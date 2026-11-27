@@ -16,10 +16,7 @@ import 'package:omi/models/sync_state.dart';
 import 'package:omi/pages/conversations/on_the_way_page.dart';
 import 'package:omi/pages/conversations/sync_pending_work.dart';
 import 'package:omi/pages/conversations/widgets/empty_conversations.dart' show NoConversationsHero;
-import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
-import 'package:omi/pages/home/widgets/home_daily_recaps_setting.dart';
 import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
@@ -476,8 +473,7 @@ void main() {
     });
   });
 
-  // Home's order holds from the first frame: Daily Recaps, then Today (the pending row first in it),
-  // then the rest. Before the list loads, the row opens Today exactly where the list's Today lands.
+  // Home's order holds from the first frame: Today (the pending row first in it), then the rest. Before the list loads, the row opens Today exactly where the list's Today lands.
   group('Home without a catch-up row', () {
     final now = DateTime.now();
     DateTime at(int daysAgo, int hour) => DateTime(now.year, now.month, now.day - daysAgo, hour);
@@ -488,20 +484,6 @@ void main() {
           finishedAt: when.add(const Duration(minutes: 5)),
           structured: Structured('Conversation $id', 'Overview', emoji: '🙂', category: 'work'),
           status: ConversationStatus.completed,
-        );
-    // Dated three days back so its card never reads "Today" or "Yesterday".
-    Future<({List<DailySummary> items, bool ok})> recaps() async => (
-          items: [
-            DailySummary(
-              id: 'r1',
-              date: at(3, 0).toIso8601String().substring(0, 10),
-              createdAt: at(2, 4),
-              headline: 'Dashboards and paperwork',
-              overview: 'A day of dashboards and forms.',
-              stats: DayStats(totalConversations: 6, actionItemsCount: 2),
-            ),
-          ],
-          ok: true,
         );
     SyncProvider pending() => _FakeSync(wals: [_wal('processing', 4, WalStatus.uploaded)]);
 
@@ -525,11 +507,8 @@ void main() {
             ..selectedEndDate = end
             ..groupConversationsByDate();
       final screen = await tester.runAsync(
-        () => buildTypedConversationScreen(provider, sync: sync, loadRecaps: recaps),
+        () => buildTypedConversationScreen(provider, sync: sync),
       );
-      // Daily Recaps on Home is opt-in; these cases check where the row sits when it is on.
-      HomeDailyRecapsSetting.enabled = true;
-      addTearDown(() => HomeDailyRecapsSetting.enabled = false);
       await tester.pumpWidget(screen!);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
@@ -552,7 +531,6 @@ void main() {
       }
     }
 
-    final recapsRow = find.byType(HomeDailyRecaps);
     final today = find.text('Today');
     final yesterday = find.text('Yesterday');
 
@@ -577,18 +555,18 @@ void main() {
           expect(find.text('Conversations on the way'), findsNothing);
           if (!loading) {
             expect(today, findsNothing);
-            expectTopToBottom(tester, [recapsRow, yesterday, find.text('Conversation y1')]);
+            expectTopToBottom(tester, [yesterday, find.text('Conversation y1')]);
           }
           await unmount(tester, provider);
         });
       }
     }
 
-    testWidgets('today starts with its conversation, below the recaps', (tester) async {
+    testWidgets('today starts with its conversation', (tester) async {
       final provider = await pumpHome(tester, pending(), items: [convo('t1', at(0, 0)), convo('y1', at(1, 18))]);
       expect(find.byKey(_row), findsNothing);
       expect(today, findsOneWidget);
-      expectTopToBottom(tester, [recapsRow, today, find.text('Conversation t1'), yesterday]);
+      expectTopToBottom(tester, [today, find.text('Conversation t1'), yesterday]);
       await unmount(tester, provider);
     });
 

@@ -4492,8 +4492,6 @@
     "syncStallAlertBody": "Không có bản ghi nào từ Omi của bạn được đồng bộ trong hơn {hours} giờ. Mở Omi để kiểm tra kết nối thiết bị.",
     "activityAttentionSyncStalledTitle": "Omi không đồng bộ",
     "activityAttentionSyncStalledSubtitle": "Không có bản ghi nào được đồng bộ hơn {hours} giờ",
-    "dailyRecapsOnHome": "Tóm tắt hàng ngày trên Trang chủ",
-    "dailyRecapsOnHomeDescription": "Hiển thị các tóm tắt mới nhất ở đầu Trang chủ.",
     "yearlySwitchTitle": "Chuyển sang gói năm",
     "yearlySwitchRowSavings": "Tiết kiệm {amount} mỗi năm",
     "yearlySwitchHomeTitle": "Tiết kiệm {amount} mỗi năm khi trả theo năm",
@@ -4513,7 +4511,6 @@
     "chatAppsCodeExpiredMessageIn": "Lấy mã mới và gửi từ {app}.",
     "episodeWritingNotes": "Đang viết ghi chú…",
     "homeStepTranscribing": "Đang chép lời…",
-    "homeRecordingsCount": "{count, plural, other{{count} bản ghi âm}}",
     "episodeWritingNotesDetail": "Đang hoàn tất bản chép trước. Bạn có thể rời trang này.",
     "episodeCoversUpTo": "Đến {time} · ghi chú đầy đủ khi kết thúc",
     "liveTranscribedUpTo": "Đã chép đến {time}",
@@ -4745,9 +4742,6 @@
     "deviceReadyToUse": "Sẵn sàng để sử dụng",
     "firmwareUpdateFirmwareTooOld": "Firmware trên thiết bị của bạn quá cũ để cài đặt bản cập nhật này. Hãy liên hệ bộ phận hỗ trợ để được giúp cập nhật thiết bị.",
     "firmwareUpdateAppRequired": "Bản cập nhật firmware này yêu cầu phiên bản ứng dụng Omi mới hơn. Hãy cập nhật ứng dụng từ cửa hàng ứng dụng của bạn, rồi kiểm tra lại.",
-    "quietPayerTitle": "Không có bản ghi nào trong 5 ngày",
-    "quietPayerMessage": "Hãy kiểm tra Omi của bạn.",
-    "quietPayerCheck": "Kiểm tra",
     "playManageSubscription": "Quản lý gói đăng ký",
     "playBilledByGoogle": "Thanh toán qua Google Play",
     "playPurchasePending": "Thanh toán đang chờ xử lý. Omi Pro bắt đầu ngay khi Google Play xác nhận.",
@@ -4768,5 +4762,10 @@
     "playStripePlanPaused": "Gói {plan} của bạn đang tạm dừng.",
     "firmwareNewestSupportedForDevice": "Thiết bị của bạn đã dùng phiên bản firmware mới nhất được hỗ trợ",
     "firmwareSyncRecordingsFirstTitle": "Hãy đồng bộ bản ghi âm của bạn trước",
-    "firmwareSyncRecordingsFirstMessage": "Một số bản ghi âm vẫn còn trên thiết bị của bạn. Hãy đợi chúng đồng bộ xong lên điện thoại, sau đó bắt đầu cập nhật."
+    "firmwareSyncRecordingsFirstMessage": "Một số bản ghi âm vẫn còn trên thiết bị của bạn. Hãy đợi chúng đồng bộ xong lên điện thoại, sau đó bắt đầu cập nhật.",
+    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
+    "homeLockedSubtitle": "Kept safe · unlock to read",
+    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
+    "homeTakingLonger": "Taking longer than usual",
+    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
 }

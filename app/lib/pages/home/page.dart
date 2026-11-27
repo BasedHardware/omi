@@ -28,7 +28,6 @@ import 'package:omi/pages/activity/activity_bell_button.dart';
 import 'package:omi/services/onboarding_sync_runtime.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/providers/home_feed_provider.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
@@ -861,16 +860,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   final convoProvider = ctx.read<ConversationProvider>();
                   final messageProvider = ctx.read<MessageProvider>();
 
-                  final feed = context.read<HomeFeedProvider?>();
-                  if (feed != null &&
-                      !feed.unsupported &&
-                      !convoProvider.hasActiveSearch &&
-                      convoProvider.selectedFolderId == null &&
-                      !convoProvider.showStarredOnly &&
-                      !convoProvider.showDiscardedConversations &&
-                      !convoProvider.showShortConversations) {
-                    await feed.refresh();
-                  } else if (convoProvider.conversations.isEmpty) {
+                  if (convoProvider.conversations.isEmpty) {
                     await convoProvider.getInitialConversations();
                   } else {
                     // Force refresh when internet connection is restored

@@ -4492,8 +4492,6 @@
     "syncStallAlertBody": "{hours} 時間以上、Omi から録音が同期されていません。端末の接続を確認するには Omi を開いてください。",
     "activityAttentionSyncStalledTitle": "Omi が同期されていません",
     "activityAttentionSyncStalledSubtitle": "{hours} 時間以上、録音が同期されていません",
-    "dailyRecapsOnHome": "ホームの日次の要約",
-    "dailyRecapsOnHomeDescription": "最新の要約をホームの上部に表示します。",
     "yearlySwitchTitle": "年払いに切り替える",
     "yearlySwitchRowSavings": "年間{amount}お得",
     "yearlySwitchHomeTitle": "年払いで年間{amount}お得",
@@ -4513,7 +4511,6 @@
     "chatAppsCodeExpiredMessageIn": "新しいコードを取得して、{app}アプリから送信してください。",
     "episodeWritingNotes": "メモを作成中…",
     "homeStepTranscribing": "文字起こし中…",
-    "homeRecordingsCount": "{count, plural, other{{count}件の録音}}",
     "episodeWritingNotesDetail": "先に文字起こしを仕上げています。このページを離れても大丈夫です。",
     "episodeCoversUpTo": "{time}まで · 終了後に完全なメモ",
     "liveTranscribedUpTo": "{time}まで文字起こし済み",
@@ -4745,9 +4742,6 @@
     "deviceReadyToUse": "使用準備完了",
     "firmwareUpdateFirmwareTooOld": "デバイスのファームウェアが古いため、この更新を適用できません。デバイスの更新についてはサポートにお問い合わせください。",
     "firmwareUpdateAppRequired": "このファームウェアの更新には、新しいバージョンのOmiアプリが必要です。アプリストアからアプリを更新してから、もう一度確認してください。",
-    "quietPayerTitle": "5日間録音がありません",
-    "quietPayerMessage": "Omiを確認してください。",
-    "quietPayerCheck": "確認",
     "playManageSubscription": "サブスクリプションを管理",
     "playBilledByGoogle": "Google Play で請求されます",
     "playPurchasePending": "お支払いは保留中です。Google Play で確認され次第 Omi Pro が始まります。",
@@ -4768,5 +4762,10 @@
     "playStripePlanPaused": "{plan} プランは一時停止中です。",
     "firmwareNewestSupportedForDevice": "お使いのデバイスは、すでにサポートされている最新のファームウェアバージョンで動作しています",
     "firmwareSyncRecordingsFirstTitle": "まず録音を同期してください",
-    "firmwareSyncRecordingsFirstMessage": "一部の録音はまだデバイスに残っています。スマートフォンへの同期が完了してから、更新を開始してください。"
+    "firmwareSyncRecordingsFirstMessage": "一部の録音はまだデバイスに残っています。スマートフォンへの同期が完了してから、更新を開始してください。",
+    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
+    "homeLockedSubtitle": "Kept safe · unlock to read",
+    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
+    "homeTakingLonger": "Taking longer than usual",
+    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
 }

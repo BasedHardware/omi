@@ -4588,8 +4588,6 @@
     "syncStallAlertBody": "Több mint {hours} órája nem szinkronizálódott felvétel az Omidról. Nyisd meg az Omit az eszköz kapcsolatának ellenőrzéséhez.",
     "activityAttentionSyncStalledTitle": "Az Omi nem szinkronizál",
     "activityAttentionSyncStalledSubtitle": "Több mint {hours} órája nem szinkronizálódott felvétel",
-    "dailyRecapsOnHome": "Napi összefoglalók a Kezdőlapon",
-    "dailyRecapsOnHomeDescription": "A legújabb összefoglalók megjelenítése a Kezdőlap tetején.",
     "yearlySwitchTitle": "Váltás éves fizetésre",
     "yearlySwitchRowSavings": "Évi {amount} megtakarítás",
     "yearlySwitchHomeTitle": "Évi {amount} megtakarítás éves fizetéssel",
@@ -4609,7 +4607,6 @@
     "chatAppsCodeExpiredMessageIn": "Kérj új kódot, és küldd el az {app} alkalmazásból.",
     "episodeWritingNotes": "Jegyzetek írása…",
     "homeStepTranscribing": "Átírás folyamatban…",
-    "homeRecordingsCount": "{count, plural, one{1 felvétel} other{{count} felvétel}}",
     "episodeWritingNotesDetail": "Először befejezzük az átiratot. Elhagyhatod ezt az oldalt.",
     "episodeCoversUpTo": "{time}-ig · teljes jegyzetek a végén",
     "liveTranscribedUpTo": "Átírva eddig: {time}",
@@ -4841,9 +4838,6 @@
     "deviceReadyToUse": "Használatra kész",
     "firmwareUpdateFirmwareTooOld": "Az eszköz firmware-e túl régi ehhez a frissítéshez. Az eszköz frissítéséhez kérjen segítséget az ügyfélszolgálattól.",
     "firmwareUpdateAppRequired": "Ehhez a firmware-frissítéshez az Omi alkalmazás újabb verziója szükséges. Frissítse az alkalmazást az alkalmazásboltban, majd ellenőrizze újra.",
-    "quietPayerTitle": "5 napja nincs felvétel",
-    "quietPayerMessage": "Nézd meg az Omidat.",
-    "quietPayerCheck": "Megnézem",
     "playManageSubscription": "Előfizetés kezelése",
     "playBilledByGoogle": "A számlázás a Google Playen keresztül történik",
     "playPurchasePending": "A fizetés függőben van. Az Omi Pro akkor indul, amikor a Google Play megerősíti.",
@@ -4864,5 +4858,10 @@
     "playStripePlanPaused": "A(z) {plan} csomagod szünetel.",
     "firmwareNewestSupportedForDevice": "Az eszközödön már a legújabb támogatott firmware-verzió fut",
     "firmwareSyncRecordingsFirstTitle": "Először szinkronizáld a felvételeidet",
-    "firmwareSyncRecordingsFirstMessage": "Néhány felvétel még az eszközödön van. Várd meg, amíg a telefonodra szinkronizálásuk befejeződik, majd indítsd el a frissítést."
+    "firmwareSyncRecordingsFirstMessage": "Néhány felvétel még az eszközödön van. Várd meg, amíg a telefonodra szinkronizálásuk befejeződik, majd indítsd el a frissítést.",
+    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
+    "homeLockedSubtitle": "Kept safe · unlock to read",
+    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
+    "homeTakingLonger": "Taking longer than usual",
+    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
 }

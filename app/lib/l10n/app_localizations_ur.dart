@@ -14814,12 +14814,6 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
-  String get dailyRecapsOnHome => 'ہوم پر روزانہ خلاصے';
-
-  @override
-  String get dailyRecapsOnHomeDescription => 'ہوم کے اوپر اپنے تازہ ترین خلاصے دکھائیں۔';
-
-  @override
   String get yearlySwitchTitle => 'سالانہ پر منتقل کریں';
 
   @override
@@ -14887,17 +14881,6 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get homeStepTranscribing => 'ٹرانسکرائب ہو رہا ہے…';
-
-  @override
-  String homeRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count ریکارڈنگز',
-      one: '$count ریکارڈنگ',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get episodeWritingNotesDetail => 'پہلے ٹرانسکرپٹ مکمل کر رہے ہیں۔ آپ یہ صفحہ چھوڑ سکتے ہیں۔';
@@ -15764,15 +15747,6 @@ class AppLocalizationsUr extends AppLocalizations {
       'اس فرم ویئر اپ ڈیٹ کے لیے Omi ایپ کا نیا ورژن درکار ہے۔ اپنے ایپ اسٹور سے ایپ کو اپ ڈیٹ کریں، پھر دوبارہ چیک کریں۔';
 
   @override
-  String get quietPayerTitle => '5 دن سے کوئی ریکارڈنگ نہیں';
-
-  @override
-  String get quietPayerMessage => 'اپنا Omi چیک کریں۔';
-
-  @override
-  String get quietPayerCheck => 'چیک کریں';
-
-  @override
   String get playManageSubscription => 'سبسکرپشن کا انتظام کریں';
 
   @override
@@ -15854,4 +15828,27 @@ class AppLocalizationsUr extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'کچھ ریکارڈنگز ابھی آپ کے ڈیوائس پر ہیں۔ انہیں فون پر سنک ہونے دیں، پھر اپڈیٹ شروع کریں۔';
+
+  @override
+  String homeLockedTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count conversations waiting',
+      one: '1 conversation waiting',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeLockedSubtitle => 'Kept safe · unlock to read';
+
+  @override
+  String get homeLockedSubtitleNoPlans => 'Kept safe until your allowance resets';
+
+  @override
+  String get homeTakingLonger => 'Taking longer than usual';
+
+  @override
+  String get homeFinishingOpensWhenReady => 'Opens as soon as it\'s ready';
 }

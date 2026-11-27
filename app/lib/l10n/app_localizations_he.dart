@@ -14691,12 +14691,6 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get dailyRecapsOnHome => 'סיכומים יומיים במסך הבית';
-
-  @override
-  String get dailyRecapsOnHomeDescription => 'הצג את הסיכומים האחרונים שלך בראש מסך הבית.';
-
-  @override
   String get yearlySwitchTitle => 'מעבר לתשלום שנתי';
 
   @override
@@ -14764,19 +14758,6 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get homeStepTranscribing => 'מתמללים…';
-
-  @override
-  String homeRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count הקלטות',
-      many: '$count הקלטות',
-      two: 'שתי הקלטות',
-      one: 'הקלטה אחת',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get episodeWritingNotesDetail => 'קודם מסיימים את התמלול. אפשר לעזוב את הדף.';
@@ -15640,15 +15621,6 @@ class AppLocalizationsHe extends AppLocalizations {
       'עדכון הקושחה הזה דורש גרסה חדשה יותר של אפליקציית Omi. יש לעדכן את האפליקציה מחנות האפליקציות שלך, ואז לבדוק שוב.';
 
   @override
-  String get quietPayerTitle => 'אין הקלטות כבר 5 ימים';
-
-  @override
-  String get quietPayerMessage => 'בדקו את ה-Omi שלכם.';
-
-  @override
-  String get quietPayerCheck => 'בדיקה';
-
-  @override
   String get playManageSubscription => 'ניהול המינוי';
 
   @override
@@ -15728,4 +15700,27 @@ class AppLocalizationsHe extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'חלק מההקלטות עדיין נמצאות במכשיר שלך. תן להן להשלים את הסינכרון לטלפון, ואז התחל את העדכון.';
+
+  @override
+  String homeLockedTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count conversations waiting',
+      one: '1 conversation waiting',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeLockedSubtitle => 'Kept safe · unlock to read';
+
+  @override
+  String get homeLockedSubtitleNoPlans => 'Kept safe until your allowance resets';
+
+  @override
+  String get homeTakingLonger => 'Taking longer than usual';
+
+  @override
+  String get homeFinishingOpensWhenReady => 'Opens as soon as it\'s ready';
 }

@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-home-every-row-dark.png",
+      "platform": "mobile-ios",
+      "description": "Home (dark) with every row kind: live, saved recordings (saved, processing, failed with Try Again), transcribing, writing, past its deadline, failed summary with Try Again, done, a day's locked conversations as one row, and yesterday",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-home-every-row-light.png",
+      "platform": "mobile-ios",
+      "description": "The same Home in light mode",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-home-phone-top.png",
+      "platform": "mobile-ios",
+      "description": "Home at iPhone size: the live row first in Today",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-home-finishing-after-end.png",
+      "platform": "mobile-ios",
+      "description": "After End: Finishing up... leads Today until the conversation's own row takes its place",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-ios-home-swipe-delete.png",
+      "platform": "mobile-ios",
+      "description": "Mid-swipe on a conversation row: the delete mark is centred in its circle",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

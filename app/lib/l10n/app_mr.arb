@@ -11915,8 +11915,6 @@
     "syncStallAlertBody": "तुमच्या Omi मधून {hours} तासांपेक्षा जास्त काळ कोणतीही रेकॉर्डिंग सिंक झाली नाही. तुमच्या डिव्हाइसचे कनेक्शन तपासण्यासाठी Omi उघडा.",
     "activityAttentionSyncStalledTitle": "Omi सिंक होत नाहीये",
     "activityAttentionSyncStalledSubtitle": "{hours} तासांपेक्षा जास्त काळ कोणतीही रेकॉर्डिंग सिंक झाली नाही",
-    "dailyRecapsOnHome": "मुख्यपृष्ठावर दैनिक रीकॅप्स",
-    "dailyRecapsOnHomeDescription": "मुख्यपृष्ठाच्या वर तुमचे नवीनतम रीकॅप्स दाखवा.",
     "yearlySwitchTitle": "वार्षिकवर स्विच करा",
     "yearlySwitchRowSavings": "वर्षाला {amount} वाचवा",
     "yearlySwitchHomeTitle": "वार्षिक पेमेंटने वर्षाला {amount} वाचवा",
@@ -11936,7 +11934,6 @@
     "chatAppsCodeExpiredMessageIn": "नवीन कोड मिळवा आणि तो {app} अॅपमधून पाठवा.",
     "episodeWritingNotes": "नोट्स लिहीत आहे…",
     "homeStepTranscribing": "ट्रान्सक्राइब होत आहे…",
-    "homeRecordingsCount": "{count, plural, one{1 रेकॉर्डिंग} other{{count} रेकॉर्डिंग}}",
     "episodeWritingNotesDetail": "आधी ट्रान्सक्रिप्ट पूर्ण करत आहोत. तुम्ही हे पेज सोडू शकता.",
     "episodeCoversUpTo": "{time} पर्यंत · संपल्यावर पूर्ण नोट्स",
     "liveTranscribedUpTo": "{time} पर्यंत ट्रान्सक्राइब झाले",
@@ -12302,9 +12299,6 @@
     "deviceReadyToUse": "वापरण्यासाठी तयार",
     "firmwareUpdateFirmwareTooOld": "या अपडेटसाठी तुमच्या डिव्हाइसचे फर्मवेअर खूप जुने आहे. डिव्हाइस अपडेट करण्यासाठी मदत हवी असल्यास सपोर्टशी संपर्क साधा.",
     "firmwareUpdateAppRequired": "या फर्मवेअर अपडेटसाठी Omi ॲपची नवीन आवृत्ती आवश्यक आहे. तुमच्या ॲप स्टोअरमधून ॲप अपडेट करा, नंतर पुन्हा तपासा.",
-    "quietPayerTitle": "5 दिवसांत एकही रेकॉर्डिंग नाही",
-    "quietPayerMessage": "तुमचा Omi तपासा.",
-    "quietPayerCheck": "तपासा",
     "playManageSubscription": "सदस्यता व्यवस्थापित करा",
     "playBilledByGoogle": "Google Play द्वारे बिल केले जाते",
     "playPurchasePending": "तुमचे पेमेंट प्रलंबित आहे. Google Play ने पुष्टी करताच Omi Pro सुरू होईल.",
@@ -12325,5 +12319,10 @@
     "playStripePlanPaused": "तुमचा {plan} प्लॅन थांबवला आहे.",
     "firmwareNewestSupportedForDevice": "तुमचे डिव्हाइस आधीच सर्वात नवीन समर्थित फर्मवेअर आवृत्तीवर आहे",
     "firmwareSyncRecordingsFirstTitle": "आधी तुमची रेकॉर्डिंग सिंक करा",
-    "firmwareSyncRecordingsFirstMessage": "काही रेकॉर्डिंग अजून तुमच्या डिव्हाइसवर आहेत. त्या तुमच्या फोनवर पूर्णपणे सिंक होऊ द्या, नंतर अपडेट सुरू करा."
+    "firmwareSyncRecordingsFirstMessage": "काही रेकॉर्डिंग अजून तुमच्या डिव्हाइसवर आहेत. त्या तुमच्या फोनवर पूर्णपणे सिंक होऊ द्या, नंतर अपडेट सुरू करा.",
+    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
+    "homeLockedSubtitle": "Kept safe · unlock to read",
+    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
+    "homeTakingLonger": "Taking longer than usual",
+    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
 }

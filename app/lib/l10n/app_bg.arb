@@ -4492,8 +4492,6 @@
     "syncStallAlertBody": "Няма синхронизирани записи от вашия Omi от повече от {hours} часа. Отворете Omi, за да проверите връзката на устройството.",
     "activityAttentionSyncStalledTitle": "Omi не се синхронизира",
     "activityAttentionSyncStalledSubtitle": "Няма синхронизирани записи от повече от {hours} часа",
-    "dailyRecapsOnHome": "Дневни резюмета в Начало",
-    "dailyRecapsOnHomeDescription": "Показвай последните резюмета в горната част на Начало.",
     "yearlySwitchTitle": "Преминете към годишен",
     "yearlySwitchRowSavings": "Спестете {amount} годишно",
     "yearlySwitchHomeTitle": "Спестете {amount} годишно с годишно плащане",
@@ -4513,7 +4511,6 @@
     "chatAppsCodeExpiredMessageIn": "Вземи нов код и го изпрати от {app}.",
     "episodeWritingNotes": "Пишем бележките…",
     "homeStepTranscribing": "Транскрибираме…",
-    "homeRecordingsCount": "{count, plural, one{{count} запис} other{{count} записа}}",
     "episodeWritingNotesDetail": "Първо довършваме транскрипцията. Можете да напуснете страницата.",
     "episodeCoversUpTo": "Обхваща до {time} · пълните бележки при приключване",
     "liveTranscribedUpTo": "Транскрибирано до {time}",
@@ -4745,9 +4742,6 @@
     "deviceReadyToUse": "Готово за използване",
     "firmwareUpdateFirmwareTooOld": "Фърмуерът на устройството ви е твърде стар за тази актуализация. Свържете се с поддръжката за помощ с актуализирането на устройството.",
     "firmwareUpdateAppRequired": "Тази актуализация на фърмуера изисква по-нова версия на приложението Omi. Актуализирайте приложението от магазина си за приложения и проверете отново.",
-    "quietPayerTitle": "Няма записи от 5 дни",
-    "quietPayerMessage": "Проверете своя Omi.",
-    "quietPayerCheck": "Провери",
     "playManageSubscription": "Управление на абонамента",
     "playBilledByGoogle": "Таксува се чрез Google Play",
     "playPurchasePending": "Плащането чака. Omi Pro започва, щом Google Play го потвърди.",
@@ -4768,5 +4762,10 @@
     "playStripePlanPaused": "Планът ви {plan} е на пауза.",
     "firmwareNewestSupportedForDevice": "Вашето устройство вече работи с най-новата поддържана версия на фърмуера",
     "firmwareSyncRecordingsFirstTitle": "Първо синхронизирайте записите си",
-    "firmwareSyncRecordingsFirstMessage": "Някои записи все още са на устройството. Оставете ги да приключат със синхронизирането към телефона, след което започнете актуализацията."
+    "firmwareSyncRecordingsFirstMessage": "Някои записи все още са на устройството. Оставете ги да приключат със синхронизирането към телефона, след което започнете актуализацията.",
+    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
+    "homeLockedSubtitle": "Kept safe · unlock to read",
+    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
+    "homeTakingLonger": "Taking longer than usual",
+    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
 }

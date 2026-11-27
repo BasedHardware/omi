@@ -12,7 +12,6 @@ import 'package:path_provider_platform_interface/path_provider_platform_interfac
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/backend/schema/pending_work.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/l10n/app_localizations.dart';
@@ -27,7 +26,6 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:omi/providers/episode_provider.dart';
-import 'package:omi/providers/home_feed_provider.dart';
 import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'package:omi/ui/ui.dart';
 
@@ -75,7 +73,6 @@ void main() {
     final history = ConversationProvider(isSignedIn: () => true);
     final v3 = ConversationsV3Provider();
     final episodes = EpisodeProvider()..suppressed = () => v3.suppressesLegacy;
-    final feed = HomeFeedProvider()..suppressed = () => v3.suppressesLegacy;
     final apps = AppProvider();
     final detail = ConversationDetailProvider()..setProviders(apps, history);
     final capture = AuditCaptureProvider(AuditLive.idle);
@@ -103,7 +100,6 @@ void main() {
       history.dispose();
       v3.dispose();
       episodes.dispose();
-      feed.dispose();
       apps.dispose();
       capture.dispose();
     });
@@ -116,7 +112,6 @@ void main() {
     await JourneyHermeticBoot.pumpPage(tester,
         page: ConversationsPage(
           requestInitialLoad: false,
-          loadRecaps: () async => (items: <DailySummary>[], ok: true),
           pendingWork: pending,
         ),
         providers: [
@@ -124,7 +119,6 @@ void main() {
           ChangeNotifierProvider<ConversationProvider>.value(value: history),
           ChangeNotifierProvider<ConversationsV3Provider>.value(value: v3),
           ChangeNotifierProvider<EpisodeProvider>.value(value: episodes),
-          ChangeNotifierProvider<HomeFeedProvider>.value(value: feed),
           ChangeNotifierProvider<AppProvider>.value(value: apps),
           ChangeNotifierProvider<ConversationDetailProvider>.value(value: detail),
           ChangeNotifierProvider<CaptureProvider>.value(value: capture),

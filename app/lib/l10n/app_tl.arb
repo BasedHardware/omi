@@ -11915,8 +11915,6 @@
     "syncStallAlertBody": "Walang recording mula sa iyong Omi na na-sync nang mahigit {hours} oras. Buksan ang Omi para tingnan ang koneksyon ng iyong device.",
     "activityAttentionSyncStalledTitle": "Hindi nagri-sync ang Omi",
     "activityAttentionSyncStalledSubtitle": "Walang naka-sync na recording nang mahigit {hours} oras",
-    "dailyRecapsOnHome": "Daily Recaps sa Home",
-    "dailyRecapsOnHomeDescription": "Ipakita ang pinakabagong recaps sa itaas ng Home.",
     "yearlySwitchTitle": "Lumipat sa Taunan",
     "yearlySwitchRowSavings": "Makatipid ng {amount} bawat taon",
     "yearlySwitchHomeTitle": "Makatipid ng {amount} bawat taon kapag taunan",
@@ -11936,7 +11934,6 @@
     "chatAppsCodeExpiredMessageIn": "Kumuha ng bagong code at ipadala ito mula sa {app}.",
     "episodeWritingNotes": "Isinusulat ang mga tala…",
     "homeStepTranscribing": "Tinatranscribe…",
-    "homeRecordingsCount": "{count, plural, one{1 recording} other{{count} na recording}}",
     "episodeWritingNotesDetail": "Tinatapos muna ang transcript. Maaari kang umalis sa pahinang ito.",
     "episodeCoversUpTo": "Hanggang {time} · buong tala kapag natapos",
     "liveTranscribedUpTo": "Na-transcribe hanggang {time}",
@@ -12302,9 +12299,6 @@
     "deviceReadyToUse": "Handa nang gamitin",
     "firmwareUpdateFirmwareTooOld": "Napakaluma na ng firmware ng iyong device para sa update na ito. Makipag-ugnayan sa support para sa tulong sa pag-update ng iyong device.",
     "firmwareUpdateAppRequired": "Kailangan ng firmware update na ito ng mas bagong Omi app. I-update ang app mula sa iyong app store, pagkatapos ay tingnan muli.",
-    "quietPayerTitle": "Walang recording sa loob ng 5 araw",
-    "quietPayerMessage": "Tingnan ang iyong Omi.",
-    "quietPayerCheck": "Tingnan",
     "playManageSubscription": "Pamahalaan ang subscription",
     "playBilledByGoogle": "Sinisingil ng Google Play",
     "playPurchasePending": "Nakabinbin ang bayad mo. Magsisimula ang Omi Pro kapag kinumpirma ito ng Google Play.",
@@ -12325,5 +12319,10 @@
     "playStripePlanPaused": "Naka-pause ang iyong {plan} plan.",
     "firmwareNewestSupportedForDevice": "Ang iyong device ay nasa pinakabagong firmware version na kayang suportahan nito",
     "firmwareSyncRecordingsFirstTitle": "I-sync muna ang iyong mga recording",
-    "firmwareSyncRecordingsFirstMessage": "May mga recording pa na nasa iyong device. Hayaang matapos munang i-sync ang mga ito sa iyong phone, pagkatapos ay simulan ang pag-update."
+    "firmwareSyncRecordingsFirstMessage": "May mga recording pa na nasa iyong device. Hayaang matapos munang i-sync ang mga ito sa iyong phone, pagkatapos ay simulan ang pag-update.",
+    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
+    "homeLockedSubtitle": "Kept safe · unlock to read",
+    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
+    "homeTakingLonger": "Taking longer than usual",
+    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
 }

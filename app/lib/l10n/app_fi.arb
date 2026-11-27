@@ -4492,8 +4492,6 @@
     "syncStallAlertBody": "Omistasi ei ole synkronoitu tallenteita yli {hours} tuntiin. Avaa Omi ja tarkista laitteen yhteys.",
     "activityAttentionSyncStalledTitle": "Omi ei synkronoi",
     "activityAttentionSyncStalledSubtitle": "Tallenteita ei synkronoitu yli {hours} tuntiin",
-    "dailyRecapsOnHome": "Päivittäiset yhteenvedot Koti-näkymässä",
-    "dailyRecapsOnHomeDescription": "Näytä uusimmat yhteenvedot Koti-näkymän yläosassa.",
     "yearlySwitchTitle": "Vaihda vuosimaksuun",
     "yearlySwitchRowSavings": "Säästä {amount} vuodessa",
     "yearlySwitchHomeTitle": "Säästä {amount} vuodessa vuosimaksulla",
@@ -4513,7 +4511,6 @@
     "chatAppsCodeExpiredMessageIn": "Hae uusi koodi ja lähetä se {app}-sovelluksesta.",
     "episodeWritingNotes": "Kirjoitetaan muistiinpanoja…",
     "homeStepTranscribing": "Litteroidaan…",
-    "homeRecordingsCount": "{count, plural, one{{count} tallenne} other{{count} tallennetta}}",
     "episodeWritingNotesDetail": "Viimeistelemme ensin litteroinnin. Voit poistua tältä sivulta.",
     "episodeCoversUpTo": "Kattaa klo {time} asti · täydet muistiinpanot lopuksi",
     "liveTranscribedUpTo": "Litteroitu klo {time} asti",
@@ -4745,9 +4742,6 @@
     "deviceReadyToUse": "Valmis käytettäväksi",
     "firmwareUpdateFirmwareTooOld": "Laitteesi laiteohjelmisto on liian vanha tätä päivitystä varten. Ota yhteyttä tukeen saadaksesi apua laitteen päivittämiseen.",
     "firmwareUpdateAppRequired": "Tämä laiteohjelmistopäivitys tarvitsee Omi-sovelluksen uudemman version. Päivitä sovellus sovelluskaupastasi ja tarkista sitten uudelleen.",
-    "quietPayerTitle": "Ei tallenteita 5 päivään",
-    "quietPayerMessage": "Tarkista Omisi.",
-    "quietPayerCheck": "Tarkista",
     "playManageSubscription": "Hallinnoi tilausta",
     "playBilledByGoogle": "Laskutus Google Playn kautta",
     "playPurchasePending": "Maksusi odottaa. Omi Pro alkaa, kun Google Play vahvistaa sen.",
@@ -4768,5 +4762,10 @@
     "playStripePlanPaused": "{plan}-tilauksesi on keskeytetty.",
     "firmwareNewestSupportedForDevice": "Laiteellasi on jo uusin tuettu laiteohjelmistoversio",
     "firmwareSyncRecordingsFirstTitle": "Synkronoi nauhoituksesi ensin",
-    "firmwareSyncRecordingsFirstMessage": "Osaa nauhoituksista on vielä laitteella. Anna niiden synkronoitua puhelimeen loppuun ja käynnistä sitten päivitys."
+    "firmwareSyncRecordingsFirstMessage": "Osaa nauhoituksista on vielä laitteella. Anna niiden synkronoitua puhelimeen loppuun ja käynnistä sitten päivitys.",
+    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
+    "homeLockedSubtitle": "Kept safe · unlock to read",
+    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
+    "homeTakingLonger": "Taking longer than usual",
+    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
 }

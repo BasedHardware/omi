@@ -13,13 +13,21 @@ class DateListItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // The same box as a past day's summary header (DaySummaryHeader), so every day header in a list
+    // is one height and the rows under Today start where they do under Yesterday.
     return Padding(
-      padding: EdgeInsets.fromLTRB(20, isFirst ? 4 : 10, 16, 0),
+      padding: EdgeInsets.fromLTRB(20, isFirst ? 0 : 6, 16, 0),
       child: Semantics(
         header: true,
-        child: Text(
-          label ?? OmiDateFormat.of(context).dayHeader(date),
-          style: OmiType.body.copyWith(fontWeight: FontWeight.w600),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 44),
+          child: Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: Text(
+              label ?? OmiDateFormat.of(context).dayHeader(date),
+              style: OmiType.body.copyWith(fontWeight: FontWeight.w600),
+            ),
+          ),
         ),
       ),
     );

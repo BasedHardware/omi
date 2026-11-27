@@ -44,6 +44,9 @@ class LocalRecording {
 
   final LocalRecordingState state;
 
+  /// When the server accepted the upload; null until then.
+  final DateTime? uploadedAt;
+
   const LocalRecording({
     required this.fileName,
     required this.filePath,
@@ -55,6 +58,7 @@ class LocalRecording {
     required this.state,
     this.geolocation,
     this.jobId,
+    this.uploadedAt,
   });
 
   factory LocalRecording.fromWal(Wal wal, {required String filePath, required int sizeBytes}) => LocalRecording(
@@ -67,6 +71,9 @@ class LocalRecording {
         seconds: wal.seconds,
         geolocation: wal.geolocation,
         jobId: wal.jobId,
+        uploadedAt: wal.status == WalStatus.uploaded && wal.uploadedAt > 0
+            ? DateTime.fromMillisecondsSinceEpoch(wal.uploadedAt * 1000)
+            : null,
         state: wal.isSyncing
             ? LocalRecordingState.uploading
             : wal.status == WalStatus.uploaded

@@ -12,12 +12,9 @@ import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
-import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/episode.dart';
-import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
-import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/episodes/episode_moments_section.dart';
 import 'package:omi/pages/episodes/live_episode_page.dart';
 import 'package:omi/pages/episodes/live_episode_row.dart';
@@ -25,7 +22,6 @@ import 'package:omi/pages/episodes/previous_episode_link.dart';
 import 'package:omi/pages/settings/device/device_live_sections.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
-import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/episode_provider.dart';
 import 'package:omi/providers/people_provider.dart';
@@ -1294,35 +1290,6 @@ void main() {
       await tester.tap(find.byKey(const Key('device_right_now_no_audio')));
       expect(reconnected, 1);
     });
-  });
-
-  testWidgets('a conversation offline sync is filling says so on its own row', (tester) async {
-    final conversation = ServerConversation(
-      id: 'c1',
-      createdAt: DateTime(2026, 10, 20, 9),
-      structured: Structured('Morning walk', 'Overview'),
-    );
-    final provider = ConversationProvider(isSignedIn: () => false)..conversations = [conversation];
-    addTearDown(provider.dispose);
-    await tester.pumpWidget(
-      ChangeNotifierProvider<ConversationProvider>.value(
-        value: provider,
-        child: MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: Scaffold(
-            body: ConversationListItem(
-              conversation: conversation,
-              date: conversation.createdAt,
-              conversationIdx: 0,
-              fillingSeconds: 720,
-            ),
-          ),
-        ),
-      ),
-    );
-    expect(find.byKey(const Key('conversation_row_filling')), findsOneWidget);
-    expect(find.textContaining('from your Omi'), findsOneWidget);
   });
 }
 

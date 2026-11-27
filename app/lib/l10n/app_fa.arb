@@ -11915,8 +11915,6 @@
     "syncStallAlertBody": "بیش از {hours} ساعت هیچ ضبطی از Omi شما همگام‌سازی نشده است. برای بررسی اتصال دستگاهتان Omi را باز کنید.",
     "activityAttentionSyncStalledTitle": "Omi همگام‌سازی نمی‌شود",
     "activityAttentionSyncStalledSubtitle": "بیش از {hours} ساعت هیچ ضبطی همگام‌سازی نشده است",
-    "dailyRecapsOnHome": "خلاصه‌های روزانه در خانه",
-    "dailyRecapsOnHomeDescription": "نمایش جدیدترین خلاصه‌ها در بالای صفحه خانه.",
     "yearlySwitchTitle": "تغییر به سالانه",
     "yearlySwitchRowSavings": "سالانه {amount} صرفه‌جویی کنید",
     "yearlySwitchHomeTitle": "با پرداخت سالانه، {amount} در سال صرفه‌جویی کنید",
@@ -11936,7 +11934,6 @@
     "chatAppsCodeExpiredMessageIn": "کد جدید بگیرید و از {app} ارسال کنید.",
     "episodeWritingNotes": "در حال نوشتن یادداشت‌ها…",
     "homeStepTranscribing": "در حال رونویسی…",
-    "homeRecordingsCount": "{count, plural, other{{count} ضبط}}",
     "episodeWritingNotesDetail": "اول متن را کامل می‌کنیم. می‌توانید این صفحه را ترک کنید.",
     "episodeCoversUpTo": "تا {time} · یادداشت‌های کامل در پایان",
     "liveTranscribedUpTo": "رونویسی تا {time}",
@@ -12302,9 +12299,6 @@
     "deviceReadyToUse": "آماده برای استفاده",
     "firmwareUpdateFirmwareTooOld": "میان‌افزار دستگاه شما برای این به‌روزرسانی خیلی قدیمی است. برای دریافت کمک در به‌روزرسانی دستگاه با پشتیبانی تماس بگیرید.",
     "firmwareUpdateAppRequired": "این به‌روزرسانی میان‌افزار به نسخه جدیدتری از برنامه Omi نیاز دارد. برنامه را از فروشگاه برنامه خود به‌روزرسانی کنید، سپس دوباره بررسی کنید.",
-    "quietPayerTitle": "۵ روز است که ضبطی نیست",
-    "quietPayerMessage": "Omi خود را بررسی کنید.",
-    "quietPayerCheck": "بررسی",
     "playManageSubscription": "مدیریت اشتراک",
     "playBilledByGoogle": "صورتحساب از طریق Google Play",
     "playPurchasePending": "پرداخت شما در انتظار است. Omi Pro پس از تأیید Google Play شروع می‌شود.",
@@ -12325,5 +12319,10 @@
     "playStripePlanPaused": "طرح {plan} شما متوقف شده است.",
     "firmwareNewestSupportedForDevice": "دستگاه شما در حال حاضر روی جدیدترین نسخه فریم‌ور پشتیبانی‌شده قرار دارد",
     "firmwareSyncRecordingsFirstTitle": "ابتدا ضبط‌های خود را همگام‌سازی کنید",
-    "firmwareSyncRecordingsFirstMessage": "برخی ضبط‌ها هنوز روی دستگاه شما هستند. اجازه دهید همگام‌سازی آن‌ها به گوشی شما کامل شود، سپس بروزرسانی را شروع کنید."
+    "firmwareSyncRecordingsFirstMessage": "برخی ضبط‌ها هنوز روی دستگاه شما هستند. اجازه دهید همگام‌سازی آن‌ها به گوشی شما کامل شود، سپس بروزرسانی را شروع کنید.",
+    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
+    "homeLockedSubtitle": "Kept safe · unlock to read",
+    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
+    "homeTakingLonger": "Taking longer than usual",
+    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
 }

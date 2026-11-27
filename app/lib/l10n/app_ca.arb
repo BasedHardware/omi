@@ -4492,8 +4492,6 @@
     "syncStallAlertBody": "Fa més de {hours} hores que no se sincronitza cap enregistrament del teu Omi. Obre Omi per comprovar la connexió del dispositiu.",
     "activityAttentionSyncStalledTitle": "Omi no se sincronitza",
     "activityAttentionSyncStalledSubtitle": "Cap enregistrament sincronitzat fa més de {hours} hores",
-    "dailyRecapsOnHome": "Resums diaris a l'Inici",
-    "dailyRecapsOnHomeDescription": "Mostra els teus resums més recents a dalt de l'Inici.",
     "yearlySwitchTitle": "Canvia a anual",
     "yearlySwitchRowSavings": "Estalvia {amount} l'any",
     "yearlySwitchHomeTitle": "Estalvia {amount} l'any amb el pagament anual",
@@ -4513,7 +4511,6 @@
     "chatAppsCodeExpiredMessageIn": "Obtén un codi nou i envia'l des de {app}.",
     "episodeWritingNotes": "S'estan escrivint les notes…",
     "homeStepTranscribing": "Transcrivint…",
-    "homeRecordingsCount": "{count, plural, one{{count} enregistrament} other{{count} enregistraments}}",
     "episodeWritingNotesDetail": "Primer acabem la transcripció. Pots sortir d'aquesta pàgina.",
     "episodeCoversUpTo": "Cobreix fins a les {time} · notes completes en acabar",
     "liveTranscribedUpTo": "Transcrit fins a les {time}",
@@ -4745,9 +4742,6 @@
     "deviceReadyToUse": "Llest per utilitzar",
     "firmwareUpdateFirmwareTooOld": "El microprogramari del dispositiu és massa antic per a aquesta actualització. Contacta amb el servei d'assistència perquè t'ajudi a actualitzar el dispositiu.",
     "firmwareUpdateAppRequired": "Aquesta actualització del microprogramari necessita una versió més nova de l'aplicació Omi. Actualitza l'aplicació des de la botiga d'aplicacions i torna-ho a comprovar.",
-    "quietPayerTitle": "Cap gravació en 5 dies",
-    "quietPayerMessage": "Comprova el teu Omi.",
-    "quietPayerCheck": "Comprova",
     "playManageSubscription": "Gestiona la subscripció",
     "playBilledByGoogle": "Facturat per Google Play",
     "playPurchasePending": "El pagament està pendent. Omi Pro començarà quan Google Play el confirmi.",
@@ -4768,5 +4762,10 @@
     "playStripePlanPaused": "El teu pla {plan} està en pausa.",
     "firmwareNewestSupportedForDevice": "El vostre dispositiu ja té la versió més recent de firmware compatible",
     "firmwareSyncRecordingsFirstTitle": "Primer sincronitzeu els enregistraments",
-    "firmwareSyncRecordingsFirstMessage": "Alguns enregistraments encara són al vostre dispositiu. Deixeu que acabin de sincronitzar-se al telèfon i, després, inicieu l'actualització."
+    "firmwareSyncRecordingsFirstMessage": "Alguns enregistraments encara són al vostre dispositiu. Deixeu que acabin de sincronitzar-se al telèfon i, després, inicieu l'actualització.",
+    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
+    "homeLockedSubtitle": "Kept safe · unlock to read",
+    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
+    "homeTakingLonger": "Taking longer than usual",
+    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
 }

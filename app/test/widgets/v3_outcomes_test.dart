@@ -451,15 +451,26 @@ void main() {
     }
 
     testWidgets('transcribing and writing say so under the title, with no button', (tester) async {
-      await pumpRow(tester, _decoded('transcribing'));
+      // Just finished: inside the deadline.
+      final fresh = {'finished_at': DateTime.now().toUtc().toIso8601String()};
+      await pumpRow(tester, _decoded('transcribing', extra: fresh));
       expect(find.text('Transcribing…'), findsOneWidget);
       expect(find.byType(OmiButton), findsNothing);
-      await pumpRow(tester, _decoded('writing'));
+      await pumpRow(tester, _decoded('writing', extra: fresh));
       await tester.pump(const Duration(milliseconds: 400));
       expect(find.text('Writing summary…'), findsOneWidget);
       await pumpRow(tester, _decoded('live'));
       await tester.pump(const Duration(seconds: 1));
       expect(find.textContaining('Listening'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('a step past its deadline says it is taking longer, never failed', (tester) async {
+      await pumpRow(tester, _decoded('transcribing'));
+      expect(find.text('Taking longer than usual'), findsOneWidget);
+      expect(find.text('Transcribing…'), findsNothing);
+      expect(find.textContaining('Failed'), findsNothing);
+      expect(find.byType(OmiButton), findsNothing);
       await tester.pumpWidget(const SizedBox());
     });
 

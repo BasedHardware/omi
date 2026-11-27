@@ -11915,8 +11915,6 @@
     "syncStallAlertBody": "உங்கள் Omi-யில் இருந்து {hours} மணி நேரத்திற்கு மேல் எந்தப் பதிவும் ஒத்திசைக்கப்படவில்லை. உங்கள் சாதன இணைப்பைச் சரிபார்க்க Omi-ஐத் திறக்கவும்.",
     "activityAttentionSyncStalledTitle": "Omi ஒத்திசைக்கவில்லை",
     "activityAttentionSyncStalledSubtitle": "{hours} மணி நேரத்திற்கு மேல் எந்தப் பதிவும் ஒத்திசைக்கப்படவில்லை",
-    "dailyRecapsOnHome": "முகப்பில் தினசரி சுருக்கங்கள்",
-    "dailyRecapsOnHomeDescription": "முகப்பின் மேலே உங்கள் சமீபத்திய சுருக்கங்களைக் காட்டு.",
     "yearlySwitchTitle": "ஆண்டுக்கு மாறவும்",
     "yearlySwitchRowSavings": "ஆண்டுக்கு {amount} சேமிக்கவும்",
     "yearlySwitchHomeTitle": "ஆண்டுக் கட்டணத்தில் ஆண்டுக்கு {amount} சேமிக்கவும்",
@@ -11936,7 +11934,6 @@
     "chatAppsCodeExpiredMessageIn": "புதிய குறியீட்டைப் பெற்று {app}-இலிருந்து அனுப்புங்கள்.",
     "episodeWritingNotes": "குறிப்புகள் எழுதப்படுகின்றன…",
     "homeStepTranscribing": "படியெடுக்கப்படுகிறது…",
-    "homeRecordingsCount": "{count, plural, one{{count} பதிவு} other{{count} பதிவுகள்}}",
     "episodeWritingNotesDetail": "முதலில் படியெடுப்பை முடிக்கிறோம். இந்தப் பக்கத்தை விட்டு வெளியேறலாம்.",
     "episodeCoversUpTo": "{time} வரை · முடிந்ததும் முழு குறிப்புகள்",
     "liveTranscribedUpTo": "{time} வரை படியெடுக்கப்பட்டது",
@@ -12302,9 +12299,6 @@
     "deviceReadyToUse": "பயன்படுத்தத் தயாராக உள்ளது",
     "firmwareUpdateFirmwareTooOld": "உங்கள் சாதனத்தின் ஃபர்ம்வேர் இந்தப் புதுப்பிப்புக்கு மிகவும் பழையதாக உள்ளது. சாதனத்தைப் புதுப்பிக்க உதவி பெற ஆதரவைத் தொடர்புகொள்ளவும்.",
     "firmwareUpdateAppRequired": "இந்த ஃபர்ம்வேர் புதுப்பிப்புக்கு Omi ஆப்பின் புதிய பதிப்பு தேவை. உங்கள் ஆப் ஸ்டோரிலிருந்து ஆப்பைப் புதுப்பித்து, மீண்டும் சரிபார்க்கவும்.",
-    "quietPayerTitle": "5 நாட்களாக பதிவுகள் இல்லை",
-    "quietPayerMessage": "உங்கள் Omi-ஐ சரிபார்க்கவும்.",
-    "quietPayerCheck": "சரிபார்",
     "playManageSubscription": "சந்தாவை நிர்வகி",
     "playBilledByGoogle": "Google Play மூலம் கட்டணம் வசூலிக்கப்படும்",
     "playPurchasePending": "உங்கள் கட்டணம் நிலுவையில் உள்ளது. Google Play உறுதிசெய்ததும் Omi Pro தொடங்கும்.",
@@ -12325,5 +12319,10 @@
     "playStripePlanPaused": "உங்கள் {plan} திட்டம் இடைநிறுத்தப்பட்டுள்ளது.",
     "firmwareNewestSupportedForDevice": "உங்கள் சாதனம் ஏற்கனவே ஆதரிக்கப்படும் மிகச் சமீபத்திய ஃபார்ம்வேர் பதிப்பில் உள்ளது",
     "firmwareSyncRecordingsFirstTitle": "முதலில் உங்கள் பதிவுகளை ஒத்திசைக்கவும்",
-    "firmwareSyncRecordingsFirstMessage": "சில பதிவுகள் இன்னும் உங்கள் சாதனத்தில் உள்ளன. அவை உங்கள் தொலைபேசிக்கு ஒத்திசைவை முடிக்க அனுமதித்து, பிறகு புதுப்பிப்பைத் தொடங்கவும்."
+    "firmwareSyncRecordingsFirstMessage": "சில பதிவுகள் இன்னும் உங்கள் சாதனத்தில் உள்ளன. அவை உங்கள் தொலைபேசிக்கு ஒத்திசைவை முடிக்க அனுமதித்து, பிறகு புதுப்பிப்பைத் தொடங்கவும்.",
+    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
+    "homeLockedSubtitle": "Kept safe · unlock to read",
+    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
+    "homeTakingLonger": "Taking longer than usual",
+    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
 }

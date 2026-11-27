@@ -4492,8 +4492,6 @@
     "syncStallAlertBody": "Al meer dan {hours} uur zijn er geen opnames van je Omi gesynchroniseerd. Open Omi om de verbinding van je apparaat te controleren.",
     "activityAttentionSyncStalledTitle": "Omi synchroniseert niet",
     "activityAttentionSyncStalledSubtitle": "Al meer dan {hours} uur geen gesynchroniseerde opnames",
-    "dailyRecapsOnHome": "Dagelijkse samenvattingen op Home",
-    "dailyRecapsOnHomeDescription": "Toon je nieuwste samenvattingen bovenaan Home.",
     "yearlySwitchTitle": "Overstappen naar jaarlijks",
     "yearlySwitchRowSavings": "Bespaar {amount} per jaar",
     "yearlySwitchHomeTitle": "Bespaar {amount} per jaar met jaarlijks betalen",
@@ -4513,7 +4511,6 @@
     "chatAppsCodeExpiredMessageIn": "Vraag een nieuwe code aan en stuur die vanuit {app}.",
     "episodeWritingNotes": "Notities schrijven…",
     "homeStepTranscribing": "Transcriberen…",
-    "homeRecordingsCount": "{count, plural, one{{count} opname} other{{count} opnames}}",
     "episodeWritingNotesDetail": "Eerst maken we het transcript af. Je kunt deze pagina verlaten.",
     "episodeCoversUpTo": "Tot {time} · volledige notities aan het eind",
     "liveTranscribedUpTo": "Getranscribeerd tot {time}",
@@ -4745,9 +4742,6 @@
     "deviceReadyToUse": "Klaar voor gebruik",
     "firmwareUpdateFirmwareTooOld": "De firmware van je apparaat is te oud voor deze update. Neem contact op met de ondersteuning voor hulp bij het bijwerken van je apparaat.",
     "firmwareUpdateAppRequired": "Voor deze firmware-update is een nieuwere Omi-app nodig. Werk de app bij via je appwinkel en controleer daarna opnieuw.",
-    "quietPayerTitle": "Al 5 dagen geen opnames",
-    "quietPayerMessage": "Controleer je Omi.",
-    "quietPayerCheck": "Controleren",
     "playManageSubscription": "Abonnement beheren",
     "playBilledByGoogle": "Gefactureerd via Google Play",
     "playPurchasePending": "Je betaling is in behandeling. Omi Pro start zodra Google Play die bevestigt.",
@@ -4768,5 +4762,10 @@
     "playStripePlanPaused": "Je {plan}-abonnement is gepauzeerd.",
     "firmwareNewestSupportedForDevice": "Je apparaat heeft al de nieuwste ondersteunde firmwareversie",
     "firmwareSyncRecordingsFirstTitle": "Synchroniseer eerst je opnames",
-    "firmwareSyncRecordingsFirstMessage": "Sommige opnames staan nog op je apparaat. Laat ze eerst volledig synchroniseren naar je telefoon en start daarna de update."
+    "firmwareSyncRecordingsFirstMessage": "Sommige opnames staan nog op je apparaat. Laat ze eerst volledig synchroniseren naar je telefoon en start daarna de update.",
+    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
+    "homeLockedSubtitle": "Kept safe · unlock to read",
+    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
+    "homeTakingLonger": "Taking longer than usual",
+    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
 }

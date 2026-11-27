@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/folder.dart';
 import 'package:omi/backend/schema/gen/speaker_tag_prompts_wire.g.dart';
@@ -9,10 +8,8 @@ import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/local_recording.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
-import 'package:omi/pages/home/widgets/home_daily_recaps.dart' show RecentRecapsLoader;
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/episode_provider.dart';
-import 'package:omi/providers/home_feed_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
@@ -97,26 +94,22 @@ class _InertSyncProvider extends ChangeNotifier implements SyncProvider {
 /// Include real MaterialApp localization delegates. Spine tests check actual page
 /// ancestry and behavior; fixture wiring is deliberately editable by the builder.
 /// Home's recaps row with nothing to show, and no I/O.
-Future<({List<DailySummary> items, bool ok})> _noRecaps() async => (items: const <DailySummary>[], ok: true);
-
 /// Server pending work and attention items with nothing to show, and no I/O.
 PendingWorkStore inertPendingWorkStore() => PendingWorkStore(
       loadPending: () async => const ApiSuccess(PendingWorkSnapshot.disabled),
       loadAttention: () async => const ApiSuccess(AttentionItemsPage.disabled),
     );
 
-/// [sync] defaults to nothing in flight; [loadRecaps] to no recaps; [pendingWork] to no server work.
+/// [sync] defaults to nothing in flight; [pendingWork] to no server work.
 Future<Widget> buildTypedConversationScreen(
   ConversationProvider provider, {
   SyncProvider? sync,
   CaptureProvider? captureProvider,
   EpisodeProvider? episodes,
-  HomeFeedProvider? feed,
   LocalRecordingsProvider? recordingsProvider,
   ThemeData? theme,
   bool initializePreferences = true,
   bool requestInitialLoad = false,
-  RecentRecapsLoader loadRecaps = _noRecaps,
   PendingWorkStore? pendingWork,
 }) async {
   if (initializePreferences) {
@@ -155,14 +148,12 @@ Future<Widget> buildTypedConversationScreen(
         ChangeNotifierProvider<PhoneCallProvider>.value(value: phone),
         ChangeNotifierProvider<CaptureProvider>.value(value: capture),
         if (episodes != null) ChangeNotifierProvider<EpisodeProvider>.value(value: episodes),
-        if (feed != null) ChangeNotifierProvider<HomeFeedProvider>.value(value: feed),
         ChangeNotifierProvider<SpeakerTagPromptsProvider>.value(value: speakerTagPrompts),
         ChangeNotifierProvider<SyncProvider>.value(value: sync ?? _InertSyncProvider()),
       ],
       child: Scaffold(
           body: ConversationsPage(
         requestInitialLoad: requestInitialLoad,
-        loadRecaps: loadRecaps,
         pendingWork: pendingWork ?? inertPendingWorkStore(),
       )),
     ),

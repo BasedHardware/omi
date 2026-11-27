@@ -1,0 +1,50 @@
+# Home
+
+Home is v3 only (David, 2026-11-27; SCA-5226). What it shows is a pure function,
+`buildHome` in `lib/pages/conversations/home/home_model.dart`, of plain inputs: the
+server's conversation list, the conversation in progress, the capture and call state,
+recordings saved on this phone, held audio and pending deletes. The page turns each
+`HomeRow` into exactly one widget, so the list of row kinds below is the whole of Home.
+
+## Rows
+
+| Row | Widget | Shown when |
+| --- | --- | --- |
+| Live | `HomeLiveRowView` | Anything is capturing. At most one, first in Today. The server's conversation in progress is drawn as its own `ConversationListItem` (live tile, "Listening" until titled, its length, no snippet); a call, Transcribe Later or a capture the server has not named yet get their own row. |
+| Finishing up… | `HomeFinishingRowView` | After End, until the server's row for it is listed or the finish settles. Follows the live row. Tapping opens the conversation once it exists, and says it will otherwise. |
+| Conversation | `ConversationListItem` | Every listed conversation in any state: done, transcribing, writing, failed. |
+| Saved recording | `RecordingListItem` | A recording held on this phone for the reader. Play, or Try Again when sending failed. |
+| Locked | `HomeLockedRowView` | A day's conversations and held audio over the plan's limit, as one row with their count and Unlock. |
+
+One prompt sits above the list at most: payment, then firmware, then voice profile,
+then Review (`HomePromptSlot`).
+
+## Rules
+
+- Days are newest first; rows within a day are newest first by start time.
+- A step that runs past its deadline says "Taking longer than usual", never "failed"
+  (`HomeDeadlines`: 15 minutes for a conversation step, measured from when it finished;
+  30 minutes for a saved recording the server accepted). Server work has no client timeout.
+- A failed conversation stays in place with "Summary failed" and Try Again. Activity
+  lists it too.
+- Live, Finishing up…, saved recordings and locked rows show only in Home's own view: no
+  search, filter or selection. Showing short or discarded conversations widens the list;
+  it is not a filter.
+- Every row is a `HomeRowShell`: one card, one 36 pt tile, title, one subtitle line in one
+  style, and an optional trailing action (`HomeRowAction`). No row carries a chevron.
+- Every row deletes with one swipe (`HomeSwipeDelete`): a conversation confirms and offers
+  Undo; a recording on this phone confirms and cannot be undone, and cannot be swiped while
+  the server is working on it.
+- The page shell does not rebuild for a list update: a `Selector2` over an identity snapshot
+  rebuilds the list below it (`test/perf/home_after_detail_perf_test.dart`).
+
+## Not on Home any more
+
+The compact card feed (`/v1/home/feed`), the episode projection and the legacy list
+fallback are gone from the client; it no longer reads the feed endpoint. Background-recap
+hiding and the offline-sync "adding from your Omi" label only ran with episodes on, and
+v3 suppresses episodes, so neither had run since v3 reached every account.
+
+Coverage: `test/unit/home_model_test.dart` (the model), `test/pages/conversations/home_v3_test.dart`
+(the page, including the `Home rows render` evidence group, written when
+`HOME_ROWS_RENDER_OUTPUT` names a directory).

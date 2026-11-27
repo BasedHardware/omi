@@ -11915,8 +11915,6 @@
     "syncStallAlertBody": "{hours} ঘণ্টার বেশি Omi থেকে কোনো রেকর্ডিং সিঙ্ক হয়নি। আপনার ডিভাইস সংযোগ পরীক্ষা করতে Omi খুলুন।",
     "activityAttentionSyncStalledTitle": "Omi সিঙ্ক হচ্ছে না",
     "activityAttentionSyncStalledSubtitle": "{hours} ঘণ্টার বেশি কোনো রেকর্ডিং সিঙ্ক হয়নি",
-    "dailyRecapsOnHome": "হোমে দৈনিক সংক্ষেপ",
-    "dailyRecapsOnHomeDescription": "হোমের উপরে আপনার সাম্প্রতিক সংক্ষেপ দেখান।",
     "yearlySwitchTitle": "বার্ষিকে যান",
     "yearlySwitchRowSavings": "বছরে {amount} সাশ্রয় করুন",
     "yearlySwitchHomeTitle": "বার্ষিক পেমেন্টে বছরে {amount} সাশ্রয় করুন",
@@ -11936,7 +11934,6 @@
     "chatAppsCodeExpiredMessageIn": "নতুন কোড নিন এবং {app} অ্যাপ থেকে পাঠান।",
     "episodeWritingNotes": "নোট লেখা হচ্ছে…",
     "homeStepTranscribing": "ট্রান্সক্রাইব করা হচ্ছে…",
-    "homeRecordingsCount": "{count, plural, one{1টি রেকর্ডিং} other{{count}টি রেকর্ডিং}}",
     "episodeWritingNotesDetail": "আগে ট্রান্সক্রিপ্ট শেষ করা হচ্ছে। আপনি এই পেজ ছেড়ে যেতে পারেন।",
     "episodeCoversUpTo": "{time} পর্যন্ত · শেষ হলে সম্পূর্ণ নোট",
     "liveTranscribedUpTo": "{time} পর্যন্ত ট্রান্সক্রাইব হয়েছে",
@@ -12302,9 +12299,6 @@
     "deviceReadyToUse": "ব্যবহারের জন্য প্রস্তুত",
     "firmwareUpdateFirmwareTooOld": "এই আপডেটের জন্য আপনার ডিভাইসের ফার্মওয়্যার অনেক পুরোনো। ডিভাইস আপডেট করতে সাহায্যের জন্য সহায়তা দলের সঙ্গে যোগাযোগ করুন।",
     "firmwareUpdateAppRequired": "এই ফার্মওয়্যার আপডেটের জন্য Omi অ্যাপের আরও নতুন সংস্করণ প্রয়োজন। আপনার অ্যাপ স্টোর থেকে অ্যাপটি আপডেট করুন, তারপর আবার পরীক্ষা করুন।",
-    "quietPayerTitle": "৫ দিন ধরে কোনো রেকর্ডিং নেই",
-    "quietPayerMessage": "আপনার Omi দেখে নিন।",
-    "quietPayerCheck": "দেখুন",
     "playManageSubscription": "সাবস্ক্রিপশন পরিচালনা",
     "playBilledByGoogle": "Google Play-এর মাধ্যমে বিল করা হয়",
     "playPurchasePending": "আপনার পেমেন্ট অপেক্ষমাণ। Google Play নিশ্চিত করলেই Omi Pro শুরু হবে।",
@@ -12325,5 +12319,10 @@
     "playStripePlanPaused": "আপনার {plan} প্ল্যান বিরতিতে আছে।",
     "firmwareNewestSupportedForDevice": "আপনার ডিভাইস ইতিমধ্যেই ফার্মওয়্যারের সর্বশেষ সমর্থিত সংস্করণে রয়েছে",
     "firmwareSyncRecordingsFirstTitle": "প্রথমে আপনার রেকর্ডিং সিঙ্ক করুন",
-    "firmwareSyncRecordingsFirstMessage": "কিছু রেকর্ডিং এখনও আপনার ডিভাইসে রয়েছে। সেগুলিকে আপনার ফোনে সিঙ্ক শেষ হতে দিন, তারপর আপডেট শুরু করুন।"
+    "firmwareSyncRecordingsFirstMessage": "কিছু রেকর্ডিং এখনও আপনার ডিভাইসে রয়েছে। সেগুলিকে আপনার ফোনে সিঙ্ক শেষ হতে দিন, তারপর আপডেট শুরু করুন।",
+    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
+    "homeLockedSubtitle": "Kept safe · unlock to read",
+    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
+    "homeTakingLonger": "Taking longer than usual",
+    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
 }

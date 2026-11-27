@@ -4527,8 +4527,6 @@
     "syncStallAlertBody": "Omi cihazınızdan {hours} saatten uzun süredir hiçbir kayıt eşitlenmedi. Cihaz bağlantınızı kontrol etmek için Omi'yu açın.",
     "activityAttentionSyncStalledTitle": "Omi eşitlemiyor",
     "activityAttentionSyncStalledSubtitle": "{hours} saatten uzun süredir eşitlenmiş kayıt yok",
-    "dailyRecapsOnHome": "Ana Sayfada Günlük Özetler",
-    "dailyRecapsOnHomeDescription": "En son özetlerini Ana Sayfanın üstünde göster.",
     "yearlySwitchTitle": "Yıllığa geçin",
     "yearlySwitchRowSavings": "Yılda {amount} tasarruf edin",
     "yearlySwitchHomeTitle": "Yıllık ödemeyle yılda {amount} tasarruf edin",
@@ -4548,7 +4546,6 @@
     "chatAppsCodeExpiredMessageIn": "Yeni bir kod al ve {app}'dan gönder.",
     "episodeWritingNotes": "Notlar yazılıyor…",
     "homeStepTranscribing": "Metne dökülüyor…",
-    "homeRecordingsCount": "{count, plural, other{{count} kayıt}}",
     "episodeWritingNotesDetail": "Önce döküm tamamlanıyor. Bu sayfadan çıkabilirsiniz.",
     "episodeCoversUpTo": "{time} saatine kadar · bitince tam notlar",
     "liveTranscribedUpTo": "{time} saatine kadar yazıya döküldü",
@@ -4780,9 +4777,6 @@
     "deviceReadyToUse": "Kullanıma hazır",
     "firmwareUpdateFirmwareTooOld": "Cihazınızın donanım yazılımı bu güncelleme için çok eski. Cihazınızı güncelleme konusunda yardım almak için destek ekibiyle iletişime geçin.",
     "firmwareUpdateAppRequired": "Bu donanım yazılımı güncellemesi için Omi uygulamasının daha yeni bir sürümü gerekiyor. Uygulamayı uygulama mağazanızdan güncelleyin, ardından yeniden kontrol edin.",
-    "quietPayerTitle": "5 gündür kayıt yok",
-    "quietPayerMessage": "Omi'ni kontrol et.",
-    "quietPayerCheck": "Kontrol Et",
     "playManageSubscription": "Aboneliği yönet",
     "playBilledByGoogle": "Google Play üzerinden faturalandırılır",
     "playPurchasePending": "Ödemeniz beklemede. Google Play onayladığında Omi Pro başlar.",
@@ -4803,5 +4797,10 @@
     "playStripePlanPaused": "{plan} planın duraklatıldı.",
     "firmwareNewestSupportedForDevice": "Cihazınız zaten desteklenen en yeni firmware sürümünü kullanıyor",
     "firmwareSyncRecordingsFirstTitle": "Önce kayıtlarınızı senkronize edin",
-    "firmwareSyncRecordingsFirstMessage": "Bazı kayıtlar hâlâ cihazınızda. Telefonunuza senkronize edilmelerini bekleyin, ardından güncellemeyi başlatın."
+    "firmwareSyncRecordingsFirstMessage": "Bazı kayıtlar hâlâ cihazınızda. Telefonunuza senkronize edilmelerini bekleyin, ardından güncellemeyi başlatın.",
+    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
+    "homeLockedSubtitle": "Kept safe · unlock to read",
+    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
+    "homeTakingLonger": "Taking longer than usual",
+    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
 }

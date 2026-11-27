@@ -30,7 +30,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:omi/app_globals.dart';
-import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
@@ -133,7 +132,6 @@ void main() {
     globalNavigatorKey.currentState!.push(MaterialPageRoute<void>(
       builder: (_) => ConversationsPage(
         requestInitialLoad: false,
-        loadRecaps: () async => (items: <DailySummary>[], ok: true),
       ),
     ));
     await firstVisibleFrame(find.byKey(const ValueKey('perf-conv-0')), 'first_home_frame_ms');

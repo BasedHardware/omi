@@ -14588,12 +14588,6 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get dailyRecapsOnHome => 'ホームの日次の要約';
-
-  @override
-  String get dailyRecapsOnHomeDescription => '最新の要約をホームの上部に表示します。';
-
-  @override
   String get yearlySwitchTitle => '年払いに切り替える';
 
   @override
@@ -14661,16 +14655,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get homeStepTranscribing => '文字起こし中…';
-
-  @override
-  String homeRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count件の録音',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get episodeWritingNotesDetail => '先に文字起こしを仕上げています。このページを離れても大丈夫です。';
@@ -15521,15 +15505,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get firmwareUpdateAppRequired => 'このファームウェアの更新には、新しいバージョンのOmiアプリが必要です。アプリストアからアプリを更新してから、もう一度確認してください。';
 
   @override
-  String get quietPayerTitle => '5日間録音がありません';
-
-  @override
-  String get quietPayerMessage => 'Omiを確認してください。';
-
-  @override
-  String get quietPayerCheck => '確認';
-
-  @override
   String get playManageSubscription => 'サブスクリプションを管理';
 
   @override
@@ -15608,4 +15583,27 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get firmwareSyncRecordingsFirstMessage => '一部の録音はまだデバイスに残っています。スマートフォンへの同期が完了してから、更新を開始してください。';
+
+  @override
+  String homeLockedTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count conversations waiting',
+      one: '1 conversation waiting',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeLockedSubtitle => 'Kept safe · unlock to read';
+
+  @override
+  String get homeLockedSubtitleNoPlans => 'Kept safe until your allowance resets';
+
+  @override
+  String get homeTakingLonger => 'Taking longer than usual';
+
+  @override
+  String get homeFinishingOpensWhenReady => 'Opens as soon as it\'s ready';
 }

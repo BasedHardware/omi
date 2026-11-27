@@ -4492,8 +4492,6 @@
     "syncStallAlertBody": "Lleva más de {hours} horas sin sincronizarse ninguna grabación de tu Omi. Abre Omi para comprobar la conexión de tu dispositivo.",
     "activityAttentionSyncStalledTitle": "Omi no se está sincronizando",
     "activityAttentionSyncStalledSubtitle": "Ninguna grabación sincronizada durante más de {hours} horas",
-    "dailyRecapsOnHome": "Resúmenes diarios en Inicio",
-    "dailyRecapsOnHomeDescription": "Muestra tus resúmenes más recientes arriba en Inicio.",
     "yearlySwitchTitle": "Cambiar a anual",
     "yearlySwitchRowSavings": "Ahorra {amount} al año",
     "yearlySwitchHomeTitle": "Ahorra {amount} al año con el pago anual",
@@ -4513,7 +4511,6 @@
     "chatAppsCodeExpiredMessageIn": "Obtén un código nuevo y envíalo desde {app}.",
     "episodeWritingNotes": "Escribiendo notas…",
     "homeStepTranscribing": "Transcribiendo…",
-    "homeRecordingsCount": "{count, plural, one{{count} grabación} other{{count} grabaciones}}",
     "episodeWritingNotesDetail": "Primero terminamos la transcripción. Puedes salir de esta página.",
     "episodeCoversUpTo": "Cubre hasta las {time} · notas completas al terminar",
     "liveTranscribedUpTo": "Transcrito hasta las {time}",
@@ -4745,9 +4742,6 @@
     "deviceReadyToUse": "Listo para usar",
     "firmwareUpdateFirmwareTooOld": "El firmware de tu dispositivo es demasiado antiguo para esta actualización. Contacta con el soporte para que te ayude a actualizar el dispositivo.",
     "firmwareUpdateAppRequired": "Esta actualización del firmware necesita una versión más reciente de la app Omi. Actualiza la app desde tu tienda de aplicaciones y vuelve a comprobarlo.",
-    "quietPayerTitle": "Sin grabaciones en 5 días",
-    "quietPayerMessage": "Revisa tu Omi.",
-    "quietPayerCheck": "Revisar",
     "playManageSubscription": "Gestionar suscripción",
     "playBilledByGoogle": "Facturado por Google Play",
     "playPurchasePending": "Tu pago está pendiente. Omi Pro empezará cuando Google Play lo confirme.",
@@ -4768,5 +4762,10 @@
     "playStripePlanPaused": "Tu plan {plan} está en pausa.",
     "firmwareNewestSupportedForDevice": "Tu dispositivo ya está en la versión de firmware compatible más reciente",
     "firmwareSyncRecordingsFirstTitle": "Sincroniza tus grabaciones primero",
-    "firmwareSyncRecordingsFirstMessage": "Algunas grabaciones siguen en tu dispositivo. Deja que terminen de sincronizarse con tu teléfono y luego inicia la actualización."
+    "firmwareSyncRecordingsFirstMessage": "Algunas grabaciones siguen en tu dispositivo. Deja que terminen de sincronizarse con tu teléfono y luego inicia la actualización.",
+    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
+    "homeLockedSubtitle": "Kept safe · unlock to read",
+    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
+    "homeTakingLonger": "Taking longer than usual",
+    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
 }

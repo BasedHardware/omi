@@ -4492,8 +4492,6 @@
     "syncStallAlertBody": "{hours}시간 이상 Omi에서 녹음이 동기화되지 않았습니다. 기기 연결을 확인하려면 Omi를 여세요.",
     "activityAttentionSyncStalledTitle": "Omi가 동기화되지 않습니다",
     "activityAttentionSyncStalledSubtitle": "{hours}시간 이상 녹음이 동기화되지 않았습니다",
-    "dailyRecapsOnHome": "홈의 일일 요약",
-    "dailyRecapsOnHomeDescription": "홈 상단에 최근 요약을 표시합니다.",
     "yearlySwitchTitle": "연간 결제로 전환",
     "yearlySwitchRowSavings": "연간 {amount} 절약",
     "yearlySwitchHomeTitle": "연간 결제로 1년에 {amount} 절약",
@@ -4513,7 +4511,6 @@
     "chatAppsCodeExpiredMessageIn": "새 코드를 받아 {app} 앱에서 보내세요.",
     "episodeWritingNotes": "메모 작성 중…",
     "homeStepTranscribing": "음성 변환 중…",
-    "homeRecordingsCount": "{count, plural, other{녹음 {count}개}}",
     "episodeWritingNotesDetail": "먼저 대화 내용을 마무리하고 있어요. 이 페이지를 나가도 됩니다.",
     "episodeCoversUpTo": "{time}까지 · 끝나면 전체 메모 제공",
     "liveTranscribedUpTo": "{time}까지 변환됨",
@@ -4745,9 +4742,6 @@
     "deviceReadyToUse": "사용 준비 완료",
     "firmwareUpdateFirmwareTooOld": "기기의 펌웨어가 너무 오래되어 이 업데이트를 설치할 수 없습니다. 기기 업데이트에 도움이 필요하면 지원팀에 문의하세요.",
     "firmwareUpdateAppRequired": "이 펌웨어 업데이트에는 더 최신 버전의 Omi 앱이 필요합니다. 앱 스토어에서 앱을 업데이트한 후 다시 확인하세요.",
-    "quietPayerTitle": "5일 동안 녹음이 없어요",
-    "quietPayerMessage": "Omi를 확인해 보세요.",
-    "quietPayerCheck": "확인",
     "playManageSubscription": "구독 관리",
     "playBilledByGoogle": "Google Play에서 청구됩니다",
     "playPurchasePending": "결제가 대기 중입니다. Google Play에서 확인되면 Omi Pro가 시작됩니다.",
@@ -4768,5 +4762,10 @@
     "playStripePlanPaused": "{plan} 플랜이 일시 중지되었습니다.",
     "firmwareNewestSupportedForDevice": "기기가 이미 지원되는 최신 펌웨어 버전을 사용하고 있습니다",
     "firmwareSyncRecordingsFirstTitle": "먼저 녹음을 동기화하세요",
-    "firmwareSyncRecordingsFirstMessage": "일부 녹음이 아직 기기에 남아 있습니다. 휴대폰으로의 동기화가 완료되면 업데이트를 시작해 주세요."
+    "firmwareSyncRecordingsFirstMessage": "일부 녹음이 아직 기기에 남아 있습니다. 휴대폰으로의 동기화가 완료되면 업데이트를 시작해 주세요.",
+    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
+    "homeLockedSubtitle": "Kept safe · unlock to read",
+    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
+    "homeTakingLonger": "Taking longer than usual",
+    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
 }

@@ -17,7 +17,6 @@ import 'package:omi/models/sync_state.dart';
 import 'package:omi/pages/activity/activity_page.dart';
 import 'package:omi/pages/activity/activity_seen.dart';
 import 'package:omi/pages/conversations/on_the_way_page.dart';
-import 'package:omi/pages/home/widgets/home_daily_recaps_setting.dart';
 import 'package:omi/pages/settings/device_settings.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -109,13 +108,14 @@ final _todayItems = [
   _convo('h3', 'Morning Run Notes', '🏃', _at(0, 7, 31), 6),
 ];
 
-/// Home with [items] (today's three conversations by default), two recaps, and [sync]'s pending
+/// Home with [items] (today's three conversations by default) and [sync]'s pending
 /// work. With [fetch], Home starts empty and loads its list through it, as on a cold start.
 Future<void> _runHome(
   AuditRun a,
   SyncProvider sync, {
   List<ServerConversation>? items,
   ConversationListFetcher? fetch,
+  AuditLive live = AuditLive.pendant,
 }) async {
   final list = items ?? _todayItems;
   final conversations = ConversationProvider(
@@ -128,13 +128,13 @@ Future<void> _runHome(
       ..groupConversationsByDate();
   }
   await a.pump(
-    HomeFrame(recaps: () async => (items: _recaps, ok: true)),
+    const HomeFrame(),
     scaffold: false,
     providers: [
       ChangeNotifierProvider<DeviceProvider>.value(
         value: AuditDeviceProvider(connected: true, battery: 79, device: auditPendant),
       ),
-      ChangeNotifierProvider<CaptureProvider>.value(value: AuditCaptureProvider(AuditLive.pendant)),
+      ChangeNotifierProvider<CaptureProvider>.value(value: AuditCaptureProvider(live)),
       ChangeNotifierProvider<ConversationProvider>.value(value: conversations),
       ChangeNotifierProvider<SyncProvider>.value(value: sync),
     ],
@@ -206,7 +206,7 @@ final offlineProcessingScenarios = <AuditScenario>[
     id: 'home-offline-processing',
     title: 'Home: conversations on the way',
     page: 'lib/pages/conversations/conversations_page.dart (ConversationsPage) on Home',
-    state: 'Two recordings uploaded and transcribing; three conversations today; two recaps',
+    state: 'Two recordings uploaded and transcribing; three conversations today',
     run: (a) async {
       final sync = _SyncAuditProvider(
         wals: [_wal(_at(0, 18, 41), 14, WalStatus.uploaded), _wal(_at(0, 17, 58), 3, WalStatus.uploaded)],
@@ -221,10 +221,7 @@ final offlineProcessingScenarios = <AuditScenario>[
     id: 'home-offline-processing-ready',
     title: 'Home: catching up on a long backlog',
     page: 'lib/pages/conversations/conversations_page.dart (ConversationsPage) on Home',
-    state: 'Three hours of pendant audio waiting for its sync, one block downloading; Daily Recaps on Home is on and '
-        'the bell has a new recap',
-    // Home's recaps light the bell, and Home only loads them with the setting on.
-    prefs: const {HomeDailyRecapsSetting.prefKey: true},
+    state: 'Three hours of pendant audio waiting for its sync, one block downloading',
     run: (a) async {
       final sync = _SyncAuditProvider(
         phase: SyncPhase.downloadingFromDevice,
@@ -233,12 +230,7 @@ final offlineProcessingScenarios = <AuditScenario>[
           _wal(_at(0, 11, 0), 110, WalStatus.miss, storage: WalStorage.sdcard),
         ],
       );
-      // Home's recaps report to the app's bell state, so seed that one and put it back after.
-      final previous = ActivitySeen.instance;
-      ActivitySeen.instance = _seenYesterday();
-      addTearDown(() => ActivitySeen.instance = previous);
       await _runHome(a, sync);
-      expect(find.byKey(const ValueKey('home_activity_dot')), findsOneWidget);
       expect(find.text('Catching up on earlier audio'), findsNothing);
       await a.shot('A long backlog adds no Home row');
     },
@@ -248,28 +240,29 @@ final offlineProcessingScenarios = <AuditScenario>[
     title: 'Home: first load with conversations on the way',
     page: 'lib/pages/conversations/conversations_page.dart (ConversationsPage) on Home',
     state: 'Cold start: the list loads while two recordings transcribe, then today\'s three conversations '
-        'arrive; two recaps',
+        'arrive',
     run: (a) async {
       final sync = _SyncAuditProvider(
         wals: [_wal(_at(0, 18, 41), 14, WalStatus.uploaded), _wal(_at(0, 17, 58), 3, WalStatus.uploaded)],
       );
       final list = Completer<({List<ServerConversation> items, bool ok})>();
-      await _runHome(a, sync, fetch: () => list.future);
+      // Nothing recording: a capture's live row would open Today on its own.
+      await _runHome(a, sync, fetch: () => list.future, live: AuditLive.idle);
       expect(find.byKey(const Key('home_pending_row')), findsNothing);
       expect(find.text('Today'), findsNothing);
-      await a.shot('Home opens with recaps and its conversation skeleton', step: 'loading');
+      await a.shot('Home opens with its conversation skeleton', step: 'loading');
       list.complete((items: _todayItems, ok: true));
       await a.settle();
       expect(find.text('Morning Run Notes'), findsOneWidget);
       expect(find.text('Today'), findsOneWidget);
-      await a.shot('Today\'s conversations arrive below recaps', step: 'loaded');
+      await a.shot('Today\'s conversations arrive', step: 'loaded');
     },
   ),
   AuditScenario(
     id: 'home-pending-none-today',
     title: 'Home: conversations on the way, none yet today',
     page: 'lib/pages/conversations/conversations_page.dart (ConversationsPage) on Home',
-    state: 'Two recordings transcribing; two conversations from yesterday and none today; two recaps',
+    state: 'Two recordings transcribing; two conversations from yesterday and none today',
     run: (a) async {
       final sync = _SyncAuditProvider(
         wals: [_wal(_at(0, 9, 12), 14, WalStatus.uploaded), _wal(_at(0, 8, 40), 3, WalStatus.uploaded)],
@@ -281,6 +274,8 @@ final offlineProcessingScenarios = <AuditScenario>[
           _convo('y1', 'Dinner, AI Demo Day, and Model Feedback', '🍽️', _at(1, 19, 5), 28),
           _convo('y2', 'Morning Run Notes', '🏃', _at(1, 7, 31), 6),
         ],
+        // Nothing recording: a capture's live row would open Today on its own.
+        live: AuditLive.idle,
       );
       expect(find.text('Today'), findsNothing);
       expect(find.byKey(const Key('home_pending_row')), findsNothing);

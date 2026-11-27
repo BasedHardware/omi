@@ -4492,8 +4492,6 @@
     "syncStallAlertBody": "Inga inspelningar från din Omi har synkroniserats på mer än {hours} timmar. Öppna Omi för att kontrollera enhetens anslutning.",
     "activityAttentionSyncStalledTitle": "Omi synkroniserar inte",
     "activityAttentionSyncStalledSubtitle": "Inga inspelningar synkroniserade på mer än {hours} timmar",
-    "dailyRecapsOnHome": "Dagliga sammanfattningar på Hem",
-    "dailyRecapsOnHomeDescription": "Visa dina senaste sammanfattningar högst upp på Hem.",
     "yearlySwitchTitle": "Byt till årsvis",
     "yearlySwitchRowSavings": "Spara {amount} om året",
     "yearlySwitchHomeTitle": "Spara {amount} om året med årsbetalning",
@@ -4513,7 +4511,6 @@
     "chatAppsCodeExpiredMessageIn": "Hämta en ny kod och skicka den från {app}.",
     "episodeWritingNotes": "Skriver anteckningar…",
     "homeStepTranscribing": "Transkriberar…",
-    "homeRecordingsCount": "{count, plural, one{{count} inspelning} other{{count} inspelningar}}",
     "episodeWritingNotesDetail": "Vi gör först klart transkriptionen. Du kan lämna den här sidan.",
     "episodeCoversUpTo": "Täcker fram till {time} · fullständiga anteckningar när det är klart",
     "liveTranscribedUpTo": "Transkriberat fram till {time}",
@@ -4745,9 +4742,6 @@
     "deviceReadyToUse": "Redo att använda",
     "firmwareUpdateFirmwareTooOld": "Enhetens firmware är för gammal för den här uppdateringen. Kontakta supporten för att få hjälp med att uppdatera enheten.",
     "firmwareUpdateAppRequired": "Den här firmwareuppdateringen kräver en nyare Omi-app. Uppdatera appen från din appbutik och kontrollera sedan igen.",
-    "quietPayerTitle": "Inga inspelningar på 5 dagar",
-    "quietPayerMessage": "Kolla din Omi.",
-    "quietPayerCheck": "Kolla",
     "playManageSubscription": "Hantera prenumeration",
     "playBilledByGoogle": "Faktureras via Google Play",
     "playPurchasePending": "Betalningen väntar. Omi Pro startar så fort Google Play bekräftar den.",
@@ -4768,5 +4762,10 @@
     "playStripePlanPaused": "Din {plan}-plan är pausad.",
     "firmwareNewestSupportedForDevice": "Din enhet har redan den senaste firmwareversionen som stöds",
     "firmwareSyncRecordingsFirstTitle": "Synkronisera dina inspelningar först",
-    "firmwareSyncRecordingsFirstMessage": "Vissa inspelningar finns fortfarande på din enhet. Låt dem slutföra synkroniseringen till telefonen och starta sedan uppdateringen."
+    "firmwareSyncRecordingsFirstMessage": "Vissa inspelningar finns fortfarande på din enhet. Låt dem slutföra synkroniseringen till telefonen och starta sedan uppdateringen.",
+    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
+    "homeLockedSubtitle": "Kept safe · unlock to read",
+    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
+    "homeTakingLonger": "Taking longer than usual",
+    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
 }

@@ -4527,8 +4527,6 @@
     "syncStallAlertBody": "Записи с вашего Omi не синхронизировались более {hours} часов. Откройте Omi, чтобы проверить подключение устройства.",
     "activityAttentionSyncStalledTitle": "Omi не синхронизируется",
     "activityAttentionSyncStalledSubtitle": "Записи не синхронизировались более {hours} часов",
-    "dailyRecapsOnHome": "Ежедневные сводки на главной",
-    "dailyRecapsOnHomeDescription": "Показывать последние сводки вверху главной.",
     "yearlySwitchTitle": "Перейти на годовой",
     "yearlySwitchRowSavings": "Экономьте {amount} в год",
     "yearlySwitchHomeTitle": "Экономьте {amount} в год с годовой оплатой",
@@ -4548,7 +4546,6 @@
     "chatAppsCodeExpiredMessageIn": "Получите новый код и отправьте его из приложения «{app}».",
     "episodeWritingNotes": "Пишем заметки…",
     "homeStepTranscribing": "Расшифровываем…",
-    "homeRecordingsCount": "{count, plural, one{{count} запись} few{{count} записи} many{{count} записей} other{{count} записи}}",
     "episodeWritingNotesDetail": "Сначала завершаем расшифровку. Можно покинуть эту страницу.",
     "episodeCoversUpTo": "Охватывает до {time} · полные заметки по завершении",
     "liveTranscribedUpTo": "Расшифровано до {time}",
@@ -4780,9 +4777,6 @@
     "deviceReadyToUse": "Готово к использованию",
     "firmwareUpdateFirmwareTooOld": "Прошивка вашего устройства слишком стара для этого обновления. Обратитесь в службу поддержки за помощью в обновлении устройства.",
     "firmwareUpdateAppRequired": "Для этого обновления прошивки требуется более новая версия приложения Omi. Обновите приложение в магазине приложений, затем проверьте ещё раз.",
-    "quietPayerTitle": "Нет записей 5 дней",
-    "quietPayerMessage": "Проверьте свой Omi.",
-    "quietPayerCheck": "Проверить",
     "playManageSubscription": "Управлять подпиской",
     "playBilledByGoogle": "Оплата через Google Play",
     "playPurchasePending": "Платёж ожидает подтверждения. Omi Pro начнётся, как только Google Play его подтвердит.",
@@ -4803,5 +4797,10 @@
     "playStripePlanPaused": "Ваш план {plan} приостановлен.",
     "firmwareNewestSupportedForDevice": "На вашем устройстве уже установлена последняя поддерживаемая версия прошивки",
     "firmwareSyncRecordingsFirstTitle": "Сначала синхронизируйте записи",
-    "firmwareSyncRecordingsFirstMessage": "Некоторые записи всё ещё находятся на устройстве. Дождитесь завершения их синхронизации с телефоном, а затем начните обновление."
+    "firmwareSyncRecordingsFirstMessage": "Некоторые записи всё ещё находятся на устройстве. Дождитесь завершения их синхронизации с телефоном, а затем начните обновление.",
+    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
+    "homeLockedSubtitle": "Kept safe · unlock to read",
+    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
+    "homeTakingLonger": "Taking longer than usual",
+    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
 }

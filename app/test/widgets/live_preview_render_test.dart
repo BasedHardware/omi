@@ -22,7 +22,8 @@ import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
-import 'package:omi/pages/conversations/widgets/v3_live_placeholder_row.dart';
+import 'package:omi/pages/conversations/home/home_live_rows.dart';
+import 'package:omi/pages/conversations/home/home_model.dart';
 import 'package:omi/pages/episodes/live_episode_page.dart';
 import 'package:omi/pages/episodes/live_episode_row.dart';
 import 'package:omi/providers/capture_provider.dart';
@@ -741,7 +742,7 @@ void main() {
             body: SafeArea(
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: OmiSpacing.md),
-                child: ListView(children: const [V3LivePlaceholderRow()]),
+                child: ListView(children: const [HomeLiveRowView(row: HomeLiveRow(HomeLiveKind.capture))]),
               ),
             ),
           ),
@@ -796,11 +797,11 @@ void main() {
         await shoot(tester, name('home-placeholder-preview', light),
             light: light, home: placeholderRow(), capture: capture);
 
-        final subtitle = tester.widget<Text>(find.byKey(const Key('v3_live_placeholder_preview')));
+        final subtitle = tester.widget<Text>(find.byKey(const Key('home_live_row_subtitle')));
         if (showsPreview) {
           expect(subtitle.data, contains('overnight run looks clean'));
         } else {
-          expect(subtitle.data, en.live, reason: 'ineligible or canonical sessions stay status-only');
+          expect(subtitle.data, startsWith(en.live), reason: 'ineligible or canonical sessions stay status-only');
           expect(find.textContaining('overnight run looks clean', findRichText: true), findsNothing);
         }
       });

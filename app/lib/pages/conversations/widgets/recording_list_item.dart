@@ -1,36 +1,72 @@
 import 'package:flutter/material.dart';
+
+import 'package:clock/clock.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/models/local_recording.dart';
+import 'package:omi/pages/conversations/home/home_model.dart';
+import 'package:omi/pages/conversations/home/home_row_shell.dart';
+import 'package:omi/pages/conversations/home/home_swipe_delete.dart';
 import 'package:omi/pages/on_device/on_device_queue_banner.dart';
 import 'package:omi/pages/conversations/recording_detail/recording_detail_sheet.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/services/app_review_service.dart';
 import 'package:omi/services/on_device/on_device_transcription_controller.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
-/// A row in the conversations list for a batch/offline-mode recording captured
-/// locally. Unlike a conversation it has no title/icon yet — it shows the
-/// recording's time + duration, its state, and an inline play/pause button that
-/// decodes and plays the local audio on device. Tapping opens a floating
-/// playback sheet (transcribe, share, delete).
-class RecordingListItem extends StatelessWidget {
+/// A recording held on this phone for the reader, in the Home row shape every other row uses: its
+/// time and length, its state, and play (or Retry when sending failed). Tapping opens the recording
+/// sheet (transcribe, share, delete). Swiping deletes it after a confirm; the file may be the only
+/// copy, so there is no Undo, and a recording the server is still working on cannot be swiped.
+class RecordingListItem extends StatefulWidget {
   final LocalRecording recording;
 
   const RecordingListItem({super.key, required this.recording});
 
-  (Color, String) _status(BuildContext context) {
+  @override
+  State<RecordingListItem> createState() => _RecordingListItemState();
+}
+
+class _RecordingListItemState extends State<RecordingListItem> {
+  bool _retrying = false;
+
+  LocalRecording get recording => widget.recording;
+
+  (Color?, String) _status(BuildContext context) {
     final l = context.l10n;
     switch (recording.state) {
       case LocalRecordingState.uploading:
-        return (OmiColors.textSecondary, l.syncStatusBackingUp);
+        return (null, l.syncStatusBackingUp);
       case LocalRecordingState.processing:
-        return (OmiColors.textTertiary, l.syncStatusUploaded);
+        // Past its deadline the row stops claiming all is well.
+        if (savedProcessingOverdue(recording, clock.now())) return (OmiColors.warning, l.homeTakingLonger);
+        return (null, l.syncStatusUploaded);
       case LocalRecordingState.failed:
         return (OmiColors.danger, l.failedStatus);
       case LocalRecordingState.pending:
-        return (OmiColors.textTertiary, l.privateAndSecureOnDevice);
+        return (null, l.privateAndSecureOnDevice);
+    }
+  }
+
+  Future<void> _retry(LocalRecordingsProvider provider) async {
+    if (_retrying) return;
+    setState(() => _retrying = true);
+    final outcome = await provider.upload(recording);
+    if (!mounted) return;
+    setState(() => _retrying = false);
+    switch (outcome) {
+      case LocalUploadOutcome.fairUseLimited:
+        OmiFeedback.error(context, context.l10n.fairUseBudgetExhausted);
+      case LocalUploadOutcome.backendBusy:
+        AppReviewService().recordBadExperience(AppReviewBadExperience.captureFailure);
+        OmiFeedback.error(context, context.l10n.msgUploadFileFailed);
+      case LocalUploadOutcome.failed:
+        AppReviewService().recordBadExperience(AppReviewBadExperience.captureFailure);
+        OmiFeedback.error(context, context.l10n.anErrorOccurredTryAgain);
+      case LocalUploadOutcome.busy || LocalUploadOutcome.started:
+        break;
     }
   }
 
@@ -38,88 +74,63 @@ class RecordingListItem extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<LocalRecordingsProvider>(
       builder: (context, provider, _) {
+        final l10n = context.l10n;
         final (statusColor, statusLabel) = _status(context);
         final isPlaying = provider.isPlaying(recording);
-        final timeStr = OmiDateFormat.of(context).time(recording.startedAt);
-
-        return Padding(
-          padding: const EdgeInsets.only(top: 12, left: 16, right: 16),
-          child: Container(
-            width: double.maxFinite,
-            decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.xlAll),
-            child: ClipRRect(
-              borderRadius: OmiRadius.xlAll,
-              child: Dismissible(
-                key: ValueKey('rec_${recording.id}'),
-                direction: recording.isBusy ? DismissDirection.none : DismissDirection.endToStart,
-                background: Container(
-                  alignment: Alignment.centerRight,
-                  color: OmiColors.danger,
-                  padding: const EdgeInsets.only(right: 20),
-                  child: const Icon(Icons.delete, color: Colors.white),
-                ),
-                // The file on this phone may be the only copy of the audio: deleting it cannot be
-                // undone, so the swipe always confirms (tokens audit #1, docs/ux-contract.md §4).
-                confirmDismiss: (_) => showOmiConfirm(
-                  context,
-                  title: context.l10n.deleteRecording,
-                  message: context.l10n.thisCannotBeUndone,
-                  confirmLabel: context.l10n.delete,
-                  destructive: true,
-                ),
-                onDismissed: (_) => provider.delete(recording),
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => showRecordingDetailSheet(context, recording),
-                  child: Padding(
-                    padding: const EdgeInsetsDirectional.symmetric(horizontal: 16, vertical: 18),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
-                          child: Icon(Icons.graphic_eq, color: OmiColors.textTertiary, size: 20),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '$timeStr · ${OmiDuration.compact(recording.seconds, context.l10n)}',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: OmiType.callout.copyWith(fontWeight: FontWeight.w600),
-                              ),
-                              const SizedBox(height: 3),
-                              _OnDeviceStatus(
-                                recording: recording,
-                                fallback: Text(
-                                  statusLabel,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(color: statusColor, fontSize: 12),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        OmiIconButton.filled(
-                          key: ValueKey('rec_play_${recording.id}'),
-                          icon: Icon(isPlaying ? Icons.pause : Icons.play_arrow, size: 24),
-                          label: isPlaying ? context.l10n.pause : context.l10n.play,
-                          diameter: kOmiMinTapTarget,
-                          fillColor: OmiColors.surface2,
-                          onPressed: () => provider.togglePlayback(recording),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
+        final title = '${OmiDateFormat.of(context).time(recording.startedAt)} · '
+            '${OmiDuration.compact(recording.seconds, l10n)}';
+        final failed = recording.state == LocalRecordingState.failed;
+        final busy =
+            recording.state == LocalRecordingState.uploading || recording.state == LocalRecordingState.processing;
+        final status = Text(
+          statusLabel,
+          style: HomeRowShell.subtitleStyle.copyWith(color: statusColor),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        );
+        return HomeSwipeDelete(
+          key: ValueKey('rec_swipe_${recording.id}'),
+          enabled: !recording.isBusy,
+          // The file on this phone may be the only copy of the audio: deleting it cannot be
+          // undone, so the swipe always confirms (tokens audit #1, docs/ux-contract.md §4).
+          confirm: (_) => showOmiConfirm(
+            context,
+            title: l10n.deleteRecording,
+            message: l10n.thisCannotBeUndone,
+            confirmLabel: l10n.delete,
+            destructive: true,
+          ),
+          onDeleted: () => provider.delete(recording),
+          child: HomeRowShell(
+            key: ValueKey('rec_${recording.id}'),
+            tile: HomeRowTile(
+              child: busy
+                  // The same spinner and failure mark a conversation's tile shows.
+                  ? const OmiSpinner(size: OmiSpinnerSize.small)
+                  : failed
+                      ? Icon(Icons.error_outline_rounded, size: 20, color: OmiColors.danger)
+                      : Icon(Icons.graphic_eq, color: OmiColors.textTertiary, size: 20),
             ),
+            title: title,
+            subtitle: statusLabel,
+            subtitleWidget: _OnDeviceStatus(recording: recording, fallback: status),
+            onTap: () => showRecordingDetailSheet(context, recording),
+            actionTrailing: true,
+            trailing: failed
+                ? HomeRowAction(
+                    key: ValueKey('rec_retry_${recording.id}'),
+                    label: l10n.retry,
+                    busy: _retrying,
+                    onPressed: () => _retry(provider),
+                  )
+                : OmiIconButton.filled(
+                    key: ValueKey('rec_play_${recording.id}'),
+                    icon: Icon(isPlaying ? Icons.pause : Icons.play_arrow, size: 20),
+                    label: isPlaying ? l10n.pause : l10n.play,
+                    diameter: kOmiMinTapTarget,
+                    fillColor: OmiColors.surface2,
+                    onPressed: () => provider.togglePlayback(recording),
+                  ),
           ),
         );
       },

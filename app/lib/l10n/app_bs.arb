@@ -11915,8 +11915,6 @@
     "syncStallAlertBody": "Snimci se nisu sinhronizovali s vašeg Omija više od {hours} sati. Otvorite Omi da provjerite vezu uređaja.",
     "activityAttentionSyncStalledTitle": "Omi se ne sinhronizuje",
     "activityAttentionSyncStalledSubtitle": "Nijedan snimak nije sinhronizovan više od {hours} sati",
-    "dailyRecapsOnHome": "Dnevni rezimei na početnoj",
-    "dailyRecapsOnHomeDescription": "Prikaži najnovije rezimee na vrhu početne.",
     "yearlySwitchTitle": "Pređi na godišnje",
     "yearlySwitchRowSavings": "Uštedite {amount} godišnje",
     "yearlySwitchHomeTitle": "Uštedite {amount} godišnje uz godišnje plaćanje",
@@ -11936,7 +11934,6 @@
     "chatAppsCodeExpiredMessageIn": "Uzmi novi kod i pošalji ga iz aplikacije {app}.",
     "episodeWritingNotes": "Pišemo bilješke…",
     "homeStepTranscribing": "Transkribujemo…",
-    "homeRecordingsCount": "{count, plural, one{{count} snimak} few{{count} snimka} other{{count} snimaka}}",
     "episodeWritingNotesDetail": "Prvo završavamo transkript. Možete napustiti ovu stranicu.",
     "episodeCoversUpTo": "Pokriva do {time} · potpune bilješke po završetku",
     "liveTranscribedUpTo": "Transkribovano do {time}",
@@ -12302,9 +12299,6 @@
     "deviceReadyToUse": "Spremno za korištenje",
     "firmwareUpdateFirmwareTooOld": "Firmver vašeg uređaja je prestar za ovo ažuriranje. Obratite se podršci za pomoć pri ažuriranju uređaja.",
     "firmwareUpdateAppRequired": "Ovo ažuriranje firmvera zahtijeva noviju verziju aplikacije Omi. Ažurirajte aplikaciju iz svoje prodavnice aplikacija, a zatim provjerite ponovo.",
-    "quietPayerTitle": "Nema snimaka 5 dana",
-    "quietPayerMessage": "Provjerite svoj Omi.",
-    "quietPayerCheck": "Provjeri",
     "playManageSubscription": "Upravljaj pretplatom",
     "playBilledByGoogle": "Naplaćuje se putem Google Playa",
     "playPurchasePending": "Plaćanje je na čekanju. Omi Pro počinje kad ga Google Play potvrdi.",
@@ -12325,5 +12319,10 @@
     "playStripePlanPaused": "Vaš {plan} plan je pauziran.",
     "firmwareNewestSupportedForDevice": "Vaš uređaj već koristi najnoviju podržanu verziju firmvera",
     "firmwareSyncRecordingsFirstTitle": "Prvo sinhronizujte svoje snimke",
-    "firmwareSyncRecordingsFirstMessage": "Neki snimci su još uvijek na vašem uređaju. Sačekajte da se sinhronizuju s telefonom, a zatim pokrenite ažuriranje."
+    "firmwareSyncRecordingsFirstMessage": "Neki snimci su još uvijek na vašem uređaju. Sačekajte da se sinhronizuju s telefonom, a zatim pokrenite ažuriranje.",
+    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
+    "homeLockedSubtitle": "Kept safe · unlock to read",
+    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
+    "homeTakingLonger": "Taking longer than usual",
+    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
 }

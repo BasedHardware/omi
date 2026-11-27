@@ -26139,18 +26139,6 @@ abstract class AppLocalizations {
   /// **'No recordings synced for over {hours} hours'**
   String activityAttentionSyncStalledSubtitle(int hours);
 
-  /// Developer Settings toggle title: show the Daily Recaps row on Home
-  ///
-  /// In en, this message translates to:
-  /// **'Daily Recaps on Home'**
-  String get dailyRecapsOnHome;
-
-  /// Subtitle for the Daily Recaps on Home toggle in Developer Settings
-  ///
-  /// In en, this message translates to:
-  /// **'Show your latest recaps at the top of Home.'**
-  String get dailyRecapsOnHomeDescription;
-
   /// Title of the sheet, row and button that switch a monthly subscription to the same plan billed yearly
   ///
   /// In en, this message translates to:
@@ -26264,12 +26252,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Transcribing…'**
   String get homeStepTranscribing;
-
-  /// Home processing row subtitle giving how many recordings one row stands for.
-  ///
-  /// In en, this message translates to:
-  /// **'{count, plural, =1{1 recording} other{{count} recordings}}'**
-  String homeRecordingsCount(int count);
 
   /// Under Writing notes on the processing page.
   ///
@@ -27657,24 +27639,6 @@ abstract class AppLocalizations {
   /// **'This firmware update needs a newer Omi app. Update the app from your app store, then check again.'**
   String get firmwareUpdateAppRequired;
 
-  /// Home row title for a paying monthly subscriber whose Omi has recorded nothing for 5 days
-  ///
-  /// In en, this message translates to:
-  /// **'No recordings in 5 days'**
-  String get quietPayerTitle;
-
-  /// Home row line under quietPayerTitle
-  ///
-  /// In en, this message translates to:
-  /// **'Check your Omi.'**
-  String get quietPayerMessage;
-
-  /// Button on the quiet Home row; opens the Omi device page
-  ///
-  /// In en, this message translates to:
-  /// **'Check'**
-  String get quietPayerCheck;
-
   /// Google Play Billing (Android): playManageSubscription
   ///
   /// In en, this message translates to:
@@ -27800,6 +27764,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Some recordings are still on your device. Let them finish syncing to your phone, then start the update.'**
   String get firmwareSyncRecordingsFirstMessage;
+
+  /// Title of the one Home row that stands for everything over the plan's limit on a day (locked conversations and held recordings). {count} is how many.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}'**
+  String homeLockedTitle(int count);
+
+  /// Second line of the Home row for conversations over the plan's limit; the row has an Unlock button that opens the plans.
+  ///
+  /// In en, this message translates to:
+  /// **'Kept safe · unlock to read'**
+  String get homeLockedSubtitle;
+
+  /// Second line of the Home row for conversations over the plan's limit, on a build that sells no plan (no Unlock button).
+  ///
+  /// In en, this message translates to:
+  /// **'Kept safe until your allowance resets'**
+  String get homeLockedSubtitleNoPlans;
+
+  /// Status line on a Home row whose transcription or summary has been running much longer than normal. Shown instead of 'Transcribing…' or 'Writing summary…'.
+  ///
+  /// In en, this message translates to:
+  /// **'Taking longer than usual'**
+  String get homeTakingLonger;
+
+  /// Short toast when the reader taps the 'Finishing up…' Home row before the conversation they just ended exists on the server.
+  ///
+  /// In en, this message translates to:
+  /// **'Opens as soon as it\'s ready'**
+  String get homeFinishingOpensWhenReady;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

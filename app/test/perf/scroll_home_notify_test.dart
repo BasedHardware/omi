@@ -13,7 +13,6 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/conversation_speakers.dart';
-import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/schema/folder.dart';
 import 'package:omi/backend/schema/gen/speaker_tag_prompts_wire.g.dart';
@@ -28,7 +27,7 @@ import 'package:omi/models/sync_state.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
-import 'package:omi/pages/episodes/live_episode_row.dart';
+import 'package:omi/pages/conversations/home/home_live_rows.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -340,7 +339,6 @@ Widget _app(_Home home) {
         floatingActionButton: const OmiBreathingDot(live: true),
         body: ConversationsPage(
           requestInitialLoad: false,
-          loadRecaps: () async => (items: <DailySummary>[], ok: true),
           pendingWork: PendingWorkStore(
             loadPending: () async => const ApiSuccess(PendingWorkSnapshot.disabled),
             loadAttention: () async => const ApiSuccess(AttentionItemsPage.disabled),
@@ -360,7 +358,7 @@ Future<_Home> _pumpHome(WidgetTester tester, {Set<int> background = const {}}) a
   await tester.pumpWidget(_app(home));
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 300));
-  expect(find.byType(LiveEpisodeRow), findsOneWidget, reason: 'Home must show the live episode row');
+  expect(find.byType(HomeLiveRowView), findsOneWidget, reason: 'Home must show the live row');
   expect(find.byType(ConversationListItem), findsWidgets);
   expect(tester.binding.transientCallbackCount, greaterThan(0), reason: 'Home must be animating');
   return home;

@@ -5,7 +5,6 @@ import 'package:pull_down_button/pull_down_button.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/episode_provider.dart';
-import 'package:omi/providers/home_feed_provider.dart';
 import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -45,7 +44,6 @@ class EpisodePage extends StatelessWidget {
   List<ServerConversation> _currentPendingMembers(BuildContext context, Set<String> initialIds) {
     final history = context.read<ConversationProvider>();
     final episodes = context.read<EpisodeProvider?>();
-    final cards = context.read<HomeFeedProvider?>()?.items ?? [];
     final sourceSeeds = [
       episode,
       ...processingEpisodes,
@@ -69,17 +67,9 @@ class EpisodePage extends StatelessWidget {
     final pending = <ServerConversation>[];
     for (final id in initialIds) {
       final versions = variants[id] ?? const <ServerConversation>[];
-      final card = cards.where((c) => c.kind == 'conversation' && c.detailId == id).firstOrNull;
-      final owners = {
-        for (final source in sources)
-          if (source.conversationIds.contains(id)) source.id,
-        for (final member in versions)
-          if (member.episodeId != null) member.episodeId!,
-      };
       if (history.memoriesToDelete.containsKey(id) ||
           (episodes?.hiddenHomeMembers.contains(id) ?? false) ||
           sources.any((s) => !s.live && s.composed && s.conversationIds.contains(id)) ||
-          cards.any((c) => c.kind == 'episode' && owners.contains(c.detailId)) ||
           versions.any((m) =>
               m.discarded ||
               m.deleted ||
@@ -87,14 +77,12 @@ class EpisodePage extends StatelessWidget {
               m.homeStep == 'ready' ||
               m.homeStep == 'noise' ||
               homeStepOf(m) == HomeStep.failed ||
-              (m.status == ConversationStatus.completed && homeStepOf(m) == null)) ||
-          (card != null &&
-              (card.homeStep == 'ready' || card.homeStep == 'noise' || card.homeStep == 'failed' || card.isLocked))) {
+              (m.status == ConversationStatus.completed && homeStepOf(m) == null))) {
         continue;
       }
       final latest = versions.lastOrNull;
       if (latest == null) continue;
-      final member = card?.homeStep == null ? latest : latest.withHomeStep(card!.homeStep!);
+      final member = latest;
       if ({HomeStep.transcribing, HomeStep.writingNotes}.contains(homeStepOf(member))) pending.add(member);
     }
     return pending;
@@ -176,11 +164,6 @@ class EpisodePage extends StatelessWidget {
     final dates = OmiDateFormat.of(context);
     final history = context.watch<ConversationProvider?>();
     final episodes = context.watch<EpisodeProvider?>();
-    final cards = context.watch<HomeFeedProvider?>();
-    final cardSteps = {
-      for (final card in cards?.items ?? [])
-        if (card.kind == 'conversation' && card.homeStep != null) card.detailId: card.homeStep!,
-    };
     final hidden = episodes?.hiddenHomeMembers ?? const <String>{};
     // The page outlives the row that opened it: the finished notes land here, too.
     // A row with no episode yet opens a stand-in with no id; its recording finds the real one.
@@ -225,11 +208,7 @@ class EpisodePage extends StatelessWidget {
       for (final member in processingAggregate ? opened.members : episode.members) member.id: member,
     };
     final members = [
-      for (final member in retained.values)
-        if (processingAggregate && cardSteps[member.id] != null)
-          (known[member.id] ?? member).withHomeStep(cardSteps[member.id]!)
-        else
-          known[member.id] ?? member,
+      for (final member in retained.values) known[member.id] ?? member,
     ]
         .where(
           (m) =>

@@ -1,7 +1,3 @@
-import 'dart:convert';
-import 'package:http/http.dart' as http;
-import 'package:omi/backend/http/api/home_feed.dart';
-import 'package:omi/providers/home_feed_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -16,7 +12,6 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/conversation_speakers.dart';
-import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/schema/folder.dart';
 import 'package:omi/backend/schema/gen/speaker_tag_prompts_wire.g.dart';
@@ -31,7 +26,7 @@ import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart'
 import 'package:omi/pages/conversation_detail/page.dart' show ConversationDetailPage;
 import 'package:omi/pages/conversations/conversations_page.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
-import 'package:omi/pages/episodes/live_episode_row.dart';
+import 'package:omi/pages/conversations/home/home_live_rows.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -49,7 +44,6 @@ import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
-import 'package:omi/services/capture/optimistic_processing.dart';
 import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'package:omi/services/wals/wal.dart' show Wal;
 import 'package:omi/services/wals/wal_interfaces.dart';
@@ -264,22 +258,11 @@ Episode _liveEpisode() => Episode(
       stateUpdatedAt: _seedNow,
     );
 
-class _CardHistory extends ConversationProvider {
-  _CardHistory() : super(isSignedIn: () => false);
-  int initialReads = 0;
-  @override
-  Future<void> getInitialConversations({bool checkDailySummaries = true}) async {
-    initialReads++;
-    throw StateError('Compact Home must not request raw history');
-  }
-}
-
 /// Home as David sees it: a pendant streaming into a live episode (the live
 /// row), 30 conversations as the list endpoint projects them (two lines each),
 /// and the detail endpoint hydrating an opened one with its full transcript.
 class _Home {
-  _Home({this.background = const {}, this.history});
-  final ConversationProvider? history;
+  _Home({this.background = const {}});
   int homeEpisodeReads = 0;
 
   /// Conversations whose notes call them background (Episodes M3).
@@ -297,7 +280,7 @@ class _Home {
     dismiss: (id, itemId) async => const ApiFailure(ApiProblem(ApiProblemKind.transport)),
     clock: () => now,
   );
-  late final ConversationProvider conversations = (history ?? ConversationProvider(isSignedIn: () => false))
+  late final ConversationProvider conversations = ConversationProvider(isSignedIn: () => false)
     ..conversations = [
       for (var i = 0; i < 30; i++)
         _conversation(i, segmentCount: 2, salience: background.contains(i) ? 'background' : null),
@@ -310,15 +293,12 @@ class _Home {
 }
 
 Widget _app(_Home home,
-    {HomeFeedProvider? feed,
-    bool requestInitialLoad = false,
-    Future<ServerConversation?> Function(String)? detailFetcher}) {
+    {bool requestInitialLoad = false, Future<ServerConversation?> Function(String)? detailFetcher}) {
   // Providers wrap the MaterialApp, as lib/main.dart does, so a pushed detail
   // route resolves them too; the detail provider keeps its production proxy.
   return MultiProvider(
     providers: [
       ChangeNotifierProvider<ConversationProvider>.value(value: home.conversations),
-      if (feed != null) ChangeNotifierProvider<HomeFeedProvider>.value(value: feed),
       ChangeNotifierProvider<AppProvider>.value(value: AppProvider()),
       ChangeNotifierProvider<CaptureProvider>.value(value: home.capture),
       ChangeNotifierProvider<EpisodeProvider>.value(value: home.episodes),
@@ -363,7 +343,6 @@ Widget _app(_Home home,
         floatingActionButton: const OmiBreathingDot(live: true),
         body: ConversationsPage(
           requestInitialLoad: requestInitialLoad,
-          loadRecaps: () async => (items: <DailySummary>[], ok: true),
           pendingWork: PendingWorkStore(
             loadPending: () async => const ApiSuccess(PendingWorkSnapshot.disabled),
             loadAttention: () async => const ApiSuccess(AttentionItemsPage.disabled),
@@ -383,7 +362,7 @@ Future<_Home> _pumpHome(WidgetTester tester, {Set<int> background = const {}}) a
   await tester.pumpWidget(_app(home));
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 300));
-  expect(find.byType(LiveEpisodeRow), findsOneWidget, reason: 'Home must show the live episode row');
+  expect(find.byType(HomeLiveRowView), findsOneWidget, reason: 'Home must show the live row');
   expect(find.byType(ConversationListItem), findsWidgets);
   expect(tester.binding.transientCallbackCount, greaterThan(0), reason: 'Home must be animating');
   return home;
@@ -432,12 +411,10 @@ Future<void> _drainAndUnmount(WidgetTester tester) async {
   await tester.pump(const Duration(seconds: 1));
 }
 
-/// Five ticks may rebuild the page shell once (the 30-second episode poll or the midnight rollover
-/// can land in the window), never once per tick, and never a conversation row. A shell rebuild
-/// also rebuilds the clock's element, so only the shell bound, not the clock count, guards the
-/// per-tick amplification.
+/// Five ticks may rebuild the page shell once (the minute deadline ticker or the midnight rollover
+/// can land in the window), never once per tick, and never a conversation row. Home's live row has
+/// no ticking clock of its own (it is status-only), so nothing per-second rebuilds at all.
 void _expectTickStaysInLeaf(Map<String, int> rebuilds, {required String when}) {
-  expect(rebuilds['LiveEpisodeClock'] ?? 0, greaterThanOrEqualTo(5), reason: '$when: the clock must tick each second');
   expect(rebuilds['ConversationListItem'], isNull, reason: '$when: a tick must not rebuild a conversation row');
   for (final shell in ['ConversationsPage', 'ConversationCaptureWidget']) {
     expect(rebuilds[shell] ?? 0, lessThanOrEqualTo(1), reason: '$when: a tick must not rebuild $shell');
@@ -461,121 +438,6 @@ void main() {
   tearDown(() {
     AnalyticsManager.resetForTesting();
     VisibilityDetectorController.instance.updateInterval = const Duration(milliseconds: 500);
-  });
-
-  testWidgets('real Home card API paints and prefetches before footer, then opens hydrated detail', (tester) async {
-    tester.view.physicalSize = const Size(800, 1000);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    final history = _CardHistory();
-    final home = _Home(history: history);
-    home.conversations.conversations = [];
-    home.conversations.groupConversationsByDate();
-    var rawReads = 0;
-    home.conversations.conversationPageFetcherOverride = () async {
-      rawReads++;
-      throw StateError('Raw Home read');
-    };
-    final cursors = <String?>[];
-    final api = HomeFeedApi(
-        baseUrl: 'https://fixture/',
-        send: (request) async {
-          final cursor = Uri.parse(request.url).queryParameters['cursor'];
-          cursors.add(cursor);
-          final offset = cursor == null ? 0 : 20;
-          return http.Response(
-              jsonEncode({
-                'items': [
-                  for (var i = offset; i < offset + 20; i++)
-                    {
-                      'id': 'conversation:conv-$i',
-                      'kind': 'conversation',
-                      'detail_id': 'conv-$i',
-                      'sort_at': _seedNow.subtract(Duration(minutes: i)).toUtc().toIso8601String(),
-                      'started_at': _seedNow.subtract(Duration(minutes: i)).toUtc().toIso8601String(),
-                      'finished_at': _seedNow.subtract(Duration(minutes: i - 1)).toUtc().toIso8601String(),
-                      'title': 'Card $i',
-                      'emoji': 'M',
-                      'preview': 'Server preview $i',
-                      'status': 'completed',
-                      'home_step': null,
-                      'starred': false,
-                      'is_locked': false,
-                      'has_tasks': false,
-                      'member_count': 1,
-                      'sources': ['omi'],
-                      'summary_available': true,
-                      'revision': 'revision:$i',
-                    }
-                ],
-                'next_cursor': cursor == null ? 'next' : null,
-                'has_more': cursor == null,
-                'truncated': false,
-                'generation': 'test-generation',
-              }),
-              200,
-              headers: {'content-type': 'application/json; charset=utf-8'});
-        });
-    final feed =
-        HomeFeedProvider(fetch: api.page, owner: () => 'test', now: () => _seedNow.add(const Duration(days: 8)));
-    addTearDown(feed.dispose);
-    var detailReads = 0;
-    await tester.pumpWidget(_app(home, feed: feed, requestInitialLoad: true, detailFetcher: (id) async {
-      detailReads++;
-      return home.hydrated(int.parse(id.substring('conv-'.length)));
-    }));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(find.text('Card 0'), findsOneWidget);
-    expect(find.text('Server preview 0'), findsOneWidget);
-    expect(rawReads, 0);
-    expect(history.initialReads, 0);
-    expect(home.homeEpisodeReads, 0);
-    expect(cursors, [null]);
-    // A card is a seed; opening it must use the existing detail hydration path.
-    await _openAndCloseRow(tester, 'conversation:conv-0');
-    expect(detailReads, greaterThan(0));
-    expect(rawReads, 0);
-    final scrollable = find.byType(CustomScrollView).first;
-    for (var i = 0; i < 12 && cursors.length < 3; i++) {
-      await tester.drag(scrollable, const Offset(0, -500));
-      await tester.pump(const Duration(milliseconds: 100));
-    }
-    expect(cursors, contains('next'));
-    final position = tester
-        .state<ScrollableState>(find.descendant(of: scrollable, matching: find.byType(Scrollable)).first)
-        .position;
-    expect(position.extentAfter, greaterThan(0), reason: 'continuation starts before the footer');
-    expect(rawReads, 0);
-    await _drainAndUnmount(tester);
-  });
-
-  testWidgets('a conversation the person just ended shows as a processing row under the live row', (tester) async {
-    final home = await _pumpHome(tester);
-    home.conversations.addProcessingConversation(OptimisticProcessingPlaceholder.conversation());
-    await tester.pump();
-    final row = find.byKey(const Key('home_processing_row'));
-    expect(row, findsOneWidget);
-    expect(find.descendant(of: row, matching: find.text('Processing…')), findsOneWidget);
-    expect(tester.getTopLeft(row).dy, greaterThan(tester.getTopLeft(find.byType(LiveEpisodeRow)).dy));
-    expect(tester.getTopLeft(row).dy, lessThan(tester.getTopLeft(find.byKey(const ValueKey('conv-0'))).dy));
-    // The server's row replaces it, then the finished conversation takes its own row.
-    home.conversations.removeProcessingConversation(OptimisticProcessingPlaceholder.id);
-    await tester.pump();
-    expect(find.byKey(const Key('home_processing_row')), findsNothing);
-    await _drainAndUnmount(tester);
-  });
-
-  testWidgets('background conversations leave Home for the daily recap, with no line or toggle', (tester) async {
-    // Today holds conv-0 (12:30), conv-1 (09:30), conv-2 (06:30) and conv-3 (03:30).
-    await _pumpHome(tester, background: {1, 2});
-    expect(find.byKey(const ValueKey('conv-1')), findsNothing);
-    expect(find.byKey(const ValueKey('conv-2')), findsNothing);
-    expect(find.byKey(const ValueKey('conv-0')), findsOneWidget);
-    expect(find.byKey(const ValueKey('conv-3')), findsOneWidget);
-    expect(find.textContaining('Also:'), findsNothing);
-    await _drainAndUnmount(tester);
   });
 
   testWidgets('opening a row hands the scheduler no idle task while Home animates, and still reports the open',

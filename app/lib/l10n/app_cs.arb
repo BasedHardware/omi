@@ -4492,8 +4492,6 @@
     "syncStallAlertBody": "Více než {hours} hodin se z vašeho Omi nesynchronizovaly žádné nahrávky. Otevřete Omi a zkontrolujte připojení zařízení.",
     "activityAttentionSyncStalledTitle": "Omi se nesynchronizuje",
     "activityAttentionSyncStalledSubtitle": "Více než {hours} hodin bez synchronizovaných nahrávek",
-    "dailyRecapsOnHome": "Denní souhrny na domovské obrazovce",
-    "dailyRecapsOnHomeDescription": "Zobrazit nejnovější souhrny v horní části domovské obrazovky.",
     "yearlySwitchTitle": "Přejít na roční",
     "yearlySwitchRowSavings": "Ušetřete {amount} ročně",
     "yearlySwitchHomeTitle": "Ušetřete {amount} ročně s roční platbou",
@@ -4513,7 +4511,6 @@
     "chatAppsCodeExpiredMessageIn": "Získej nový kód a pošli ho z aplikace {app}.",
     "episodeWritingNotes": "Píšeme poznámky…",
     "homeStepTranscribing": "Přepisujeme…",
-    "homeRecordingsCount": "{count, plural, one{{count} nahrávka} few{{count} nahrávky} many{{count} nahrávek} other{{count} nahrávky}}",
     "episodeWritingNotesDetail": "Nejprve dokončujeme přepis. Tuto stránku můžete opustit.",
     "episodeCoversUpTo": "Pokrývá do {time} · úplné poznámky po dokončení",
     "liveTranscribedUpTo": "Přepsáno do {time}",
@@ -4745,9 +4742,6 @@
     "deviceReadyToUse": "Připraveno k použití",
     "firmwareUpdateFirmwareTooOld": "Firmware vašeho zařízení je pro tuto aktualizaci příliš starý. Obraťte se na podporu, která vám s aktualizací zařízení pomůže.",
     "firmwareUpdateAppRequired": "Tato aktualizace firmwaru vyžaduje novější verzi aplikace Omi. Aktualizujte aplikaci v obchodě s aplikacemi a poté proveďte kontrolu znovu.",
-    "quietPayerTitle": "Žádné nahrávky za 5 dní",
-    "quietPayerMessage": "Zkontrolujte svůj Omi.",
-    "quietPayerCheck": "Zkontrolovat",
     "playManageSubscription": "Spravovat předplatné",
     "playBilledByGoogle": "Účtováno přes Google Play",
     "playPurchasePending": "Platba čeká na vyřízení. Omi Pro začne, jakmile ji Google Play potvrdí.",
@@ -4768,5 +4762,10 @@
     "playStripePlanPaused": "Váš tarif {plan} je pozastaven.",
     "firmwareNewestSupportedForDevice": "Vaše zařízení už používá nejnovější podporovanou verzi firmwaru",
     "firmwareSyncRecordingsFirstTitle": "Nejprve synchronizujte své nahrávky",
-    "firmwareSyncRecordingsFirstMessage": "Některé nahrávky jsou stále ve vašem zařízení. Počkejte, až se synchronizují do telefonu, a potom spusťte aktualizaci."
+    "firmwareSyncRecordingsFirstMessage": "Některé nahrávky jsou stále ve vašem zařízení. Počkejte, až se synchronizují do telefonu, a potom spusťte aktualizaci.",
+    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
+    "homeLockedSubtitle": "Kept safe · unlock to read",
+    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
+    "homeTakingLonger": "Taking longer than usual",
+    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
 }

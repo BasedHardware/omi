@@ -4492,8 +4492,6 @@
     "syncStallAlertBody": "Tiada rakaman daripada Omi anda disegerakkan selama lebih {hours} jam. Buka Omi untuk menyemak sambungan peranti anda.",
     "activityAttentionSyncStalledTitle": "Omi tidak disegerakkan",
     "activityAttentionSyncStalledSubtitle": "Tiada rakaman disegerakkan selama lebih {hours} jam",
-    "dailyRecapsOnHome": "Ringkasan Harian di Utama",
-    "dailyRecapsOnHomeDescription": "Tunjukkan ringkasan terkini anda di bahagian atas Utama.",
     "yearlySwitchTitle": "Tukar ke Tahunan",
     "yearlySwitchRowSavings": "Jimat {amount} setahun",
     "yearlySwitchHomeTitle": "Jimat {amount} setahun dengan bayaran tahunan",
@@ -4513,7 +4511,6 @@
     "chatAppsCodeExpiredMessageIn": "Dapatkan kod baharu dan hantar daripada {app}.",
     "episodeWritingNotes": "Menulis nota…",
     "homeStepTranscribing": "Sedang mentranskrip…",
-    "homeRecordingsCount": "{count, plural, other{{count} rakaman}}",
     "episodeWritingNotesDetail": "Menyiapkan transkrip dahulu. Anda boleh meninggalkan halaman ini.",
     "episodeCoversUpTo": "Meliputi sehingga {time} · nota penuh apabila selesai",
     "liveTranscribedUpTo": "Ditranskripsi sehingga {time}",
@@ -4745,9 +4742,6 @@
     "deviceReadyToUse": "Sedia untuk digunakan",
     "firmwareUpdateFirmwareTooOld": "Perisian tegar peranti anda terlalu lama untuk kemas kini ini. Hubungi sokongan untuk mendapatkan bantuan mengemas kini peranti anda.",
     "firmwareUpdateAppRequired": "Kemas kini perisian tegar ini memerlukan versi apl Omi yang lebih baharu. Kemas kini apl daripada gedung aplikasi anda, kemudian semak semula.",
-    "quietPayerTitle": "Tiada rakaman dalam 5 hari",
-    "quietPayerMessage": "Semak Omi anda.",
-    "quietPayerCheck": "Semak",
     "playManageSubscription": "Urus langganan",
     "playBilledByGoogle": "Dibilkan oleh Google Play",
     "playPurchasePending": "Pembayaran anda belum selesai. Omi Pro bermula sebaik Google Play mengesahkannya.",
@@ -4768,5 +4762,10 @@
     "playStripePlanPaused": "Pelan {plan} anda dijeda.",
     "firmwareNewestSupportedForDevice": "Peranti anda sudah menggunakan versi firmware terbaharu yang disokong",
     "firmwareSyncRecordingsFirstTitle": "Segerakkan rakaman anda terlebih dahulu",
-    "firmwareSyncRecordingsFirstMessage": "Sebahagian rakaman masih berada pada peranti anda. Biarkan ia selesai disegerakkan ke telefon anda, kemudian mulakan kemas kini."
+    "firmwareSyncRecordingsFirstMessage": "Sebahagian rakaman masih berada pada peranti anda. Biarkan ia selesai disegerakkan ke telefon anda, kemudian mulakan kemas kini.",
+    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
+    "homeLockedSubtitle": "Kept safe · unlock to read",
+    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
+    "homeTakingLonger": "Taking longer than usual",
+    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
 }

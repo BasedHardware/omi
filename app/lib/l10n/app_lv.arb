@@ -4492,8 +4492,6 @@
     "syncStallAlertBody": "Vairāk nekā {hours} stundas no jūsu Omi nav sinhronizēts neviens ieraksts. Atveriet Omi, lai pārbaudītu ierīces savienojumu.",
     "activityAttentionSyncStalledTitle": "Omi nesinhronizējas",
     "activityAttentionSyncStalledSubtitle": "Vairāk nekā {hours} stundas nav sinhronizēts neviens ieraksts",
-    "dailyRecapsOnHome": "Dienas kopsavilkumi sākumā",
-    "dailyRecapsOnHomeDescription": "Rādīt jaunākos kopsavilkumus sākuma augšdaļā.",
     "yearlySwitchTitle": "Pāriet uz gada maksu",
     "yearlySwitchRowSavings": "Ietaupiet {amount} gadā",
     "yearlySwitchHomeTitle": "Ietaupiet {amount} gadā, maksājot par gadu",
@@ -4513,7 +4511,6 @@
     "chatAppsCodeExpiredMessageIn": "Iegūstiet jaunu kodu un nosūtiet to no lietotnes {app}.",
     "episodeWritingNotes": "Rakstām piezīmes…",
     "homeStepTranscribing": "Notiek transkribēšana…",
-    "homeRecordingsCount": "{count, plural, zero{{count} ierakstu} one{{count} ieraksts} other{{count} ieraksti}}",
     "episodeWritingNotesDetail": "Vispirms pabeidzam transkripciju. Varat pamest šo lapu.",
     "episodeCoversUpTo": "Līdz {time} · pilnas piezīmes beigās",
     "liveTranscribedUpTo": "Transkribēts līdz {time}",
@@ -4745,9 +4742,6 @@
     "deviceReadyToUse": "Gatavs lietošanai",
     "firmwareUpdateFirmwareTooOld": "Jūsu ierīces aparātprogrammatūra ir pārāk veca šim atjauninājumam. Sazinieties ar atbalsta dienestu, lai saņemtu palīdzību ierīces atjaunināšanā.",
     "firmwareUpdateAppRequired": "Šim aparātprogrammatūras atjauninājumam nepieciešama jaunāka Omi lietotnes versija. Atjauniniet lietotni savā lietotņu veikalā un pēc tam pārbaudiet vēlreiz.",
-    "quietPayerTitle": "5 dienas nav ierakstu",
-    "quietPayerMessage": "Pārbaudiet savu Omi.",
-    "quietPayerCheck": "Pārbaudīt",
     "playManageSubscription": "Pārvaldīt abonementu",
     "playBilledByGoogle": "Norēķini caur Google Play",
     "playPurchasePending": "Maksājums gaida. Omi Pro sāksies, tiklīdz Google Play to apstiprinās.",
@@ -4768,5 +4762,10 @@
     "playStripePlanPaused": "Jūsu {plan} plāns ir apturēts.",
     "firmwareNewestSupportedForDevice": "Jūsu ierīcē jau ir jaunākā atbalstītā aparatprogrammatūras versija",
     "firmwareSyncRecordingsFirstTitle": "Vispirms sinhronizējiet savus ierakstus",
-    "firmwareSyncRecordingsFirstMessage": "Daži ieraksti vēl atrodas jūsu ierīcē. Ļaujiet tiem pabeigt sinhronizēšanu ar tālruni, pēc tam sāciet atjaunināšanu."
+    "firmwareSyncRecordingsFirstMessage": "Daži ieraksti vēl atrodas jūsu ierīcē. Ļaujiet tiem pabeigt sinhronizēšanu ar tālruni, pēc tam sāciet atjaunināšanu.",
+    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
+    "homeLockedSubtitle": "Kept safe · unlock to read",
+    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
+    "homeTakingLonger": "Taking longer than usual",
+    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
 }

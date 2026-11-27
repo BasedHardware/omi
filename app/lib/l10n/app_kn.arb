@@ -11915,8 +11915,6 @@
     "syncStallAlertBody": "{hours} ಗಂಟೆಗಳಿಗಿಂತ ಹೆಚ್ಚು ಕಾಲ ನಿಮ್ಮ Omi ಇಂದ ಯಾವುದೇ ರೆಕಾರ್ಡಿಂಗ್ ಸಿಂಕ್ ಆಗಿಲ್ಲ. ನಿಮ್ಮ ಸಾಧನದ ಸಂಪರ್ಕವನ್ನು ಪರಿಶೀಲಿಸಲು Omi ತೆರೆಯಿರಿ.",
     "activityAttentionSyncStalledTitle": "Omi ಸಿಂಕ್ ಆಗುತ್ತಿಲ್ಲ",
     "activityAttentionSyncStalledSubtitle": "{hours} ಗಂಟೆಗಳಿಗಿಂತ ಹೆಚ್ಚು ಕಾಲ ಯಾವುದೇ ರೆಕಾರ್ಡಿಂಗ್ ಸಿಂಕ್ ಆಗಿಲ್ಲ",
-    "dailyRecapsOnHome": "ಮುಖಪುಟದಲ್ಲಿ ದೈನಿಕ ಸಾರಾಂಶಗಳು",
-    "dailyRecapsOnHomeDescription": "ಮುಖಪುಟದ ಮೇಲ್ಭಾಗದಲ್ಲಿ ನಿಮ್ಮ ಇತ್ತೀಚಿನ ಸಾರಾಂಶಗಳನ್ನು ತೋರಿಸಿ.",
     "yearlySwitchTitle": "ವಾರ್ಷಿಕಕ್ಕೆ ಬದಲಿಸಿ",
     "yearlySwitchRowSavings": "ವರ್ಷಕ್ಕೆ {amount} ಉಳಿಸಿ",
     "yearlySwitchHomeTitle": "ವಾರ್ಷಿಕ ಪಾವತಿಯಿಂದ ವರ್ಷಕ್ಕೆ {amount} ಉಳಿಸಿ",
@@ -11936,7 +11934,6 @@
     "chatAppsCodeExpiredMessageIn": "ಹೊಸ ಕೋಡ್ ಪಡೆದು {app} ನಿಂದ ಕಳುಹಿಸಿ.",
     "episodeWritingNotes": "ಟಿಪ್ಪಣಿಗಳನ್ನು ಬರೆಯಲಾಗುತ್ತಿದೆ…",
     "homeStepTranscribing": "ಪ್ರತಿಲೇಖನ ಮಾಡಲಾಗುತ್ತಿದೆ…",
-    "homeRecordingsCount": "{count, plural, one{1 ರೆಕಾರ್ಡಿಂಗ್} other{{count} ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು}}",
     "episodeWritingNotesDetail": "ಮೊದಲು ಪ್ರತಿಲೇಖನ ಮುಗಿಸಲಾಗುತ್ತಿದೆ. ನೀವು ಈ ಪುಟದಿಂದ ಹೊರಡಬಹುದು.",
     "episodeCoversUpTo": "{time} ವರೆಗೆ · ಮುಗಿದಾಗ ಪೂರ್ಣ ಟಿಪ್ಪಣಿಗಳು",
     "liveTranscribedUpTo": "{time} ವರೆಗೆ ಪ್ರತಿಲೇಖನವಾಗಿದೆ",
@@ -12302,9 +12299,6 @@
     "deviceReadyToUse": "ಬಳಸಲು ಸಿದ್ಧ",
     "firmwareUpdateFirmwareTooOld": "ಈ ನವೀಕರಣಕ್ಕೆ ನಿಮ್ಮ ಸಾಧನದ ಫರ್ಮ್‌ವೇರ್ ತುಂಬಾ ಹಳೆಯದಾಗಿದೆ. ನಿಮ್ಮ ಸಾಧನವನ್ನು ನವೀಕರಿಸಲು ಸಹಾಯಕ್ಕಾಗಿ ಬೆಂಬಲ ತಂಡವನ್ನು ಸಂಪರ್ಕಿಸಿ.",
     "firmwareUpdateAppRequired": "ಈ ಫರ್ಮ್‌ವೇರ್ ನವೀಕರಣಕ್ಕೆ Omi ಆ್ಯಪ್‌ನ ಹೊಸ ಆವೃತ್ತಿ ಅಗತ್ಯವಿದೆ. ನಿಮ್ಮ ಆ್ಯಪ್ ಸ್ಟೋರ್‌ನಿಂದ ಆ್ಯಪ್ ಅನ್ನು ನವೀಕರಿಸಿ, ನಂತರ ಮತ್ತೆ ಪರಿಶೀಲಿಸಿ.",
-    "quietPayerTitle": "5 ದಿನಗಳಿಂದ ಯಾವುದೇ ರೆಕಾರ್ಡಿಂಗ್ ಇಲ್ಲ",
-    "quietPayerMessage": "ನಿಮ್ಮ Omi ಪರಿಶೀಲಿಸಿ.",
-    "quietPayerCheck": "ಪರಿಶೀಲಿಸಿ",
     "playManageSubscription": "ಚಂದಾದಾರಿಕೆ ನಿರ್ವಹಿಸಿ",
     "playBilledByGoogle": "Google Play ಮೂಲಕ ಬಿಲ್ ಮಾಡಲಾಗುತ್ತದೆ",
     "playPurchasePending": "ನಿಮ್ಮ ಪಾವತಿ ಬಾಕಿ ಇದೆ. Google Play ದೃಢೀಕರಿಸಿದ ತಕ್ಷಣ Omi Pro ಆರಂಭವಾಗುತ್ತದೆ.",
@@ -12325,5 +12319,10 @@
     "playStripePlanPaused": "ನಿಮ್ಮ {plan} ಯೋಜನೆಯನ್ನು ವಿರಾಮಗೊಳಿಸಲಾಗಿದೆ.",
     "firmwareNewestSupportedForDevice": "ನಿಮ್ಮ ಸಾಧನವು ಈಗಾಗಲೇ ಬೆಂಬಲಿತ ಅತ್ಯಂತ ಹೊಸ ಫಾರ್ಮ್‌ವೇರ್ ಆವೃತ್ತಿಯಲ್ಲಿದೆ",
     "firmwareSyncRecordingsFirstTitle": "ಮೊದಲು ನಿಮ್ಮ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಸಿಂಕ್ ಮಾಡಿ",
-    "firmwareSyncRecordingsFirstMessage": "ಕೆಲವು ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಇನ್ನೂ ನಿಮ್ಮ ಸಾಧನದಲ್ಲಿವೆ. ಅವುಗಳು ನಿಮ್ಮ ಫೋನ್‌ಗೆ ಸಿಂಕ್ ಆಗಲು ಬಿಡಿ, ನಂತರ ನವೀಕರಣ ಪ್ರಾರಂಭಿಸಿ."
+    "firmwareSyncRecordingsFirstMessage": "ಕೆಲವು ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಇನ್ನೂ ನಿಮ್ಮ ಸಾಧನದಲ್ಲಿವೆ. ಅವುಗಳು ನಿಮ್ಮ ಫೋನ್‌ಗೆ ಸಿಂಕ್ ಆಗಲು ಬಿಡಿ, ನಂತರ ನವೀಕರಣ ಪ್ರಾರಂಭಿಸಿ.",
+    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
+    "homeLockedSubtitle": "Kept safe · unlock to read",
+    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
+    "homeTakingLonger": "Taking longer than usual",
+    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
 }

@@ -25,16 +25,14 @@ typedef SummaryWaitAnswer = ({String conversationId, ConversationByIdResult resu
 typedef SummaryWaitRequest = Future<({ConversationByIdResult result, bool settled})> Function(String conversationId,
     {bool untilOutline});
 
-/// The server's per-user switch for recordings and conversations (v3), and the conversation in
-/// progress.
+/// Recordings and conversations (v3) for the signed-in account, and the conversation in progress.
 ///
-/// [v3] true means the new Home: a flat list of conversations with the live one on top, and no episode
-/// calls. False or a 404 means today's Home runs untouched. Until the first answer ([resolved] false)
-/// the app makes neither episode nor feed calls, so a v3 account never makes one. The last answer is
-/// kept per account, so after the first launch a cold start knows at once; a different account never
-/// inherits it.
+/// The client is v3-only (David, 2026-11-27): every signed-in account gets v3 Home, a flat list of
+/// conversations with the live one on top, and makes no episode or Home-feed calls. The server's
+/// per-account answer no longer selects a Home; a failed or missing live read only leaves the live
+/// row empty.
 class ConversationsV3Provider extends ChangeNotifier {
-  /// [cached] is the remembered answer, `<uid>:1` or `<uid>:0`; tests pass it, the app reads it.
+  /// [cached] is accepted for source compatibility and ignored: there is no answer to remember.
   ConversationsV3Provider(
       {ConversationsLiveFetcher? fetchLive,
       String Function()? uid,
@@ -49,27 +47,16 @@ class ConversationsV3Provider extends ChangeNotifier {
       active: (_) => !_disposed && v3,
       apply: _applySummaryAnswer,
     );
-    final remembered = cached ?? _readCached();
     _owner = _uid();
-    if (_owner.isNotEmpty && remembered == '$_owner:1') {
-      _v3 = true;
-      _resolved = true;
-    } else if (_owner.isNotEmpty && remembered == '$_owner:0') {
-      _resolved = true;
-    }
   }
 
   /// Home re-reads the live conversation this often while it is on screen.
   static const pollInterval = Duration(seconds: 15);
 
-  static const _prefKey = 'conversationsV3Answer';
-
   final ConversationsLiveFetcher _fetchLive;
   final String Function() _uid;
 
   String _owner = '';
-  bool _v3 = false;
-  bool _resolved = false;
   ServerConversation? _live;
   Future<void>? _reading;
   ServerConversation? _finishRow;
@@ -100,6 +87,9 @@ class ConversationsV3Provider extends ChangeNotifier {
 
   bool get finishFeedbackEnabled => v3 && !const bool.fromEnvironment('OMI_V3_FINISH_FEEDBACK_OFF');
   ServerConversation? get finishRow => finishFeedbackEnabled && !_finishExpired ? _finishRow : null;
+
+  /// The conversation the finish row stands for, once the End named one; Home opens it from that row.
+  String? get finishConversationId => finishRow == null ? null : (_finishLiveId ?? _finishRecordingId);
 
   bool suppressListeningAfterFinish(String? captureId) =>
       finishFeedbackEnabled && _suppressListening && _finishCaptureId == captureId;
@@ -335,13 +325,14 @@ class ConversationsV3Provider extends ChangeNotifier {
   int _watchers = 0;
   bool _disposed = false;
 
-  bool get v3 => _v3 && _owner == _uid();
+  /// Every signed-in account is on v3.
+  bool get v3 => _owner.isNotEmpty && _owner == _uid();
 
-  /// The server has answered for this account (now or on an earlier launch).
-  bool get resolved => _resolved && _owner == _uid();
+  /// Kept for callers that waited on the server's answer: there is none to wait for.
+  bool get resolved => true;
 
-  /// Episode and Home-feed reads wait for this: off for a v3 account, and until the first answer.
-  bool get suppressesLegacy => !resolved || v3;
+  /// Episode reads stay off: v3 accounts never make them.
+  bool get suppressesLegacy => true;
 
   ServerConversation? get live =>
       v3 && ((_finishExpired && !_finishAccepted) || _live?.id != _finishLiveId) ? _live : null;
@@ -349,28 +340,11 @@ class ConversationsV3Provider extends ChangeNotifier {
   @visibleForTesting
   bool get polling => _poll != null;
 
-  static String _readCached() {
-    try {
-      return SharedPreferencesUtil().getString(_prefKey);
-    } catch (_) {
-      return '';
-    }
-  }
-
-  void _remember(bool on) {
-    // The cache only shortens a cold start; the live read stays authoritative.
-    try {
-      unawaited(SharedPreferencesUtil().saveString(_prefKey, '$_owner:${on ? 1 : 0}').catchError((_) => false));
-    } catch (_) {}
-  }
-
   void _ensureOwner() {
     final uid = _uid();
     if (uid == _owner) return;
     _clearManualFinish();
     _owner = uid;
-    _v3 = false;
-    _resolved = false;
     _live = null;
     _reading = null;
   }
@@ -392,13 +366,10 @@ class ConversationsV3Provider extends ChangeNotifier {
     final owner = _owner;
     final result = await _fetchLive();
     if (_disposed || owner != _uid()) return;
-    final wasV3 = _v3;
-    final wasResolved = _resolved;
     final wasLive = _live;
     switch (result) {
       case ApiSuccess(:final data):
-        _v3 = data.v3;
-        _live = data.v3 ? data.conversation : null;
+        _live = data.conversation;
         if (_finishRow != null) _bindFinishToLive();
         if (_live != null &&
             _live!.id != _finishLiveId &&
@@ -407,24 +378,13 @@ class ConversationsV3Provider extends ChangeNotifier {
           if (_finishRow == null) _finishLiveId = null;
         }
       case ApiFailure(:final problem) when problem.kind == ApiProblemKind.notFound:
-        // An older server: today's Home.
-        _v3 = false;
+        // No live endpoint: no conversation in progress to show.
         _live = null;
-      case ApiFailure(:final problem) when !_resolved && (problem.statusCode ?? 0) >= 500:
-        // The first answer is a server error: run today's Home rather than holding episodes and the
-        // feed back for every account. Not remembered, so the next read decides again.
-        _v3 = false;
-        _live = null;
-        _resolved = true;
-        notifyListeners();
-        return;
       case ApiFailure():
-        // Offline, or a later failure: keep the last answer.
+        // Offline or a server error: keep the last live conversation; the next read decides again.
         return;
     }
-    _resolved = true;
-    if (wasV3 != _v3 || !wasResolved) _remember(_v3);
-    if (wasV3 != _v3 || !wasResolved || !_sameLive(wasLive, _live)) notifyListeners();
+    if (!_sameLive(wasLive, _live)) notifyListeners();
   }
 
   static bool _sameLive(ServerConversation? a, ServerConversation? b) {

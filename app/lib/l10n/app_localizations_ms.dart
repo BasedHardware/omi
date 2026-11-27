@@ -14839,12 +14839,6 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
-  String get dailyRecapsOnHome => 'Ringkasan Harian di Utama';
-
-  @override
-  String get dailyRecapsOnHomeDescription => 'Tunjukkan ringkasan terkini anda di bahagian atas Utama.';
-
-  @override
   String get yearlySwitchTitle => 'Tukar ke Tahunan';
 
   @override
@@ -14912,16 +14906,6 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get homeStepTranscribing => 'Sedang mentranskrip…';
-
-  @override
-  String homeRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count rakaman',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get episodeWritingNotesDetail => 'Menyiapkan transkrip dahulu. Anda boleh meninggalkan halaman ini.';
@@ -15789,15 +15773,6 @@ class AppLocalizationsMs extends AppLocalizations {
       'Kemas kini perisian tegar ini memerlukan versi apl Omi yang lebih baharu. Kemas kini apl daripada gedung aplikasi anda, kemudian semak semula.';
 
   @override
-  String get quietPayerTitle => 'Tiada rakaman dalam 5 hari';
-
-  @override
-  String get quietPayerMessage => 'Semak Omi anda.';
-
-  @override
-  String get quietPayerCheck => 'Semak';
-
-  @override
   String get playManageSubscription => 'Urus langganan';
 
   @override
@@ -15880,4 +15855,27 @@ class AppLocalizationsMs extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Sebahagian rakaman masih berada pada peranti anda. Biarkan ia selesai disegerakkan ke telefon anda, kemudian mulakan kemas kini.';
+
+  @override
+  String homeLockedTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count conversations waiting',
+      one: '1 conversation waiting',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeLockedSubtitle => 'Kept safe · unlock to read';
+
+  @override
+  String get homeLockedSubtitleNoPlans => 'Kept safe until your allowance resets';
+
+  @override
+  String get homeTakingLonger => 'Taking longer than usual';
+
+  @override
+  String get homeFinishingOpensWhenReady => 'Opens as soon as it\'s ready';
 }

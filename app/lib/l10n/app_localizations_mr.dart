@@ -14810,12 +14810,6 @@ class AppLocalizationsMr extends AppLocalizations {
   }
 
   @override
-  String get dailyRecapsOnHome => 'मुख्यपृष्ठावर दैनिक रीकॅप्स';
-
-  @override
-  String get dailyRecapsOnHomeDescription => 'मुख्यपृष्ठाच्या वर तुमचे नवीनतम रीकॅप्स दाखवा.';
-
-  @override
   String get yearlySwitchTitle => 'वार्षिकवर स्विच करा';
 
   @override
@@ -14883,17 +14877,6 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get homeStepTranscribing => 'ट्रान्सक्राइब होत आहे…';
-
-  @override
-  String homeRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count रेकॉर्डिंग',
-      one: '1 रेकॉर्डिंग',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get episodeWritingNotesDetail => 'आधी ट्रान्सक्रिप्ट पूर्ण करत आहोत. तुम्ही हे पेज सोडू शकता.';
@@ -15761,15 +15744,6 @@ class AppLocalizationsMr extends AppLocalizations {
       'या फर्मवेअर अपडेटसाठी Omi ॲपची नवीन आवृत्ती आवश्यक आहे. तुमच्या ॲप स्टोअरमधून ॲप अपडेट करा, नंतर पुन्हा तपासा.';
 
   @override
-  String get quietPayerTitle => '5 दिवसांत एकही रेकॉर्डिंग नाही';
-
-  @override
-  String get quietPayerMessage => 'तुमचा Omi तपासा.';
-
-  @override
-  String get quietPayerCheck => 'तपासा';
-
-  @override
   String get playManageSubscription => 'सदस्यता व्यवस्थापित करा';
 
   @override
@@ -15850,4 +15824,27 @@ class AppLocalizationsMr extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'काही रेकॉर्डिंग अजून तुमच्या डिव्हाइसवर आहेत. त्या तुमच्या फोनवर पूर्णपणे सिंक होऊ द्या, नंतर अपडेट सुरू करा.';
+
+  @override
+  String homeLockedTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count conversations waiting',
+      one: '1 conversation waiting',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeLockedSubtitle => 'Kept safe · unlock to read';
+
+  @override
+  String get homeLockedSubtitleNoPlans => 'Kept safe until your allowance resets';
+
+  @override
+  String get homeTakingLonger => 'Taking longer than usual';
+
+  @override
+  String get homeFinishingOpensWhenReady => 'Opens as soon as it\'s ready';
 }

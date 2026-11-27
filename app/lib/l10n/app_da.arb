@@ -4534,8 +4534,6 @@
     "syncStallAlertBody": "Der er ikke synkroniseret optagelser fra din Omi i over {hours} timer. Åbn Omi for at tjekke din enheds forbindelse.",
     "activityAttentionSyncStalledTitle": "Omi synkroniserer ikke",
     "activityAttentionSyncStalledSubtitle": "Ingen optagelser synkroniseret i over {hours} timer",
-    "dailyRecapsOnHome": "Daglige opsummeringer på Hjem",
-    "dailyRecapsOnHomeDescription": "Vis dine seneste opsummeringer øverst på Hjem.",
     "yearlySwitchTitle": "Skift til årlig",
     "yearlySwitchRowSavings": "Spar {amount} om året",
     "yearlySwitchHomeTitle": "Spar {amount} om året med årlig betaling",
@@ -4555,7 +4553,6 @@
     "chatAppsCodeExpiredMessageIn": "Få en ny kode, og send den fra {app}.",
     "episodeWritingNotes": "Skriver noter…",
     "homeStepTranscribing": "Transskriberer…",
-    "homeRecordingsCount": "{count, plural, one{{count} optagelse} other{{count} optagelser}}",
     "episodeWritingNotesDetail": "Vi gør først transskriptionen færdig. Du kan godt forlade siden.",
     "episodeCoversUpTo": "Dækker frem til {time} · fulde noter, når det er slut",
     "liveTranscribedUpTo": "Transskriberet frem til {time}",
@@ -4787,9 +4784,6 @@
     "deviceReadyToUse": "Klar til brug",
     "firmwareUpdateFirmwareTooOld": "Din enheds firmware er for gammel til denne opdatering. Kontakt support for at få hjælp til at opdatere din enhed.",
     "firmwareUpdateAppRequired": "Denne firmwareopdatering kræver en nyere version af Omi-appen. Opdater appen fra din appbutik, og søg derefter efter opdateringer igen.",
-    "quietPayerTitle": "Ingen optagelser i 5 dage",
-    "quietPayerMessage": "Tjek din Omi.",
-    "quietPayerCheck": "Tjek",
     "playManageSubscription": "Administrer abonnement",
     "playBilledByGoogle": "Faktureres via Google Play",
     "playPurchasePending": "Din betaling afventer. Omi Pro starter, når Google Play bekræfter den.",
@@ -4810,5 +4804,10 @@
     "playStripePlanPaused": "Dit {plan}-abonnement er sat på pause.",
     "firmwareNewestSupportedForDevice": "Din enhed kører allerede den nyeste understøttede firmwareversion",
     "firmwareSyncRecordingsFirstTitle": "Synkroniser dine optagelser først",
-    "firmwareSyncRecordingsFirstMessage": "Nogle optagelser er stadig på din enhed. Lad dem blive færdige med at synkronisere til din telefon, og start derefter opdateringen."
+    "firmwareSyncRecordingsFirstMessage": "Nogle optagelser er stadig på din enhed. Lad dem blive færdige med at synkronisere til din telefon, og start derefter opdateringen.",
+    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
+    "homeLockedSubtitle": "Kept safe · unlock to read",
+    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
+    "homeTakingLonger": "Taking longer than usual",
+    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
 }

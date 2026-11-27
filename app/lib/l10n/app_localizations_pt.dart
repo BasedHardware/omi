@@ -14830,12 +14830,6 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
-  String get dailyRecapsOnHome => 'Resumos diários no Início';
-
-  @override
-  String get dailyRecapsOnHomeDescription => 'Mostre seus resumos mais recentes no topo do Início.';
-
-  @override
   String get yearlySwitchTitle => 'Mudar para anual';
 
   @override
@@ -14903,17 +14897,6 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get homeStepTranscribing => 'Transcrevendo…';
-
-  @override
-  String homeRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count gravações',
-      one: '$count gravação',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get episodeWritingNotesDetail => 'Primeiro terminamos a transcrição. Você pode sair desta página.';
@@ -15781,15 +15764,6 @@ class AppLocalizationsPt extends AppLocalizations {
       'Esta atualização de firmware precisa de uma versão mais recente do app Omi. Atualize o app pela sua loja de aplicativos e verifique novamente.';
 
   @override
-  String get quietPayerTitle => 'Sem gravações há 5 dias';
-
-  @override
-  String get quietPayerMessage => 'Verifique seu Omi.';
-
-  @override
-  String get quietPayerCheck => 'Verificar';
-
-  @override
   String get playManageSubscription => 'Gerir subscrição';
 
   @override
@@ -15871,4 +15845,27 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Algumas gravações ainda estão no seu dispositivo. Deixe-as concluir a sincronização com seu telefone e, em seguida, inicie a atualização.';
+
+  @override
+  String homeLockedTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count conversations waiting',
+      one: '1 conversation waiting',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeLockedSubtitle => 'Kept safe · unlock to read';
+
+  @override
+  String get homeLockedSubtitleNoPlans => 'Kept safe until your allowance resets';
+
+  @override
+  String get homeTakingLonger => 'Taking longer than usual';
+
+  @override
+  String get homeFinishingOpensWhenReady => 'Opens as soon as it\'s ready';
 }

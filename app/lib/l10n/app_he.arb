@@ -11915,8 +11915,6 @@
     "syncStallAlertBody": "לא סונכרנו הקלטות מה-Omi שלך במשך יותר מ-{hours} שעות. פתח את Omi כדי לבדוק את חיבור המכשיר.",
     "activityAttentionSyncStalledTitle": "Omi לא מסתנכרן",
     "activityAttentionSyncStalledSubtitle": "לא סונכרנו הקלטות במשך יותר מ-{hours} שעות",
-    "dailyRecapsOnHome": "סיכומים יומיים במסך הבית",
-    "dailyRecapsOnHomeDescription": "הצג את הסיכומים האחרונים שלך בראש מסך הבית.",
     "yearlySwitchTitle": "מעבר לתשלום שנתי",
     "yearlySwitchRowSavings": "חסכו {amount} בשנה",
     "yearlySwitchHomeTitle": "חסכו {amount} בשנה עם תשלום שנתי",
@@ -11936,7 +11934,6 @@
     "chatAppsCodeExpiredMessageIn": "קבלו קוד חדש ושלחו אותו מ{app}.",
     "episodeWritingNotes": "כותבים הערות…",
     "homeStepTranscribing": "מתמללים…",
-    "homeRecordingsCount": "{count, plural, one{הקלטה אחת} two{שתי הקלטות} many{{count} הקלטות} other{{count} הקלטות}}",
     "episodeWritingNotesDetail": "קודם מסיימים את התמלול. אפשר לעזוב את הדף.",
     "episodeCoversUpTo": "מכסה עד {time} · הערות מלאות בסיום",
     "liveTranscribedUpTo": "תומלל עד {time}",
@@ -12302,9 +12299,6 @@
     "deviceReadyToUse": "מוכן לשימוש",
     "firmwareUpdateFirmwareTooOld": "הקושחה של המכשיר שלך ישנה מדי לעדכון הזה. יש לפנות לתמיכה לקבלת עזרה בעדכון המכשיר.",
     "firmwareUpdateAppRequired": "עדכון הקושחה הזה דורש גרסה חדשה יותר של אפליקציית Omi. יש לעדכן את האפליקציה מחנות האפליקציות שלך, ואז לבדוק שוב.",
-    "quietPayerTitle": "אין הקלטות כבר 5 ימים",
-    "quietPayerMessage": "בדקו את ה-Omi שלכם.",
-    "quietPayerCheck": "בדיקה",
     "playManageSubscription": "ניהול המינוי",
     "playBilledByGoogle": "החיוב דרך Google Play",
     "playPurchasePending": "התשלום ממתין. Omi Pro יתחיל ברגע ש-Google Play יאשר אותו.",
@@ -12325,5 +12319,10 @@
     "playStripePlanPaused": "התוכנית {plan} שלך מושהית.",
     "firmwareNewestSupportedForDevice": "המכשיר שלך כבר נמצא בגרסת הקושחה החדשה ביותר הנתמכת עבורו",
     "firmwareSyncRecordingsFirstTitle": "סנכרן תחילה את ההקלטות שלך",
-    "firmwareSyncRecordingsFirstMessage": "חלק מההקלטות עדיין נמצאות במכשיר שלך. תן להן להשלים את הסינכרון לטלפון, ואז התחל את העדכון."
+    "firmwareSyncRecordingsFirstMessage": "חלק מההקלטות עדיין נמצאות במכשיר שלך. תן להן להשלים את הסינכרון לטלפון, ואז התחל את העדכון.",
+    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
+    "homeLockedSubtitle": "Kept safe · unlock to read",
+    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
+    "homeTakingLonger": "Taking longer than usual",
+    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
 }

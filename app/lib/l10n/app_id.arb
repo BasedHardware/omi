@@ -4527,8 +4527,6 @@
     "syncStallAlertBody": "Tidak ada rekaman dari Omi Anda yang tersinkronisasi selama lebih dari {hours} jam. Buka Omi untuk memeriksa koneksi perangkat Anda.",
     "activityAttentionSyncStalledTitle": "Omi tidak tersinkronisasi",
     "activityAttentionSyncStalledSubtitle": "Tidak ada rekaman yang tersinkronisasi selama lebih dari {hours} jam",
-    "dailyRecapsOnHome": "Ringkasan Harian di Beranda",
-    "dailyRecapsOnHomeDescription": "Tampilkan ringkasan terbaru di bagian atas Beranda.",
     "yearlySwitchTitle": "Beralih ke Tahunan",
     "yearlySwitchRowSavings": "Hemat {amount} per tahun",
     "yearlySwitchHomeTitle": "Hemat {amount} per tahun dengan bayar tahunan",
@@ -4548,7 +4546,6 @@
     "chatAppsCodeExpiredMessageIn": "Dapatkan kode baru lalu kirim dari {app}.",
     "episodeWritingNotes": "Menulis catatan…",
     "homeStepTranscribing": "Sedang mentranskrip…",
-    "homeRecordingsCount": "{count, plural, other{{count} rekaman}}",
     "episodeWritingNotesDetail": "Menyelesaikan transkrip dulu. Anda boleh meninggalkan halaman ini.",
     "episodeCoversUpTo": "Mencakup hingga {time} · catatan lengkap saat selesai",
     "liveTranscribedUpTo": "Ditranskripsi hingga {time}",
@@ -4780,9 +4777,6 @@
     "deviceReadyToUse": "Siap digunakan",
     "firmwareUpdateFirmwareTooOld": "Firmware perangkat Anda terlalu lama untuk pembaruan ini. Hubungi dukungan untuk bantuan memperbarui perangkat Anda.",
     "firmwareUpdateAppRequired": "Pembaruan firmware ini memerlukan aplikasi Omi versi lebih baru. Perbarui aplikasi dari toko aplikasi Anda, lalu periksa lagi.",
-    "quietPayerTitle": "Tidak ada rekaman dalam 5 hari",
-    "quietPayerMessage": "Periksa Omi Anda.",
-    "quietPayerCheck": "Periksa",
     "playManageSubscription": "Kelola langganan",
     "playBilledByGoogle": "Ditagih oleh Google Play",
     "playPurchasePending": "Pembayaran tertunda. Omi Pro dimulai setelah Google Play mengonfirmasinya.",
@@ -4803,5 +4797,10 @@
     "playStripePlanPaused": "Paket {plan} kamu sedang dijeda.",
     "firmwareNewestSupportedForDevice": "Perangkat Anda sudah menggunakan versi firmware terbaru yang didukung",
     "firmwareSyncRecordingsFirstTitle": "Sinkronkan rekaman Anda terlebih dahulu",
-    "firmwareSyncRecordingsFirstMessage": "Beberapa rekaman masih berada di perangkat Anda. Biarkan rekaman tersebut selesai disinkronkan ke ponsel Anda, lalu mulai pembaruan."
+    "firmwareSyncRecordingsFirstMessage": "Beberapa rekaman masih berada di perangkat Anda. Biarkan rekaman tersebut selesai disinkronkan ke ponsel Anda, lalu mulai pembaruan.",
+    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
+    "homeLockedSubtitle": "Kept safe · unlock to read",
+    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
+    "homeTakingLonger": "Taking longer than usual",
+    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
 }

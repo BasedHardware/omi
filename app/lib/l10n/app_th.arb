@@ -4492,8 +4492,6 @@
     "syncStallAlertBody": "ไม่มีการบันทึกจาก Omi ของคุณถูกซิงค์เป็นเวลาเกิน {hours} ชั่วโมง เปิด Omi เพื่อตรวจสอบการเชื่อมต่อของอุปกรณ์",
     "activityAttentionSyncStalledTitle": "Omi ไม่ได้ซิงค์",
     "activityAttentionSyncStalledSubtitle": "ไม่มีการบันทึกที่ซิงค์เป็นเวลาเกิน {hours} ชั่วโมง",
-    "dailyRecapsOnHome": "สรุปรายวันในหน้าหลัก",
-    "dailyRecapsOnHomeDescription": "แสดงสรุปล่าสุดของคุณที่ด้านบนของหน้าหลัก",
     "yearlySwitchTitle": "เปลี่ยนเป็นรายปี",
     "yearlySwitchRowSavings": "ประหยัด {amount} ต่อปี",
     "yearlySwitchHomeTitle": "ประหยัด {amount} ต่อปีเมื่อจ่ายรายปี",
@@ -4513,7 +4511,6 @@
     "chatAppsCodeExpiredMessageIn": "ขอรหัสใหม่แล้วส่งจากแอป{app}",
     "episodeWritingNotes": "กำลังเขียนบันทึก…",
     "homeStepTranscribing": "กำลังถอดเสียง…",
-    "homeRecordingsCount": "{count, plural, other{บันทึก {count} รายการ}}",
     "episodeWritingNotesDetail": "กำลังทำบทถอดความให้เสร็จก่อน คุณออกจากหน้านี้ได้",
     "episodeCoversUpTo": "ครอบคลุมถึง {time} · บันทึกฉบับเต็มเมื่อจบ",
     "liveTranscribedUpTo": "ถอดความถึง {time}",
@@ -4745,9 +4742,6 @@
     "deviceReadyToUse": "พร้อมใช้งาน",
     "firmwareUpdateFirmwareTooOld": "เฟิร์มแวร์ของอุปกรณ์คุณเก่าเกินไปสำหรับการอัปเดตนี้ ติดต่อฝ่ายสนับสนุนเพื่อขอความช่วยเหลือในการอัปเดตอุปกรณ์",
     "firmwareUpdateAppRequired": "การอัปเดตเฟิร์มแวร์นี้ต้องใช้แอป Omi เวอร์ชันใหม่กว่า อัปเดตแอปจากร้านค้าแอปของคุณ แล้วตรวจสอบอีกครั้ง",
-    "quietPayerTitle": "ไม่มีการบันทึกมา 5 วัน",
-    "quietPayerMessage": "ตรวจสอบ Omi ของคุณ",
-    "quietPayerCheck": "ตรวจสอบ",
     "playManageSubscription": "จัดการการสมัครสมาชิก",
     "playBilledByGoogle": "เรียกเก็บเงินผ่าน Google Play",
     "playPurchasePending": "การชำระเงินรอดำเนินการ Omi Pro จะเริ่มเมื่อ Google Play ยืนยัน",
@@ -4768,5 +4762,10 @@
     "playStripePlanPaused": "แพ็กเกจ {plan} ของคุณหยุดชั่วคราวอยู่",
     "firmwareNewestSupportedForDevice": "อุปกรณ์ของคุณใช้เฟิร์มแวร์เวอร์ชันล่าสุดที่รองรับอยู่แล้ว",
     "firmwareSyncRecordingsFirstTitle": "ซิงค์ไฟล์บันทึกเสียงของคุณก่อน",
-    "firmwareSyncRecordingsFirstMessage": "ไฟล์บันทึกเสียงบางส่วนยังอยู่ในอุปกรณ์ของคุณ รอให้ซิงค์ไปยังโทรศัพท์เสร็จก่อน แล้วจึงเริ่มการอัปเดต"
+    "firmwareSyncRecordingsFirstMessage": "ไฟล์บันทึกเสียงบางส่วนยังอยู่ในอุปกรณ์ของคุณ รอให้ซิงค์ไปยังโทรศัพท์เสร็จก่อน แล้วจึงเริ่มการอัปเดต",
+    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
+    "homeLockedSubtitle": "Kept safe · unlock to read",
+    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
+    "homeTakingLonger": "Taking longer than usual",
+    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
 }

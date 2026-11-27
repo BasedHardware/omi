@@ -4492,8 +4492,6 @@
     "syncStallAlertBody": "Üle {hours} tunni pole sinu Omist sünkroonitud ühtegi salvestust. Ava Omi ja kontrolli seadme ühendust.",
     "activityAttentionSyncStalledTitle": "Omi ei sünkrooni",
     "activityAttentionSyncStalledSubtitle": "Üle {hours} tunni pole sünkroonitud ühtegi salvestust",
-    "dailyRecapsOnHome": "Päevased kokkuvõtted avalehel",
-    "dailyRecapsOnHomeDescription": "Näita viimaseid kokkuvõtteid avalehe ülaosas.",
     "yearlySwitchTitle": "Mine üle aastasele",
     "yearlySwitchRowSavings": "Säästa {amount} aastas",
     "yearlySwitchHomeTitle": "Säästa aastamaksega {amount} aastas",
@@ -4513,7 +4511,6 @@
     "chatAppsCodeExpiredMessageIn": "Hangi uus kood ja saada see rakendusest {app}.",
     "episodeWritingNotes": "Kirjutame märkmeid…",
     "homeStepTranscribing": "Transkribeerime…",
-    "homeRecordingsCount": "{count, plural, one{{count} salvestus} other{{count} salvestust}}",
     "episodeWritingNotesDetail": "Kõigepealt lõpetame transkriptsiooni. Võid sellelt lehelt lahkuda.",
     "episodeCoversUpTo": "Katab kuni {time} · täielikud märkmed lõpus",
     "liveTranscribedUpTo": "Transkribeeritud kuni {time}",
@@ -4745,9 +4742,6 @@
     "deviceReadyToUse": "Valmis kasutamiseks",
     "firmwareUpdateFirmwareTooOld": "Teie seadme püsivara on selle värskenduse jaoks liiga vana. Seadme värskendamiseks abi saamiseks võtke ühendust klienditoega.",
     "firmwareUpdateAppRequired": "See püsivara värskendus vajab Omi rakenduse uuemat versiooni. Värskendage rakendust oma rakenduste poes ja kontrollige seejärel uuesti.",
-    "quietPayerTitle": "5 päeva pole salvestisi",
-    "quietPayerMessage": "Kontrolli oma Omit.",
-    "quietPayerCheck": "Kontrolli",
     "playManageSubscription": "Halda tellimust",
     "playBilledByGoogle": "Arveldus Google Play kaudu",
     "playPurchasePending": "Makse ootel. Omi Pro algab, kui Google Play selle kinnitab.",
@@ -4768,5 +4762,10 @@
     "playStripePlanPaused": "Sinu {plan} pakett on peatatud.",
     "firmwareNewestSupportedForDevice": "Teie seadmes on juba uusim toetatud püsivaraversioon",
     "firmwareSyncRecordingsFirstTitle": "Sünkroonige oma salvestised esmalt",
-    "firmwareSyncRecordingsFirstMessage": "Mõned salvestised on veel teie seadmes. Oodake, kuni need on telefonisse sünkroonitud, ja seejärel alustage uuendust."
+    "firmwareSyncRecordingsFirstMessage": "Mõned salvestised on veel teie seadmes. Oodake, kuni need on telefonisse sünkroonitud, ja seejärel alustage uuendust.",
+    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
+    "homeLockedSubtitle": "Kept safe · unlock to read",
+    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
+    "homeTakingLonger": "Taking longer than usual",
+    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
 }

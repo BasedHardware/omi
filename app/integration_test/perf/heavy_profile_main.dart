@@ -15,7 +15,6 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/app_globals.dart';
 import 'package:omi/backend/http/conversation_api_contract.dart';
-import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/backend/schema/gen/speaker_tag_prompts_wire.g.dart';
@@ -303,13 +302,11 @@ void main() {
       live.startUpdates();
       mark('home_live_preview.push');
       globalNavigatorKey.currentState!.push(MaterialPageRoute<void>(
-          builder: (_) => withLive(Scaffold(
-              backgroundColor: Colors.black,
-              body: ConversationsPage(
-                  requestInitialLoad: false, loadRecaps: () async => (items: <DailySummary>[], ok: true))))));
+          builder: (_) =>
+              withLive(Scaffold(backgroundColor: Colors.black, body: ConversationsPage(requestInitialLoad: false)))));
       await _idle(const Duration(seconds: 2));
       final liveHome = find.descendant(
-          of: find.byType(ConversationsPage).last, matching: find.byKey(const Key('home_live_episode_preview')));
+          of: find.byType(ConversationsPage).last, matching: find.byKey(const Key('home_live_row_subtitle')));
       expect(liveHome, findsOneWidget, reason: 'Home must show the live row with preview words');
       mark('home_live_preview.watch');
       await _idle(const Duration(seconds: 5));
@@ -717,9 +714,7 @@ class _HeavyHomeTabsState extends State<_HeavyHomeTabs> {
   @override
   Widget build(BuildContext context) {
     final selected = context.select<HomeProvider, int>((home) => home.selectedIndex);
-    _pages[selected] ??= selected == HomeProvider.homeTab
-        ? ConversationsPage(loadRecaps: () async => (items: <DailySummary>[], ok: true))
-        : const ActionItemsPage();
+    _pages[selected] ??= selected == HomeProvider.homeTab ? ConversationsPage() : const ActionItemsPage();
     return Scaffold(
       backgroundColor: Colors.black,
       body: Column(

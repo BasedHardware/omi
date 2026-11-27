@@ -4492,8 +4492,6 @@
     "syncStallAlertBody": "Καμία ηχογράφηση από το Omi σας δεν συγχρονίστηκε για πάνω από {hours} ώρες. Ανοίξτε το Omi για να ελέγξετε τη σύνδεση της συσκευής.",
     "activityAttentionSyncStalledTitle": "Το Omi δεν συγχρονίζεται",
     "activityAttentionSyncStalledSubtitle": "Καμία ηχογράφηση δεν συγχρονίστηκε για πάνω από {hours} ώρες",
-    "dailyRecapsOnHome": "Ημερήσιες περιλήψεις στην Αρχική",
-    "dailyRecapsOnHomeDescription": "Εμφάνιση των πιο πρόσφατων περιλήψεων στην κορυφή της Αρχικής.",
     "yearlySwitchTitle": "Μετάβαση σε ετήσιο",
     "yearlySwitchRowSavings": "Εξοικονομήστε {amount} τον χρόνο",
     "yearlySwitchHomeTitle": "Εξοικονομήστε {amount} τον χρόνο με ετήσια χρέωση",
@@ -4513,7 +4511,6 @@
     "chatAppsCodeExpiredMessageIn": "Πάρε νέο κωδικό και στείλ' τον από τα {app}.",
     "episodeWritingNotes": "Γράφονται οι σημειώσεις…",
     "homeStepTranscribing": "Μεταγραφή…",
-    "homeRecordingsCount": "{count, plural, one{{count} εγγραφή} other{{count} εγγραφές}}",
     "episodeWritingNotesDetail": "Πρώτα ολοκληρώνεται η απομαγνητοφώνηση. Μπορείς να φύγεις από τη σελίδα.",
     "episodeCoversUpTo": "Καλύπτει έως τις {time} · πλήρεις σημειώσεις στο τέλος",
     "liveTranscribedUpTo": "Απομαγνητοφώνηση έως τις {time}",
@@ -4745,9 +4742,6 @@
     "deviceReadyToUse": "Έτοιμο για χρήση",
     "firmwareUpdateFirmwareTooOld": "Το υλικολογισμικό της συσκευής σας είναι πολύ παλιό για αυτήν την ενημέρωση. Επικοινωνήστε με την υποστήριξη για βοήθεια με την ενημέρωση της συσκευής σας.",
     "firmwareUpdateAppRequired": "Αυτή η ενημέρωση υλικολογισμικού απαιτεί νεότερη έκδοση της εφαρμογής Omi. Ενημερώστε την εφαρμογή από το κατάστημα εφαρμογών σας και ελέγξτε ξανά.",
-    "quietPayerTitle": "Καμία ηχογράφηση εδώ και 5 ημέρες",
-    "quietPayerMessage": "Έλεγξε το Omi σου.",
-    "quietPayerCheck": "Έλεγχος",
     "playManageSubscription": "Διαχείριση συνδρομής",
     "playBilledByGoogle": "Χρέωση μέσω Google Play",
     "playPurchasePending": "Η πληρωμή εκκρεμεί. Το Omi Pro ξεκινά μόλις την επιβεβαιώσει το Google Play.",
@@ -4768,5 +4762,10 @@
     "playStripePlanPaused": "Το πρόγραμμά σας {plan} είναι σε παύση.",
     "firmwareNewestSupportedForDevice": "Η συσκευή σας έχει ήδη την πιο πρόσφατη υποστηριζόμενη έκδοση υλικολογισμικού",
     "firmwareSyncRecordingsFirstTitle": "Συγχρονίστε πρώτα τις ηχογραφήσεις σας",
-    "firmwareSyncRecordingsFirstMessage": "Μερικές ηχογραφήσεις βρίσκονται ακόμη στη συσκευή σας. Περιμένετε να ολοκληρωθεί ο συγχρονισμός τους στο τηλέφωνό σας και, στη συνέχεια, ξεκινήστε την ενημέρωση."
+    "firmwareSyncRecordingsFirstMessage": "Μερικές ηχογραφήσεις βρίσκονται ακόμη στη συσκευή σας. Περιμένετε να ολοκληρωθεί ο συγχρονισμός τους στο τηλέφωνό σας και, στη συνέχεια, ξεκινήστε την ενημέρωση.",
+    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
+    "homeLockedSubtitle": "Kept safe · unlock to read",
+    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
+    "homeTakingLonger": "Taking longer than usual",
+    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
 }

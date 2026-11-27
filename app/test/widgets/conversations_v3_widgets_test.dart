@@ -110,12 +110,6 @@ void main() {
       expect(find.byIcon(Icons.edit_rounded), findsOneWidget);
     });
 
-    testWidgets('an account not on v3 shows the emoji, whatever an old document says', (tester) async {
-      await pumpTile(tester, _conversation(state: ConversationTileState.writing), v3: _v3(false));
-      expect(find.text('🚀'), findsOneWidget);
-      expect(find.byType(ConversationWritingPen), findsNothing);
-    });
-
     testWidgets('failed shows a warning mark, never the emoji', (tester) async {
       await pumpTile(tester, _conversation(state: ConversationTileState.failed));
       expect(find.byKey(const Key('conversation_tile_failed')), findsOneWidget);

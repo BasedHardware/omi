@@ -11915,8 +11915,6 @@
     "syncStallAlertBody": "మీ Omi నుండి {hours} గంటల కంటే ఎక్కువ ఏ రికార్డింగ్ సింక్ కాలేదు. మీ పరికర కనెక్షన్‌ను తనిఖీ చేయడానికి Omi తెరవండి.",
     "activityAttentionSyncStalledTitle": "Omi సింక్ కావడం లేదు",
     "activityAttentionSyncStalledSubtitle": "{hours} గంటల కంటే ఎక్కువ ఏ రికార్డింగ్ సింక్ కాలేదు",
-    "dailyRecapsOnHome": "హోమ్‌లో రోజువారీ రీక్యాప్‌లు",
-    "dailyRecapsOnHomeDescription": "హోమ్ పైభాగంలో మీ తాజా రీక్యాప్‌లను చూపించు.",
     "yearlySwitchTitle": "వార్షికానికి మారండి",
     "yearlySwitchRowSavings": "ఏడాదికి {amount} ఆదా చేయండి",
     "yearlySwitchHomeTitle": "వార్షిక చెల్లింపుతో ఏడాదికి {amount} ఆదా చేయండి",
@@ -11936,7 +11934,6 @@
     "chatAppsCodeExpiredMessageIn": "కొత్త కోడ్ తీసుకుని {app} నుండి పంపండి.",
     "episodeWritingNotes": "నోట్స్ రాస్తున్నాం…",
     "homeStepTranscribing": "ట్రాన్స్‌క్రైబ్ చేస్తున్నాం…",
-    "homeRecordingsCount": "{count, plural, one{{count} రికార్డింగ్} other{{count} రికార్డింగ్‌లు}}",
     "episodeWritingNotesDetail": "ముందు ట్రాన్స్‌క్రిప్ట్ పూర్తి చేస్తున్నాం. మీరు ఈ పేజీ వదిలి వెళ్లవచ్చు.",
     "episodeCoversUpTo": "{time} వరకు · ముగిశాక పూర్తి నోట్స్",
     "liveTranscribedUpTo": "{time} వరకు ట్రాన్స్‌క్రైబ్ అయింది",
@@ -12302,9 +12299,6 @@
     "deviceReadyToUse": "వాడుకకు సిద్ధం",
     "firmwareUpdateFirmwareTooOld": "ఈ నవీకరణకు మీ పరికరంలోని ఫర్మ్‌వేర్ చాలా పాతది. మీ పరికరాన్ని నవీకరించడంలో సహాయం కోసం సపోర్ట్‌ను సంప్రదించండి.",
     "firmwareUpdateAppRequired": "ఈ ఫర్మ్‌వేర్ నవీకరణకు కొత్త వెర్షన్ Omi యాప్ అవసరం. మీ యాప్ స్టోర్ నుండి యాప్‌ను నవీకరించి, మళ్లీ తనిఖీ చేయండి.",
-    "quietPayerTitle": "5 రోజులుగా రికార్డింగ్‌లు లేవు",
-    "quietPayerMessage": "మీ Omiని తనిఖీ చేయండి.",
-    "quietPayerCheck": "తనిఖీ",
     "playManageSubscription": "సబ్‌స్క్రిప్షన్ నిర్వహించండి",
     "playBilledByGoogle": "Google Play ద్వారా బిల్ చేయబడుతుంది",
     "playPurchasePending": "మీ చెల్లింపు పెండింగ్‌లో ఉంది. Google Play నిర్ధారించగానే Omi Pro మొదలవుతుంది.",
@@ -12325,5 +12319,10 @@
     "playStripePlanPaused": "మీ {plan} ప్లాన్ పాజ్ చేయబడింది.",
     "firmwareNewestSupportedForDevice": "మీ డివైస్ ఇప్పటికే మద్దతు ఉన్న అత్యంత కొత్త ఫర్మ్‌వేర్ వెర్షన్‌లో ఉంది",
     "firmwareSyncRecordingsFirstTitle": "ముందుగా మీ రికార్డింగ్‌లను సమకాలీకరించండి",
-    "firmwareSyncRecordingsFirstMessage": "కొన్ని రికార్డింగ్‌లు ఇంకా మీ డివైస్‌లో ఉన్నాయి. అవి మీ ఫోన్‌కు పూర్తిగా సమకాలీకరించనివ్వండి, తర్వాత నవీకరణను ప్రారంభించండి."
+    "firmwareSyncRecordingsFirstMessage": "కొన్ని రికార్డింగ్‌లు ఇంకా మీ డివైస్‌లో ఉన్నాయి. అవి మీ ఫోన్‌కు పూర్తిగా సమకాలీకరించనివ్వండి, తర్వాత నవీకరణను ప్రారంభించండి.",
+    "homeLockedTitle": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
+    "homeLockedSubtitle": "Kept safe · unlock to read",
+    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
+    "homeTakingLonger": "Taking longer than usual",
+    "homeFinishingOpensWhenReady": "Opens as soon as it's ready"
 }

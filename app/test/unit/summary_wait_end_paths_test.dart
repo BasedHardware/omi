@@ -155,7 +155,7 @@ void main() {
       expect((homeRows, fallbackRows), (1, 0));
     });
 
-    test('off, or an account without grouping: nothing is sent', () async {
+    test('off: nothing is sent', () async {
       var asked = 0;
       Future<({ConversationByIdResult result, bool settled})> wait(String id, {bool untilOutline = false}) async {
         asked++;
@@ -170,15 +170,6 @@ void main() {
           summaryWait: wait);
       addTearDown(off.dispose);
       expect(off.awaitSummaryAfterEnd('c'), isFalse);
-
-      final legacy = ConversationsV3Provider(
-          fetchLive: () async => _live(false),
-          uid: () => 'u1',
-          cached: 'u1:0',
-          summaryWaitEnabled: () => true,
-          summaryWait: wait);
-      addTearDown(legacy.dispose);
-      expect(legacy.awaitSummaryAfterEnd('c'), isFalse);
       await Future<void>.delayed(Duration.zero);
       expect(asked, 0);
     });
