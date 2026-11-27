@@ -25,6 +25,26 @@ def recording(cid='r', at=NOW, segments=None, **extra):
     }
 
 
+def native_ready_fields(end):
+    intent = {'finished_at': end, 'revision': 1, 'job_id': 'job'}
+    return {
+        'finished_at': end,
+        'status': 'completed',
+        'record_lane_owner': 'batch_live_v1',
+        'record_audio_closed': True,
+        'record_upload_revision': 7,
+        'record_sealed_at': end.timestamp(),
+        'finalization_job_id': 'job',
+        'finalization_revision': 1,
+        'private_cloud_sync_enabled': True,
+        'data_protection_level': 'standard',
+        'v3_native_manual_stop': intent,
+        'v3_manual_end': True,
+        'v3_native_manual_ready_revision': 7,
+        'v3_native_manual_ready_proof': {'seal': end.timestamp(), 'intent': intent},
+    }
+
+
 def entry(first=1, **extra):
     return {
         'first_line': first,
@@ -43,6 +63,61 @@ def test_five_minute_silence_boundary():
     assert len(outline.stretches([row], NOW + timedelta(hours=1))) == 2
     row['transcript_segments'][1]['start'] = 309.999
     assert len(outline.stretches([row], NOW + timedelta(hours=1))) == 1
+
+
+@pytest.mark.parametrize('gap', [0, 1])
+def test_native_manual_cut_keeps_final_tail_and_separates_next_recording(gap):
+    end = NOW + timedelta(seconds=30)
+    previous = recording(
+        'previous',
+        segments=[
+            {'text': 'opening thought', 'start': 0, 'end': 10},
+            {'text': 'final decision', 'start': 21, 'end': 30},
+        ],
+        finished_at=end,
+        v3_native_manual_stop={'finished_at': end, 'revision': 1, 'job_id': 'job'},
+    )
+    successor = recording('next', at=end + timedelta(seconds=gap))
+    assert len(outline.stretches([previous, successor], end + timedelta(seconds=15))) == 1
+    previous.update(native_ready_fields(end))
+    old, new = outline.stretches([previous, successor], end + timedelta(seconds=15))
+    assert old['manual_end'] and old['finished']
+    assert [line['text'] for line in old['lines']] == ['opening thought', 'final decision']
+    assert not new['manual_end'] and not new['finished']
+    assert {line['conversation_id'] for line in new['lines']} == {'next'}
+
+
+def test_ambiguous_native_overlap_keeps_existing_natural_policy():
+    end = NOW + timedelta(seconds=10)
+    previous = recording('previous', **native_ready_fields(end))
+    overlapping = recording(
+        'overlapping', at=NOW + timedelta(seconds=8), segments=[{'text': 'other source', 'start': 0, 'end': 10}]
+    )
+    (group,) = outline.stretches([previous, overlapping], end + timedelta(seconds=15))
+    assert not group['manual_end'] and not group['finished']
+    (group,) = outline.stretches([previous, overlapping], end + timedelta(minutes=6))
+    assert not group['manual_end'] and group['finished']
+
+
+@pytest.mark.parametrize(
+    'change',
+    [
+        {'record_upload_revision': 8},
+        {'record_sealed_at': NOW.timestamp() + 20},
+        {'record_audio_closed': False},
+        {'record_upload_sessions': {'producer': True}},
+        {'record_audio_partial': {'generation': 1}},
+        {'v3_native_manual_ready_proof': None},
+        {'finalization_revision': 2},
+    ],
+)
+def test_stale_native_readiness_does_not_fall_back_to_legacy_manual_end(change):
+    end = NOW + timedelta(seconds=10)
+    source = recording('native', **{**native_ready_fields(end), **change})
+    (group,) = outline.stretches([source], end + timedelta(seconds=20))
+    assert not group['finished'] and not group['manual_end']
+    (group,) = outline.stretches([source], end + timedelta(minutes=6))
+    assert group['finished'] and not group['manual_end']
 
 
 def test_three_hour_window_cap_is_deterministic_on_the_recorded_clock():
@@ -665,6 +740,36 @@ def test_finish_sli_keeps_adjacent_cuts_on_their_own_cards():
     groups = outline.stretches([a, b, c], NOW + timedelta(minutes=2), finish_routes=set())
     windows = planner.windows(groups, [[entry()], [entry()]])
     assert [w['_finish_sli_sources'] for w in windows] == [('a',), ('b',)]
+
+
+def test_finish_sli_binds_a_native_finish_window_to_its_recording():
+    # SCA-4489 x #25992: a native Finish cuts through its sealed tail, not a recording cut, and must still
+    # carry its recording into the Finish→Home window binding. Unmeasured passes carry nothing.
+    end = NOW + timedelta(seconds=30)
+    native = recording('native', **native_ready_fields(end))
+    (group,) = outline.stretches([native], end + timedelta(seconds=1), finish_routes=set())
+    assert group['native_manual_end'] and group['manual_end']
+    assert group['_finish_sli_sources'] == ('native',)
+    (unmeasured,) = outline.stretches([dict(native)], end + timedelta(seconds=1))
+    assert unmeasured['manual_end'] and '_finish_sli_sources' not in unmeasured
+
+
+def test_native_tail_cannot_cut_when_earlier_overlapping_speech_continues_past_stop():
+    end = NOW + timedelta(seconds=30)
+    overlapping = recording('overlapping', segments=[{'text': 'continuous speech', 'start': 0, 'end': 60}])
+    native = recording('native', at=NOW + timedelta(seconds=10), **native_ready_fields(end))
+    successor = recording('successor', at=NOW + timedelta(seconds=70))
+    (group,) = outline.stretches([overlapping, native, successor], NOW + timedelta(seconds=90))
+    assert not group['manual_end'] and not group['finished']
+    assert [line['conversation_id'] for line in group['lines']] == ['overlapping', 'native', 'successor']
+
+
+def test_inert_native_stop_does_not_mask_legacy_manual_end():
+    end = NOW + timedelta(seconds=12)
+    legacy = recording('legacy', finished_at=end, v3_manual_end=True, v3_native_manual_stop={'finished_at': end})
+    (group,) = outline.stretches([legacy], end + timedelta(seconds=1))
+    assert group['legacy_manual_end'] and group['finished']
+    assert not group['native_manual_end']
 
 
 @pytest.mark.parametrize('cohesion', [False, True])
