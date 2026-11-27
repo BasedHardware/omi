@@ -1,0 +1,22 @@
+{
+  "success_log_weight": 10,
+  "settle_seconds": 600,
+  "minimum_requests": 100,
+  "minimum_effective_requests": 30,
+  "minimum_candidate_errors": 10,
+  "relative_increase": 0.25,
+  "alpha": 0.01,
+  "log_page_budgets": {"backend-sync": 64},
+  "services": {
+    "backend": {
+      "from-segments": {"method": "POST", "path": "/v1/conversations/from-segments"}
+    },
+    "backend-sync": {
+      "sync-local-files": {"method": "POST", "path": "/v2/sync-local-files", "refusal_statuses": [503]},
+      "deletion-batch-purges": {"method": "POST", "path": "/v1/conversations/deletion-batch-purges/run"},
+      "reconcile": {"method": "POST", "path": "/v1/conversations-v3/reconcile"}
+    },
+    "backend-sync-backfill": {},
+    "backend-integration": {}
+  }
+}

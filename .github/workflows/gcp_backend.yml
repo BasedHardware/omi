@@ -20,7 +20,9 @@
 name: Deploy Backend to Cloud RUN
 
 run-name: >-
-  ${{ inputs.selected_rollback_revision && format('Select {0}/{1}/{2} sha={3} lock={4} img={5} elig={6} by {7} inverse={8}',
+  ${{ inputs.selected_split_binding && format('Holdback {0}/{1} sha={2} by {3} plan={4}',
+    inputs.environment, inputs.cloud_run_service, inputs.release_sha, inputs.requested_by, inputs.selected_split_binding) ||
+    inputs.selected_rollback_revision && format('Select {0}/{1}/{2} sha={3} lock={4} img={5} elig={6} by {7} inverse={8}',
     inputs.environment, inputs.mode, inputs.cloud_run_service, inputs.release_sha,
     github.event.inputs.break_glass_lock == 'true' && 'break-glass' || 'prod-train',
     inputs.service_images == '' && 'default' || 'override',
@@ -95,6 +97,16 @@ on:
         description: 'Named standard deploy only. Exact revision admitted at 100% serving before dispatch.'
         required: false
         default: ''
+      selected_split_plan:
+        description: 'Named production deploy only. Canonical hold-back plan.'
+        required: false
+        default: ''
+        type: string
+      selected_split_binding:
+        description: 'SHA-256 of selected_split_plan.'
+        required: false
+        default: ''
+        type: string
       deploy_gateway:
         description: 'Development only: deploy the LLM gateway binary with the backend stack (requires deploy_targets=all)'
         required: true
@@ -233,6 +245,8 @@ jobs:
           CLOUD_RUN_SERVICE: ${{ github.event.inputs.cloud_run_service || 'all' }}
           SERVICE_IMAGES: ${{ github.event.inputs.service_images }}
           SELECTED_ROLLBACK_REVISION: ${{ inputs.selected_rollback_revision }}
+          SELECTED_SPLIT_PLAN: ${{ inputs.selected_split_plan }}
+          SELECTED_SPLIT_BINDING: ${{ inputs.selected_split_binding }}
           REQUESTED_BY: ${{ github.event.inputs.requested_by }}
           RELEASE_SHA: ${{ github.event.inputs.release_sha }}
           SKIP_ELIGIBILITY: ${{ github.event.inputs.skip_eligibility_proof }}
@@ -330,7 +344,25 @@ jobs:
             [[ "$CLOUD_RUN_SERVICE" == all || "$CLOUD_RUN_SERVICE" == backend-integration ]] || exit 1
             INTEGRATION_ONLY=true
           fi
-          if [[ "$CLOUD_RUN_SERVICE" != all && "$CLOUD_RUN_SERVICE" != backend-projection-pump && "$INTEGRATION_ONLY" != true ]]; then
+          if [[ -n "${SELECTED_SPLIT_PLAN:-}" || -n "${SELECTED_SPLIT_BINDING:-}" ]]; then
+            IFS=';' read -r version donor _ <<< "$SELECTED_SPLIT_PLAN"
+            [[ "$WORKFLOW_MODE" == deploy && "$DEPLOY_ENVIRONMENT" == prod &&
+               "$DEPLOY_TARGETS" == cloud-run-only && "$CLOUD_RUN_SERVICE" != all &&
+               "$CLOUD_RUN_SERVICE" != backend-projection-pump && "$INTEGRATION_ONLY" == false &&
+               "$DEPLOY_GATEWAY" == false && -z "$SERVICE_IMAGES" &&
+               "$SKIP_ELIGIBILITY" == false && "$BREAK_GLASS_LOCK" == false &&
+               -z "$SELECTED_ROLLBACK_REVISION" && "$REQUESTED_BY" =~ ^selection:[0-9a-f]{32}$ &&
+               "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ && "$RELEASE_SHA" != 0714c5198be8f0183c8fd7dd3810d53c91af17a4 &&
+               "$GITHUB_RUN_ATTEMPT" == 1 && "$GITHUB_REF" == refs/heads/main &&
+               "$version" == holdback-v1 && "$donor" =~ ^${CLOUD_RUN_SERVICE}-[a-z0-9-]+$ &&
+               "$SELECTED_SPLIT_BINDING" =~ ^[0-9a-f]{64}$ &&
+               "$(printf %s "$SELECTED_SPLIT_PLAN" | sha256sum | cut -d ' ' -f 1)" == "$SELECTED_SPLIT_BINDING" ]] || exit 1
+            if [[ "$SELECTED_SPLIT_PLAN" == *,* && "$CLOUD_RUN_SERVICE" != backend ]]; then
+              echo 'Split image moves are enabled for Backend only.' >&2
+              exit 1
+            fi
+            ROLLBACK_REVISION="$donor"
+          elif [[ "$CLOUD_RUN_SERVICE" != all && "$CLOUD_RUN_SERVICE" != backend-projection-pump && "$INTEGRATION_ONLY" != true ]]; then
             if [[ ! "$SELECTED_ROLLBACK_REVISION" =~ ^${CLOUD_RUN_SERVICE}-[a-z0-9]([a-z0-9-]*[a-z0-9])?$ ||
                   ${#SELECTED_ROLLBACK_REVISION} -gt 63 ]]; then
               echo 'Named deploy requires the admitted selected_rollback_revision.' >&2
@@ -402,7 +434,8 @@ jobs:
             .break_glass_lock == "false" and .skip_eligibility_proof == "false" and
             .deploy_gateway == "false" and
             ([.service_images, .pump_release_disposition, .break_glass_confirm,
-              .break_glass_reason, .release_version, .selected_rollback_revision] | all(. == "" or . == null)) and
+              .break_glass_reason, .release_version, .selected_rollback_revision,
+              .selected_split_plan, .selected_split_binding] | all(. == "" or . == null)) and
             (.requested_by | test("[^[:space:]]"))' "$GITHUB_EVENT_PATH" >/dev/null
           # Cloud Run v2 can return literal outer quotes as part of the etag.
           etag_pattern='^([A-Za-z0-9_+/=-]{1,200}|"[A-Za-z0-9_+/=-]{1,200}")$'
@@ -1358,6 +1391,8 @@ jobs:
           integration_image: ${{ needs.validate-production-boundary.outputs.integration_image }}
           post_wrap_guard: ${{ needs.validate-production-boundary.outputs.post_wrap_guard || 'internal' }}
           rollback_revision: ${{ needs.validate-production-boundary.outputs.rollback_revision || 'backend-integration-provfix-off1114' }}
+          selected_split_plan: ${{ inputs.selected_split_plan }}
+          selected_split_binding: ${{ inputs.selected_split_binding }}
           # 2026-10-24 costcut (live 22:45Z): prod backend-sync runs 6Gi; dev keeps 8Gi.
           backend_sync_memory: ${{ vars.BACKEND_SYNC_MEMORY || (github.event.inputs.environment == 'prod' && '6Gi' || '8Gi') }}
           # Read only for a development dispatch, so a production run never carries it.
