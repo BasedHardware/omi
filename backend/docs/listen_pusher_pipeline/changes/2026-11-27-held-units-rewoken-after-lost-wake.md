@@ -4,7 +4,10 @@
 `FirestoreProviderSttOutbox.sweep_held` after `sweep_running`.
 - It pages up to 100 `vendor_held` jobs per pass by the `(state, enqueued_at)` index.
 - It re-arms the provider-STT outbox row of each hold whose `vendor_hold.redrive_at` is more than 600 s overdue,
-  for units still inside the 60-day audio lifecycle.
+  only when the staged audio is provably inside the 60-day lifecycle under the input-retention contract
+  (`input_retention.staged_enqueue`: `audio_staged_at`, else the legacy enqueue time, staging bucket only).
+  An invalid staging clock or audio staged before the cutoff is never re-armed; it is counted as
+  `provider_stt_held_expired`, and the hold's owner records its expiry.
 - The rearm is the same fenced transaction the stranded-running sweep uses (#26120): the job is still held, the
   owner matches, the privacy fence holds, and the open row is due, unleased and not woken in the last 600 s.
 - A redriven unit still goes through the paid-once bound (`check_new_attempt`).

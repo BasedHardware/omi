@@ -239,6 +239,7 @@ def maintain(now: float) -> dict[str, int]:
         'provider_stt_running_errors': 0,
         'provider_stt_held_rewoken': 0,
         'provider_stt_held_errors': 0,
+        'provider_stt_held_expired': 0,
         'summary_debt_scanned': 0,
         'summary_debt_admitted': 0,
         'summary_debt_near_expiry_admitted': 0,
@@ -267,8 +268,12 @@ def maintain(now: float) -> dict[str, int]:
     try:
         # Kill switch off parks holds on purpose: the guards then measure stale holds as wedges.
         if held_redrive_enabled():
-            rewoken, errors = provider_stt_outbox().sweep_held(now=now)
-            counts.update(provider_stt_held_rewoken=rewoken, provider_stt_held_errors=errors)
+            rewoken, errors, expired = provider_stt_outbox().sweep_held(now=now)
+            counts.update(
+                provider_stt_held_rewoken=rewoken,
+                provider_stt_held_errors=errors,
+                provider_stt_held_expired=expired,
+            )
     except Exception as error:
         logger.error('event=provider_stt_held_sweep outcome=error exception_type=%s', type(error).__name__)
         counts['provider_stt_held_errors'] = 1

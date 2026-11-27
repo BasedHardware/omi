@@ -1294,7 +1294,7 @@ def test_non_transient_gateway_status_stays_5xx_and_keeps_the_lease(rows, client
     assert rows[0][KEY]['lease_until'] > 0
 
 
-def _provider_sweep(monkeypatch, sweep, sweep_running=lambda *, now: (3, 0), sweep_held=lambda *, now: (5, 0)):
+def _provider_sweep(monkeypatch, sweep, sweep_running=lambda *, now: (3, 0), sweep_held=lambda *, now: (5, 0, 1)):
     monkeypatch.setattr(
         route,
         'provider_stt_outbox',
@@ -1328,6 +1328,7 @@ def test_maintenance_sweeps_the_outbox_and_admits_summary_debt(rows, monkeypatch
         'provider_stt_running_errors': 0,
         'provider_stt_held_rewoken': 5,
         'provider_stt_held_errors': 0,
+        'provider_stt_held_expired': 1,
         'summary_debt_scanned': 5,
         'summary_debt_expired_seen': 2,
         'summary_debt_admitted': 3,

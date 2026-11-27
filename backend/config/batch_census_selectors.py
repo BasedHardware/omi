@@ -402,7 +402,7 @@ EXCEPTIONS: dict[str, SelectorException] = {
         100,
         'every two minutes on the provider wake backstop',
         'Index vendor_hold.redrive_at and bound the page by the overdue redrive',
-        'f031de76cba29d91b43250c5d7e178dc22021e640dfeb445cf4370e7e5353c1a',
+        '2791fa0bbef3485a289928868f3e718305a193a3f6794eec04804dd72ea4a4ca',
     ),
     'database.record_seal_worker.pending_page': _legacy(
         'Legacy seal readiness depends on capture barrier checks after page',

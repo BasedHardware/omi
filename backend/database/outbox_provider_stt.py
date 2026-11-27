@@ -22,8 +22,10 @@ from typing import Any, Callable, Literal, Mapping
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
+from config.batch_pipeline_retention import LIFECYCLE_SECONDS
 from config.policy import sweep_age
 from database.outbox import Claim, EnqueueResult, OutboxKind, Outcome, SweepCounts
+from utils.batch_pipeline.input_retention import invalid_staged_clock, staged_enqueue
 from utils.observability.sweep_age import skip_ancient
 
 Row = dict[str, Any]
@@ -88,13 +90,19 @@ def _held_overdue(job: Mapping[str, Any], now: float) -> bool:
     return now - redrive_at >= REWAKE_AFTER_SECONDS
 
 
+def _held_inside_retention(job: Mapping[str, Any], now: float) -> bool:
+    """The staged audio is provably inside the lifecycle, by the input-retention contract's staging clock.
+
+    ``staged_enqueue`` prefers ``audio_staged_at`` and falls back to the legacy enqueue time; an invalid staging
+    clock, audio outside the staging bucket, or audio staged at or past the lifecycle is not provable, so the hold
+    is left for its owner's expiry instead of re-armed.
+    """
+    staged = staged_enqueue(dict(job))
+    return not invalid_staged_clock(dict(job)) and staged is not None and now - staged < LIFECYCLE_SECONDS
+
+
 def _held_recoverable(job: Mapping[str, Any], now: float) -> bool:
-    """Overdue and still inside the audio lifecycle; past it the open-row sweep's age gate applies too."""
-    enqueued_at = job.get('enqueued_at')
-    if isinstance(enqueued_at, (int, float)) and not isinstance(enqueued_at, bool) and math.isfinite(enqueued_at):
-        if now - enqueued_at > sweep_age.max_age_seconds('provider-stt'):
-            return False
-    return _held_overdue(job, now)
+    return _held_overdue(job, now) and _held_inside_retention(job, now)
 
 
 def _rearm_wake(row: Row, now: float) -> Row:
@@ -416,7 +424,7 @@ class FirestoreProviderSttOutbox:
                 errors += 1
         return rewoken, errors
 
-    def sweep_held(self, *, now: float, limit: int = HELD_RECOVERY_PAGE_SIZE) -> tuple[int, int]:
+    def sweep_held(self, *, now: float, limit: int = HELD_RECOVERY_PAGE_SIZE) -> tuple[int, int, int]:
         """Re-wake ``vendor_held`` jobs whose redrive is overdue, which the open-outbox sweep may never reach.
 
         A held unit's redrive rides its outbox row's deferred wake; when that wake is lost, only the
@@ -438,10 +446,14 @@ class FirestoreProviderSttOutbox:
             query = query.start_after(self._held_cursor)
         page = list(query.stream(timeout=10, retry=None))
         self._held_cursor = page[-1] if len(page) == page_size else None
-        rewoken = errors = 0
+        rewoken = errors = expired = 0
         for snapshot in page:
             try:
-                if not _held_overdue(snapshot.to_dict() or {}, now):
+                job = snapshot.to_dict() or {}
+                if not _held_overdue(job, now):
+                    continue
+                if not _held_inside_retention(job, now):
+                    expired += 1  # The hold's owner records its expiry; a lost wake is never re-armed past it.
                     continue
                 fresh = self._rearm_job(snapshot.reference, lambda job: _held_recoverable(job, now), now)
                 if fresh is not None:
@@ -449,7 +461,7 @@ class FirestoreProviderSttOutbox:
                     rewoken += 1
             except Exception:
                 errors += 1
-        return rewoken, errors
+        return rewoken, errors, expired
 
     def _rearm_running(self, job_ref, cutoff: float, now: float) -> Row | None:
         def stranded(job: Mapping[str, Any]) -> bool:

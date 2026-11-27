@@ -169,6 +169,7 @@ def test_job_side_sweep_reaches_ancient_open_missing_and_closed_wakes(emulator):
 def test_held_sweep_rewakes_only_overdue_holds_whose_wake_was_lost(emulator):
     from config.batch_pipeline_retention import LIFECYCLE_SECONDS
     from database.outbox_provider_stt import REWAKE_AFTER_SECONDS
+    from utils.batch_pipeline.input_retention import STAGING_BUCKET
 
     client, collection = emulator
     owner = f'provider-held-{uuid.uuid4().hex[:8]}'
@@ -178,18 +179,22 @@ def test_held_sweep_rewakes_only_overdue_holds_whose_wake_was_lost(emulator):
     jobs = client.collection(f"{collection.removesuffix('_provider_stt_outbox')}_jobs")
     now = LIFECYCLE_SECONDS + 1_000_000.0
     overdue = now - 10 * REWAKE_AFTER_SECONDS
-    labels = ('lost', 'missing', 'closed', 'future', 'fresh_wake', 'ancient', 'pending')
+    labels = ('lost', 'missing', 'closed', 'future', 'fresh_wake', 'staged_expired', 'bad_clock', 'pending')
     segments = {label: _segment(label) for label in labels}
     for label, segment in segments.items():
         redrive_at = now + 300 if label == 'future' else overdue
-        jobs.document(segment).set(
-            {
-                'state': 'provider_pending' if label == 'pending' else 'vendor_held',
-                'enqueued_at': now - LIFECYCLE_SECONDS - 1 if label == 'ancient' else now - 86400,
-                'owner_id': owner,
-                'vendor_hold': {'reason': 'rate_limited', 'redrive_at': redrive_at},
-            }
-        )
+        job = {
+            'state': 'provider_pending' if label == 'pending' else 'vendor_held',
+            'enqueued_at': now - 86400,
+            'owner_id': owner,
+            'audio_uri': f'gs://{STAGING_BUCKET}/{owner}/{segment}.enc',
+            'vendor_hold': {'reason': 'rate_limited', 'redrive_at': redrive_at},
+        }
+        if label == 'staged_expired':
+            job['audio_staged_at'] = now - LIFECYCLE_SECONDS - 1  # staged before the cutoff, enqueued since
+        if label == 'bad_clock':
+            job['audio_staged_at'] = 'not-a-clock'
+        jobs.document(segment).set(job)
         if label != 'missing':
             queued = outbox.enqueue(segment, owner, {'segment_id': segment}, redrive_at, now=now - 86400)
             if label == 'closed':
@@ -198,9 +203,13 @@ def test_held_sweep_rewakes_only_overdue_holds_whose_wake_was_lost(emulator):
     outbox._mutate(segments['fresh_wake'], lambda old: ({**old, 'woken_at': now - 1}, None))
     wakes.clear()
 
-    # Two-row pages reach every held job; only overdue holds inside the audio lifecycle whose wake is
-    # not fresh are re-armed. An open row keeps its due time; a missing or closed row is recreated due now.
-    assert sum(outbox.sweep_held(now=now, limit=2)[0] for _ in range(4)) == 3
+    # Two-row pages reach every held job. Only overdue holds whose staged audio is provably inside the
+    # lifecycle and whose wake is not fresh are re-armed; an open row keeps its due time, and a missing or
+    # closed row is recreated due now. Holds past retention or with an invalid staging clock are counted.
+    passes = [outbox.sweep_held(now=now, limit=2) for _ in range(4)]
+    assert sum(rewoken for rewoken, _, _ in passes) == 3
+    assert sum(errors for _, errors, _ in passes) == 0
+    assert sum(expired for _, _, expired in passes) == 2
     due = {segment: at for segment, _, at in wakes}
     assert due == {segments['lost']: overdue, segments['missing']: now, segments['closed']: now}
-    assert all(outbox.sweep_held(now=now, limit=2) == (0, 0) for _ in range(4))
+    assert all(outbox.sweep_held(now=now, limit=2)[:2] == (0, 0) for _ in range(4))
