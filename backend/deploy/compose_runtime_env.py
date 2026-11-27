@@ -294,9 +294,10 @@ def _apply_conversations_v3_stage(env_config: ConfigDict) -> None:
                 'category': 'reliability',
             }
         # desktop-backend sets its env inline in its deploy workflow and reads the code defaults
-        # (stage beta, no first build), which matches this source while it is beta. If this source
-        # leaves beta, desktop capability/episode responses diverge; desktop creates stay one-to-one.
-        # Moving to all needs that workflow to carry CONVERSATIONS_V3_STAGE too.
+        # (stage beta, no first build), so at stage all it still reads beta. That is inert today:
+        # desktop_backend.py mounts no conversations/episodes router (no capability response), and
+        # mark_new admits only omi/phone sources, so desktop creates stay one-to-one at any stage.
+        # A desktop route that reads the stage needs that workflow to carry CONVERSATIONS_V3_STAGE.
         gke = env_config.get('gke', {})
         config_map = gke.get('config_map')
         if isinstance(config_map, dict):

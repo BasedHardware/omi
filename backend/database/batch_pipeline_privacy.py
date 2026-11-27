@@ -16,6 +16,11 @@ from typing import Any
 from config.firestore_read_levers import lever_enabled, lever_percent
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from database.batch_account_authority_schema import PRIVACY_COLLECTION as PRIVACY_COLLECTION
+from database.batch_account_authority_schema import (
+    account_recording_policy_denies,
+    data_protection_denies,
+    recording_policy_denies,
+)
 from database.batch_privacy_attempt import SCHEMA_FIELD, TOKEN_FIELD, TOKEN_SCHEMA, current_attempt, token_version
 from database import privacy_check_metrics as metrics
 from database import batch_privacy_owner_cache as shared_cache
@@ -710,6 +715,23 @@ def _owner_decision(
     return generation
 
 
+def read_live_batch_write_authority(
+    client, transaction, uid, *, privacy_snapshot, conversation_ids, expected_generation, read_budget, walk_out
+) -> int:
+    """Complete a fresh authority walk using the token already read in this transaction."""
+    return _assert_batch_write_allowed_live(
+        client,
+        transaction,
+        uid,
+        privacy_snapshot=privacy_snapshot,
+        conversation_ids=conversation_ids,
+        expected_generation=expected_generation,
+        read_budget=read_budget,
+        walk_out=walk_out,
+        snapshots={},
+    )
+
+
 def _assert_batch_write_allowed_live(
     client: Any,
     transaction: Any,
@@ -768,10 +790,7 @@ def _assert_batch_write_allowed_live(
         snapshots['user'] = data
     if not snapshot.exists:
         raise BatchPrivacyBlocked('account_missing')
-    if (
-        data.get('data_protection_level', 'enhanced') not in {'standard', 'enhanced'}
-        or data.get('migration_status') is not None
-    ):
+    if data_protection_denies(data):
         raise BatchPrivacyBlocked('data_protection_changed')
     if privacy_snapshot is None:
         privacy_snapshot = read(client.collection(PRIVACY_COLLECTION).document(key))
@@ -787,7 +806,7 @@ def _assert_batch_write_allowed_live(
     # distinct document. A walk that reaches a document an earlier walk already
     # passed stops there; cycle detection stays per source and every source is
     # still read and checked itself.
-    user_sync_enabled = bool(data.get('private_cloud_sync_enabled', True))
+    user_sync_enabled = not account_recording_policy_denies(data)
     _verify_conversation_ids(
         client,
         transaction,
@@ -861,13 +880,7 @@ def _verify_conversation_ids(
             chain[conversation_id] = bool(conversation.exists)
             if snapshots is not None:
                 snapshots.setdefault('conversations', {})[conversation_id] = row
-            if row.get('record_lane_owner') == 'batch_live_v1' and (
-                row.get('uses_custom_stt')
-                or not row.get('private_cloud_sync_enabled')
-                # Match users.get_user_private_cloud_sync_enabled without an
-                # out-of-transaction read: absent means enabled, opt-out wins.
-                or not user_sync_enabled
-            ):
+            if recording_policy_denies(row, user_sync_enabled):
                 raise BatchPrivacyBlocked('recording_privacy_changed')
             if redirected and not conversation.exists:
                 raise BatchPrivacyBlocked('conversation_redirect_missing')

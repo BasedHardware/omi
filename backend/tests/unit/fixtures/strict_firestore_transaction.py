@@ -131,9 +131,18 @@ class StrictFirestoreDocument:
             supported_field_paths = [field for field in field_paths if field != 'recording']
             if supported_field_paths not in (
                 ['deleted'],
+                [
+                    'v3_process_pending',
+                    'v3_process_attempts',
+                    'deleted',
+                    'is_locked',
+                    'finalization_engine',
+                    'finalization_owner_epoch',
+                ],
                 ['created_at', 'summary_blocked_reason'],
                 ["is_locked"],
                 ["folder_id"],
+                ['v3_pending'],
                 ["language"],
                 ["private_cloud_sync_enabled"],
                 ['uses_custom_stt', 'private_cloud_sync_enabled', 'data_protection_level'],
@@ -531,9 +540,12 @@ class StrictFirestore:
         field_paths: list[str] | None = None,
         transaction: StrictFirestoreTransaction | None = None,
     ) -> list[StrictFirestoreSnapshot]:
-        # Whole-document BatchGet (no field mask) and the folder-membership mask are modelled.
-        if field_paths is not None and field_paths != ['folder_id']:
-            raise UnsupportedFirestoreOperationError('only whole-document or folder membership BatchGet is supported')
+        # Whole-document BatchGet (no field mask), the folder-membership mask and the v3 size quarantine's
+        # pending-marker mask (a non-transactional single-field read) are modelled.
+        if field_paths is not None and field_paths not in (['folder_id'], ['v3_pending']):
+            raise UnsupportedFirestoreOperationError(
+                'only whole-document, folder membership or v3_pending BatchGet is supported'
+            )
         snapshots = []
         for reference in reversed(references):
             if reference._database is not self:

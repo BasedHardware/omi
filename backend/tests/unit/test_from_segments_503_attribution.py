@@ -11,10 +11,12 @@ logged at ERROR, never an accepted outcome.
 import json
 import logging
 
+import httpx
 import pytest
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
+from utils.conversations.processing_metrics import FROM_SEGMENTS_METRIC_ROUTE, RETRYABLE_PROCESSING_RESPONSES_TOTAL
 from utils.llm import gateway_error_contract
 from utils.other import endpoints
 from utils.other.from_segments_503 import (
@@ -99,6 +101,69 @@ def test_dependency_503_is_attributed_too(caplog):
     assert len(lines) == 1
     assert lines[0].raise_site == 'auth_deadline_exceeded'
     assert lines[0].body_bytes == len(response.content)
+
+
+@pytest.mark.parametrize(
+    ('error_factory', 'failure_class'),
+    [
+        (
+            lambda: gateway_error_contract.retryable_processing_response('from_segments_processing_in_flight'),
+            'other',
+        ),
+        (lambda: gateway_error_contract.retryable_processing_response('request_budget_exhausted'), 'timeout'),
+        (lambda: gateway_error_contract.conversation_processing_http_exception(TimeoutError('slow')), 'timeout'),
+        (lambda: gateway_error_contract.conversation_processing_http_exception(httpx.ReadError('lost')), 'transport'),
+    ],
+    ids=['in-flight', 'request-budget', 'provider-timeout', 'provider-transport'],
+)
+def test_from_segments_counts_each_retryable_response_once(error_factory, failure_class):
+    app = FastAPI()
+    router = APIRouter(route_class=FromSegments503Route)
+
+    @router.post(FROM_SEGMENTS_PATH)
+    def _route():
+        raise error_factory()
+
+    app.include_router(router)
+    metric = RETRYABLE_PROCESSING_RESPONSES_TOTAL.labels(failure_class=failure_class, route=FROM_SEGMENTS_METRIC_ROUTE)
+    generic = RETRYABLE_PROCESSING_RESPONSES_TOTAL.labels(failure_class=failure_class, route='conversation_processing')
+    before = metric._value.get()
+    generic_before = generic._value.get()
+
+    response = TestClient(app).post(FROM_SEGMENTS_PATH)
+
+    assert response.status_code == 503
+    assert response.headers['Retry-After'] == '2'
+    assert response.json() == {'detail': gateway_error_contract.RETRYABLE_CONVERSATION_PROCESSING_ERROR_DETAIL}
+    assert metric._value.get() == before + 1
+    assert generic._value.get() == generic_before
+
+
+def test_processing_counter_excludes_other_responses():
+    def sample():
+        return {
+            tuple(sorted(item.labels.items())): item.value
+            for metric in RETRYABLE_PROCESSING_RESPONSES_TOTAL.collect()
+            for item in metric.samples
+            if item.name.endswith('_total')
+        }
+
+    app = FastAPI()
+    router = APIRouter(route_class=FromSegments503Route)
+
+    @router.post(FROM_SEGMENTS_PATH)
+    def _route():
+        # Mapping a provider failure that never leaves the route is not a 503 response.
+        gateway_error_contract.conversation_processing_http_exception(TimeoutError('handled'))
+        return {'ok': True}
+
+    app.include_router(router)
+    before = sample()
+
+    assert TestClient(app).post(FROM_SEGMENTS_PATH).status_code == 200
+    assert TestClient(_app(dependency_503=True)).post(FROM_SEGMENTS_PATH).status_code == 503
+    assert TestClient(_app(status=422)).post(FROM_SEGMENTS_PATH).status_code == 422
+    assert sample() == before
 
 
 def test_untagged_503_is_a_defect_marker_not_an_accepted_outcome(caplog):
@@ -248,6 +313,9 @@ def _reachable_503_sites() -> dict[str, HTTPException]:
         ),
         'request_budget_exhausted': gateway_error_contract.conversation_processing_http_exception(
             RequestDeadlineExceeded('spent')
+        ),
+        'from_segments_processing_in_flight': gateway_error_contract.retryable_processing_response(
+            'from_segments_processing_in_flight'
         ),
         'auth_deadline_exceeded': _auth_deadline_503(),
     }

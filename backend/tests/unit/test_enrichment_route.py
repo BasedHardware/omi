@@ -1294,12 +1294,12 @@ def test_non_transient_gateway_status_stays_5xx_and_keeps_the_lease(rows, client
     assert rows[0][KEY]['lease_until'] > 0
 
 
-def _provider_sweep(monkeypatch, sweep):
-    """Stub the C8 provider-STT outbox that maintain() also sweeps (M3 review); never touches Firestore."""
-    import database.outbox as outbox_module
-    from types import SimpleNamespace
-
-    monkeypatch.setattr(outbox_module, 'outbox_for', lambda kind: SimpleNamespace(sweep=sweep))
+def _provider_sweep(monkeypatch, sweep, sweep_running=lambda *, now: (3, 0), sweep_held=lambda *, now: (5, 0, 1)):
+    monkeypatch.setattr(
+        route,
+        'provider_stt_outbox',
+        lambda: SimpleNamespace(sweep=sweep, sweep_running=sweep_running, sweep_held=sweep_held),
+    )
 
 
 @pytest.mark.parametrize('near_expiry', [2, None], ids=['current', 'legacy'])
@@ -1324,6 +1324,11 @@ def test_maintenance_sweeps_the_outbox_and_admits_summary_debt(rows, monkeypatch
         'provider_stt_rewoken': 4,
         'provider_stt_discarded': 2,
         'provider_stt_sweep_errors': 1,
+        'provider_stt_running_rewoken': 3,
+        'provider_stt_running_errors': 0,
+        'provider_stt_held_rewoken': 5,
+        'provider_stt_held_errors': 0,
+        'provider_stt_held_expired': 1,
         'summary_debt_scanned': 5,
         'summary_debt_expired_seen': 2,
         'summary_debt_admitted': 3,
@@ -1358,7 +1363,33 @@ def test_maintenance_isolates_a_provider_stt_sweep_failure(rows, monkeypatch):
     )
     counts = route.maintain(1000.0)
     assert counts['rewoken'] == 1 and counts['provider_stt_sweep_errors'] == 1
+    assert counts['provider_stt_running_rewoken'] == 3
+    assert counts['provider_stt_held_rewoken'] == 5
     assert counts['summary_debt_admitted'] == 1
+
+
+def test_maintenance_isolates_a_held_sweep_failure_and_honours_its_kill_switch(rows, monkeypatch):
+    """The held sweep's failure is counted without blocking the rest; its kill switch skips it."""
+    from services import summary_debt_repair
+    from database.outbox import SweepCounts
+
+    monkeypatch.setattr(ENRICHMENT_OUTBOX, 'sweep', lambda *, now, limit=100: SweepCounts(0, 0, 0, 0))
+    held = Mock(side_effect=RuntimeError('synthetic'))
+    _provider_sweep(monkeypatch, lambda *, now, limit=100: SweepCounts(0, 0, 0, 0), sweep_held=held)
+    monkeypatch.setattr(
+        summary_debt_repair,
+        'tick',
+        lambda *, now: {'scanned': 1, 'admitted': 1, 'near_expiry_admitted': 0, 'errors': 0, 'expired_seen': 0},
+    )
+    counts = route.maintain(1000.0)
+    assert counts['provider_stt_held_errors'] == 1 and counts['provider_stt_held_rewoken'] == 0
+    assert counts['provider_stt_running_rewoken'] == 3 and counts['summary_debt_admitted'] == 1
+
+    held.reset_mock()
+    monkeypatch.setenv('BATCH_VENDOR_HELD_REDRIVE_ENABLED', 'false')
+    counts = route.maintain(1000.0)
+    held.assert_not_called()
+    assert counts['provider_stt_held_errors'] == 0 and counts['summary_debt_admitted'] == 1
 
 
 def _oversized_write_rejection():

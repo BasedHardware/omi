@@ -165,8 +165,9 @@ BODY_DIGEST = {
     'utils.support.retention._select_conversations': 'f36920350f4e3a557e0e474e8801ae414c21ce67203e0627f7a39ba820243d16',
     'database.conversations_v3_live._recent_window_query': '6f2c323bfa8df890362c6bdc4796182a70e4c704376bcb4944358560b12edc75',
     'database.conversations_v3._oldest_pending': 'e2da208a3dcbae7d7c7c59335883b422e27dc71c9cfae51568883aa452bcfc57',
-    'database.conversations_v3.commit_projection': '4f070f852f6b023db0d1299b647cc91afc723aa976922d916e8ffa3adf77f1e0',
-    'database.batch_pipeline_conversation_purge_scans._claim': 'faa5dabcf01dc5bd377b2e14a149282aa2db93b2872cdc97a3b756157701532c',
+    'database.conversations_v3.commit_projection': 'f6f6c894b77c617cd877358fc70396033bde60277f1c47af8e2adaf22fe24ae9',
+    'database.batch_pipeline_conversation_purge_scans._claim': '662c759fc79795f0851e0b18082b7dcb006e109253e45ba1fde2190d542bddf8',
+    'database.batch_privacy_late_sweeps.reconcile_batch_privacy_late_sweeps': 'bd0c62aeb7bab5e86e3fdbb73bc9b6cb395a1218923110590d0a8fcaacabd5f6',
     'database.batch_pipeline_conversation_purge_scans.run_job': 'fe5d30b77da198a7e0dc188115c8906fb6446925079a4e96339d36675a55faeb',
     'database.batch_pipeline_store.FirestoreStore.protected_retries': 'b55d2960c94057cb8df9b9cdd2e7728b6af63728bc0a2cb6f5bd333efed443a2',
     'database.batch_pipeline_store.FirestoreTransaction.protected_ready': 'c722019b927498cd74c6d5c4d3e52506c4e1318ef5ae74da4ddd17af978ae564',
@@ -174,11 +175,11 @@ BODY_DIGEST = {
     'database.batch_census_export._scope': '239ed05dc6fef88f4ed8a88b870867f37623329cb96d8b1131278a52a3652dc8',
     'database.batch_pipeline_allowance_migration.candidates': '04c9beae56ec6091544a2ec69a8ba170032dbe3670697b704db2f88d513bc5cb',
     'database.conversation_batch_purge_jobs.RunProgress.pending_segments': '86b3d882fe3c575b3a540bb00d1845c941c5256d99848c4dc89917eb707ff3cc',
-    'database.conversations._PageFill._run_lean': 'b63bc3c4fea800ebe132e510332c4ec503c854a560eb5b380bd7e1d2701cbfe3',
+    'database.conversations._PageFill._run_lean': 'ce3f5086213a795ae6cd49bee70e7dd62587aa4fe61a0375fa65fece8c048c5c',
     'database.conversation_batch_purge_jobs.RunProgress.segments': '8abb8d7ed330ab91cc91af8b792809121c06605ff0180e0c90da4b66d6e3ef45',
     'database.conversation_batch_purge_jobs._drop_segment_records': '2db3123e6e11d177d434326668969249a7fd4e0aade9788d045056fbdefe8c9d',
     'database.conversation_batch_purge_jobs._owes_segments': '5945da3db3e539efafe6dbc95560280683ea863b77a8e7e720ee3c2902b59c68',
-    'database.conversation_batch_purge_jobs.run_job': '6ce31f57dbe5d612325f14c71473b364d3c31515c65907835a572b5132536965',
+    'database.conversation_batch_purge_jobs.run_job': '014d04b13eb68e59af11c061be1f0b926b3509dfe1964d717cb9fc14677dc94e',
     'database.batch_pipeline_store.promote_record_recoveries': 'ce853ebe262f00a49241f670f28e23dfa0951d37cda42e1da34a966899c1ecd1',
     'database.record_custody_receipts.prune': 'a01ec56fc4132450ccd96a0eb11f59bfbdfdb8e7760e8c8d565f11ccd3af8e23',
     'database.action_items.FirestoreActionItems.iter_all': '1bc86d38c0b932c87e130090fde9d1105a6ca0df82c636b7dca0e2fd24c9d6d3',
@@ -216,8 +217,8 @@ BODY_DIGEST = {
     'database.batch_pipeline_store.FirestoreStore.projection_successor': '96adabf372104327c5a8065ef2ff06621648ee242b3415d04b047d50ded9e6b1',
     'database.batch_pipeline_store.FirestoreTransaction.service_frontier': '56b1e013fd6925c981be2186d76458211b724187b771ddc5ebb0eaa47820c44b',
     'database.batch_pipeline_store.reseed_hinted_activation': 'b962f088769367e4902876ef9dd91de299238b945f13610829e5f1f1acd8d449',
-    # Re-reviewed 2026-11-17: optional pre-begin pacing only; reseed query ownership is unchanged.
-    'database.batch_pipeline_store.FirestoreStore.run': '20a0e3fdea5dd2194d7c806216e36c644fccbeca46bd5a6489e132ae902d8e32',
+    # SCA-3508: the sampled post-commit audit uses bounded point reads; the frontier query is unchanged.
+    'database.batch_pipeline_store.FirestoreStore.run': 'd484f03ba80272761744eed17c240e6d9bfaf8681a125a162a6eb21593826f5e',
     'database.batch_pipeline_store.FirestoreStore.control_candidates': 'c1ce9e8170a7fde0e6a82c44a2db0c0c18909cba723e9cefd402cfe1f7993df9',
     'database.batch_pipeline_store.FirestoreStore.control_candidate': 'd82ee8b1c03be61b104e25304d6a0a732a9b59453fd302f4e7794a75622d65ad',
     'database.batch_pipeline_store.FirestoreStore.oldest_retry': '8d77904364b37100b5816f0252831ef6cf8807930dba8671cdc56bf603340315',
@@ -419,7 +420,41 @@ _add(
     DriverEntry(
         'database.conversation_batch_purge_jobs.due_jobs',
         neutrals={'now': _NOW, 'limit': _LIMIT},
-        domains={'collection': ['conversation_batch_purge_jobs', 'conversation_erasure_jobs']},
+        domains={
+            'collection': ['conversation_batch_purge_jobs', 'conversation_erasure_jobs'],
+            'post_window': [False, True],
+        },
+    )
+)
+# Post-window artifact sweep intent has the same bounded due-at query.
+_add(
+    DriverEntry(
+        'database.batch_privacy_late_sweeps.due_jobs',
+        base={'now': T0},
+        neutrals={'limit': _LIMIT},
+        domains={'execution': [False, True]},
+    )
+)
+_add(
+    DriverEntry(
+        'database.privacy_check_metrics.observe_post_window_pending',
+        base={'phase': 'artifact_proof'},
+        domains={
+            'collection': [
+                ref_collection('batch_privacy_late_sweeps'),
+                ref_collection('conversation_batch_purge_jobs'),
+            ],
+            'schedule_field': ['due_at', 'execute_at', 'post_window_due_at'],
+        },
+    )
+)
+_add(
+    CoveredByEntry(
+        'database.batch_privacy_late_sweeps.reconcile_batch_privacy_late_sweeps',
+        ('database.batch_privacy_late_sweeps.due_jobs',),
+        'The reconciler reuses the bounded due query; its per-intent artifact traversal uses owner_documents.',
+        expect_observed=False,
+        body_digest=BODY_DIGEST['database.batch_privacy_late_sweeps.reconcile_batch_privacy_late_sweeps'],
     )
 )
 # Play billing reconcile: one single-field ``next_check_at`` range, oldest first.
@@ -1590,6 +1625,8 @@ _add(
             'hide_home': (False, 'post-read visibility only; same query'),
             'capture_only': (False, 'post-read visibility only; same query'),
             'show_held': (False, 'post-read visibility only; same query'),
+            'metadata_only': (False, 'wrapper decode behavior only; same query'),
+            'on_prepared': (None, 'row preparation callback only; same query'),
             'limit': _LIMIT,
             'offset': _OFFSET,
             'budget': _BUDGET,
@@ -3732,12 +3769,22 @@ for entry in (
         'Backfill uses that task query and scans projected memory links before writing a removal marker and deleting. '
         'The WAL custody guard uses the existing observation rows before donor-task queries or projection writes. '
         'The Home index bit is derived from the flags already present in those writes. '
+        'Native settlement only updates existing documents and their recording claims. '
         'Write elision uses only the projection snapshots already read under revision fences. '
         'The collision record and commit meter add no query: on a lock failure the record re-reads by reference '
         'the documents the commit had already loaded. Re-reviewed 2026-11-26: discarded sources clear '
         'their pending marker using the same fenced point update as deleted sources. '
         'Linked backfill replacements use the existing task and memory query results and loaded claims. '
-        'Unlocked paging carries unvisited IDs and the cursor into the existing builder lease write; no new query.',
+        'Unlocked paging carries unvisited IDs and the cursor into the existing builder lease write; no new query. '
+        'Re-reviewed 2026-11-26 (SCA-2918 locked-closure allowance): each batch after the first renews the pass '
+        'lease (builder or backfill-builder) with a transactional point read and update of that one lease document, '
+        'behind CONVERSATIONS_V3_COMMIT_LEASE_RENEWAL; the locked-closure batch cap only counts the planned batches '
+        'before any read and raises LockedBatchCap; the daily attempt counter moved to load (a point transaction on the '
+        'builder lease document); no new query. Re-reviewed 2026-11-27: for a closure past the origin bound the '
+        'batch cap is decided before any lake upload (no Firestore read); no new query. Re-reviewed 2026-11-27 (Codex r4715443730): a locked-closure batch preloads its transcript '
+        'pointers from the lake before its transaction and runs its body at most three times; no new Firestore query. '
+        'The locked-closure cap is now decided on one preparation pass with uploads deferred '
+        '(transcript_pointer.deferred_offloads); no new Firestore query.',
         expect_observed=False,
         body_digest=BODY_DIGEST['database.conversations_v3.commit_projection'],
     ),
@@ -4261,7 +4308,7 @@ _provider_stt_outbox = FirestoreProviderSttOutbox(
     create_wake=lambda row_id, token, available_at: None,
     collection='batch_pipeline_prod_provider_stt_outbox',
 )
-for _method in ('claim', 'sweep'):
+for _method in ('claim', 'sweep', 'sweep_running', 'sweep_held'):
     _add(
         DriverEntry(
             f'database.outbox_provider_stt.FirestoreProviderSttOutbox.{_method}',

@@ -574,7 +574,7 @@ prometheus:
         # 2026-10-16 for data Cloud Run only writes every 60s anyway. 120s halves the
         # bill; no rule reads these families over a window shorter than 5m, which
         # still holds 2-3 samples. Do not drop below 120s without re-pricing.
-        scrape_interval: 120s
+        scrape_interval: 135s
         scrape_timeout: 45s
         metrics_path: /metrics
         scheme: http

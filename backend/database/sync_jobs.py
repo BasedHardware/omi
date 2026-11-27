@@ -156,6 +156,12 @@ def get_sync_ledger_fence_mode() -> SyncLedgerFenceMode:
         return SyncLedgerFenceMode.STANDBY
 
 
+def sync_ledger_fence_standby_configured() -> bool:
+    """Whether standby is the configured mode, not an invalid setting failing closed to it."""
+    raw = os.getenv(SYNC_LEDGER_FENCE_MODE_ENV, SyncLedgerFenceMode.LEGACY.value).strip().lower()
+    return raw == SyncLedgerFenceMode.STANDBY.value
+
+
 def sync_job_uses_ledger_fence(job: Dict[str, Any]) -> bool:
     """Whether this persisted job was admitted after the active cutover."""
     return job.get('ledger_fence_mode') == SyncLedgerFenceMode.ACTIVE.value

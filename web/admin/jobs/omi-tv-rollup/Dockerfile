@@ -3,7 +3,7 @@ FROM node:22-alpine AS builder
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
-COPY lib/qualified-activity.ts lib/wall-mcp.ts lib/wall-capture-sql.ts lib/wall-rollup-extract.ts ./lib/
+COPY lib/qualified-activity.ts lib/posthog-sampling.ts lib/wall-mcp.ts lib/wall-capture-sql.ts lib/wall-rollup-extract.ts ./lib/
 COPY jobs/omi-tv-rollup/ ./jobs/omi-tv-rollup/
 RUN npx tsc -p jobs/omi-tv-rollup/tsconfig.json
 RUN npm prune --omit=dev

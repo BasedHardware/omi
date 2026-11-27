@@ -1,4 +1,4 @@
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from types import SimpleNamespace
 import struct
 from unittest.mock import MagicMock
@@ -299,6 +299,7 @@ def test_conversation_purge_attempts_other_prefixes_when_some_generations_are_pr
 
     monkeypatch.setattr(storage_mod, '_get_storage_client', lambda: _Client({'private': private}))
     monkeypatch.setattr(storage_mod, 'private_cloud_sync_bucket', 'private')
+    monkeypatch.setattr(storage_mod, 'destructive_operation_gate', lambda *_a, **_kw: nullcontext())
     monkeypatch.delenv('BUCKET_AUDIO_DERIVED', raising=False)
     monkeypatch.delenv('BUCKET_CANONICAL_AUDIO', raising=False)
     monkeypatch.setattr(_Blob, 'generation', 1, raising=False)

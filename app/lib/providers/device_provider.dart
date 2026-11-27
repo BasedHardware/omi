@@ -274,7 +274,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       syncs.setDevice(null);
       syncs.flashPage.setDevice(null);
       syncs.storage.setDevice(null);
-      syncs.ring.setDevice(null);
     } catch (_) {
       // Tests and early construction may not have WAL ready.
     }
@@ -1162,8 +1161,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     // Wals
     try {
-      ServiceManager.instance().wal.getSyncs().sdcard.setDevice(null);
-      ServiceManager.instance().wal.getSyncs().flashPage.setDevice(null);
+      final syncs = ServiceManager.instance().wal.getSyncs();
+      syncs.setDevice(null);
+      syncs.storage.setDevice(null);
+      syncs.flashPage.setDevice(null);
     } catch (_) {
       // Tests and early construction may not have WAL ready.
     }
@@ -1355,7 +1356,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     // WalSyncs attaches legacy SD only for confirmed legacy firmware.
     syncs.flashPage.setDevice(device);
     syncs.storage.setDevice(device);
-    syncs.ring.setDevice(device);
 
     // Device connection and inventory are a recovery wake, even when the
     // home page is not mounted. The coordinator serializes it with every
@@ -1430,6 +1430,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
           notifyListeners();
         }
         if (coherent == null || coherent.unreadPackets <= 0) return;
+        RecordingTransferCoordinator.instance.wakeRingFromBle(device.id);
         Logger.debug(
           'DeviceProvider: Ring auto-sync detected ${coherent.unreadPackets} unread packets (${coherent.usedBytes} bytes)',
         );

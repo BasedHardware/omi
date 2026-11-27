@@ -20,6 +20,7 @@ ADMISSION = 'record_admission'
 PROJECTION = 'batch_projection'
 SYNC = 'sync_intake'
 OUTLINE = 'outline_model'
+SPEAKERS = 'speakers'
 
 # Audio-to-words steps, by lane driver step name (lanes/batch.py, lanes/sync.py): the plain name a reader
 # sees. Anything not listed is shown as its step name.
@@ -39,6 +40,10 @@ STEP_NAMES = {
     'asr(cassette)': 'cassette words',
     'stt(cassette)': 'cassette words',
     'diarization(cassette)': 'cassette speaker labels',
+    'HttpDiarizer -> speaker peer /v2/diarization (community-1)': (
+        "diarization (the product's HttpDiarizer to the speaker peer: community-1 turns)"
+    ),
+    'projection_segments(batch_segment_id)': 'batch unit scopes (projection_segments with batch_segment_id)',
     'conversation_targeting(baseline clock)': 'conversation targeting (baseline clock)',
 }
 
@@ -99,6 +104,8 @@ def stand_in_notes(result: Mapping[str, Any]) -> list[dict[str, Any]]:
                 'and stamped record_projection_revision; the projection transaction (replace_record, its '
                 f'manual-end promotion, receipts) did not run. Its segments were {_words_from(sources, lane="batch")}.'
             )
+            if result.get('speakers'):
+                text += ' The stored segments were the projection\'s own (segment ids, batch unit speaker scopes).'
         elif name == SYNC:
             text = (
                 'A device-sync fragment was written as a completed recording and woken as the projection would; '
@@ -108,6 +115,8 @@ def stand_in_notes(result: Mapping[str, Any]) -> list[dict[str, Any]]:
         else:
             text = ''
         out.append({'name': name, 'count': count, 'text': text})
+    if result.get('speakers'):
+        out.append({'name': SPEAKERS, 'count': None, 'text': speaker_note(result['speakers'])})
     out.append(
         {
             'name': OUTLINE,
@@ -117,6 +126,58 @@ def stand_in_notes(result: Mapping[str, Any]) -> list[dict[str, Any]]:
         }
     )
     return out
+
+
+def _tally(counts: Mapping[str, Any]) -> str:
+    return ', '.join(f'{k} x{v}' for k, v in sorted(counts.items())) or 'none'
+
+
+def speaker_note(block: Mapping[str, Any]) -> str:
+    """What ran for speakers (``speakers/scenario.py``), from the run's own counters."""
+    counts = block.get('counts') or {}
+    peer = block.get('cassette_outcomes') or {}
+    cassettes = '; '.join(f'{route} {_tally(row)}' for route, row in sorted(peer.items())) or 'no calls'
+    gallery = block.get('gallery') or []
+    people = [g for g in gallery if g != 'user']
+    text = (
+        f'Speaker peer ({block.get("mode")}: '
+        + ('cassettes only' if block.get('mode') == 'replay' else 'cassettes, local models on a miss')
+        + f'; {cassettes}; recorded answers are CPU fp32 local models, not production GPU answers). Product code: the batch lane diarized {counts.get("batch_lane_diarizations", 0)} unit(s) '
+        "through the product's HttpDiarizer and projected them with batch unit scopes"
+    )
+    if gallery:
+        text += (
+            f'; {counts.get("gallery_embeddings", 0)} gallery voice(s) were embedded through extract_embedding_from_bytes'
+            + (' and the owner enrolled with set_user_speaker_embedding' if 'user' in gallery else '')
+            + (
+                f'; {len(people)} person(s) enrolled with create_person, add_person_speech_sample, '
+                'update_person_speech_samples_version and set_person_speaker_embedding, on a paid plan written '
+                'with update_user_subscription (naming people is a paid entitlement)'
+                if people
+                else ''
+            )
+        )
+    text += (
+        f'; on the conversation the resolver ran (reasons: {_tally(block.get("resolver_reasons") or {})}) and '
+        f'run_batch_final_pass returned {", ".join(block.get("final_pass") or []) or "nothing (not called)"}. '
+        'Stand-in: the batch pipeline store and its encrypted artifacts were never written, so the staged-unit reads '
+        f'were answered from this run\'s batch lane (load_reference x{counts.get("stand_in_load_reference", 0)}, '
+        f'load_result x{counts.get("stand_in_load_result", 0)}, fetch_audio x{counts.get("stand_in_fetch_audio", 0)}; '
+        'the store handle and runtime stage replaced).'
+    )
+    if block.get('receipts') == 'processed':
+        text += (
+            ' Counterfactual: the unit receipts named the conversation each speaker pass ran on. Production\'s '
+            'projection names the recording it wrote the unit to, and its load_reference answers skipped_merged '
+            'for any other conversation, the v3 conversation included (run this scenario with receipts '
+            '"recording" to see that).'
+        )
+    else:
+        skipped = counts.get('stand_in_load_reference_skipped_merged', 0)
+        text += ' The unit receipts named the recording, as the production projection writes them' + (
+            f'; {skipped} read(s) for another conversation were answered skipped_merged.' if skipped else '.'
+        )
+    return text
 
 
 def audio_steps(result: Mapping[str, Any]) -> list[dict[str, Any]]:

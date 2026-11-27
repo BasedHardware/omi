@@ -292,12 +292,12 @@ def test_batch_treatment_is_excluded_from_all_existing_live_demand_arms(monkeypa
     h._demand_cohort = 'admitted'
     h.receiver = SimpleNamespace(lane_meter=LiveLaneMeter())
     h.receiver.lane_meter.demand_cohort = 'admitted'
-    old_before = telemetry.CAPTURE_AUDIO.labels(demand_cohort='admitted')._value.get()
+    old_before = telemetry.CAPTURE_AUDIO.labels(demand_cohort='admitted', visibility='unreported')._value.get()
     assert batch_preview.capture_batch_preview(h, select_provider=False)
     assert h._demand_cohort == attached.cohort == h.receiver.lane_meter.demand_cohort == 'ineligible'
     assert demand_routing.attach_live_demand(SimpleNamespace(host=h)) is None
     attached.capture(1)
-    assert telemetry.CAPTURE_AUDIO.labels(demand_cohort='admitted')._value.get() == old_before
+    assert telemetry.CAPTURE_AUDIO.labels(demand_cohort='admitted', visibility='unreported')._value.get() == old_before
 
 
 @pytest.mark.parametrize('language,expected', [('en', ('en',)), ('pt', ('pt', 'en'))])

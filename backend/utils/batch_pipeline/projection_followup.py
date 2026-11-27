@@ -18,12 +18,13 @@ import socket
 import time
 from typing import TYPE_CHECKING
 
-from prometheus_client import Counter
+from prometheus_client import Counter, Histogram
 
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, matches_live_privacy_version
 from database.batch_privacy_attempt import with_batch_privacy_attempt
 from config.batch_pipeline import (
     projection_followup_backoff_seconds,
+    projection_followup_discovery_interval_seconds,
     projection_followup_claimed_sibling_skip_enabled,
     projection_followup_early_coalesce_enabled,
     projection_followup_page_enabled,
@@ -80,6 +81,12 @@ OUTCOMES = Counter(
     'Async projection follow-up attempts and discovery skips by outcome',
     ['outcome'],
 )
+TARGETED_START_SECONDS = Histogram(
+    'omi_batch_pipeline_projection_followup_targeted_start_seconds',
+    'Targeted follow-up wake to actual attempt start (including slot wait), per serving process',
+    buckets=(0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30, 60, 120, 300, 600, 1800),
+)
+MAX_WAKE_MARKS = 20_000
 # Walk-owed rows held between discovery passes. Dropped rows stay durable and
 # are rediscovered; the bound only caps memory.
 MAX_OWED = 256
@@ -146,6 +153,10 @@ class ProjectionFollowups:
         # Skipped siblings still finishing when their claimant gave up: re-queue on finish.
         self.sibling_requeue: set[str] = set()
         self.completed_probes: dict[int, dict[ProjectionBinding, FollowupPrivacyProof]] = {}
+        # Targeted wake time per segment, for wake-to-attempt-start latency (SCA-3120).
+        self.wake_marks: dict[str, float] = {}
+        # Monotonic time of this process's last periodic discovery read (pacing only).
+        self.last_discovery: float | None = None
         self.backoff_ceiling = projection_followup_backoff_seconds()
         # Desync needs the keyset cursor: with pagination off every page is the
         # head, so offset, backoff and pass bounds stay off (the legacy path).
@@ -320,6 +331,7 @@ class ProjectionFollowups:
                 self.pending = deque(segment for segment in self.pending if segment not in selected)
                 queued = set(self.targeted_pending)
                 self.targeted_pending.extend(segment for segment in first if segment not in queued)
+                self.mark_wakes(first)
             self.launch_targeted()
             return
         if priority:
@@ -331,6 +343,7 @@ class ProjectionFollowups:
                 self.forget_page(segment)  # Targeted recovery wakes always probe completion.
             self.prioritized.update(first)
             self.pending = deque(first + [segment for segment in self.pending if segment not in first])
+            self.mark_wakes(first)
             self.launch()
             if not discover or self.pending or not self.owed:
                 return
@@ -343,6 +356,14 @@ class ProjectionFollowups:
                 return
         if not discover:
             return
+        # Pace only the periodic sweep (SCA-3120). Targeted wakes and queued rows
+        # were handled above; owed rows wait for the next paced discovery.
+        interval = projection_followup_discovery_interval_seconds()
+        now = _monotonic()
+        if interval > 0 and self.last_discovery is not None and now - self.last_discovery < interval:
+            OUTCOMES.labels('discovery_paced').inc()
+            return
+        self.last_discovery = now
         # No await of slow follow-ups. Durable rows are rediscovered after restart.
         segments = await run_blocking(db_executor, self.candidates)
         if self.after in segments:
@@ -368,6 +389,18 @@ class ProjectionFollowups:
         self.prioritized.update(owed)
         self.pending = deque(queued + discovered + owed)
         self.launch()
+
+    def mark_wakes(self, segments):
+        now = _monotonic()
+        for segment in segments:
+            self.wake_marks.setdefault(segment, now)
+        while len(self.wake_marks) > MAX_WAKE_MARKS:
+            self.wake_marks.pop(next(iter(self.wake_marks)))
+
+    def observe_wake(self, segment):
+        marked = self.wake_marks.pop(segment, None)
+        if marked is not None:
+            TARGETED_START_SECONDS.observe(max(0.0, _monotonic() - marked))
 
     def launch(self):
         self.launch_targeted()
@@ -403,6 +436,7 @@ class ProjectionFollowups:
 
     def finished(self, segment, task, *, targeted=False):
         self.tasks.pop(segment, None)
+        self.wake_marks.pop(segment, None)  # a task cancelled before entry leaves no stale mark
         self.forget_page(segment)
         if segment in self.sibling_requeue and not task.cancelled():
             self.sibling_requeue.discard(segment)
@@ -515,6 +549,8 @@ class ProjectionFollowups:
         # During mixed discovery both queues share one process-wide effect
         # budget. Queueing for it does not spend the follow-up attempt clock.
         async with slots if isinstance(slots, asyncio.Semaphore) else nullcontext():
+            # Attempt entry, after the shared slot: the targeted wake-to-start sample.
+            self.observe_wake(segment)
             return await self.run_attempt(segment, track_backoff=track_backoff)
 
     async def run_attempt(self, segment, *, track_backoff):

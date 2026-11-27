@@ -209,6 +209,39 @@ void main() {
       expect(harness.coordinator.nextCooldownAt, DateTime.utc(2026, 1, 1, 0, 0, 5));
     });
 
+    test('a held-only drain preserves the failure backoff without scheduling a retry', () async {
+      final results = [
+        const RecordingTransferDrainResult(attempted: true, failed: true, needsReconciliation: false),
+        const RecordingTransferDrainResult(
+          attempted: false,
+          failed: false,
+          needsReconciliation: false,
+          heldOnly: true,
+        ),
+        const RecordingTransferDrainResult(attempted: true, failed: true, needsReconciliation: false),
+      ].iterator;
+      final cooldowns = <Duration>[];
+      final coordinator = RecordingTransferCoordinator(
+        reconcile: () async {},
+        discover: () async {},
+        refreshPending: () async {},
+        drain: () async {
+          expect(results.moveNext(), isTrue);
+          return results.current;
+        },
+        autoUploadEnabled: () => true,
+        scheduleCooldown: (delay, _) => cooldowns.add(delay),
+      );
+      addTearDown(coordinator.dispose);
+
+      await coordinator.wake(WakeTrigger.startup);
+      await coordinator.wake(WakeTrigger.userRetry);
+      expect(cooldowns, [const Duration(seconds: 5)]);
+
+      await coordinator.wake(WakeTrigger.userRetry);
+      expect(cooldowns, [const Duration(seconds: 5), const Duration(seconds: 10)]);
+    });
+
     test('a scheduled cooldown wake still runs after the app is backgrounded', () async {
       final harness = _TransferHarness()..drainFails = true;
       addTearDown(harness.dispose);
@@ -295,8 +328,10 @@ void main() {
         onPassTimedOut: (trigger, _) => timedOut.add(trigger),
         scheduleCooldown: (_, callback) => retries.add(callback),
         onTransferAdmitted: () => admissions++,
-        onTransferStarted: () async => holds++,
-        onTransferFinished: () async => releases++,
+        acquireTransferLease: () async {
+          holds++;
+          return () async => releases++;
+        },
       );
       addTearDown(coordinator.dispose);
 
@@ -403,15 +438,32 @@ void main() {
       expect(harness.backlog, ['wal-after-lock']);
     });
 
+    test('cancel retires the manual upload authorization while its reader settles', () async {
+      final ring = Completer<bool>();
+      final harness = _TransferHarness(autoUploadEnabled: false);
+      addTearDown(harness.dispose);
+      final coordinator = harness.coordinator..onManualRingWake = () => ring.future;
+
+      final manual = coordinator.wake(WakeTrigger.userRetry);
+      await coordinator.waitUntilIdle();
+      expect(harness.drainedWalIds, ['wal-1']);
+
+      coordinator.cancelManualRingSync();
+      harness.backlog.add('late-ring-wal');
+      ring.complete(true);
+      await manual;
+
+      expect(harness.drainPasses, 1);
+      expect(harness.backlog, ['late-ring-wal']);
+    });
+
     test('a transfer pass acquires keep-alive and releases it when the pass ends', () async {
       var acquired = 0;
       var released = 0;
       final harness = _TransferHarness(
-        onTransferStarted: () async {
+        acquireTransferLease: () async {
           acquired++;
-        },
-        onTransferFinished: () async {
-          released++;
+          return () async => released++;
         },
       );
       addTearDown(harness.dispose);
@@ -425,9 +477,7 @@ void main() {
     test('keep-alive is released when a pass throws', () async {
       var released = 0;
       final harness = _TransferHarness(
-        onTransferFinished: () async {
-          released++;
-        },
+        acquireTransferLease: () async => () async => released++,
       )..drainThrows = true;
       addTearDown(harness.dispose);
 
@@ -447,8 +497,10 @@ void main() {
         }
 
         final harness = _TransferHarness(
-          onTransferStarted: hook == 'start' ? failingOnceHook : null,
-          onTransferFinished: hook == 'finish' ? failingOnceHook : null,
+          acquireTransferLease: () async {
+            if (hook == 'start') await failingOnceHook();
+            return hook == 'finish' ? failingOnceHook : () async {};
+          },
         );
         addTearDown(harness.dispose);
 
@@ -532,10 +584,11 @@ void main() {
     test('a due mobile batch wakes only the phone drain while a background pass is finishing', () async {
       final finishing = Completer<void>();
       final finishEntered = Completer<void>();
-      final harness = _TransferHarness(onTransferFinished: () async {
-        if (!finishEntered.isCompleted) finishEntered.complete();
-        await finishing.future;
-      });
+      final harness = _TransferHarness(
+          acquireTransferLease: () async => () async {
+                if (!finishEntered.isCompleted) finishEntered.complete();
+                await finishing.future;
+              });
       addTearDown(harness.dispose);
       harness.coordinator.setForeground(false);
       final current = harness.coordinator.wake(WakeTrigger.socketReconnected);
@@ -684,8 +737,7 @@ class _TransferHarness {
     bool autoUploadEnabled = true,
     List<String>? backlog,
     List<String>? drainedWalIds,
-    Future<void> Function()? onTransferStarted,
-    Future<void> Function()? onTransferFinished,
+    AcquireTransferLease? acquireTransferLease,
   })  : _autoUploadEnabled = autoUploadEnabled,
         backlog = backlog ?? <String>['wal-1'],
         drainedWalIds = drainedWalIds ?? <String>[] {
@@ -702,8 +754,7 @@ class _TransferHarness {
       initiallyConnected: true,
       clock: () => DateTime.utc(2026, 1, 1),
       scheduleCooldown: (delay, callback) => scheduledCooldowns.add(_ScheduledCooldown(delay, callback)),
-      onTransferStarted: onTransferStarted,
-      onTransferFinished: onTransferFinished,
+      acquireTransferLease: acquireTransferLease,
       onConnectivityRestored: () async {
         retryBudgetResets++;
       },

@@ -1,0 +1,522 @@
+{
+ "model": "parakeet-tdt-0.6b-v3@541d1f99/cpu-fp32/vad",
+ "source": "local",
+ "windows": "vad",
+ "words": [
+  {
+   "end": 1.048,
+   "start": 0.888,
+   "text": "He"
+  },
+  {
+   "end": 1.448,
+   "start": 1.048,
+   "text": "tells"
+  },
+  {
+   "end": 1.608,
+   "start": 1.448,
+   "text": "us"
+  },
+  {
+   "end": 1.928,
+   "start": 1.608,
+   "text": "that"
+  },
+  {
+   "end": 2.168,
+   "start": 1.928,
+   "text": "at"
+  },
+  {
+   "end": 2.408,
+   "start": 2.168,
+   "text": "this"
+  },
+  {
+   "end": 2.968,
+   "start": 2.408,
+   "text": "festive"
+  },
+  {
+   "end": 3.368,
+   "start": 2.968,
+   "text": "season"
+  },
+  {
+   "end": 3.528,
+   "start": 3.368,
+   "text": "of"
+  },
+  {
+   "end": 3.688,
+   "start": 3.528,
+   "text": "the"
+  },
+  {
+   "end": 4.008,
+   "start": 3.688,
+   "text": "year,"
+  },
+  {
+   "end": 4.408,
+   "start": 4.168,
+   "text": "with"
+  },
+  {
+   "end": 4.888,
+   "start": 4.408,
+   "text": "Christmas"
+  },
+  {
+   "end": 6.328,
+   "start": 6.008,
+   "text": "This"
+  },
+  {
+   "end": 6.648,
+   "start": 6.328,
+   "text": "change"
+  },
+  {
+   "end": 6.968,
+   "start": 6.648,
+   "text": "came"
+  },
+  {
+   "end": 7.208,
+   "start": 6.968,
+   "text": "about"
+  },
+  {
+   "end": 7.448,
+   "start": 7.208,
+   "text": "from"
+  },
+  {
+   "end": 7.608,
+   "start": 7.448,
+   "text": "an"
+  },
+  {
+   "end": 8.088,
+   "start": 7.608,
+   "text": "adventure"
+  },
+  {
+   "end": 8.328,
+   "start": 8.088,
+   "text": "we"
+  },
+  {
+   "end": 8.488,
+   "start": 8.328,
+   "text": "had"
+  },
+  {
+   "end": 8.968,
+   "start": 8.488,
+   "text": "together."
+  },
+  {
+   "end": 10.28,
+   "start": 10.12,
+   "text": "He"
+  },
+  {
+   "end": 10.52,
+   "start": 10.28,
+   "text": "has"
+  },
+  {
+   "end": 10.84,
+   "start": 10.52,
+   "text": "grave"
+  },
+  {
+   "end": 11.32,
+   "start": 10.84,
+   "text": "doubts"
+  },
+  {
+   "end": 11.72,
+   "start": 11.32,
+   "text": "whether"
+  },
+  {
+   "end": 11.88,
+   "start": 11.72,
+   "text": "Sir"
+  },
+  {
+   "end": 12.36,
+   "start": 11.88,
+   "text": "Frederick"
+  },
+  {
+   "end": 13.0,
+   "start": 12.36,
+   "text": "Leighton's"
+  },
+  {
+   "end": 13.24,
+   "start": 13.0,
+   "text": "work"
+  },
+  {
+   "end": 13.4,
+   "start": 13.24,
+   "text": "is"
+  },
+  {
+   "end": 13.56,
+   "start": 13.4,
+   "text": "really"
+  },
+  {
+   "end": 14.12,
+   "start": 13.72,
+   "text": "great."
+  },
+  {
+   "end": 15.24,
+   "start": 15.0,
+   "text": "One"
+  },
+  {
+   "end": 15.48,
+   "start": 15.24,
+   "text": "day"
+  },
+  {
+   "end": 15.64,
+   "start": 15.48,
+   "text": "when"
+  },
+  {
+   "end": 15.72,
+   "start": 15.64,
+   "text": "I"
+  },
+  {
+   "end": 15.96,
+   "start": 15.72,
+   "text": "rode"
+  },
+  {
+   "end": 16.12,
+   "start": 15.96,
+   "text": "over"
+  },
+  {
+   "end": 16.2,
+   "start": 16.12,
+   "text": "to"
+  },
+  {
+   "end": 16.36,
+   "start": 16.2,
+   "text": "the"
+  },
+  {
+   "end": 17.16,
+   "start": 16.36,
+   "text": "Shimerdas,"
+  },
+  {
+   "end": 17.4,
+   "start": 17.32,
+   "text": "I"
+  },
+  {
+   "end": 17.64,
+   "start": 17.4,
+   "text": "found"
+  },
+  {
+   "end": 18.44,
+   "start": 17.64,
+   "text": "Antonia"
+  },
+  {
+   "end": 18.76,
+   "start": 18.44,
+   "text": "starting"
+  },
+  {
+   "end": 18.92,
+   "start": 18.76,
+   "text": "off"
+  },
+  {
+   "end": 19.08,
+   "start": 18.92,
+   "text": "on"
+  },
+  {
+   "end": 19.32,
+   "start": 19.08,
+   "text": "foot."
+  },
+  {
+   "end": 21.24,
+   "start": 20.28,
+   "text": "Linnell's"
+  },
+  {
+   "end": 21.8,
+   "start": 21.24,
+   "text": "pictures"
+  },
+  {
+   "end": 21.96,
+   "start": 21.8,
+   "text": "are"
+  },
+  {
+   "end": 22.12,
+   "start": 21.96,
+   "text": "a"
+  },
+  {
+   "end": 22.36,
+   "start": 22.12,
+   "text": "sort"
+  },
+  {
+   "end": 22.52,
+   "start": 22.36,
+   "text": "of"
+  },
+  {
+   "end": 23.32,
+   "start": 22.76,
+   "text": "upguard"
+  },
+  {
+   "end": 23.56,
+   "start": 23.48,
+   "text": "and"
+  },
+  {
+   "end": 24.12,
+   "start": 23.72,
+   "text": "Adam"
+  },
+  {
+   "end": 24.6,
+   "start": 24.2,
+   "text": "painting."
+  },
+  {
+   "end": 25.48,
+   "start": 25.24,
+   "text": "There"
+  },
+  {
+   "end": 25.64,
+   "start": 25.48,
+   "text": "had"
+  },
+  {
+   "end": 25.8,
+   "start": 25.64,
+   "text": "been"
+  },
+  {
+   "end": 26.04,
+   "start": 25.8,
+   "text": "another"
+  },
+  {
+   "end": 26.44,
+   "start": 26.04,
+   "text": "black"
+  },
+  {
+   "end": 26.84,
+   "start": 26.44,
+   "text": "frost"
+  },
+  {
+   "end": 27.0,
+   "start": 26.84,
+   "text": "the"
+  },
+  {
+   "end": 27.24,
+   "start": 27.0,
+   "text": "night"
+  },
+  {
+   "end": 27.64,
+   "start": 27.24,
+   "text": "before,"
+  },
+  {
+   "end": 27.96,
+   "start": 27.8,
+   "text": "and"
+  },
+  {
+   "end": 28.04,
+   "start": 27.96,
+   "text": "the"
+  },
+  {
+   "end": 28.28,
+   "start": 28.04,
+   "text": "air"
+  },
+  {
+   "end": 28.44,
+   "start": 28.28,
+   "text": "was"
+  },
+  {
+   "end": 28.76,
+   "start": 28.44,
+   "text": "clear"
+  },
+  {
+   "end": 28.92,
+   "start": 28.76,
+   "text": "and"
+  },
+  {
+   "end": 29.16,
+   "start": 28.92,
+   "text": "heady"
+  },
+  {
+   "end": 29.32,
+   "start": 29.24,
+   "text": "as"
+  },
+  {
+   "end": 30.584,
+   "start": 30.424,
+   "text": "It"
+  },
+  {
+   "end": 30.824,
+   "start": 30.584,
+   "text": "is"
+  },
+  {
+   "end": 31.544,
+   "start": 30.824,
+   "text": "obviously"
+  },
+  {
+   "end": 32.264,
+   "start": 31.544,
+   "text": "unnecessary"
+  },
+  {
+   "end": 32.504,
+   "start": 32.264,
+   "text": "for"
+  },
+  {
+   "end": 32.664,
+   "start": 32.504,
+   "text": "us"
+  },
+  {
+   "end": 32.904,
+   "start": 32.664,
+   "text": "to"
+  },
+  {
+   "end": 33.064,
+   "start": 32.904,
+   "text": "point"
+  },
+  {
+   "end": 33.224,
+   "start": 33.064,
+   "text": "out"
+  },
+  {
+   "end": 33.464,
+   "start": 33.224,
+   "text": "how"
+  },
+  {
+   "end": 34.184,
+   "start": 33.464,
+   "text": "luminous"
+  },
+  {
+   "end": 34.424,
+   "start": 34.184,
+   "text": "the"
+  },
+  {
+   "end": 35.592,
+   "start": 35.352,
+   "text": "It"
+  },
+  {
+   "end": 35.752,
+   "start": 35.592,
+   "text": "was"
+  },
+  {
+   "end": 35.912,
+   "start": 35.752,
+   "text": "on"
+  },
+  {
+   "end": 36.072,
+   "start": 35.912,
+   "text": "one"
+  },
+  {
+   "end": 36.152,
+   "start": 36.072,
+   "text": "of"
+  },
+  {
+   "end": 36.312,
+   "start": 36.152,
+   "text": "these"
+  },
+  {
+   "end": 36.872,
+   "start": 36.312,
+   "text": "gravel"
+  },
+  {
+   "end": 37.272,
+   "start": 36.872,
+   "text": "beds"
+  },
+  {
+   "end": 37.432,
+   "start": 37.272,
+   "text": "that"
+  },
+  {
+   "end": 37.592,
+   "start": 37.432,
+   "text": "I"
+  },
+  {
+   "end": 37.912,
+   "start": 37.592,
+   "text": "met"
+  },
+  {
+   "end": 38.072,
+   "start": 37.912,
+   "text": "my"
+  },
+  {
+   "end": 38.712,
+   "start": 38.072,
+   "text": "adventure."
+  }
+ ]
+}

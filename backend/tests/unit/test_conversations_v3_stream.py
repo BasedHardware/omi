@@ -7,6 +7,7 @@ import json
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from fastapi import HTTPException
 
 import pytest
@@ -16,7 +17,8 @@ from utils.conversations import process_conversation as process
 from models.structured import Structured
 from routers import conversations as routes
 from tests.unit.test_conversations_v3_transactions import strict  # noqa: F401
-from utils.conversations.v3 import service
+from tests.unit.test_conversations_v3_engine import native_ready_fields
+from utils.conversations.v3 import policy, service
 
 AT = datetime(2026, 11, 16, tzinfo=timezone.utc)
 
@@ -31,6 +33,7 @@ def outline_gateway(monkeypatch, stall):
     import openai.resources  # noqa: F401
 
     from utils.conversations.v3 import models
+    from utils.llm.prompt_cache import prefix_cache_key
 
     class GatewayStream(httpx.AsyncByteStream):
         closed = False
@@ -51,7 +54,9 @@ def outline_gateway(monkeypatch, stall):
     stream = GatewayStream()
 
     async def gateway(request):
-        assert json.loads(request.content)['stream'] is True
+        payload = json.loads(request.content)
+        assert payload['stream'] is True
+        assert payload['prompt_cache_key'] == prefix_cache_key('v3-outline', models.OUTLINE_CACHE_PREFIX, owner_uid='u')
         assert request.extensions['timeout']['read'] == 30
         return httpx.Response(200, headers={'Content-Type': 'text/event-stream'}, stream=stream)
 
@@ -67,7 +72,8 @@ def outline_gateway(monkeypatch, stall):
 @pytest.mark.parametrize('stall', [False, True])
 def test_paid_outline_stream_deadline_discards_partial_reply_and_closes_stream(outline_gateway, stall):
     models, stream = outline_gateway
-    assert models.outline('u', [('human', 'synthetic speech')]) == ('' if stall else 'outline')
+    messages = [('system', models.OUTLINE_CACHE_PREFIX), ('human', 'synthetic speech')]
+    assert models.outline('u', messages) == ('' if stall else 'outline')
     assert stream.closed
 
 
@@ -96,6 +102,37 @@ async def test_stored_summary_returns_chat_done_without_a_writer(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_stream_serves_background_summary_settled_before_lease_acquisition(monkeypatch, strict):
+    async def blocking(pool, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    row = {
+        'id': 'c',
+        'v3_derived': True,
+        'finished_at': AT,
+        'transcript_segments': [{'text': 'word ' * 400}],
+    }
+    settled = {**row, 'summary_covers_through': AT, 'structured': {'title': 'Background notes'}}
+    released = []
+
+    def acquire(*args):
+        strict.rows[('users', 'u', 'conversations', 'c')] = settled
+        return 'token'
+
+    monkeypatch.setattr(summary, 'run_blocking', blocking)
+    monkeypatch.setattr(summary.store, 'get_firestore_client', lambda: strict)
+    monkeypatch.setattr(summary.store, 'decode_row', lambda uid, snapshot: snapshot.to_dict())
+    monkeypatch.setattr(leases, 'acquire', acquire)
+    monkeypatch.setattr(leases, 'release', lambda *args: released.append(args))
+    monkeypatch.setattr(summary, 'write', lambda *args: pytest.fail('fresh summary called the notes model'))
+
+    stream = summary.stream('u', row)
+    assert await anext(stream) == summary.done(settled)
+    assert released == [('u', 'summary-c', 'token')]
+    assert [frame async for frame in stream] == []
+
+
+@pytest.mark.asyncio
 async def test_competing_writer_returns_pollable_error(monkeypatch):
     from fastapi import HTTPException
 
@@ -117,7 +154,7 @@ async def test_on_open_respects_the_custom_stt_paid_notes_allowance(monkeypatch,
 
     monkeypatch.setattr(summary, 'run_blocking', blocking)
     monkeypatch.setattr(summary, 'should_skip_omi_paid_postprocessing', lambda *a, **kw: exhausted)
-    monkeypatch.setattr(leases, 'acquire', lambda *a: 'token')
+    monkeypatch.setattr(leases, 'acquire', lambda *a, **kw: 'token')
     row = {'id': 'c', 'uses_custom_stt': True, 'source': 'omi', 'transcript_segments': [{'text': 'word ' * 400}]}
     assert await summary.prepare('u', row) == (None if exhausted else 'token')
 
@@ -263,7 +300,8 @@ async def test_summary_renews_lease_until_model_finishes(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_summary_route_returns_409_before_streaming_response(monkeypatch):
+@pytest.mark.parametrize('headers', [{}, {'X-Omi-Recording-Detail': '1'}])
+async def test_summary_route_returns_409_before_streaming_response(monkeypatch, headers):
     from fastapi import HTTPException
 
     async def blocking(pool, fn, *args, **kwargs):
@@ -273,11 +311,66 @@ async def test_summary_route_returns_409_before_streaming_response(monkeypatch):
     monkeypatch.setattr(summary, 'run_blocking', blocking)
     monkeypatch.setattr(routes, '_get_valid_conversation_by_id', lambda *a: {'id': 'c'})
     monkeypatch.setattr(routes, 'require_generated_compute', lambda *a: None)
-    monkeypatch.setattr(leases, 'acquire', lambda *a: None)
+    monkeypatch.setattr(leases, 'acquire', lambda *a, **kw: None)
     monkeypatch.setattr(routes, 'StreamingResponse', lambda *a, **kw: pytest.fail('headers already sent'))
     with pytest.raises(HTTPException) as error:
-        await routes.conversation_summary_stream('c', 'u')
+        await routes.conversation_summary_stream('c', 'u', request=SimpleNamespace(headers=headers))
     assert error.value.status_code == 409
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('detail_intent', ['0', '1'])
+async def test_summary_stream_uses_main_generation_path_by_default(monkeypatch, detail_intent):
+    row = {'id': 'c', 'v3_derived': True, 'v3_process_failure_reason': 'outline'}
+    prepare = AsyncMock(return_value='lease')
+
+    async def blocking(_pool, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.delenv('OMI_V3_SUMMARY_FIRST_OPEN_GATING', raising=False)
+    monkeypatch.setattr(routes, 'run_blocking', blocking)
+    monkeypatch.setattr(routes, '_get_valid_conversation_by_id', lambda *a: row)
+    monkeypatch.setattr(routes, 'require_generated_compute', lambda *a: None)
+    monkeypatch.setattr(summary, 'prepare', prepare)
+    monkeypatch.setattr(
+        service, 'reconcile', lambda *a, **kw: pytest.fail('outline failure triggered on-open recovery')
+    )
+
+    response = await routes.conversation_summary_stream(
+        'c', 'u', request=SimpleNamespace(headers={'X-Omi-Recording-Detail': detail_intent})
+    )
+
+    assert response.status_code == 200
+    prepare.assert_awaited_once_with('u', row, promote_llm=False)
+    assert 'v3_process_pending' not in row
+
+
+@pytest.mark.asyncio
+async def test_explicit_read_only_summary_serves_stored_row_without_paid_work(monkeypatch):
+    monkeypatch.setenv('OMI_V3_SUMMARY_FIRST_OPEN_GATING', 'true')
+    row = {
+        'id': 'c',
+        'finished_at': AT,
+        'summary_covers_through': AT - timedelta(minutes=10),
+        'structured': {'title': 'Stored'},
+    }
+
+    async def blocking(pool, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(routes, 'run_blocking', blocking)
+    monkeypatch.setattr(summary, 'run_blocking', blocking)
+    monkeypatch.setattr(routes, '_get_valid_conversation_by_id', lambda *a: row)
+    monkeypatch.setattr(routes, 'require_generated_compute', lambda *a: None)
+    monkeypatch.setattr(service, 'reconcile', lambda *a, **kw: pytest.fail('ordinary read reconciled'))
+    monkeypatch.setattr(summary, 'prepare', lambda *a, **kw: pytest.fail('ordinary read prepared paid work'))
+
+    response = await routes.conversation_summary_stream(
+        'c', 'u', request=SimpleNamespace(headers={'X-Omi-Recording-Detail': '0'})
+    )
+    (frame,) = [event async for event in response.body_iterator]
+    payload = json.loads(base64.b64decode(frame[6:].strip()))
+    assert payload['structured']['title'] == 'Stored'
 
 
 @pytest.mark.asyncio
@@ -310,6 +403,7 @@ async def test_legacy_summary_does_not_generate_from_live_v3_rows(monkeypatch, c
 @pytest.mark.asyncio
 @pytest.mark.parametrize('becomes_live', [False, True])
 async def test_legacy_summary_reconciles_other_v3_rows_and_rechecks_live_admission(monkeypatch, becomes_live):
+    monkeypatch.setenv('OMI_V3_SUMMARY_FIRST_OPEN_GATING', 'true')
     row = {
         'id': 'c',
         'v3_derived': True,
@@ -329,7 +423,8 @@ async def test_legacy_summary_reconciles_other_v3_rows_and_rechecks_live_admissi
         if becomes_live:
             row['home_hidden'] = False
 
-    async def prepare(uid, stored):
+    async def prepare(uid, stored, *, promote_llm):
+        assert promote_llm
         prepares.append((uid, stored))
 
     monkeypatch.delenv('CONVERSATIONS_V3_LIVE_RECAP_COHORT', raising=False)
@@ -340,13 +435,19 @@ async def test_legacy_summary_reconciles_other_v3_rows_and_rechecks_live_admissi
     monkeypatch.setattr(summary, 'prepare', prepare)
     if becomes_live:
         with pytest.raises(HTTPException) as error:
-            await routes.conversation_summary_stream('c', 'u')
+            await routes.conversation_summary_stream(
+                'c', 'u', request=SimpleNamespace(headers={'X-Omi-Recording-Detail': '1'})
+            )
         assert (error.value.status_code, error.value.detail) == (404, 'live_recap_unavailable')
         assert not prepares
     else:
-        assert (await routes.conversation_summary_stream('c', 'u')).status_code == 200
+        assert (
+            await routes.conversation_summary_stream(
+                'c', 'u', request=SimpleNamespace(headers={'X-Omi-Recording-Detail': '1'})
+            )
+        ).status_code == 200
         assert prepares == [('u', row)]
-    assert reconciles == [('u', {'on_open': True, 'conversation_id': 'c'})]
+    assert reconciles == [('u', {'on_open': True, 'promote_llm': True, 'conversation_id': 'c'})]
 
 
 @pytest.mark.parametrize('locked', [True, False])
@@ -527,7 +628,7 @@ async def test_early_stream_exit_releases_preacquired_summary_token(monkeypatch,
 
     released = []
     monkeypatch.setattr(summary, 'run_blocking', blocking)
-    monkeypatch.setattr(leases, 'acquire', lambda *a: 'token')
+    monkeypatch.setattr(leases, 'acquire', lambda *a, **kw: 'token')
     monkeypatch.setattr(leases, 'release', lambda *a: released.append(a))
     row = {'id': 'c', 'finished_at': AT}
     token = await summary.prepare('u', row)
@@ -979,7 +1080,9 @@ def test_completed_note_detail_repairs_uuid_citations_without_rewriting_storage(
 
 
 @pytest.mark.asyncio
-async def test_explicit_summary_open_locks_configured_preview_with_live_recap_present(monkeypatch):
+@pytest.mark.parametrize('detail_intent', [None, '1'])
+async def test_summary_open_locks_configured_preview_with_live_recap_present(monkeypatch, detail_intent):
+    monkeypatch.setenv('OMI_V3_SUMMARY_FIRST_OPEN_GATING', 'true')
     row = {
         'id': 'c',
         'v3_derived': True,
@@ -994,12 +1097,12 @@ async def test_explicit_summary_open_locks_configured_preview_with_live_recap_pr
     async def blocking(pool, fn, *args, **kwargs):
         return fn(*args, **kwargs)
 
-    async def reconcile(uid, *, on_open, conversation_id):
-        reconciles.append((on_open, conversation_id))
+    async def reconcile(uid, *, on_open, promote_llm, conversation_id):
+        reconciles.append((on_open, promote_llm, conversation_id))
         row.update(status='processing', v3_unlocked=False)
 
-    async def prepare(uid, current):
-        prepared.append(current.copy())
+    async def prepare(uid, current, *, promote_llm):
+        prepared.append((promote_llm, current.copy()))
 
     monkeypatch.setenv('CONVERSATIONS_V3_LIVE_RECAP_COHORT', 'uid:synthetic')
     monkeypatch.setattr(routes, 'run_blocking', blocking)
@@ -1008,7 +1111,167 @@ async def test_explicit_summary_open_locks_configured_preview_with_live_recap_pr
     monkeypatch.setattr(service, 'reconcile', reconcile)
     monkeypatch.setattr(summary, 'prepare', prepare)
 
-    response = await routes.conversation_summary_stream('c', 'synthetic')
+    headers = {} if detail_intent is None else {'X-Omi-Recording-Detail': detail_intent}
+    response = await routes.conversation_summary_stream('c', 'synthetic', request=SimpleNamespace(headers=headers))
     assert response.media_type == 'text/event-stream'
-    assert reconciles == [(True, 'c')]
-    assert prepared[0]['status'] == 'processing' and not prepared[0]['v3_unlocked']
+    assert reconciles == [(True, detail_intent == '1', 'c')]
+    assert prepared[0][0] is (detail_intent == '1')
+    assert prepared[0][1]['status'] == 'processing' and not prepared[0][1]['v3_unlocked']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('gateway_timeout', [False, True])
+async def test_background_outline_sends_same_lane_and_explicit_cache_prefix(monkeypatch, gateway_timeout):
+    import httpx
+    from openai import AsyncOpenAI
+    from utils.conversations.v3 import models, outline
+    from utils.llm.gateway_client import GatewayContextChatOpenAI
+    from utils.llm.prompt_cache import prefix_cache_key
+
+    cache_keys = []
+
+    async def gateway(request):
+        payload = json.loads(request.content)
+        cache_keys.append(payload['prompt_cache_key'])
+        assert request.headers['x-omi-background-flex-budget-ms'] == '83000'
+        assert not payload.get('stream')
+        assert payload['model'] == 'omi:auto:conversation-v3-outline'
+        assert payload['reasoning_effort'] == 'none'
+        assert payload['response_format'] == {'type': 'json_object'}
+        assert payload['prompt_cache_options'] == {'mode': 'explicit', 'ttl': '30m'}
+        assert payload['messages'][0]['content'][0] == {
+            'type': 'text',
+            'text': outline.OUTLINE_CACHE_PREFIX,
+            'prompt_cache_breakpoint': {'mode': 'explicit'},
+        }
+        if gateway_timeout:
+            return httpx.Response(
+                502,
+                json={
+                    'error': {
+                        'message': 'provider request failed',
+                        'type': 'api_error',
+                        'param': None,
+                        'code': 'provider_failure',
+                        'failure_class': 'timeout_before_output',
+                    }
+                },
+            )
+        return httpx.Response(
+            200,
+            json={
+                'id': 'synthetic',
+                'object': 'chat.completion',
+                'created': 0,
+                'model': 'omi:auto:conversation-v3-outline',
+                'choices': [{'index': 0, 'message': {'role': 'assistant', 'content': '{}'}, 'finish_reason': 'stop'}],
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(gateway)) as transport:
+        async_client = AsyncOpenAI(
+            api_key='test', base_url='http://gateway.invalid/v1', http_client=transport, max_retries=0
+        )
+        model = GatewayContextChatOpenAI(
+            api_key='test',
+            model='omi:auto:conversation-v3-outline',
+            root_async_client=async_client,
+            async_client=async_client.chat.completions,
+        )
+        monkeypatch.setattr(models, 'get_or_create_omi_gateway_llm', lambda *a, **kw: model)
+        messages = [('system', outline.OUTLINE_CACHE_PREFIX), ('human', 'Synthetic speech')]
+
+        async def claim():
+            return 83_000
+
+        owners = ('u1', 'u2', 'u1')
+        for uid in owners:
+            assert await models.background_outline(uid, messages, claim=claim) == ('' if gateway_timeout else '{}')
+        assert cache_keys == [
+            prefix_cache_key('v3-outline', outline.OUTLINE_CACHE_PREFIX, owner_uid=uid) for uid in owners
+        ]
+        assert cache_keys[0] != cache_keys[1]
+
+
+def test_outline_only_budgets_finished_automatic_stretches_with_publication_headroom():
+    from time import monotonic
+
+    now = datetime.now(timezone.utc)
+    group = {'finished': True, 'manual_end': False, 'end': now - timedelta(minutes=5)}
+    budget_deadline = monotonic() + 100
+    assert 99_000 < service._outline_flex_budget(group, budget_deadline) <= 100_000
+    assert service._outline_flex_budget(group, None) == 0
+    assert service._outline_flex_budget({**group, 'finished': False}, budget_deadline) == 0
+    assert service._outline_flex_budget({**group, 'manual_end': True}, budget_deadline) == 0
+    assert service._outline_flex_budget({**group, 'end': now - timedelta(hours=2)}, budget_deadline) < 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('foreground', [False, True])
+@pytest.mark.parametrize('gating', [False, True])
+async def test_summary_model_marks_only_the_background_attempt_preemptible(monkeypatch, foreground, gating):
+    from utils.conversations.v3 import models
+    from utils.llm import background_flex
+
+    marks = []
+    monkeypatch.setenv('OMI_V3_SUMMARY_FIRST_OPEN_GATING', str(gating))
+
+    async def blocking(_pool, fn, *args):
+        return fn(*args)
+
+    monkeypatch.setattr(models, 'run_blocking', blocking)
+    monkeypatch.setattr(leases, 'mark_llm_preemptible', lambda *_args: marks.append(_args))
+    now = datetime.now(timezone.utc)
+    with models.notes_mode('u', foreground=foreground, background_lease=('c', 'token', now)):
+        async with models.summary_model_attempt():
+            if foreground:
+                assert marks == []
+                assert background_flex.budget_ms('conversation_v3_summary') == 0
+            else:
+                assert marks == ([('u', 'summary-c', 'token', True)] if gating else [])
+                assert background_flex.budget_ms('conversation_v3_summary') > 54_000
+    assert marks == (
+        [('u', 'summary-c', 'token', True), ('u', 'summary-c', 'token', False)] if gating and not foreground else []
+    )
+    assert background_flex.budget_ms('conversation_v3_summary') == 0
+
+
+@pytest.mark.asyncio
+async def test_stale_native_foreground_rearms_without_starting_paid_notes(strict, monkeypatch):
+    end = datetime.now(timezone.utc)
+    timestamp = end - timedelta(minutes=2)
+    source = {'id': 'raw', 'recording': True, 'started_at': timestamp, **native_ready_fields(end)}
+    binding = policy.native_manual_binding(source)
+    assert binding
+    derived = {
+        'id': 'derived',
+        'status': 'processing',
+        'v3_derived': True,
+        'v3_recording_ids': ['raw'],
+        'manual_end': True,
+        'v3_native_manual_binding': binding,
+        'finished_at': end,
+    }
+    raw_path = ('users', 'synthetic', 'conversations', 'raw')
+    strict.rows[raw_path] = {
+        **source,
+        'record_audio_closed': False,
+        'record_upload_revision': 8,
+        'v3_pending_since': timestamp,
+        'v3_pending': False,
+    }
+    strict.rows[('users', 'synthetic', 'conversations', 'derived')] = derived
+    token = leases.acquire('synthetic', 'summary-derived', firestore_client=strict)
+
+    async def blocking(pool, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(summary, 'run_blocking', blocking)
+    monkeypatch.setattr(summary.store, 'get_firestore_client', lambda: strict)
+    monkeypatch.setattr(summary.store, 'decode_row', lambda uid, snapshot: snapshot.to_dict())
+    monkeypatch.setattr(summary, 'write', lambda *a: pytest.fail('stale native source invoked foreground notes'))
+    frames = [frame async for frame in summary.stream('synthetic', derived, token=token)]
+    assert len(frames) == 1 and frames[0].startswith('error:')
+    assert strict.rows[raw_path]['v3_pending'] is True
+    assert strict.rows[raw_path]['v3_pending_since'] == timestamp
+    assert leases.acquire('synthetic', 'summary-derived', firestore_client=strict)

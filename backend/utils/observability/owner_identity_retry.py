@@ -32,6 +32,7 @@ FUNNEL_REASONS = {
             'private_cloud_disabled',
             'missing_revision',
             'already_resolved_owner',
+            'split_by_final_pass',
             'id_mismatch',
             'empty_transcript',
             'manual_receipt_unavailable',

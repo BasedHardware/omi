@@ -16,11 +16,18 @@
 #   workerd-rollback    helm rollback prod workerd to workerd_helm_revision.
 #   repair-traffic-only  Restore Cloud Run traffic to the serving revisions.
 #   recover-pump-cap    SCA-3318 one-time service-level cap correction on the dark pump.
+#   recover-split       Restore the admitted inverse from a failed bound promotion receipt.
+#   probe-app-icon      Check app-icon containment on the admitted Backend revision.
 
 name: Deploy Backend to Cloud RUN
 
 run-name: >-
-  ${{ inputs.selected_rollback_revision && format('Select {0}/{1}/{2} sha={3} lock={4} img={5} elig={6} by {7} inverse={8}',
+  ${{ inputs.mode == 'recover-split' && format('Recover split from run {0}/1 by {1}', inputs.split_recovery_run_id, inputs.requested_by) ||
+    inputs.mode == 'probe-app-icon' && format('Probe Backend app icon revision={0} sha={1} by {2}',
+    inputs.app_icon_candidate_revision, inputs.release_sha, inputs.requested_by) ||
+    inputs.selected_split_binding && format('Holdback {0}/{1} sha={2} by {3} plan={4}',
+    inputs.environment, inputs.cloud_run_service, inputs.release_sha, inputs.requested_by, inputs.selected_split_binding) ||
+    inputs.selected_rollback_revision && format('Select {0}/{1}/{2} sha={3} lock={4} img={5} elig={6} by {7} inverse={8}',
     inputs.environment, inputs.mode, inputs.cloud_run_service, inputs.release_sha,
     github.event.inputs.break_glass_lock == 'true' && 'break-glass' || 'prod-train',
     inputs.service_images == '' && 'default' || 'override',
@@ -77,6 +84,8 @@ on:
           - repair-traffic-only
           - operator-qualify-publish
           - recover-pump-cap
+          - recover-split
+          - probe-app-icon
       deploy_targets:
         description: 'Deploy all backend surfaces or Cloud Run only'
         required: true
@@ -95,6 +104,26 @@ on:
         description: 'Named standard deploy only. Exact revision admitted at 100% serving before dispatch.'
         required: false
         default: ''
+      selected_split_plan:
+        description: 'Named production deploy only. Canonical hold-back plan.'
+        required: false
+        default: ''
+        type: string
+      selected_split_binding:
+        description: 'SHA-256 of selected_split_plan.'
+        required: false
+        default: ''
+        type: string
+      app_icon_candidate_revision:
+        description: 'Probe-app-icon only. Exact admitted, tagged, zero-traffic Backend revision for release_sha.'
+        required: false
+        default: ''
+        type: string
+      split_recovery_run_id:
+        description: 'recover-split only. Run ID of the terminal failed or cancelled production hold-back deployment (attempt 1).'
+        required: false
+        default: ''
+        type: string
       selected_registered_max_instances:
         description: 'Registered max instances already admitted for a named production integration or sync deploy.'
         required: false
@@ -238,6 +267,8 @@ jobs:
           CLOUD_RUN_SERVICE: ${{ github.event.inputs.cloud_run_service || 'all' }}
           SERVICE_IMAGES: ${{ github.event.inputs.service_images }}
           SELECTED_ROLLBACK_REVISION: ${{ inputs.selected_rollback_revision }}
+          SELECTED_SPLIT_PLAN: ${{ inputs.selected_split_plan }}
+          SELECTED_SPLIT_BINDING: ${{ inputs.selected_split_binding }}
           REQUESTED_BY: ${{ github.event.inputs.requested_by }}
           RELEASE_SHA: ${{ github.event.inputs.release_sha }}
           SKIP_ELIGIBILITY: ${{ github.event.inputs.skip_eligibility_proof }}
@@ -335,7 +366,25 @@ jobs:
             [[ "$CLOUD_RUN_SERVICE" == all || "$CLOUD_RUN_SERVICE" == backend-integration ]] || exit 1
             INTEGRATION_ONLY=true
           fi
-          if [[ "$CLOUD_RUN_SERVICE" != all && "$CLOUD_RUN_SERVICE" != backend-projection-pump && "$INTEGRATION_ONLY" != true ]]; then
+          if [[ -n "${SELECTED_SPLIT_PLAN:-}" || -n "${SELECTED_SPLIT_BINDING:-}" ]]; then
+            IFS=';' read -r version donor _ <<< "$SELECTED_SPLIT_PLAN"
+            [[ "$WORKFLOW_MODE" == deploy && "$DEPLOY_ENVIRONMENT" == prod &&
+               "$DEPLOY_TARGETS" == cloud-run-only && "$CLOUD_RUN_SERVICE" != all &&
+               "$CLOUD_RUN_SERVICE" != backend-projection-pump && "$INTEGRATION_ONLY" == false &&
+               "$DEPLOY_GATEWAY" == false && -z "$SERVICE_IMAGES" &&
+               "$SKIP_ELIGIBILITY" == false && "$BREAK_GLASS_LOCK" == false &&
+               -z "$SELECTED_ROLLBACK_REVISION" && "$REQUESTED_BY" =~ ^selection:[0-9a-f]{32}$ &&
+               "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ && "$RELEASE_SHA" != 0714c5198be8f0183c8fd7dd3810d53c91af17a4 &&
+               "$GITHUB_RUN_ATTEMPT" == 1 && "$GITHUB_REF" == refs/heads/main &&
+               "$version" == holdback-v1 && "$donor" =~ ^${CLOUD_RUN_SERVICE}-[a-z0-9-]+$ &&
+               "$SELECTED_SPLIT_BINDING" =~ ^[0-9a-f]{64}$ &&
+               "$(printf %s "$SELECTED_SPLIT_PLAN" | sha256sum | cut -d ' ' -f 1)" == "$SELECTED_SPLIT_BINDING" ]] || exit 1
+            if [[ "$SELECTED_SPLIT_PLAN" == *,* && "$CLOUD_RUN_SERVICE" != backend ]]; then
+              echo 'Split image moves are enabled for Backend only.' >&2
+              exit 1
+            fi
+            ROLLBACK_REVISION="$donor"
+          elif [[ "$CLOUD_RUN_SERVICE" != all && "$CLOUD_RUN_SERVICE" != backend-projection-pump && "$INTEGRATION_ONLY" != true ]]; then
             if [[ ! "$SELECTED_ROLLBACK_REVISION" =~ ^${CLOUD_RUN_SERVICE}-[a-z0-9]([a-z0-9-]*[a-z0-9])?$ ||
                   ${#SELECTED_ROLLBACK_REVISION} -gt 63 ]]; then
               echo 'Named deploy requires the admitted selected_rollback_revision.' >&2
@@ -407,7 +456,8 @@ jobs:
             .break_glass_lock == "false" and .skip_eligibility_proof == "false" and
             .deploy_gateway == "false" and
             ([.service_images, .pump_release_disposition, .break_glass_confirm,
-              .break_glass_reason, .release_version, .selected_rollback_revision] | all(. == "" or . == null)) and
+              .break_glass_reason, .release_version, .selected_rollback_revision,
+              .selected_split_plan, .selected_split_binding] | all(. == "" or . == null)) and
             (.requested_by | test("[^[:space:]]"))' "$GITHUB_EVENT_PATH" >/dev/null
           # Cloud Run v2 can return literal outer quotes as part of the etag.
           etag_pattern='^([A-Za-z0-9_+/=-]{1,200}|"[A-Za-z0-9_+/=-]{1,200}")$'
@@ -1363,6 +1413,8 @@ jobs:
           integration_image: ${{ needs.validate-production-boundary.outputs.integration_image }}
           post_wrap_guard: ${{ needs.validate-production-boundary.outputs.post_wrap_guard || 'internal' }}
           rollback_revision: ${{ needs.validate-production-boundary.outputs.rollback_revision || 'backend-integration-provfix-off1114' }}
+          selected_split_plan: ${{ inputs.selected_split_plan }}
+          selected_split_binding: ${{ inputs.selected_split_binding }}
           # 2026-10-24 costcut (live 22:45Z): prod backend-sync runs 6Gi; dev keeps 8Gi.
           backend_sync_memory: ${{ vars.BACKEND_SYNC_MEMORY || (github.event.inputs.environment == 'prod' && '6Gi' || '8Gi') }}
           # Read only for a development dispatch, so a production run never carries it.
@@ -1503,6 +1555,66 @@ jobs:
           region: ${{ env.REGION }}
           release_version: ${{ github.event.inputs.release_version }}
 
+  recover-bound-split:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.repository == 'BasedHardware/omi' &&
+      github.ref == 'refs/heads/main' &&
+      github.run_attempt == 1 &&
+      inputs.mode == 'recover-split' &&
+      inputs.environment == 'prod' &&
+      inputs.deploy_targets == 'cloud-run-only' &&
+      !inputs.break_glass_lock &&
+      !inputs.skip_eligibility_proof
+    environment: prod
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout immutable recovery controls
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - name: Fetch the original attempt and its completed promotion receipt
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ORIGINAL_RUN: ${{ inputs.split_recovery_run_id }}
+        run: |
+          set -euo pipefail
+          [[ "$ORIGINAL_RUN" =~ ^[1-9][0-9]{0,18}$ ]]
+          original="repos/$GITHUB_REPOSITORY/actions/runs/$ORIGINAL_RUN/attempts/1"
+          evidence="$(mktemp -d "$RUNNER_TEMP/split-recovery.XXXXXX")"
+          gh api "$original" > "$evidence/run.json"
+          jq -e '.path == ".github/workflows/gcp_backend.yml" and .head_branch == "main" and
+            .head_repository.full_name == "BasedHardware/omi" and .event == "workflow_dispatch" and
+            .status == "completed" and (.display_title | startswith("Holdback prod/"))' "$evidence/run.json" >/dev/null
+          deploy_conclusion="$(gh api --paginate "$original/jobs" --jq '.jobs[] | select(.name == "deploy") | .conclusion')"
+          case "$deploy_conclusion" in failure|cancelled|timed_out) ;; *) exit 1 ;; esac
+          gh run download "$ORIGINAL_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name "backend-holdback-promotion-$ORIGINAL_RUN-1" --dir "$evidence/artifact"
+          test -s "$evidence/artifact/backend-holdback-promotion.json"
+          printf 'SPLIT_RECOVERY_EVIDENCE=%s\n' "$evidence" >> "$GITHUB_ENV"
+      - name: Authenticate existing production workflow identity
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com
+      - name: Set up existing gcloud client
+        uses: google-github-actions/setup-gcloud@v3
+      - name: Restore only the admitted inverse while ownership still matches
+        env:
+          ORIGINAL_RUN: ${{ inputs.split_recovery_run_id }}
+          PROJECT: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          python3 backend/scripts/cloud_run_split_canary.py recover-run \
+            --project "$PROJECT" --region "$REGION" --run-id "$ORIGINAL_RUN" \
+            --run-metadata "$SPLIT_RECOVERY_EVIDENCE/run.json" \
+            --promotion-receipt "$SPLIT_RECOVERY_EVIDENCE/artifact/backend-holdback-promotion.json"
+
   recover-projection-pump-cap:
     needs: validate-production-boundary
     if: >-
@@ -1541,6 +1653,52 @@ jobs:
         env:
           APPROVED_ETAG: ${{ inputs.pump_recovery_etag }}
         run: python3 backend/scripts/recover_projection_pump_cap.py --etag="$APPROVED_ETAG"
+
+  probe-app-icon:
+    name: Probe candidate app-icon containment before promotion
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      inputs.mode == 'probe-app-icon' &&
+      inputs.environment == 'prod' &&
+      !inputs.break_glass_lock &&
+      !inputs.skip_eligibility_proof
+    environment: prod
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require the original attempt
+        run: test "$GITHUB_RUN_ATTEMPT" = 1
+      - name: Checkout immutable workflow controls
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - name: Authenticate existing production workflow identity
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com
+      - name: Set up existing gcloud client
+        uses: google-github-actions/setup-gcloud@v3
+      - name: Verify candidate identity and require containment from one synthetic icon request
+        shell: bash
+        env:
+          CANDIDATE_REVISION: ${{ inputs.app_icon_candidate_revision }}
+          CANDIDATE_SOURCE: ${{ inputs.release_sha }}
+        run: |
+          set +x
+          set -euo pipefail
+          umask 077
+          probe_dir="$(mktemp -d "$RUNNER_TEMP/app-icon-probe.XXXXXXXX")"
+          trap 'rm -rf "$probe_dir"' EXIT
+          receipt="$(python3 -I .github/scripts/app_icon_containment_probe.py \
+            "$probe_dir/token" "$CANDIDATE_REVISION" "$CANDIDATE_SOURCE")"
+          printf '%s\n' "$receipt" | tee -a "$GITHUB_STEP_SUMMARY"
+          test "$receipt" = "http_status=424 outcome=icon_generation_disabled"
 
   # SOURCE-ONLY PROPOSAL: contract remains closed until approved ingress IDs
   # and existing repository authorization evidence are reviewed and committed.

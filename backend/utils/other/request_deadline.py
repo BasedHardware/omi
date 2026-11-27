@@ -1,14 +1,13 @@
 """A request-scoped wall-clock deadline for the synchronous from-segments ingest.
 
-The route must answer a retryable error inside the client's own 30 s HTTP pool
-deadline instead of holding the request for the notes agent's full recovery
-budget (agentic 120 s, then one-shot 180 s). The route sets the deadline; the
-auth dependency bounds its in-flight calls by it and the notes step caps its own
-deadlines to whatever remains. Unset — every other caller — changes nothing.
+The route bounds auth, intake and its processing wait with one deadline.
+Enrichment uses the remaining budget in inline mode. Continued processing can
+run with its own budget after the HTTP waiter returns a retryable error.
+Other callers leave the deadline unset.
 
 The deadline is a contextvar, so it reaches the synchronous auth dependency and
-the handler through the threadpool context copy FastAPI makes for each, and the
-``asyncio.run`` the notes step opens copies it again. It is stored as one
+the handler through context copies. The inline notes loop and the async
+continuation both inherit the processing deadline. It is stored as one
 absolute monotonic instant, so every step derives its own relative timeout from
 the same deadline instead of restarting a fresh budget.
 """
@@ -65,6 +64,11 @@ def request_deadline_remaining_seconds() -> float | None:
 def request_deadline_exceeded() -> bool:
     remaining = request_deadline_remaining_seconds()
     return remaining is not None and remaining <= 0.0
+
+
+def require_request_budget() -> None:
+    if request_deadline_exceeded():
+        raise RequestDeadlineExceeded('request budget spent before the next step')
 
 
 async def await_within_request_deadline(awaitable_factory: Callable[[], Coroutine[Any, Any, T]]) -> T:

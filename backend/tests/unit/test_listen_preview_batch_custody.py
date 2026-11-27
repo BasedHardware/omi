@@ -406,3 +406,48 @@ async def test_cancelled_claim_finishes_first_frame_custody_before_teardown(remo
     assert register_recording('owner', row, store=MemoryStore())
     r.initialize_stt.assert_not_awaited()
     r._teardown_body.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'failure,expected_reason',
+    [
+        ('refused', 'claim'),
+        ('exception', 'claim'),
+        ('archive_disabled', 'archive'),
+        ('unsupported_language', 'policy'),
+        ('consent_revoked', 'policy'),
+    ],
+)
+async def test_live_fallback_names_its_reason_and_carries_it_to_the_transport(monkeypatch, failure, expected_reason):
+    from prometheus_client import REGISTRY
+
+    from utils.observability import demand_cohort
+
+    r = receiver()
+    telemetry = demand_cohort.attach_demand_telemetry(r.host, 'ineligible')
+    claim = Mock(return_value=None, side_effect=RuntimeError('unavailable') if failure == 'exception' else None)
+    monkeypatch.setattr(preview_custody, 'claim_server_batch_lane', claim)
+    monkeypatch.setattr(preview_custody, 'record_fallback', Mock())
+    if failure == 'unsupported_language':
+        r.host.request.websocket.query_params['language'] = 'zh'
+        r.host.request.language = r.host.language = 'zh'
+    elif failure == 'consent_revoked':
+        r.host.private_cloud_sync_enabled = False
+    elif failure == 'archive_disabled':
+        r.raw_archive.durable = False
+
+    def count(reason):
+        return (
+            REGISTRY.get_sample_value(
+                'omi_listen_preview_batch_custody_total', {'outcome': 'live_fallback', 'reason': reason}
+            )
+            or 0.0
+        )
+
+    before = {reason: count(reason) for reason in demand_cohort.FALLBACK_REASONS}
+    await r._flush_stt_buffer(bytearray(b'\x00\x00' * 160))
+    after = {reason: count(reason) for reason in demand_cohort.FALLBACK_REASONS}
+    assert after[expected_reason] - before[expected_reason] == 1
+    assert sum(after.values()) - sum(before.values()) == 1
+    assert telemetry.fallback_reason == expected_reason

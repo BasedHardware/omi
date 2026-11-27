@@ -168,6 +168,28 @@ def clear_legal_hold_deferral(uid: str, conversation_id: str, *, firestore_clien
         pass  # Gone already (an account wipe or another delete): nothing left to reconcile.
 
 
+def defer_audio_erasure(uid: str, conversation_id: str, *, source_ids: List[str]) -> None:
+    """Record an audio cleanup blocked by a hold after the conversation was deleted."""
+    from database._client import get_firestore_client
+    from database.conversation_batch_purge_jobs import accept_fields, erasure_job_ref
+
+    client = get_firestore_client()
+    tombstone_ref = client.collection('users').document(uid).collection(COLLECTION).document(conversation_id)
+    obligation_ref = erasure_job_ref(client, uid, conversation_id)
+
+    def body(transaction):
+        # An account wipe supersedes conversation cleanup. Do not restore a removed tombstone.
+        if not tombstone_ref.get(transaction=transaction).exists:
+            return
+        owed = obligation_ref.get(transaction=transaction).to_dict() or {}
+        prior_sources = [str(source) for source in owed.get('audio_source_ids') or []]
+        sources = list(dict.fromkeys(prior_sources + source_ids))
+        transaction.update(tombstone_ref, {'legal_hold_deferred': True, 'erasure_armed': True})
+        transaction.set(obligation_ref, accept_fields(uid, conversation_id, audio_source_ids=sources), merge=True)
+
+    _in_transaction(client, body)
+
+
 def _in_transaction(client: Any, body: Any) -> Any:
     from google.cloud import firestore
 
@@ -185,11 +207,22 @@ def record_deletion(uid: str, conversation_id: str, *, expected_exists: bool = F
     tombstone_ref = user.collection(COLLECTION).document(conversation_id)
     deferred = _DEFERRED_BATCH_PURGES.get()
     deferred = deferred if deferred is not None and deferred[0] == uid else None
-    tombstone_payload = None
-    if expected_exists:
-        from database.conversation_batch_purge_jobs import arm_fields, job_ref
+    obligations = ()
+    if deferred is not None:
+        from database.conversation_batch_purge_jobs import arm_fields, job_ref, post_window_job
 
-        obligation_ref = job_ref(db, uid, conversation_id) if deferred is not None else None
+        # The tombstone and both obligations share a Commit. The first pass
+        # cannot clear the independent delayed discovery pass.
+        obligations = (
+            (job_ref(db, uid, conversation_id), arm_fields(uid, conversation_id)),
+            post_window_job(db, uid, conversation_id),
+        )
+
+    def arm_jobs(writer):
+        for reference, fields in obligations:
+            writer.set(reference, fields, merge=True)
+
+    if expected_exists:
 
         def body(transaction):
             row_snapshot = conversation_ref.get(transaction=transaction)
@@ -197,41 +230,36 @@ def record_deletion(uid: str, conversation_id: str, *, expected_exists: bool = F
                 raise ConversationDeleteTargetChanged(conversation_id)
             tombstone = tombstone_ref.get(transaction=transaction)
             row = row_snapshot.to_dict() or {}
-            if obligation_ref is not None:
-                obligation_ref.get(transaction=transaction)
+            for reference, _ in obligations:
+                reference.get(transaction=transaction)
             if not tombstone.exists:
                 transaction.create(tombstone_ref, _tombstone_payload(conversation_id, row))
-            if obligation_ref is not None:
-                transaction.set(obligation_ref, arm_fields(uid, conversation_id), merge=True)
+            arm_jobs(transaction)
             return row
 
         row = _in_transaction(db, body)
-        if deferred is not None and conversation_id not in deferred[1]:
-            deferred[1].append(conversation_id)
     else:
         row = conversation_ref.get().to_dict() or {}
         tombstone_payload = _tombstone_payload(conversation_id, row)
-    if deferred is not None and tombstone_payload is not None:
-        from database.conversation_batch_purge_jobs import arm_fields, job_ref
-
-        # The obligation commits with the intent, before any fallible cleanup.
-        obligation = (job_ref(db, uid, conversation_id), arm_fields(uid, conversation_id))
-        try:
-            batch = db.batch()
-            batch.create(tombstone_ref, tombstone_payload)
-            batch.set(*obligation, merge=True)
-            batch.commit()
-        except AlreadyExists:
-            # A retried delete keeps the original tombstone and re-arms the obligation.
-            obligation[0].set(obligation[1], merge=True)
-        if conversation_id not in deferred[1]:
-            deferred[1].append(conversation_id)
-    elif deferred is None and tombstone_payload is not None:
-        try:
-            tombstone_ref.create(tombstone_payload)
-        except AlreadyExists:
-            # A retried delete after hard cleanup must preserve the original binding.
-            pass
+        if deferred is not None:
+            try:
+                batch = db.batch()
+                batch.create(tombstone_ref, tombstone_payload)
+                arm_jobs(batch)
+                batch.commit()
+            except AlreadyExists:
+                # Retried deletes preserve the original tombstone and re-arm both passes.
+                batch = db.batch()
+                arm_jobs(batch)
+                batch.commit()
+        else:
+            try:
+                tombstone_ref.create(tombstone_payload)
+            except AlreadyExists:
+                # Preserve the binding on retries after hard cleanup.
+                pass
+    if deferred is not None and conversation_id not in deferred[1]:
+        deferred[1].append(conversation_id)
     # Staged chunks are siblings, including when no conversation was ever created.
     # The tombstone transaction fence prevents a racing upload from restaging them.
     from database.from_segments_chunks import purge_chunks

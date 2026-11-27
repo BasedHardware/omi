@@ -4,6 +4,7 @@ import json
 import os
 import unicodedata
 from contextvars import ContextVar
+from contextlib import contextmanager
 from functools import wraps
 from itertools import zip_longest
 from typing import Any, Callable, ParamSpec, TypeVar
@@ -56,20 +57,26 @@ def enabled() -> bool:
     return os.getenv('CONVERSATION_KNOWN_SPELLINGS', 'true').lower() == 'true'
 
 
-def spelling_context_run(fn: Callable[_P, _T]) -> Callable[_P, _T]:
-    """Share reads across nested summary/app/memory steps, without a global user cache."""
+@contextmanager
+def spelling_context():
+    """Share reads within one processing pass."""
+    if _run_cache.get() is not None:
+        yield
+        return
+    token = _run_cache.set({})
+    people_token = _run_people.set({})
+    try:
+        yield
+    finally:
+        _run_people.reset(people_token)
+        _run_cache.reset(token)
 
+
+def spelling_context_run(fn: Callable[_P, _T]) -> Callable[_P, _T]:
     @wraps(fn)
     def wrapped(*args: _P.args, **kwargs: _P.kwargs) -> _T:
-        if _run_cache.get() is not None:
+        with spelling_context():
             return fn(*args, **kwargs)
-        token = _run_cache.set({})
-        people_token = _run_people.set({})
-        try:
-            return fn(*args, **kwargs)
-        finally:
-            _run_people.reset(people_token)
-            _run_cache.reset(token)
 
     return wrapped
 

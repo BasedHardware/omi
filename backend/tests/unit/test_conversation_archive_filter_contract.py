@@ -162,7 +162,7 @@ def conversations_db():
     from utils.conversations import terminal_settled
     from utils import summary_quality
     from models import structured
-    from database import sync_live_overlap, transcript_pointer
+    from database import conversations_v3_fence, sync_live_overlap, transcript_pointer
     from utils.sync import live_overlap, stage
     from utils.home_feed import projection as home_feed_projection
 
@@ -238,6 +238,8 @@ def conversations_db():
         "utils.sync.stage": stage,
         # The archive read contract does not use the V3 repair ledger.
         "database.conversations_v3_backfill_runs": ModuleType("database.conversations_v3_backfill_runs"),
+        # The notes-write fence loads its V3 policy before the fixture closes the utils paths.
+        "database.conversations_v3_fence": conversations_v3_fence,
         "database.speaker_assignment_effects": AutoMockModule("database.speaker_assignment_effects"),
         # Archive queries never invoke the separate speaker publication/revocation IO seam.
         "database.speaker_auto_enroll": ModuleType("database.speaker_auto_enroll"),

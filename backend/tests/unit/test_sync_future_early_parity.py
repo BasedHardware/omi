@@ -131,7 +131,7 @@ def test_early_upload_job_and_context_documents_equal_main(
 
         monkeypatch.setattr(module, 'with_context', freeze)
 
-        def stage(item, wav):
+        def stage(item, wav, *, record_origin=None):
             uri = 'gs://synthetic/audio#1'
             store.rows['artifacts', artifact_id(item.segment_id, uri)] = {
                 'owner_id': item.owner_id,
@@ -168,6 +168,7 @@ def test_early_upload_job_and_context_documents_equal_main(
         if hold is not None:
             headers['X-Omi-Upload-Hold'] = hold
             headers['X-Omi-Upload-Hold-Age-Ms'] = '300500' if hold == 'bg300' else 'invalid'
+            headers['X-Omi-Upload-Trace'] = 'sealed=1794700500;gate=retries_exhausted'
         if recovery_header is not None:
             headers['X-Omi-Upload-Recovered'] = recovery_header
         with TestClient(app, raise_server_exceptions=False) as routed:
@@ -200,7 +201,9 @@ def test_early_upload_job_and_context_documents_equal_main(
                 row['upload_recovered'] = True
     assert expected == records[1]
     if hold == 'bg300':
-        histogram.labels.assert_called_once_with('bg300', 'true' if recovery_header == '1' else 'false')
+        histogram.labels.assert_called_once_with(
+            'bg300', 'true' if recovery_header == '1' else 'false', 'retries_exhausted'
+        )
         histogram.labels.return_value.observe.assert_called_once_with(300.5)
     else:
         histogram.labels.assert_not_called()
@@ -384,7 +387,7 @@ async def test_unmarked_rpc_and_coalescing_documents_equal_main_and_old_readers_
         'client_platform': 'ios',
         'intake_context': {'recording_session_id': 'session'},
     }
-    artifacts = types.SimpleNamespace(stage_audio=lambda *a: 'gs://synthetic/audio#1')
+    artifacts = types.SimpleNamespace(stage_audio=lambda *a, **kw: 'gs://synthetic/audio#1')
     for module, seed in ((previous_coalescing, old), (upload_coalescing, current)):
         assert (
             await module.offer(

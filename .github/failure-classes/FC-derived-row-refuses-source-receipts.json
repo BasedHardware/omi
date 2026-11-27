@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-derived-row-refuses-source-receipts",
+  "family": "identity-qualifier",
+  "violated_contract": "A row derived from source records (a conversations-v3 conversation built from recordings) owns the evidence those sources hold for the content it copied. Comparing a receipt's owner id against the derived row's own id treats its own sources as a merge, so every derived row silently abstains from the evidence path (batch speaker resolution and the final pass refused 24 of 24 fresh v3 rows on 2026-11-26).",
+  "canonical_prevention": "Qualify receipt ownership by the row's declared derivation (database/batch_final_pass.receipt_owners over v3_recording_ids), keep shared-unit and privacy fences over that whole owner set, carry only the row's own content from a source (own-speech mask), re-check the source's live claim after inference, and prove it red-first with a lab scenario that writes receipts the way production's projection does.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_batch_final_pass.py",
+    "backend/testing/pipeline_lab/scenario/scenarios/speaker_owner_and_person_finish.json"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/database/batch_final_pass.py",
+    "backend/utils/conversations/final_pass_batch.py",
+    "backend/utils/conversations/batch_identity_evidence.py"
+  ],
+  "status": "open"
+}
