@@ -214,3 +214,11 @@ def unsplit_spans(segments) -> dict[str, tuple[float, float]]:
         if len(chain) > 1:
             spans[segment_id] = (get(segment, 'start'), get(chain[-1], 'end'))
     return spans
+
+
+def derived_piece_ids(segments) -> set[str]:
+    """Ids of the pieces after the first in every split run: the obligation key ignores them, so a split never opens
+    a new final-pass obligation for the same unit membership."""
+
+    by_id = {s.id: s for s in segments if s.id}
+    return {piece.id for segment_id in by_id for piece in expand_split(segment_id, by_id)[1:]}

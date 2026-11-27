@@ -1783,9 +1783,13 @@ def test_a_segment_with_two_voices_splits_at_the_voice_change(lane, monkeypatch,
 
 
 def test_a_later_pass_reads_the_pieces_back(lane, monkeypatch, results):
+    from utils.conversations import final_pass_retry as retry
+
     _six_words(lane)
     _turns(monkeypatch, (0, 3.65, 'A'), (3.65, 16, 'B'))
+    key = retry.scope_key(lane.conversation)
     before = [(s.id, s.text, s.start, s.end) for s in resolve(lane)]
+    assert len(before) == 3 and retry.scope_key(lane.conversation) == key  # no new obligation for the same units
     after = resolve(lane)
     assert results[-1]['outcome'] == 'success', results[-1]
     assert results[-1]['split_segments'] == 0 and results[-1]['coverage']['unplaced'] == 0
