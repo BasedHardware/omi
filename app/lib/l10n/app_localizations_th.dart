@@ -15785,32 +15785,32 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String get pendantStopQuestionTitle => 'Why did you stop wearing your pendant?';
+  String get pendantStopQuestionTitle => 'ทำไมคุณจึงเลิกสวมจี้?';
 
   @override
-  String get pendantStopReasonUncomfortable => 'Uncomfortable to wear';
+  String get pendantStopReasonUncomfortable => 'ใส่แล้วไม่สบายตัว';
 
   @override
-  String get pendantStopReasonHabit => 'I forgot or never got into the habit';
+  String get pendantStopReasonHabit => 'ลืมสวมหรือไม่เคยชินกับการสวม';
 
   @override
-  String get pendantStopReasonCharging => 'Charging is a hassle';
+  String get pendantStopReasonCharging => 'การชาร์จยุ่งยาก';
 
   @override
-  String get pendantStopReasonValue => 'Not useful enough';
+  String get pendantStopReasonValue => 'ไม่ค่อยมีประโยชน์';
 
   @override
-  String get pendantStopReasonDevice => 'A device problem';
+  String get pendantStopReasonDevice => 'ปัญหาด้านอุปกรณ์';
 
   @override
-  String get pendantStopReasonOther => 'Other';
+  String get pendantStopReasonOther => 'อื่น ๆ';
 
   @override
-  String get pendantStopOptionalNote => 'Add a note (optional)';
+  String get pendantStopOptionalNote => 'เพิ่มโน้ต (ไม่บังคับ)';
 
   @override
-  String get pendantStopSendNote => 'Send note';
+  String get pendantStopSendNote => 'ส่งโน้ต';
 
   @override
-  String get pendantStopQuestionThanks => 'Thanks for sharing your feedback';
+  String get pendantStopQuestionThanks => 'ขอบคุณที่แบ่งปันความคิดเห็นของคุณ';
 }

@@ -15889,32 +15889,32 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
-  String get pendantStopQuestionTitle => 'Why did you stop wearing your pendant?';
+  String get pendantStopQuestionTitle => 'Por que você parou de usar o Pendant?';
 
   @override
-  String get pendantStopReasonUncomfortable => 'Uncomfortable to wear';
+  String get pendantStopReasonUncomfortable => 'Desconfortável de usar';
 
   @override
-  String get pendantStopReasonHabit => 'I forgot or never got into the habit';
+  String get pendantStopReasonHabit => 'Esqueci ou nunca criei o hábito';
 
   @override
-  String get pendantStopReasonCharging => 'Charging is a hassle';
+  String get pendantStopReasonCharging => 'Carregar é um incômodo';
 
   @override
-  String get pendantStopReasonValue => 'Not useful enough';
+  String get pendantStopReasonValue => 'Não é útil o suficiente';
 
   @override
-  String get pendantStopReasonDevice => 'A device problem';
+  String get pendantStopReasonDevice => 'Um problema no dispositivo';
 
   @override
-  String get pendantStopReasonOther => 'Other';
+  String get pendantStopReasonOther => 'Outro';
 
   @override
-  String get pendantStopOptionalNote => 'Add a note (optional)';
+  String get pendantStopOptionalNote => 'Adicionar uma observação (opcional)';
 
   @override
-  String get pendantStopSendNote => 'Send note';
+  String get pendantStopSendNote => 'Enviar observação';
 
   @override
-  String get pendantStopQuestionThanks => 'Thanks for sharing your feedback';
+  String get pendantStopQuestionThanks => 'Obrigado por compartilhar seu feedback';
 }

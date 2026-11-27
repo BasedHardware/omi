@@ -15772,32 +15772,32 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String get pendantStopQuestionTitle => 'Why did you stop wearing your pendant?';
+  String get pendantStopQuestionTitle => 'لماذا توقفت عن ارتداء القلادة؟';
 
   @override
-  String get pendantStopReasonUncomfortable => 'Uncomfortable to wear';
+  String get pendantStopReasonUncomfortable => 'غير مريحة في الارتداء';
 
   @override
-  String get pendantStopReasonHabit => 'I forgot or never got into the habit';
+  String get pendantStopReasonHabit => 'نسيتها أو لم أعتد على ارتدائها';
 
   @override
-  String get pendantStopReasonCharging => 'Charging is a hassle';
+  String get pendantStopReasonCharging => 'الشحن مزعج';
 
   @override
-  String get pendantStopReasonValue => 'Not useful enough';
+  String get pendantStopReasonValue => 'ليست مفيدة بما يكفي';
 
   @override
-  String get pendantStopReasonDevice => 'A device problem';
+  String get pendantStopReasonDevice => 'مشكلة في الجهاز';
 
   @override
-  String get pendantStopReasonOther => 'Other';
+  String get pendantStopReasonOther => 'أخرى';
 
   @override
-  String get pendantStopOptionalNote => 'Add a note (optional)';
+  String get pendantStopOptionalNote => 'أضف ملاحظة (اختياري)';
 
   @override
-  String get pendantStopSendNote => 'Send note';
+  String get pendantStopSendNote => 'إرسال الملاحظة';
 
   @override
-  String get pendantStopQuestionThanks => 'Thanks for sharing your feedback';
+  String get pendantStopQuestionThanks => 'شكراً لمشاركة ملاحظاتك';
 }

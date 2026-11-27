@@ -15925,32 +15925,32 @@ class AppLocalizationsMk extends AppLocalizations {
   }
 
   @override
-  String get pendantStopQuestionTitle => 'Why did you stop wearing your pendant?';
+  String get pendantStopQuestionTitle => 'Зошто престана да го носиш приврзокот?';
 
   @override
-  String get pendantStopReasonUncomfortable => 'Uncomfortable to wear';
+  String get pendantStopReasonUncomfortable => 'Незгодно за носење';
 
   @override
-  String get pendantStopReasonHabit => 'I forgot or never got into the habit';
+  String get pendantStopReasonHabit => 'Заборавав или никогаш не стекнав навика';
 
   @override
-  String get pendantStopReasonCharging => 'Charging is a hassle';
+  String get pendantStopReasonCharging => 'Полнењето е досадно';
 
   @override
-  String get pendantStopReasonValue => 'Not useful enough';
+  String get pendantStopReasonValue => 'Не е доволно корисен';
 
   @override
-  String get pendantStopReasonDevice => 'A device problem';
+  String get pendantStopReasonDevice => 'Проблем со уредот';
 
   @override
-  String get pendantStopReasonOther => 'Other';
+  String get pendantStopReasonOther => 'Друго';
 
   @override
-  String get pendantStopOptionalNote => 'Add a note (optional)';
+  String get pendantStopOptionalNote => 'Додај забелешка (опционално)';
 
   @override
-  String get pendantStopSendNote => 'Send note';
+  String get pendantStopSendNote => 'Испрати забелешка';
 
   @override
-  String get pendantStopQuestionThanks => 'Thanks for sharing your feedback';
+  String get pendantStopQuestionThanks => 'Ви благодариме што ја споделивте вашата повратна информација';
 }

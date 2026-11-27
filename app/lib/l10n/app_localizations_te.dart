@@ -15924,32 +15924,32 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
-  String get pendantStopQuestionTitle => 'Why did you stop wearing your pendant?';
+  String get pendantStopQuestionTitle => 'మీరు మీ పెండెంట్ ధరించడం ఎందుకు మానేశారు?';
 
   @override
-  String get pendantStopReasonUncomfortable => 'Uncomfortable to wear';
+  String get pendantStopReasonUncomfortable => 'ధరించడానికి అసౌకర్యంగా ఉంటుంది';
 
   @override
-  String get pendantStopReasonHabit => 'I forgot or never got into the habit';
+  String get pendantStopReasonHabit => 'నేను మర్చిపోయాను లేదా ఎప్పుడూ అలవాటుగా మార్చుకోలేదు';
 
   @override
-  String get pendantStopReasonCharging => 'Charging is a hassle';
+  String get pendantStopReasonCharging => 'ఛార్జ్ చేయడం ఇబ్బందికరంగా ఉంటుంది';
 
   @override
-  String get pendantStopReasonValue => 'Not useful enough';
+  String get pendantStopReasonValue => 'అంతగా ఉపయోగకరంగా లేదు';
 
   @override
-  String get pendantStopReasonDevice => 'A device problem';
+  String get pendantStopReasonDevice => 'డివైస్‌లో సమస్య';
 
   @override
-  String get pendantStopReasonOther => 'Other';
+  String get pendantStopReasonOther => 'ఇతర';
 
   @override
-  String get pendantStopOptionalNote => 'Add a note (optional)';
+  String get pendantStopOptionalNote => 'గమనిక జోడించండి (ఐచ్ఛికం)';
 
   @override
-  String get pendantStopSendNote => 'Send note';
+  String get pendantStopSendNote => 'గమనికను పంపండి';
 
   @override
-  String get pendantStopQuestionThanks => 'Thanks for sharing your feedback';
+  String get pendantStopQuestionThanks => 'మీ ఫీడ్‌బ్యాక్‌ను పంచినందుకు ధన్యవాదాలు';
 }

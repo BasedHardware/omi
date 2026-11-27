@@ -4772,5 +4772,15 @@
     "batteryRestartToRefresh": "重启 Omi 以刷新",
     "onTheWayAllowanceHeldTitle": "将在您的分钟数于 {date} 刷新时处理",
     "onTheWayAllowanceHeldUpgrade": "或升级套餐以立即处理",
-    "onTheWayDayProcessesOn": "将于 {date} 处理"
+    "onTheWayDayProcessesOn": "将于 {date} 处理",
+    "pendantStopQuestionTitle": "您为什么不再佩戴吊坠？",
+    "pendantStopReasonUncomfortable": "佩戴不舒适",
+    "pendantStopReasonHabit": "我总是忘记或从未养成习惯",
+    "pendantStopReasonCharging": "充电很麻烦",
+    "pendantStopReasonValue": "不够实用",
+    "pendantStopReasonDevice": "设备出现问题",
+    "pendantStopReasonOther": "其他",
+    "pendantStopOptionalNote": "添加备注（可选）",
+    "pendantStopSendNote": "发送备注",
+    "pendantStopQuestionThanks": "感谢您分享反馈"
 }

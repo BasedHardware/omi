@@ -15912,32 +15912,32 @@ class AppLocalizationsKn extends AppLocalizations {
   }
 
   @override
-  String get pendantStopQuestionTitle => 'Why did you stop wearing your pendant?';
+  String get pendantStopQuestionTitle => 'ನೀವು ನಿಮ್ಮ ಪೆಂಡೆಂಟ್ ಧರಿಸುವುದನ್ನು ಏಕೆ ನಿಲ್ಲಿಸಿದ್ದೀರಿ?';
 
   @override
-  String get pendantStopReasonUncomfortable => 'Uncomfortable to wear';
+  String get pendantStopReasonUncomfortable => 'ಧರಿಸಲು ಅಸ್ವಸ್ಥವಾಗಿದೆ';
 
   @override
-  String get pendantStopReasonHabit => 'I forgot or never got into the habit';
+  String get pendantStopReasonHabit => 'ಮರೆತುಬಿಟ್ಟೆ ಅಥವಾ ಅಭ್ಯಾಸವಾಗಲಿಲ್ಲ';
 
   @override
-  String get pendantStopReasonCharging => 'Charging is a hassle';
+  String get pendantStopReasonCharging => 'ಚಾರ್ಜ್ ಮಾಡುವುದು ಕಿರಿಕಿರಿಯ ಕೆಲಸ';
 
   @override
-  String get pendantStopReasonValue => 'Not useful enough';
+  String get pendantStopReasonValue => 'ಸಾಕಷ್ಟು ಉಪಯುಕ್ತವಾಗಿಲ್ಲ';
 
   @override
-  String get pendantStopReasonDevice => 'A device problem';
+  String get pendantStopReasonDevice => 'ಸಾಧನದ ಸಮಸ್ಯೆ';
 
   @override
-  String get pendantStopReasonOther => 'Other';
+  String get pendantStopReasonOther => 'ಇತರೆ';
 
   @override
-  String get pendantStopOptionalNote => 'Add a note (optional)';
+  String get pendantStopOptionalNote => 'ಟಿಪ್ಪಣಿ ಸೇರಿಸಿ (ಐಚ್ಛಿಕ)';
 
   @override
-  String get pendantStopSendNote => 'Send note';
+  String get pendantStopSendNote => 'ಟಿಪ್ಪಣಿ ಕಳುಹಿಸಿ';
 
   @override
-  String get pendantStopQuestionThanks => 'Thanks for sharing your feedback';
+  String get pendantStopQuestionThanks => 'ನಿಮ್ಮ ಅಭಿಪ್ರಾಯವನ್ನು ಹಂಚಿಕೊಂಡಿದ್ದಕ್ಕೆ ಧನ್ಯವಾದ';
 }

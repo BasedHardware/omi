@@ -12329,5 +12329,15 @@
     "batteryRestartToRefresh": "برای بازخوانی، Omi را دوباره راه‌اندازی کنید",
     "onTheWayAllowanceHeldTitle": "وقتی دقیقه‌های شما تمدید می‌شوند، در {date} پردازش می‌شود",
     "onTheWayAllowanceHeldUpgrade": "یا با ارتقای طرح، فوراً آن‌ها را پردازش کنید",
-    "onTheWayDayProcessesOn": "در {date} پردازش می‌شود"
+    "onTheWayDayProcessesOn": "در {date} پردازش می‌شود",
+    "pendantStopQuestionTitle": "چرا دیگر آویزتان را نمی‌پوشید؟",
+    "pendantStopReasonUncomfortable": "استفاده از آن راحت نیست",
+    "pendantStopReasonHabit": "فراموش می‌کردم یا هیچ‌وقت به آن عادت نکردم",
+    "pendantStopReasonCharging": "شارژ کردن آن دردسر دارد",
+    "pendantStopReasonValue": "به اندازه کافی مفید نیست",
+    "pendantStopReasonDevice": "مشکل در دستگاه",
+    "pendantStopReasonOther": "سایر",
+    "pendantStopOptionalNote": "افزودن یادداشت (اختیاری)",
+    "pendantStopSendNote": "ارسال یادداشت",
+    "pendantStopQuestionThanks": "ممنون که بازخوردتان را به اشتراک گذاشتید"
 }

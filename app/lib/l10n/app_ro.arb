@@ -4772,5 +4772,15 @@
     "batteryRestartToRefresh": "Repornește Omi pentru a actualiza valoarea",
     "onTheWayAllowanceHeldTitle": "Vor fi procesate pe {date} când se reînnoiesc minutele tale",
     "onTheWayAllowanceHeldUpgrade": "Sau procesează-le imediat cu un upgrade de plan",
-    "onTheWayDayProcessesOn": "Se procesează {date}"
+    "onTheWayDayProcessesOn": "Se procesează {date}",
+    "pendantStopQuestionTitle": "De ce nu mai porți pandantivul?",
+    "pendantStopReasonUncomfortable": "Incomod de purtat",
+    "pendantStopReasonHabit": "Am uitat de el sau nu mi-a devenit obicei",
+    "pendantStopReasonCharging": "Încărcarea este o bătaie de cap",
+    "pendantStopReasonValue": "Nu este suficient de util",
+    "pendantStopReasonDevice": "O problemă cu dispozitivul",
+    "pendantStopReasonOther": "Altul",
+    "pendantStopOptionalNote": "Adaugă o notă (opțional)",
+    "pendantStopSendNote": "Trimite nota",
+    "pendantStopQuestionThanks": "Mulțumim pentru feedback"
 }

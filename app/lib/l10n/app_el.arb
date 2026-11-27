@@ -4772,5 +4772,15 @@
     "batteryRestartToRefresh": "Κάντε επανεκκίνηση του Omi για να ανανεωθεί η ένδειξη",
     "onTheWayAllowanceHeldTitle": "Θα επεξεργαστούν στις {date} όταν ανανεωθούν τα λεπτά σας",
     "onTheWayAllowanceHeldUpgrade": "Ή επεξεργαστείτε τα αμέσως με μια αναβάθμιση προγράμματος",
-    "onTheWayDayProcessesOn": "Επεξεργασία στις {date}"
+    "onTheWayDayProcessesOn": "Επεξεργασία στις {date}",
+    "pendantStopQuestionTitle": "Γιατί σταματήσατε να φοράτε το μενταγιόν σας;",
+    "pendantStopReasonUncomfortable": "Άβολο στη φορά",
+    "pendantStopReasonHabit": "Το ξεχνώ ή δεν το έκανα ποτέ συνήθεια",
+    "pendantStopReasonCharging": "Η φόρτιση είναι ταλαιπωρία",
+    "pendantStopReasonValue": "Δεν είναι αρκετά χρήσιμο",
+    "pendantStopReasonDevice": "Πρόβλημα με τη συσκευή",
+    "pendantStopReasonOther": "Άλλο",
+    "pendantStopOptionalNote": "Προσθέστε μια σημείωση (προαιρετικό)",
+    "pendantStopSendNote": "Αποστολή σημείωσης",
+    "pendantStopQuestionThanks": "Ευχαριστούμε που μοιραστήκατε τα σχόλιά σας"
 }

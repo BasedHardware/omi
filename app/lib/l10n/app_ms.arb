@@ -4772,5 +4772,15 @@
     "batteryRestartToRefresh": "Mulakan semula Omi untuk memuat semula",
     "onTheWayAllowanceHeldTitle": "Akan diproses pada {date} apabila minit anda diperbaharui",
     "onTheWayAllowanceHeldUpgrade": "Atau proses terus dengan naik taraf pelan",
-    "onTheWayDayProcessesOn": "Diproses pada {date}"
+    "onTheWayDayProcessesOn": "Diproses pada {date}",
+    "pendantStopQuestionTitle": "Mengapa anda berhenti memakai pendant anda?",
+    "pendantStopReasonUncomfortable": "Tidak selesa dipakai",
+    "pendantStopReasonHabit": "Saya terlupa atau tidak pernah menjadi tabiat",
+    "pendantStopReasonCharging": "Mengecas menyusahkan",
+    "pendantStopReasonValue": "Tidak cukup berguna",
+    "pendantStopReasonDevice": "Masalah peranti",
+    "pendantStopReasonOther": "Lain-lain",
+    "pendantStopOptionalNote": "Tambah nota (pilihan)",
+    "pendantStopSendNote": "Hantar nota",
+    "pendantStopQuestionThanks": "Terima kasih kerana berkongsi maklum balas anda"
 }

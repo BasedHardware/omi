@@ -12329,5 +12329,15 @@
     "batteryRestartToRefresh": "I-restart ang Omi upang i-refresh",
     "onTheWayAllowanceHeldTitle": "Ipo-proseso sa {date} kapag mag-renew na ang iyong mga minuto",
     "onTheWayAllowanceHeldUpgrade": "O mag-plan upgrade para maiproseso agad ang mga ito",
-    "onTheWayDayProcessesOn": "Maiiproseso sa {date}"
+    "onTheWayDayProcessesOn": "Maiiproseso sa {date}",
+    "pendantStopQuestionTitle": "Bakit mo tinigil ang pagsusuot ng iyong pendant?",
+    "pendantStopReasonUncomfortable": "Hindi komportableng isuot",
+    "pendantStopReasonHabit": "Nakalimutan ko o hindi ko naging gawi",
+    "pendantStopReasonCharging": "Hassle ang pag-charge",
+    "pendantStopReasonValue": "Hindi sapat na kapaki-pakinabang",
+    "pendantStopReasonDevice": "Problema sa device",
+    "pendantStopReasonOther": "Iba pa",
+    "pendantStopOptionalNote": "Magdagdag ng tala (opsyonal)",
+    "pendantStopSendNote": "Ipadala ang tala",
+    "pendantStopQuestionThanks": "Salamat sa pagbabahagi ng iyong feedback"
 }

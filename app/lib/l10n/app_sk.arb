@@ -4772,5 +4772,15 @@
     "batteryRestartToRefresh": "Pre obnovenie údajov reštartujte Omi",
     "onTheWayAllowanceHeldTitle": "Spracuje sa {date}, keď sa obnovia vaše minúty",
     "onTheWayAllowanceHeldUpgrade": "Alebo ich spracujte hneď s upgradom plánu",
-    "onTheWayDayProcessesOn": "Spracuje sa {date}"
+    "onTheWayDayProcessesOn": "Spracuje sa {date}",
+    "pendantStopQuestionTitle": "Prečo ste prestali nosiť prívesok?",
+    "pendantStopReasonUncomfortable": "Nepohodlné na nosenie",
+    "pendantStopReasonHabit": "Zabudli ste naň alebo ste si nikdy nevytvorili návyk",
+    "pendantStopReasonCharging": "Nabíjanie je nepríjemné",
+    "pendantStopReasonValue": "Nie je dostatočne užitočný",
+    "pendantStopReasonDevice": "Problém so zariadením",
+    "pendantStopReasonOther": "Iné",
+    "pendantStopOptionalNote": "Pridať poznámku (nepovinné)",
+    "pendantStopSendNote": "Odoslať poznámku",
+    "pendantStopQuestionThanks": "Ďakujeme za vašu spätnú väzbu"
 }

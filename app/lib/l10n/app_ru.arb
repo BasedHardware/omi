@@ -4807,5 +4807,15 @@
     "batteryRestartToRefresh": "Перезапустите Omi, чтобы обновить данные",
     "onTheWayAllowanceHeldTitle": "Будут обработаны {date}, когда обновятся ваши минуты",
     "onTheWayAllowanceHeldUpgrade": "Или обработайте их сразу, улучшив тариф",
-    "onTheWayDayProcessesOn": "Будут обработаны {date}"
+    "onTheWayDayProcessesOn": "Будут обработаны {date}",
+    "pendantStopQuestionTitle": "Почему вы перестали носить кулон?",
+    "pendantStopReasonUncomfortable": "Неудобно носить",
+    "pendantStopReasonHabit": "Забывал(а) или так и не вошло в привычку",
+    "pendantStopReasonCharging": "Заряжать неудобно",
+    "pendantStopReasonValue": "Недостаточно полезен",
+    "pendantStopReasonDevice": "Проблема с устройством",
+    "pendantStopReasonOther": "Другое",
+    "pendantStopOptionalNote": "Добавить заметку (необязательно)",
+    "pendantStopSendNote": "Отправить заметку",
+    "pendantStopQuestionThanks": "Спасибо за ваш отзыв"
 }

@@ -4772,5 +4772,15 @@
     "batteryRestartToRefresh": "Starten Sie Omi neu, um den Wert zu aktualisieren",
     "onTheWayAllowanceHeldTitle": "Wird am {date} verarbeitet, wenn sich Ihre Minuten erneuern",
     "onTheWayAllowanceHeldUpgrade": "Oder verarbeiten Sie sie sofort mit einem Plan-Upgrade",
-    "onTheWayDayProcessesOn": "Wird am {date} verarbeitet"
+    "onTheWayDayProcessesOn": "Wird am {date} verarbeitet",
+    "pendantStopQuestionTitle": "Warum tragen Sie Ihren Anhänger nicht mehr?",
+    "pendantStopReasonUncomfortable": "Unbequem zu tragen",
+    "pendantStopReasonHabit": "Ich habe es vergessen oder mir nie angewöhnt",
+    "pendantStopReasonCharging": "Aufladen ist umständlich",
+    "pendantStopReasonValue": "Nicht nützlich genug",
+    "pendantStopReasonDevice": "Ein Problem mit dem Gerät",
+    "pendantStopReasonOther": "Sonstiges",
+    "pendantStopOptionalNote": "Notiz hinzufügen (optional)",
+    "pendantStopSendNote": "Notiz senden",
+    "pendantStopQuestionThanks": "Danke, dass Sie Ihr Feedback geteilt haben"
 }

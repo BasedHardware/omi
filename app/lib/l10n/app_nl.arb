@@ -4772,5 +4772,15 @@
     "batteryRestartToRefresh": "Start Omi opnieuw op om te vernieuwen",
     "onTheWayAllowanceHeldTitle": "Worden verwerkt op {date} wanneer je minuten vernieuwen",
     "onTheWayAllowanceHeldUpgrade": "Of verwerk ze direct met een upgrade van je plan",
-    "onTheWayDayProcessesOn": "Worden verwerkt op {date}"
+    "onTheWayDayProcessesOn": "Worden verwerkt op {date}",
+    "pendantStopQuestionTitle": "Waarom ben je gestopt met het dragen van je hanger?",
+    "pendantStopReasonUncomfortable": "Onprettig om te dragen",
+    "pendantStopReasonHabit": "Ik vergat het of het werd nooit een gewoonte",
+    "pendantStopReasonCharging": "Opladen is een gedoe",
+    "pendantStopReasonValue": "Niet nuttig genoeg",
+    "pendantStopReasonDevice": "Een probleem met het apparaat",
+    "pendantStopReasonOther": "Anders",
+    "pendantStopOptionalNote": "Notitie toevoegen (optioneel)",
+    "pendantStopSendNote": "Notitie verzenden",
+    "pendantStopQuestionThanks": "Bedankt voor het delen van je feedback"
 }

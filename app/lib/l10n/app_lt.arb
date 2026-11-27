@@ -4772,5 +4772,15 @@
     "batteryRestartToRefresh": "Paleiskite Omi iš naujo, kad atnaujintumėte",
     "onTheWayAllowanceHeldTitle": "Bus apdorojama {date}, kai atsinaujins jūsų minutės",
     "onTheWayAllowanceHeldUpgrade": "Arba apdorokite juos nedelsiant atnaujinę planą",
-    "onTheWayDayProcessesOn": "Apdorojama {date}"
+    "onTheWayDayProcessesOn": "Apdorojama {date}",
+    "pendantStopQuestionTitle": "Kodėl nustojote nešioti savo pakabuką?",
+    "pendantStopReasonUncomfortable": "Nepatogu nešioti",
+    "pendantStopReasonHabit": "Pamiršdavau arba nepripratau jo nešioti",
+    "pendantStopReasonCharging": "Įkrauti per daug rūpesčių",
+    "pendantStopReasonValue": "Nepakankamai naudinga",
+    "pendantStopReasonDevice": "Įrenginio problema",
+    "pendantStopReasonOther": "Kita",
+    "pendantStopOptionalNote": "Pridėti pastabą (neprivaloma)",
+    "pendantStopSendNote": "Siųsti pastabą",
+    "pendantStopQuestionThanks": "Dėkojame, kad pasidalinote atsiliepimu"
 }

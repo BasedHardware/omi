@@ -19398,5 +19398,35 @@
     "pendantStopReasonOther": "Other",
     "pendantStopOptionalNote": "Add a note (optional)",
     "pendantStopSendNote": "Send note",
-    "pendantStopQuestionThanks": "Thanks for sharing your feedback"
+    "pendantStopQuestionThanks": "Thanks for sharing your feedback",
+    "@pendantStopQuestionTitle": {
+        "description": "Title of a one-time survey for someone who stopped wearing their Omi pendant. A pendant is the wearable device."
+    },
+    "@pendantStopReasonUncomfortable": {
+        "description": "Survey answer. The pendant was physically uncomfortable to wear."
+    },
+    "@pendantStopReasonHabit": {
+        "description": "Survey answer. The person forgot to wear the pendant or never made it a habit."
+    },
+    "@pendantStopReasonCharging": {
+        "description": "Survey answer. The person found charging the pendant inconvenient."
+    },
+    "@pendantStopReasonValue": {
+        "description": "Survey answer. The person did not find the pendant useful enough to keep wearing it."
+    },
+    "@pendantStopReasonDevice": {
+        "description": "Survey answer. There was a problem with the pendant device."
+    },
+    "@pendantStopReasonOther": {
+        "description": "Survey answer. The person stopped wearing the pendant for another reason."
+    },
+    "@pendantStopOptionalNote": {
+        "description": "Placeholder in the optional free-text feedback field after the survey answer."
+    },
+    "@pendantStopSendNote": {
+        "description": "Button that sends the optional written survey feedback."
+    },
+    "@pendantStopQuestionThanks": {
+        "description": "Confirmation text after the person selects an answer to the survey."
+    }
 }

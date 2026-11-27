@@ -12329,5 +12329,15 @@
     "batteryRestartToRefresh": "Рестартирајте го Omi за освежување",
     "onTheWayAllowanceHeldTitle": "Ќе се обработат на {date}, кога ќе се обноват вашите минути",
     "onTheWayAllowanceHeldUpgrade": "Или обработете ги веднаш со надградба на планот",
-    "onTheWayDayProcessesOn": "Обработка на {date}"
+    "onTheWayDayProcessesOn": "Обработка на {date}",
+    "pendantStopQuestionTitle": "Зошто престана да го носиш приврзокот?",
+    "pendantStopReasonUncomfortable": "Незгодно за носење",
+    "pendantStopReasonHabit": "Заборавав или никогаш не стекнав навика",
+    "pendantStopReasonCharging": "Полнењето е досадно",
+    "pendantStopReasonValue": "Не е доволно корисен",
+    "pendantStopReasonDevice": "Проблем со уредот",
+    "pendantStopReasonOther": "Друго",
+    "pendantStopOptionalNote": "Додај забелешка (опционално)",
+    "pendantStopSendNote": "Испрати забелешка",
+    "pendantStopQuestionThanks": "Ви благодариме што ја споделивте вашата повратна информација"
 }

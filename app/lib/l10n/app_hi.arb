@@ -4772,5 +4772,15 @@
     "batteryRestartToRefresh": "रीफ़्रेश करने के लिए Omi पुनः प्रारंभ करें",
     "onTheWayAllowanceHeldTitle": "आपके मिनट रिन्यू होने पर {date} को प्रोसेस होगा",
     "onTheWayAllowanceHeldUpgrade": "या प्लान अपग्रेड के साथ उन्हें तुरंत प्रोसेस करें",
-    "onTheWayDayProcessesOn": "{date} को प्रोसेस होगा"
+    "onTheWayDayProcessesOn": "{date} को प्रोसेस होगा",
+    "pendantStopQuestionTitle": "आपने पेंडेंट पहनना क्यों बंद किया?",
+    "pendantStopReasonUncomfortable": "पहनने में असहज",
+    "pendantStopReasonHabit": "मैं भूल जाता था या कभी आदत नहीं बनी",
+    "pendantStopReasonCharging": "चार्ज करने में परेशानी होती है",
+    "pendantStopReasonValue": "काफ़ी उपयोगी नहीं",
+    "pendantStopReasonDevice": "डिवाइस में समस्या",
+    "pendantStopReasonOther": "अन्य",
+    "pendantStopOptionalNote": "नोट जोड़ें (वैकल्पिक)",
+    "pendantStopSendNote": "नोट भेजें",
+    "pendantStopQuestionThanks": "अपनी प्रतिक्रिया साझा करने के लिए धन्यवाद"
 }

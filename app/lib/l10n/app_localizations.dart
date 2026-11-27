@@ -27825,61 +27825,61 @@ abstract class AppLocalizations {
   /// **'Processes {date}'**
   String onTheWayDayProcessesOn(String date);
 
-  /// No description provided for @pendantStopQuestionTitle.
+  /// Title of a one-time survey for someone who stopped wearing their Omi pendant. A pendant is the wearable device.
   ///
   /// In en, this message translates to:
   /// **'Why did you stop wearing your pendant?'**
   String get pendantStopQuestionTitle;
 
-  /// No description provided for @pendantStopReasonUncomfortable.
+  /// Survey answer. The pendant was physically uncomfortable to wear.
   ///
   /// In en, this message translates to:
   /// **'Uncomfortable to wear'**
   String get pendantStopReasonUncomfortable;
 
-  /// No description provided for @pendantStopReasonHabit.
+  /// Survey answer. The person forgot to wear the pendant or never made it a habit.
   ///
   /// In en, this message translates to:
   /// **'I forgot or never got into the habit'**
   String get pendantStopReasonHabit;
 
-  /// No description provided for @pendantStopReasonCharging.
+  /// Survey answer. The person found charging the pendant inconvenient.
   ///
   /// In en, this message translates to:
   /// **'Charging is a hassle'**
   String get pendantStopReasonCharging;
 
-  /// No description provided for @pendantStopReasonValue.
+  /// Survey answer. The person did not find the pendant useful enough to keep wearing it.
   ///
   /// In en, this message translates to:
   /// **'Not useful enough'**
   String get pendantStopReasonValue;
 
-  /// No description provided for @pendantStopReasonDevice.
+  /// Survey answer. There was a problem with the pendant device.
   ///
   /// In en, this message translates to:
   /// **'A device problem'**
   String get pendantStopReasonDevice;
 
-  /// No description provided for @pendantStopReasonOther.
+  /// Survey answer. The person stopped wearing the pendant for another reason.
   ///
   /// In en, this message translates to:
   /// **'Other'**
   String get pendantStopReasonOther;
 
-  /// No description provided for @pendantStopOptionalNote.
+  /// Placeholder in the optional free-text feedback field after the survey answer.
   ///
   /// In en, this message translates to:
   /// **'Add a note (optional)'**
   String get pendantStopOptionalNote;
 
-  /// No description provided for @pendantStopSendNote.
+  /// Button that sends the optional written survey feedback.
   ///
   /// In en, this message translates to:
   /// **'Send note'**
   String get pendantStopSendNote;
 
-  /// No description provided for @pendantStopQuestionThanks.
+  /// Confirmation text after the person selects an answer to the survey.
   ///
   /// In en, this message translates to:
   /// **'Thanks for sharing your feedback'**

@@ -4772,5 +4772,15 @@
     "batteryRestartToRefresh": "รีสตาร์ท Omi เพื่อรีเฟรช",
     "onTheWayAllowanceHeldTitle": "จะประมวลผลในวันที่ {date} เมื่อจำนวนนาทีของคุณต่ออายุ",
     "onTheWayAllowanceHeldUpgrade": "หรืออัปเกรดแพ็กเกจเพื่อประมวลผลทันที",
-    "onTheWayDayProcessesOn": "ประมวลผลในวันที่ {date}"
+    "onTheWayDayProcessesOn": "ประมวลผลในวันที่ {date}",
+    "pendantStopQuestionTitle": "ทำไมคุณจึงเลิกสวมจี้?",
+    "pendantStopReasonUncomfortable": "ใส่แล้วไม่สบายตัว",
+    "pendantStopReasonHabit": "ลืมสวมหรือไม่เคยชินกับการสวม",
+    "pendantStopReasonCharging": "การชาร์จยุ่งยาก",
+    "pendantStopReasonValue": "ไม่ค่อยมีประโยชน์",
+    "pendantStopReasonDevice": "ปัญหาด้านอุปกรณ์",
+    "pendantStopReasonOther": "อื่น ๆ",
+    "pendantStopOptionalNote": "เพิ่มโน้ต (ไม่บังคับ)",
+    "pendantStopSendNote": "ส่งโน้ต",
+    "pendantStopQuestionThanks": "ขอบคุณที่แบ่งปันความคิดเห็นของคุณ"
 }

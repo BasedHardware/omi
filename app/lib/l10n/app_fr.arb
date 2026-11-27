@@ -4807,5 +4807,15 @@
     "batteryRestartToRefresh": "Redémarrez Omi pour actualiser",
     "onTheWayAllowanceHeldTitle": "Seront traités le {date} au renouvellement de vos minutes",
     "onTheWayAllowanceHeldUpgrade": "Ou traitez-les tout de suite en passant à un forfait supérieur",
-    "onTheWayDayProcessesOn": "Traitement le {date}"
+    "onTheWayDayProcessesOn": "Traitement le {date}",
+    "pendantStopQuestionTitle": "Pourquoi avez-vous arrêté de porter votre pendentif ?",
+    "pendantStopReasonUncomfortable": "Inconfortable à porter",
+    "pendantStopReasonHabit": "Je l'oubliais ou je n'ai jamais pris l'habitude",
+    "pendantStopReasonCharging": "La recharge est contraignante",
+    "pendantStopReasonValue": "Pas assez utile",
+    "pendantStopReasonDevice": "Un problème avec l'appareil",
+    "pendantStopReasonOther": "Autre",
+    "pendantStopOptionalNote": "Ajouter une note (facultatif)",
+    "pendantStopSendNote": "Envoyer la note",
+    "pendantStopQuestionThanks": "Merci d'avoir partagé votre retour"
 }
