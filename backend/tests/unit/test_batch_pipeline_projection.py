@@ -187,7 +187,7 @@ def test_production_result_cannot_invent_vad_groups_from_transcript_gaps():
 
 def test_assignment_held_without_recovery_matrix():
     """Which quarantined-receipt rows the held-partial scan may treat as held."""
-    from database.batch_pipeline_projection import assignment_held_without_recovery
+    from utils.batch_pipeline.held_terminal import assignment_held_without_recovery
 
     quarantined = {'projection': {'state': 'quarantined'}}
     assert assignment_held_without_recovery({'recovery_state': 'held'}, quarantined)

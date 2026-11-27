@@ -342,6 +342,9 @@ class SpeakerScoring:
             # The last whole-pass outcome of the run: a scorecard the resolver alone satisfied must not hide a
             # failing final pass.
             'final_pass': self.final_pass[-1] if self.final_pass else None,
+            # What the stored ids mean (models.conversation.ConversationSpeakers.status): the app numbers voices
+            # ("Speaker 1", "Speaker 2") only for a resolved conversation.
+            'resolution': (row.get('speaker_resolution') or {}).get('status'),
         }
 
 

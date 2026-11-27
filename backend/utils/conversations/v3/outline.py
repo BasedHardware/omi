@@ -213,6 +213,8 @@ def _held_cuts(members, lines, now, silence_gap, continuity):
     by_id = {row['id']: row for row in members}
     held = {}
     for row in members:
+        if policy.NATIVE_MANUAL_READY in row:
+            continue
         cut = utc(row.get('finished_at')) if row.get('v3_manual_end') else None
         begin = _bounds(row)[0]
         if cut is None or begin is None or now - cut >= policy.FINISH_WAIT:
@@ -317,8 +319,19 @@ def stretches(
             )
     lines.sort(key=lambda line: (line['start'], line['conversation_id']))
     groups = []
+    native_cuts = {
+        row['id']: cut
+        for row in members
+        if (binding := policy.native_manual_binding(row)) and isinstance(cut := utc(binding['finished_at']), datetime)
+    }
+    recording_starts = {row['id']: utc(row.get('started_at')) for row in members} if native_cuts else {}
+    native_tails = {line['conversation_id']: line for line in lines if line['conversation_id'] in native_cuts}
     owner_cuts = {utc(at) for at in manual_cuts}
-    recording_cuts = {utc(r['finished_at']) for r in members if r.get('v3_manual_end') and r.get('finished_at')}
+    recording_cuts = {
+        utc(row['finished_at'])
+        for row in members
+        if row.get('v3_manual_end') and row.get('finished_at') and policy.NATIVE_MANUAL_READY not in row
+    }
     # An End also marks the recording it finalized, and that mark sits at the recording's last speech,
     # which can be minutes before the End when later speech travelled in other recordings. With an
     # owner-level cut for the same End, the End time is the cut: the recording's own mark must not cut the
@@ -407,17 +420,30 @@ def stretches(
                     mark['start'],
                 )
             silence = gap >= silence_gap
+        prior_line = previous['lines'][-1] if previous and previous['lines'] else None
+        next_start = recording_starts.get(mark['conversation_id'])
+        native_cut = bool(
+            previous is not None
+            and prior_line is not None
+            and prior_line is native_tails.get(prior_line['conversation_id'])
+            and mark['conversation_id'] != prior_line['conversation_id']
+            and isinstance(next_start, datetime)
+            and native_cuts[prior_line['conversation_id']] <= min(next_start, now)
+            and previous['end'] <= max(prior_line['end'], native_cuts[prior_line['conversation_id']])
+            and previous['end'] <= mark['start']
+        )
         capped = False
         if (
             previous is not None
             and not silence
+            and not native_cut
             and not previous['manual_end']
             and max_window
             and mark['start'] - previous['first'] >= max_window
         ):
             previous['window_cap_end'] = True
             capped = True
-        if silence or capped or (previous and previous['manual_end']):
+        if native_cut or silence or capped or (previous and previous['manual_end']):
             groups.append(
                 {
                     'key': None,
@@ -426,7 +452,7 @@ def stretches(
                     'lines': [],
                     'manual_end': False,
                     'after_window_cap': capped,
-                    'after_manual_end': bool(previous and previous['manual_end'] and not silence),
+                    'after_manual_end': bool(not silence and previous and (native_cut or previous['manual_end'])),
                 }
             )
         group = groups[-1]
@@ -458,6 +484,18 @@ def stretches(
         group.pop('awaits', None)
         group.pop('first', None)
     for index, group in enumerate(groups):
+        tail = group['lines'][-1]
+        native_source = tail['conversation_id']
+        native_manual_end = (
+            tail is native_tails.get(native_source)
+            and native_cuts[native_source] <= now
+            and group['end'] <= max(tail['end'], native_cuts[native_source])
+        )
+        group['native_manual_end'] = native_manual_end
+        if native_manual_end:
+            group['native_manual_source'] = native_source
+        group['legacy_manual_end'] = group['manual_end']
+        group['manual_end'] = native_manual_end or group['legacy_manual_end']
         # Silence, a manual cut or the window cap starts a later stretch, so only the last one can
         # still be open. Page continuation and future-dated speech must not also hold an earlier one
         # open: two open stretches never commit (multiple_open_conversations parks the owner).

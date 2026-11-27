@@ -70,8 +70,25 @@ def bounded_pending_enabled() -> bool:
     return default_on('CONVERSATIONS_V3_BOUNDED_PENDING')
 
 
+def commit_lease_renewal_enabled() -> bool:
+    """Default on: a multi-batch projection commit renews the pass's lease before each later batch."""
+    return default_on('CONVERSATIONS_V3_COMMIT_LEASE_RENEWAL')
+
+
 def transcript_size_cap_enabled() -> bool:
     return default_on('CONVERSATIONS_V3_TRANSCRIPT_SIZE_CAP')
+
+
+def size_quarantine_enabled() -> bool:
+    """A one-seed pass Firestore rejects for size sets the seed and the pending sources its rejected commit
+    writes aside, so the rest of the backlog drains."""
+    return default_on('CONVERSATIONS_V3_SIZE_QUARANTINE')
+
+
+def size_quarantine_filters() -> bool:
+    """Whether live seeding skips held ids: load filters only on a bounded (UnlockedPage) pass, which needs
+    CONVERSATIONS_V3_BOUNDED_PENDING. The sweep and the pass chain skip held ids under exactly this condition."""
+    return size_quarantine_enabled() and bounded_pending_enabled()
 
 
 def finish_no_pointer_enabled() -> bool:

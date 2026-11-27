@@ -1555,6 +1555,21 @@ async def test_a_range_too_large_for_one_pass_blocks_with_its_own_reason(owner, 
     assert conversations(strict) == before and not priors(strict)
 
 
+@pytest.mark.asyncio
+async def test_a_locked_closure_owner_keeps_the_derived_limit(owner, strict, monkeypatch):
+    # The locked-claimant allowance (SCA-2918) is for builder passes only: a listed owner's re-derive is
+    # bounded by DERIVED_LIMIT exactly as before.
+    sources, rows = lunch(count=3)
+    owner(*sources, *rows)
+    before = conversations(strict)
+    monkeypatch.setenv('CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS', '*')
+    monkeypatch.setattr(store, 'LOCKED_DERIVED_ALLOWANCE', 2048)
+    monkeypatch.setattr(store, 'DERIVED_LIMIT', 2)
+    outcome, report = await rederive()
+    assert outcome == 'blocked' and report['blocked_reason'] == 'v3_derived_budget'
+    assert conversations(strict) == before and not priors(strict)
+
+
 def test_a_resumed_attempt_keeps_the_first_copy_of_a_row(strict):
     first = {'id': 'c0', 'raw': {'id': 'c0', 'title': 'before'}, 'claims': [{'recording_id': 'r0', 'index': 0}]}
     later = {'id': 'c0', 'raw': {'id': 'c0', 'title': 'later'}, 'claims': [{'recording_id': 'r0', 'index': 3}]}
