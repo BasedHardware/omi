@@ -179,6 +179,28 @@ Held-piece recovery and prompt-verification coordinators retain their existing s
 Rollback sets `PRERECORDED_SONIOX_FAILOVER_ENABLED=false` everywhere it is declared.
 No Deepgram route or ordinary `soniox` pre-recorded model token is added.
 
+## Soniox first for legacy sync multilingual audio
+
+`STT_PRERECORDED_SONIOX_MULTILINGUAL_ENABLED` defaults to `true`. Inside a legacy sync
+attempt (`current_parakeet_caller()` is `sync_*`), a Modulate-selected file whose
+language is unknown or code-switched (`multi`), or a language outside English and the
+major European languages (`en`, `es`, `fr`, `de`, `it`, `pt`, `nl`) that Soniox accepts
+as a hint, is sent to the Soniox batch client first. Any Soniox failure (refusal, 429,
+timeout, 5xx, invalid response) runs Velma on the same audio, exactly as before. The
+fallback reports `component=stt_prerecorded,from=soniox,to=modulate,outcome=degraded`
+and logs `event=prerecorded_soniox_multilingual outcome=fallback kind=<kind>`. An empty
+Soniox transcript is the answer and does not run Velma.
+
+Files over 600 s, retries (`attempts > 0`), held-piece recovery, prompt verification,
+a missing `SONIOX_API_KEY`, and every caller outside legacy sync (voice messages,
+push-to-talk, shadow, batch recovery) keep Velma first. Served audio is counted in
+`omi_prerecorded_vendor_audio_seconds_total{provider=soniox,endpoint=stt}` and logged as
+`event=prerecorded_soniox_multilingual outcome=served`.
+
+Rollback sets `STT_PRERECORDED_SONIOX_MULTILINGUAL_ENABLED=false`; Velma is first again
+for every pre-recorded caller. See the
+[change note](./listen_pusher_pipeline/changes/2026-11-27-soniox-multilingual-sync.md).
+
 ## Fair-use decay switch
 
 `FAIR_USE_THROTTLE_DECAY_ENABLED` defaults on. `false`, `off`, or `0` restores

@@ -942,6 +942,11 @@
     "PORT": {
       "seeded": "2026-10-25"
     },
+    "STT_PRERECORDED_SONIOX_MULTILINGUAL_ENABLED": {
+      "owner": "Goal: Pipeline",
+      "review_by": "2026-12-11",
+      "reason": "ship-on kill switch for Soniox-first legacy multilingual sync (SCA-4917); retire after the production readback"
+    },
     "PRERECORDED_SONIOX_FAILOVER_ENABLED": {
       "owner": "refactor-lead",
       "review_by": "2026-12-01",

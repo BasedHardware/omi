@@ -50,6 +50,7 @@ from utils.stt.modulate_batch import modulate_budget_refusal as _modulate_budget
 from utils.stt.modulate_batch import wav_duration_seconds as _wav_duration_seconds
 from utils.stt.allowance_watch import observe_request
 from utils.stt.parakeet_request_metrics import observe_parakeet_request
+from utils.stt import soniox_multilingual
 from utils.stt.soniox_batch import SonioxBatchError, transcribe as soniox_transcribe
 from utils.stt.brand_terms import normalize_brand_terms
 from utils.stt.speaker_clustering import select_speaker_cluster
@@ -788,7 +789,21 @@ def modulate_prerecorded_from_bytes_with_soniox(
     language: Optional[str] = None,
     provider_served: Optional[Callable[[str], None]] = None,
 ) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
-    """Run Modulate, then one bounded Soniox submission only for credit/quota refusal."""
+    """Run Modulate, then one bounded Soniox submission only for credit/quota refusal.
+
+    Legacy sync's multilingual audio runs Soniox first instead (``soniox_multilingual``), and Modulate as here
+    when Soniox fails. Coordinators that own their paid attempts keep Modulate-first."""
+    if (
+        attempts == 0
+        and not _held_single_attempt.get()
+        and _verification_deadline.get() is None
+        and soniox_multilingual.applies(language)
+    ):
+        served = soniox_multilingual.transcribe(audio_bytes, language=language, diarize=diarize)
+        if served is not None:
+            if provider_served is not None:
+                provider_served(SONIOX_PROVIDER)
+            return served if return_language else served[0]
     try:
         result = modulate_prerecorded_from_bytes(
             audio_bytes,

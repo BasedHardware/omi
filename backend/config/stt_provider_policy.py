@@ -128,7 +128,10 @@ PROVIDER_SERVING_SURFACES: Final[Mapping[str, frozenset[STTServingSurface]]] = {
     # (config.prerecorded_stt.provider_for_model_token) and it is absent from
     # DEFAULT_MODELS_BY_SURFACE, so general prerecorded/PTT selection keeps its
     # existing providers. Ordinary Modulate credit/breaker refusals and the batch
-    # route table both constrain Soniox to one replacement submission.
+    # route table both constrain Soniox to one replacement submission. The one
+    # Soniox-first call is legacy sync's multilingual audio, behind
+    # STT_PRERECORDED_SONIOX_MULTILINGUAL_ENABLED (utils/stt/soniox_multilingual.py);
+    # selection still returns Modulate there, and Velma serves on any Soniox failure.
     SONIOX_PROVIDER: frozenset(
         {STTServingSurface.STREAMING, STTServingSurface.HELD_RECOVERY, STTServingSurface.PRERECORDED}
     ),
