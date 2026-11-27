@@ -19,6 +19,11 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from database import home_visibility_index
+from database.conversations_v3_projection_budget import (
+    encoded_bytes as _encoded_bytes,
+    log_largest_write,
+    partition_rows,
+)
 from database._client import firestore_failure_reason, get_firestore_client
 from database.transcript_pointer import (
     MAX_PRELOAD_DOCUMENTS,
@@ -191,7 +196,11 @@ SOURCE_FENCE_FIELDS = (
 
 
 def source_fence(raw):
-    return {key: (raw or {}).get(key) for key in SOURCE_FENCE_FIELDS}
+    row = raw or {}
+    fields = SOURCE_FENCE_FIELDS
+    if policy.NATIVE_MANUAL_STOP in row or policy.NATIVE_MANUAL_READY in row:
+        fields += policy.NATIVE_MANUAL_SOURCE_FIELDS
+    return {key: row.get(key) for key in fields}
 
 
 def terminal_recording(row):
@@ -255,7 +264,8 @@ def adoptable(uid, ids, *, firestore_client=None):
     """Derived rows that already own a planned id but were outside the loaded closure.
 
     Only live derived rows qualify: a deleted or tombstoned target keeps raising, so a rebuild can
-    never resurrect a window the user deleted.
+    never resurrect a window the user deleted. Settled native tiles are returned
+    so the planner can reserve their IDs without adopting their speech.
     """
     client = firestore_client or get_firestore_client()
     coll = user_conversations(client, uid)
@@ -263,7 +273,11 @@ def adoptable(uid, ids, *, firestore_client=None):
     for cid in ids:
         snapshot = coll.document(cid).get()
         raw = snapshot.to_dict() or {} if snapshot.exists else {}
-        if not raw.get('v3_derived') or raw.get('deleted') or raw.get('recording'):
+        if (
+            not (raw.get('v3_derived') or raw.get(policy.NATIVE_MANUAL_SETTLED))
+            or raw.get('deleted')
+            or raw.get('recording')
+        ):
             continue
         tombstone = client.collection('users').document(uid).collection('deleted_conversations').document(cid).get()
         if tombstone.exists:
@@ -1030,34 +1044,6 @@ def fixed_write_bytes(recordings, rows, encrypted_cache):
     return total
 
 
-def _encoded_bytes(value):
-    return len(json.dumps(value, default=str).encode())
-
-
-def log_largest_write(staged, *, batch, batches):
-    """Name the largest document the failed transaction staged: kind and estimated bytes, never ids or content."""
-    sizes: list[tuple[str, int, int | None]] = [
-        ('derived_row', _encoded_bytes(row), None) for row in staged.get('rows') or []
-    ]
-    for current, update in (staged.get('recordings') or {}).values():
-        merged = {**current, **update}
-        sizes.append(('recording', _encoded_bytes(merged), len(merged.get('claims') or [])))
-    if staged.get('lease') is not None:
-        sizes.append(('builder_lease', _encoded_bytes({**staged['lease'][0], **staged['lease'][1]}), None))
-    if not sizes:
-        return
-    kind, size, claims = max(sizes, key=lambda item: item[1])
-    logger.warning(
-        'v3 projection write too large kind=%s bytes=%d claims=%s batch=%d batches=%d staged_total_bytes=%d',
-        kind,
-        size,
-        claims if claims is not None else '-',
-        batch,
-        batches,
-        sum(item[1] for item in sizes),
-    )
-
-
 def mark_pending(uid, cid, *, manual_end=False, firestore_client=None):
     client = firestore_client or get_firestore_client()
     ref = user_conversations(client, uid).document(cid)
@@ -1120,6 +1106,7 @@ def promote_manual_end(uid, cid, *, firestore_client=None):
         if (
             not row.get('recording')
             or not row.get('v3_manual_end_requested')
+            or row.get(policy.NATIVE_MANUAL_STOP)
             # The cut is materialised from finished_at; without it the marker would be inert.
             or not row.get('finished_at')
             or row.get('v3_manual_end')
@@ -1183,6 +1170,7 @@ def commit_projection(
     remove=(),
     removed_ids: set[str] | None = None,
     retire=None,
+    settle=None,
     key='builder',
     bounded_pending_limit=None,
     unlocked_page=None,
@@ -1201,6 +1189,17 @@ def commit_projection(
     """
     client = firestore_client or get_firestore_client()
     retire = dict(retire or {})
+    settle = dict(settle or {})
+    if any(
+        existing.get(cid, {}).get(field)
+        for cid in remove
+        for field in (policy.NATIVE_MANUAL_BINDING, policy.NATIVE_MANUAL_NOTES_VISIBILITY, policy.NATIVE_MANUAL_SETTLED)
+    ):
+        raise Conflict('backfill_native_finish_unsupported')
+    if settle and (
+        key != 'builder' or remove or retire or not settle.keys() <= existing.keys() - {r['id'] for r in rows}
+    ):
+        raise Conflict('source_changed')
     moved = set()
     coll = user_conversations(client, uid)
     held = leases.lease_ref(client, uid, key)
@@ -1310,7 +1309,7 @@ def commit_projection(
         absorbed = {cid: row['id'] for row in batch_rows for cid in row.get('_v3_absorbed', ())}
         touched = {*(row['id'] for row in batch_rows), *absorbed}
         if final:
-            touched.update((*retire, *remove))
+            touched.update((*retire, *remove, *settle))
         if any(has_retained_custody(observed.get(cid)) for cid in touched):
             collisions.report(
                 collisions.RACED, collisions.CONVERSATION, None, writer='retained_custody', lane=key, phase='guards'
@@ -1324,7 +1323,11 @@ def commit_projection(
         if retired and merge_donors_have_tasks(uid, retired, firestore_client=client, transaction=tx):
             raise Conflict('rederive_live_donor_tasks')
         tombstones = client.collection('users').document(uid).collection('deleted_conversations')
-        tombstone_ids = list(dict.fromkeys([*(row['id'] for row in batch_rows), *absorbed, *(retire if final else ())]))
+        tombstone_ids = list(
+            dict.fromkeys(
+                [*(row['id'] for row in batch_rows), *absorbed, *((retire.keys() | settle.keys()) if final else ())]
+            )
+        )
         if any(
             snapshot.exists
             for _, snapshot in _projection_snapshots(client, tombstones, tx, tombstone_ids, batch_reads=batch_reads)
@@ -1409,6 +1412,8 @@ def commit_projection(
             tx.set(removal_ref(user, cid), {'absorbed_by_refinement': True})
             written.add(cid)
         if final:
+            for cid, patch in settle.items():
+                tx.update(coll.document(cid), home_visibility_index.stamp(patch, observed[cid]))
             for cid in sorted(deleting):
                 tx.set(removal_ref(user, cid), {'removed_by_backfill_rederive': True})
                 tx.delete(coll.document(cid))
@@ -1419,7 +1424,9 @@ def commit_projection(
                     update_if_changed(coll.document(cid), observed.get(cid, {}), patch)
                 if cid in retired:
                     tx.set(removal_ref(user, cid), {'retired_by_repair': True})
-        replaced = {r['id'] for r in batch_rows} | set(absorbed) | deleting | (retired if final else set())
+        replaced = (
+            {r['id'] for r in batch_rows} | set(absorbed) | deleting | (retired | settle.keys() if final else set())
+        )
         for rid, recording in recordings.items():
             if (
                 recording.get('deleted')
@@ -1519,37 +1526,27 @@ def commit_projection(
         return observed, batch_moved, batch_prepared, skipped_ids, written, skipped_ids | skipped_patches, deleting
 
     fixed = fixed_write_bytes(recordings, rows, encrypted_cache)
-    # Reserve space for all donor writes, including the task-link fences in the survivor's batch.
-    fixed_writes = len(recordings) + 2 * len(remove) + absorption_writes + len(retire) + len(retired) + 1
-    if (retired or remove) and fixed_writes + bool(rows) > BATCH_MAX_WRITES:
-        raise Conflict('backfill_partition_budget')
-    max_rows = max(1, BATCH_MAX_WRITES - fixed_writes)
-    batches, current, size, pointers = [], [], 0, 0
-    for raw, encoded in zip(rows, prepared):
-        amount = len(json.dumps(encoded, default=str).encode())
-        # Privacy filtering resolves each prepared pointer before the first write.
-        pointer = isinstance(encoded.get('transcript_segments'), dict)
-        if current and (
-            size + amount > BATCH_ROW_BYTES
-            or fixed + size + amount > BATCH_WRITE_BYTES
-            or len(current) >= max_rows
-            or (pointer and pointers >= MAX_PRELOAD_DOCUMENTS)
-        ):
-            batches.append(current)
-            current, size, pointers = [], 0, 0
-        current.append((raw, encoded))
-        size += amount
-        pointers += pointer
-    if current or not batches:
-        batches.append(current)
+    fixed += _encoded_bytes(settle) if settle else 0
+    fixed_writes = len(recordings) + 2 * len(remove) + absorption_writes + len(retire) + len(retired) + len(settle) + 1
+    batches = partition_rows(
+        rows,
+        prepared,
+        fixed=fixed,
+        fixed_writes=fixed_writes,
+        max_writes=BATCH_MAX_WRITES,
+        max_bytes=BATCH_WRITE_BYTES,
+        row_bytes=BATCH_ROW_BYTES,
+        max_pointers=MAX_PRELOAD_DOCUMENTS,
+        removals=bool(retired or remove),
+        settle=bool(settle),
+        replacing_claimants=replacing_claimants,
+    )
     heavy = _past_origin_bound(uid, existing, key=key)
     if heavy and len(batches) > LOCKED_MAX_BATCHES:
         # Each batch rereads the whole closure: a locked-claimant closure may not buy an unbounded commit.
         # Park on the derived budget before any transaction, so nothing is written and pending stays owed.
         metrics.safe_metric(lambda: logger.info('event=v3_locked_closure_batches batches=%d', len(batches)))
         raise LockedBatchCap('v3_derived_budget')
-    if replacing_claimants and len(batches) > 1:
-        raise Conflict('backfill_partition_budget')
     for index, batch in enumerate(batches):
         batch_rows, batch_prepared, final = [r for r, _ in batch], [r for _, r in batch], index == len(batches) - 1
         try:
