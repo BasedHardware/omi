@@ -23,7 +23,13 @@ import time
 from fastapi import HTTPException, Request
 from fastapi.responses import Response
 
+from utils.conversations.processing_metrics import (
+    FROM_SEGMENTS_METRIC_ROUTE,
+    defer_retryable_processing_response_count,
+    record_retryable_processing_response,
+)
 from utils.external_list_reads import ExternalListCacheRoute
+from utils.llm.gateway_error_contract import retryable_processing_response_failure_class
 from utils.other.raise_site import UNATTRIBUTED_RAISE_SITE, raise_site_of, serialized_detail_bytes
 
 logger = logging.getLogger(__name__)
@@ -66,9 +72,13 @@ class FromSegments503Route(ExternalListCacheRoute):
         async def handler(request: Request) -> Response:
             started = time.monotonic()
             try:
-                response = await original(request)
+                with defer_retryable_processing_response_count():
+                    response = await original(request)
             except HTTPException as exc:
                 if exc.status_code == 503:
+                    failure_class = retryable_processing_response_failure_class(exc)
+                    if failure_class is not None:
+                        record_retryable_processing_response(failure_class, FROM_SEGMENTS_METRIC_ROUTE)
                     log_from_segments_503(
                         raise_site=raise_site_of(exc),
                         body_bytes=serialized_detail_bytes(exc.detail),
