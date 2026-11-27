@@ -89,6 +89,20 @@ The published language-only rate is $0.01/sample-hour; multilingual batch STT
 is $0.03/audio-hour ([provider pricing](https://platform.modulate.ai/pricing)).
 These are list estimates, not invoice measurements or guaranteed GPU savings.
 
+A declared supported language (a conversation pin or a single-language preference) skips the
+probe, so nothing above measures how much of that audio is really unsupported speech. The
+declared-language audit (`utils/stt/declared_language_audit.py`,
+`BATCH_DECLARED_LANGUAGE_AUDIT_ENABLED`, default on) samples 2% of declared-supported batch
+intake units by a stable hash of their audio. It sends the first 30 s to the self-hosted gate
+(`/v2/language` on the Parakeet service, which transcribes the same unit) from a 2-worker
+background pool. At most 4 probes wait at once and a full pool skips the sample, so intake
+never waits. It counts
+`omi_batch_pipeline_declared_language_audit_total{declared, heard, heard_class, confident}`
+(`confident` is top-1 probability >= 0.8) and never changes a route. The leak share is
+`heard_class="unsupported",confident="true"` over all rows except `heard_class` `unavailable`
+and `unknown`. Skips count in `omi_batch_pipeline_declared_language_audit_skipped_total{reason}`.
+The first 30 s can be silence; those rows land in `unknown`.
+
 The private rollout `fleet_gate.sh` requires language-route coverage for every
 since-T0 completed cohort unit and rejects any unknown/unsupported Parakeet
 attempt, including with the kill switch off. Missing logs are unknown, not zero.

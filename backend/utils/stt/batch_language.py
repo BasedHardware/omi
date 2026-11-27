@@ -25,7 +25,7 @@ from config.prerecorded_language import (
 )
 from config.stt_provider_policy import MODULATE_SUPPORTED_LANGUAGES, normalized_stt_language
 from utils.stt.prerecorded_deadline import probe_timeout
-from utils.stt import language_gate
+from utils.stt import declared_language_audit, language_gate
 from utils.stt.prerecorded_health import CREDIT_AUTH, PROVIDER_ERROR, note_provider_failure
 from utils.stt.vendor_guard import (
     ENDPOINT_LID,
@@ -352,6 +352,8 @@ def resolve_language(
 ) -> LanguageDecision:
     code = normalized_stt_language(language.strip() if isinstance(language, str) else None)
     if not language_guard_enabled() or language_class(language) != 'unknown':
+        if surface == 'batch' and language_class(language) == 'supported':
+            declared_language_audit.maybe_audit(code, audio, cut=probe_wav)  # sampled, off the intake path
         return LanguageDecision(code, 1.0, 'declared')
     enforced, verdict = (
         _self_gate(audio, surface, cohort_key, audio_options)
