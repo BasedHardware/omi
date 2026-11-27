@@ -23,7 +23,6 @@ from fastapi.responses import JSONResponse
 
 from config.client_telemetry import MAX_REQUEST_BYTES, QUERY_CHANNELS, TelemetryContractError
 from config.app_channel import APP_CHANNEL_HEADER, app_channel
-from config.conversations_v3 import conversations_v3_enabled
 from database.client_telemetry import accept_batch, query_is_stale, recent_owner_ids
 from database.client_telemetry_ops import (
     channel_roster,
@@ -197,7 +196,7 @@ async def post_v3_finish_cuts(
             status_code=403,
             detail={"code": "telemetry_forbidden", "message": "beta app channel required"},
         )
-    if finish_home_sli.enabled() and conversations_v3_enabled(uid):
+    if finish_home_sli.enabled() and finish_home_sli.home_cohort(uid):
         for observation in observations:
             finish_home_sli.observe_client_cut(
                 uid,

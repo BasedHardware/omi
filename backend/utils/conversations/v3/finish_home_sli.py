@@ -11,7 +11,7 @@ import os
 from uuid import UUID
 
 from config.app_channel import APP_CHANNEL_HEADER, app_channel
-from config.conversations_v3 import conversations_v3_enabled
+from config.conversations_v3 import conversations_v3_enabled, v3_intake_held_out
 from utils.encryption import ENCRYPTION_SECRET
 
 _logger = logging.getLogger(__name__)
@@ -25,6 +25,17 @@ def enabled() -> bool:
 def _key(kind: str, uid: str, identifier: str) -> str:
     raw = json.dumps([kind, uid, identifier], separators=(',', ':')).encode()
     return hmac.new(ENCRYPTION_SECRET, b'v3-finish-home-sli:' + raw, hashlib.sha256).hexdigest()[:32]
+
+
+def home_cohort(uid: str) -> bool:
+    """The owner reads v3 Home, so a Finish cut belongs in the v3 denominator.
+
+    The same rule, in the same order, as ``get_conversations`` (routers/conversations.py) uses to choose v3
+    Home over legacy Home: stage admission, then the per-owner intake holdout. A held-out owner (SCA-2918)
+    Finishes on legacy Home, where no v3 card can ever match the cut. Unknown holdout membership admits
+    (``v3_intake_held_out`` fails open), exactly as Home serves that owner v3.
+    """
+    return conversations_v3_enabled(uid) and not v3_intake_held_out(uid)
 
 
 def _emit(stage: str, **fields) -> None:
@@ -96,7 +107,7 @@ def from_request(uid: str, request) -> Finish | None:
     header = request.headers.get(HEADER, '')
     if header == 'none' or len(header) > 100:
         return None
-    if app_channel(request.headers.get(APP_CHANNEL_HEADER)) != 'beta' or not conversations_v3_enabled(uid):
+    if app_channel(request.headers.get(APP_CHANNEL_HEADER)) != 'beta' or not home_cohort(uid):
         return None
     now = datetime.now(timezone.utc)
     if not header:

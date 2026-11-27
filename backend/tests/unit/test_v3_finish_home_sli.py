@@ -60,6 +60,27 @@ def test_legacy_finish_requires_a_bound_recording(monkeypatch, caplog):
     assert 'recording-id' not in caplog.text
 
 
+@pytest.mark.parametrize('header', [None, f'app,{uuid4()},{int(datetime.now(timezone.utc).timestamp() * 1000)}'])
+def test_held_out_owner_finish_emits_no_cut(monkeypatch, caplog, header):
+    # Home sends a held-out owner (SCA-2918) to legacy Home: the cut must not enter the v3 cohort.
+    monkeypatch.setenv('CONVERSATIONS_V3_FINISH_HOME_SLI', 'on')
+    monkeypatch.setattr(sli, 'conversations_v3_enabled', lambda uid: True)
+    monkeypatch.setattr(sli, 'v3_intake_held_out', lambda uid: uid == 'held')
+    headers = {sli.APP_CHANNEL_HEADER: 'beta', **({sli.HEADER: header} if header else {})}
+    request = SimpleNamespace(headers=headers)
+    with caplog.at_level('INFO'):
+        assert sli.from_request('held', request) is None
+        assert sli.from_request('owner', request) is not None
+    stages = [json.loads(r.message.split(readback.MARKER)[1])['stage'] for r in caplog.records]
+    assert stages == (['cut'] if header else [])
+
+
+def test_holdout_is_asked_only_after_stage_admission(monkeypatch):
+    monkeypatch.setattr(sli, 'conversations_v3_enabled', lambda uid: False)
+    monkeypatch.setattr(sli, 'v3_intake_held_out', lambda uid: pytest.fail('holdout read before admission'))
+    assert sli.home_cohort('owner') is False
+
+
 def test_client_cut_uses_the_same_key_as_finish_header(monkeypatch, caplog):
     monkeypatch.setenv('CONVERSATIONS_V3_FINISH_HOME_SLI', 'on')
     cut_id = str(uuid4())

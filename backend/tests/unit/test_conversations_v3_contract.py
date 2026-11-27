@@ -285,12 +285,14 @@ class _MixedFinish:
             live_db, 'live_window', lambda *a, **kw: pytest.fail('a named Finish fell back to another window')
         )
 
-    def finish(self, named):
+    def finish(self, named, http_request=None):
         from fastapi import Response
         from models.conversation import ProcessConversationRequest
 
         request = ProcessConversationRequest(live_conversation_id=named) if named else None
-        return routes.process_in_progress_conversation(request, 'synthetic', None, response=Response())
+        return routes.process_in_progress_conversation(
+            request, 'synthetic', None, response=Response(), http_request=http_request
+        )
 
 
 def test_named_v3_finish_closes_its_window_while_a_legacy_row_is_in_progress(monkeypatch):
@@ -335,6 +337,89 @@ def test_named_finish_beside_a_v3_recording_in_progress_keeps_today_path(monkeyp
     mixed.legacy = {'id': 'session-recording', 'status': 'in_progress', 'recording': True}
     assert mixed.finish('old-window') == 'legacy'
     assert mixed.finalized == ['session-recording'] and mixed.finished == []
+
+
+def _finish_sli_request(monkeypatch):
+    """A TestFlight Finish carrying a valid client cut header, with the Finish→Home SLI on."""
+    from types import SimpleNamespace
+    from uuid import uuid4
+
+    from utils.conversations.v3 import finish_home_sli as sli
+
+    monkeypatch.setenv('CONVERSATIONS_V3_FINISH_HOME_SLI', 'on')
+    now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+    return SimpleNamespace(headers={sli.HEADER: f'app,{uuid4()},{now_ms}', sli.APP_CHANNEL_HEADER: 'beta'})
+
+
+def _sli_stages(caplog):
+    import json
+
+    from scripts import finish_home_readback as readback
+
+    return [
+        json.loads(r.message.split(readback.MARKER)[1])['stage'] for r in caplog.records if readback.MARKER in r.message
+    ]
+
+
+@pytest.mark.parametrize('named,window_live', [('old-window', True), ('old-window', False), (None, True)])
+def test_held_out_owner_finish_on_legacy_home_counts_no_cut(monkeypatch, caplog, named, window_live):
+    # SCA-4489: a held-out owner reads legacy Home, so no v3 card can match a cut. Whether the Finish closes
+    # the named old window, misses it (strict named_only, then the legacy Finish) or is the legacy Finish,
+    # nothing enters the v3 denominator.
+    mixed = _MixedFinish(monkeypatch, window_live=window_live)
+    http_request = _finish_sli_request(monkeypatch)
+    with caplog.at_level('INFO'):
+        mixed.finish(named, http_request)
+    assert _sli_stages(caplog) == []
+
+
+@pytest.mark.parametrize('member,unavailable', [(False, False), (True, True)])
+def test_admitted_owner_unmatched_finish_cut_stays_in_the_denominator(monkeypatch, caplog, member, unavailable):
+    # An admitted owner (or unknown membership, which admits as Home does) Finishing a legacy row binds no
+    # recording: the cut is still counted, as a miss, never dropped.
+    mixed = _MixedFinish(monkeypatch, member=member, unavailable=unavailable)
+    http_request = _finish_sli_request(monkeypatch)
+    with caplog.at_level('INFO'):
+        assert mixed.finish('old-window', http_request) == 'legacy'
+    assert mixed.finalized == ['legacy-row']
+    assert _sli_stages(caplog) == ['cut']
+
+
+def test_finish_sli_cohort_is_the_home_router_v3_rule(monkeypatch):
+    # The Finish cut counts exactly when get_conversations serves v3 Home (show_held is legacy Home).
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from utils.conversations.v3 import finish_home_sli as sli
+    from utils.other import endpoints as auth
+
+    holdout = _Holdout(monkeypatch)
+    calls = []
+    monkeypatch.setattr(
+        routes.conversations_db, 'get_conversations_without_photos', lambda *a, **kw: calls.append(kw) or []
+    )
+    monkeypatch.setattr(routes, '_heal_locked_conversations_if_eligible', lambda *a: None)
+    app = FastAPI()
+    app.include_router(routes.router)
+    app.dependency_overrides[auth.get_current_user_uid] = lambda: 'synthetic'
+    states = [
+        (False, False, None),  # admitted, not held out
+        (True, False, None),  # held out
+        (True, True, None),  # unknown membership fails open
+        (True, False, 'off'),  # holdout switch off
+    ]
+    with TestClient(app) as client:
+        for member, unavailable, holdout_env in states:
+            holdout.member, holdout.unavailable = member, unavailable
+            if holdout_env:
+                monkeypatch.setenv('CONVERSATIONS_V3_HOLDOUT', holdout_env)
+            else:
+                monkeypatch.delenv('CONVERSATIONS_V3_HOLDOUT', raising=False)
+            assert client.get('/v1/conversations').status_code == 200
+            assert sli.home_cohort('synthetic') is (not calls[-1]['show_held'])
+        monkeypatch.setenv('CONVERSATIONS_V3', 'off')
+        assert client.get('/v1/conversations').status_code == 200
+        assert calls[-1]['show_held'] is True and sli.home_cohort('synthetic') is False
+    assert [not kw['show_held'] for kw in calls] == [True, False, True, True, False]
 
 
 def test_held_out_owner_reads_legacy_home_with_v3_cards_and_held_pieces(monkeypatch):

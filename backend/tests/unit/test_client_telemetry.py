@@ -604,7 +604,8 @@ def test_http_auth_size_and_admin_gate(monkeypatch):
 def test_finish_cut_route_authenticates_and_logs_only_the_opaque_cut(monkeypatch, caplog):
     monkeypatch.setattr(telemetry_router.auth, "_enforce_rate_limit", lambda *args, **kwargs: None)
     monkeypatch.setattr(telemetry_router.finish_home_sli, "enabled", lambda: True)
-    monkeypatch.setattr(telemetry_router, "conversations_v3_enabled", lambda uid: uid == OWNER)
+    monkeypatch.setattr(telemetry_router.finish_home_sli, "conversations_v3_enabled", lambda uid: uid == OWNER)
+    monkeypatch.setattr(telemetry_router.finish_home_sli, "v3_intake_held_out", lambda uid: False)
     authed = TestClient(_app(OWNER))
     payload = {
         "schema_version": 1,
@@ -633,6 +634,36 @@ def test_finish_cut_route_authenticates_and_logs_only_the_opaque_cut(monkeypatch
         anonymous.post("/v1/telemetry/v3-finish-cuts", json=payload, headers={"X-Omi-App-Channel": "beta"}).status_code
         == 401
     )
+
+
+def test_finish_cut_route_drops_a_held_out_owners_cut(monkeypatch, caplog):
+    # SCA-4489: Home sends a held-out owner to legacy Home, so the durable outbox's cut is accepted
+    # (the client must not retry) but never enters the v3 Finish→Home cohort.
+    monkeypatch.setattr(telemetry_router.auth, "_enforce_rate_limit", lambda *args, **kwargs: None)
+    monkeypatch.setattr(telemetry_router.finish_home_sli, "enabled", lambda: True)
+    monkeypatch.setattr(telemetry_router.finish_home_sli, "conversations_v3_enabled", lambda uid: True)
+    monkeypatch.setattr(telemetry_router.finish_home_sli, "v3_intake_held_out", lambda uid: uid == OWNER)
+    payload = {
+        "schema_version": 1,
+        "batch_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaab",
+        "observations": [
+            {
+                "event_id": "11111111-1111-4111-8111-111111111112",
+                "occurred_at": datetime.now(timezone.utc).isoformat(),
+                "platform": "ios",
+                "channel": "beta",
+                "family": "finish_cut",
+                "attributes": {"operation_id": "22222222-2222-4222-8222-222222222223", "source": "app"},
+            }
+        ],
+    }
+    with caplog.at_level("INFO"):
+        response = TestClient(_app(OWNER)).post(
+            "/v1/telemetry/v3-finish-cuts", json=payload, headers={"X-Omi-App-Channel": "beta"}
+        )
+    assert response.status_code == 200
+    assert response.json()["accepted_count"] == 1
+    assert "event=v3_finish_home_sli" not in caplog.text
 
 
 def test_router_is_registered_on_the_backend_app():

@@ -726,6 +726,8 @@ def process_in_progress_conversation(
         # the window closes exactly that window; the legacy row keeps recording. A miss runs the legacy Finish.
         # No experiment wake here: record_end stores no cut for a held-out owner, and the window cut
         # wakes its builder itself (finish._acknowledge enqueues the pending recording).
+        # No Finish→Home cut to bind: a held-out owner reads legacy Home, so finish_home_sli.home_cohort
+        # produced none for this request.
         finished = finish_live_window(uid, named, named_only=True)
         if finished is not None:
             return finished
