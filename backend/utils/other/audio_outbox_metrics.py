@@ -45,6 +45,7 @@ for _stage in ('commit', 'raw_commit', 'projection', 'window_tail'):
     CUSTODY_FAILURES.labels(stage=_stage, reason='transient').inc(0)
     CUSTODY_FAILURES.labels(stage=_stage, reason='invalid_argument').inc(0)
 for _stage in (
+    'commit',
     'pusher_queue',
     'pusher_budget',
     'pusher_pending',

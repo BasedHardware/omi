@@ -381,12 +381,15 @@ class AuthenticationProvider extends BaseProvider {
     }
   }
 
+  static const termsOfServiceUrl = 'https://www.omi.me/pages/terms-of-service';
+  static const privacyPolicyUrl = 'https://www.omi.me/pages/privacy';
+
   void openTermsOfService() {
-    _launchUrl('https://www.omi.me/pages/terms-of-service');
+    _launchUrl(termsOfServiceUrl);
   }
 
   void openPrivacyPolicy() {
-    _launchUrl('https://www.omi.me/pages/privacy');
+    _launchUrl(privacyPolicyUrl);
   }
 
   void _launchUrl(String url) async {
@@ -399,41 +402,32 @@ class AuthenticationProvider extends BaseProvider {
     await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
   }
 
-  Future<void> linkWithGoogle() async {
-    setLoading(true);
-    try {
-      final result = await completeProviderLinkAndMigrate(
-        linkProvider: AuthService.instance.linkWithGoogle,
-        migrate: migrateAppOwnerId,
-      );
-      if (result == null) {
-        setLoading(false);
-        return;
-      }
-    } catch (e) {
-      AppSnackbar.showSnackbarError(
-        globalNavigatorKey.currentContext?.l10n.authFailedToLinkGoogle ??
-            'Failed to link with Google, please try again.',
-      );
-      rethrow;
-    } finally {
-      setLoading(false);
-    }
-  }
+  Future<ProviderLinkResult?> linkWithGoogle({
+    String? expectedOwnerUid,
+    ProviderLinkAuthorization? authorization,
+  }) =>
+      _linkProvider(
+          () => AuthService.instance.linkWithGoogle(expectedOwnerUid: expectedOwnerUid, authorization: authorization));
 
-  Future<void> linkWithApple() async {
+  Future<ProviderLinkResult?> linkWithApple({
+    String? expectedOwnerUid,
+    ProviderLinkAuthorization? authorization,
+  }) =>
+      _linkProvider(
+          () => AuthService.instance.linkWithApple(expectedOwnerUid: expectedOwnerUid, authorization: authorization));
+
+  Future<ProviderLinkResult?> _linkProvider(Future<ProviderLinkResult?> Function() link) async {
+    if (loading) return null;
     setLoading(true);
     try {
-      await completeProviderLinkAndMigrate(
-        linkProvider: AuthService.instance.linkWithApple,
-        migrate: migrateAppOwnerId,
-      );
-    } catch (e) {
-      Logger.debug('Error linking with Apple: $e');
-      AppSnackbar.showSnackbarError(
-        globalNavigatorKey.currentContext?.l10n.authFailedToLinkApple ?? 'Failed to link with Apple, please try again.',
-      );
-      rethrow;
+      final result = await completeProviderLinkAndMigrate(linkProvider: link, migrate: migrateAppOwnerId);
+      final destination = result?.destinationSession;
+      if (destination != null && AuthService.instance.isSessionSnapshotCurrent(destination)) {
+        // The UID is unchanged on ordinary links, so the UID-distinct streams
+        // won't publish the updated sign-in methods for the account view.
+        user = _auth.currentUser;
+      }
+      return result;
     } finally {
       setLoading(false);
     }

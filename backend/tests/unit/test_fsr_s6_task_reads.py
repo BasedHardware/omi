@@ -171,7 +171,7 @@ def test_no_stale_bridge_snapshot_after_external_effect(monkeypatch, modules, wi
 
 @pytest.mark.parametrize('enabled', [False, True])
 @pytest.mark.parametrize('case', ['missing', 'deleted', 'cycle', 'bad_donor', 'wrong_flatten_target'])
-def test_bridge_rejects_unsafe_lifecycle_shapes(monkeypatch, modules, wire, enabled, case):
+def test_bridge_settles_unsafe_lifecycle_shapes(monkeypatch, modules, wire, enabled, case):
     enable(monkeypatch, enabled)
     rows = {'survivor': {'id': 'survivor'}}
     if case == 'missing':
@@ -183,9 +183,16 @@ def test_bridge_rejects_unsafe_lifecycle_shapes(monkeypatch, modules, wire, enab
     else:
         rows['survivor'].update(sync_merged_from=['donor'], smart_merge={'role': 'survivor'})
         rows['donor'] = {'id': 'donor', 'deleted': case != 'bad_donor', 'sync_merged_into': 'wrong'}
-    wire(rows)
-    with pytest.raises((modules.bridge.SyncAssignmentSuperseded, modules.bridge.SyncAssignmentConflict)):
-        modules.bridge.finish_sync_bridges('u', 'survivor')
+    store = wire(rows)
+    if case in {'bad_donor', 'wrong_flatten_target'}:
+        # A lineage entry that cannot redirect at the survivor is terminal: the
+        # bridge settles the survivor without retracting, copying, or rewriting
+        # the donor, instead of raising out of the enrichment resume.
+        assert modules.bridge.finish_sync_bridges('u', 'survivor') == 'survivor'
+        assert store.rows[('users', 'u', 'conversations', 'donor')] == rows['donor']
+    else:
+        with pytest.raises((modules.bridge.SyncAssignmentSuperseded, modules.bridge.SyncAssignmentConflict)):
+            modules.bridge.finish_sync_bridges('u', 'survivor')
 
 
 @pytest.mark.parametrize('enabled', [False, True])

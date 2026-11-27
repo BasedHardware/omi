@@ -109,6 +109,7 @@ def attach(
                         str(owner['id']),
                         expected_version=int(owner.get('state_version') or 0),
                         updates={'recovered_conversation_ids': list(dict.fromkeys(recovered_ids))},
+                        finalizing_conversation_id=getattr(c, 'finalizing_conversation_id', None),
                         firestore_client=c.firestore_client,
                     )
                 joined = episode_groups.join_duplicates(
@@ -120,6 +121,8 @@ def attach(
                     if owner_reuse_enabled()
                     else record_recovered(uid, str(owner['id']), conversation_id, row, c)
                 )
+                if recovered == 'skipped_deleted':
+                    return recovered
                 if recovered == 'skipped_discarded':
                     end_discarded(uid, conversation_id, row, SYNC_UPDATE, c)
                     return recovered

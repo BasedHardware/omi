@@ -64,7 +64,9 @@ def main(argv: list[str] | None = None) -> int:
         runtime_env = ['--runtime-env', str(Path(arm['path']) / 'backend' / 'deploy' / 'runtime_env.yaml')]
     if args.overlay:
         built = {'service': 'given', 'source': 'file'}
-        (base / 'overlay.json').write_text(Path(args.overlay).read_text())
+        from testing.pipeline_lab.store import private_write_text
+
+        private_write_text(base / 'overlay.json', Path(args.overlay).read_text())  # may name the owner uid
     else:
         code, built = _cli('overlay', 'from-runtime-env', *runtime_env, '--out', str(base / 'overlay.json'))
     report['overlay'] = (

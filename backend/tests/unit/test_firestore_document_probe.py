@@ -714,8 +714,7 @@ def test_call_site_skips_plumbing_frames(monkeypatch):
     google = _Frame('google.cloud.firestore_v1.query', 'get', loop)
     anonymous = _Frame('database.memories', '<lambda>', google)
     probe_frame = _Frame(probe.__name__, 'stream', anonymous)
-    caller = _Frame(probe.__name__, 'call_site', probe_frame)
-    monkeypatch.setattr(probe.inspect, 'currentframe', lambda: caller)
+    monkeypatch.setattr(probe, '_getframe', lambda depth: probe_frame)
     saved = set(probe._known_callers)
     try:
         assert probe.call_site() == 'database.memories:get_memories'

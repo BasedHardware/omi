@@ -10,6 +10,10 @@ backend/docs/checkout-admission.md).
 
 from config.plan_catalog import configured_ladder_prices, validate_ladder_price
 from database.fsr_read_cache import fresh_reader, fresh_reads
+import database.play_subscriptions as play_subscriptions_db
+from utils import play_stripe_guard
+from config import prepaid_code_redeem as prepaid_code_config
+from config import play_billing as play_billing_config
 import os
 from datetime import datetime, timezone
 
@@ -90,7 +94,7 @@ from utils import stripe as stripe_utils
 from database.account_deletion_marker import account_deletion_blocks_user_work
 from utils.apps import find_app_subscription, paid_app, set_user_app_sub_customer_id
 from utils.other import endpoints as auth
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from starlette.background import BackgroundTask
 
 from utils.stripe import base_url, create_connect_account, refresh_connect_account_link, is_onboarding_complete
@@ -128,6 +132,11 @@ async def _deletion_webhook_blocks_entitlement(uid: str, subscription_id: str | 
             logger.error('Stripe webhook could not cancel a deletion-fenced subscription: %s', type(error).__name__)
             raise HTTPException(503, 'Subscription cancellation must be retried') from error
     return True
+
+
+PREPAID_PLAN_DETAIL = (
+    "Your prepaid plan ends on its own and nothing will be charged. It can't be changed until it ends."
+)
 
 
 def _stripe_client_error_detail(e: stripe.error.StripeError, fallback: str) -> str:
@@ -342,6 +351,9 @@ def _build_subscription_from_stripe_object(
     current period's latest invoice is paid (see ``_cancel_grace_period_paid``).
     """
     stripe_status = stripe_sub['status']
+    # A prepaid plan's term end is its real end: no paid-through grace, the user drops to Free now.
+    if prepaid_code_config.is_prepaid_subscription(stripe_sub):
+        grant_cancel_grace = False
 
     # For inactive subscriptions (canceled, unpaid, etc.), always downgrade to Basic
     # regardless of price ID — ensures deleted/canceled users don't keep paid access.
@@ -492,8 +504,13 @@ def _try_reactivate_subscription(uid: str, target_price_id: str) -> dict | None:
         if status in stripe_utils.TERMINAL_SUBSCRIPTION_STATUSES:
             return None
 
-        # Check if subscription is active but scheduled to cancel
-        if status == 'active' and stripe_sub_dict.get('cancel_at_period_end') == True:
+        # Check if subscription is active but scheduled to cancel. A prepaid no-card subscription is
+        # never un-cancelled (it has no card to renew with): it falls through to the 409 below.
+        if (
+            status == 'active'
+            and stripe_sub_dict.get('cancel_at_period_end') == True
+            and not prepaid_code_config.is_prepaid_subscription(stripe_sub_dict)
+        ):
             current_price_id = stripe_sub_dict['items']['data'][0]['price']['id']
 
             # If resubscribing to the same plan, just remove cancellation
@@ -781,6 +798,20 @@ def _validate_price_id(price_id: str) -> None:
             raise HTTPException(status_code=503, detail='Ladder price unavailable') from error
 
 
+def play_client_refusal(http_request: Optional[Request], uid: str) -> Optional[JSONResponse]:
+    """A build that buys through Google Play never starts a new Stripe charge; management routes stay open."""
+    if http_request is None:
+        return None
+    headers = http_request.headers
+    if not play_billing_config.client_uses_play(headers.get('X-App-Platform'), headers.get('X-App-Build'), uid):
+        return None
+    logger.info(f"Stripe charge refused for a Google Play client: {sanitize(http_request.url.path)}")
+    return JSONResponse(
+        status_code=409,
+        content={'detail': play_billing_config.USE_GOOGLE_PLAY_MESSAGE, 'code': play_billing_config.USE_GOOGLE_PLAY},
+    )
+
+
 @router.post(
     '/v1/payments/checkout-session',
     response_model=PaymentCheckoutSessionResponse,
@@ -791,6 +822,7 @@ def create_checkout_session_endpoint(
     request: CreateCheckoutRequest,
     uid: str = Depends(auth.get_current_user_uid),
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
+    http_request: Request = None,
 ):
     # Retained currency prices are management-only; ordinary targets keep the
     # existing purchase and eligibility checks before promotion-code lookup.
@@ -800,6 +832,9 @@ def create_checkout_session_endpoint(
         _validate_price_id(request.price_id)
         # Check if user can make a new payment
         can_pay, reason = subscription_utils.can_user_make_payment(uid, request.price_id)
+        if not can_pay and reason in subscription_utils.PLAY_REFUSAL_CODES:
+            code = subscription_utils.PLAY_REFUSAL_CODES[reason]
+            return JSONResponse(status_code=400, content={'detail': reason, 'code': code})
         if not can_pay:
             raise HTTPException(status_code=400, detail=reason)
 
@@ -837,6 +872,10 @@ def create_checkout_session_endpoint(
     if reactivation_result:
         return reactivation_result
 
+    play_refusal = play_client_refusal(http_request, uid)
+    if play_refusal:
+        return play_refusal
+
     # Omi Pro only; runs after every subscriber escape (stale records can look basic).
     single_plan_error = subscription_utils.new_buyer_single_plan_violation(uid, request.price_id)
     if single_plan_error:
@@ -847,7 +886,7 @@ def create_checkout_session_endpoint(
     existing_customer_id = users_db.get_stripe_customer_id(uid)
     # A trial is only for a first-time subscriber. A client that asked for one on behalf of a former
     # subscriber promised something this checkout cannot give, so refuse rather than charge at once.
-    if request.trial_days and existing_customer_id:
+    if request.trial_days and (existing_customer_id or play_subscriptions_db.is_play_customer(uid)):
         raise HTTPException(status_code=400, detail="trial_unavailable")
     trial_period_days = request.trial_days or None
     try:
@@ -943,7 +982,11 @@ def _store_modified_subscription(
 
 @router.post('/v1/payments/upgrade-subscription', response_model=PaymentUpgradeSubscriptionResponse)
 @fresh_reader
-def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str = Depends(auth.get_current_user_uid)):
+def upgrade_subscription_endpoint(
+    request: UpgradeSubscriptionRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+    http_request: Request = None,
+):
     """Upgrade or change a user's subscription plan.
 
     - Cross-plan changes (e.g. Unlimited→Pro): immediate swap via Subscription.modify(),
@@ -951,6 +994,9 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
     - Same plan, different interval (e.g. monthly→annual): scheduled via SubscriptionSchedule,
       takes effect at end of current billing period.
     """
+    play_refusal = play_client_refusal(http_request, uid)
+    if play_refusal:
+        return play_refusal
     currency_binding = management_binding(request.price_id)
     if currency_binding is None:
         _validate_price_id(request.price_id)
@@ -965,6 +1011,8 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
     try:
         # Retrieve current subscription to get current price ID
         stripe_sub = stripe.Subscription.retrieve(current_subscription.stripe_subscription_id).to_dict()
+        if prepaid_code_config.is_prepaid_subscription(stripe_sub):
+            raise HTTPException(status_code=409, detail=PREPAID_PLAN_DETAIL)
         if stripe_sub.get('cancel_at_period_end') and (
             not stripe_sub.get('current_period_end') or stripe_sub['current_period_end'] > int(time.time())
         ):
@@ -1194,16 +1242,21 @@ def cancel_subscription_endpoint(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     subscription = users_db.get_user_subscription(uid)
+    if subscription.provider == 'play':
+        raise HTTPException(status_code=409, detail=play_stripe_guard.PLAY_MANAGED_DETAIL)
     if not subscription.stripe_subscription_id:
         raise HTTPException(status_code=400, detail="No active Stripe subscription found.")
-
-    # Store cancellation reason
-    if request.reason:
-        users_db.set_user_cancellation_feedback(uid, request.reason, request.reason_details)
 
     try:
         # First, check if the subscription is managed by a subscription schedule
         stripe_sub = stripe.Subscription.retrieve(subscription.stripe_subscription_id)
+        if prepaid_code_config.is_prepaid_subscription(stripe_sub):
+            # Cancelling would move its end to this month's end and lose the prepaid months.
+            raise HTTPException(status_code=409, detail=PREPAID_PLAN_DETAIL)
+
+        # Store cancellation reason (a refused cancel records nothing)
+        if request.reason:
+            users_db.set_user_cancellation_feedback(uid, request.reason, request.reason_details)
 
         # Look for active subscription schedules for this customer
         customer_id = stripe_sub.get('customer')
@@ -1410,6 +1463,9 @@ async def stripe_webhook(
     return result
 
 
+PLAY_CHECKOUT_REFUSED = 'Checkout refused: Google Play already bills this user.'
+
+
 async def _restore_paid_cancel_grace(invoice: dict, subscription_obj: dict) -> None:
     """Grant the paid-through grace once a canceled subscription's latest invoice is paid late.
 
@@ -1590,6 +1646,9 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
             # An incomplete Basic row is not a completed paid checkout;
             # preserve the existing duplicate/replacement decision in pure code.
             existing_subscription = await run_blocking(db_executor, users_db.get_user_valid_subscription, uid)
+            if play_stripe_guard.live_play_row(existing_subscription) and session.get('subscription'):
+                await play_stripe_guard.refuse_stripe_for_play_subscriber(uid, session['subscription'])
+                return {"status": "success", "message": PLAY_CHECKOUT_REFUSED}
             checkout_decision = transition(
                 existing_subscription,
                 ResolvedStripeEvent(event['type'], session.get('subscription'), None, int(time.time())),
@@ -1709,6 +1768,17 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                 subscription_obj, grant_cancel_grace=True, now=now, period_paid=period_paid
             )
             if new_subscription:
+                if (
+                    is_paid_plan(new_subscription.plan)
+                    and subscription_obj.get('status') in ('active', 'trialing', 'past_due')
+                    and play_stripe_guard.live_play_row(
+                        await run_blocking(db_executor, users_db.get_existing_user_subscription, uid)
+                    )
+                ):
+                    await play_stripe_guard.refuse_stripe_for_play_subscriber(
+                        uid, subscription_obj['id'], subscription_obj
+                    )
+                    return {"status": "success", "message": PLAY_CHECKOUT_REFUSED}
                 # Resolve prior entitlement before reconciliation; emit only
                 # after the authoritative write so stale deletion is not churn.
                 billing_owner_confirmed = False
@@ -2232,9 +2302,26 @@ def stripe_cancel():
     """)
 
 
+def _customer_has_prepaid_subscription(customer_id: str) -> bool:
+    """Any subscription that can still bill and carries the prepaid marker, read from Stripe itself."""
+    subscriptions = stripe.Subscription.list(customer=customer_id, status='all', limit=20)
+    return any(
+        sub.get('status') not in stripe_utils.TERMINAL_SUBSCRIPTION_STATUSES
+        and prepaid_code_config.is_prepaid_subscription(sub)
+        for sub in subscriptions.data
+    )
+
+
 @router.post('/v1/payments/customer-portal', response_model=CustomerPortalSessionResponse)
 def create_customer_portal_endpoint(uid: str = Depends(auth.get_current_user_uid)):
     """Create a Stripe Customer Portal session for managing payment methods and subscriptions."""
+    # Released clients open this URL as-is; a Play subscriber is sent to Google Play's subscription center.
+    current = users_db.get_user_subscription(uid)
+    if current.provider == 'play':
+        return {"url": play_billing_config.manage_subscription_url()}
+    # The portal could renew, switch or cancel a prepaid no-card plan; it ends on its own.
+    if current.prepaid:
+        raise HTTPException(status_code=409, detail=PREPAID_PLAN_DETAIL)
 
     customer_id = users_db.get_stripe_customer_id(uid)
 
@@ -2249,6 +2336,25 @@ def create_customer_portal_endpoint(uid: str = Depends(auth.get_current_user_uid
 
     if not customer_id:
         raise HTTPException(status_code=400, detail="No Stripe customer found. Please create a subscription first.")
+
+    # The stored row gets the prepaid marker only when the webhook lands; Stripe has it from creation.
+    # A live paid non-prepaid row cannot sit next to a prepaid plan (redeem refuses a live plan), so only
+    # a free, ended or unmarked row can be in that window and needs the Stripe read.
+    live_paid_row = (
+        is_paid_plan(current.plan)
+        and current.status == SubscriptionStatus.active
+        and (current.current_period_end or 0) >= int(time.time())
+    )
+    # Switch off and no prepaid marker on the row: nobody can be mid-redemption, so the portal is exactly
+    # as before the feature (no extra Stripe read, no new failure mode). Cohort or on turns the read back on.
+    if not live_paid_row and prepaid_code_config.mode() != 'off':
+        try:
+            has_prepaid = _customer_has_prepaid_subscription(customer_id)
+        except stripe.error.StripeError as error:
+            logger.error(f"Customer portal: could not read subscriptions for {uid}: {sanitize(str(error))}")
+            raise HTTPException(status_code=503, detail="Could not verify your subscription. Please try again.")
+        if has_prepaid:
+            raise HTTPException(status_code=409, detail=PREPAID_PLAN_DETAIL)
 
     return_url = urljoin(base_url, 'v1/payments/portal-return')
 

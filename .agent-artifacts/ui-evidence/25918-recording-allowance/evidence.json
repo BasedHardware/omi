@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-activity-hold.png",
+      "platform": "mobile-ios",
+      "description": "Activity uses a neutral hourglass for a confirmed hold and an amber warning and Try Again for a separate genuine failure.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-activity-processing.png",
+      "platform": "mobile-ios",
+      "description": "Activity shows the original recording as transcribing after release and pull-to-refresh.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-transcript-completed.png",
+      "platform": "mobile-ios",
+      "description": "Conversation Detail displays one finished transcript for the original recording.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-activity-large-text.png",
+      "platform": "mobile-ios",
+      "description": "At 180% text scaling, actions stay readable below their respective status.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

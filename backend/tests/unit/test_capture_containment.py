@@ -82,6 +82,12 @@ def row(id, source, start=0, end=600, segments=None, **extra):
     }
 
 
+def test_parked_capture_is_ineligible_even_with_contained_speech():
+    pendant, laptop = complementary_pair()
+    decision = cc.measure_capture_containment(pendant, {**laptop, 'deferred': True})
+    assert not decision.would_join and decision.reason == 'ineligible'
+
+
 def test_complementary_pair_joins_in_both_orders_and_symmetric_rule_cannot():
     pendant, laptop = complementary_pair()
     assert not measure_shared_speech(pendant['transcript_segments'], laptop['transcript_segments']).confirms()

@@ -3,6 +3,7 @@ package stubapi
 import (
 	"context"
 
+	"github.com/BasedHardware/omi/backend-go/internal/batchunit"
 	"github.com/BasedHardware/omi/backend-go/internal/platform/crypt"
 	"github.com/BasedHardware/omi/backend-go/internal/platform/httpx"
 	"github.com/BasedHardware/omi/backend-go/internal/queue"
@@ -67,11 +68,16 @@ func (c *Client) Memories(ctx context.Context, in VendorInput, revision int64, k
 	return out.Contents, f
 }
 
-func (c *Client) Speech(ctx context.Context, in VendorInput) (string, *Fault) {
+func (c *Client) Speech(ctx context.Context, in VendorInput, route batchunit.Route, byok bool) (string, *Fault) {
 	var out struct {
 		Result string `json:"result"`
 	}
-	f := c.call(ctx, SpeechVendor, "POST", "/speech/unit", in, &out, "")
+	body := struct {
+		VendorInput
+		Route batchunit.Route `json:"route,omitempty"`
+		BYOK  bool            `json:"byok,omitempty"`
+	}{in, route, byok}
+	f := c.call(ctx, SpeechVendor, "POST", "/speech/unit", body, &out, "")
 	return out.Result, f
 }
 

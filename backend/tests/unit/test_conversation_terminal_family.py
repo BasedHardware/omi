@@ -8,6 +8,7 @@ import pytest
 from google.cloud.firestore_v1 import _helpers
 
 from database import conversations as db, recurring_voice_privacy
+from database.conversation_processing_result import update_fields
 from models.conversation_enums import ConversationStatus as Status
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.conversations import lifecycle, terminal_relevance
@@ -154,6 +155,33 @@ def test_core_does_not_mutate_inputs_or_run_hooks(store, monkeypatch):
     assert db.claim_conversation_status_in_txn(current, expected_status='merging', claimed_status='completed') is None
 
 
+@pytest.mark.parametrize(
+    'current_status,updates,expected',
+    [
+        ('queued', {}, 'completed'),
+        ('leased', {}, 'completed'),
+        ('dead_letter', {}, None),
+        ('blocked_byok', {}, None),
+        ('queued', {'discarded': False}, None),
+        ('queued', {'finalization_revision': 3}, None),
+    ],
+)
+def test_discard_settles_only_its_queued_finalization_projection(store, current_status, updates, expected):
+    current = {
+        **store.rows[PATH],
+        'discarded': True,
+        'finalization_job_id': 'bound-job',
+        'finalization_revision': 2,
+        'finalization_status': current_status,
+    }
+    patch = db.claim_conversation_status_in_txn(
+        current, expected_status='processing', claimed_status='completed', extra_updates=updates, allow_discarded=True
+    )
+    assert patch is not None
+    assert patch.get('finalization_status') == expected
+    assert current['finalization_status'] == current_status
+
+
 @pytest.mark.parametrize('family', sorted(db.TERMINAL_FAILURE_FAMILIES) + [None])
 @pytest.mark.parametrize('status', ['processing', 'completed', 'failed'])
 def test_late_persist_keeps_failure_and_merges_content(store, family, status):
@@ -196,6 +224,29 @@ def test_persist_flips_content_and_status_in_one_write(store):
     assert patch['title'] == 'new content' and patch['status'] == 'completed'
     assert patch['terminal_family'] == 'success'
     assert observed == [True]
+
+
+@pytest.mark.parametrize('mode', ['off', 'on'])
+@pytest.mark.parametrize(
+    'existing, patch, visible',
+    [
+        ({'recording': True, 'home_hidden': True}, {'recording': False}, False),
+        ({'recording': False, 'home_hidden': True}, {'home_hidden': False}, True),
+    ],
+)
+def test_persist_writes_home_visibility_with_its_source_flags(store, monkeypatch, mode, existing, patch, visible):
+    monkeypatch.setenv('CONVERSATION_TERMINAL_FAMILY_MODE', mode)
+    store.rows[PATH].update(existing)
+    tx = store.transaction()
+    monkeypatch.setattr(store, 'transaction', lambda: tx)
+    if mode == 'off':
+        monkeypatch.setattr(tx, 'set', lambda ref, data, *, merge: tx.sets.append((ref.path, data)))
+
+    assert persist(patch)
+    [(path, payload)] = tx.sets + tx.updates
+    assert path == PATH
+    assert {key: payload[key] for key in patch} == patch
+    assert payload['home_list_visible'] is visible
 
 
 @pytest.mark.parametrize(
@@ -311,7 +362,7 @@ def test_update_mask_matches_legacy_merge_including_empty_maps_and_literal_keys(
     payload = {'structured': {'title': 'notes', 'kept': {}}, 'literal.dot': {'back`tick': 2}, 'list': [1, 2]}
     merge = _helpers.pbs_for_set_with_merge('projects/demo/databases/(default)/documents/users/u', payload, True)[0]
     update = _helpers.pbs_for_update(
-        'projects/demo/databases/(default)/documents/users/u', db._processing_result_update_fields(payload), None
+        'projects/demo/databases/(default)/documents/users/u', update_fields(payload), None
     )[0]
     assert set(merge.update_mask.field_paths) == set(update.update_mask.field_paths)
     assert merge.update.fields == update.update.fields
@@ -325,7 +376,7 @@ def test_mode_default_and_operator_kill_switch(monkeypatch, mode, expected):
         monkeypatch.delenv('CONVERSATION_TERMINAL_FAMILY_MODE', raising=False)
     else:
         monkeypatch.setenv('CONVERSATION_TERMINAL_FAMILY_MODE', mode)
-    assert db._terminal_family_serving('synthetic') is expected
+    assert db.terminal_settled.serving('synthetic') is expected
 
 
 @pytest.mark.parametrize('reason', ['terminal_failure', 'completed_status_regression'])

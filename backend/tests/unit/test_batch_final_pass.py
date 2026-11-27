@@ -23,7 +23,7 @@ from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.fixtures.speaker_final_pass_retry import retry_state  # noqa: F401
 from models.audio_file import AudioFile
-from models.conversation import Conversation
+from models.conversation import Conversation, ConversationSpeakers
 from models.diarization import OMI_EMBEDDING_SPACE
 from models.structured import Structured
 from utils.batch_pipeline.contracts import WorkItem, ProjectionBinding, Priority
@@ -439,6 +439,144 @@ def test_reference_refuses_expired_erasing_or_changed_artifacts(reference_store,
             references.load_reference(store, UID, 'unit-a', 'conversation')
 
 
+def _v3_conversation_row(client, cid='v3-conversation'):
+    client.rows[('users', UID, 'conversations', cid)] = {'id': cid, 'v3_recording_ids': ['conversation']}
+    return cid
+
+
+def test_v3_conversation_reads_units_projected_onto_its_source_recording(reference_store):
+    # A conversations-v3 row copies its recording's projected segments; the unit's receipts keep naming the
+    # recording. Before the fix every v3 row refused with skipped_merged (owner corpus 2026-11-26: 24 of 24).
+    store, client = reference_store
+    cid = _v3_conversation_row(client)
+    before = deepcopy(client.rows)
+    with pytest.raises(references.ReferenceUnavailable, match='skipped_merged'):
+        references.load_reference(store, UID, 'unit-a', cid)
+    assert references.load_reference(store, UID, 'unit-a', cid, source_ids=('conversation',)) is not None
+    # A recording the row was not built from is still another conversation's audio.
+    with pytest.raises(references.ReferenceUnavailable, match='skipped_merged'):
+        references.load_reference(store, UID, 'unit-a', cid, source_ids=('other-recording',))
+    assert client.rows == before
+
+
+def test_v3_source_recording_keeps_shared_unit_and_privacy_fences(reference_store):
+    store, client = reference_store
+    cid = _v3_conversation_row(client)
+    receipts = client.rows[('batch_pipeline_dev_results', 'unit-a')]['projection_parts']
+    receipts['1'] = {'conversation_id': 'foreign', 'speaker_scope': 'final:batch:unit-a'}
+    with pytest.raises(references.ReferenceUnavailable, match='skipped_shared_unit'):
+        references.load_reference(store, UID, 'unit-a', cid, source_ids=('conversation',))
+    del receipts['1']
+    client.rows[('users', UID, 'conversations', 'conversation')]['deleted'] = True
+    with pytest.raises(BatchPrivacyBlocked):
+        references.load_reference(store, UID, 'unit-a', cid, source_ids=('conversation',))
+
+
+def test_receipt_sources_are_the_rows_own_v3_recordings():
+    assert batch.receipt_sources(SimpleNamespace(v3_recording_ids=['r2', 'r1', 'r1', None])) == ('r1', 'r2')
+    assert batch.receipt_sources(SimpleNamespace(v3_recording_ids=None)) == ()
+    assert batch.receipt_sources(SimpleNamespace()) == ()
+
+
+def _recordings(monkeypatch, rows):
+    monkeypatch.setattr(batch, 'source_recording_fence', lambda uid, rid: deepcopy(rows.get(rid)))
+
+
+def _at(seconds):
+    return datetime.fromtimestamp(seconds, timezone.utc)
+
+
+def test_v3_source_live_hold_reads_claims_minus_deleted_spans(monkeypatch):
+    conversation = SimpleNamespace(id='mine', v3_recording_ids=['R'])
+    _recordings(
+        monkeypatch,
+        {
+            'R': {
+                'claims': [
+                    {'conversation_id': 'mine', 'start': _at(1010), 'end': _at(1020)},
+                    {'conversation_id': 'sibling', 'start': _at(1020), 'end': _at(1030)},
+                ],
+                'deleted_spans': [{'start': _at(1014), 'end': _at(1016), 'conversation_id': 'mine'}],
+            }
+        },
+    )
+    assert batch.source_scope(UID, conversation).intervals == ((1010.0, 1014.0), (1016.0, 1020.0))
+
+
+def test_only_own_speech_reaches_the_diarizer():
+    # A source recording's unit: this conversation spoke at 2-4 s and 5-6 s (unit clock); a sibling at 10-14 s
+    # and deleted speech sat at 20-22 s. Only the padded own-word stretches keep their samples.
+    words = [{'timestamp': [2.0, 2.5]}, {'timestamp': [3.0, 4.0]}, {'timestamp': [5.0, 6.0]}]
+    spans = batch.own_speech_spans(words)
+    assert spans == [(1.75, 6.25)]
+    pcm = b'\x01\x00' * (30 * 16000)
+    masked = batch.masked_pcm(pcm, spans)
+    assert len(masked) == len(pcm)
+    at = lambda t: masked[int(t * 16000) * 2 : int(t * 16000) * 2 + 2]  # noqa: E731
+    assert at(3) == at(5.5) == b'\x01\x00'
+    assert at(1) == at(12) == at(21) == b'\x00\x00'
+    turns = [{'start': 0, 'end': 30, 'speaker': 'A'}, {'start': 10, 'end': 14, 'speaker': 'B'}]
+    assert batch.clip_turns(turns, spans) == [{'start': 1.75, 'end': 6.25, 'speaker': 'A'}]
+
+
+@pytest.mark.parametrize('row', [None, {'deleted': True, 'claims': []}, {'is_locked': True}, {'claims': []}])
+def test_v3_source_recording_gone_locked_or_unclaimed_refuses(monkeypatch, row):
+    _recordings(monkeypatch, {'R': row} if row is not None else {})
+    with pytest.raises(references.ReferenceUnavailable, match='skipped_merged'):
+        batch.source_scope(UID, SimpleNamespace(id='mine', v3_recording_ids=['R']))
+
+
+def test_v3_source_scope_fingerprint_changes_when_a_claim_or_deletion_changes(monkeypatch):
+    rows = {'R': {'claims': [{'conversation_id': 'mine', 'start': _at(1010), 'end': _at(1020)}]}}
+    _recordings(monkeypatch, rows)
+    conversation = SimpleNamespace(id='mine', v3_recording_ids=['R'])
+    first = batch.source_scope(UID, conversation)
+    rows['R']['deleted_spans'] = [{'start': _at(1012), 'end': _at(1013)}]
+    assert batch.source_scope(UID, conversation).fingerprint != first.fingerprint
+    rows['R'] = {'claims': [{'conversation_id': 'mine', 'start': _at(1010), 'end': _at(1018)}]}
+    assert batch.source_scope(UID, conversation).fingerprint != first.fingerprint
+    assert batch.source_scope(UID, SimpleNamespace(id='legacy', v3_recording_ids=None)) is None
+
+
+def test_appended_units_never_collide_with_later_native_units():
+    # 0-5 s, a 2-6 s unit whose samples differ (appended), and a 6-7 s unit at its own clock.
+    def unit(start, seconds, sample):
+        item = SimpleNamespace(capture_at=1000.0 + start)
+        words = [{'timestamp': [0.0, 0.5], 'text': 'w', 'segment_id': f's{start}'}]
+        return item, sample * (seconds * 16000), words, lambda: True
+
+    capacity = 7 * 32000
+    stream = batch.UnitStream(
+        1000.0,
+        capacity,
+        iter([unit(0, 5, b'\x01\x00'), unit(2, 4, b'\x02\x00'), unit(6, 1, b'\x03\x00')]),
+        SimpleNamespace(timeout=lambda seconds: None),
+    )
+    pcm, words, checks = batch._assemble(stream)
+    pcm = bytes(pcm)
+    appended = capacity + batch.APPEND_GAP_BYTES
+    assert pcm[: 5 * 32000] == b'\x01\x00' * (5 * 16000)
+    assert pcm[6 * 32000 : 7 * 32000] == b'\x03\x00' * 16000  # the native unit stays at its own clock
+    assert pcm[appended:] == b'\x02\x00' * (4 * 16000)
+    assert [w['timestamp'][0] for w in words] == [0.0, appended / 32000, 6.0]
+    assert len(checks) == 3
+
+
+def test_v3_source_passes_learn_no_recurring_profile_and_get_a_fresh_obligation(monkeypatch):
+    from utils.conversations import final_pass_retry as retry
+
+    monkeypatch.setattr(retry, 'batch_unit_scope', lambda s: s.speaker_id_scope)
+    segment = SimpleNamespace(id='s1', speaker_id_scope='final:batch:u1')
+    legacy = SimpleNamespace(transcript_segments=[segment], v3_recording_ids=None)
+    v3 = SimpleNamespace(transcript_segments=[segment], v3_recording_ids=['R'])
+    assert retry.scope_key(legacy) != retry.scope_key(v3)
+    assert retry.scope_key(v3) == retry.scope_key(
+        SimpleNamespace(transcript_segments=[segment], v3_recording_ids=['R'])
+    )
+    source = __import__('inspect').getsource(batch._run)
+    assert 'and not receipt_sources(conversation)' in source
+
+
 def test_reference_privacy_deletion_fence(reference_store):
     store, client = reference_store
     assert references.load_reference(store, UID, 'unit-a', 'conversation') is not None
@@ -596,13 +734,16 @@ def test_capture_clock_places_staged_pcm_and_words_across_gap(lane, monkeypatch)
     assert [w['timestamp'] for w in received] == [[0.2, 2.8], [3, 5.8], [10.2, 12.8], [13, 15.8]]
 
 
-def test_overlapping_incompatible_unit_clocks_keep_all_labels(lane):
+def test_overlapping_incompatible_unit_clocks_append_after_timeline(lane):
+    # unit-b's clock overlaps unit-a with different samples. Labels need each unit's words on its own audio,
+    # so unit-b is appended after the timeline and the pass runs, instead of refusing the conversation
+    # (9 of 24 owner v3 conversations refused this way on 2026-11-26).
     lane.items['unit-b'] = replace(lane.items['unit-b'], capture_at=CAPTURE + 4)
     metric = batch.OUTCOMES.labels(lane='batch', outcome='failed_incomplete_coverage')
     before = metric._value.get()
-    assert all(s.person_id == 'resolver-person' for s in resolve(lane))
-    assert not lane.gpu and lane.fallbacks
-    assert metric._value.get() == before + 1
+    assert all(s.is_user for s in resolve(lane))
+    assert len(lane.gpu) == 1
+    assert metric._value.get() == before
 
 
 def test_staged_read_budget_can_exceed_playback_64_mib_limit(lane, monkeypatch):
@@ -1386,3 +1527,224 @@ def test_shared_units_count_one_conversation_and_each_omitted_unit(prod_shaped, 
     assert after['shared_unit'] - before_units.get('shared_unit', 0) == 2
     assert after['blocked_by_shared_unit'] - before_units.get('blocked_by_shared_unit', 0) == 1
     assert sum(batch_outcome_counts().values()) - sum(before_conversations.values()) == 1
+
+
+def _final_pass_with(evidence_seconds, vector, prints):
+    from models.diarization import DiarizationResult
+
+    class Backend:
+        def diarize(self, pcm, **_):
+            return DiarizationResult.model_validate(
+                {
+                    'turns': [{'start': 0.0, 'end': 4.0, 'speaker': 'SPEAKER_00'}],
+                    'overlaps': [],
+                    'centroids': {'SPEAKER_00': {'embedding': vector, 'evidence_seconds': evidence_seconds}},
+                    'embedding_space': OMI_EMBEDDING_SPACE,
+                    'version': 'test',
+                    'provenance': {'backend': 'pyannote'},
+                }
+            )
+
+    words = [{'timestamp': [0.5, 1.0], 'text': 'hi'}, {'timestamp': [1.5, 2.0], 'text': 'there'}]
+    segments, _ = final.run_final_pass(
+        b'\0\0' * 64000,
+        words,
+        None,
+        {k: {'embedding': v} for k, v in prints.items()},
+        deadline=time.monotonic() + 30,
+        conversation_id='c',
+        diarizer_backend=Backend(),
+        record_outcome=False,
+    )
+    return segments
+
+
+def test_final_pass_voice_without_enough_evidence_is_unknown_not_no_match():
+    # Owner corpus 2026-11-26: on short v3 conversations the final pass labeled voices under the 5 s evidence
+    # floor no_match, and apply_speaker_resolution cleared the resolver's correct owner labels with it.
+    owner = [1.0] + [0.0] * 255
+    stranger = [0.0, 1.0] + [0.0] * 254
+    short = _final_pass_with(2.0, owner, {'user': owner})
+    assert {s.speaker_identity_status for s in short} == {'unknown'}
+    rejected = _final_pass_with(8.0, stranger, {'user': owner})
+    assert {s.speaker_identity_status for s in rejected} == {'no_match'}
+    named = _final_pass_with(8.0, owner, {'user': owner})
+    assert all(s.is_user for s in named)
+
+
+def test_unknown_final_pass_voice_keeps_the_resolvers_owner_label():
+    conversation = Conversation(
+        id='c',
+        created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        started_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 1, 1, 0, 1, tzinfo=timezone.utc),
+        structured=Structured(),
+        transcript_segments=[
+            {'id': 's1', 'text': 'hi', 'speaker': 'SPEAKER_00', 'speaker_id': 0, 'is_user': True, 'start': 0, 'end': 2}
+        ],
+    )
+    stage.apply_speaker_resolution(conversation, {'s1': 3}, {}, {3: 'unknown'}, owner_voiceprint_available=True)
+    assert conversation.transcript_segments[0].is_user is True
+    stage.apply_speaker_resolution(conversation, {'s1': 3}, {}, {3: 'no_match'}, owner_voiceprint_available=True)
+    assert conversation.transcript_segments[0].is_user is False
+
+
+def test_v3_sources_kill_switch_restores_the_refusal(monkeypatch):
+    from utils.conversations import final_pass_retry as retry
+
+    monkeypatch.setattr(retry, 'batch_unit_scope', lambda s: s.speaker_id_scope)
+    row = SimpleNamespace(
+        id='mine',
+        v3_recording_ids=['R'],
+        transcript_segments=[SimpleNamespace(id='s1', speaker_id_scope='final:batch:u1')],
+    )
+    on_key = retry.scope_key(row)
+    monkeypatch.setenv('BATCH_FINAL_PASS_V3_SOURCES_ENABLED', 'false')
+    assert batch.receipt_sources(row) == ()
+    assert batch.source_scope(UID, row) is None
+    assert retry.scope_key(row) != on_key  # the legacy key, as before the change
+
+
+def test_append_kill_switch_restores_the_clock_conflict_refusal(monkeypatch):
+    monkeypatch.setenv('BATCH_FINAL_PASS_APPEND_CONFLICTING_UNITS_ENABLED', 'false')
+    item = lambda start: SimpleNamespace(capture_at=1000.0 + start)  # noqa: E731
+    stream = batch.UnitStream(
+        1000.0,
+        6 * 32000,
+        iter(
+            [(item(0), b'\x01\x00' * 5 * 16000, [], lambda: True), (item(2), b'\x02\x00' * 4 * 16000, [], lambda: True)]
+        ),
+        SimpleNamespace(timeout=lambda seconds: None),
+    )
+    with pytest.raises(batch.IncompleteCoverage, match='conflicting capture clocks'):
+        batch._assemble(stream)
+
+
+# ---- partial final pass on a resolved conversation (BATCH_FINAL_PASS_KEEP_RESOLVED_ON_PARTIAL_ENABLED) ----------
+
+
+def _resolved_by(monkeypatch, ids, *, person_id=None, status='resolved'):
+    """The resolver grouped the voices: conversation-scope ids, one identity per voice, and its status."""
+
+    def resolver(uid, current, **kwargs):
+        for segment, speaker_id in zip(current.transcript_segments, ids):
+            segment.assign_resolved_speaker(speaker_id, f'final:batch:conversation:{current.id}')
+            if segment.speaker_label_source != 'manual':
+                segment.is_user, segment.person_id = person_id is None, person_id
+                segment.speaker_label_source = 'auto'
+        current.speaker_resolution = ConversationSpeakers(status=status, version=2, participant_speaker_ids=[])
+
+    monkeypatch.setattr(stage, '_resolve', resolver)
+
+
+def _turns(monkeypatch, *turns):
+    """The final pass diarizes ``(start, end, voice)`` turns; voice ``A`` sounds like the owner, others do not."""
+    original = final.diarize
+
+    def diarize(*args, **kwargs):
+        output = original(*args, **kwargs)
+        output['turns'] = [{'start': start, 'end': end, 'speaker': voice} for start, end, voice in turns]
+        output['centroids'] = {
+            voice: {'embedding': [1.0, 0.0] if voice == 'A' else [0.0, 1.0], 'evidence_seconds': 12}
+            for voice in {t[2] for t in turns}
+        }
+        return output
+
+    monkeypatch.setattr(final, 'diarize', diarize)
+
+
+@pytest.fixture
+def results(monkeypatch):
+    captured = []
+    original = batch.run_batch_final_pass
+
+    def run(*args, **kwargs):
+        captured.append(original(*args, **kwargs))
+        return captured[-1]
+
+    monkeypatch.setattr(batch, 'run_batch_final_pass', run)
+    return captured
+
+
+def test_partial_pass_reuses_the_resolver_voice_and_keeps_resolved(lane, monkeypatch, results):
+    _resolved_by(monkeypatch, [7, 7])
+    _turns(monkeypatch, (4, 16, 'A'))  # 'Hello' of the first segment falls in a diarizer gap
+    first, second = resolve(lane)
+    assert results[-1]['outcome'] == 'failed_unassigned_words'
+    assert results[-1]['partial_resolution'] == 'kept'
+    # Before: the applied segment took a new id (8) beside the resolver's 7, one person as two numbers.
+    assert (first.speaker_id, second.speaker_id) == (7, 7)
+    assert {s.speaker_id_scope for s in (first, second)} == {'final:batch:conversation:conversation'}
+    assert first.is_user and second.is_user
+    resolution = lane.conversation.speaker_resolution
+    assert resolution.status == 'resolved' and resolution.version == 2
+
+
+@pytest.mark.parametrize('switch, prior', [('false', 'resolved'), ('true', 'unavailable')])
+def test_kill_switch_off_or_unresolved_prior_keeps_new_ids_and_unavailable(lane, monkeypatch, results, switch, prior):
+    monkeypatch.setenv('BATCH_FINAL_PASS_KEEP_RESOLVED_ON_PARTIAL_ENABLED', switch)
+    _resolved_by(monkeypatch, [7, 7], status=prior)
+    _turns(monkeypatch, (4, 16, 'A'))
+    first, second = resolve(lane)
+    assert results[-1]['partial_resolution'] == ('disabled' if switch == 'false' else 'not_resolved')
+    assert (first.speaker_id, second.speaker_id) == (7, 8)
+    assert lane.conversation.speaker_resolution.status == 'unavailable'
+
+
+@pytest.mark.parametrize(
+    'ids, turns, reason',
+    [
+        # Two final voices on one resolver voice: the final pass split it.
+        ([7, 7], [(4, 8, 'A'), (8, 16, 'B')], 'split'),
+        # Resolver voice 7 is mostly the final voice mapped onto 9: the final pass merged them.
+        ([7, 9], [(4, 16, 'A')], 'merge'),
+    ],
+)
+def test_ambiguous_mapping_falls_back_to_new_ids(lane, monkeypatch, results, ids, turns, reason):
+    _resolved_by(monkeypatch, ids)
+    _turns(monkeypatch, *turns)
+    first, second = resolve(lane)
+    assert results[-1]['partial_resolution'] == reason
+    assert first.speaker_id == ids[0] and second.speaker_id == max(ids) + 1
+    assert lane.conversation.speaker_resolution.status == 'unavailable'
+
+
+def test_mapping_needs_a_clear_majority():
+    scope = 'final:batch:conversation:c'
+    stored = {
+        'a': SimpleNamespace(speaker_id=7, speaker_id_scope=scope),
+        'b': SimpleNamespace(speaker_id=9, speaker_id_scope=scope),
+        'u': SimpleNamespace(speaker_id=0, speaker_id_scope='final:batch:unit'),
+    }
+    conversation = SimpleNamespace(id='c', speaker_resolution=ConversationSpeakers(status='resolved'))
+    words = lambda *pairs: [{'segment_id': sid, 'speaker': voice} for sid, voice in pairs]  # noqa: E731
+    assert batch._resolver_voice_mapping(conversation, stored, words(('a', 'A'), ('b', 'A'))) == (None, 'ambiguous')
+    # Words outside the conversation scope belong to no resolver voice.
+    assert batch._resolver_voice_mapping(conversation, stored, words(('a', 'A'), ('u', 'A'))) == (None, 'ambiguous')
+    mapped = words(('a', 'A'), ('a', 'A'), ('u', 'A'), ('b', 'B'), ('b', None))
+    assert batch._resolver_voice_mapping(conversation, stored, mapped) == ({'A': 7, 'B': 9}, 'mapped')
+
+
+def test_identity_disagreement_on_one_number_falls_back(lane, monkeypatch, results):
+    # The resolver named voice 7 a person; the final pass names it the owner. Reusing 7 would show one number with
+    # two names, so the pass keeps today's new id.
+    _resolved_by(monkeypatch, [7, 7], person_id='resolver-person')
+    _turns(monkeypatch, (4, 16, 'A'))
+    first, second = resolve(lane)
+    assert results[-1]['partial_resolution'] == 'inconsistent'
+    assert (first.speaker_id, first.person_id) == (7, 'resolver-person')
+    assert second.speaker_id == 8 and second.is_user
+    assert lane.conversation.speaker_resolution.status == 'unavailable'
+
+
+def test_manual_segment_is_untouched_and_the_rest_keeps_resolved(lane, monkeypatch, results):
+    sid = lane.conversation.transcript_segments[0].id
+    lane.receipts['segments'] = {sid: {'is_user': True, 'person_id': None, 'source': 'manual', 'generation': 1}}
+    _resolved_by(monkeypatch, [7, 7])
+    _turns(monkeypatch, (0, 16, 'A'))
+    manual, other = resolve(lane)
+    assert results[-1]['outcome'] == 'success' and results[-1]['partial_resolution'] == 'kept'
+    assert manual.speaker_label_source == 'manual' and manual.is_user and manual.speaker_id == 7
+    # The receipt reserves the owner (joint naming), so the final voice is no_match; it still reuses voice 7.
+    assert other.speaker_id == 7 and other.speaker_identity_status == 'no_match'
+    assert lane.conversation.speaker_resolution.status == 'resolved'

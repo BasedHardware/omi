@@ -269,6 +269,30 @@
       "reviewed": "2026-11-14"
     },
     {
+      "site": "backend/utils/batch_pipeline/parked_sweep.py",
+      "expression": "f'{namespace}_jobs'",
+      "collection_pattern": "batch_pipeline_*_jobs",
+      "owner": "Goal: Pipeline (SCA-3880)",
+      "unit": "admitted hourly parked GPU page",
+      "reads_per_unit_budget": 200,
+      "reads_per_day_budget": 4800,
+      "basis": "planning-bound",
+      "source": "SCA-3880 DESIGN revision 2. Two indexed metadata pages of 100 rows each. Index-entry billing is separate.",
+      "reviewed": "2026-11-23"
+    },
+    {
+      "site": "backend/utils/batch_pipeline/parked_sweep.py",
+      "expression": "f'{self.store.namespace}_leases'",
+      "collection_pattern": "batch_pipeline_*_leases",
+      "owner": "Goal: Pipeline (SCA-3880)",
+      "unit": "admitted hourly parked GPU page",
+      "reads_per_unit_budget": 2,
+      "reads_per_day_budget": 288,
+      "basis": "planning-bound",
+      "source": "SCA-3880 DESIGN revision 2. One admission read and one cursor checkpoint read per admitted pass. Planning bound includes up to 10 rejected admission attempts per hour (240 extra reads/day), across replicas and restarts. Verify that envelope before rollout; it is not a global limit on rejected claims.",
+      "reviewed": "2026-11-23"
+    },
+    {
       "site": "backend/database/batch_pipeline_store.py",
       "expression": "f'{self.namespace}_allowance_holds'",
       "collection_pattern": "batch_pipeline_*_allowance_holds",
@@ -303,6 +327,18 @@
       "basis": "planning-bound",
       "source": "One indexed page of at most 25 jobs and at most three transactional rereads per job in FirestoreProviderSttOutbox.sweep_running. Production enrichment-maintenance runs at most 720 scheduled passes per day. The development schedule is paused.",
       "reviewed": "2026-11-23"
+    },
+    {
+      "site": "backend/database/batch_pipeline_admission_view.py",
+      "expression": "f'{store.namespace}_jobs'",
+      "collection_pattern": "batch_pipeline_*_jobs",
+      "owner": "Conversation API (#25918)",
+      "unit": "conversation list or detail request with eligible capture metadata",
+      "reads_per_unit_budget": 256,
+      "reads_per_day_budget": 2400000,
+      "basis": "planning-bound",
+      "source": "#25918: request cap includes the minimum read for empty queries. Daily planning uses 240000 recordings/day from the native-close intake envelope times 10 billed document equivalents per recording for repeated list/detail views and retained holds. The view frequency is an assumption to verify with Firestore caller metrics, not a serving limit or measured traffic.",
+      "reviewed": "2026-11-24"
     },
     {
       "site": "backend/database/batch_pipeline_purge.py",
@@ -390,6 +426,16 @@
     }
   ],
   "exempt": [
+    {
+      "site": "backend/database/memories.py",
+      "expression": "canonical.memory_items",
+      "reason": "Existing canonical memory items. Backfill re-derive reads source links within a removal transaction. These documents store memory records and carry no work state."
+    },
+    {
+      "site": "backend/database/memories.py",
+      "expression": "canonical.memory_evidence",
+      "reason": "Existing canonical memory evidence. Backfill re-derive reads source links within a removal transaction. These documents store provenance and carry no work state."
+    },
     {
       "collection": "operational_hold_release_plan_shards",
       "reason": "Immutable fragments of a reviewed account-erasure approval. The erasure worker reads one exact hash-prefix document for each matching object lookup. This collection carries no queue, lease, retry, or progress state and is never polled."

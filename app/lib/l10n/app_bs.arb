@@ -8712,6 +8712,12 @@
     "@authUnexpectedError": {
         "description": "Error message for unexpected error during sign-in"
     },
+    "accountSignInMethods": "Načini prijave",
+    "accountAddSignInMethod": "Dodaj način prijave",
+    "accountAddSignInMethodDetails": "Dodajte način prijave na ovaj Omi račun. Vaš plan, snimci i integracije ostaju na ovom računu.",
+    "accountSignInConflictTitle": "Ovaj način prijave povezan je s drugim računom",
+    "accountSignInConflictDetails": "Još ste prijavljeni na ovaj račun. Svaki Omi račun zadržava svoj plan, snimke i integracije.",
+    "accountSignInMethodAdded": "Način prijave je dodan",
     "authFailedToLinkGoogle": "Greška pri povezivanju sa Google, molimo pokušajte ponovo.",
     "@authFailedToLinkGoogle": {
         "description": "Error message when linking Google account fails"
@@ -11805,6 +11811,7 @@
     "processingNewestFirst": "Prvo ćemo obraditi najnovije snimke do dostupnog limita. Ostali ostaju na čekanju.",
     "processingAction": "Obradi snimke na čekanju",
     "processingProgress": "Obrada vaših snimaka na čekanju…",
+    "waitingForTranscriptionAllowance": "Čeka se dostupna kvota za transkripciju",
     "processingDeferred": "Čeka obradu",
     "processingCount": "{count, plural, =1{1 razgovor na čekanju} other{{count} razgovora na čekanju}}",
     "playbackPartialAudioSaved": "Sačuvano {saved} od {total} audija",
@@ -12172,7 +12179,6 @@
     "capturePendantDisconnectedShort": "Omi će se sam ponovo povezati",
     "forYou": "Za vas",
     "stopThese": "Zaustavi ovo",
-    "meetingActionItemsTitle": "Stavke za uraditi",
     "addToTasks": "Dodaj u zadatke",
     "showInTranscript": "Prikaži transkript",
     "tentativeTaskDueDate": "Rok oko {date}",
@@ -12298,5 +12304,26 @@
     "firmwareUpdateAppRequired": "Ovo ažuriranje firmvera zahtijeva noviju verziju aplikacije Omi. Ažurirajte aplikaciju iz svoje prodavnice aplikacija, a zatim provjerite ponovo.",
     "quietPayerTitle": "Nema snimaka 5 dana",
     "quietPayerMessage": "Provjerite svoj Omi.",
-    "quietPayerCheck": "Provjeri"
+    "quietPayerCheck": "Provjeri",
+    "playManageSubscription": "Upravljaj pretplatom",
+    "playBilledByGoogle": "Naplaćuje se putem Google Playa",
+    "playPurchasePending": "Plaćanje je na čekanju. Omi Pro počinje kad ga Google Play potvrdi.",
+    "playPurchaseOtherAccount": "Ova kupovina na Google Playu pripada drugom Omi računu.",
+    "playPurchaseNotConfirmed": "Kupovinu još nismo mogli potvrditi. Pokušat ćemo ponovo automatski.",
+    "playRenewalTerms": "Automatski se obnavlja po prikazanoj cijeni dok ne otkažete. Upravljajte ili otkažite bilo kada na Google Playu.",
+    "playPaidAppUnavailable": "Nije dostupno na Androidu",
+    "pageNotAvailableInApp": "Ova stranica nije dostupna u aplikaciji.",
+    "shopOrderPlacedCheckEmail": "Narudžba je poslana. Potvrdu potražite u e-pošti.",
+    "prepaidCodeEntry": "Imate kod?",
+    "prepaidCodeTitle": "Iskoristite kod",
+    "prepaidCodeFieldHint": "Unesite svoj kod",
+    "prepaidCodeRedeem": "Iskoristi",
+    "prepaidCodeRedeemed": "Kod je iskorišten",
+    "prepaidCodeResult": "{reason, select, invalid{Ovaj kod nije važeći. Provjerite ga i pokušajte ponovo.} used{Ovaj kod je već iskorišten.} expired{Ovaj kod je istekao.} hasPlan{Već imate plan. Vaš kod nije iskorišten. Iskoristite ga kada vam plan istekne.} notPrepaid{Ovaj kod se ne može iskoristiti ovdje. Iskoristite ga kada odaberete plan.} notEligible{Ovaj kod se ne može koristiti na ovom računu.} rateLimited{Previše pokušaja. Pokušajte kasnije.} other{Nešto nije u redu. Pokušajte ponovo.}}",
+    "playStripeBilledOnWeb": "Naplaćuje se putem omi.me. Otkažite ovdje bilo kada.",
+    "playStripeBilledOnWebShort": "Naplaćuje se putem omi.me.",
+    "playStripePlanPaused": "Vaš {plan} plan je pauziran.",
+    "firmwareNewestSupportedForDevice": "Vaš uređaj već koristi najnoviju podržanu verziju firmvera",
+    "firmwareSyncRecordingsFirstTitle": "Prvo sinhronizujte svoje snimke",
+    "firmwareSyncRecordingsFirstMessage": "Neki snimci su još uvijek na vašem uređaju. Sačekajte da se sinhronizuju s telefonom, a zatim pokrenite ažuriranje."
 }

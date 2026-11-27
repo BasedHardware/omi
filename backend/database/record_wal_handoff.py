@@ -10,7 +10,10 @@ import time
 from uuid import uuid4
 
 from google.cloud import firestore
+from config.record_wal_duplicate import MERGE_TARGET_FIELD, RETAINED_DONORS_FIELD, SETTLED_FIELD
 
+from config.firestore_read_levers import lever_enabled
+from database.privacy_check_metrics import STATUS_SKIP
 from database._client import run_transactional, get_data_plane_firestore_client
 from database.batch_pipeline_privacy import (
     assert_batch_write_allowed,
@@ -43,6 +46,10 @@ def bundle_id(uid, cid, files):
     return JOB_PREFIX + identity([SCHEMA, uid, cid, files])
 
 
+def file_identity(uid, cid, generation, entry):
+    return identity([SCHEMA, uid, cid, generation, entry])
+
+
 def intake_collection(client, namespace):
     # Existing admission receipt storage; only tagged WAL files own this index.
     return _ref(client, namespace, '_wal_schema').parent
@@ -56,7 +63,19 @@ def _file_ref(client, namespace, file_id):
     return _ref(client, namespace, 'wal_file_' + file_id)
 
 
-def check_owner_authority(client, tx, uid, cid, source, device, expected_generation=None, *, sampling_read_budget=None):
+def check_owner_authority(
+    client,
+    tx,
+    uid,
+    cid,
+    source,
+    device,
+    expected_generation=None,
+    *,
+    sampling_read_budget=None,
+    allow_retained_merge=False,
+    verify_upload_context=True,
+):
     snapshots = {}
     check = assert_batch_write_allowed
     options = {}
@@ -70,17 +89,31 @@ def check_owner_authority(client, tx, uid, cid, source, device, expected_generat
         conversation_ids=(cid,),
         expected_generation=expected_generation,
         snapshots=snapshots,
-        **options
+        **options,
     )
     row = snapshots.get('conversations', {}).get(cid) or {}
     user = snapshots.get('user') or {}
+    target_id = row.get(MERGE_TARGET_FIELD)
+    successor = snapshots.get('conversations', {}).get(target_id) or {}
+    retained = (
+        allow_retained_merge
+        and row.get(SETTLED_FIELD) is True
+        and row.get('deleted') is True
+        and bool(target_id)
+        and target_id == row.get('sync_merged_into')
+        and successor.get('private_cloud_sync_enabled') is True
+        and not successor.get('uses_custom_stt')
+        and not successor.get('deleted')
+        and not successor.get('sync_merged_into')
+        and cid in (successor.get(RETAINED_DONORS_FIELD) or [])
+    )
     if (
         not row
-        or row.get('deleted')
-        or row.get('sync_merged_into')
+        or (row.get('deleted') or row.get('sync_merged_into'))
+        and not retained
         or row.get('record_lane_owner') != 'batch_live_v1'
-        or row.get('source') != source
-        or row.get('client_device_id') != device
+        or verify_upload_context
+        and (row.get('source') != source or row.get('client_device_id') != device)
         or row.get('uses_custom_stt')
         or not row.get('private_cloud_sync_enabled')
         or not user.get('private_cloud_sync_enabled', True)
@@ -111,10 +144,12 @@ def begin(client, namespace, uid, cid, files, source, device):
             raise BatchPrivacyBlocked('privacy_generation_changed')
         if previous.get('state') == 'accepted':
             return previous
+        if row.get(SETTLED_FIELD) is True:
+            raise HandoffConflict('duplicate settlement owns the record')
         file_rows = []
         new_files = []
         for entry in files:
-            file_id = identity([SCHEMA, uid, cid, generation, entry])
+            file_id = file_identity(uid, cid, generation, entry)
             prior = _file_ref(client, namespace, file_id).get(transaction=tx).to_dict() or {}
             file_rows.append({'file_id': file_id, **entry, 'receipt': prior.get('receipt')})
             if not prior:
@@ -179,6 +214,8 @@ def commit(client, namespace, fence, receipts):
         current = ref.get(transaction=tx).to_dict() or {}
         if current.get('state') == 'accepted':
             return current
+        if row.get(SETTLED_FIELD) is True:
+            raise HandoffConflict('duplicate settlement owns the record')
         if current.get('fence_token') != fence['fence_token'] or current.get('fence_until', 0) < time.time():
             raise HandoffConflict('exact request fence lost')
         if len(receipts) != len(fence['files']) or not receipts:
@@ -258,7 +295,7 @@ def commit(client, namespace, fence, receipts):
 def check_fence(client, namespace, fence):
     @firestore.transactional
     def check(tx):
-        _, protection, _ = check_owner_authority(
+        _, protection, row = check_owner_authority(
             client,
             tx,
             fence['owner_id'],
@@ -269,6 +306,8 @@ def check_fence(client, namespace, fence):
         )
         if protection != fence['data_protection_level']:
             raise BatchPrivacyBlocked('data_protection_changed')
+        if row.get(SETTLED_FIELD) is True:
+            raise HandoffConflict('duplicate settlement owns the record')
         current = _ref(client, namespace, fence['job_id']).get(transaction=tx).to_dict() or {}
         if current.get('fence_token') != fence['fence_token'] or current.get('fence_until', 0) < time.time():
             raise HandoffConflict('exact request fence lost')
@@ -293,7 +332,7 @@ def status(receipt):
     }
 
 
-def read_status(client, namespace, uid, job_id):
+def read_status(client, namespace, uid, job_id, *, poll: bool = False):
     @firestore.transactional
     def read(tx):
         receipt = _ref(client, namespace, job_id).get(transaction=tx).to_dict() or {}
@@ -301,13 +340,16 @@ def read_status(client, namespace, uid, job_id):
             return None
         if receipt.get('schema') != SCHEMA or receipt.get('version') != VERSION:
             raise HandoffConflict('unsupported custody receipt schema')
-        assert_batch_write_allowed(
-            client,
-            tx,
-            uid,
-            conversation_ids=(receipt['conversation_id'],),
-            expected_generation=receipt['privacy_generation'],
-        )
+        if poll and lever_enabled('bpp_status_skip', uid):
+            STATUS_SKIP.labels('wal_receipt').inc()
+        else:
+            assert_batch_write_allowed(
+                client,
+                tx,
+                uid,
+                conversation_ids=(receipt['conversation_id'],),
+                expected_generation=receipt['privacy_generation'],
+            )
         return status(receipt)
 
     return run_transactional(client, read)

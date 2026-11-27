@@ -1329,7 +1329,11 @@ class ConversationDetailProvider extends ChangeNotifier
   /// Re-reads the open conversation. With [trackLoad] the outcome is kept in [detailLoad] so a tab
   /// with nothing to show can say it is loading or offer Try Again; untracked refreshes stay
   /// silent and never overwrite a tracked failure with "loading".
-  Future<bool> refreshConversation({bool trackLoad = false}) async {
+  /// [read] replaces the detail read for this one refresh. Reliability experiment `fast_end_feedback`
+  /// passes the conversation its waiting request already returned, so it lands through the same
+  /// checks as any other read. Omitted (the baseline), this is the ordinary detail read.
+  Future<bool> refreshConversation(
+      {bool trackLoad = false, Future<ConversationByIdResult> Function(String)? read}) async {
     final openedId = conversationOrNull?.id;
     final ownerUid = SharedPreferencesUtil().uid;
     if (openedId == null) return false;
@@ -1347,7 +1351,7 @@ class ConversationDetailProvider extends ChangeNotifier
     ServerConversation? updatedConversation;
     var inaccessible = false;
     try {
-      final result = await _fetchConversationResult(openedId);
+      final result = await (read ?? _fetchConversationResult)(openedId);
       updatedConversation = result.item;
       inaccessible = result.inaccessible;
       if (updatedConversation != null) {
@@ -1371,7 +1375,9 @@ class ConversationDetailProvider extends ChangeNotifier
         if (!_syncConversationId.hasMatch(openedId)) return false;
         _adoptBridgedConversation(openedId, updatedConversation);
       } else {
-        if (updatedConversation.homeStep == null &&
+        if (updatedConversation.isAdmittedForTranscription && updatedConversation.homeStep != 'transcribing') {
+          updatedConversation = updatedConversation.withHomeStep('transcribing');
+        } else if (updatedConversation.homeStep == null &&
             conversation.homeStep == 'failed' &&
             (updatedConversation.status == ConversationStatus.processing ||
                 updatedConversation.status == ConversationStatus.merging)) {

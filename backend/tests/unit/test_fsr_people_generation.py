@@ -110,7 +110,7 @@ def test_account_purge_erases_generation_head_after_source_batches(monkeypatch):
     monkeypatch.setattr(batch_pipeline_purge, 'purge_batch_owner', lambda uid: None)
     monkeypatch.setattr(user_data_deletion, 'search_apps_db', lambda _uid, my_apps: [])
     monkeypatch.setattr(user_data_deletion, 'get_data_plane_firestore_client', lambda: MagicMock())
-    monkeypatch.setattr(user_data_deletion, 'stop_quiet_checks_for_account', lambda *args, **kwargs: None)
+    monkeypatch.setattr(user_data_deletion, 'purge_finalization_jobs', lambda *args, **kwargs: None)
     # Test the erasure function independently of its unrelated staged-cache decorator.
     result = user_data_deletion.purge_user_subtree.__wrapped__(
         'owner', client, lambda sub, **kwargs: events.append(sub.id)

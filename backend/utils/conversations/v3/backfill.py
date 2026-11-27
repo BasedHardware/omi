@@ -17,7 +17,7 @@ import time
 from contextlib import ExitStack
 from datetime import datetime, timedelta, timezone
 
-from config.conversations_v3 import HISTORICAL_SITDOWN_TIMING, stretch_cohesion_enabled
+from config.conversations_v3 import HISTORICAL_SITDOWN_TIMING, max_window_seconds, stretch_cohesion_enabled
 from database import conversations as conversations_db
 from database import conversations_v3 as store
 from database import conversations_v3_backfill_runs as runs
@@ -62,6 +62,10 @@ class BackfillRetry(Exception):
     """The step could not run now (owner busy); the task is retried by the queue."""
 
 
+class BackfillRunExists(ValueError):
+    """A run with this id is already planned for the owner."""
+
+
 def _utc(value):
     return outline.utc(value)
 
@@ -97,7 +101,8 @@ def plan_partitions(meta, since, until, *, max_rows=PARTITION_ROWS, historical_s
             elif silent:
                 cut = silent[-1]
             else:
-                cut = max(range(1, len(current)), key=lambda i: gaps[i]) if len(current) > 1 else len(current)
+                # Largest gap, latest on ties, so a gap-free run fills partitions instead of cutting at row 1.
+                cut = max(range(1, len(current)), key=lambda i: (gaps[i], i)) if len(current) > 1 else len(current)
             partitions.append({'rows': current[:cut], 'forced_cut': forced})
             current, gaps = current[cut:], gaps[cut:]
         current.append(row)
@@ -176,7 +181,7 @@ def estimate_partition(uid, partition, run_id, *, rederive=False, now=None):
         uid, since=partition['since'], until=partition['until'], run_id=run_id, rederive=rederive
     )
     eligible = [r for r in recordings.values() if policy.builder_eligible(r)]
-    groups = outline.stretches(eligible, now)
+    groups = outline.stretches(eligible, now, max_window=timedelta(seconds=max_window_seconds()))
     est = {
         'sources': len(eligible),
         'stretches': len(groups),
@@ -250,7 +255,7 @@ def create_run(
             raise Conflict('rederive_live_timing')
         record['historical_timing'] = list(HISTORICAL_SITDOWN_TIMING)
     if not runs.create_run(uid, run_id, record, firestore_client=firestore_client):
-        raise ValueError('backfill_run_exists')
+        raise BackfillRunExists('backfill_run_exists')
     runs.mark_start(uid, run_id, firestore_client=firestore_client)
     return run_id
 
@@ -414,6 +419,26 @@ async def run_step(uid, run_id, index, phase):
     drained = await service.drain_backfill(
         uid, deadline=deadline, after=part.get('notes_scan_after'), keep_going=keep_going
     )
+    if drained.get('account_deletion'):
+        await run_blocking(
+            db_executor,
+            runs.update_run,
+            uid,
+            run_id,
+            status='blocked',
+            partition=(
+                index,
+                {
+                    'status': 'blocked',
+                    'reason': 'account_deletion',
+                    'notes_processed': int(part.get('notes_processed') or 0) + drained['processed'],
+                    'notes_failed': int(part.get('notes_failed') or 0) + drained['failed'],
+                    'notes_remaining': drained['remaining'],
+                },
+            ),
+            expect=active,
+        )
+        return {'outcome': 'blocked', 'reason': 'account_deletion'}
     fields = {
         'notes_processed': int(part.get('notes_processed') or 0) + drained['processed'],
         'notes_failed': int(part.get('notes_failed') or 0) + drained['failed'],
@@ -461,47 +486,69 @@ async def run_step(uid, run_id, index, phase):
     return {'outcome': 'committed', 'last': last}
 
 
-def _undo_refused(uid, run_id, reason, firestore_client):
+def _undo_refused(uid, run_id, reason, firestore_client, earlier=None):
+    # Merged into the earlier undo record so totals of groups already undone are never lost.
     runs.update_run(
         uid,
         run_id,
-        patch={'undo': {'outcome': 'busy', 'reason': reason, 'at': datetime.now(timezone.utc)}},
+        patch={'undo': {**(earlier or {}), 'outcome': 'busy', 'reason': reason, 'at': datetime.now(timezone.utc)}},
         firestore_client=firestore_client,
     )
     return {'outcome': 'busy', 'reason': reason}
 
 
-def _kept_by_deletion(donors, derived, kept):
-    """Close the owner's deletions over the run: rows linked to a kept donor stay, and so do their donors.
+def undo_groups(docs):
+    """Split a run's documents into connected groups: donors and copies linked by claims.
 
-    Restoring a donor the owner deleted a copy of would resurrect it; deleting a sibling copy that
-    shares a kept donor would drop the rest of that speech from Home. Both stay as backfilled v3.
+    A claimed copy id joins the group even when the copy document is gone, so its deletion tombstone
+    is checked with the group. A copy a donor names only by a post-run deleted span or a recorded
+    deleted copy still links the group's donors, but is not read: that donor already keeps the group
+    (deleted_after_backfill), so such ids never count against the group's read bound.
     """
-    links = {d['id']: {c.get('conversation_id') for c in d.get('claims') or []} for d in donors}
-    kept_donors, kept_rows = set(kept) & set(links), set()
-    while True:
-        rows = {
-            r['id']
-            for r in derived
-            if kept_donors & set(r.get('v3_recording_ids') or [])
-            or any(r['id'] in links.get(cid, ()) for cid in kept_donors)
-        }
-        more = {rid for r in derived if r['id'] in rows for rid in r.get('v3_recording_ids') or []}
-        more = (more & set(links)) | {cid for cid, claimed in links.items() if claimed & rows}
-        if rows <= kept_rows and more <= kept_donors:
-            return kept_donors, kept_rows
-        kept_rows |= rows
-        kept_donors |= more
+    parent = {}
+
+    def find(x):
+        parent.setdefault(x, x)
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a, b):
+        parent[find(a)] = find(b)
+
+    donors, rows = set(), set()
+    for doc in docs:
+        find(doc['id'])
+        if doc.get('v3_derived'):
+            rows.add(doc['id'])
+            for rid in doc.get('v3_recording_ids') or []:
+                union(doc['id'], rid)
+        else:
+            donors.add(doc['id'])
+            prior = {s.get('conversation_id') for s in (doc.get('v3_backfill_prior') or {}).get('deleted_spans') or []}
+            claimed = {c.get('conversation_id') for c in doc.get('claims') or []} - {None}
+            deleted = {s.get('conversation_id') for s in doc.get('deleted_spans') or []} - prior
+            deleted |= set(doc.get('v3_backfill_deleted_copies') or [])
+            rows |= claimed
+            for cid in (claimed | deleted) - {None}:
+                union(doc['id'], cid)
+    rows |= {doc['id'] for doc in docs if doc.get('v3_derived')}
+    groups = {}
+    for node in donors | rows:
+        group = groups.setdefault(find(node), ([], []))
+        (group[0] if node in donors else group[1]).append(node)
+    return [(sorted(d), sorted(r)) for d, r in groups.values()]
 
 
 def undo_run(uid, run_id, *, firestore_client=None):
     """Restore every legacy donor of a run exactly and remove its derived rows.
 
     Undo holds both the backfill and the live builder leases, so no pass commits (or stamps another
-    row with this run) while it enumerates, restores and deletes. Donors are restored before copies
-    are removed, so an interrupted undo can show a duplicate, never hide a conversation; it is
-    idempotent and simply rerun. A donor whose backfilled copy the owner deleted is kept converted,
-    with the copies it shares, so undo never resurrects a deletion; the ledger counts them.
+    row with this run) while it enumerates and works. Each connected group of donors and copies is
+    undone in one transaction, so a conversation is never hidden or shown twice partway. A group in
+    which the owner deleted a copy stays as backfilled v3, so undo never resurrects a deletion; the
+    ledger counts those groups. Idempotent: rerun after an interruption.
     """
     run = runs.get_run(uid, run_id, firestore_client=firestore_client)
     if run is None:
@@ -511,6 +558,9 @@ def undo_run(uid, run_id, *, firestore_client=None):
     if run.get('mode') == 'rederive':
         # A re-derive keeps each row's original run stamp; undo that run to remove its rows.
         return {'outcome': 'undo_the_original_run'}
+    if run.get('status') in ('undone', 'undone_partial'):
+        # Already undone: report the recorded result instead of re-reading old removals as new races.
+        return {**{k: v for k, v in (run.get('undo') or {}).items() if k != 'at'}, 'outcome': run['status']}
     # 'undoing' is written first so in-flight drains stop (keep_going); a refusal records why.
     runs.update_run(uid, run_id, status='undoing', firestore_client=firestore_client)
     held = []
@@ -518,57 +568,76 @@ def undo_run(uid, run_id, *, firestore_client=None):
         for key, reason in ((store.BACKFILL_LEASE, 'backfill_pass_in_flight'), ('builder', 'live_builder_in_flight')):
             token = leases.acquire(uid, key, firestore_client=firestore_client)
             if token is None:
-                return _undo_refused(uid, run_id, reason, firestore_client)
+                return _undo_refused(uid, run_id, reason, firestore_client, run.get('undo'))
             held.append((key, token))
         token = held[0][1]
-
-        def renew():
-            for key, held_token in held:
-                leases.renew(uid, key, held_token, firestore_client=firestore_client)
-
         docs = store.backfill_run_documents(uid, run_id, firestore_client=firestore_client)
-        derived = [d for d in docs if d.get('v3_derived')]
-        donors = [d for d in docs if not d.get('v3_derived')]
-        if any(leases.held(uid, 'summary-' + d['id'], firestore_client=firestore_client) for d in derived):
-            return _undo_refused(uid, run_id, 'notes_in_flight', firestore_client)
-        kept_donors, kept_rows = _kept_by_deletion(
-            donors, derived, {d['id'] for d in donors if store.deleted_after_backfill(d)}
-        )
-        restored = 0
-        restore = [d['id'] for d in donors if d['id'] not in kept_donors]
-        for start in range(0, len(restore), store.BACKFILL_UNDO_PAGE):
-            count, late = store.restore_backfill_donors(
-                uid, token, restore[start : start + store.BACKFILL_UNDO_PAGE], firestore_client=firestore_client
-            )
-            restored += count
-            if late:
-                # Deleted while undo ran: keep it and every copy it shares.
-                kept_donors, kept_rows = _kept_by_deletion(donors, derived, kept_donors | set(late))
-            renew()
-        removed = 0
-        remove = [d['id'] for d in derived if d['id'] not in kept_rows]
-        for start in range(0, len(remove), store.BACKFILL_UNDO_PAGE):
-            removed += store.delete_backfill_rows(
-                uid, token, remove[start : start + store.BACKFILL_UNDO_PAGE], firestore_client=firestore_client
-            )
-            renew()
+        derived = [d['id'] for d in docs if d.get('v3_derived')]
+        if any(leases.held(uid, 'summary-' + cid, firestore_client=firestore_client) for cid in derived):
+            return _undo_refused(uid, run_id, 'notes_in_flight', firestore_client, run.get('undo'))
+        kept = {'groups_kept_deleted': 0, 'donors_kept_deleted': 0, 'groups_kept_live': 0, 'donors_kept_live': 0}
+
+        def totals():
+            # Restored/removed totals and removed copy ids are written in each group's own transaction
+            # (crash-safe, across attempts); kept groups stay stamped with the run and are recounted.
+            progress = (runs.get_run(uid, run_id, firestore_client=firestore_client) or {}).get('undo_progress') or {}
+            result: dict[str, object] = {
+                'donors_restored': int(progress.get('donors_restored') or 0),
+                'rows_removed': int(progress.get('rows_removed') or 0),
+                **kept,
+            }
+            return progress, result
+
+        for donors, rows in undo_groups(docs):
+            try:
+                outcome, donors_touched, _removed = store.undo_backfill_group(
+                    uid, token, donors, rows, run_id=run_id, firestore_client=firestore_client
+                )
+                for key, held_token in held:
+                    leases.renew(uid, key, held_token, firestore_client=firestore_client)
+            except store.Conflict as error:
+                # Groups already done stay done; the run stays 'undoing' and a rerun continues. Copies
+                # removed so far are still checked for a delete that raced them.
+                progress, result = totals()
+                raced = store.deleted_copy_ids(
+                    uid, list(progress.get('removed_ids') or []), firestore_client=firestore_client
+                )
+                result.update(deleted_during_undo=len(raced), deleted_during_undo_ids=raced)
+                runs.update_run(
+                    uid,
+                    run_id,
+                    patch={
+                        'undo': {**result, 'outcome': 'error', 'reason': str(error), 'at': datetime.now(timezone.utc)}
+                    },
+                    firestore_client=firestore_client,
+                )
+                return {'outcome': 'error', 'reason': str(error), **result}
+            if outcome == 'kept':
+                kept['groups_kept_deleted'] += 1
+                kept['donors_kept_deleted'] += donors_touched
+            elif outcome == 'kept_live':
+                kept['groups_kept_live'] += 1
+                kept['donors_kept_live'] += donors_touched
+        progress, result = totals()
+        # A delete whose tombstone landed after its copy was undone raced undo (the shared delete path
+        # reads the copy before it writes the tombstone): that legacy row is visible again. Every
+        # attempt's removed copies are checked, and the ids are kept for the operator.
+        raced = store.deleted_copy_ids(uid, list(progress.get('removed_ids') or []), firestore_client=firestore_client)
+        result.update(deleted_during_undo=len(raced), deleted_during_undo_ids=raced)
     finally:
         for key, held_token in held:
             leases.release(uid, key, held_token, firestore_client=firestore_client)
-    result = {
-        'donors_restored': restored,
-        'rows_removed': removed,
-        'donors_kept_deleted': len(kept_donors),
-        'rows_kept_deleted': len(kept_rows),
-    }
+    # Kept groups or a raced delete mean undo did not return everything to legacy: never call that done.
+    partial = result['groups_kept_deleted'] or result['groups_kept_live'] or result['deleted_during_undo']
+    status = 'undone_partial' if partial else 'undone'
     runs.update_run(
         uid,
         run_id,
-        status='undone',
+        status=status,
         patch={'undo': {**result, 'at': datetime.now(timezone.utc)}},
         firestore_client=firestore_client,
     )
-    return {'outcome': 'undone', **result}
+    return {'outcome': status, **result}
 
 
 # ---- live re-derive -------------------------------------------------------------------------------
@@ -605,7 +674,7 @@ def estimate_live_partition(uid, partition, run_id, *, now=None, historical_sitd
 
     Before counts are exact. After counts come from the real planner with one window per stretch
     (each stretch outlined as a single conversation), so ``windows_after`` is the fewest windows the
-    run can make; the outline can split a stretch into more windows (each with at least 300 words, or
+    run can make; the outline can split a stretch into more windows (each with at least 150 words, or
     the manual-end window), which adopt more rows, so the run retires at most about
     ``rows_retired_est`` (eligible rows minus the windows that adopt one). Spend is priced
     like a backfill: one outline per stretch, plus notes or tasks for every window after.
@@ -620,7 +689,7 @@ def estimate_live_partition(uid, partition, run_id, *, now=None, historical_sitd
             eligible, now, since=partition['since'], until=partition['until'], internal_end=internal_end
         )
     else:
-        groups = outline.stretches(eligible, now)
+        groups = outline.stretches(eligible, now, max_window=timedelta(seconds=max_window_seconds()))
     protected = {cid for cid, row in existing.items() if row.get('_v3_protected')}
     outlines = [outline.fallback(group) for group in groups]
     if historical_sitdown:

@@ -7,6 +7,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/conversation_v3.dart';
 import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/conversations/early_title.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 /// A Home row's tile. For an account on v3 it shows where the conversation is in the pipeline:
@@ -22,6 +23,12 @@ class ConversationStateTile extends StatefulWidget {
   final ServerConversation conversation;
 
   static const double extent = 36;
+
+  /// Reliability experiment `early_title_icon`: whether a row still in the pipeline already shows its
+  /// emoji, because the server has fixed its title and emoji ([titledBeforeSummary]); the row's status
+  /// line goes on saying what is still being done. Off, always false.
+  static bool showsEmojiEarly(ServerConversation conversation, ConversationTileState? state) =>
+      state != null && titledBeforeSummary(conversation);
 
   @override
   State<ConversationStateTile> createState() => _ConversationStateTileState();
@@ -47,7 +54,9 @@ class _ConversationStateTileState extends State<ConversationStateTile> {
         SemanticsService.sendAnnouncement(view, message, direction);
       });
     }
-    final (Widget child, String? label) = switch (state) {
+    // The emoji of a row whose title and emoji are already fixed; [_shown] still follows the real state.
+    final tileState = ConversationStateTile.showsEmojiEarly(conversation, state) ? ConversationTileState.done : state;
+    final (Widget child, String? label) = switch (tileState) {
       ConversationTileState.live => (const OmiBreathingDot(key: Key('conversation_tile_live')), l10n.live),
       ConversationTileState.transcribing => (
           const OmiSpinner(key: Key('conversation_tile_transcribing'), size: OmiSpinnerSize.small),
@@ -79,7 +88,7 @@ class _ConversationStateTileState extends State<ConversationStateTile> {
       child: OmiCrossFade(
         alignment: Alignment.center,
         // Done and no-state both show the emoji: one key, so the emoji never cross-fades with itself.
-        child: KeyedSubtree(key: ValueKey('tile_${label == null ? 'emoji' : state!.name}'), child: child),
+        child: KeyedSubtree(key: ValueKey('tile_${label == null ? 'emoji' : tileState!.name}'), child: child),
       ),
     );
     return label == null ? tile : Semantics(label: label, child: tile);

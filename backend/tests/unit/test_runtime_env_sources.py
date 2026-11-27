@@ -17,6 +17,32 @@ def test_checked_in_manifest_matches_sources():
     assert COMPOSER['compose_manifest']() == manifest
 
 
+def test_derived_service_forbidden_env_removes_inherited_values_and_keeps_inherited_forbidden():
+    config = {
+        'cloud_run': {
+            'services': {
+                'backend-integration': {
+                    'env': {
+                        'INTEGRATION_ONLY': {'value': 'true'},
+                        'SHARED': {'value': 'present'},
+                    },
+                    'forbidden_env': ['SOURCE_FORBIDDEN'],
+                },
+                'backend-projection-pump': {
+                    'derive_from': 'backend-integration',
+                    'forbidden_env': ['INTEGRATION_ONLY'],
+                },
+            }
+        }
+    }
+
+    COMPOSER['_resolve_derived_services'](config)
+
+    pump = config['cloud_run']['services']['backend-projection-pump']
+    assert pump['env'] == {'SHARED': {'value': 'present'}}
+    assert pump['forbidden_env'] == ['SOURCE_FORBIDDEN', 'INTEGRATION_ONLY']
+
+
 def test_docket_retirements_have_no_source_bindings():
     registry = yaml.load((ROOT / 'config/feature-flags.yaml').read_text(), Loader=SAFE_LOADER)
     retired = {row['key'] for row in registry['retired'] if 'David flag docket 2026-11-09' in row.get('reason', '')}

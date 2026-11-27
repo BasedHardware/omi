@@ -1,5 +1,8 @@
 """Atomic batch protocol ownership, durable projection binding and queue admission."""
 
+from database import batch_pipeline_upload_metrics as upload_metrics
+from config.request_clock import context_fields
+
 from dataclasses import asdict, replace
 from datetime import datetime, timedelta, timezone
 import logging
@@ -20,6 +23,8 @@ from utils.batch_pipeline.correctness_metrics import record as record_correctnes
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
 from utils.batch_pipeline.result_protocol import stamp
 from utils.batch_pipeline.scheduler import Scheduler, owner_key
+from utils.conversations.v3.policy import NATIVE_MANUAL_INPUT_REVISION, NATIVE_MANUAL_STOP
+from utils.observability.stt_cap_dispatch import DispatchPath, DispatchReason, record_decision
 
 PROTOCOL = 'batch_v1'
 logger = logging.getLogger(__name__)
@@ -72,6 +77,7 @@ def admit(
         serialized_binding.pop('partial_record')
 
     def commit(tx):
+        created_units = 0
         if coalescing_group is not None:
             from database.batch_pipeline_coalescing import guard
 
@@ -216,6 +222,7 @@ def admit(
                     marked = tx.get('jobs', item.segment_id)
                     stamp(marked, 'source_reuse_version')
                     tx.put('jobs', item.segment_id, marked)
+            created_units += int(bool(created) and not item.shadow)
             job = tx.get('jobs', item.segment_id)
             if park_allowance and created and job.get('state') == allowance_hold.STATE:
                 parked += 1
@@ -232,6 +239,12 @@ def admit(
                 # conversation snapshots already read in this transaction.
                 job['record_intake_claimed_at'] = pending.get('record_intake_claimed_at')
                 job['record_sealed_at'] = row.get('record_sealed_at')
+                if not binding.partial_record and row.get(NATIVE_MANUAL_STOP) and record_barrier is not None:
+                    # The already-checked staging barrier binds manual notes to this upload even
+                    # when the independent token-lease rollout is off. Never repin a replay.
+                    revision = record_barrier.get('record_upload_revision')
+                    if type(revision) is int and revision > 0:
+                        job[NATIVE_MANUAL_INPUT_REVISION] = revision
                 job['record_ready_at'] = time.time()
                 finished = row.get('finished_at')
                 if isinstance(finished, datetime):
@@ -261,6 +274,7 @@ def admit(
             content_key,
             {
                 **coalescing_completion.manifest(coalescing_group),
+                **context_fields(intake),
                 'status': 'processing',
                 'job_id': binding.job_id,
                 'lane': 'batch',
@@ -283,14 +297,18 @@ def admit(
             '_policy_id': admission.policy_id,
             '_admitted_seconds': sum(i.duration_seconds for i in items),
             '_reused_seconds': sum(i.duration_seconds for i in items if i.segment_id in (source_aliases or {})),
+            '_created_units': created_units,
             '_allowance_parked': parked,
         }
 
     outcome = store.run(commit)
+    created_units = int(outcome.pop('_created_units', 0) or 0)
+    if created_units:
+        upload_metrics.CREATED.labels(upload_metrics.bounded_class((intake or {}).get('upload_entitlement'))).inc(
+            created_units
+        )
     parked = outcome.pop('_allowance_parked', 0)
     if parked:
-        from utils.observability.stt_cap_dispatch import DispatchPath, DispatchReason, record_decision
-
         record_decision(DispatchPath.BATCH_INTAKE, False, DispatchReason.ALLOWANCE_EXHAUSTED)
         logger.info('event=batch_allowance_intake outcome=parked units=%s', parked)
     policy_id = str(outcome.pop('_policy_id', policy.policy_id))

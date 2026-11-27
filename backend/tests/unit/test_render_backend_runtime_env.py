@@ -854,6 +854,8 @@ def test_prod_cloud_run_secret_refs_match_approved_bindings():
             # Keiki iMessage/WhatsApp signing secrets (David, 2026-10-30: build the Keiki integration).
             'KEIKI_IMESSAGE_SIGNING_SECRET',
             'KEIKI_WHATSAPP_SIGNING_SECRET',
+            # Google Play Billing account-id HMAC key (purchase binding; backend serves the Play routes).
+            'PLAY_ACCOUNT_ID_HMAC_KEY',
         },
         'backend-sync': common
         | {'GOOGLE_MAPS_API_KEY', 'DREAM_AGENT_FEEDBACK_SALT', 'TYPESENSE_HOST', 'TYPESENSE_API_KEY'},
@@ -1739,19 +1741,33 @@ def test_prod_silence_read_skip_respects_backend_backfill_pump_and_listen_pins()
     assert [entry['value'] for entry in values['env'] if entry['name'] == key] == ['false']
 
 
-def test_prod_backend_renders_sibling_skip_and_poll_backoff_preservation_pins(monkeypatch):
+def test_prod_backend_renders_sibling_skip_preservation_pin(monkeypatch):
     prod = _MANIFEST['environments']['prod']
     _set_workflow_bound_env(monkeypatch, prod)
     backend = prod['cloud_run']['services']['backend']
     rendered = dict(_MODULE['_parse_deploy_cloud_run_env_vars'](_MODULE['_render_env_vars'](backend['env'])))
 
     assert rendered['BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED'] == 'false'
-    assert rendered['SYNC_POLL_BACKOFF_ENABLED'] == 'false'
-    assert 'SYNC_POLL_BACKOFF_PERCENT' not in rendered
-    assert 'SYNC_POLL_BACKOFF_PERCENT' in _MODULE['_remove_env_extra']('backend', backend).split(',')
 
 
-def test_prod_backfill_renders_sibling_skip_and_poll_backoff_preservation_pins(monkeypatch):
+def test_prod_logging_reductions_render_only_on_backend_integration(monkeypatch):
+    prod = _MANIFEST['environments']['prod']
+    _set_workflow_bound_env(monkeypatch, prod)
+    expected = {
+        'BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_ENABLED': 'true',
+        'BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_PERCENT': '1',
+        'BATCH_POLICY_KILL_SWITCH_LOG_ON_CHANGE_ENABLED': 'true',
+    }
+
+    for name, service in prod['cloud_run']['services'].items():
+        rendered = dict(_MODULE['_parse_deploy_cloud_run_env_vars'](_MODULE['_render_env_vars'](service['env'])))
+        actual = {key: rendered[key] for key in expected if key in rendered}
+        assert actual == (expected if name == 'backend-integration' else {}), name
+    pump = prod['cloud_run']['services']['backend-projection-pump']
+    assert set(expected) <= set(pump['forbidden_env'])
+
+
+def test_prod_backfill_renders_sibling_skip_preservation_pin(monkeypatch):
     prod = _MANIFEST['environments']['prod']
     _set_workflow_bound_env(monkeypatch, prod)
     backfill = prod['cloud_run']['services']['backend-sync-backfill']
@@ -1759,7 +1775,15 @@ def test_prod_backfill_renders_sibling_skip_and_poll_backoff_preservation_pins(m
 
     for key, expected in {
         'BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED': 'false',
-        'SYNC_POLL_BACKOFF_ENABLED': 'false',
-        'SYNC_POLL_BACKOFF_PERCENT': '0',
     }.items():
         assert [(name, value) for name, value in rendered if name == key] == [(key, expected)]
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+def test_retired_job_status_poll_settings_are_absent(monkeypatch, environment):
+    config = _MANIFEST['environments'][environment]
+    _set_workflow_bound_env(monkeypatch, config)
+    retired = {'SYNC_POLL_BACKOFF_ENABLED', 'SYNC_POLL_BACKOFF_PERCENT'}
+    for service in config['cloud_run']['services'].values():
+        rendered = _MODULE['_render_env_vars'](service['env'])
+        assert retired.isdisjoint(dict(_MODULE['_parse_deploy_cloud_run_env_vars'](rendered)))

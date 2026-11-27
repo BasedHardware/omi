@@ -8712,6 +8712,12 @@
     "@authUnexpectedError": {
         "description": "Error message for unexpected error during sign-in"
     },
+    "accountSignInMethods": "Спосабы ўваходу",
+    "accountAddSignInMethod": "Дадаць спосаб уваходу",
+    "accountAddSignInMethodDetails": "Дадайце спосаб уваходу ў гэты ўліковы запіс Omi. Ваш тарыфны план, запісы і інтэграцыі застануцца ў гэтым уліковым запісе.",
+    "accountSignInConflictTitle": "Гэты спосаб уваходу звязаны з іншым уліковым запісам",
+    "accountSignInConflictDetails": "Вы па-ранейшаму ўвайшлі ў гэты ўліковы запіс. Кожны ўліковы запіс Omi захоўвае свой тарыфны план, запісы і інтэграцыі.",
+    "accountSignInMethodAdded": "Спосаб уваходу дададзены",
     "authFailedToLinkGoogle": "Не вдалося звязаць з Google, спрабуйце яшчэ раз.",
     "@authFailedToLinkGoogle": {
         "description": "Error message when linking Google account fails"
@@ -11805,6 +11811,7 @@
     "processingNewestFirst": "Спачатку апрацуем найноўшыя запісы ў межах даступнага ліміту. Астатнія будуць чакаць.",
     "processingAction": "Апрацаваць запісы ў чаканні",
     "processingProgress": "Апрацоўваем запісы ў чаканні…",
+    "waitingForTranscriptionAllowance": "Чакаем даступнага ліміту транскрыпцыі",
     "processingDeferred": "Чакае апрацоўкі",
     "processingCount": "{count, plural, =1{1 размова ў чаканні} other{{count} размоў у чаканні}}",
     "playbackPartialAudioSaved": "Захавана {saved} з {total} аўдыя",
@@ -12172,7 +12179,6 @@
     "capturePendantDisconnectedShort": "Omi перападключыцца сам",
     "forYou": "Для вас",
     "stopThese": "Спыніць гэта",
-    "meetingActionItemsTitle": "Элементы действий",
     "addToTasks": "Дадаць у задачы",
     "showInTranscript": "Паказаць у расшыфроўцы",
     "tentativeTaskDueDate": "Тэрмін прыблізна {date}",
@@ -12298,5 +12304,26 @@
     "firmwareUpdateAppRequired": "Для гэтага абнаўлення прашыўкі патрэбна навейшая версія праграмы Omi. Абнавіце праграму ў краме праграм, затым праверце яшчэ раз.",
     "quietPayerTitle": "Няма запісаў 5 дзён",
     "quietPayerMessage": "Праверце свой Omi.",
-    "quietPayerCheck": "Праверыць"
+    "quietPayerCheck": "Праверыць",
+    "playManageSubscription": "Кіраваць падпіскай",
+    "playBilledByGoogle": "Аплата праз Google Play",
+    "playPurchasePending": "Аплата ў чаканні. Omi Pro пачнецца, калі Google Play яе пацвердзіць.",
+    "playPurchaseOtherAccount": "Гэтая пакупка ў Google Play належыць іншаму акаўнту Omi.",
+    "playPurchaseNotConfirmed": "Не ўдалося пацвердзіць пакупку. Мы паспрабуем зноў аўтаматычна.",
+    "playRenewalTerms": "Аўтаматычна падаўжаецца па паказаным кошце, пакуль вы не скасуеце. Кіраваць ці скасаваць можна ў любы час у Google Play.",
+    "playPaidAppUnavailable": "Недаступна на Android",
+    "pageNotAvailableInApp": "Гэтая старонка недаступная ў праграме.",
+    "shopOrderPlacedCheckEmail": "Заказ аформлены. Пацвярджэнне прыйдзе на вашу пошту.",
+    "prepaidCodeEntry": "Ёсць код?",
+    "prepaidCodeTitle": "Актываваць код",
+    "prepaidCodeFieldHint": "Увядзіце ваш код",
+    "prepaidCodeRedeem": "Актываваць",
+    "prepaidCodeRedeemed": "Код актываваны",
+    "prepaidCodeResult": "{reason, select, invalid{Гэты код несапраўдны. Праверце яго і паспрабуйце зноў.} used{Гэты код ужо выкарыстаны.} expired{Тэрмін дзеяння гэтага кода скончыўся.} hasPlan{У вас ужо ёсць план. Ваш код не выкарыстаны. Актывуйце яго пасля заканчэння плана.} notPrepaid{Гэты код нельга актываваць тут. Выкарыстайце яго пры выбары плана.} notEligible{Гэты код нельга выкарыстаць на гэтым акаўнце.} rateLimited{Занадта шмат спроб. Паспрабуйце пазней.} other{Нешта пайшло не так. Паспрабуйце зноў.}}",
+    "playStripeBilledOnWeb": "Аплата праз omi.me. Скасуйце тут у любы час.",
+    "playStripeBilledOnWebShort": "Аплата праз omi.me.",
+    "playStripePlanPaused": "Ваш план {plan} прыпынены.",
+    "firmwareNewestSupportedForDevice": "Ваша прылада ўжо працуе на найноўшай падтрыманай версіі прашыўкі",
+    "firmwareSyncRecordingsFirstTitle": "Спачатку сінхранізуйце свае запісы",
+    "firmwareSyncRecordingsFirstMessage": "Некаторыя запісы ўсё яшчэ на вашай прыладзе. Дайце ім завяршыць сінхранізацыю на тэлефон, а потым пачніце абнаўленне."
 }

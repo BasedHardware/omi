@@ -15,6 +15,7 @@ from utils.episodes import home_membership
 
 HAS_MORE_HEADER = 'X-Omi-Has-More'
 NEXT_CURSOR_HEADER = 'X-Omi-Next-Cursor'
+HOME_MODE_HEADER = 'X-Omi-Home-Page-Mode'
 
 
 def apply(response: Any, page: Mapping[str, Any]) -> None:

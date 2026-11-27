@@ -280,10 +280,13 @@ func ID(namespace string, parts ...string) string {
 
 // Account is the account service's answer for one user.
 type Account struct {
-	Deleting bool     `json:"deleting"`
-	OwnKey   bool     `json:"own_key"`
-	MinWords int      `json:"min_words"`
-	Apps     []string `json:"apps"`
+	EntitlementChangedAt  time.Time `json:"entitlement_changed_at"`
+	EntitlementGeneration int64     `json:"entitlement_generation"`
+	AllowanceExhausted    bool      `json:"allowance_exhausted"`
+	Deleting              bool      `json:"deleting"`
+	OwnKey                bool      `json:"own_key"`
+	MinWords              int       `json:"min_words"`
+	Apps                  []string  `json:"apps"`
 }
 
 // Account reads a user's account state.

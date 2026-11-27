@@ -44,6 +44,10 @@ def batch_held_dead_letter_enabled() -> bool:
     return kill_switch('BATCH_HELD_DEAD_LETTER_ENABLED')
 
 
+def parked_job_sweeper_enabled() -> bool:
+    return kill_switch('BATCH_PARKED_JOB_SWEEPER_ENABLED', log=False)
+
+
 def projection_source_deleted_enabled() -> bool:
     """Ship-on no-text settlement for a deleted source without a tombstone or redirect."""
     return rollout_default_on(
@@ -920,6 +924,27 @@ def projection_followup_slots(default: int = PROJECTION_FOLLOWUP_SLOTS_DEFAULT) 
     except ValueError:
         return default
     return value if 1 <= value <= PROJECTION_FOLLOWUP_SLOTS_MAX else default
+
+
+PROJECTION_FOLLOWUP_DISCOVERY_INTERVAL_MAX = 900.0
+
+
+def projection_followup_discovery_interval_seconds() -> float:
+    """Minimum seconds between one serving process's periodic follow-up discovery reads.
+
+    ``0`` (the default) keeps today's behavior: discover on every serving pass whose
+    queue has drained. A positive value paces only the periodic sweep, so fleet sweep
+    volume stops scaling with serving-pass speed. Targeted owner-chain wakes and
+    queued rows are never delayed. Malformed or out-of-range values keep ``0``.
+    """
+    raw = os.getenv('BATCH_PIPELINE_PROJECTION_FOLLOWUP_DISCOVERY_INTERVAL_SECONDS', '').strip()
+    try:
+        value = float(raw) if raw else 0.0
+    except ValueError:
+        return 0.0
+    if not math.isfinite(value) or not 0 <= value <= PROJECTION_FOLLOWUP_DISCOVERY_INTERVAL_MAX:
+        return 0.0
+    return value
 
 
 PROJECTION_FOLLOWUP_BACKOFF_DEFAULT = 900.0

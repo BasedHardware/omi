@@ -51,6 +51,7 @@ List<ServerConversation> pastProcessingConversations({
           ];
     for (final member in members) {
       if (member.deleted || member.discarded || member.isLocked) continue;
+      if ((byId[member.id] ?? member).isTranscriptionAllowanceHeld) continue;
       byId[member.id] = ServerConversation(
         id: member.id,
         createdAt: member.createdAt,
@@ -63,6 +64,7 @@ List<ServerConversation> pastProcessingConversations({
   return byId.values.where((c) {
     final step = homeStepOf(c);
     return !attentionIds.contains(c.id) &&
+        !c.isTranscriptionAllowanceHeld &&
         (step == HomeStep.transcribing || step == HomeStep.writingNotes) &&
         localHomeDay(c.startedAt ?? c.createdAt).isBefore(today);
   }).toList()
@@ -77,6 +79,7 @@ List<ServerConversation> failedActivityConversations({
   required Iterable<ServerConversation> conversations,
   List<Episode> episodes = const [],
   Set<String> attentionIds = const {},
+  bool includeFailures = true,
   bool v3Only = false,
 }) {
   final byId = <String, ServerConversation>{
@@ -98,8 +101,11 @@ List<ServerConversation> failedActivityConversations({
           !attentionIds.contains(c.id) &&
           !c.deleted &&
           !c.discarded &&
-          isFailedConversation(c) &&
-          (!v3Only || c.v3?.tileState == ConversationTileState.failed))
+          (c.isTranscriptionAllowanceHeld ||
+              (includeFailures &&
+                  !c.isAdmittedForTranscription &&
+                  isFailedConversation(c) &&
+                  (!v3Only || c.v3?.tileState == ConversationTileState.failed))))
       .toList()
     ..sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
 }

@@ -446,6 +446,10 @@ def main() -> int:
         ]
         if args.metadata_only:
             command.append("--metadata-only")
+        elif args.lane == "local" and not any(
+            os.getenv(name, "").lower() in {"0", "false"} for name in ("OMI_PREFLIGHT_ALL", "PRE_PUSH_PREFLIGHT_ALL")
+        ):
+            command.append("--keep-going")
         if skip_changelog:
             command.append("--skip-changelog")
         result = run_local_checks(command, root, args.lane)

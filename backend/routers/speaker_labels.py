@@ -5,12 +5,14 @@ import traceback
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 
 from database import conversations as conversations_db
+from database.legal_holds import DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable
 from models.conversation import Conversation
 from models.speaker_labels import RejectSpeakerRequest, VoiceMatchesResponse
 from utils.conversations.factory import deserialize_conversation
 from utils.log_sanitizer import hash_log_identifier
 from utils.ignored_voice_markers import record_exclusion_markers, retire_exclusion_markers
 from utils.other import endpoints as auth
+from utils.other.account_gate_http import account_gate_busy_http_exception
 from utils.other.storage import delete_speech_profile_blob
 from utils.speaker_voice_matches import find_person_voice_matches
 
@@ -68,6 +70,10 @@ def reject_speaker_label(
             use_for_speech_training=False,
             rejection={'kind': data.kind, 'person_id': data.person_id},
         )
+    except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as error:
+        # Same fence as the live-sheet assignment routes: while a destructive
+        # operation owns the account gate, a reject is retryable (409), not 500.
+        raise account_gate_busy_http_exception() from error
     except LookupError as error:
         logger.warning(
             'speaker label reject lookup miss conv_hash=%s speaker=%s: %s\n%s',

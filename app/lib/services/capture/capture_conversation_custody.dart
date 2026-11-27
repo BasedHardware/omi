@@ -41,9 +41,14 @@ extension _CaptureConversationCustody on CaptureController {
       (close.walGeneration == null ||
           (close.phone is LocalWalSync && close.phone.sessionGeneration == close.walGeneration));
 
-  void _rememberConversationClose(String id) {
+  /// Every close this capture saw, for idempotence; [closed] also records that the server ended the
+  /// recording (not an `in_progress` answer), which is what End's ownership reads.
+  void _rememberConversationClose(String id, {bool closed = true}) {
     _seenConversationCloses.add(id);
     if (_seenConversationCloses.length > 128) _seenConversationCloses.remove(_seenConversationCloses.first);
+    if (!closed) return;
+    _closedServerRecordings.add(id);
+    if (_closedServerRecordings.length > 128) _closedServerRecordings.remove(_closedServerRecordings.first);
   }
 
   /// Admission is synchronous: do not defer the audio cut behind a previous stamp or HTTP result.
@@ -178,6 +183,7 @@ extension _CaptureConversationCustody on CaptureController {
       }
       _admittedConversationCloses.clear();
       _seenConversationCloses.clear();
+      _closedServerRecordings.clear();
       _pendingProcessCloses.clear();
       // Retired-account I/O must not block the next account's chain.
       _pendingFinalizeAndStamp = null;

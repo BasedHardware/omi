@@ -8,10 +8,12 @@ import hashlib
 import json
 import struct
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import google_crc32c
-from google.api_core.exceptions import PreconditionFailed
+from cryptography.exceptions import InvalidTag
+from fastapi import HTTPException
+from google.api_core.exceptions import PreconditionFailed, ServiceUnavailable
 from google.cloud.exceptions import NotFound
 import pytest
 
@@ -25,11 +27,12 @@ from database.batch_pipeline_store import FirestoreStore
 from models.sync_job_status import SyncJobStartResponse, SyncJobStatusResponse
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.batch_pipeline import live_upload, record_wal_handoff as handoff, record_wal_metrics as metrics
+from utils.batch_pipeline.artifact_reads import ArtifactReadLimit
 from utils.batch_pipeline.intake import durable_status
 from utils.other import storage
 from utils.other.local_storage import LocalStorageClient
 from utils.sync import record_token_lease
-from utils.sync.poll_limit import with_poll_hint
+from utils.sync.poll_limit import with_custody_hold_poll_hint
 
 UID, CID, NS = 'synthetic-wal-owner', 'synthetic-record', 'batch_pipeline_dev'
 ROW_PATH = ('users', UID, 'conversations', CID)
@@ -150,6 +153,123 @@ def world(monkeypatch, tmp_path):
     return SimpleNamespace(client=client, store=store, bucket=bucket, paths=paths, upload=upload, rows=rows)
 
 
+@pytest.mark.parametrize(
+    'failure_at, failure',
+    [
+        ('inventory', ArtifactReadLimit('archive count limit')),
+        ('inventory', KeyError('missing manifest')),
+        ('inventory', ValueError('manifest must be a JSON object')),
+        ('inventory', OverflowError('manifest has an out-of-range rate')),
+        ('inventory', InvalidTag()),
+        ('parse', struct.error('truncated WAL')),
+        ('revalidate', ServiceUnavailable('final snapshot read failed')),
+        ('commit', ServiceUnavailable('uncertain CAS')),
+        ('timeout_before_commit', None),
+        ('timeout_after_commit', None),
+    ],
+)
+async def test_duplicate_settlement_only_falls_back_before_commit(world, monkeypatch, failure_at, failure):
+    from config.record_audio import record_identity
+    from utils.batch_pipeline import record_wal_duplicate as duplicate
+
+    job = 'bp_' + record_identity(UID, CID)[0]
+    world.client.rows[(f'{NS}_intakes', job)] = {'segment_ids': ['segment']}
+    world.client.rows[(f'{NS}_jobs', 'segment')] = {'state': 'committed'}
+    monkeypatch.setattr(duplicate, 'select', lambda *_: ('settle', None))
+
+    def staged(paths, budget, *, descriptors):
+        if failure_at == 'parse':
+            raise failure
+        descriptors['wal'] = {}
+        return [('wal', 1, [])]
+
+    monkeypatch.setattr(duplicate.sample, 'read_staged_packets', staged)
+    prepared = SimpleNamespace(prior=None, scope=SimpleNamespace(source={}))
+    late_dispatch = []
+
+    def reconcile_snapshot(*args, commit=False, before_commit=None, **kwargs):
+        if not commit:
+            return prepared
+        if failure_at == 'commit':
+            before_commit()
+        else:
+            late_dispatch.append(before_commit)
+        raise failure
+
+    reconcile = Mock(side_effect=reconcile_snapshot)
+    monkeypatch.setattr(duplicate.ledger, 'reconcile', reconcile)
+    inventory = Mock(side_effect=failure if failure_at == 'inventory' else None)
+    monkeypatch.setattr(duplicate, '_inventory', inventory)
+    monkeypatch.setattr(duplicate, '_placements', lambda *_: (['proved'], False))
+    monkeypatch.setattr(duplicate, '_recheck', lambda *_: None)
+    legacy = AsyncMock(return_value=live_upload.JSONResponse(status_code=202, content={'job_id': job}))
+    monkeypatch.setattr(live_upload, '_answer_registered_upload', legacy)
+
+    if failure is None:
+        timeout = asyncio.timeout(None)
+        monkeypatch.setattr(duplicate.asyncio, 'timeout', lambda _: timeout)
+
+        async def offload(executor, body, *args, **kwargs):
+            if kwargs.get('commit'):
+                if failure_at == 'timeout_after_commit':
+                    kwargs['before_commit']()
+                else:
+                    late_dispatch.append(kwargs['before_commit'])
+                timeout.reschedule(asyncio.get_running_loop().time())
+                await asyncio.Future()
+            return body(*args, **kwargs)
+
+        monkeypatch.setattr(duplicate, 'run_blocking', offload)
+
+    response = await world.upload(upload_paths=world.paths[:1], capture_claims={'wal': {}})
+    if failure_at in ('commit', 'timeout_after_commit'):
+        assert response.status_code == 503
+        legacy.assert_not_awaited()
+        if failure_at == 'commit':
+            assert reconcile.call_count == 2 and reconcile.call_args.kwargs['commit'] is True
+    else:
+        assert response.status_code == 202
+        legacy.assert_awaited_once()
+        assert (
+            reconcile.call_count
+            == {'parse': 0, 'inventory': 1, 'revalidate': 2, 'timeout_before_commit': 1}[failure_at]
+        )
+        if late_dispatch:
+            with pytest.raises(ArtifactReadLimit, match='cancelled before dispatch'):
+                late_dispatch[0]()
+
+
+async def test_legacy_coverage_cannot_replace_a_concurrently_settled_alias(world, monkeypatch):
+    from config.record_audio import record_identity
+    from config.record_wal_duplicate import RECEIPT_FIELD
+    from utils.batch_pipeline import record_lease_append
+
+    monkeypatch.setenv('RECORD_WAL_HANDOFF_ENABLED', 'false')
+    monkeypatch.setattr(live_upload, 'coverage_wait_memo_enabled', lambda: False)
+    monkeypatch.setattr(record_lease_append, 'retain_upload', AsyncMock())
+    monkeypatch.setattr(live_upload, 'artifacts_for', lambda _: object())
+    legacy = Mock(side_effect=AssertionError('legacy status must not redrive a settled alias'))
+    monkeypatch.setattr(live_upload, 'durable_status', legacy)
+    canonical = record_identity(UID, CID)[0]
+    job = 'bp_' + canonical
+    world.client.rows[(f'{NS}_intakes', job)] = {'segment_ids': ['segment']}
+    world.client.rows[(f'{NS}_jobs', 'segment')] = {'state': 'committed'}
+    original = {'dispatch_protocol': 'batch_v1', 'job_id': job, 'status': 'completed'}
+    world.store.run(lambda tx: tx.put('content', f'{UID}/{canonical}', original))
+    alias_key = f'{UID}/synthetic-upload'
+    winner = {**original, 'record_content_id': canonical, RECEIPT_FIELD: {'scope': 'synthetic'}}
+
+    def covered(*args):
+        world.store.run(lambda tx: tx.put('content', alias_key, winner))
+        return True
+
+    monkeypatch.setattr(live_upload, '_covered', covered)
+    response = await world.upload()
+    assert response.status_code == 503
+    assert world.store.run(lambda tx: tx.get('content', alias_key)) == winner
+    legacy.assert_not_called()
+
+
 async def test_all_files_accepted_before_decode_and_completed_native_job_never_completes_upload(world):
     response = await world.upload()
     assert response.status_code == 202
@@ -162,8 +282,7 @@ async def test_all_files_accepted_before_decode_and_completed_native_job_never_c
         SyncJobStatusResponse(**status)
         assert status['status'] == 'processing' and status.get('result') is None
         assert status['reason_code'] == database.PENDING_REASON
-        assert with_poll_hint(status)['poll_after_ms'] == 300000
-        assert with_poll_hint(status, surface_open=True)['poll_after_ms'] == 300000
+        assert with_custody_hold_poll_hint(status)['poll_after_ms'] == 300000
     assert len(world.bucket.rows) == len(world.rows('wal_files')) == len(world.rows('wal_obligations')) == 2
     assert len(world.rows('wal_outbox')) == 2
     assert world.client.rows[ROW_PATH]['record_upload_revision'] == 8
@@ -485,6 +604,18 @@ async def test_plain_status_lookup_is_receipt_capable_even_with_admission_unset(
         intake, 'shadow_from_env', Mock(side_effect=AssertionError('WAL status used ordinary jobstore'))
     )
     assert intake.get_durable_job_status(accepted['job_id'], UID)['status'] == 'processing'
+    original_check = database.assert_batch_write_allowed
+    denied = Mock(side_effect=BatchPrivacyBlocked('account_deleted'))
+    monkeypatch.setattr(database, 'assert_batch_write_allowed', denied)
+    assert intake.get_durable_job_status(accepted['job_id'], UID)['status'] == 'processing'
+    denied.assert_not_called()
+    with pytest.raises(HTTPException) as foreign_owner:
+        intake.get_durable_job_status(accepted['job_id'], 'other-owner')
+    assert foreign_owner.value.status_code == 404
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"bpp_status_skip":0}')
+    with pytest.raises(BatchPrivacyBlocked, match='account_deleted'):
+        intake.get_durable_job_status(accepted['job_id'], UID)
+    monkeypatch.setattr(database, 'assert_batch_write_allowed', original_check)
     assert (await world.upload()).status_code == 202
     assert world.bucket.attempts == 2
 
