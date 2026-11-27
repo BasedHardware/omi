@@ -37,10 +37,21 @@ qualifying cards. When the app happens to fetch Home does not change the score:
 an eligible summary that is fetched late or never fetched is still scored at
 eligibility. The reconcile mapping uses the cut that actually closed the
 window, including when the closing recording is silent and its predecessor
-supplies the speech. An unbound Finish, a client-only cut, and a cut whose card
-never became eligible remain unmatched (a miss).
+supplies the speech. A Finish that finds its window already on Home with its
+notes (`already_visible`) changes nothing; it emits `already_visible` with the
+card it answered with and is scored as ready at its cut (0 s) on the
+`already_visible` route. An unbound Finish, a client-only cut, and a cut whose
+card never became eligible remain unmatched (a miss).
 
-Route is `held` when a predecessor holds the cut, `fast` after a successful
+Server-side route and window observations are collected only for the Home
+cohort that admits cuts (`conversations_v3_enabled` and not held out), read off
+the event loop. A window binding is emitted by the commit that first ends the
+card with that Finish recording, not again on later reconcile passes; `held` is
+emitted once per held recording on each instance (the readback reads route
+signals as a set, so a repeat from another instance changes nothing).
+
+Route is `already_visible` for a Finish that found its card on Home, else
+`held` when a predecessor holds the cut, `fast` after a successful
 fast transcript write, `batch` when ordinary batch admitted it and there is no
 earlier qualifying fast or hold observation, or `unknown`. Events carry
 opaque, domain-separated HMACs in restricted logs. The readback returns

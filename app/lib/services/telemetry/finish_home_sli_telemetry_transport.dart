@@ -14,28 +14,26 @@ import 'package:path_provider/path_provider.dart';
 
 /// Installs a dedicated authenticated outbox without enabling general telemetry.
 void installFinishHomeSliTelemetryTransport() {
-  final telemetry = FinishHomeSliTelemetry.instance;
-  telemetry.testFlightEnabled = () => Env.isTestFlight && !Env.hasApiBaseUrlOverride;
-  telemetry.ownerId = () => FirebaseAuth.instance.currentUser?.uid;
-  telemetry.platform = () {
-    if (PlatformService.isIOS) return 'ios';
-    if (PlatformService.isAndroid) return 'android';
-    return null;
-  };
-  telemetry.outbox.attachStore(
-    FileTelemetryStore(
+  FinishHomeSliTelemetry.instance.install(
+    store: FileTelemetryStore(
       getApplicationSupportDirectory,
       fileName: 'finish_home_sli_outbox.json',
     ),
+    testFlightEnabled: () => Env.isTestFlight && !Env.hasApiBaseUrlOverride,
+    ownerId: () => FirebaseAuth.instance.currentUser?.uid,
+    platform: () {
+      if (PlatformService.isIOS) return 'ios';
+      if (PlatformService.isAndroid) return 'android';
+      return null;
+    },
+    tokenFor: (ownerId, {required bool forceRefresh}) async {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null || user.uid != ownerId) return null;
+      if (forceRefresh) return user.getIdToken(true);
+      return AuthService.instance.getIdToken();
+    },
+    post: _postFinishCuts,
   );
-  telemetry.outbox.tokenFor = (ownerId, {required bool forceRefresh}) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null || user.uid != ownerId) return null;
-    if (forceRefresh) return user.getIdToken(true);
-    return AuthService.instance.getIdToken();
-  };
-  telemetry.outbox.post = _postFinishCuts;
-  telemetry.start();
 }
 
 Future<TelemetryHttpResult> _postFinishCuts({

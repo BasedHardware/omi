@@ -461,11 +461,13 @@ async def _manual_finish_admitted(
         if current.get(NATIVE_MANUAL_STOP):
             # A native recording's explicit stop: its cut and notes wait for the native batch
             # completion, so the confirmed admission only names this Finish's route, once.
-            finish_home_sli.observe_route(uid, conversation_id, 'batch')
+            if await finish_home_sli.measured_async(uid):
+                finish_home_sli.observe_route(uid, conversation_id, 'batch')
             return
         if not current.get('v3_manual_end_requested') or not manual_end_marker_enabled():
             return
-        finish_home_sli.observe_route(uid, conversation_id, 'batch')
+        if await finish_home_sli.measured_async(uid):
+            finish_home_sli.observe_route(uid, conversation_id, 'batch')
         single = len(units) == 1
         recording_finish = bool(current.get(FINISH_RECORDING_FIELD))
         promoted = False

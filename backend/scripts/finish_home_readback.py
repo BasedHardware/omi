@@ -1,7 +1,9 @@
 """Aggregate a read-only export of SCA-4489 Finish-to-Home observations.
 
 A Finish is scored from its cut to the first committed write that left its window Home-eligible with a
-summary (``eligible``). A Home response that carried the summary (``summary``) only validates that the
+summary (``eligible``). A Finish that found its window already on Home with its notes (``already_visible``)
+changes nothing and answers with that card: it is ready at its cut and scores 0 s on the ``already_visible``
+route. A Home response that carried the summary (``summary``) only validates that the
 reader actually showed it; when the app fetches Home does not change the score.
 """
 
@@ -86,6 +88,7 @@ def readback(events, start, through):
     legacy_candidates, legacy_proofs = {}, set()
     eligible, fetched = defaultdict(list), defaultdict(list)
     routes, windows = defaultdict(list), defaultdict(list)
+    visible = {}
     for event in events:
         stage = event['stage']
         observed_at = event['observed_at']
@@ -122,6 +125,11 @@ def readback(events, start, through):
             fetched[event['card']].append(observed_at)
         elif stage == 'route':
             routes[event['recording']].append((observed_at, event['route']))
+        elif stage == 'already_visible':
+            finish = event['finish']
+            candidate = (observed_at, event['card'])
+            if finish not in visible or candidate < visible[finish]:
+                visible[finish] = candidate
 
     # An older client has no local cut token. Its candidate becomes eligible
     # only when a committed server manual-end marker names the same recording.
@@ -151,8 +159,14 @@ def readback(events, start, through):
         timing_basis[basis if basis in {'client_cut', 'server_cut'} else 'unknown'] += 1
         recording = bindings[finish][1] if finish in bindings else None
         linked = windows.get(recording, ())
-        # The score is the first eligibility of any linked card; it never reads fetch timing.
-        winner = _first(eligible, linked, cut)
+        # The score is the first eligibility of any linked card; it never reads fetch timing. A Finish that
+        # found its card already on Home is ready at the cut: that card is its winner, with no write to wait on.
+        already = visible.get(finish)
+        if already is not None:
+            linked = [(cut, already[1])]
+            winner = (cut, already[1])
+        else:
+            winner = _first(eligible, linked, cut)
         first_ready = winner[0] if winner else None
         if winner is None:
             validation['fetched_without_eligible'] += _first(fetched, linked, cut) is not None
@@ -169,7 +183,9 @@ def readback(events, start, through):
                 # A projection mismatch: Home returned a sibling card but suppressed the eligible one.
                 validation['other_linked_card_fetched'] += _first(fetched, linked, ready_at) is not None
         route_signals = {route for t, route in routes.get(recording, ()) if cut <= t <= (first_ready or through)}
-        if 'held' in route_signals:
+        if already is not None:
+            route = 'already_visible'
+        elif 'held' in route_signals:
             route = 'held'
         elif 'fast' in route_signals:
             route = 'fast'

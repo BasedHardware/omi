@@ -25,7 +25,7 @@ def finish_live_window(
     *,
     allow_recording_fallback: bool = False,
     named_only: bool = False,
-    observe_recording: Callable[[str], None] | None = None,
+    observe_recording: Callable[..., None] | None = None,
 ) -> CreateConversationResponse | None:
     """``named_only``: finish only the window (or just-sealed capture) ``window_id`` names, never a newer
     capture that superseded it (``strict``); None otherwise.
@@ -133,6 +133,10 @@ def _acknowledge(uid, window, outcome, recording_id, observe_recording=None):
     # capture's request rides along unstamped and unbound) and on ``tail`` or a declined newer capture.
     if observe_recording is not None and deliberate_finish(outcome):
         observe_recording(recording_id)
+    elif observe_recording is not None and outcome == 'already_visible' and window and window.get('id'):
+        # The Finish found its window already on Home with notes: the card the answer carries is ready at
+        # the cut, so the SLI scores it as a 0 s success instead of an unmatched miss.
+        observe_recording(recording_id, visible_card=window['id'])
     # A Finish that found a newer capture is counted apart (``newer_*``; ``newer_dual_*`` when the window tail
     # was cut and the capture requested too) and answered like the path that stored it.
     outcome = outcome.removeprefix('newer_').removeprefix('dual_')

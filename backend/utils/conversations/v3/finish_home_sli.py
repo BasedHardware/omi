@@ -8,6 +8,8 @@ import hmac
 import json
 import logging
 import os
+import threading
+import time
 from uuid import UUID
 
 from config.app_channel import APP_CHANNEL_HEADER, app_channel
@@ -38,6 +40,24 @@ def home_cohort(uid: str) -> bool:
     return conversations_v3_enabled(uid) and not v3_intake_held_out(uid)
 
 
+def measured(uid: str) -> bool:
+    """Synchronous gate for server-side observations: the kill switch, then the Home cohort.
+
+    Call it on a worker thread; async callers use ``measured_async``. Every observation that a Finish cut can
+    join (route, window) is collected only for owners whose cuts ``from_request`` admits.
+    """
+    return enabled() and home_cohort(uid)
+
+
+async def measured_async(uid: str) -> bool:
+    """``measured`` for the event loop: the cohort read runs on the db executor, never on the loop."""
+    if not enabled():
+        return False
+    from utils.executors import db_executor, run_blocking
+
+    return bool(await run_blocking(db_executor, home_cohort, uid))
+
+
 def _emit(stage: str, **fields) -> None:
     _logger.info('event=v3_finish_home_sli %s', json.dumps({'stage': stage, **fields}, separators=(',', ':')))
 
@@ -53,7 +73,16 @@ class Finish:
     def cut(self) -> None:
         _emit('cut', finish=self.finish, cut_at=self.cut_at.isoformat(), source=self.source, basis=self.basis)
 
-    def bind(self, recording_id: str, *, prove_legacy_manual_end: bool = False) -> None:
+    def bind(
+        self, recording_id: str, *, prove_legacy_manual_end: bool = False, visible_card: str | None = None
+    ) -> None:
+        """Bind this cut to the recording the Finish answered with.
+
+        ``visible_card``: the Finish found that recording's window already on Home with its notes
+        (``already_visible``). The cut is then ready at the cut instant, and the readback scores it as a
+        0 s success on the ``already_visible`` route instead of waiting for an eligibility write that never
+        comes (the Finish changes nothing).
+        """
         if self.finish is None:
             # Released clients without the header carry no source or device cut
             # clock. Keep the candidate out of the cohort unless a committed
@@ -73,6 +102,8 @@ class Finish:
         else:
             finish = self.finish
             _emit('binding', finish=finish, recording=_key('recording', self.uid, recording_id))
+        if visible_card is not None:
+            _emit('already_visible', finish=finish, card=_key('card', self.uid, visible_card))
 
 
 def observe_client_cut(uid: str, identifier: str, cut_at: datetime, source: str) -> None:
@@ -131,8 +162,39 @@ def from_request(uid: str, request) -> Finish | None:
 
 
 def observe_route(uid: str, recording_id: str, route: str) -> None:
+    """Emit a route signal. Callers gate on ``measured``/``measured_async`` (cohort) first."""
     if enabled() and route in {'fast', 'batch', 'held'}:
         _emit('route', recording=_key('recording', uid, recording_id), route=route)
+
+
+# A held Finish stays held across every reconcile pass until its awaited transcript lands or its wait
+# ends. The readback reads route signals as a set, so one signal per hold is enough; later passes on this
+# instance stay quiet. Bounded by entry count and by the longest plausible hold.
+HELD_SEEN_SECONDS = 30 * 60
+HELD_SEEN_MAX = 4096
+_held_seen: dict[str, float] = {}
+_held_lock = threading.Lock()
+
+
+def observe_held(uid: str, recording_ids: Iterable[str], *, clock=time.monotonic) -> None:
+    """Emit ``held`` once per held Finish recording (per instance), not on every reconcile pass."""
+    if not enabled():
+        return
+    now = clock()
+    fresh = []
+    with _held_lock:
+        for recording_id in recording_ids:
+            key = _key('recording', uid, recording_id)
+            seen = _held_seen.get(key)
+            if seen is not None and now - seen < HELD_SEEN_SECONDS:
+                continue
+            _held_seen[key] = now
+            fresh.append(recording_id)
+        if len(_held_seen) > HELD_SEEN_MAX:
+            for key, _ in sorted(_held_seen.items(), key=lambda item: item[1])[: len(_held_seen) - HELD_SEEN_MAX]:
+                del _held_seen[key]
+    for recording_id in fresh:
+        observe_route(uid, recording_id, 'held')
 
 
 def observe_window(uid: str, recording_id: str, card_id: str) -> None:
@@ -147,14 +209,26 @@ def remember_window(
     ended: bool,
     window: Mapping[str, object],
     row: Mapping[str, object],
+    prior: Mapping[str, object] | None = None,
+    was_ended: bool = False,
 ) -> None:
+    """Remember the Finish recordings this commit newly binds to the window's card.
+
+    A recording the stored card already held as an ended manual-end window was bound by the commit that
+    ended it, so a later reconcile pass that rewrites the same card does not bind (and emit) it again.
+    """
     if not enabled or not ended or not window.get('manual_end'):
         return
     sources = window.get('_finish_sli_sources')
     row_id = row.get('id')
     if not isinstance(sources, (tuple, list)) or not isinstance(row_id, str):
         return
-    typed_sources = tuple(source for source in sources if isinstance(source, str))
+    bound: set[object] = set()
+    if prior and was_ended and prior.get('id') == row_id and prior.get('manual_end'):
+        stored = prior.get('v3_recording_ids')
+        if isinstance(stored, (list, tuple)):
+            bound = set(stored)
+    typed_sources = tuple(source for source in sources if isinstance(source, str) and source not in bound)
     if typed_sources:
         windows[row_id] = typed_sources
 

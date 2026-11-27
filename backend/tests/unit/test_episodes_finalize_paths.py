@@ -1447,6 +1447,25 @@ def test_named_finish_leaves_a_completed_visible_window_as_it_is(sealed_named_ro
     counter.labels.assert_called_once_with('already_visible')
 
 
+def test_already_visible_finish_binds_the_card_it_answered_with(conv, sealed_named_route, monkeypatch):
+    # SCA-4489 review: the Finish found its window already on Home with notes. Its cut is bound to that
+    # card as ready at the cut, so the readback scores it 0 s instead of an unmatched miss.
+    client, db, paths, enqueued, counter = sealed_named_route
+    db.rows[paths['window']].update(
+        status='completed',
+        tile_state='done',
+        home_hidden=False,
+        structured={'title': 'Morning standup', 'overview': 'Planned the release train.', 'emoji': '🗓️'},
+    )
+    bound = []
+    finish = Mock(bind=lambda recording_id, **kwargs: bound.append((recording_id, kwargs)))
+    monkeypatch.setattr(conv.finish_home_sli, 'from_request', lambda uid, request: finish)
+
+    assert client.post('/v1/conversations', json={'live_conversation_id': 'window'}).status_code == 200
+    counter.labels.assert_called_once_with('already_visible')
+    assert bound == [('latest', {'prove_legacy_manual_end': True, 'visible_card': 'window'})]
+
+
 def _rotated_successor(db, a, *, speech):
     """A speech-pause rotation writes the next capture in progress before it seals A."""
     later = a['finished_at'] + timedelta(seconds=2)

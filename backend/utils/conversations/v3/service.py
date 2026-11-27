@@ -449,7 +449,10 @@ async def _reconcile_groups(
     derive,
     on_open,
 ):
-    measure_finish = not (derive or on_open) and finish_home_sli.enabled()
+    # Live and on-open passes both commit Finish windows: a card first committed by an on-open pass is still
+    # bound once (remember_window skips recordings the stored card already ended with). Backfill and re-derive
+    # never measure. Only owners whose Finish cuts the SLI admits (the Home cohort) are observed.
+    measure_finish = not derive and await finish_home_sli.measured_async(uid)
     held_finishes = set() if measure_finish else None
     owner_cuts = []
     if historical_timing is not None:
@@ -471,8 +474,8 @@ async def _reconcile_groups(
             continuity=capture_continuity_enabled() and not derive,
             **({'finish_routes': held_finishes} if measure_finish else {}),
         )
-    for recording_id in held_finishes or ():
-        finish_home_sli.observe_route(uid, recording_id, 'held')
+    if held_finishes:
+        finish_home_sli.observe_held(uid, sorted(held_finishes))
     return groups, owner_cuts, measure_finish
 
 
@@ -1084,6 +1087,8 @@ async def _plan_projection(
                 ended=ended,
                 window=window,
                 row=row,
+                prior=prior,
+                was_ended=bool(was_ended),
             )
         rows.append(row)
         for rid, claims in row['_v3_claims'].items():

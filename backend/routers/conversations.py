@@ -755,7 +755,12 @@ def process_in_progress_conversation(
             request.live_conversation_id if request else None,
             allow_recording_fallback=request is None or request.finish_only_body,
             **(
-                {'observe_recording': lambda recording_id: finish.bind(recording_id, prove_legacy_manual_end=True)}
+                {
+                    # ``visible_card`` arrives only for an already visible Finish (finish._acknowledge).
+                    'observe_recording': lambda recording_id, **visible: finish.bind(
+                        recording_id, prove_legacy_manual_end=True, **visible
+                    )
+                }
                 if finish
                 else {}
             ),

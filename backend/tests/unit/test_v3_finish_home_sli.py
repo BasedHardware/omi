@@ -415,8 +415,14 @@ def test_native_batch_finish_reads_back_as_the_batch_route(monkeypatch, caplog):
     assert result['totals']['within_60s'] == 1
 
 
+def _in_cohort(monkeypatch, member=True):
+    monkeypatch.setattr(sli, 'conversations_v3_enabled', lambda uid: member)
+    monkeypatch.setattr(sli, 'v3_intake_held_out', lambda uid: False)
+
+
 def test_native_batch_admission_names_the_route_once_and_nothing_else(monkeypatch, caplog):
     monkeypatch.setenv('CONVERSATIONS_V3_FINISH_HOME_SLI', 'on')
+    _in_cohort(monkeypatch)
     monkeypatch.setattr(conversations_v3, 'promote_manual_end', lambda *a, **k: pytest.fail('native cut promoted'))
     # The app's Finish also asks for the legacy manual end; the native stop must not take that path too.
     native = {'recording': True, 'v3_manual_end_requested': True, NATIVE_MANUAL_STOP: NATIVE_STOP}
@@ -430,6 +436,7 @@ def test_native_batch_admission_names_the_route_once_and_nothing_else(monkeypatc
 
 def test_legacy_manual_end_admission_names_the_batch_route_once(monkeypatch, caplog):
     monkeypatch.setenv('CONVERSATIONS_V3_FINISH_HOME_SLI', 'on')
+    _in_cohort(monkeypatch)
     monkeypatch.setenv('CONVERSATIONS_V3_FAST_FINISH', 'off')
     monkeypatch.setattr(conversations_v3, 'promote_manual_end', lambda *a, **k: False)
     with caplog.at_level('INFO'):
@@ -438,3 +445,213 @@ def test_legacy_manual_end_admission_names_the_batch_route_once(monkeypatch, cap
         _admit_record('owner', 'natural', {'recording': True})
         _admit_record('owner', 'capture', {'v3_manual_end_requested': True, NATIVE_MANUAL_STOP: NATIVE_STOP})
     assert [(event['stage'], event.get('route')) for event in _sli_events(caplog)] == [('route', 'batch')]
+
+
+# --- SCA-4489 review fixes --------------------------------------------------------------------------------
+
+
+def _event(stage, elapsed, **fields):
+    return {'stage': stage, 'observed_at': START + timedelta(seconds=elapsed), **fields}
+
+
+def test_already_visible_finish_is_ready_at_its_cut_not_a_miss():
+    # The Finish found its card on Home with notes: no eligibility write follows, and none is needed.
+    events = [
+        _event('cut', 1, cut_at=START.isoformat(), finish='f', source='app', basis='client_cut'),
+        _event('binding', 2, finish='f', recording='rec'),
+        _event('already_visible', 2, finish='f', card='card'),
+        _event('summary', 9, card='card'),
+    ]
+    result = readback.readback(events, START, THROUGH)
+    assert result['totals']['finishes'] == 1
+    assert result['totals']['unmatched'] == 0
+    assert result['totals']['within_60s'] == 1
+    assert result['totals']['matched_client_cut_p95_seconds'] == 0
+    assert [(row['route'], row['finishes']) for row in result['by_route_source']] == [('already_visible', 1)]
+    assert result['home_fetch_validation']['eligible'] == 1
+    assert result['home_fetch_validation']['fetched'] == 1
+
+
+def test_already_visible_bind_emits_a_scoreable_event(monkeypatch, caplog):
+    monkeypatch.setenv('CONVERSATIONS_V3_FINISH_HOME_SLI', 'on')
+    _in_cohort(monkeypatch)
+    now = datetime.now(timezone.utc)
+    request = SimpleNamespace(
+        headers={sli.HEADER: f'pendant,{uuid4()},{int(now.timestamp() * 1000)}', sli.APP_CHANNEL_HEADER: 'beta'}
+    )
+    with caplog.at_level('INFO'):
+        finish = sli.from_request('owner', request)
+        finish.bind('recording', prove_legacy_manual_end=True, visible_card='card')
+    events = _sli_events(caplog)
+    assert [e['stage'] for e in events] == ['cut', 'binding', 'already_visible']
+    assert events[2] == {
+        'stage': 'already_visible',
+        'finish': events[0]['finish'],
+        'card': sli._key('card', 'owner', 'card'),
+    }
+    entries = [
+        {'timestamp': datetime.fromtimestamp(r.created, tz=timezone.utc).isoformat(), 'textPayload': r.getMessage()}
+        for r in caplog.records
+    ]
+    start = now.replace(microsecond=0) - timedelta(minutes=1)
+    through = start + timedelta(days=1, minutes=1)
+    result = readback.readback(readback.observations(entries, through), start, through)
+    assert result['totals']['within_60s'] == 1 and result['totals']['unmatched'] == 0
+
+
+def test_legacy_already_visible_finish_is_scored_once_proven(monkeypatch, caplog):
+    monkeypatch.setenv('CONVERSATIONS_V3_FINISH_HOME_SLI', 'on')
+    _in_cohort(monkeypatch)
+    with caplog.at_level('INFO'):
+        finish = sli.from_request('owner', SimpleNamespace(headers={sli.APP_CHANNEL_HEADER: 'beta'}))
+        finish.bind('recording', prove_legacy_manual_end=True, visible_card='card')
+    assert [e['stage'] for e in _sli_events(caplog)] == ['legacy_candidate', 'legacy_manual_end', 'already_visible']
+
+
+def test_acknowledge_binds_already_visible_with_its_card(monkeypatch):
+    from utils.conversations.v3 import finish as v3_finish
+
+    monkeypatch.setattr(v3_finish, 'deserialize_conversation', lambda window: SimpleNamespace())
+    monkeypatch.setattr(v3_finish, 'CreateConversationResponse', lambda **kwargs: kwargs)
+    monkeypatch.setattr(v3_finish.live, 'has_finish_content', lambda *a: True)
+    monkeypatch.setattr(
+        v3_finish.metrics, 'FINISH_NO_POINTER', SimpleNamespace(labels=lambda o: SimpleNamespace(inc=lambda: None))
+    )
+    observed = []
+
+    def observe(recording_id, **kwargs):
+        observed.append((recording_id, kwargs))
+
+    v3_finish._acknowledge('owner', {'id': 'card'}, 'already_visible', 'rec', observe)
+    v3_finish._acknowledge('owner', {'id': 'card'}, 'already_empty', 'rec', observe)
+    assert observed == [('rec', {'visible_card': 'card'})]
+
+
+def test_route_observations_are_limited_to_the_home_cohort(monkeypatch, caplog):
+    monkeypatch.setenv('CONVERSATIONS_V3_FINISH_HOME_SLI', 'on')
+    monkeypatch.setenv('CONVERSATIONS_V3_FAST_FINISH', 'off')
+    monkeypatch.setattr(conversations_v3, 'promote_manual_end', lambda *a, **k: False)
+    monkeypatch.setattr(sli, 'conversations_v3_enabled', lambda uid: uid != 'stage-outsider')
+    monkeypatch.setattr(sli, 'v3_intake_held_out', lambda uid: uid == 'held-out')
+    native = {'recording': True, 'v3_manual_end_requested': True, NATIVE_MANUAL_STOP: NATIVE_STOP}
+    with caplog.at_level('INFO'):
+        for uid in ('stage-outsider', 'held-out'):
+            _admit_record(uid, 'recording', native)
+            _admit_record(uid, 'recording', {'recording': True, 'v3_manual_end_requested': True})
+    assert _sli_events(caplog) == []
+    assert sli.measured('held-out') is False and sli.measured('owner') is True
+    assert asyncio.run(sli.measured_async('stage-outsider')) is False
+    monkeypatch.delenv('CONVERSATIONS_V3_FINISH_HOME_SLI')
+    assert sli.measured('owner') is False and asyncio.run(sli.measured_async('owner')) is False
+
+
+def _reconcile_groups(monkeypatch, uid, *, derive=False, on_open=False):
+    from utils.conversations.v3 import service
+
+    held = {'held-recording'}
+
+    def stretches(eligible, now, **kwargs):
+        if 'finish_routes' in kwargs:
+            kwargs['finish_routes'].update(held)
+        return []
+
+    monkeypatch.setattr(service.outline, 'stretches', stretches)
+    monkeypatch.setattr(service.manual_cuts, 'enabled', lambda uid: False)
+    return asyncio.run(
+        service._reconcile_groups(
+            uid,
+            [],
+            START,
+            since=None,
+            until=None,
+            internal_end=None,
+            historical_timing=None,
+            silence_gap=timedelta(seconds=120),
+            lock_delay=timedelta(seconds=120),
+            custom_timing=False,
+            cohesion=False,
+            derive=derive,
+            on_open=on_open,
+        )
+    )
+
+
+def test_reconcile_measures_only_home_cohort_owners_and_holds_once(monkeypatch, caplog):
+    monkeypatch.setenv('CONVERSATIONS_V3_FINISH_HOME_SLI', 'on')
+    monkeypatch.setattr(sli, '_held_seen', {})
+    monkeypatch.setattr(sli, 'conversations_v3_enabled', lambda uid: True)
+    monkeypatch.setattr(sli, 'v3_intake_held_out', lambda uid: uid == 'held-out')
+    with caplog.at_level('INFO'):
+        assert _reconcile_groups(monkeypatch, 'held-out')[2] is False
+        assert _reconcile_groups(monkeypatch, 'owner', derive=True)[2] is False
+        assert _sli_events(caplog) == []
+        # Three reconcile passes over the same held Finish (one on open) name the held route once.
+        assert _reconcile_groups(monkeypatch, 'owner')[2] is True
+        assert _reconcile_groups(monkeypatch, 'owner')[2] is True
+        assert _reconcile_groups(monkeypatch, 'owner', on_open=True)[2] is True
+    assert _sli_events(caplog) == [
+        {'stage': 'route', 'recording': sli._key('recording', 'owner', 'held-recording'), 'route': 'held'}
+    ]
+
+
+def test_held_route_repeats_only_after_its_window(monkeypatch, caplog):
+    monkeypatch.setenv('CONVERSATIONS_V3_FINISH_HOME_SLI', 'on')
+    monkeypatch.setattr(sli, '_held_seen', {})
+    clock = iter([0.0, 10.0, sli.HELD_SEEN_SECONDS + 1])
+    with caplog.at_level('INFO'):
+        for _ in range(3):
+            sli.observe_held('owner', ['r'], clock=lambda: next(clock))
+    assert [e['route'] for e in _sli_events(caplog)] == ['held', 'held']
+
+
+def _ended_window(*sources):
+    return {'manual_end': True, '_finish_sli_sources': sources}
+
+
+@pytest.mark.parametrize(
+    'prior,was_ended,expected',
+    [
+        (None, False, {'card': ('a', 'b')}),
+        # The stored card was not yet ended: this commit ends it, so it binds.
+        ({'id': 'card', 'manual_end': True, 'v3_recording_ids': ['a', 'b']}, False, {'card': ('a', 'b')}),
+        # The stored card ended without a Finish cut (silence): the cut is new in this commit.
+        ({'id': 'card', 'manual_end': False, 'v3_recording_ids': ['a', 'b']}, True, {'card': ('a', 'b')}),
+        # A later pass rewrites the same ended Finish card: nothing new to bind.
+        ({'id': 'card', 'manual_end': True, 'v3_recording_ids': ['a', 'b']}, True, {}),
+        # Only a recording newly joining the ended card binds.
+        ({'id': 'card', 'manual_end': True, 'v3_recording_ids': ['a']}, True, {'card': ('b',)}),
+    ],
+)
+def test_window_binding_is_remembered_only_when_new_in_the_commit(prior, was_ended, expected):
+    windows = {}
+    sli.remember_window(
+        windows,
+        enabled=True,
+        ended=True,
+        window=_ended_window('a', 'b'),
+        row={'id': 'card'},
+        prior=prior,
+        was_ended=was_ended,
+    )
+    assert windows == expected
+
+
+def test_repeated_reconcile_commits_emit_one_window_event(monkeypatch, caplog):
+    monkeypatch.setenv('CONVERSATIONS_V3_FINISH_HOME_SLI', 'on')
+    stored = None
+    with caplog.at_level('INFO'):
+        for _ in range(3):
+            windows = {}
+            row = {'id': 'card', 'manual_end': True, 'v3_recording_ids': ['rec']}
+            sli.remember_window(
+                windows,
+                enabled=True,
+                ended=True,
+                window=_ended_window('rec'),
+                row=row,
+                prior=stored,
+                was_ended=stored is not None,
+            )
+            sli.observe_windows('owner', [row], windows)
+            stored = row
+    assert [e['stage'] for e in _sli_events(caplog)] == ['window']
