@@ -848,9 +848,11 @@ def test_attested_evidence_workflow_allows_only_byte_equivalent_descendant(tmp_p
 
 def test_evidence_bootstrap_refuses_added_script_before_python(tmp_path):
     workflow = yaml.safe_load((ROOT / '.github/workflows/gcp_backend_listen_helm.yml').read_text())
-    steps = next(job['steps'] for job in workflow['jobs'].values()
-                 if any(step.get('name') == 'Verify staged evidence scripts before Python'
-                        for step in job.get('steps', [])))
+    steps = next(
+        job['steps']
+        for job in workflow['jobs'].values()
+        if any(step.get('name') == 'Verify staged evidence scripts before Python' for step in job.get('steps', []))
+    )
     guard = next(step for step in steps if step.get('name') == 'Verify staged evidence scripts before Python')
     reconstruct = next(step for step in steps if step.get('name') == 'Reconstruct evidence runtime before credentials')
     assert steps.index(guard) < steps.index(reconstruct)
@@ -871,8 +873,12 @@ def test_evidence_bootstrap_refuses_added_script_before_python(tmp_path):
     def run_guard():
         import os
 
-        return subprocess.run(['bash', '-c', command], cwd=tmp_path, check=False,
-                              env={**os.environ, 'GITHUB_WORKFLOW_SHA': git('rev-parse', 'HEAD')}).returncode
+        return subprocess.run(
+            ['bash', '-c', command],
+            cwd=tmp_path,
+            check=False,
+            env={**os.environ, 'GITHUB_WORKFLOW_SHA': git('rev-parse', 'HEAD')},
+        ).returncode
 
     assert run_guard() == 0
     (scripts / 'yaml.py').write_text('# inert importable fixture\n')
