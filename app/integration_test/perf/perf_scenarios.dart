@@ -535,8 +535,8 @@ Future<void> runLiveScenario(WidgetTester tester, PerfWorld world, String name) 
     case 'home_live_scroll':
       // The shell's Scaffold supplies the Material the capture card's ink needs; the first
       // frames still show the card while the episodes capability is in flight.
-      globalNavigatorKey.currentState!
-          .push(MaterialPageRoute<void>(builder: (_) => Scaffold(body: ConversationsPage(requestInitialLoad: false))));
+      globalNavigatorKey.currentState!.push(
+          MaterialPageRoute<void>(builder: (_) => const Scaffold(body: ConversationsPage(requestInitialLoad: false))));
       await settleLiveEpisode(tester, world);
       expect(find.byKey(const ValueKey('home_live')), findsOneWidget, reason: 'Home must show the live episode row');
       await liveScrollRoundTrip(tester, world, ConversationsPage);
@@ -655,7 +655,7 @@ class _TabShellPageState extends State<_TabShellPage> {
   Widget build(BuildContext context) {
     final selected = context.select<HomeProvider, int>((home) => home.selectedIndex);
     _pages[selected] ??=
-        selected == HomeProvider.homeTab ? ConversationsPage(requestInitialLoad: false) : const ActionItemsPage();
+        selected == HomeProvider.homeTab ? const ConversationsPage(requestInitialLoad: false) : const ActionItemsPage();
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(
@@ -706,7 +706,7 @@ Future<void> runScenario(WidgetTester tester, PerfWorld world, String name) asyn
     return;
   }
   final Widget page = switch (name) {
-    'home_scroll' => ConversationsPage(requestInitialLoad: false),
+    'home_scroll' => const ConversationsPage(requestInitialLoad: false),
     'detail_scroll' => ConversationDetailPage(
         conversation: world.conversations.conversations.singleWhere((c) => c.id == 'perf-conv-0'),
         initialTab: ConversationTab.transcript),

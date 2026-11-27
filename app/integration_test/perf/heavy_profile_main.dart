@@ -302,8 +302,8 @@ void main() {
       live.startUpdates();
       mark('home_live_preview.push');
       globalNavigatorKey.currentState!.push(MaterialPageRoute<void>(
-          builder: (_) =>
-              withLive(Scaffold(backgroundColor: Colors.black, body: ConversationsPage(requestInitialLoad: false)))));
+          builder: (_) => withLive(
+              const Scaffold(backgroundColor: Colors.black, body: ConversationsPage(requestInitialLoad: false)))));
       await _idle(const Duration(seconds: 2));
       final liveHome = find.descendant(
           of: find.byType(ConversationsPage).last, matching: find.byKey(const Key('home_live_row_subtitle')));
@@ -714,7 +714,7 @@ class _HeavyHomeTabsState extends State<_HeavyHomeTabs> {
   @override
   Widget build(BuildContext context) {
     final selected = context.select<HomeProvider, int>((home) => home.selectedIndex);
-    _pages[selected] ??= selected == HomeProvider.homeTab ? ConversationsPage() : const ActionItemsPage();
+    _pages[selected] ??= selected == HomeProvider.homeTab ? const ConversationsPage() : const ActionItemsPage();
     return Scaffold(
       backgroundColor: Colors.black,
       body: Column(

@@ -114,7 +114,8 @@ void main() {
   });
 
   test('rows pending delete are hidden', () {
-    final model = buildHome(HomeInputs(now: now, listed: [convo('a', today), convo('b', today)], hiddenIds: {'a'}));
+    final model =
+        buildHome(HomeInputs(now: now, listed: [convo('a', today), convo('b', today)], hiddenIds: const {'a'}));
     expect(keys(model), ['b']);
   });
 

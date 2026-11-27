@@ -130,7 +130,7 @@ void main() {
     }
 
     globalNavigatorKey.currentState!.push(MaterialPageRoute<void>(
-      builder: (_) => ConversationsPage(
+      builder: (_) => const ConversationsPage(
         requestInitialLoad: false,
       ),
     ));
