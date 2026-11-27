@@ -26,6 +26,7 @@ from utils.batch_pipeline.serving import Serving
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.scheduler import Scheduler
 from utils.batch_pipeline import admission
+from utils.batch_pipeline.leader import QUEUE_METRICS, SERVING_LEGACY_METRICS, SERVING_MAINTENANCE, LeaderLease
 
 
 @pytest.fixture
@@ -707,6 +708,43 @@ def test_metrics_retains_legacy_drain_until_both_controls_are_on(api, monkeypatc
     service.metrics.refresh.assert_not_called()
 
 
+def test_repeated_legacy_metrics_uses_separate_lease_from_held_expiry_supervisor(api, monkeypatch):
+    client, store = api
+    monkeypatch.setenv('BATCH_PIPELINE_SERVING_ENABLED', 'false')
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PUMP_ENABLED', 'false')
+    monkeypatch.setenv('BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED', 'false')
+    monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', 'true')
+
+    cleanup = Mock()
+    enrichment = Mock()
+    fallback = Serving(
+        store,
+        cleanup=cleanup,
+        enrichment_sweep=enrichment,
+        leader=LeaderLease(store, SERVING_MAINTENANCE, ttl_seconds=60, holder='legacy-metrics'),
+        legacy_metrics_leader=LeaderLease(store, SERVING_LEGACY_METRICS, ttl_seconds=60, holder='legacy-metrics'),
+    )
+    monkeypatch.setattr(module, 'serving_for_stage', lambda stage: fallback)
+
+    for _ in range(4):
+        assert client.get('/v2/batch-pipeline/metrics').status_code == 200
+
+    assert store.rows['leases', SERVING_LEGACY_METRICS]['holder'] == 'legacy-metrics'
+    assert ('leases', SERVING_MAINTENANCE) not in store.rows
+    assert cleanup.call_count == 4
+    assert enrichment.call_count == 4
+
+    supervisor = Serving(
+        store,
+        leader=LeaderLease(store, SERVING_MAINTENANCE, ttl_seconds=60, holder='serving-supervisor'),
+    )
+    supervisor.held_dead_letter.tick = Mock()
+    supervisor.sweep_held_dead_letters(periodic=True)
+
+    assert store.rows['leases', SERVING_MAINTENANCE]['holder'] == 'serving-supervisor'
+    supervisor.held_dead_letter.tick.assert_called_once()
+
+
 @pytest.mark.parametrize(
     'scrape_flag,serving_flag', [(None, 'false'), ('true', 'false'), (None, 'true'), ('true', 'true')]
 )
@@ -1282,7 +1320,6 @@ async def test_full_record_pass_repeats_after_yield_without_idle_wait(monkeypatc
 
 def test_stage_serving_initializes_once_and_keeps_independent_metrics_lease(monkeypatch):
     from utils.batch_pipeline import serving
-    from utils.batch_pipeline.leader import QUEUE_METRICS, SERVING_MAINTENANCE
 
     store = MemoryStore()
     metrics = QueueMetrics(CollectorRegistry(), min_refresh_seconds=30)
@@ -1316,5 +1353,7 @@ def test_stage_serving_initializes_once_and_keeps_independent_metrics_lease(monk
         assert metrics.oldest_leader.ttl_seconds == 20
         assert service.leader.role == SERVING_MAINTENANCE
         assert service.leader.ttl_seconds == 60
+        assert service.legacy_metrics_leader.role == SERVING_LEGACY_METRICS
+        assert service.legacy_metrics_leader.ttl_seconds == 60
     finally:
         serving._serving_for_stage.cache_clear()

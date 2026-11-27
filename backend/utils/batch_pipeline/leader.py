@@ -40,6 +40,7 @@ TABLE = 'leases'
 # separate: each already ran its own recovery before replicas existed.
 PUMP_RECOVERY = 'pump_recovery'
 SERVING_MAINTENANCE = 'serving_maintenance'
+SERVING_LEGACY_METRICS = 'serving_legacy_metrics'
 QUEUE_METRICS = 'queue_metrics'
 TIMELINESS_METRICS = 'timeliness_metrics'
 PROJECTION_OUTBOX_SCAN = 'projection_outbox_scan'
@@ -47,7 +48,13 @@ STRICT_ROLES = frozenset({UPLOAD_COALESCING_SCAN, PROJECTION_OUTBOX_SCAN})
 # Cover supervised tick jitter and sample RPCs between configured samples;
 # the default sampling cadence remains 300s.
 TIMELINESS_LEASE_GRACE_SECONDS = 60.0
-ROLES = STRICT_ROLES | {PUMP_RECOVERY, SERVING_MAINTENANCE, QUEUE_METRICS, TIMELINESS_METRICS}
+ROLES = STRICT_ROLES | {
+    PUMP_RECOVERY,
+    SERVING_MAINTENANCE,
+    SERVING_LEGACY_METRICS,
+    QUEUE_METRICS,
+    TIMELINESS_METRICS,
+}
 LEASE_EVENTS = Counter('omi_batch_leader_lease_total', 'Lease checks by static role and outcome', ['role', 'outcome'])
 
 
