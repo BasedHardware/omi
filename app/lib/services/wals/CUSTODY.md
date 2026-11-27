@@ -330,9 +330,10 @@ written; every audio file is flushed before index admission, and receiptless
 audio also syncs the documents directory. A failed barrier leaves that WAL in
 memory and emits `WAL Write Receipt` with `directory_sync_failed`. After three
 consecutive native directory-sync failures, the process opens a fail-fast
-circuit until restart; later custody writes stay in memory without repeatedly
-calling the native channel or admitting unsynced files. Native directory sync
-runs off the UI thread. When pending receipts
+circuit. Later custody writes stay in memory while native barrier probes retry
+with exponential backoff from 30 seconds up to 30 minutes; disk admission
+resumes only after a probe succeeds. Native directory sync runs off the UI
+thread. When pending receipts
 exist, deleted-account cleanup captures persisted main, backup, temporary and
 quarantine index references before account-purge index rewrites, then reuses
 that snapshot after WAL readiness. It reads at most 128 receipt entries per
