@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/http/api/sync_upload_refusal.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -1162,32 +1163,40 @@ void main() {
       // Omi refusal from platform shedding without server-side logs.
       await DebugLogManager.setEnabled(true);
       addTearDown(() => DebugLogManager.setEnabled(false));
-      await DebugLogManager.clear();
-      final sync = await buildDrain(
-        failure: () => const SyncUploadHttpException(503, 'Server is temporarily unavailable',
-            reasonCode: 'sync_dispatch_busy', retryAfterSeconds: 30),
-        pauses: <Duration>[],
-        attempts: <List<String>>[],
-      );
 
-      await sync.syncAll();
-
-      Map<String, dynamic>? extra;
-      for (var attempt = 0; attempt < 100 && extra == null; attempt++) {
-        await Future<void>.delayed(const Duration(milliseconds: 20));
-        final lines = await (await DebugLogManager.getLogFile())!.readAsLines();
-        for (final line in lines) {
-          final entry = jsonDecode(line) as Map<String, dynamic>;
-          if (entry['message'] case final String message when message.startsWith('Local upload HTTP failure')) {
-            extra = entry['extra'] as Map<String, dynamic>;
+      Future<Map<String, dynamic>> failureLine(SyncUploadHttpException failure) async {
+        await DebugLogManager.clear();
+        final sync = await buildDrain(failure: () => failure, pauses: <Duration>[], attempts: <List<String>>[]);
+        await sync.syncAll();
+        Map<String, dynamic>? extra;
+        for (var attempt = 0; attempt < 100 && extra == null; attempt++) {
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+          final lines = await (await DebugLogManager.getLogFile())!.readAsLines();
+          for (final line in lines) {
+            final entry = jsonDecode(line) as Map<String, dynamic>;
+            if (entry['message'] case final String message when message.startsWith('Local upload HTTP failure')) {
+              extra = entry['extra'] as Map<String, dynamic>;
+            }
           }
         }
+        expect(extra, isNotNull, reason: 'the refused batch must reach the shared debug log');
+        return extra!;
       }
-      expect(extra, isNotNull, reason: 'the refused batch must reach the shared debug log');
-      expect(extra!['statusCode'], 503);
-      expect(extra['reasonCode'], 'sync_dispatch_busy');
-      expect(extra['retryAfterSeconds'], 30);
-      expect(extra.containsKey('recordingWaitSeconds'), isFalse, reason: 'absent server fields stay absent');
+
+      // The recording-scoped wait the server answers while live-record coverage is unproven.
+      final scoped = await failureLine(const SyncUploadHttpException(503, 'Server is temporarily unavailable',
+          reasonCode: recordCapturePending, retryAfterSeconds: 30, recordingWaitSeconds: 1800));
+      expect(scoped['statusCode'], 503);
+      expect(scoped['reasonCode'], recordCapturePending);
+      expect(scoped['retryAfterSeconds'], 30);
+      expect(scoped['recordingWaitSeconds'], 1800);
+
+      // A platform 5xx carries no Omi reason; its line must say so by omission.
+      final platform = await failureLine(const SyncUploadHttpException(503, 'Server is temporarily unavailable'));
+      expect(platform['statusCode'], 503);
+      expect(platform.keys, isNot(contains('reasonCode')));
+      expect(platform.keys, isNot(contains('retryAfterSeconds')));
+      expect(platform.keys, isNot(contains('recordingWaitSeconds')));
     });
 
     test('a 503 without Retry-After pauses between batches with a growing backoff', () async {
