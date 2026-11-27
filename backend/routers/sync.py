@@ -870,7 +870,8 @@ async def sync_local_files_v2(
     ledger_fence_mode = await run_blocking(db_executor, get_sync_ledger_fence_mode)
     if ledger_fence_mode is SyncLedgerFenceMode.STANDBY:
         future_capture_request.mark(FutureCaptureOutcome.PREFLIGHT_REFUSED)
-        if sync_ledger_fence_standby_configured():  # An invalid setting also fails closed; it stays counted.
+        # An invalid setting also fails closed to STANDBY; only a configured cutover is designed.
+        if await run_blocking(db_executor, sync_ledger_fence_standby_configured):
             designed_refusal.mark_designed_refusal(uid, 'sync_ledger_fence_cutover', x_cloud_trace_context)
         # The one-time hard-revision-retirement cutover intentionally blocks
         # before app-managed raw-file persistence or a content claim. Clients
