@@ -13,7 +13,7 @@ from database import conversations_v3_live
 from models.conversation import CreateConversationResponse
 from models.conversation_enums import ConversationStatus
 from utils.conversations.factory import deserialize_conversation
-from utils.conversations.v3 import live, metrics, triggers
+from utils.conversations.v3 import finish_home_sli, live, metrics, triggers
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
@@ -134,9 +134,11 @@ def _acknowledge(uid, window, outcome, recording_id, observe_recording=None):
     if observe_recording is not None and deliberate_finish(outcome):
         observe_recording(recording_id)
     elif observe_recording is not None and outcome == 'already_visible' and window and window.get('id'):
-        # The Finish found its window already on Home with notes: the card the answer carries is ready at
-        # the cut, so the SLI scores it as a 0 s success instead of an unmatched miss.
-        observe_recording(recording_id, visible_card=window['id'])
+        # The Finish found its window already on Home: the SLI scores the card the answer carries as a 0 s
+        # success only when that card proves a summary is showing; otherwise it is reported, not scored.
+        observe_recording(
+            recording_id, visible_card=window['id'], visible_summary=finish_home_sli.visible_summary(window)
+        )
     # A Finish that found a newer capture is counted apart (``newer_*``; ``newer_dual_*`` when the window tail
     # was cut and the capture requested too) and answered like the path that stored it.
     outcome = outcome.removeprefix('newer_').removeprefix('dual_')

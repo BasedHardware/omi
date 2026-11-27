@@ -1463,7 +1463,7 @@ def test_already_visible_finish_binds_the_card_it_answered_with(conv, sealed_nam
 
     assert client.post('/v1/conversations', json={'live_conversation_id': 'window'}).status_code == 200
     counter.labels.assert_called_once_with('already_visible')
-    assert bound == [('latest', {'prove_legacy_manual_end': True, 'visible_card': 'window'})]
+    assert bound == [('latest', {'prove_legacy_manual_end': True, 'visible_card': 'window', 'visible_summary': True})]
 
 
 def _rotated_successor(db, a, *, speech):

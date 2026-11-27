@@ -10,7 +10,7 @@ import logging
 import os
 import threading
 import time
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from config.app_channel import APP_CHANNEL_HEADER, app_channel
 from config.conversations_v3 import conversations_v3_enabled, v3_intake_held_out
@@ -74,36 +74,51 @@ class Finish:
         _emit('cut', finish=self.finish, cut_at=self.cut_at.isoformat(), source=self.source, basis=self.basis)
 
     def bind(
-        self, recording_id: str, *, prove_legacy_manual_end: bool = False, visible_card: str | None = None
+        self,
+        recording_id: str,
+        *,
+        prove_legacy_manual_end: bool = False,
+        visible_card: str | None = None,
+        visible_summary: bool = False,
     ) -> None:
         """Bind this cut to the recording the Finish answered with.
 
-        ``visible_card``: the Finish found that recording's window already on Home with its notes
-        (``already_visible``). The cut is then ready at the cut instant, and the readback scores it as a
-        0 s success on the ``already_visible`` route instead of waiting for an eligibility write that never
-        comes (the Finish changes nothing).
+        ``prove_legacy_manual_end``: this request itself is the deliberate Finish (the live-window path binds
+        only on a deliberate outcome). A headerless request then proves its own candidate: the candidate and
+        the proof carry the same random per-request id, so the readback never attributes a proof by timing.
+
+        ``visible_card``: the Finish found that recording's window already on Home (``already_visible``) and
+        changed nothing. ``visible_summary`` says whether that card proves a summary is showing
+        (``visible_summary(row)``); only then does the readback score the cut as a 0 s success on the
+        ``already_visible`` route. Otherwise it is reported apart and not scored.
         """
         if self.finish is None:
             # Released clients without the header carry no source or device cut
-            # clock. Keep the candidate out of the cohort unless a committed
-            # server-side manual-end marker later proves its eligibility.
+            # clock. Keep the candidate out of the cohort unless a manual-end
+            # proof establishes that this request was the deliberate Finish.
             finish = _key('legacy-finish', self.uid, recording_id)
-            recording = _key('recording', self.uid, recording_id)
+            request = uuid4().hex
             _emit(
                 'legacy_candidate',
                 finish=finish,
-                recording=recording,
+                recording=_key('recording', self.uid, recording_id),
+                request=request,
                 cut_at=self.cut_at.isoformat(),
                 source='unknown',
                 basis='server_cut',
             )
             if prove_legacy_manual_end:
-                observe_legacy_manual_end(self.uid, recording_id)
+                observe_legacy_manual_end(self.uid, recording_id, request=request)
         else:
             finish = self.finish
             _emit('binding', finish=finish, recording=_key('recording', self.uid, recording_id))
         if visible_card is not None:
-            _emit('already_visible', finish=finish, card=_key('card', self.uid, visible_card))
+            _emit(
+                'already_visible',
+                finish=finish,
+                card=_key('card', self.uid, visible_card),
+                summary=bool(visible_summary),
+            )
 
 
 def observe_client_cut(uid: str, identifier: str, cut_at: datetime, source: str) -> None:
@@ -126,10 +141,19 @@ def observe_client_cut(uid: str, identifier: str, cut_at: datetime, source: str)
     ).cut()
 
 
-def observe_legacy_manual_end(uid: str, recording_id: str) -> None:
-    """Record positive proof only after the server commits its manual-end marker."""
+def observe_legacy_manual_end(uid: str, recording_id: str, *, request: str | None = None) -> None:
+    """Record positive proof of a deliberate Finish on a recording.
+
+    ``request``: the proof belongs to that exact headerless request (``Finish.bind``). Without it (the
+    proof follows a committed manual-end marker on another path) it names only the recording, and the
+    readback scores it only when exactly one candidate on that recording could have produced it.
+    """
     if enabled():
-        _emit('legacy_manual_end', recording=_key('recording', uid, recording_id))
+        _emit(
+            'legacy_manual_end',
+            recording=_key('recording', uid, recording_id),
+            **({'request': request} if request is not None else {}),
+        )
 
 
 def from_request(uid: str, request) -> Finish | None:
@@ -259,19 +283,32 @@ def home_ready(row: Mapping[str, object]) -> bool:
     Shared by the write-path eligibility signal and the Home-fetch validation. Owner-visibility filters
     that need the stored row (relevance discards, settling fragments) are the caller's, as in Home.
     """
+    return bool(
+        row.get('v3_derived') and row.get('manual_end') and row.get('tile_state') == 'done' and _shows_summary(row)
+    )
+
+
+_HOME_HIDDEN = ('home_hidden', 'backfilled', 'is_locked', 'sync_merged_into', 'deleted', 'discarded')
+
+
+def _shows_summary(row: Mapping[str, object]) -> bool:
     from utils.conversations.summary_delivery import present
 
     return bool(
-        row.get('v3_derived')
-        and row.get('manual_end')
-        and row.get('tile_state') == 'done'
-        and row.get('status') == 'completed'
-        and not any(
-            row.get(key)
-            for key in ('home_hidden', 'backfilled', 'is_locked', 'sync_merged_into', 'deleted', 'discarded')
-        )
+        row.get('status') == 'completed'
+        and not any(row.get(key) for key in _HOME_HIDDEN)
         and present(row.get('structured'))
     )
+
+
+def visible_summary(row: Mapping[str, object] | None) -> bool:
+    """Whether an ``already_visible`` Finish answer proves its card shows a summary on Home.
+
+    The Finish path calls a window ``already_visible`` when it is completed and not hidden; that alone does
+    not prove notes. This also requires readable notes and none of Home's hiding flags. A window that never
+    had a manual end is still a Home card, so ``home_ready``'s manual-end and tile requirements do not apply.
+    """
+    return bool(row) and _shows_summary(row)
 
 
 def eligible_after(before: Mapping[str, object], after: Mapping[str, object], *, rewritten: bool, visible) -> bool:

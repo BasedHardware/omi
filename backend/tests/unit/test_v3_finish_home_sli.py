@@ -133,7 +133,7 @@ def test_readback_only_admits_proven_legacy_candidates():
     assert result['totals']['finishes'] == 1
     assert result['totals']['timing_unknown'] == 1
     assert result['by_route_source'][0]['source'] == 'unknown'
-    assert result['legacy_excluded'] == {'no_proof': 1, 'not_the_proven_request': 0}
+    assert result['legacy_excluded'] == {'no_proof': 1, 'not_the_proven_request': 0, 'ambiguous': 0, 'retry': 0}
 
 
 def test_readback_keeps_missing_and_late_finishes_in_the_cohort():
@@ -460,7 +460,7 @@ def test_already_visible_finish_is_ready_at_its_cut_not_a_miss():
     events = [
         _event('cut', 1, cut_at=START.isoformat(), finish='f', source='app', basis='client_cut'),
         _event('binding', 2, finish='f', recording='rec'),
-        _event('already_visible', 2, finish='f', card='card'),
+        _event('already_visible', 2, finish='f', card='card', summary=True),
         _event('summary', 9, card='card'),
     ]
     result = readback.readback(events, START, THROUGH)
@@ -482,13 +482,14 @@ def test_already_visible_bind_emits_a_scoreable_event(monkeypatch, caplog):
     )
     with caplog.at_level('INFO'):
         finish = sli.from_request('owner', request)
-        finish.bind('recording', prove_legacy_manual_end=True, visible_card='card')
+        finish.bind('recording', prove_legacy_manual_end=True, visible_card='card', visible_summary=True)
     events = _sli_events(caplog)
     assert [e['stage'] for e in events] == ['cut', 'binding', 'already_visible']
     assert events[2] == {
         'stage': 'already_visible',
         'finish': events[0]['finish'],
         'card': sli._key('card', 'owner', 'card'),
+        'summary': True,
     }
     entries = [
         {'timestamp': datetime.fromtimestamp(r.created, tz=timezone.utc).isoformat(), 'textPayload': r.getMessage()}
@@ -523,9 +524,14 @@ def test_acknowledge_binds_already_visible_with_its_card(monkeypatch):
     def observe(recording_id, **kwargs):
         observed.append((recording_id, kwargs))
 
+    shown = {'id': 'card', 'status': 'completed', 'structured': {'overview': 'Planned the release train.'}}
     v3_finish._acknowledge('owner', {'id': 'card'}, 'already_visible', 'rec', observe)
+    v3_finish._acknowledge('owner', shown, 'already_visible', 'rec', observe)
     v3_finish._acknowledge('owner', {'id': 'card'}, 'already_empty', 'rec', observe)
-    assert observed == [('rec', {'visible_card': 'card'})]
+    assert observed == [
+        ('rec', {'visible_card': 'card', 'visible_summary': False}),
+        ('rec', {'visible_card': 'card', 'visible_summary': True}),
+    ]
 
 
 def test_route_observations_are_limited_to_the_home_cohort(monkeypatch, caplog):
@@ -673,10 +679,9 @@ def _legacy_candidate(elapsed, recording='rec'):
     )
 
 
-def test_legacy_proof_cuts_at_the_finish_request_not_an_earlier_request_on_the_recording():
-    # 1 s: a headerless request that was not a Finish binds the recording (no manual end committed).
-    # 5 s: the Finish request binds it again and its manual end is proven. Eligible at 64 s: 59 s after the
-    # Finish (within the deadline), 63 s after the earlier request (late), so the chosen cut is visible.
+def test_recording_level_proof_with_several_candidates_is_ambiguous_not_guessed():
+    # A committed manual-end marker names the recording, not a request. With two headerless requests on the
+    # recording, neither is established as the Finish, so both are excluded instead of picked by timing.
     events = [
         _legacy_candidate(1),
         _legacy_candidate(5),
@@ -685,25 +690,28 @@ def test_legacy_proof_cuts_at_the_finish_request_not_an_earlier_request_on_the_r
         _event('eligible', 64, card='card'),
     ]
     result = readback.readback(events, START, THROUGH)
-    assert result['totals']['finishes'] == 1
-    assert result['totals']['late'] == 0, 'the earlier request is not the cut'
-    assert result['totals']['timing_unknown'] == 1
-    assert result['legacy_excluded'] == {'no_proof': 0, 'not_the_proven_request': 1}
+    assert result['totals']['finishes'] == 0
+    assert result['legacy_excluded'] == {'no_proof': 0, 'not_the_proven_request': 0, 'ambiguous': 2, 'retry': 0}
 
 
-def test_legacy_proof_committed_after_the_finish_proves_that_request_not_a_later_one():
-    # The finalization commit lands after the Finish request; a later retry on the recording is not the cut.
+def test_recording_level_proof_after_the_only_candidate_establishes_it():
     events = [
         _legacy_candidate(1),
         _event('legacy_manual_end', 30, recording='rec'),
-        _legacy_candidate(40),
         _event('window', 2, recording='rec', card='card'),
         _event('eligible', 50, card='card'),
     ]
     result = readback.readback(events, START, THROUGH)
     assert result['totals']['finishes'] == 1
-    assert result['legacy_excluded'] == {'no_proof': 0, 'not_the_proven_request': 1}
+    assert result['legacy_excluded'] == {'no_proof': 0, 'not_the_proven_request': 0, 'ambiguous': 0, 'retry': 0}
     assert result['by_route_source'][0]['timing_unknown'] == 1
+
+
+def test_recording_level_proof_long_before_the_only_candidate_does_not_prove_it():
+    events = [_event('legacy_manual_end', 1, recording='rec'), _legacy_candidate(30)]
+    result = readback.readback(events, START, THROUGH)
+    assert result['totals']['finishes'] == 0
+    assert result['legacy_excluded']['no_proof'] == 1
 
 
 def test_legacy_candidate_without_proof_is_excluded_and_reported_not_a_miss():
@@ -712,7 +720,7 @@ def test_legacy_candidate_without_proof_is_excluded_and_reported_not_a_miss():
     assert result['totals']['finishes'] == 0
     assert result['totals']['unmatched'] == 0
     assert result['by_route_source'] == []
-    assert result['legacy_excluded'] == {'no_proof': 2, 'not_the_proven_request': 0}
+    assert result['legacy_excluded'] == {'no_proof': 2, 'not_the_proven_request': 0, 'ambiguous': 0, 'retry': 0}
 
 
 def test_emitted_legacy_events_read_back_as_the_proven_finish_request(monkeypatch, caplog):
@@ -731,4 +739,143 @@ def test_emitted_legacy_events_read_back_as_the_proven_finish_request(monkeypatc
         e['cut_at'] = at.isoformat()
     result = readback.readback(events, START, THROUGH)
     assert result['totals']['finishes'] == 1
-    assert result['legacy_excluded'] == {'no_proof': 0, 'not_the_proven_request': 1}
+    assert result['legacy_excluded'] == {'no_proof': 0, 'not_the_proven_request': 1, 'ambiguous': 0, 'retry': 0}
+
+
+# --- SCA-4489 review at 0ff2da52: a proof names its request; retries keep the original cut; already-visible
+# needs a summary --------------------------------------------------------------------------------------------
+
+
+def _tied_candidate(elapsed, request, recording='rec'):
+    return {**_legacy_candidate(elapsed, recording), 'request': request}
+
+
+def _tied_proof(elapsed, request, recording='rec'):
+    return _event('legacy_manual_end', elapsed, recording=recording, request=request)
+
+
+R1, R2, R3 = ('1' * 32, '2' * 32, '3' * 32)
+
+
+def test_intervening_earlier_candidate_never_takes_the_finish_requests_proof():
+    # 1 s: a headerless request that was not the Finish. 2 s: a recording-level marker commits. 3 s: the
+    # Finish request proves itself. Eligible at 62 s: 59 s after the Finish, 61 s after the earlier request.
+    # A rule that picks the last candidate before the first proof scores 1 s and calls the Finish late.
+    events = [
+        _tied_candidate(1, R1),
+        _event('legacy_manual_end', 2, recording='rec'),
+        _tied_candidate(3, R3),
+        _tied_proof(3, R3),
+        _event('window', 4, recording='rec', card='card'),
+        _event('eligible', 62, card='card'),
+    ]
+    result = readback.readback(events, START, THROUGH)
+    assert result['totals']['finishes'] == 1
+    assert result['totals']['late'] == 0, 'the earlier request is not the cut'
+    assert result['totals']['timing_unknown'] == 1
+    assert result['legacy_excluded'] == {'no_proof': 0, 'not_the_proven_request': 1, 'ambiguous': 0, 'retry': 0}
+
+
+def test_out_of_order_recording_proof_between_candidates_is_ambiguous():
+    # The same shape with no request-tied proof: the recording proof cannot name either request.
+    events = [
+        _legacy_candidate(1),
+        _event('legacy_manual_end', 2, recording='rec'),
+        _legacy_candidate(3),
+        _event('window', 4, recording='rec', card='card'),
+        _event('eligible', 30, card='card'),
+    ]
+    result = readback.readback(events, START, THROUGH)
+    assert result['totals']['finishes'] == 0
+    assert result['totals']['unmatched'] == 0
+    assert result['legacy_excluded'] == {'no_proof': 0, 'not_the_proven_request': 0, 'ambiguous': 2, 'retry': 0}
+
+
+def test_retry_never_moves_the_cut_forward():
+    # The Finish at 1 s and its retry at 6 s both prove themselves; the retry's proof is logged first. The
+    # summary is eligible at 63 s: 62 s after the Finish (late), 57 s after the retry. The earliest proven
+    # cut is scored, so a retry cannot make a late summary look within 60 s.
+    events = [
+        _tied_candidate(1, R1),
+        _tied_candidate(6, R2),
+        _tied_proof(6.5, R2),
+        _tied_proof(7, R1),
+        _event('window', 7, recording='rec', card='card'),
+        _event('eligible', 63, card='card'),
+    ]
+    result = readback.readback(events, START, THROUGH)
+    assert result['totals']['finishes'] == 1
+    assert result['totals']['late'] == 1
+    assert result['totals']['timing_unknown'] == 0
+    assert result['legacy_excluded'] == {'no_proof': 0, 'not_the_proven_request': 0, 'ambiguous': 0, 'retry': 1}
+
+
+def test_retry_logged_before_the_original_keeps_the_original_cut():
+    # Log order inverted on another instance: the retry's candidate is logged before the original's.
+    events = [
+        {**_tied_candidate(6, R2), 'observed_at': START + timedelta(seconds=1)},
+        {**_tied_candidate(1, R1), 'observed_at': START + timedelta(seconds=2)},
+        _tied_proof(2, R1),
+        _tied_proof(2, R2),
+        _event('window', 3, recording='rec', card='card'),
+        _event('eligible', 63, card='card'),
+    ]
+    result = readback.readback(events, START, THROUGH)
+    assert result['totals']['late'] == 1
+    assert result['legacy_excluded']['retry'] == 1
+
+
+def test_a_proof_for_another_recording_does_not_prove_this_request():
+    events = [_tied_candidate(1, R1), _tied_proof(2, R1, recording='other')]
+    result = readback.readback(events, START, THROUGH)
+    assert result['totals']['finishes'] == 0
+    assert result['legacy_excluded']['no_proof'] == 1
+
+
+def test_emitted_proof_carries_its_own_requests_id(monkeypatch, caplog):
+    monkeypatch.setenv('CONVERSATIONS_V3_FINISH_HOME_SLI', 'on')
+    _in_cohort(monkeypatch)
+    beta = SimpleNamespace(headers={sli.APP_CHANNEL_HEADER: 'beta'})
+    with caplog.at_level('INFO'):
+        sli.from_request('owner', beta).bind('recording', prove_legacy_manual_end=True)
+        sli.from_request('owner', beta).bind('recording', prove_legacy_manual_end=True)
+        sli.observe_legacy_manual_end('owner', 'recording')
+    first, first_proof, second, second_proof, marker = _sli_events(caplog)
+    assert first_proof['request'] == first['request'] and second_proof['request'] == second['request']
+    assert first['request'] != second['request']
+    assert all(readback.KEY.fullmatch(e['request']) for e in (first, second))
+    assert 'request' not in marker
+
+
+def test_already_visible_without_a_proven_summary_is_reported_not_scored():
+    events = [
+        _event('cut', 1, cut_at=START.isoformat(), finish='f', source='app', basis='client_cut'),
+        _event('binding', 2, finish='f', recording='rec'),
+        _event('already_visible', 2, finish='f', card='card', summary=False),
+        _event('cut', 1, cut_at=START.isoformat(), finish='g', source='app', basis='client_cut'),
+        _event('binding', 2, finish='g', recording='rec-g'),
+        # An event from an emitter that predates the summary field proves nothing either.
+        _event('already_visible', 2, finish='g', card='card-g'),
+    ]
+    result = readback.readback(events, START, THROUGH)
+    assert result['totals']['finishes'] == 0
+    assert result['totals']['within_60s'] == 0
+    assert result['by_route_source'] == []
+    assert result['already_visible_unproven'] == 2
+
+
+@pytest.mark.parametrize(
+    ('row', 'shown'),
+    [
+        ({'status': 'completed', 'structured': {'overview': 'Planned the release.'}}, True),
+        ({'status': 'completed', 'structured': {'sections': [{'body_markdown': '- ship'}]}}, True),
+        ({'status': 'completed', 'structured': {'overview': '  '}}, False),
+        ({'status': 'completed'}, False),
+        ({'status': 'processing', 'structured': {'overview': 'Planned the release.'}}, False),
+        ({'status': 'completed', 'discarded': True, 'structured': {'overview': 'Planned the release.'}}, False),
+        ({'status': 'completed', 'home_hidden': True, 'structured': {'overview': 'Planned the release.'}}, False),
+        (None, False),
+    ],
+)
+def test_visible_summary_requires_notes_on_a_shown_card(row, shown):
+    assert sli.visible_summary(row) is shown

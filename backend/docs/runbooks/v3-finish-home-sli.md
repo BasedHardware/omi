@@ -12,11 +12,18 @@ An older beta request without the operation header is only eligible when a
 committed server-side manual-end marker proves the deliberate Finish. Those
 legacy samples use `unknown` source and the server receipt time (`server_cut`),
 which is a lower bound on elapsed time. Every untagged request on a recording
-logs a candidate for it, so the proof names one request: the last candidate
-logged at or before the recording's first proof (or the first within 5 seconds
-after it). Earlier or later requests on that recording, and untagged requests
-on a recording with no proof, are excluded and counted in `legacy_excluded`
-(`not_the_proven_request`, `no_proof`); they are neither cuts nor misses.
+logs a candidate for it with a random per-request id, so timing never decides
+which request a proof belongs to. A candidate is scored only where a deliberate
+Finish is established: the live-window Finish proves its own request (its
+`legacy_manual_end` carries that candidate's request id), or a recording-level
+proof (a committed manual-end marker, which names no request) follows the
+recording's only candidate. Later proven requests on the same recording are
+retries and keep the earliest proven cut, so a retry never moves the cut
+forward. Other requests on a recording with a request-tied proof, every
+candidate on a recording whose recording-level proof cannot say which of
+several requests was the Finish, and candidates with no proof are excluded and
+counted in `legacy_excluded` (`not_the_proven_request`, `ambiguous`, `retry`,
+`no_proof`); they are neither cuts nor misses.
 
 The scored readiness signal is `eligible`: the first committed server write
 that leaves the Finish window Home-eligible with a summary. The v3 notes
@@ -41,11 +48,15 @@ qualifying cards. When the app happens to fetch Home does not change the score:
 an eligible summary that is fetched late or never fetched is still scored at
 eligibility. The reconcile mapping uses the cut that actually closed the
 window, including when the closing recording is silent and its predecessor
-supplies the speech. A Finish that finds its window already on Home with its
-notes (`already_visible`) changes nothing; it emits `already_visible` with the
-card it answered with and is scored as ready at its cut (0 s) on the
-`already_visible` route. An unbound Finish, a client-only cut, and a cut whose
-card never became eligible remain unmatched (a miss).
+supplies the speech. A Finish that finds its window already on Home
+(`already_visible`) changes nothing; it emits `already_visible` with the card
+it answered with. The Finish path calls a window already visible when it is
+completed and not hidden, which does not prove notes, so the event also records
+whether that card is completed, carries an overview or rendered note section,
+and has none of Home's hiding flags (`summary`). Only then is it scored as
+ready at its cut (0 s) on the `already_visible` route; otherwise it is counted
+in `already_visible_unproven` and not scored. An unbound Finish, a client-only
+cut, and a cut whose card never became eligible remain unmatched (a miss).
 
 Server-side route and window observations are collected only for the Home
 cohort that admits cuts (`conversations_v3_enabled` and not held out), read off
