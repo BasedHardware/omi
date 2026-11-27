@@ -196,7 +196,9 @@ async def post_v3_finish_cuts(
             status_code=403,
             detail={"code": "telemetry_forbidden", "message": "beta app channel required"},
         )
-    if finish_home_sli.enabled() and finish_home_sli.home_cohort(uid):
+    # Stage admission can read Redis on a cache miss and the holdout check walks a membership lookup:
+    # both are blocking, so the cohort check runs on the DB executor, never on the event loop.
+    if finish_home_sli.enabled() and await run_blocking(db_executor, finish_home_sli.home_cohort, uid):
         for observation in observations:
             finish_home_sli.observe_client_cut(
                 uid,

@@ -666,6 +666,44 @@ def test_finish_cut_route_drops_a_held_out_owners_cut(monkeypatch, caplog):
     assert "event=v3_finish_home_sli" not in caplog.text
 
 
+def test_finish_cut_route_runs_the_cohort_check_on_the_db_executor(monkeypatch, caplog):
+    # SCA-4489: home_cohort can do synchronous Redis I/O (stage admission cache miss) and a holdout
+    # membership lookup, so the async ingest handler must await it through run_blocking(db_executor, ...).
+    monkeypatch.setattr(telemetry_router.auth, "_enforce_rate_limit", lambda *args, **kwargs: None)
+    monkeypatch.setattr(telemetry_router.finish_home_sli, "enabled", lambda: True)
+    monkeypatch.setattr(telemetry_router.finish_home_sli, "conversations_v3_enabled", lambda uid: True)
+    monkeypatch.setattr(telemetry_router.finish_home_sli, "v3_intake_held_out", lambda uid: False)
+    real_run_blocking = telemetry_router.run_blocking
+    offloaded: list[tuple[object, object, tuple]] = []
+
+    async def recording_run_blocking(executor, fn, *args, **kwargs):
+        offloaded.append((executor, fn, args))
+        return await real_run_blocking(executor, fn, *args, **kwargs)
+
+    monkeypatch.setattr(telemetry_router, "run_blocking", recording_run_blocking)
+    payload = {
+        "schema_version": 1,
+        "batch_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaac",
+        "observations": [
+            {
+                "event_id": "11111111-1111-4111-8111-111111111113",
+                "occurred_at": datetime.now(timezone.utc).isoformat(),
+                "platform": "ios",
+                "channel": "beta",
+                "family": "finish_cut",
+                "attributes": {"operation_id": "22222222-2222-4222-8222-222222222224", "source": "app"},
+            }
+        ],
+    }
+    with caplog.at_level("INFO"):
+        response = TestClient(_app(OWNER)).post(
+            "/v1/telemetry/v3-finish-cuts", json=payload, headers={"X-Omi-App-Channel": "beta"}
+        )
+    assert response.status_code == 200
+    assert offloaded == [(telemetry_router.db_executor, telemetry_router.finish_home_sli.home_cohort, (OWNER,))]
+    assert "event=v3_finish_home_sli" in caplog.text
+
+
 def test_router_is_registered_on_the_backend_app():
     # main.py mounts through the B8 role map; read its ROUTER_MOUNTS rows structurally (AST, not an
     # import: importing app_roles loads every router, too slow for a fast unit test).
