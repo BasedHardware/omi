@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -15,6 +16,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/pending_work.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/pages/settings/device_settings.dart';
@@ -23,7 +25,9 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/pending_work/pending_work_store.dart';
+import 'package:omi/services/services.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_derived_views.dart';
 import 'package:omi/ui/ui.dart';
@@ -38,6 +42,14 @@ import '../../helpers/sfpro_font_fixtures.dart';
 
 const _output = String.fromEnvironment('DEVICE_SETTINGS_RENDER_OUTPUT');
 const _frame = Key('device_settings_frame');
+
+class _TestConnectivityPlatform extends ConnectivityPlatform {
+  @override
+  Future<List<ConnectivityResult>> checkConnectivity() async => [ConnectivityResult.wifi];
+
+  @override
+  Stream<List<ConnectivityResult>> get onConnectivityChanged => const Stream.empty();
+}
 
 class _Device extends ChangeNotifier implements DeviceProvider {
   _Device(this.batteryLevel, {required bool firstChargePending})
@@ -73,6 +85,14 @@ class _Device extends ChangeNotifier implements DeviceProvider {
   String get latestStableFirmwareVersion => '';
   @override
   Future<void> getDeviceInfo({bool forceRefresh = false}) async {}
+  @override
+  void markDisconnectIntentional(String deviceId) {}
+  @override
+  void setIsConnected(bool value) {}
+  @override
+  Future<void> setConnectedDevice(BtDevice? device) async {}
+  @override
+  void updateConnectingStatus(bool value) {}
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -315,6 +335,57 @@ void main() {
       expect(find.text('Try Again'), findsNothing);
     } finally {
       semantics.dispose();
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('Forget Device also removes the pendant from the saved devices list', (tester) async {
+    final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    final unmanaged = <Object?>[];
+    for (final method in ['configureSavedReconnect', 'unmanageDevice']) {
+      final channel = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.$method';
+      messenger.setMockMessageHandler(channel, (message) async {
+        final args = BleHostApi.pigeonChannelCodec.decodeMessage(message) as List<Object?>;
+        if (method == 'unmanageDevice') unmanaged.add(args.first);
+        return BleHostApi.pigeonChannelCodec.encodeMessage(<Object?>[null]);
+      });
+      addTearDown(() => messenger.setMockMessageHandler(channel, null));
+    }
+    ConnectivityPlatform.instance = _TestConnectivityPlatform();
+    try {
+      await ServiceManager.init();
+    } catch (_) {}
+    final other = BtDevice(id: 'omi-other', name: 'Omi', type: DeviceType.omi, rssi: -50);
+    await SharedPreferencesUtil().btDeviceSet(other);
+    await SharedPreferencesUtil()
+        .btDeviceSet(BtDevice(id: 'omi-evidence', name: 'Omi', type: DeviceType.omi, rssi: -40));
+
+    await pumpDevice(tester);
+    final en = lookupAppLocalizations(const Locale('en'));
+    try {
+      final forget = find.byKey(const Key('forget_device_button'));
+      await tester.scrollUntilVisible(forget, 200);
+      await Scrollable.ensureVisible(tester.element(forget), alignment: 0.5);
+      await tester.pump();
+      await tester.tap(forget);
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.tap(
+        find.descendant(of: find.byType(OmiAlertDialog), matching: find.text(en.forgetDevice)),
+      );
+      for (var i = 0; i < 10; i++) {
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+
+      expect(SharedPreferencesUtil().btDevice.id, isEmpty);
+      expect(SharedPreferencesUtil().btDevices.map((d) => d.id), ['omi-other'],
+          reason: 'the pairing screen lists every saved device, so a forgotten one must leave the list');
+      expect(unmanaged, contains('omi-evidence'));
+      // Let the confirmation toast finish.
+      await tester.pump(const Duration(seconds: 6));
+    } finally {
+      // Stops the connectivity service's periodic reachability probe before the pending-timer check.
+      ConnectivityService().dispose();
       debugDefaultTargetPlatformOverride = null;
     }
   });
