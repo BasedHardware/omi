@@ -468,22 +468,14 @@ def judge(sha, rows, repo, registry, service=None):
 
 
 def default_repo():
-    """SERVING_HAS_REPO, else $OMI_WORKSPACE_ROOT/upstream-keep-clean, else the checkout this file lives in. The
-    rollout-tools worktree sits outside the workspace, so parents[3] alone has no upstream-keep-clean there."""
-    if os.environ.get('SERVING_HAS_REPO'):
-        return os.environ['SERVING_HAS_REPO']
+    """Use the explicit repo or the product checkout containing this script."""
+    override = os.environ.get('SERVING_HAS_REPO')
+    if override:
+        return override
     root = os.environ.get('OMI_WORKSPACE_ROOT')
     if root and (Path(root) / 'upstream-keep-clean').is_dir():
         return str(Path(root) / 'upstream-keep-clean')
-    workspace = Path(__file__).resolve().parents[3]
-    local = workspace / 'upstream-keep-clean'
-    if local.is_dir():
-        return str(local)
-    try:
-        common = command([GIT, '-C', str(workspace), 'rev-parse', '--git-common-dir']).strip()
-        return str((workspace / common).resolve().parent / 'upstream-keep-clean')
-    except (Unknown, OSError, subprocess.TimeoutExpired):
-        return str(local)
+    return str(Path(__file__).resolve().parents[2])
 
 
 def main(argv=None, registry=None, describe=None):

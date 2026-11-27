@@ -193,21 +193,8 @@ def validate(doc, revision_name, revision, opts):
     if opts.created_after and timestamp(revision['metadata']['creationTimestamp']) <= timestamp(opts.created_after):
         raise ValueError('revision_too_old')
     if opts.contains:
-        # Ancestor, or a proven-equivalent squash merge of that reviewed head (lead 7bc379).
-        r = subprocess.run(
-            [
-                sys.executable,
-                '-I',
-                str(Path(__file__).resolve().with_name('contains_commit.py')),
-                '--repo',
-                opts.repo,
-                opts.contains,
-                release,
-            ],
-            capture_output=True,
-            timeout=120,
-        )
-        if r.returncode:
+        required = serving_has.resolve(opts.repo, opts.contains, fetch=False)
+        if not serving_has.is_ancestor(opts.repo, required, release):
             raise ValueError('release_does_not_contain_commit')
     return release, env, label_state
 

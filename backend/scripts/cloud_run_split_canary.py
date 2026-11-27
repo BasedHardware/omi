@@ -189,7 +189,31 @@ def allocations(plan, candidate, donor_percent=0):
     return result
 
 
-def promote(service, wire, candidate, transport, guard, *, sleep=time.sleep, now=None):
+def restore_completed(service, wire, transport, receipt):
+    plan = decode_plan(service, wire)
+    candidate = receipt['candidate']
+    if (
+        receipt['target'] != transport.name
+        or receipt['binding'] != hashlib.sha256(wire.encode()).hexdigest()
+        or not valid_revision(service, candidate)
+        or candidate in plan['inverse']
+    ):
+        raise ValueError('rollback_receipt_mismatch')
+    current = transport.read()
+    expected = allocations(plan, candidate)
+    if (
+        not current.converged
+        or current.uid != receipt['uid']
+        or current.etag != receipt['etag']
+        or current.tags != tuple(map(tuple, receipt['tags']))
+        or current.requested != expected
+        or current.observed != expected
+    ):
+        raise RuntimeError('rollback_traffic_ownership_lost')
+    transport.replace(current, plan['inverse'])
+
+
+def promote(service, wire, candidate, transport, guard, *, sleep=time.sleep, now=None, on_promoted=None):
     """Guard a named candidate and return only after its final map is observed.
 
     For a split service a guarded canary first borrows up to 10 percentage
@@ -259,7 +283,10 @@ def promote(service, wire, candidate, transport, guard, *, sleep=time.sleep, now
             canary = min(10, inverse[donor] - plan['holdback'] - 1)
             current = guard_window(move(current, inverse[donor] - canary), MIN_WINDOW)
         current = guard_window(move(current, plan['holdback']), plan['guard_seconds'])
-        return move(current, 0).observed
+        promoted = move(current, 0)
+        if on_promoted:
+            on_promoted(promoted)
+        return promoted.observed
     except Hold:
         raise
     except BaseException:
@@ -373,16 +400,17 @@ def main(argv=None):
         return guard_eval.main(argv[1:], reader=reader)
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='mode', required=True)
-    for mode in ('promote', 'validate-plan'):
+    for mode in ('promote', 'validate-plan', 'restore-completed'):
         command = commands.add_parser(mode)
         command.add_argument('--service', choices=HOLDBACK_BY_SERVICE, required=True)
         command.add_argument('--plan', required=True)
         command.add_argument('--binding', required=True)
         if mode != 'validate-plan':
-            command.add_argument('--candidate', required=True)
             command.add_argument('--project', required=True)
             command.add_argument('--region', required=True)
+            command.add_argument('--promotion-receipt', type=Path, required=True)
         if mode == 'promote':
+            command.add_argument('--candidate', required=True)
             command.add_argument('--guard-command', nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
     try:
@@ -391,15 +419,33 @@ def main(argv=None):
         decode_plan(args.service, args.plan)
         if args.mode == 'validate-plan':
             return 0
+        transport = CloudRunTraffic(args.project, args.region, args.service, gcloud_json)
+        if args.mode == 'restore-completed':
+            restore_completed(args.service, args.plan, transport, json.loads(args.promotion_receipt.read_text()))
+            print('HOLDBACK_RESTORED exact admitted inverse')
+            return 0
+
+        def record(state):
+            receipt = dict(
+                target=transport.name,
+                binding=args.binding,
+                candidate=args.candidate,
+                uid=state.uid,
+                etag=state.etag,
+                tags=state.tags,
+            )
+            with args.promotion_receipt.open('x') as output:
+                json.dump(receipt, output)
+
         default = [sys.executable, '-I', str(Path(__file__).with_name('guard_eval.py'))]
         guard = guard_command(args.guard_command or default, args.project, args.region)
-        transport = CloudRunTraffic(args.project, args.region, args.service, gcloud_json)
-        print(json.dumps(promote(args.service, args.plan, args.candidate, transport, guard), sort_keys=True))
+        result = promote(args.service, args.plan, args.candidate, transport, guard, on_promoted=record)
+        print(json.dumps(result, sort_keys=True))
         return 0
     except Hold as error:
         print(f'HOLDBACK_HELD {error}', file=sys.stderr)
         return 75
-    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError):
+    except (OSError, ValueError, RuntimeError, KeyError, TypeError, subprocess.SubprocessError):
         print('HOLDBACK_FAILED inspect workflow traffic and guard evidence', file=sys.stderr)
         return 1
 

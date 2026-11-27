@@ -237,7 +237,7 @@ def test_step_census_refuses_an_unclassified_new_step():
     )
     assert (
         hashlib.sha256(json.dumps([s['name'] for s in STEPS]).encode()).hexdigest()
-        == "a27c199923e5680ae0e4af5932146abbe993819cd961bd926ee740258fbb7177"
+        == "377093f224060350d23d22033331f277faaadb4527a25f691410ef734d605446"
     )
 
 

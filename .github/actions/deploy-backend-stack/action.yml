@@ -630,6 +630,8 @@ runs:
         tags: |
           gcr.io/${{ inputs.project_id }}/${{ inputs.service }}:latest
           gcr.io/${{ inputs.project_id }}/${{ inputs.service }}:${{ steps.image-tag.outputs.short_sha }}
+        labels: |
+          org.opencontainers.image.revision=${{ inputs.admitted_sha }}
         cache-from: type=registry,ref=gcr.io/${{ inputs.project_id }}/${{ inputs.service }}:buildcache
         cache-to: type=registry,ref=gcr.io/${{ inputs.project_id }}/${{ inputs.service }}:buildcache,mode=max
 
@@ -1834,6 +1836,7 @@ runs:
           result="$(python3 "$DEPLOY_CONTROL_SCRIPTS/cloud_run_split_canary.py" promote \
             --service "$SERVICE" --plan "$PLAN" --binding "$BINDING" \
             --candidate "$candidate" --project "$PROJECT" --region "$REGION" \
+            --promotion-receipt "$RUNNER_TEMP/backend-holdback-promotion.json" \
             --guard-command python3 -I "$DEPLOY_CONTROL_SCRIPTS/cloud_run_split_canary.py" workflow-guard)" || {
               rc=$?
               if ((rc == 75)); then
@@ -1991,6 +1994,24 @@ runs:
 
     # SCA-3681: The manual dev datastore smoke is suspended pending a verified
     # dev endpoint. api.omiapi.com forwards Beta clients to production.
+
+    - name: Restore admitted inverse after a failed bound acceptance gate
+      if: >-
+        ${{ failure() && inputs.selected_split_binding != '' &&
+            steps.shift-cloud-run-traffic.outputs.promoted == 'true' &&
+            (steps.verify-serving-release-vector.outcome == 'failure' ||
+             steps.smoke-promoted-production-serving-api.outcome == 'failure') }}
+      shell: bash
+      env:
+        SERVICE: ${{ inputs.cloud_run_service }}
+        PLAN: ${{ inputs.selected_split_plan }}
+        BINDING: ${{ inputs.selected_split_binding }}
+        PROJECT: ${{ inputs.project_id }}
+        REGION: ${{ inputs.region }}
+      run: |
+        python3 "$DEPLOY_CONTROL_SCRIPTS/cloud_run_split_canary.py" restore-completed \
+          --service "$SERVICE" --plan "$PLAN" --binding "$BINDING" --project "$PROJECT" --region "$REGION" \
+          --promotion-receipt "$RUNNER_TEMP/backend-holdback-promotion.json"
 
     - name: Restore Cloud Run traffic snapshot after failed promotion
       if: >-

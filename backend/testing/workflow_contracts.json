@@ -741,6 +741,7 @@
         "tests/unit/test_repair_cloud_run_traffic.py",
         "tests/unit/test_cloud_run_traffic_snapshot.py",
         "tests/unit/test_stage_split_image.py",
+        "tests/unit/test_split_release_controls.py",
         "tests/unit/test_integration_canary_workflow.py",
         "tests/unit/test_deploy_status_report.py",
         "tests/unit/test_backend_runtime_env_validator.py",
