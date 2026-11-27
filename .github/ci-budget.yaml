@@ -1516,7 +1516,7 @@
       "runs_on": "${{ (inputs.mode == 'evidence' || inputs.mode == 'image-only') && 'ubuntu-22.04' || 'ubuntu-latest' }}"
     },
     "gcp_backend_pusher.yml/deploy": {
-      "budget_p50_minutes": 7,
+      "budget_p50_minutes": 8,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 1,
@@ -1525,7 +1525,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Manual prod/dev deploy, about one dispatch a day. SCA-4874 narrows this job to the default dispatch and adds one bookkeeping minute for the new protected mode input. The job remains manual-only with no PR runs.",
+      "rationale": "Manual prod/dev deploy, about one dispatch a day. SCA-4763 adds a one-replica canary inverse server dry-run (read-only admission probe) after canary readiness, one more minute; no PR or scheduled runs.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1534,7 +1534,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_backend_pusher.yml/pusher-image-only": {
-      "budget_p50_minutes": 20,
+      "budget_p50_minutes": 22,
       "display_name": "pusher-image-only",
       "expected_runs_class": "non-pr",
       "expected_runs_per_day": 1,
@@ -1543,7 +1543,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "Omi Release",
-      "rationale": "Manual protected production Pusher only. Preview and canary verification are read-only. The runtime forecast also covers guarded promotion and rollback rollout waits, with no PR or scheduled runs.",
+      "rationale": "Manual protected production Pusher only. SCA-4763 replaces the isolated rehearsal with live server dry-runs and GitHub API verification of the non-secret evidence input; preview and canary verification stay read-only. The forecast covers guarded promotion and rollback rollout waits, with no PR or scheduled runs.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -5398,7 +5398,7 @@
     "gcp_backend_pusher.yml": {
       "name": "Deploy Backend Pusher to GKE",
       "owner": "CI maintainers",
-      "rationale": "SCA-4874 adds the protected image-only dispatch input under the existing manual trigger and prod-train lock. No PR or scheduled runs.",
+      "rationale": "SCA-4763 adds the non-secret pusher_image_only_evidence dispatch input under the existing manual trigger and prod-train lock. No PR or scheduled runs.",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
@@ -5455,6 +5455,11 @@
               ],
               "required": "false",
               "type": "choice"
+            },
+            "pusher_image_only_evidence": {
+              "default": "",
+              "description": "Protected production Pusher image-only evidence: non-secret JSON of run and record ids (schema 2)",
+              "required": "false"
             },
             "pusher_role_image_digest": {
               "default": "",
