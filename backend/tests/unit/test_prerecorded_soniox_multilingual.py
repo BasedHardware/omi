@@ -410,3 +410,26 @@ def test_concurrent_calls_with_the_same_audio_submit_to_soniox_once(vendors):
 
     assert vendors.soniox.call_count == 1
     assert vendors.velma.call_count == 1  # the concurrent duplicate ran Velma, not a second Soniox submission
+
+
+def test_a_recently_attempted_file_never_reaches_soniox_through_the_credit_refusal_hop(vendors, monkeypatch):
+    from config.prerecorded_stt import TranscriptionOutcome
+    from utils.stt.outcomes import TranscriptionFailure
+
+    vendors.soniox.return_value = ([], 'multi')  # Soniox-first answered empty
+    vendors.velma.return_value = ([], 'multi')
+    sync_call('multi')
+
+    hop = Mock(return_value=(SONIOX_WORDS, 'zh'))
+    monkeypatch.setattr(stt, 'soniox_transcribe', hop)
+    monkeypatch.setattr(stt, 'record_fallback', Mock())
+    monkeypatch.setattr(stt, 'record_vendor_burn', Mock())
+    vendors.velma.side_effect = TranscriptionFailure(
+        TranscriptionOutcome.PROVIDER_BUDGET_EXHAUSTED, provider='modulate', retryable=False
+    )
+    with pytest.raises(TranscriptionFailure):
+        with parakeet_caller('sync_fresh'):
+            stt.modulate_prerecorded_from_bytes_with_soniox(wav_bytes(), language='multi')
+
+    assert vendors.soniox.call_count == 1
+    hop.assert_not_called()

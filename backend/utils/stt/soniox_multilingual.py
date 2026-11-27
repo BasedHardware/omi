@@ -108,8 +108,12 @@ def transcribe(audio_bytes: bytes, *, language: Optional[str], diarize: bool) ->
     Soniox submission); or None when Soniox was not attempted (run Velma exactly as before)."""
     duration = wav_duration_seconds(audio_bytes)
     digest = hashlib.sha256(audio_bytes).hexdigest()
-    if not 0 < duration <= MAX_SECONDS or not _claim(digest):
+    if not 0 < duration <= MAX_SECONDS:
         return None
+    if not _claim(digest):
+        # Soniox already has (or had) this audio: run Velma, and never let a failover hop resubmit it.
+        logger.info('event=prerecorded_soniox_multilingual outcome=skipped reason=already_attempted')
+        return FAILED
     if not _IN_FLIGHT.acquire(blocking=False):
         _release(digest)  # never attempted: a later call may still try Soniox
         logger.info('event=prerecorded_soniox_multilingual outcome=skipped reason=in_flight_cap')
