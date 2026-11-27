@@ -69,7 +69,7 @@ from utils.conversations.v3 import (
 )
 from utils.conversations.v3 import manual_cuts, refinement, preview_wakes, rederive_plan, summary_wake
 from utils.conversations.v3 import live_tail
-from utils.conversations.v3 import capture_device
+from utils.conversations.v3 import capture_device, notes_order
 from utils.conversations.v3.word_floor import MIN_TASK_WORDS, has_unspaced_script, text_word_count
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.meeting_treatment import deduplicated_transcribed_speech_seconds
@@ -1583,7 +1583,7 @@ async def _process_leased(uid, row, token):
 
 
 async def drain_processing(uid):
-    rows = await run_blocking(db_executor, pending_processing, uid)
+    rows = notes_order.finish_first(await run_blocking(db_executor, pending_processing, uid))
     for row in rows:
         if row is None or not python_owns_finalization(row):
             continue
