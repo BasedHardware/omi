@@ -1863,3 +1863,43 @@ def test_words_that_do_not_spell_the_text_never_split():
         for i, (t, v) in enumerate(zip('a b c d e f'.split(), 'AAABBB'))
     ]
     assert splitting.split_segment(segment, words, splitting.plan_runs(words)) is None
+
+
+def test_kill_switch_off_still_reads_existing_pieces_back(lane, monkeypatch, results):
+    _six_words(lane)
+    _turns(monkeypatch, (0, 3.65, 'A'), (3.65, 16, 'B'))
+    before = [(s.id, s.text, s.start, s.end) for s in resolve(lane)]
+    monkeypatch.setenv('BATCH_FINAL_PASS_SPLIT_MIXED_SEGMENTS_ENABLED', 'false')
+    after = resolve(lane)
+    assert results[-1]['outcome'] == 'success' and results[-1]['coverage']['unplaced'] == 0
+    assert [(s.id, s.text, s.start, s.end) for s in after] == before
+
+
+def test_the_identity_only_retry_never_splits(lane, monkeypatch, results):
+    original = _six_words(lane)
+    _turns(monkeypatch, (0, 3.65, 'A'), (3.65, 16, 'B'))
+    with batch.identity_only_attempt():
+        segments = resolve(lane)
+    assert results[-1]['outcome'] == 'failed_unassigned_words' and results[-1]['split_segments'] == 0
+    assert [s.id for s in segments] == [s.id for s in original]
+
+
+def test_a_saved_sync_window_moves_with_each_piece():
+    from models.transcript_segment import TranscriptSegment
+
+    segment = TranscriptSegment(
+        id='s',
+        text='one two three four',
+        start=10,
+        end=14,
+        is_user=False,
+        audio_source={'type': 'sync', 'start': 1010, 'end': 1014},
+    )
+    words = [
+        {'text': t, 'speaker': v, 'timestamp': [i, i + 0.9]}
+        for i, (t, v) in enumerate(zip(segment.text.split(), 'AABB'))
+    ]
+    first, second = splitting.split_segment(segment, words, splitting.plan_runs(words))
+    assert (first.audio_source['start'], first.audio_source['end']) == (1010, 1012)
+    assert (second.audio_source['start'], second.audio_source['end']) == (1012, 1014)
+    assert segment.audio_source == {'type': 'sync', 'start': 1010, 'end': 1014}

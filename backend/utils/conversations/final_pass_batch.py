@@ -513,23 +513,22 @@ def decode_unit_evidence(
             # A segment an earlier pass split is a run of stored pieces (the first keeps the projection id): its
             # words move to the pieces by token position, and the pieces must spell the projection text exactly.
             pieces_of = {}
-            if split_mixed_segments_enabled():
-                for sid, source in reconstructed.items():
-                    chain = splitting.expand_split(sid, stored)
-                    if len(chain) < 2:
-                        continue
-                    pieces_of.update((piece.id, sid) for piece in chain)
-                    mine = [word for word in words if word['segment_id'] == sid]
-                    owners = (
-                        splitting.assign_words_to_pieces(mine, chain)
-                        if source.end > source.start and ' '.join(p.text for p in chain).split() == source.text.split()
-                        else None
-                    )
-                    if owners is None:
-                        diagnostics.update((piece.id, 'projection_text_mismatch') for piece in chain)
-                        continue
-                    for word, owner in zip(mine, owners):
-                        word['segment_id'] = owner
+            for sid, source in reconstructed.items():
+                chain = splitting.expand_split(sid, stored)
+                if len(chain) < 2:
+                    continue
+                pieces_of.update((piece.id, sid) for piece in chain)
+                mine = [word for word in words if word['segment_id'] == sid]
+                owners = (
+                    splitting.assign_words_to_pieces(mine, chain)
+                    if source.end > source.start and ' '.join(p.text for p in chain).split() == source.text.split()
+                    else None
+                )
+                if owners is None:
+                    diagnostics.update((piece.id, 'projection_text_mismatch') for piece in chain)
+                    continue
+                for word, owner in zip(mine, owners):
+                    word['segment_id'] = owner
             placed = {word['segment_id'] for word in words}
             for sid, segment in stored.items():
                 if sid in pieces_of:
@@ -779,7 +778,8 @@ def _run(uid, conversation, receipt, load_prints, apply, failure_context: UnitFa
     unassigned = False
     splits, origin, word_piece = {}, {}, {}
     split_refusals = Counts()
-    can_split = split_mixed_segments_enabled()
+    # Never on the identity-only retry: notes may already cite the segment (see final_pass_split).
+    can_split = split_mixed_segments_enabled() and not _IDENTITY_ONLY.get()
     split_members = {piece.id for sid in stored for piece in splitting.expand_split(sid, stored)[1:]} | {
         sid for sid in stored if splitting.split_segment_id(sid, 1) in stored
     }

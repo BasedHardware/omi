@@ -16,7 +16,7 @@ from uuid import NAMESPACE_URL, uuid5
 from difflib import SequenceMatcher
 from itertools import groupby
 from typing import Any
-from utils.conversations.final_pass_split import unsplit_spans
+from utils.conversations.final_pass_split import unsplit_lines
 
 CAP = timedelta(hours=2)
 TRANSCRIPT_BUDGET = 900 * 1024
@@ -449,7 +449,10 @@ def build(uid, window, recordings, existing=None, *, allocated=None, manual_end_
         # new recorded lines rather than rebuilding away those edits/windows.
         old_segments = deepcopy(existing.get('transcript_segments') or [])
         keys = {(s.get('id'), s.get('start'), s.get('end')) for s in old_segments}
-        keys.update((sid, start, end) for sid, (start, end) in unsplit_spans(old_segments).items())
+        # A line the batch final pass split is still present: by its id and span, or by its pieces' joined text.
+        whole_lines = unsplit_lines(old_segments)
+        keys.update((line['id'], line['start'], line['end']) for line in whole_lines)
+        comparable = old_segments + whole_lines
 
         def already_present(segment):
             if (segment.get('id'), segment.get('start'), segment.get('end')) in keys:
@@ -468,7 +471,7 @@ def build(uid, window, recordings, existing=None, *, allocated=None, manual_end_
                         >= 0.92
                     )
                 )
-                for old in old_segments
+                for old in comparable
             )
 
         segments = old_segments + [s for s in segments if not already_present(s)]
@@ -697,7 +700,7 @@ def _segment_keys(row):
         for s in segments
     }
     # A segment the batch final pass split is still published: its pieces span the original timing.
-    keys.update((sid, start, end, None) for sid, (start, end) in unsplit_spans(segments).items())
+    keys.update((line['id'], line['start'], line['end'], None) for line in unsplit_lines(segments))
     return keys
 
 

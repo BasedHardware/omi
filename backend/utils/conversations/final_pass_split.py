@@ -12,6 +12,11 @@ first word starts, relative to the segment's first word. The first piece keeps t
 the segment (structured notes, action items) still resolve; later pieces take ``split_segment_id(id, k)``. A later
 pass recognises the run of pieces as the projection segment they came from (:func:`expand_split`).
 
+Splitting runs only on the first pass over a conversation's units, not on the identity-only retry
+(``final_pass_retry.run_only``): by then structured notes may cite the segment, and a split would narrow that
+citation to its first piece. Reading pieces back does not depend on the kill switch, so turning splitting off never
+strands segments an earlier pass split.
+
 Not split: manual segments, corrected text (``original_text``), translated segments, segments already split, and
 segments of more than ``MAX_PIECES`` runs; runs shorter than ``MIN_RUN_WORDS`` words or ``MIN_RUN_SECONDS`` are
 absorbed into the neighbouring run. Words in a
@@ -143,13 +148,25 @@ def split_segment(segment, words: list[dict], runs: list[Run]) -> Optional[list]
     pieces[-1].end = segment.end
     if any(p.end <= p.start for p in pieces):
         return None
+    source = segment.audio_source if isinstance(segment.audio_source, dict) else None
     for piece in pieces:
+        if source and source.get('type') == 'sync' and _is_number(source.get('start')):
+            # A saved sync window is proof only while it equals origin + start/end; each piece keeps that origin.
+            piece.audio_source = {
+                **source,
+                'start': source['start'] + (piece.start - segment.start),
+                'end': source['start'] + (piece.end - segment.start),
+            }
         if segment.audio_capture_start is not None and segment.audio_capture_end is not None:
             piece.audio_capture_start = segment.audio_capture_start + (piece.start - segment.start)
             piece.audio_capture_end = min(
                 segment.audio_capture_end, segment.audio_capture_start + (piece.end - segment.start)
             )
     return pieces
+
+
+def _is_number(value) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
 def refusal(segment) -> Optional[str]:
@@ -199,21 +216,28 @@ def assign_words_to_pieces(words: list[dict], pieces: list) -> Optional[list[str
     return owners
 
 
-def unsplit_spans(segments) -> dict[str, tuple[float, float]]:
-    """For each split run among stored segments (dicts or models), the original segment's id and span: the first
-    piece's start and the last piece's end. Readers that recognise a published segment by its exact id and timing
-    (the conversations-v3 planner) use it to see the original line in its pieces."""
+def unsplit_lines(segments) -> list[dict]:
+    """For each split run among stored segments (dicts or models), the original line: its id, the first piece's
+    start, the last piece's end and the pieces' joined text. Readers that recognise a published segment by its exact
+    id and timing, or by overlapping text (the conversations-v3 planner), see the original line in its pieces."""
 
     def get(segment, key):
         return segment.get(key) if isinstance(segment, dict) else getattr(segment, key, None)
 
     by_id = {get(s, 'id'): s for s in segments if get(s, 'id')}
-    spans = {}
+    lines = []
     for segment_id, segment in by_id.items():
         chain = expand_split(segment_id, by_id)
         if len(chain) > 1:
-            spans[segment_id] = (get(segment, 'start'), get(chain[-1], 'end'))
-    return spans
+            lines.append(
+                {
+                    'id': segment_id,
+                    'start': get(segment, 'start'),
+                    'end': get(chain[-1], 'end'),
+                    'text': ' '.join(get(piece, 'text') or '' for piece in chain),
+                }
+            )
+    return lines
 
 
 def derived_piece_ids(segments) -> set[str]:

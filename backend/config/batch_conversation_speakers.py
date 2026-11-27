@@ -42,8 +42,8 @@ def keep_resolved_on_partial_enabled() -> bool:
 
 def split_mixed_segments_enabled() -> bool:
     """Kill switch: a stored segment the final pass hears as two or three voices splits at the voice change (first
-    piece keeps the id), and a later pass reads the pieces back. False restores whole-segment relabeling only (a mixed
-    segment keeps its label) and treats existing pieces as text mismatches."""
+    piece keeps the id). False restores whole-segment relabeling only (a mixed segment keeps its label); existing
+    pieces are still read back."""
     return _default_on(FINAL_PASS_SPLIT_MIXED_ENV)
 
 

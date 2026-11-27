@@ -133,9 +133,11 @@ never split; they and segments mostly in a gap abstain, with
 and recurring learning is suppressed. The result carries `split_segments` and
 `split_refusals`, logged as `batch_final_pass_split`. The conversations-v3 planner
 recognises a split segment as published (its pieces span the original timing), so a
-replan does not re-add it. Kill switch: `BATCH_FINAL_PASS_SPLIT_MIXED_SEGMENTS_ENABLED=false`
-(default on, read per call) stops new splits; already-split pieces then read back as
-text mismatches and abstain.
+replan does not re-add it. Splitting runs only on a conversation's first pass, never on
+the identity-only retry (notes may already cite the segment). Each piece keeps a saved
+sync audio window re-timed to the piece. Kill switch:
+`BATCH_FINAL_PASS_SPLIT_MIXED_SEGMENTS_ENABLED=false` (default on, read per call) stops
+new splits; existing pieces are still read back and relabeled.
 
 A partial pass on a conversation the resolver already marked `resolved` keeps it
 resolved. Each final-pass voice maps to the resolver voice holding more than half of
