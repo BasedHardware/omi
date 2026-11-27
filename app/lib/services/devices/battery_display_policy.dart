@@ -75,8 +75,8 @@ class BatteryDisplayPolicy {
   /// False when the remote kill switch is set; every reading then shows as reported.
   bool enabled = true;
 
-  // Per-device charge history. It survives reconnects so a charge that spans a
-  // Bluetooth drop still counts.
+  // Per-device charge history. A long charge that ended is kept across reconnects;
+  // a charge still in progress is dropped when the link is re-established.
   final Map<String, DateTime> _chargeStartedAt = {};
   final Map<String, DateTime> _longChargeEndedAt = {};
   final Set<String> _firstPairing = {};
@@ -92,8 +92,10 @@ class BatteryDisplayPolicy {
   /// This device's remembered stuck reading, loaded once per connection.
   (int, DateTime)? _remembered;
 
-  /// Starts a new connection to [deviceId]. Charge history for the device is kept.
+  /// Starts a new connection to [deviceId]. A charge in progress is not carried over: the
+  /// app did not observe the gap, so it cannot count toward a long charge.
   void beginConnection(String deviceId) {
+    _chargeStartedAt.remove(deviceId);
     _deviceId = deviceId;
     _lastLevel = -1;
     _flatLevel = null;
@@ -125,7 +127,10 @@ class BatteryDisplayPolicy {
     if (level < 0 || level > 100) return;
     final now = _clock();
     final id = _deviceId;
-    if (level > nearEmpty) {
+    if (level == 0) {
+      // A real 0% ends any remembered stuck value (a stuck filter never reads 0).
+      if (id != null) _forgetStuck(id);
+    } else if (level > nearEmpty) {
       // A believable reading: the pendant is past any stuck state.
       _confirmedDrain = false;
       if (id != null) {

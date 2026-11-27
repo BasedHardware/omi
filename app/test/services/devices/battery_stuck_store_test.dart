@@ -20,6 +20,8 @@ void main() {
 
     await SharedPreferencesUtil().btDeviceForget('AA:BB');
     expect(store.load(), isEmpty, reason: 'Forget Device ends the stuck record');
+    expect(SharedPreferencesUtil().getString(PrefsBatteryStuckStore.key), '{}',
+        reason: 'the forgotten device id and reading are erased from disk');
   });
 
   test('a corrupt record reads as empty', () async {

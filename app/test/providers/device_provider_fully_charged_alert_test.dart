@@ -498,13 +498,16 @@ DeviceProvider _provider(
 }
 
 void _batteryDisplayGuardTests() {
-  DeviceProvider guarded(_ChargingTransport transport, _Clock clock, {bool allowed = true}) => DeviceProvider(
+  DeviceProvider guarded(_ChargingTransport transport, _Clock clock,
+          {bool allowed = true, List<BatteryHideReason>? reported}) =>
+      DeviceProvider(
         chargingConnectionLoader: (_) async => OmiDeviceConnection(_device(), transport),
         clock: () => clock.wall,
         monotonicNow: () => clock.mono,
         fullyChargedNotification: (_) {},
         batteryDisplayGuardAllowed: () async => allowed,
         batteryStuckStore: InMemoryBatteryStuckStore(),
+        batteryHiddenReporter: reported?.add,
       );
 
   testWidgets('a low reading while charging shows no percentage until charging stops', (tester) async {
@@ -579,7 +582,67 @@ void _batteryDisplayGuardTests() {
     expect(provider.displayBatteryLevel, -1);
     expect(provider.settingsBatteryLevel, -1);
     expect(provider.batteryHideReason, BatteryHideReason.firstPairing);
+    expect(provider.batteryReadingStuck, isFalse, reason: 'a new pendant may really be empty: no restart advice');
     expect(provider.hasLowBatteryAlertedForTesting, isFalse);
+  });
+
+  testWidgets('a near-empty reading defers the low-battery alert until it falls', (tester) async {
+    final transport = _ChargingTransport()..value = [0];
+    final clock = _Clock();
+    final provider = guarded(transport, clock);
+    addTearDown(transport.notifications.close);
+    addTearDown(transport.batteryNotifications.close);
+    addTearDown(provider.dispose);
+    provider.connectedDevice = _device();
+    provider.setIsConnected(true);
+    await provider.initiateChargingStatusListener();
+    await provider.initiateBleBatteryListener();
+    transport.batteryNotifications.add([4]);
+    expect(provider.displayBatteryLevel, 4);
+    expect(provider.hasLowBatteryAlertedForTesting, isFalse, reason: 'it may still turn out stuck');
+    transport.batteryNotifications.add([3]);
+    expect(provider.hasLowBatteryAlertedForTesting, isTrue);
+    transport.batteryNotifications.add([15]);
+    await tester.pump(const Duration(minutes: 11));
+  });
+
+  testWidgets('a low first reading stays hidden until the charging status is known', (tester) async {
+    final pending = Completer<List<int>>();
+    final transport = _ChargingTransport()..pendingRead = pending;
+    final clock = _Clock();
+    final reported = <BatteryHideReason>[];
+    final provider = guarded(transport, clock, reported: reported);
+    addTearDown(transport.notifications.close);
+    addTearDown(transport.batteryNotifications.close);
+    addTearDown(provider.dispose);
+    provider.connectedDevice = _device();
+    provider.setIsConnected(true);
+    provider.batteryLevel = 1;
+    expect(provider.displayBatteryLevel, -1, reason: '3.0.24 may be on the charger with a frozen 1%');
+    final listening = provider.initiateChargingStatusListener();
+    pending.complete([1]);
+    await listening;
+    expect(provider.batteryHideReason, BatteryHideReason.chargingLow);
+    expect(reported, [BatteryHideReason.chargingLow]);
+  });
+
+  testWidgets('each hide reason is reported once per connection', (tester) async {
+    final transport = _ChargingTransport()..value = [1];
+    final clock = _Clock();
+    final reported = <BatteryHideReason>[];
+    final provider = guarded(transport, clock, reported: reported);
+    addTearDown(transport.notifications.close);
+    addTearDown(transport.batteryNotifications.close);
+    addTearDown(provider.dispose);
+    provider.connectedDevice = _device();
+    provider.setIsConnected(true);
+    await provider.initiateChargingStatusListener();
+    await provider.initiateBleBatteryListener();
+    transport.batteryNotifications.add([1]);
+    transport.batteryNotifications.add([2]);
+    transport.batteryNotifications.add([1]);
+    expect(reported, [BatteryHideReason.chargingLow]);
+    await tester.pump(const Duration(minutes: 1));
   });
 
   testWidgets('a falling near-empty reading is real: it shows and alerts', (tester) async {

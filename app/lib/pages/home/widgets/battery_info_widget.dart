@@ -72,7 +72,7 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
               final low = hasBattery && batteryLevel <= kLowBatteryPercent && !isCharging;
               final semantics = [
                 connectedDevice.name,
-                if (hasBattery) l10n.batteryLevelSemantics(batteryLevel),
+                if (hasBattery) l10n.batteryLevelSemantics(batteryLevel) else ...[l10n.battery, l10n.unknown],
                 if (isCharging) l10n.charging,
               ].join(', ');
               final batteryPill = _DevicePill(

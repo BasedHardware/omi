@@ -15,7 +15,7 @@ class PrefsBatteryStuckStore implements BatteryStuckStore {
       if (encoded.isEmpty) return {};
       final saved = _savedIds();
       final decoded = jsonDecode(encoded) as Map<String, dynamic>;
-      return {
+      final readings = {
         for (final entry in decoded.entries)
           if (saved.contains(entry.key.toUpperCase()) && entry.value is List && (entry.value as List).length == 2)
             entry.key: (
@@ -23,6 +23,9 @@ class PrefsBatteryStuckStore implements BatteryStuckStore {
               DateTime.fromMillisecondsSinceEpoch((entry.value as List)[1] as int),
             ),
       };
+      // A forgotten device's record is erased, not just skipped.
+      if (readings.length != decoded.length) save(readings);
+      return readings;
     } catch (_) {
       return {};
     }

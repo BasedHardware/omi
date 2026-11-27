@@ -83,13 +83,31 @@ void main() {
         reason: 'the long charge is too old to explain it; the flat rule still does');
   });
 
-  test('charge history survives a reconnect; drain and flat state do not', () {
+  test('a charge is not timed across a reconnect the app did not observe', () {
     policy.onCharging('omi', true);
     advance(const Duration(minutes: 40));
     policy.beginConnection('omi');
     policy.onCharging('omi', false);
     policy.onSample(1, charging: false);
+    expect(policy.hideReason(1, charging: false), isNull);
+  });
+
+  test('an observed long charge that ended is still known after a reconnect', () {
+    policy.onCharging('omi', true);
+    advance(const Duration(minutes: 40));
+    policy.onCharging('omi', false);
+    policy.beginConnection('omi');
+    policy.onSample(1, charging: false);
     expect(policy.hideReason(1, charging: false), BatteryHideReason.longCharge);
+  });
+
+  test('a real 0% clears a remembered stuck value', () {
+    final store = InMemoryBatteryStuckStore()..save({'omi': (1, now)});
+    final p = BatteryDisplayPolicy(clock: () => now, store: store)..beginConnection('omi');
+    p.onSample(0, charging: false);
+    expect(store.load(), isEmpty);
+    p.onSample(1, charging: false);
+    expect(p.hideReason(1, charging: false), isNull);
   });
 
   test('a stuck reading is hidden at once on the next connection, until a real reading arrives', () {
