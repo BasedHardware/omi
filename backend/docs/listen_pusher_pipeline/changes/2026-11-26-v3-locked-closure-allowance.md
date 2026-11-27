@@ -80,6 +80,14 @@ Without renewal, the same commit loses the lease after two batches.
 daily cap apply wherever it does. Derive (`load_derive`, partition budget) and live re-derive (`load_live_rederive`,
 `DERIVED_LIMIT`) keep today's bounds for a listed owner; a heavy derive is planned as its own run.
 
+**No stranded uploads.** Preparation offloads a changed shared or public transcript to the object lake before any
+transaction. So the cap is decided first, from an estimate that prepares every row inline (no upload) and counts
+every row whose visibility allows offload as a pointer at least as large as either form. Partitioning is next-fit,
+so heavier items and more pointers never give fewer batches: when the estimate fits the cap, the real partition
+fits too, and when it does not, the attempt parks with nothing uploaded. The estimate may park a closure whose
+offloaded rows would have fit, which only keeps the owner parked as before. It runs only for a closure past the
+origin bound, and costs one extra inline encryption of the closure's rows.
+
 **Seed retry.** A pass whose commit would exceed the batch cap raises `LockedBatchCap` before any transaction. The
 builder re-enters down the same ladder a load-time overflow uses, pending and unlocked seeds alike: 32 pending + 8
 unlocked, 8 + 8, 1 + 1, then one seed of either kind (the single lanes). The step comes from the seeds the pass read,

@@ -416,7 +416,8 @@ IAM rights in `based-hardware`; Release's `ro-prod` identity cannot verify or cr
 
 The next pass loads the locked claimants within the allowance and commits in at most
 `CONVERSATIONS_V3_LOCKED_MAX_BATCHES` batches. That is about 6.5k to 30k reads per pass. A pass whose
-commit would need more batches writes nothing and retries down the same ladder a load-time overflow
+commit would need more batches writes nothing, uploads no transcript to the object lake (the cap is decided
+before preparation can offload), and retries down the same ladder a load-time overflow
 uses, pending and unlocked seeds alike: 32 pending + 8 unlocked, then 8 + 8, then 1 + 1, then one seed of
 either kind. The step comes from the seeds the pass read, so it re-enters at most three times, and it parks
 only at one seed. Only builder passes get the allowance: derive and re-derive keep their partition bounds,

@@ -177,7 +177,10 @@ pass's own builder lease token; a stale pass charges nothing and gets the origin
 
 Rewritable rows keep the original bound. Such a closure may commit in at most
 `CONVERSATIONS_V3_LOCKED_MAX_BATCHES` (default 6) projection batches. Otherwise the commit raises
-`LockedBatchCap` (`v3_derived_budget`) before any transaction, and the builder retries down the load
+`LockedBatchCap` (`v3_derived_budget`) before any transaction, and before preparation can offload a
+transcript to the object lake, so a capped attempt leaves no uploaded copy behind. The cap is decided from an
+inline estimate that counts every row that might offload as a pointer at least as large as either form, so the
+estimate never has fewer batches than the real commit. The builder then retries down the load
 ladder below the seeds it read (pending + unlocked: 32 + 8, 8 + 8, 1 + 1, then one of either kind). It
 re-enters at most three times and parks only at one seed.
 

@@ -25,6 +25,7 @@ from database.conversations_v3_projection_budget import (
     partition_rows,
 )
 from database._client import firestore_failure_reason, get_firestore_client
+from database import transcript_pointer
 from database.transcript_pointer import (
     MAX_PRELOAD_DOCUMENTS,
     TranscriptBlobAbsent,
@@ -64,6 +65,8 @@ from utils.conversations import terminal_settled
 from utils.conversations.v3 import Conflict, UnlockedPage, metrics, policy, preview_wakes, request_log_trace_id
 from utils.observability.fallback import record_fallback
 from utils.open_loops.extraction import OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD, OPEN_LOOP_EXTRACTIONS_FIELD
+from config import object_lake as object_lake_config
+from utils.other.object_lake import LakeObjectRef
 
 logger = logging.getLogger(__name__)
 
@@ -680,6 +683,30 @@ def _committable_rows(sources):
     return LOCKED_MAX_BATCHES * max(1, BATCH_MAX_WRITES - sources - 1)
 
 
+# The widest values a transcript pointer can carry (_parse_ref allows up to the data-class limit plus 64 KiB).
+_POINTER_BOUND_BYTES, _POINTER_BOUND_DEK_VERSION = 10**9 - 1, 10**12 - 1
+
+
+def _offload_bound(uid, clean, encoded):
+    """``encoded`` (prepared inline) as the batch-count estimate sees it: when preparation could offload this row's
+    transcript, the transcript is replaced by a stand-in at least as large as both the inline form and any pointer,
+    and it counts as a pointer. Superset of offload_or_inline's condition: the lake has a bucket and the row's
+    visibility allows offload (the cohort and the 4 KiB inline threshold are ignored, so it never under-counts)."""
+    segments = encoded.get('transcript_segments')
+    if not (segments and object_lake_config.bucket() and transcript_pointer.conversation_allows_offload(clean)):
+        return encoded
+    digest = '0' * 64
+    pointer = LakeObjectRef(
+        object_lake_config.bucket(),
+        f"{object_lake_config.release()}/spaces/{uid}/transcript/{clean.get('id') or ''}/{digest}",
+        digest,
+        _POINTER_BOUND_BYTES,
+        'transcript',
+        _POINTER_BOUND_DEK_VERSION,
+    ).to_pointer_dict()
+    return {**encoded, 'transcript_segments': {'inline': segments, 'pointer': pointer}}
+
+
 def _past_origin_bound(uid, existing, *, key='builder'):
     """The closure used the locked-claimant allowance: a listed owner past DERIVED_LIMIT or DERIVED_BYTES."""
     if _locked_allowance(uid, key=key) == (0, 0):
@@ -1288,8 +1315,8 @@ def commit_projection(
     failure_transitions = {
         r['id']: r.get('v3_process_failed') and not (existing.get(r['id']) or {}).get('v3_process_failed') for r in rows
     }
-    prepared = []
-    for row in rows:
+
+    def prepare(row, *, allow_offload=True):
         clean = {k: v for k, v in row.items() if not k.startswith('_v3_') and k != 'updated_at'}
         # A prior row carries its stored open-loop extractions as the protected blob (the read
         # path never decodes them); the codec accepts only the decoded object.
@@ -1297,7 +1324,7 @@ def commit_projection(
         marker = clean.pop(OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD, None)
         level = clean.get('data_protection_level') or 'standard'
         encoded = conversations._prepare_conversation_for_write(  # pyright: ignore[reportPrivateUsage] -- reuse the authoritative encryption codec
-            clean, uid, level, allow_offload=True
+            clean, uid, level, allow_offload=allow_offload
         )
         if blob:
             prior_level = (existing.get(row['id']) or {}).get('data_protection_level') or 'standard'
@@ -1311,7 +1338,9 @@ def commit_projection(
                         {OPEN_LOOP_EXTRACTIONS_FIELD: retained}, uid, level
                     )
                 )
-        prepared.append(home_visibility_index.stamp(encoded))
+        encoded = home_visibility_index.stamp(encoded)
+        return encoded if allow_offload else _offload_bound(uid, clean, encoded)
+
     encrypted_cache = encrypt(json.dumps(cache, default=str), uid)
     batch_reads = os.getenv('CONVERSATIONS_V3_BATCH_COMMIT_READS', 'on').strip().lower() != 'off'
     settle_enabled = terminal_settled.serving(uid)
@@ -1580,25 +1609,36 @@ def commit_projection(
     fixed = fixed_write_bytes(recordings, rows, encrypted_cache)
     fixed += _encoded_bytes(settle) if settle else 0
     fixed_writes = len(recordings) + 2 * len(remove) + absorption_writes + len(retire) + len(retired) + len(settle) + 1
-    batches = partition_rows(
-        rows,
-        prepared,
-        fixed=fixed,
-        fixed_writes=fixed_writes,
-        max_writes=BATCH_MAX_WRITES,
-        max_bytes=BATCH_WRITE_BYTES,
-        row_bytes=BATCH_ROW_BYTES,
-        max_pointers=MAX_PRELOAD_DOCUMENTS,
-        removals=bool(retired or remove),
-        settle=bool(settle),
-        replacing_claimants=replacing_claimants,
-    )
-    heavy = _past_origin_bound(uid, existing, key=key)
-    if heavy and len(batches) > LOCKED_MAX_BATCHES:
-        # Each batch rereads the whole closure: a locked-claimant closure may not buy an unbounded commit.
-        # Park on the derived budget before any transaction, so nothing is written and pending stays owed.
-        metrics.safe_metric(lambda: logger.info('event=v3_locked_closure_batches batches=%d', len(batches)))
-        raise LockedBatchCap('v3_derived_budget')
+
+    def partition(prepared_rows, *, estimate=False):
+        return partition_rows(
+            rows,
+            prepared_rows,
+            fixed=fixed,
+            fixed_writes=fixed_writes,
+            max_writes=BATCH_MAX_WRITES,
+            max_bytes=BATCH_WRITE_BYTES,
+            row_bytes=BATCH_ROW_BYTES,
+            max_pointers=MAX_PRELOAD_DOCUMENTS,
+            removals=bool(retired or remove),
+            # The estimate only counts batches; the size-dependent refusals belong to the real partition.
+            settle=bool(settle) and not estimate,
+            replacing_claimants=replacing_claimants and not estimate,
+        )
+
+    if _past_origin_bound(uid, existing, key=key):
+        # Each batch rereads the whole closure: a locked-claimant closure may not buy an unbounded commit. Decide
+        # the cap before preparation can offload a transcript to the object lake: a rejected attempt must not leave
+        # uploaded copies of user content that no row references (custody). The estimate prepares inline and counts
+        # every row that might offload as a pointer at least as large as either form, so it never has fewer batches
+        # than the real partition (next-fit is monotone in item size and pointer count). Park on the derived budget
+        # before any upload or transaction, so nothing is written and pending stays owed.
+        estimated = len(partition([prepare(row, allow_offload=False) for row in rows], estimate=True))
+        if estimated > LOCKED_MAX_BATCHES:
+            metrics.safe_metric(lambda: logger.info('event=v3_locked_closure_batches batches=%d', estimated))
+            raise LockedBatchCap('v3_derived_budget')
+    prepared = [prepare(row) for row in rows]
+    batches = partition(prepared)
     for index, batch in enumerate(batches):
         batch_rows, batch_prepared, final = [r for r, _ in batch], [r for _, r in batch], index == len(batches) - 1
         try:

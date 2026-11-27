@@ -165,7 +165,7 @@ BODY_DIGEST = {
     'utils.support.retention._select_conversations': 'f36920350f4e3a557e0e474e8801ae414c21ce67203e0627f7a39ba820243d16',
     'database.conversations_v3_live._recent_window_query': '6f2c323bfa8df890362c6bdc4796182a70e4c704376bcb4944358560b12edc75',
     'database.conversations_v3._oldest_pending': 'e2da208a3dcbae7d7c7c59335883b422e27dc71c9cfae51568883aa452bcfc57',
-    'database.conversations_v3.commit_projection': '8640e556d206f735b537b2c89bb197fbded7cfc10ef1732adb373fe9b24ac2c6',
+    'database.conversations_v3.commit_projection': '2000f15f0850ce4694746b68d705e078a4f5a9a115b5b973801599dc8b4cfbc4',
     'database.batch_pipeline_conversation_purge_scans._claim': 'faa5dabcf01dc5bd377b2e14a149282aa2db93b2872cdc97a3b756157701532c',
     'database.batch_pipeline_conversation_purge_scans.run_job': 'fe5d30b77da198a7e0dc188115c8906fb6446925079a4e96339d36675a55faeb',
     'database.batch_pipeline_store.FirestoreStore.protected_retries': 'b55d2960c94057cb8df9b9cdd2e7728b6af63728bc0a2cb6f5bd333efed443a2',
@@ -3743,7 +3743,9 @@ for entry in (
         'lease (builder or backfill-builder) with a transactional point read and update of that one lease document, '
         'behind CONVERSATIONS_V3_COMMIT_LEASE_RENEWAL; the locked-closure batch cap only counts the planned batches '
         'before any read and raises LockedBatchCap; the daily attempt counter moved to load (a point transaction on the '
-        'builder lease document); no new query.',
+        'builder lease document); no new query. Re-reviewed 2026-11-27: for a closure past the origin bound the '
+        'batch cap is decided from an inline estimate before preparation can offload (no lake upload, no Firestore '
+        'read); no new query.',
         expect_observed=False,
         body_digest=BODY_DIGEST['database.conversations_v3.commit_projection'],
     ),
