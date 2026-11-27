@@ -48,6 +48,7 @@ class LiveWalReceipt {
   static const _stagingDirectory = 'staging';
   static const _retiredDirectory = 'retired';
   static const _maxEntries = 128;
+  static const maxUnindexedPurgeBatchEntries = _maxEntries;
   static const maxInventorySourceEntries = _maxEntries;
   static const _maxReceiptBytes = 16 * 1024;
   static const maxInventoryReceiptBytes = _maxReceiptBytes;
@@ -64,6 +65,7 @@ class LiveWalReceipt {
       RegExp(r'_wr([a-f0-9]{32})(?:_clke[0-9a-z]{1,32})?_[^_]+\.bin$', caseSensitive: false);
   static final _clockSuffix = RegExp(r'_clke[0-9a-z]{1,32}$');
   static final _digestPattern = RegExp(r'^[a-f0-9]{64}$');
+  static final Set<String> _confirmedDirectoryParents = <String>{};
   static final Expando<_LiveWalMemoryProof> _writerProofs = Expando<_LiveWalMemoryProof>('live_wal_writer_proof');
 
   static Directory directory(Directory documents) => Directory(path.join(documents.path, directoryName));
@@ -109,6 +111,13 @@ class LiveWalReceipt {
     await _durabilityChannel.invokeMethod<void>('syncDirectory', {'path': directory.path});
   }
 
+  static Future<void> _syncConfirmedDirectory(Directory directory) async {
+    await _syncDirectory(directory);
+    _confirmedDirectoryParents.add(directory.path);
+  }
+
+  static Future<void> syncAudioParentDirectory(File audio) => _syncDirectory(audio.parent);
+
   static Future<bool> hasPendingReceipt(File audio) => _receipt(audio.parent, path.basename(audio.path)).exists();
 
   static Future<void> _writeTemporaryReceipt(File file, String body) async {
@@ -123,7 +132,7 @@ class LiveWalReceipt {
     if (await FileSystemEntity.type(directory.path, followLinks: false) != FileSystemEntityType.directory) {
       throw const FileSystemException('invalid live WAL receipt directory');
     }
-    if (!existed) await _syncDirectory(directory.parent);
+    if (!existed) await _syncConfirmedDirectory(directory.parent);
     return directory;
   }
 
@@ -136,10 +145,13 @@ class LiveWalReceipt {
     final pending = _receipt(audio.parent, name);
     await _checkedDirectory(pending.parent);
     final staging = await _checkedDirectory(Directory(path.join(pending.parent.path, _stagingDirectory)));
-    // Retry these barriers when the directories already exist: an earlier
-    // attempt may have created them but failed before confirming durability.
+    // A new reserved audio entry is created for each flush, so persist its
+    // parent before receipt publication. Cache the stable receipt directory
+    // only after a successful barrier; retries still sync an unconfirmed dir.
     await _syncDirectory(audio.parent);
-    await _syncDirectory(pending.parent);
+    if (!_confirmedDirectoryParents.contains(pending.parent.path)) {
+      await _syncConfirmedDirectory(pending.parent);
+    }
     final temporary = File(path.join(staging.path, name + _pending));
     // Freeze the policy after the digest finishes. Any pending live file is
     // replayed held because later policy tightening may have been interrupted.
@@ -158,7 +170,7 @@ class LiveWalReceipt {
       // The rename crosses directories, so persist both the removed staging name
       // and the newly published pending name before audio bytes can be written.
       await _syncDirectory(staging);
-      await _syncDirectory(pending.parent);
+      await _syncConfirmedDirectory(pending.parent);
     } catch (error, stackTrace) {
       // A partial staging write is not scanned or replayed. Retire it and sync
       // its directory so retries cannot accumulate abandoned receipt blobs.
@@ -359,20 +371,20 @@ class LiveWalReceipt {
     required Set<String> owners,
     required Set<String> reservedNames,
     required bool Function(String) mayDelete,
+    required List<File> entries,
+    Set<String> protectedNames = const <String>{},
   }) async {
     if (!purgeEnabled || owners.isEmpty) return (removed: 0, referenceScanIncomplete: false);
     final documents = primary.parent;
-    final pending = directory(documents);
     var removed = 0;
     var scanComplete = true;
     try {
-      if (await FileSystemEntity.type(pending.path, followLinks: false) != FileSystemEntityType.directory) {
-        return (removed: 0, referenceScanIncomplete: false);
-      }
       Set<String>? indexedNames;
-      await for (final entry in pending.list(followLinks: false)) {
+      for (final entry in entries) {
         final name = _receiptBasename(entry.path);
-        if (entry is! File || name == null || reservedNames.contains(name.toLowerCase())) continue;
+        if (name == null || reservedNames.contains(name.toLowerCase()) || protectedNames.contains(name.toLowerCase())) {
+          continue;
+        }
         final ({Wal wal, int length, LiveWalBinding binding})? record;
         try {
           record = await _read(entry, name);
@@ -397,9 +409,30 @@ class LiveWalReceipt {
       }
     } catch (_) {
       scanComplete = false;
-      /* An unreadable index or receipt directory gives no deletion authority. */
+      /* An unreadable index or receipt gives no deletion authority. */
     }
     return (removed: removed, referenceScanIncomplete: !scanComplete);
+  }
+
+  /// Enumerate cheap receipt paths as bounded pages. Callers process each page
+  /// under the index lock after WAL readiness, so a large archive cannot hold
+  /// startup or one index-writer critical section for the full scan.
+  static Stream<List<File>> pendingReceiptPages(Directory documents) async* {
+    final pending = directory(documents);
+    final type = await FileSystemEntity.type(pending.path, followLinks: false);
+    if (type == FileSystemEntityType.notFound) return;
+    if (type != FileSystemEntityType.directory) throw const FileSystemException('invalid live WAL receipt directory');
+
+    var page = <File>[];
+    await for (final entry in pending.list(followLinks: false)) {
+      if (entry is! File || _receiptBasename(entry.path) == null) continue;
+      page.add(entry);
+      if (page.length == maxUnindexedPurgeBatchEntries) {
+        yield List<File>.unmodifiable(page);
+        page = <File>[];
+      }
+    }
+    if (page.isNotEmpty) yield List<File>.unmodifiable(page);
   }
 
   static Future<LiveWalReplay> recover(

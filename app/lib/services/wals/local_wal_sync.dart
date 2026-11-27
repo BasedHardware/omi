@@ -199,6 +199,13 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   Future<void>? _initializationInFlight;
   bool _initialIndexAdmissionPending = false;
   bool _headlessIndexLoad = false;
+  Set<String> _deletedAccountReceiptPurgeOwners = <String>{};
+  Set<String> _deletedAccountReceiptPurgeProtectedNames = <String>{};
+  bool _deletedAccountReceiptPurgeReferencesComplete = true;
+  Future<void>? _deletedAccountReceiptPurgeInFlight;
+
+  @visibleForTesting
+  Future<void> get deletedAccountReceiptPurgeForTesting => _deletedAccountReceiptPurgeInFlight ?? Future<void>.value();
 
   Future<T> _enqueueBuffer<T>(Future<T> Function() op) {
     final prev = _bufferQueue;
@@ -917,6 +924,30 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       reportStaleMissingWals(trigger: 'startup');
     }
     if (!_walReady.isCompleted) _walReady.complete();
+    final deletedOwners = _deletedAccountReceiptPurgeOwners;
+    _deletedAccountReceiptPurgeOwners = <String>{};
+    if (deletedOwners.isNotEmpty && _isCurrent(generation)) {
+      final protectedNames = _deletedAccountReceiptPurgeProtectedNames;
+      final referenceSnapshotComplete = _deletedAccountReceiptPurgeReferencesComplete;
+      _deletedAccountReceiptPurgeProtectedNames = <String>{};
+      _deletedAccountReceiptPurgeReferencesComplete = true;
+      final purge = _purgeDeletedAccountReceiptsAfterReady(
+        deletedOwners,
+        generation,
+        protectedNames: protectedNames,
+        referenceSnapshotComplete: referenceSnapshotComplete,
+      );
+      _deletedAccountReceiptPurgeInFlight = purge;
+      unawaited(purge.then<void>((_) {
+        if (identical(_deletedAccountReceiptPurgeInFlight, purge)) {
+          _deletedAccountReceiptPurgeInFlight = null;
+        }
+      }, onError: (Object _, StackTrace __) {
+        if (identical(_deletedAccountReceiptPurgeInFlight, purge)) {
+          _deletedAccountReceiptPurgeInFlight = null;
+        }
+      }));
+    }
     _notifyUpdated(generation);
   }
 
@@ -1503,11 +1534,29 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
               // The exclusively reserved managed name and owner-stamped index
               // row preserve custody when the sidecar channel is unavailable.
               // Never overwrite audio protected by a sidecar left from an
-              // ambiguous publication failure. Do not retry the failed
-              // directory-sync channel here; file flush and index admission
-              // preserve one stable path for later retry.
-              if (await LiveWalReceipt.hasPendingReceipt(file)) rethrow;
+              // ambiguous publication failure. The audio fallback is admitted
+              // only after its own parent-directory barrier succeeds.
+              if (await LiveWalReceipt.hasPendingReceipt(file)) {
+                // prepare() has not written audio yet. If an ambiguous sidecar
+                // survived cleanup, remove this empty exclusive reservation
+                // before leaving the WAL in memory for a later retry.
+                try {
+                  if (await file.length() == 0) await file.delete();
+                } catch (_) {}
+                rethrow;
+              }
               await file.writeAsBytes(data, flush: true);
+              // The receipt barrier may have failed before audio was written.
+              // A flushed file does not persist its parent directory entry; do
+              // not index it or release RAM unless the native barrier succeeds.
+              try {
+                await LiveWalReceipt.syncAudioParentDirectory(file);
+              } catch (_) {
+                try {
+                  await file.delete();
+                } catch (_) {}
+                rethrow;
+              }
             }
           }
           if (writeId == null || digest != null) await file.writeAsBytes(data, flush: true);

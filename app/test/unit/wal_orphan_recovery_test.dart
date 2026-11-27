@@ -76,6 +76,12 @@ void main() {
       .writeAsBytes(bytes ?? List.generate(50, (_) => [1, 0, 0, 0, 7]).expand((v) => v).toList());
   Future<RecordingOrphanCensus> census() => captureRecordingCensus(
       documents: dir.path, memoryBuckets: {'active': []}, phoneSeconds: now, currentOwner: 'owner-a');
+  int receiptlessManagedCount(RecordingOrphanCensus result) {
+    final classification = result.summary['orphan_classification'] as Map;
+    final classes = classification['classes'] as Map;
+    return ((classes['receiptless_managed'] as Map)['count'] as int);
+  }
+
   setUp(() async {
     SharedPreferences.setMockInitialValues({'uid': 'owner-a'});
     await SharedPreferencesUtil.init();
@@ -447,7 +453,6 @@ void main() {
       dir.path,
       LiveWalReceipt.directory(dir).path,
       dir.path,
-      LiveWalReceipt.directory(dir).path,
       '${LiveWalReceipt.directory(dir).path}/staging',
       LiveWalReceipt.directory(dir).path,
     ]);
@@ -459,7 +464,7 @@ void main() {
     final receiptDirectory = LiveWalReceipt.directory(dir);
     var receiptDirectorySyncs = 0;
     LiveWalReceipt.syncDirectoryForTesting = (directory) async {
-      if (directory.path == receiptDirectory.path && ++receiptDirectorySyncs == 3) {
+      if (directory.path == receiptDirectory.path && ++receiptDirectorySyncs == 2) {
         throw const FileSystemException('injected post-rename directory sync failure');
       }
     };
@@ -482,7 +487,7 @@ void main() {
       throwsA(isA<FileSystemException>()),
     );
 
-    expect(receiptDirectorySyncs, 4, reason: 'the failed publication gets a durable cleanup attempt');
+    expect(receiptDirectorySyncs, 3, reason: 'the failed publication gets a durable cleanup attempt');
     expect(await receiptFor(filename).exists(), isFalse);
     expect(await audioFile.exists(), isFalse);
     expect(receiptDirectory.listSync().whereType<File>(), isEmpty);
@@ -584,7 +589,7 @@ void main() {
     expect(LiveWalReceipt.directory(dir).listSync().whereType<File>(), isEmpty);
   }, skip: LiveWalReceipt.writeEnabled ? false : 'Receipt writer is disabled by dart-define');
 
-  test('audio directory sync failure still indexes the flushed fallback', () async {
+  test('audio directory sync failure retains the recording in memory', () async {
     LiveWalReceipt.syncDirectoryForTesting = (_) async {
       throw const FileSystemException('injected directory sync failure');
     };
@@ -592,13 +597,42 @@ void main() {
     await captureReceiptAudio(writer);
     await writer.finalizeCurrentSession();
     final pending = writer.testWals.singleWhere((wal) => wal.recordingSessionId == 'receipt-session');
-    expect(pending.storage, WalStorage.disk);
-    final audioFile = File('${dir.path}/${pending.filePath}');
-    expect(await audioFile.readAsBytes(), orderedEquals(encodeWalFrames(receiptFrames)));
-    expect((await WalFileManager.loadIndexedWals()).singleWhere((wal) => wal.filePath == pending.filePath).ownerUid,
-        'owner-a');
-    expect(await receiptFor(pending.filePath!).exists(), isFalse);
+    expect(pending.storage, WalStorage.mem);
+    expect(pending.data, isNotEmpty);
+    expect((await WalFileManager.loadIndexedWals()).any((wal) => wal.filePath == pending.filePath), isFalse);
     expect(LiveWalReceipt.directory(dir).listSync().whereType<File>(), isEmpty);
+  }, skip: LiveWalReceipt.writeEnabled ? false : 'Receipt writer is disabled by dart-define');
+
+  test('surviving ambiguous receipt removes the empty exclusive audio reservation', () async {
+    final receiptDirectory = LiveWalReceipt.directory(dir);
+    String? sidecarPath;
+    LiveWalReceipt.writeReceiptForTesting = (file, body) async {
+      sidecarPath = '${receiptDirectory.path}/${file.uri.pathSegments.last}';
+      await file.writeAsString(body, flush: true);
+    };
+    var syncs = 0;
+    LiveWalReceipt.syncDirectoryForTesting = (directory) async {
+      if (directory.path != receiptDirectory.path) return;
+      syncs++;
+      if (syncs == 2) throw const FileSystemException('injected post-rename sync failure');
+      if (syncs == 3) {
+        final sidecar = File(sidecarPath!);
+        await sidecar.writeAsString('ambiguous surviving sidecar', flush: true);
+        throw const FileSystemException('injected cleanup sync failure');
+      }
+    };
+    final writer = await ledger(realCensus: true);
+    await captureReceiptAudio(writer);
+
+    await writer.finalizeCurrentSession();
+
+    final pending = writer.testWals.singleWhere((wal) => wal.recordingSessionId == 'receipt-session');
+    expect(pending.storage, WalStorage.mem);
+    expect(pending.data, isNotEmpty);
+    final sidecar = receiptDirectory.listSync().whereType<File>().single;
+    final reservedAudio =
+        File('${dir.path}/${sidecar.uri.pathSegments.last.substring(0, sidecar.uri.pathSegments.last.length - 5)}');
+    expect(await reservedAudio.exists(), isFalse);
   }, skip: LiveWalReceipt.writeEnabled ? false : 'Receipt writer is disabled by dart-define');
 
   for (final scenario in ['witness', 'no witness', 'new account']) {
@@ -776,6 +810,7 @@ void main() {
             : null,
       );
       expect(restarted.testWals.where((w) => w.ownerUid == 'owner-a'), isEmpty);
+      await restarted.deletedAccountReceiptPurgeForTesting;
     } else {
       await existing!.purgeAccountWals('owner-a');
     }
@@ -925,6 +960,23 @@ void main() {
     expect(await audioFile.exists(), isFalse);
   });
 
+  test('unindexed account purge drains receipts in bounded pages', () async {
+    final audioFiles = <File>[];
+    for (var i = 0; i < LiveWalReceipt.maxUnindexedPurgeBatchEntries + 1; i++) {
+      audioFiles.add(await makePendingReceipt('owner-a'));
+    }
+
+    final result = await WalFileManager.purgeUnindexedLiveWalReceipts(
+      owners: {'owner-a'},
+      reservedNames: {},
+      mayDelete: (_) => true,
+    );
+
+    expect(result.referenceScanIncomplete, isFalse);
+    expect(result.removed, audioFiles.length);
+    expect(await Future.wait(audioFiles.map((file) => file.exists())), everyElement(isFalse));
+  });
+
   test('bounded reference scan accepts the maximum receipt census alongside other sources', () async {
     final ringDirectory = Directory('${dir.path}/pendant_ring_custody')..createSync();
     for (var i = 0; i < 511; i++) {
@@ -962,13 +1014,12 @@ void main() {
     await File('${receiptDirectory.path}/notes.txt').writeAsString('not a receipt');
 
     final result = await census();
-    final managedOrphan = result.orphans.singleWhere((file) => file.filePath == managedAudio.path);
 
     expect(result.complete, isTrue);
     expect(result.summary['receipt_scan_errors'], 2);
     expect(result.summary['symlinks_skipped'], 0);
-    expect(managedOrphan.classification, 'receiptless_managed');
-    expect(managedOrphan.reclaimSkipReason(DateTime.fromMillisecondsSinceEpoch(now * 1000)), 'managed_receipt_missing');
+    expect(result.orphans.any((file) => file.filePath == managedAudio.path), isFalse);
+    expect(receiptlessManagedCount(result), 1);
   });
 
   test('invalid receipt leaves managed audio visible without fencing unrelated recovery', () async {
@@ -977,13 +1028,15 @@ void main() {
     await receiptFor(basename).writeAsString('{');
 
     final result = await census();
-    final orphan = result.orphans.singleWhere((file) => file.filePath == audioFile.path);
 
     expect(result.complete, isTrue);
     expect(result.summary['receipt_scan_errors'], 1);
     expect(result.summary['unreadable_metadata_files'], 0);
-    expect(orphan.classification, 'receiptless_managed');
-    expect(orphan.reclaimSkipReason(DateTime.fromMillisecondsSinceEpoch(now * 1000)), 'managed_receipt_missing');
+    expect(result.orphans.any((file) => file.filePath == audioFile.path), isFalse);
+    expect(receiptlessManagedCount(result), 1);
+    final classification = result.summary['orphan_classification'] as Map;
+    final ageBuckets = classification['age_buckets'] as Map;
+    expect(ageBuckets.values.fold<int>(0, (sum, bucket) => sum + (bucket as Map)['count'] as int), 0);
   });
 
   test('receipt budget truncation preserves census and withholds managed recovery authority', () async {
@@ -992,16 +1045,10 @@ void main() {
     }
 
     final result = await census();
-    final receiptless = result.orphans.where((file) => file.classification == 'receiptless_managed');
 
     expect(result.complete, isTrue);
     expect(result.summary['receipt_scan_truncated'], isTrue);
-    expect(receiptless, isNotEmpty);
-    expect(
-      receiptless.every((file) =>
-          file.reclaimSkipReason(DateTime.fromMillisecondsSinceEpoch(now * 1000)) == 'managed_receipt_missing'),
-      isTrue,
-    );
+    expect(receiptlessManagedCount(result), greaterThan(0));
   });
 
   test('over-budget quarantine reference scan retains audio and reports incomplete evidence', () async {
@@ -1131,11 +1178,12 @@ void main() {
     final basename = LiveWalReceipt.uniqueName(name(now - 2), LiveWalReceipt.newId());
     final candidate = await audio(basename);
     final result = await census();
-    final orphan = result.orphans.singleWhere((file) => file.filePath == candidate.path);
-    expect(orphan.classification, 'receiptless_managed');
-    expect(orphan.reclaimSkipReason(DateTime.fromMillisecondsSinceEpoch(now * 1000)), 'managed_receipt_missing');
+    expect(result.orphans.any((file) => file.filePath == candidate.path), isFalse);
+    expect(receiptlessManagedCount(result), 1);
     expect(result.summary['orphan_census_complete'], isTrue);
-    expect(orphan.info, isNull);
+    final classification = result.summary['orphan_classification'] as Map;
+    final ageBuckets = classification['age_buckets'] as Map;
+    expect(ageBuckets.values.fold<int>(0, (sum, bucket) => sum + (bucket as Map)['count'] as int), 0);
   });
 
   test('receipt-managed basename keeps both backend timestamp contracts and estimated run identity', () {
@@ -1380,15 +1428,10 @@ void main() {
         .where((f) => f.path.endsWith('.bin'))
         .singleWhere((file) => initial.every((w) => w.filePath != file.uri.pathSegments.last));
     final firstCensus = await census();
-    final remainingOrphan = firstCensus.orphans.where((file) => file.filePath == remainingAudio.path);
     expect(firstCensus.complete, isTrue);
     expect(firstCensus.summary['receipt_scan_truncated'], isTrue);
-    expect(remainingOrphan.length, lessThanOrEqualTo(1));
-    if (remainingOrphan.isNotEmpty) {
-      expect(remainingOrphan.single.classification, 'receiptless_managed');
-      expect(remainingOrphan.single.reclaimSkipReason(DateTime.fromMillisecondsSinceEpoch(now * 1000)),
-          'managed_receipt_missing');
-    }
+    expect(receiptlessManagedCount(firstCensus), 0);
+    expect(firstCensus.orphans.any((file) => file.filePath == remainingAudio.path), isFalse);
     expect(await remainingAudio.readAsBytes(), orderedEquals(bytes));
 
     final next = await ledger(realCensus: true);
@@ -1441,9 +1484,8 @@ void main() {
     await restarted.recoverOrphanAudio();
     expect(restarted.testWals.where((w) => w.filePath == base), isEmpty);
     final result = await census();
-    final orphan = result.orphans.singleWhere((file) => file.filePath == candidate.path);
-    expect(orphan.classification, 'receiptless_managed');
-    expect(orphan.reclaimSkipReason(DateTime.fromMillisecondsSinceEpoch(now * 1000)), 'managed_receipt_missing');
+    expect(result.orphans.any((file) => file.filePath == candidate.path), isFalse);
+    expect(receiptlessManagedCount(result), 1);
     expect(await candidate.exists(), isTrue);
   });
 

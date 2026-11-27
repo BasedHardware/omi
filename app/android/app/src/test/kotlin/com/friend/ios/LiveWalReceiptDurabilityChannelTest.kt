@@ -1,7 +1,10 @@
 package com.friend.ios
 
 import android.content.Context
+import android.os.Looper
 import io.flutter.util.PathUtils
+import io.flutter.plugin.common.MethodCall
+import io.flutter.plugin.common.MethodChannel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -9,11 +12,54 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
 import java.io.File
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 @RunWith(RobolectricTestRunner::class)
 class LiveWalReceiptDurabilityChannelTest {
     private val context: Context = RuntimeEnvironment.getApplication()
+
+    private class CapturedResult : MethodChannel.Result {
+        val completed = CountDownLatch(1)
+        var success = false
+        var errorCode: String? = null
+
+        override fun success(result: Any?) {
+            success = true
+            completed.countDown()
+        }
+
+        override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {
+            this.errorCode = errorCode
+            completed.countDown()
+        }
+
+        override fun notImplemented() {
+            errorCode = "not_implemented"
+            completed.countDown()
+        }
+    }
+
+    private fun invokeDirectorySync(path: String): CapturedResult {
+        val response = CapturedResult()
+        LiveWalReceiptDurabilityChannel.handle(
+            context,
+            MethodCall("syncDirectory", mapOf("path" to path)),
+            response,
+        )
+        val mainLooper = shadowOf(Looper.getMainLooper())
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+        var completed = false
+        while (!completed && System.nanoTime() < deadline) {
+            mainLooper.idle()
+            completed = response.completed.await(10, TimeUnit.MILLISECONDS)
+        }
+        mainLooper.idle()
+        assertTrue("native channel response timed out", completed || response.completed.await(1, TimeUnit.SECONDS))
+        return response
+    }
 
     @Test
     fun `accepts the path provider documents directory and its descendants`() {
@@ -45,5 +91,24 @@ class LiveWalReceiptDurabilityChannelTest {
         assertThrows(SecurityException::class.java) {
             LiveWalReceiptDurabilityChannel.checkedDirectory(context, externalDirectory.path)
         }
+    }
+
+    @Test
+    fun `registered handler syncs a documents directory successfully`() {
+        val documents = LiveWalReceiptDurabilityChannel.documentsDirectory(context)
+        val nested = File(documents, "durability-test").apply { mkdirs() }
+
+        val response = invokeDirectorySync(nested.path)
+        assertTrue(response.success)
+        assertEquals(null, response.errorCode)
+    }
+
+    @Test
+    fun `registered handler rejects paths outside documents`() {
+        val outside = File(context.cacheDir.parentFile, "outside-live-wal-sync").apply { mkdirs() }
+
+        val response = invokeDirectorySync(outside.path)
+        assertEquals("invalid_path", response.errorCode)
+        assertEquals(false, response.success)
     }
 }

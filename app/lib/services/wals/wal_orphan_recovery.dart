@@ -412,7 +412,7 @@ extension LocalOrphanRecovery on LocalWalSyncImpl {
         phase: OrphanAudioReceiptlessPhase.recovery,
         receiptlessManagedCount: count('classes', 'receiptless_managed', 'count'),
         receiptlessManagedBytes: count('classes', 'receiptless_managed', 'bytes'),
-        managedReceiptMissingSkipCount: 0,
+        managedReceiptMissingSkipCount: count('classes', 'receiptless_managed', 'count'),
         receiptScanTruncated: census?.summary['receipt_scan_truncated'] == true,
         censusComplete: census?.complete ?? false,
       ));

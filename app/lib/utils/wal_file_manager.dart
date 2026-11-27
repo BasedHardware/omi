@@ -64,14 +64,48 @@ class WalFileManager {
     required Set<String> owners,
     required Set<String> reservedNames,
     required bool Function(String) mayDelete,
-  }) =>
-      _saveLock.withResource(() async {
-        final primary = _walFile;
-        final backup = _walBackupFile;
-        if (primary == null || backup == null) return (removed: 0, referenceScanIncomplete: true);
-        return LiveWalReceipt.purgeUnindexed(primary, backup,
-            owners: owners, reservedNames: reservedNames, mayDelete: mayDelete);
-      });
+    Set<String> protectedNames = const <String>{},
+    bool referenceSnapshotComplete = true,
+    bool Function()? shouldContinue,
+  }) async {
+    if (!referenceSnapshotComplete) return (removed: 0, referenceScanIncomplete: true);
+    File? primary;
+    File? backup;
+    await _saveLock.withResource(() async {
+      primary = _walFile;
+      backup = _walBackupFile;
+    });
+    if (primary == null || backup == null) return (removed: 0, referenceScanIncomplete: true);
+
+    var removed = 0;
+    var referenceScanIncomplete = false;
+    try {
+      await for (final page in LiveWalReceipt.pendingReceiptPages(primary!.parent)) {
+        if (shouldContinue != null && !shouldContinue()) {
+          referenceScanIncomplete = true;
+          break;
+        }
+        final result = await _saveLock.withResource(() => LiveWalReceipt.purgeUnindexed(
+              primary!,
+              backup!,
+              owners: owners,
+              reservedNames: reservedNames,
+              mayDelete: mayDelete,
+              entries: page,
+              protectedNames: protectedNames,
+            ));
+        removed += result.removed;
+        referenceScanIncomplete = referenceScanIncomplete || result.referenceScanIncomplete;
+        if (result.referenceScanIncomplete) break;
+        // Yield between small batches so WAL admission, capture and foreground
+        // work continue while a large deleted-owner archive is drained.
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+    } catch (_) {
+      referenceScanIncomplete = true;
+    }
+    return (removed: removed, referenceScanIncomplete: referenceScanIncomplete);
+  }
 
   static Future<LiveWalPurgeSnapshot?> captureLiveWalPurgeSnapshot() => _saveLock.withResource(() async {
         final primary = _walFile;

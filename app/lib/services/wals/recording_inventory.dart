@@ -569,7 +569,12 @@ Future<RecordingOrphanCensus> captureRecordingCensus(
       threshold: 0,
       debugName: 'orphan_audio_classifier');
   summary['orphan_classification'] = {
-    ...orphanClassificationSummary(classified.files, phoneSeconds),
+    ...orphanClassificationSummary(
+      classified.files,
+      phoneSeconds,
+      receiptlessManagedCount: classified.receiptlessManagedCount,
+      receiptlessManagedBytes: classified.receiptlessManagedBytes,
+    ),
     'frame_files_read': classified.reads,
     'frame_cache_hits': classified.hits,
   };

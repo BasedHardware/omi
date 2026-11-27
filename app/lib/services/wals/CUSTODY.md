@@ -325,6 +325,13 @@ or reclaim. The directory scan examines at most 128 ordinary entries, skips
 Unscanned managed names remain receiptless. Unexpected or invalid sidecar
 entries are diagnostic and do not invalidate unrelated census results; a sidecar
 reserves its basename only after validation and an unchanged-file check.
+Receipt publication flushes the audio file and syncs the documents directory
+before indexing a receiptless fallback. If that barrier fails, the WAL stays in
+memory. Native directory sync runs off the UI thread. Deleted-account receipt
+cleanup snapshots persisted index/quarantine references before any load-time
+index rewrite, then starts after WAL readiness. It reads at most 128 receipt
+entries per batch and releases the index-writer lock between batches; incomplete
+reference checks retain the audio and are reported.
 Unreadable, invalid, changed or unresolved index, journal, preference or consent
 sources prevent adoption. Wrong-typed or quarantined
 legacy preference inputs also make the census incomplete; recovery and support
@@ -437,7 +444,9 @@ cap/change/reference, commit-time expiry and outside-Documents skips, and a boun
 never exports paths, basenames, account IDs or per-file entries.
 `Orphan Audio Receiptless Custody` separately aggregates receiptless managed
 count/bytes, managed-receipt-missing skips, phase, scan truncation and census
-completeness for recovery and reclaim; it exports no paths, basenames or owners.
+completeness for recovery and reclaim; receiptless files count as managed-receipt
+skips in both phases and are excluded from age buckets because their capture
+metadata is not trusted. It exports no paths, basenames or owners.
 
 Guard: `test/unit/wal_orphan_recovery_test.dart`; startup admission's existing
 no-orphan-discovery contract remains separately guarded by

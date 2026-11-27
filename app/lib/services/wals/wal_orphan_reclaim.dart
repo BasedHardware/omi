@@ -128,6 +128,11 @@ extension LocalOrphanReclaim on LocalWalSyncImpl {
         return;
       }
       _orphanFrameCache = snapshot.frameCache;
+      final classification = snapshot.summary['orphan_classification'] as Map?;
+      final classes = classification?['classes'] as Map?;
+      final receiptless = classes?['receiptless_managed'] as Map?;
+      final receiptlessCount = receiptless?['count'] as int? ?? 0;
+      if (receiptlessCount > 0) skips['managed_receipt_missing'] = receiptlessCount;
       final candidates = <OrphanAudioFile>[];
       for (final file in snapshot.orphans) {
         final reason = !snapshot.isDocumentsFile(file) ? 'outside_documents' : file.reclaimSkipReason(_now());
@@ -278,7 +283,7 @@ extension LocalOrphanReclaim on LocalWalSyncImpl {
             phase: OrphanAudioReceiptlessPhase.reclaim,
             receiptlessManagedCount: receiptless?['count'] as int? ?? 0,
             receiptlessManagedBytes: receiptless?['bytes'] as int? ?? 0,
-            managedReceiptMissingSkipCount: skips['managed_receipt_missing'] ?? 0,
+            managedReceiptMissingSkipCount: receiptless?['count'] as int? ?? 0,
             receiptScanTruncated: census?.summary['receipt_scan_truncated'] == true,
             censusComplete: census?.complete ?? false,
           ));

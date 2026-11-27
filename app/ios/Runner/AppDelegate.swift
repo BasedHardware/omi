@@ -235,28 +235,25 @@ final class QuickActionsIconPatcher: NSObject {
           result(FlutterError(code: "invalid_path", message: "directory path is required", details: nil))
           return
         }
-        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-          .resolvingSymlinksInPath().standardizedFileURL.path
-        let directory = URL(fileURLWithPath: rawPath).resolvingSymlinksInPath().standardizedFileURL.path
-        var isDirectory: ObjCBool = false
-        guard directory == documents || directory.hasPrefix(documents + "/"),
-              FileManager.default.fileExists(atPath: directory, isDirectory: &isDirectory), isDirectory.boolValue else {
-          result(FlutterError(code: "invalid_path", message: "directory is outside app documents", details: nil))
-          return
+        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        DispatchQueue.global(qos: .utility).async {
+          do {
+            try LiveWalReceiptDurability.syncDirectory(rawPath, documentsURL: documentsURL)
+            DispatchQueue.main.async { result(nil) }
+          } catch LiveWalReceiptDurabilityError.invalidPath {
+            DispatchQueue.main.async {
+              result(FlutterError(code: "invalid_path", message: "directory is outside app documents", details: nil))
+            }
+          } catch let LiveWalReceiptDurabilityError.syncFailed(message) {
+            DispatchQueue.main.async {
+              result(FlutterError(code: "directory_sync_failed", message: message, details: nil))
+            }
+          } catch {
+            DispatchQueue.main.async {
+              result(FlutterError(code: "directory_sync_failed", message: error.localizedDescription, details: nil))
+            }
+          }
         }
-        let descriptor = Darwin.open(directory, O_RDONLY | O_DIRECTORY)
-        guard descriptor >= 0 else {
-          result(FlutterError(code: "directory_sync_failed", message: String(cString: strerror(errno)), details: nil))
-          return
-        }
-        let status = Darwin.fsync(descriptor)
-        let syncError = errno
-        Darwin.close(descriptor)
-        guard status == 0 else {
-          result(FlutterError(code: "directory_sync_failed", message: String(cString: strerror(syncError)), details: nil))
-          return
-        }
-        result(nil)
       }
     FlutterMethodChannel(name: "com.omi/device_health_policy", binaryMessenger: messenger).setMethodCallHandler { call, result in
       guard call.method == "setPolicy", let args = call.arguments as? [String: Any], let epoch = args["epoch"] as? NSNumber else {

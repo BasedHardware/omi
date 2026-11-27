@@ -1,14 +1,23 @@
 package com.friend.ios
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.system.Os
 import android.system.OsConstants
 import java.io.File
+import java.util.concurrent.Executors
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 
 /** Directory fsync bridge shared by UI and headless Flutter engines. */
 object LiveWalReceiptDurabilityChannel {
+    private val ioExecutor = Executors.newSingleThreadExecutor { task ->
+        Thread(task, "omi-live-wal-durability").apply { isDaemon = true }
+    }
+    private val mainHandler = Handler(Looper.getMainLooper())
+
     internal fun documentsDirectory(context: Context): File =
         context.getDir("flutter", Context.MODE_PRIVATE).canonicalFile
 
@@ -23,30 +32,46 @@ object LiveWalReceiptDurabilityChannel {
         return directory
     }
 
+    internal fun syncDirectory(context: Context, rawPath: String) {
+        val directory = checkedDirectory(context, rawPath)
+        val fd = Os.open(directory.path, OsConstants.O_RDONLY or OsConstants.O_DIRECTORY, 0)
+        try {
+            Os.fsync(fd)
+        } finally {
+            Os.close(fd)
+        }
+    }
+
     fun register(context: Context, engine: FlutterEngine) {
         MethodChannel(engine.dartExecutor.binaryMessenger, "com.omi/live_wal_receipt_durability")
-            .setMethodCallHandler { call, result ->
-                if (call.method != "syncDirectory") {
-                    result.notImplemented()
-                    return@setMethodCallHandler
-                }
-                val rawPath = call.argument<String>("path")
-                if (rawPath == null) {
-                    result.error("invalid_path", "directory path is required", null)
-                    return@setMethodCallHandler
-                }
-                try {
-                    val directory = checkedDirectory(context, rawPath)
-                    val fd = Os.open(directory.path, OsConstants.O_RDONLY or OsConstants.O_DIRECTORY, 0)
-                    try {
-                        Os.fsync(fd)
-                    } finally {
-                        Os.close(fd)
-                    }
+            .setMethodCallHandler { call, result -> handle(context, call, result) }
+    }
+
+    internal fun handle(context: Context, call: MethodCall, result: MethodChannel.Result) {
+        if (call.method != "syncDirectory") {
+            result.notImplemented()
+            return
+        }
+        val rawPath = call.argument<String>("path")
+        if (rawPath == null) {
+            result.error("invalid_path", "directory path is required", null)
+            return
+        }
+        ioExecutor.execute {
+            val error = try {
+                syncDirectory(context, rawPath)
+                null
+            } catch (caught: Exception) {
+                caught
+            }
+            mainHandler.post {
+                if (error == null) {
                     result.success(null)
-                } catch (error: Exception) {
-                    result.error("directory_sync_failed", error.message ?: error.javaClass.simpleName, null)
+                } else {
+                    val code = if (error is SecurityException) "invalid_path" else "directory_sync_failed"
+                    result.error(code, error.message ?: error.javaClass.simpleName, null)
                 }
             }
+        }
     }
 }
