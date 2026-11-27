@@ -2,6 +2,7 @@
 """Score Cloud Run 5xx for two revisions in one settled window."""
 
 import argparse
+from collections import Counter
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 import json
@@ -27,10 +28,46 @@ LOG_PAGE_BUDGET = 24
 # Production keeps 10% of Cloud Run 429 request logs, like 2xx/3xx
 # (backend/docs/runbooks/cloud-logging-cost-controls.md, cost-request-429-sample).
 SAMPLED_CLIENT_STATUSES = (429,)
+# A designed-refusal record is written while its request is in flight. Its
+# timestamp can sit this far from the request log's on either side.
+REFUSAL_RECORD_SLACK_SECONDS = 120
+RECORD_NAME = re.compile(r"[a-z][a-z0-9_]{0,62}")
+TRACE_ID = re.compile(r"[0-9a-f]{32}")
 
 
 class LogPageBudgetExceeded(ValueError):
     pass
+
+
+class RefusalRecordsUnreconciled(ValueError):
+    """Designed-refusal records cannot be matched to the request logs they claim."""
+
+    def __init__(self, reason):
+        super().__init__(reason)
+        self.reason = reason
+
+
+def designed_refusals(route):
+    """Return (record name, statuses) for a route that logs designed refusals, else None."""
+    if "refusal_statuses" in route:
+        # The blanket status exclusion hid real 503s; a stale config must not revive it.
+        raise ValueError("refusal_statuses is retired; use designed_refusals")
+    spec = route.get("designed_refusals")
+    if spec is None:
+        return None
+    if not isinstance(spec, dict) or set(spec) != {"record", "statuses"}:
+        raise ValueError("invalid designed_refusals")
+    statuses = spec["statuses"]
+    if (
+        type(spec["record"]) is not str
+        or not RECORD_NAME.fullmatch(spec["record"])
+        or not isinstance(statuses, list)
+        or not statuses
+        or len(set(statuses)) != len(statuses)
+        or any(type(status) is not int or not 500 <= status < 600 for status in statuses)
+    ):
+        raise ValueError("invalid designed_refusals")
+    return spec["record"], tuple(statuses)
 
 
 def policy_for(service, route_names=None):
@@ -53,6 +90,8 @@ def policy_for(service, route_names=None):
         and 0 < policy["alpha"] < 0.5
     ):
         raise ValueError("invalid guard delay, relative margin or alpha")
+    if policy["settle_seconds"] < REFUSAL_RECORD_SLACK_SECONDS:
+        raise ValueError("settle delay shorter than refusal record slack")
     identities = set()
     for name, route in routes.items():
         method, path = route["method"], route["path"]
@@ -63,9 +102,9 @@ def policy_for(service, route_names=None):
             or method not in ("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS")
             or not re.fullmatch(r"/[a-z0-9/_-]+", path)
             or identity in identities
-            or any(type(status) is not int or not 500 <= status < 600 for status in route.get("refusal_statuses", ()))
         ):
             raise ValueError("invalid or duplicate guard route")
+        designed_refusals(route)
         identities.add(identity)
     if route_names is not None and not set(route_names) <= routes.keys():
         raise ValueError("unknown route")
@@ -73,7 +112,7 @@ def policy_for(service, route_names=None):
     policy["routes"] = {
         name: route
         for name, route in routes.items()
-        if route_names is None or name in route_names or route.get("refusal_statuses")
+        if route_names is None or name in route_names or designed_refusals(route)
     }
     policy["scored_routes"] = list(routes) if route_names is None else list(dict.fromkeys(route_names))
     policy["required_routes"] = [] if route_names is None else policy["scored_routes"]
@@ -142,16 +181,23 @@ def service_population(side, weights):
     if "service_logs" not in side:
         # Historical offline fixtures carry preaggregated status classes.
         return Population(total, count(classes.get("5xx", 0)), count(classes.get("4xx", 0)))
-    logged = route_population(side["service_logs"], weights, ())
+    logged = route_population(side["service_logs"], weights, {})
     if logged.errors > total:
         return replace(logged, population_note="log_total_used_logged_5xx_exceeds_gmp_total")
     return Population(total, logged.errors, logged.clients)
 
 
-def route_population(statuses, weights, refusal_statuses):
-    """Weight sampled log classes back to request counts. Unsampled 4xx/5xx count once."""
+def route_population(statuses, weights, refusal_records):
+    """Weight sampled log classes back to request counts. Unsampled 4xx/5xx count once.
+
+    Only 5xx matched to a designed-refusal record are excluded. ``refusal_records``
+    maps status to the number of designed-refusal records matched to this route,
+    revision and window. More records than observed responses of that status
+    cannot be reconciled and never clamp.
+    """
     success_weight, limited_weight = weights
     successes = clients = errors = excluded = 0
+    observed = Counter()
     for status, value in statuses.items():
         status, value = int(status), count(value)
         if 200 <= status < 400:
@@ -162,10 +208,16 @@ def route_population(statuses, weights, refusal_statuses):
             clients += value
         elif 500 <= status < 600:
             errors += value
-            if status in refusal_statuses:
-                excluded += value
+            observed[status] += value
         else:
             raise ValueError("invalid route status")
+    for status, records in refusal_records.items():
+        status, records = int(status), count(records)
+        if not 500 <= status < 600:
+            raise RefusalRecordsUnreconciled("non_5xx_refusal_record")
+        if records > observed[status]:
+            raise RefusalRecordsUnreconciled("records_exceed_route_responses")
+        excluded += records
     weight = max(success_weight, limited_weight)
     return Population(success_weight * successes + clients + errors, errors - excluded, clients, excluded, weight)
 
@@ -197,9 +249,12 @@ def evaluate(policy, candidate, inverse):
     """Evaluate aggregate inputs in candidate/inverse order.
 
     Each input contains service response classes, service log statuses when
-    available, and per-route HTTP statuses from a single window. Missing route
-    buckets represent zero after a complete log read. Designed refusals stay in
-    the denominator as observed requests.
+    available, per-route HTTP statuses from a single window and, for routes
+    with designed refusals, ``refusal_records`` (route -> status -> records
+    matched to that revision, route and window). Missing route buckets
+    represent zero after a complete log read. Only matched designed refusals
+    leave the 5xx numerator; they stay in the denominator as observed requests.
+    Records that cannot be reconciled hold with INSUFFICIENT_DATA.
     """
     weights = log_weights(policy)
     service_pair = [service_population(side, weights) for side in (candidate, inverse)]
@@ -208,17 +263,20 @@ def evaluate(policy, candidate, inverse):
         row = compare(*service_pair, policy, policy["alpha"])
         return {"verdict": "NO_COMPARATOR", "checks": {"service": row}}
     routes = policy["routes"]
-    route_pairs = {
-        name: [
-            route_population(side["routes"].get(name, {}), weights, route.get("refusal_statuses", ()))
-            for side in (candidate, inverse)
-        ]
-        for name, route in routes.items()
-    }
+    try:
+        route_pairs = {
+            name: [
+                route_population(side["routes"].get(name, {}), weights, refusal_records(side, name, route))
+                for side in (candidate, inverse)
+            ]
+            for name, route in routes.items()
+        }
+    except RefusalRecordsUnreconciled as error:
+        return {"verdict": "INSUFFICIENT_DATA", "reason": "refusal_records_" + error.reason, "checks": {}}
     for index, population in enumerate(service_pair):
         excluded = sum(pair[index].excluded for pair in route_pairs.values())
         if excluded > population.errors:
-            raise ValueError("refusals exceed service 5xx")
+            return {"verdict": "INSUFFICIENT_DATA", "reason": "refusal_records_exceed_service_5xx", "checks": {}}
         service_pair[index] = replace(population, errors=population.errors - excluded, excluded=excluded)
     scored = policy["scored_routes"]
     alpha = policy["alpha"] / (1 + len(scored))
@@ -233,6 +291,39 @@ def evaluate(policy, candidate, inverse):
     else:
         verdict = "PASS"
     return {"verdict": verdict, "checks": checks}
+
+
+def refusal_records(side, name, route):
+    spec = designed_refusals(route)
+    if spec is None:
+        return {}
+    statuses = side["routes"].get(name, {})
+    if "refusal_records" not in side:
+        # A refusal route with refusal-status responses needs its record read.
+        if any(int(status) in spec[1] and count(value) for status, value in statuses.items()):
+            raise RefusalRecordsUnreconciled("unread")
+        return {}
+    records = side["refusal_records"].get(name, {})
+    if any(int(status) not in spec[1] for status in records):
+        raise RefusalRecordsUnreconciled("undeclared_status")
+    return records
+
+
+def log_time(value):
+    """Parse a Cloud Logging RFC 3339 timestamp, which may carry nanoseconds."""
+    match = re.fullmatch(r"(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(\.\d+)?Z", value)
+    if not match:
+        raise ValueError("invalid Logging timestamp")
+    whole = datetime.fromisoformat(match[1] + "+00:00").timestamp()
+    return whole + (float(match[2]) if match[2] else 0)
+
+
+def trace_id(value):
+    """Return the 32-hex trace id from a request log trace or an X-Cloud-Trace-Context value."""
+    if not isinstance(value, str):
+        return None
+    tail = value.rsplit("/traces/", 1)[-1]
+    return tail if TRACE_ID.fullmatch(tail) else None
 
 
 class Telemetry:
@@ -285,18 +376,22 @@ class Telemetry:
         return self.log_counts(service, (candidate, inverse), start, end, 200, 600, route=route)
 
     def log_counts(self, service, revisions, start, end, minimum_status, maximum_status, *, route=None):
+        result = {revision: {} for revision in revisions}
+        filters = self.request_filters(service, revisions, start, end, minimum_status, maximum_status, route)
+        for row in self.entries(filters, "entries(resource/labels,httpRequest/status),nextPageToken"):
+            revision = row["resource"]["labels"]["revision_name"]
+            status = row["httpRequest"]["status"]
+            if type(status) is not int or not (minimum_status <= status < maximum_status):
+                raise ValueError("invalid Logging status")
+            counts = result[revision]
+            counts[status] = counts.get(status, 0) + 1
+        return result
+
+    def request_filters(self, service, revisions, start, end, minimum_status, maximum_status, route=None):
         # Project infrastructure labels and status. Apply any route predicate on the server.
-        project = f"projects/{self.project}"
-        revisions_filter = " OR ".join(f'resource.labels.revision_name="{revision}"' for revision in revisions)
         filters = [
-            f'logName="{project}/logs/run.googleapis.com%2Frequests"',
-            'resource.type="cloud_run_revision"',
-            f'resource.labels.project_id="{self.project}"',
-            f'resource.labels.location="{self.region}"',
-            f'resource.labels.service_name="{service}"',
-            f'({revisions_filter})',
-            f'timestamp>"{stamp(start)}"',
-            f'timestamp<="{stamp(end)}"',
+            f'logName="projects/{self.project}/logs/run.googleapis.com%2Frequests"',
+            *self.revision_filters(service, revisions, start, end),
             f'httpRequest.status>={minimum_status}',
             f'httpRequest.status<{maximum_status}',
         ]
@@ -306,35 +401,105 @@ class Telemetry:
             filters.extend(
                 (f'httpRequest.requestMethod="{route["method"]}"', f'httpRequest.requestUrl =~ {json.dumps(path)}')
             )
+        return filters
+
+    def revision_filters(self, service, revisions, start, end):
+        revisions_filter = " OR ".join(f'resource.labels.revision_name="{revision}"' for revision in revisions)
+        return [
+            'resource.type="cloud_run_revision"',
+            f'resource.labels.project_id="{self.project}"',
+            f'resource.labels.location="{self.region}"',
+            f'resource.labels.service_name="{service}"',
+            f'({revisions_filter})',
+            f'timestamp>"{stamp(start)}"',
+            f'timestamp<="{stamp(end)}"',
+        ]
+
+    def entries(self, filters, fields):
+        """Yield every entry for the filter, spending the evaluator's shared page budget."""
+        project = f"projects/{self.project}"
         body = {
             "resourceNames": [f"{project}/locations/global/buckets/_Default/views/_AllLogs"],
             "filter": " AND ".join(filters),
             "pageSize": LOG_PAGE_SIZE,
         }
-        result = {revision: {} for revision in revisions}
         seen_tokens = set()
         while self.log_pages_left:
             self.log_pages_left -= 1
-            response = self.request(
-                "https://logging.googleapis.com/v2/entries:list",
-                {"fields": "entries(resource/labels,httpRequest/status),nextPageToken"},
-                body,
-            )
-            for row in response.get("entries", []):
-                revision = row["resource"]["labels"]["revision_name"]
-                status = row["httpRequest"]["status"]
-                if type(status) is not int or not (minimum_status <= status < maximum_status):
-                    raise ValueError("invalid Logging status")
-                counts = result[revision]
-                counts[status] = counts.get(status, 0) + 1
+            response = self.request("https://logging.googleapis.com/v2/entries:list", {"fields": fields}, body)
+            yield from response.get("entries", [])
             token = response.get("nextPageToken")
             if not token:
-                return result
+                return
             if token in seen_tokens:
                 raise ValueError("repeated Logging page")
             seen_tokens.add(token)
             body["pageToken"] = token
         raise LogPageBudgetExceeded("Logging page budget exhausted")
+
+    def refusal_counts(self, service, candidate, inverse, start, end, route):
+        """Count designed-refusal records matched one-to-one to this route's request logs.
+
+        A record matches when its trace id names a request log on the same
+        revision and route, inside the window, with the record's status. The
+        records are read with a slack on both sides of the window, because a
+        record and its request log are stamped at different moments. An
+        unmatched record inside the window's core, a record that names the
+        other revision or a different status, a duplicate record and a record
+        that does not parse cannot be reconciled and raise instead of clamping.
+        """
+        record, statuses = designed_refusals(route)
+        revisions = (candidate, inverse)
+        responses = {revision: {} for revision in revisions}
+        status_filter = " OR ".join(f"httpRequest.status={status}" for status in statuses)
+        filters = [*self.request_filters(service, revisions, start, end, 500, 600, route), f"({status_filter})"]
+        for row in self.entries(filters, "entries(resource/labels,httpRequest/status,trace),nextPageToken"):
+            revision, status = row["resource"]["labels"]["revision_name"], row["httpRequest"]["status"]
+            if status not in statuses:
+                raise ValueError("invalid Logging status")
+            trace = trace_id(row.get("trace"))
+            if trace is None:
+                continue  # Unmatchable: the response stays an error.
+            if trace in responses[revision]:
+                raise RefusalRecordsUnreconciled("duplicate_request_trace")
+            responses[revision][trace] = status
+
+        slack = REFUSAL_RECORD_SLACK_SECONDS
+        pattern = re.compile(
+            rf"(?:^|[\s:]){re.escape(record)} uid=\S+ status=(\d{{3}}) "
+            rf"reason=[a-z0-9_]+ trace=([0-9a-f]{{32}})\s*$"
+        )
+        text_status = " OR ".join(f'textPayload:"status={status}"' for status in statuses)
+        filters = [
+            f'logName="projects/{self.project}/logs/run.googleapis.com%2Fstdout"',
+            *self.revision_filters(service, revisions, start - slack, end + slack),
+            f'textPayload:"{record} "',
+            f"({text_status})",
+        ]
+        matched = {revision: Counter() for revision in revisions}
+        claimed = set()
+        for row in self.entries(filters, "entries(resource/labels,textPayload,timestamp),nextPageToken"):
+            revision = row["resource"]["labels"]["revision_name"]
+            match = pattern.search(row.get("textPayload") or "")
+            if revision not in responses or match is None:
+                raise RefusalRecordsUnreconciled("unparseable_record")
+            status, trace = int(match[1]), match[2]
+            if status not in statuses:
+                continue  # A designed refusal of another status, outside this policy.
+            if (revision, trace) in claimed:
+                raise RefusalRecordsUnreconciled("duplicate_record")
+            other = inverse if revision == candidate else candidate
+            if trace in responses[revision]:
+                if responses[revision][trace] != status:
+                    raise RefusalRecordsUnreconciled("status_mismatch")
+                claimed.add((revision, trace))
+                matched[revision][status] += 1
+            elif trace in responses[other]:
+                raise RefusalRecordsUnreconciled("revision_mismatch")
+            elif start + slack < log_time(row["timestamp"]) <= end - slack:
+                # Its request must sit in this window on this route; it does not.
+                raise RefusalRecordsUnreconciled("unmatched_record")
+        return {revision: {status: value for status, value in counts.items()} for revision, counts in matched.items()}
 
 
 def read_window(
@@ -383,13 +548,18 @@ def read_window(
             for revision, statuses in successes.items():
                 logs[revision].update(statuses)
         inputs = {
-            name: {"service": series, "service_logs": logs[name], "routes": {}} for name, series in counts.items()
+            name: {"service": series, "service_logs": logs[name], "routes": {}, "refusal_records": {}}
+            for name, series in counts.items()
         }
         if service_population(inputs[inverse], log_weights(policy)).requests:
             for name, route in policy["routes"].items():
                 statuses = telemetry.route_counts(service, candidate, inverse, start, end, route)
                 for revision, aggregate in statuses.items():
                     inputs[revision]["routes"][name] = aggregate
+                if designed_refusals(route):
+                    records = telemetry.refusal_counts(service, candidate, inverse, start, end, route)
+                    for revision, aggregate in records.items():
+                        inputs[revision]["refusal_records"][name] = aggregate
         return dict(identity, **evaluate(policy, inputs[candidate], inputs[inverse]))
     except (TimeoutExpired, TimeoutError):
         return dict(unavailable, reason="telemetry_timeout")
@@ -401,6 +571,8 @@ def read_window(
             reason = "telemetry_timeout"
         elif isinstance(error, LogPageBudgetExceeded):
             reason = "telemetry_log_page_budget"
+        elif isinstance(error, RefusalRecordsUnreconciled):
+            reason = "refusal_records_" + error.reason
         return dict(unavailable, reason=reason)
 
 

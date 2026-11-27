@@ -12,7 +12,11 @@
       "from-segments": {"method": "POST", "path": "/v1/conversations/from-segments"}
     },
     "backend-sync": {
-      "sync-local-files": {"method": "POST", "path": "/v2/sync-local-files"},
+      "sync-local-files": {
+        "method": "POST",
+        "path": "/v2/sync-local-files",
+        "designed_refusals": {"record": "sync_upload_refused", "statuses": [503]}
+      },
       "deletion-batch-purges": {"method": "POST", "path": "/v1/conversations/deletion-batch-purges/run"},
       "reconcile": {"method": "POST", "path": "/v1/conversations-v3/reconcile"}
     },

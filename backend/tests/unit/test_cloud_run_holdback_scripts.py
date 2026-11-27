@@ -423,10 +423,13 @@ def test_guard_policy_requires_rate_limited_log_weight(monkeypatch, tmp_path):
 
 def test_sync_dispatch_503s_stay_in_the_error_population():
     config = json.loads(guard_eval.CONFIG.read_text())
-    assert 'refusal_statuses' not in config['services']['backend-sync']['sync-local-files']
+    route = config['services']['backend-sync']['sync-local-files']
+    assert 'refusal_statuses' not in route
+    assert route['designed_refusals'] == {'record': 'sync_upload_refused', 'statuses': [503]}
     policy = guard_eval.policy_for('backend-sync', ['sync-local-files'])
-    candidate = side({'5xx': 1_000}, {'503': 1_000}, {'sync-local-files': {'503': 1_000}})
-    inverse = side({'2xx': 1_000}, {}, {'sync-local-files': {'200': 100}})
+    # 503s with no matched designed-refusal record (sync_dispatch_unavailable) count.
+    candidate = dict(side({'5xx': 1_000}, {'503': 1_000}, {'sync-local-files': {'503': 1_000}}), refusal_records={})
+    inverse = dict(side({'2xx': 1_000}, {}, {'sync-local-files': {'200': 100}}), refusal_records={})
     result = guard_eval.evaluate(policy, candidate, inverse)
     assert result['verdict'] != 'PASS', result
     assert result['verdict'] == 'TRIP'
