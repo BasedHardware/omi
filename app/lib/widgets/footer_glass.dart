@@ -58,7 +58,10 @@ class FooterGlassSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GlassContainer(
+    // Own repaint boundary: the page around a footer repaints on every scroll frame, and the
+    // control should not be repainted with it.
+    return RepaintBoundary(
+        child: GlassContainer(
       width: circle ? height : null,
       height: height,
       alignment: Alignment.center,
@@ -70,6 +73,6 @@ class FooterGlassSurface extends StatelessWidget {
       quality: GlassQuality.premium,
       settings: FooterGlass.settingsFor(Theme.of(context).brightness),
       child: child,
-    );
+    ));
   }
 }

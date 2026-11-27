@@ -56,8 +56,10 @@ class HomeChatBarBackdrop extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Glass needs the list behind it; a solid block would leave it nothing to refract.
-    if (FooterGlass.enabled) return const SizedBox.shrink();
+    // Glass needs the list behind it; a solid block would leave it nothing to refract. Still a
+    // Positioned: an unpositioned child would size Home's footer Stack to itself (nothing), and the
+    // row of controls is laid out against that Stack.
+    if (FooterGlass.enabled) return const Positioned.fill(child: SizedBox.shrink());
     final solid = homeChatBarOffset(context) + kHomeChatBarHeight;
     final height = solid + kHomeBottomFadeHeight;
     return Positioned(

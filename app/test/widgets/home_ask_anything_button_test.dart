@@ -119,6 +119,24 @@ void main() {
           find.descendant(of: find.byType(HomeChatBarBackdrop), matching: find.byType(DecoratedBox)), findsOneWidget);
     });
 
+    testWidgets('without the backdrop the footer row keeps its place and width', (tester) async {
+      // Home lays the row out against a Stack whose other child is the backdrop. With glass on the
+      // backdrop paints nothing, but it must not let that Stack collapse to nothing.
+      const row = ValueKey('row');
+      await tester.pumpWidget(_buildHarness(
+        child: const Stack(children: [
+          Stack(children: [
+            HomeChatBarBackdrop(),
+            Positioned(left: 16, right: 16, bottom: 8, child: SizedBox(key: row, height: 62)),
+          ]),
+        ]),
+      ));
+      // The harness is 300 points wide and as tall as the screen.
+      final rect = tester.getRect(find.byKey(row));
+      expect(rect.width, 300 - 32);
+      expect(rect.bottom, tester.getSize(find.byType(MaterialApp)).height - 8);
+    });
+
     testWidgets('on for iOS only, so Android keeps the flat footer', (tester) async {
       FooterGlass.debugOverride = null;
       for (final platform in TargetPlatform.values) {
