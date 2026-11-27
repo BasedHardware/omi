@@ -73,6 +73,16 @@ windows, stable titles and recording-file pieces. See the
 [v3 runbook](./runbooks/conversations-v3.md) for query budgets, queue identity,
 summary leases, counters, rollout, rollback and deletion criteria.
 
+`CONVERSATIONS_V3_HOLDOUT` defaults to `on`; `off` skips the check and its membership read.
+Owners in the `conversations-v3-holdout` rollout cohort (empty by default) keep legacy intake
+for new captures at every stage: `mark_new` leaves new rows unmarked, except a v3 rotation
+successor, which continues the capture in flight. Stage admission is unchanged, so Finish and
+builders drain existing v3 work. A held-out owner's `/v1/conversations/live` still serves an
+active v3 window and answers `v3:false` only after a complete window lookup (a capped lookup
+keeps `v3:true` and records a `lookup_cap` fallback). Their Home list reads legacy mode, which
+shows existing `v3_derived` cards and new legacy pieces held for notes. Unknown membership
+admits and records a `feature_flags`/`v3_holdout` fallback.
+
 `CONVERSATIONS_V3_MANUAL_END_HOME_VISIBLE` defaults to `on`. Set it to `off`
 to restore classification-based hiding for derived media and recognized background
 on subsequent projections. The manual-end marker and classification remain stored.
@@ -103,7 +113,12 @@ native binding has projected. Set the switch to `off` on the API service to rest
 until a member is added). For a member, or for every v3 owner with `on`, a manually
 finished v3 recording of up to 20 minutes is transcribed once through the prerecorded provider
 when record admission stages its sealed audio, and written as a provisional transcript that the
-batch record projection later replaces.
+batch record projection later replaces. `CONVERSATIONS_V3_FAST_FINISH_CHUNKED` (default `on`, an
+ops kill switch) splits every unit into chunks of at most five minutes, sends them concurrently inside
+a 45 s end-to-end deadline and stitches them in order, for recordings of up to nine chunks (about 44
+minutes). Recordings over 20 minutes take that path only for `CONVERSATIONS_V3_FAST_FINISH_LONG_PERCENT`
+(default 25) of owners and up to `CONVERSATIONS_V3_FAST_FINISH_LONG_DAILY_SECONDS` (default 7200) of
+their audio per process per UTC day. `off` restores one serial request per unit and the 20-minute bound.
 
 `CONVERSATIONS_V3_MAX_WINDOW_SECONDS` defaults to 10800. A transcript line
 starting at or after that elapsed time starts a separate v3 stretch. Set the
@@ -320,6 +335,19 @@ errors skip discovery; cursor, heartbeat and new claims check the acquisition
 token transactionally. Existing 120s group custody leases and privacy/erasure
 checks remain authoritative for already claimed audio. See
 [coalescing scan coordination](listen_pusher_pipeline/changes/2026-11-14-coalescing-scan-leader.md).
+
+## Pusher playback inventory manifest reuse
+
+`PUSHER_INVENTORY_MANIFEST_LONG_TTL_ENABLED` defaults to false, for a
+120-second lifetime. Set it to true on Pusher to use 900 seconds. The cache
+has one 8 MiB process-local byte budget. Reuse requires both
+`PRIVATE_SYNC_INVENTORY_MANIFEST_BODY_CACHE_ENABLED` and
+`PRIVATE_SYNC_LISTED_MANIFEST_READ_ENABLED`, which default to true.
+Ordinary gapped playback inventory requires a unique current manifest,
+rechecks its generation and metageneration on every hit, and verifies its
+body, media binding and gap count before using frames. Fresh, strict and
+deadline-bound inventory reads bypass this cache. See the
+[rollout and readback runbook](runbooks/private-sync-inventory-manifest-reuse.md).
 
 ## Retained seal proof rules
 

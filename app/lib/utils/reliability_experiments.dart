@@ -96,6 +96,14 @@ class ReliabilityExperiments {
         'the title keeps saying Transcribing… or Writing summary… until the summary is stored. Off: Home lists only '
         'completed rows, so "Processing…" stays until the summary is stored, and a tile in the pipeline shows a '
         'spinner or a pen.',
+    'no_live_player': 'The conversation page of a conversation still in progress has no audio player: its bar is '
+        'Ask Omi and, where it applies, End Conversation; a tap on a transcript line does not seek, and no audio '
+        'is loaded for it. The player comes back when the conversation ends. Off: the Transcript tab shows the '
+        'player over the audio saved so far.',
+    'title_at_end': 'A conversation still in progress reads "Listening" on Home and on its page, whatever name '
+        'the server holds for it; its name shows once it has ended. With the server\'s experiment of the same name '
+        'no name is made before the end at all. Off: a name the server made from the first minutes shows while '
+        'the conversation is still open.',
   };
 
   static Set<String> _selected = localSelectionAllowed ? parse(compileTimeValue) : const {};

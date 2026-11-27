@@ -300,6 +300,9 @@ void main() {
     final after = MobileBatchUploadHold(enabled: () => true, wake: () {}, now: () => _start);
     final restarted = await custodyLedger(gate: gate, now: () => _start)
       ..mobileBatchUploadHold = after;
+    final reloaded = (await restarted.getAllWals()).singleWhere((wal) => wal.filePath == file.filePath);
+    expect(reloaded.recoveredMobileBatchHold, isTrue);
+    reloaded.recoveredMobileBatchHold = false; // Simulate a bad reported label.
     await restarted.syncAll();
     expect(requests, [
       [ready.filePath],
@@ -308,7 +311,9 @@ void main() {
     expect((await restarted.getAllWals()).every((wal) => wal.status == WalStatus.uploaded), isTrue);
     expect(traces.last?.holdState, 'fg60');
     expect(traces.first?.recovered, isFalse);
-    expect(traces.last?.recovered, isTrue);
+    expect(traces.first?.journalRecovery, WalJournalRecovery.fresh);
+    expect(traces.last?.recovered, isFalse);
+    expect(traces.last?.journalRecovery, WalJournalRecovery.recovered);
     expect(traces.last?.holdSealedAtMs, _start.millisecondsSinceEpoch);
     expect(await File('${directory.path}/${file.filePath}').readAsBytes(), [1, 0, 0, 0, 1]);
   });

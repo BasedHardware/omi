@@ -2,7 +2,7 @@
 
 A *snapshot* is the list of v3 conversations at one instant, each summarized by ``conversation_row``:
 recording labels, words, Home visibility and its reason, manual end, kind, status, whether it has a title
-and notes. No text.
+and notes, and in a ``speakers`` scenario a numbers-only speaker scorecard (``speakers``). No text.
 
 *Facts* are the rest of what a run observed, for the checks that do not read a snapshot: ``fast_finish``
 (recording label -> outcome), ``finish_taps`` (one row per tap, ``finish_tap_row``), ``ops``
@@ -84,10 +84,41 @@ def conversation_row(row: Mapping[str, Any], label_of, words: int) -> dict[str, 
     }
 
 
+SPEAKER_RATE = {'wrong_name': 'wrong_name_rate'}  # expect key stem -> scorecard key, where they differ
+
+
+def speaker_misses(card: Optional[Mapping[str, Any]], want: Mapping[str, Any]) -> list[str]:
+    """Mismatches of a conversation's speaker scorecard (``speakers/scenario.SpeakerScoring.card``) against a
+    ``speakers`` expect field. A ``null`` rate (nothing to measure) fails a minimum."""
+    if not card:
+        return ['speakers=none (no scorecard: the conversation holds no truth recording)']
+    misses = []
+    for key, bound in want.items():
+        if key == 'final_pass':
+            if card.get('final_pass') != bound:
+                misses.append(f'final_pass={card.get("final_pass")!r} (want {bound!r})')
+            continue
+        if key == 'voices':
+            count, tolerance = bound
+            have = card.get('voices')
+            if have is None or abs(have - count) > tolerance:
+                misses.append(f'voices={have!r} (want {count}' + (f' +/- {tolerance})' if tolerance else ')'))
+            continue
+        stem, _, side = key.rpartition('_')
+        have = card.get(SPEAKER_RATE.get(stem, stem))
+        ok = have is not None and (have >= bound if side == 'min' else have <= bound)
+        if not ok:
+            misses.append(f'{SPEAKER_RATE.get(stem, stem)}={have!r} (want {">=" if side == "min" else "<="} {bound})')
+    return misses
+
+
 def _matches(conv: Mapping[str, Any], fields: Mapping[str, Any]) -> list[str]:
     """Mismatches of one conversation against the check's fields (empty = it matches)."""
     misses = []
     for key, want in fields.items():
+        if key == 'speakers':
+            misses.extend(speaker_misses(conv.get('speakers'), want))
+            continue
         if key == 'recordings':
             ok = sorted(set(conv['recordings'])) == sorted(set(want))
             have = conv['recordings']
@@ -269,4 +300,7 @@ def actual_of(
     if not holders:
         return {'label': label, 'conversation': None}
     chosen = next((c for c in holders if not _matches(c, check.fields)), holders[0])
-    return {'label': label, 'conversation': {k: chosen.get(k) for k in VERDICT_FIELDS}, 'holders': len(holders)}
+    conversation = {k: chosen.get(k) for k in VERDICT_FIELDS}
+    if 'speakers' in check.fields:  # the scorecard: numbers only
+        conversation['speakers'] = chosen.get('speakers')
+    return {'label': label, 'conversation': conversation, 'holders': len(holders)}

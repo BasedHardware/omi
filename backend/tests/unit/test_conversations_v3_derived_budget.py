@@ -1,13 +1,15 @@
 """The live closure loads a heavy owner's claimed rows without chaining through settled history."""
 
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
+from unittest.mock import AsyncMock
 
 import pytest
 
 from database import conversations_v3 as store, conversations_v3_leases as leases, memories
-from utils.conversations.v3 import Conflict, service
+from utils.conversations.v3 import Conflict, service, triggers
 from tests.unit.test_conversations_v3_claim_growth import T0, UID, path, strict  # noqa: F401
-from tests.unit.test_conversations_v3_review import AT, MemoryQuery, source
+from tests.unit.test_conversations_v3_lock_timing import _locked_pair
+from tests.unit.test_conversations_v3_review import AT, MemoryQuery, builder, source  # noqa: F401
 
 C = '/users/u/conversations/'
 
@@ -497,3 +499,330 @@ def test_successor_check_ignores_undecoded_terminal_pointer(terminal):
     pointer = {'uri': 'gs://bucket/transcript', 'revision': 3}
     row = {'id': 'r', 'started_at': AT, 'transcript_segments': pointer, terminal: True}
     store._mark_successor_pending(None, {'r': row})
+
+
+def test_backfill_rederive_keeps_both_prior_windows_when_merge_would_strand_a_memory_link(strict, monkeypatch):
+    first = derived('first', T0, 10, ['r'], backfilled=True)
+    second_start = T0 + timedelta(seconds=10)
+    linked = derived('linked', second_start, 10, ['r'], backfilled=True)
+    claims = [claim('first', T0, 10), claim('linked', second_start, 10)]
+    recording = {'id': 'r', 'recording': True, 'status': 'completed', 'claims': claims}
+    strict.rows.update({path('first'): first, path('linked'): linked, path('r'): recording})
+    token = leases.acquire(UID, store.BACKFILL_LEASE, firestore_client=strict)
+    monkeypatch.setattr(memories, 'linked_conversation_ids', lambda uid, ids, **kw: {'linked'} & ids)
+    merged = derived('merged', T0, 20, ['r'], backfilled=True)
+    removed = set()
+
+    with pytest.raises(Conflict, match='backfill_rederive_linked_claims'):
+        store.commit_projection(
+            UID,
+            token,
+            {'r': {**recording, '_v3_revision': 1}},
+            {row['id']: {**row, '_v3_revision': 1} for row in (first, linked)},
+            [merged],
+            [],
+            remove=('first', 'linked'),
+            removed_ids=removed,
+            key=store.BACKFILL_LEASE,
+            firestore_client=strict,
+        )
+
+    assert strict.rows[path('first')] == first
+    assert strict.rows[path('linked')] == linked
+    assert strict.rows[path('r')]['claims'] == claims
+    assert path('merged') not in strict.rows
+    assert not removed
+
+
+def test_multi_batch_replacement_of_claiming_windows_refuses_before_any_batch_commits(strict, monkeypatch):
+    # The replacement spans several transactions and shares recording r with windows it removes:
+    # an earlier batch must not commit before a later one finds the linked prior.
+    first = derived('first', T0, 10, ['r'], backfilled=True)
+    second_start = T0 + timedelta(seconds=10)
+    linked = derived('linked', second_start, 10, ['r'], backfilled=True)
+    claims = [claim('first', T0, 10), claim('linked', second_start, 10)]
+    recording = {'id': 'r', 'recording': True, 'status': 'completed', 'claims': claims}
+    strict.rows.update({path('first'): first, path('linked'): linked, path('r'): recording})
+    token = leases.acquire(UID, store.BACKFILL_LEASE, firestore_client=strict)
+    monkeypatch.setattr(memories, 'linked_conversation_ids', lambda uid, ids, **kw: {'linked'} & ids)
+    monkeypatch.setattr(store, 'BATCH_MAX_WRITES', 7)
+    replacements = [derived(f'm{i}', T0 + timedelta(seconds=2 * i), 2, ['r'], backfilled=True) for i in range(8)]
+    before = {key: dict(value) for key, value in strict.rows.items()}
+    removed = set()
+
+    with pytest.raises(Conflict, match='backfill_partition_budget'):
+        store.commit_projection(
+            UID,
+            token,
+            {'r': {**recording, '_v3_revision': 1}},
+            {row['id']: {**row, '_v3_revision': 1} for row in (first, linked)},
+            replacements,
+            [],
+            remove=('first', 'linked'),
+            removed_ids=removed,
+            key=store.BACKFILL_LEASE,
+            firestore_client=strict,
+        )
+
+    assert all(path(row['id']) not in strict.rows for row in replacements)
+    assert strict.rows[path('first')] == first and strict.rows[path('linked')] == linked
+    assert strict.rows[path('r')]['claims'] == claims
+    assert not removed
+    assert {k: v for k, v in strict.rows.items() if k in before} == before
+
+
+@pytest.mark.parametrize('overflow', ['count', 'bytes'])
+@pytest.mark.parametrize('pending_limit', [32, 8, 1])
+def test_unlocked_index_overflow_reproduces_at_every_pending_seed_size(monkeypatch, overflow, pending_limit):
+    rows = {C + f'd{i}': derived(f'd{i}', AT, 10, [], v3_unlocked=True) for i in range(9)}
+    rows['/users/u/conversation_v3_leases/builder'] = {'unlocked_ids': [f'd{i}' for i in range(9)]}
+    if overflow == 'count':
+        monkeypatch.setattr(store, 'DERIVED_LIMIT', 8)
+    else:
+        monkeypatch.setattr(store, 'DERIVED_BYTES', store._encoded_bytes(rows[C + 'd0']['transcript_segments']) * 8)
+    with pytest.raises(Conflict, match='v3_derived_budget'):
+        store.load('u', firestore_client=MemoryQuery(rows), pending_limit=pending_limit)
+
+
+@pytest.mark.parametrize('overflow', ['count', 'bytes'])
+def test_paged_unlocked_load_closes_claims_and_rotates_past_an_unlocked_preview(strict, monkeypatch, overflow):
+    lease_path = '/users/u/conversation_v3_leases/builder'
+    rows = {lease_path: {'unlocked_ids': ['a', 'b', 'c']}}
+    for index, cid in enumerate('abc'):
+        start = AT + timedelta(hours=index * 3)
+        rid = f'r{cid}'
+        rows[C + cid] = derived(cid, start, 10, [rid], v3_unlocked=True)
+        rows[C + rid] = source(
+            rid,
+            started_at=start,
+            finished_at=start + timedelta(seconds=10),
+            v3_pending=False,
+            claims=[claim(cid, start, 10)],
+        )
+    # A claimant outside the source's time margin must still enter the closure.
+    rows[C + 'd'] = derived('d', AT - timedelta(hours=3), 10, ['ra'])
+    rows[C + 'ra']['claims'].append(claim('d', AT - timedelta(hours=3), 10))
+    if overflow == 'count':
+        monkeypatch.setattr(store, 'DERIVED_LIMIT', 2)
+    else:
+        monkeypatch.setattr(store, 'DERIVED_BYTES', store._encoded_bytes(rows[C + 'a']['transcript_segments']) * 2)
+
+    page = store.UnlockedPage()
+    recordings, existing, _ = store.load('u', firestore_client=MemoryQuery(rows), pending_limit=1, unlocked_page=page)
+    assert set(recordings) == {'ra'}
+    assert set(existing) == {'a', 'd'}
+    assert page.remaining == {'b', 'c'}
+
+    # The selected preview remains unlocked. The final transaction must preserve
+    # even an omitted ID with no loaded source and advance past the selected ID.
+    strict.rows.update({path(row['id']): row.copy() for key, row in rows.items() if key.startswith(C)})
+    token = leases.acquire(UID, 'builder', firestore_client=strict)
+    held = leases.lease_ref(strict, UID, 'builder')
+    strict.rows[held.path]['unlocked_ids'] = ['a', 'b', 'c']
+    store.commit_projection(
+        UID, token, recordings, existing, [existing['a']], [], unlocked_page=page, firestore_client=strict
+    )
+    state = held.get().to_dict()
+    assert state['unlocked_ids'] == ['a', 'b', 'c']
+    assert state['v3_unlocked_cursor'] == 'a'
+    rows[lease_path] = state
+    recordings, existing, _ = store.load('u', firestore_client=MemoryQuery(rows), pending_limit=1, unlocked_page=page)
+    assert set(recordings) == {'rb'}
+    assert set(existing) == {'b'}
+    assert page.remaining == {'a', 'c'}
+
+
+@pytest.mark.asyncio
+async def test_seed_lanes_that_overflow_together_each_advance_on_successive_passes(monkeypatch):
+    lease_path = '/users/u/conversation_v3_leases/builder'
+    late = AT + timedelta(hours=6)
+    rows = {
+        lease_path: {'unlocked_ids': ['u']},
+        C + 'u': derived('u', late, 10, ['ru'], v3_unlocked=True),
+        C
+        + 'ru': source(
+            'ru',
+            started_at=late,
+            finished_at=late + timedelta(seconds=10),
+            v3_pending=False,
+            claims=[claim('u', late, 10)],
+        ),
+        C + 'p1': derived('p1', AT, 5, ['rp']),
+        C + 'p2': derived('p2', AT + timedelta(seconds=5), 5, ['rp']),
+        C
+        + 'rp': source(
+            'rp',
+            started_at=AT,
+            finished_at=AT + timedelta(seconds=10),
+            v3_pending_since=AT,
+            claims=[claim('p1', AT, 5), claim('p2', AT + timedelta(seconds=5), 5)],
+        ),
+    }
+    client = MemoryQuery(rows)
+    monkeypatch.setattr(store, 'DERIVED_LIMIT', 2)  # Each lane's closure fits alone; together they overflow.
+
+    async def run_fixture(_, fn, *args, **kwargs):
+        if fn in (store.mark_bounded_attempt, store.clear_terminal_pending, leases.renew):
+            return None
+        return fn(*args, firestore_client=client, **kwargs)
+
+    monkeypatch.setattr(service, 'run_blocking', run_fixture)
+    loaded = []
+    for minute in (0, 1):  # Successive passes lead with alternate lanes.
+        clock = AT.replace(minute=minute)
+        monkeypatch.setattr(
+            service, 'datetime', type('Clock', (datetime,), {'now': staticmethod(lambda tz=None: clock)})
+        )
+        page = store.UnlockedPage()
+        recordings, existing, _, limit = await service._load_live_batch('u', 'token', None, page)
+        loaded.append((set(recordings), set(existing), page.remaining, limit))
+    assert loaded[0] == ({'rp'}, {'p1', 'p2'}, {'u'}, 1)  # The unvisited window stays owed to a later pass.
+    assert loaded[1] == ({'ru'}, {'u'}, frozenset(), None)  # An unlocked-only pass leaves the remembered page alone.
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('overflowing', ['pending', 'unlocked'])
+@pytest.mark.parametrize('minute', [0, 1])
+async def test_an_empty_seed_lane_does_not_clear_the_other_lanes_overflow(monkeypatch, overflowing, minute):
+    rp_claims = [claim(f'p{i}', AT + timedelta(seconds=i), 1) for i in range(3)]
+    rows = {C + f'p{i}': derived(f'p{i}', AT + timedelta(seconds=i), 1, ['rp']) for i in range(3)}
+    if overflowing == 'pending':
+        rows[C + 'rp'] = source(
+            'rp', started_at=AT, finished_at=AT + timedelta(seconds=3), v3_pending_since=AT, claims=rp_claims
+        )
+    else:
+        rows[C + 'p0']['v3_unlocked'] = True
+        rows['/users/u/conversation_v3_leases/builder'] = {'unlocked_ids': ['p0']}
+        rows[C + 'rp'] = source(
+            'rp', started_at=AT, finished_at=AT + timedelta(seconds=3), v3_pending=False, claims=rp_claims
+        )
+    client = MemoryQuery(rows)
+    monkeypatch.setattr(store, 'DERIVED_LIMIT', 2)
+
+    async def run_fixture(_, fn, *args, **kwargs):
+        if fn in (store.mark_bounded_attempt, store.clear_terminal_pending, leases.renew):
+            return None
+        return fn(*args, firestore_client=client, **kwargs)
+
+    clock = AT.replace(minute=minute)
+    monkeypatch.setattr(service, 'run_blocking', run_fixture)
+    monkeypatch.setattr(service, 'datetime', type('Clock', (datetime,), {'now': staticmethod(lambda tz=None: clock)}))
+    with pytest.raises(Conflict, match='v3_derived_budget'):  # Parks instead of an empty successful pass.
+        await service._load_live_batch('u', 'token', None, store.UnlockedPage())
+
+
+@pytest.mark.asyncio
+async def test_unvisited_unlocked_wake_is_independent_of_pending_seeds(monkeypatch):
+    calls = []
+
+    async def run_fixture(_, fn, uid, *, at, wake_key):
+        assert fn is service.enqueue and wake_key == 'pass-token'
+        calls.append((uid, at))
+
+    monkeypatch.setattr(service, 'run_blocking', run_fixture)
+    await service._wake_unvisited_unlocked('u', store.UnlockedPage(), 'pass-token')
+    assert not calls
+    await service._wake_unvisited_unlocked('u', store.UnlockedPage(frozenset({'later'})), 'pass-token')
+    assert len(calls) == 1
+    assert calls[0][0] == 'u' and calls[0][1] > AT
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('outlasts_wake', [False, True])
+async def test_reconcile_wakes_unvisited_unlocked_windows_once_per_pass(builder, monkeypatch, outlasts_wake):
+    _window, existing, recordings = _locked_pair(datetime.now(timezone.utc) - timedelta(hours=2))
+    monkeypatch.setenv('CONVERSATIONS_V3_LOCK_SECONDS', '3600')
+    recordings['r'].update(recording=True, status='completed', v3_pending=True)
+    pages, wakes = [], []
+    omitted = {'fingerprint': 'later-outline', 'entries': [], 'preview_key': '0:later'}
+
+    def load(*a, unlocked_page=None, **kw):
+        unlocked_page.remaining, unlocked_page.cursor = frozenset({'later'}), 'early'
+        pages.append(unlocked_page)
+        return recordings, existing, [omitted]
+
+    def commit(*a, unlocked_page=None, **kw):
+        assert unlocked_page is pages[0]  # The page's cursor reaches the lease write.
+        assert omitted in a[5]  # The unvisited window's paid outline survives the cache rewrite.
+        if outlasts_wake:  # This pass's own wake ran (busy) under the lease.
+            late = datetime.now(timezone.utc) + timedelta(minutes=2)
+            monkeypatch.setattr(
+                service, 'datetime', type('Clock', (datetime,), {'now': staticmethod(lambda tz=None: late)})
+            )
+
+    monkeypatch.setattr(store, 'load', load)
+    monkeypatch.setattr(service, '_commit', commit)
+    names = []
+    monkeypatch.setenv('CONVERSATIONS_V3_TASKS_URL', 'https://test.invalid')
+    monkeypatch.setattr(triggers, 'enqueue_named_task', lambda queue, url, task_id, *a, **kw: names.append(task_id))
+
+    def wake(uid, **kw):
+        if kw.get('wake_key'):
+            wakes.append(kw['at'])
+            triggers.enqueue(uid, **kw)
+
+    monkeypatch.setattr(service, 'enqueue', wake)
+    started = datetime.now(timezone.utc)
+    assert await service.reconcile('synthetic') == 'committed'
+    assert len(pages) == 1 and wakes[0] - started >= timedelta(seconds=59)
+    # One wake per pass, re-armed after the lease only when this pass outlasted it, under a fresh task name.
+    assert len(wakes) == len(set(names)) == (2 if outlasts_wake else 1)
+    if outlasts_wake:
+        assert wakes[1] > wakes[0] + timedelta(minutes=1)
+
+
+@pytest.mark.asyncio
+async def test_parked_paged_pass_wakes_its_unvisited_windows_after_the_backoff(builder, monkeypatch):
+    _window, existing, recordings = _locked_pair(datetime.now(timezone.utc) - timedelta(hours=2))
+    monkeypatch.setenv('CONVERSATIONS_V3_LOCK_SECONDS', '3600')
+    recordings['r'].update(recording=True, status='completed', v3_pending=True)
+    until = datetime.now(timezone.utc) + timedelta(minutes=5)
+    parked, wakes = [], []
+
+    def load(*a, unlocked_page=None, **kw):
+        unlocked_page.remaining, unlocked_page.cursor = frozenset({'later'}), 'early'
+        return recordings, existing, []
+
+    def commit(*a, **kw):
+        raise Conflict('v3_derived_budget')
+
+    monkeypatch.setattr(store, 'load', load)
+    monkeypatch.setattr(service, '_commit', commit)
+    monkeypatch.setattr(store, 'record_blocked', lambda *a, **kw: parked.append(a))
+    monkeypatch.setattr(store, 'backoff_state', lambda *a: (until if parked else None, None))
+    monkeypatch.setattr(service, '_drain_blocked', AsyncMock())
+    monkeypatch.setattr(service, 'enqueue', lambda uid, **kw: kw.get('wake_key') and wakes.append(kw['at']))
+    assert await service.reconcile('synthetic') == 'blocked'
+    # The pre-commit continuation lands inside the backoff; a second wake follows its end.
+    assert len(wakes) == 2 and wakes[0] < until < wakes[1] <= until + timedelta(seconds=5)
+
+
+def test_unlocked_continuation_is_not_swallowed_by_an_earlier_same_minute_wake(monkeypatch):
+    names = []
+    monkeypatch.setenv('CONVERSATIONS_V3_TASKS_URL', 'https://test.invalid')
+    monkeypatch.setattr(triggers, 'enqueue_named_task', lambda queue, url, task_id, *a, **kw: names.append(task_id))
+    minute = AT + timedelta(minutes=1)
+    triggers.enqueue('u', at=minute)  # An earlier wake: it can run busy under this pass's lease and be consumed.
+    triggers.enqueue('u', at=minute + timedelta(seconds=20), wake_key='pass-token')
+    triggers.enqueue('u', at=minute + timedelta(seconds=40), wake_key='pass-token')  # Same pass stays idempotent.
+    assert names[0] != names[1] == names[2]
+
+
+def test_previous_bounded_pending_park_gets_one_unlocked_paging_attempt(strict):
+    token = leases.acquire(UID, 'builder', firestore_client=strict)
+    held = leases.lease_ref(strict, UID, 'builder')
+    assert store.record_blocked(UID, token, 'v3_derived_budget', firestore_client=strict)
+    strict.rows[held.path]['unlocked_ids'] = ['owed']
+    assert store.backoff_state(UID, firestore_client=strict) == (None, 'v3_derived_budget')
+    store.mark_bounded_attempt(UID, token, firestore_client=strict)
+    backoff, reason = store.backoff_state(UID, firestore_client=strict)
+    assert backoff is not None and reason == 'v3_derived_budget'
+
+
+def test_park_with_indexed_unlocked_windows_spends_the_paging_attempt(strict):
+    token = leases.acquire(UID, 'builder', firestore_client=strict)
+    strict.rows[leases.lease_ref(strict, UID, 'builder').path]['unlocked_ids'] = ['owed']
+    # A builder pass that already paged the unlocked windows and still parked gets no early retry.
+    assert store.record_blocked(UID, token, 'v3_derived_budget', firestore_client=strict)
+    backoff, reason = store.backoff_state(UID, firestore_client=strict)
+    assert backoff is not None and reason == 'v3_derived_budget'

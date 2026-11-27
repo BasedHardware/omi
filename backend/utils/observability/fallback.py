@@ -221,6 +221,7 @@ ALLOWED_COMPONENTS = frozenset(
         'daily_summary',
         'feature_flags',
         'play_billing',
+        'conversations_v3',
         'other',
     }
 )

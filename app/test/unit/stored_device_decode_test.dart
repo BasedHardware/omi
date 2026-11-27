@@ -50,4 +50,63 @@ void main() {
     expect(SharedPreferencesUtil().btDevice.id, '11:22:33:44:55:66');
     expect(SharedPreferencesUtil().btDevice.name, 'Omi DevKit 2');
   });
+
+  group('forgetting a device', () {
+    BtDevice pendant(String id) => BtDevice(id: id, name: 'Omi', type: DeviceType.omi, rssi: 0);
+
+    setUp(() async {
+      SharedPreferences.setMockInitialValues({});
+      await SharedPreferencesUtil.init();
+    });
+
+    test('removes the active device from the saved list too and leaves nothing to quarantine', () async {
+      await SharedPreferencesUtil().btDeviceSet(pendant('AA:AA:AA:AA:AA:01'));
+      var changes = 0;
+      final subscription = SharedPreferencesUtil().deviceChanges.listen((_) => changes++);
+      addTearDown(subscription.cancel);
+
+      await SharedPreferencesUtil().btDeviceForget('AA:AA:AA:AA:AA:01');
+      // Reading the cleared entry must not archive it as corrupt.
+      expect(SharedPreferencesUtil().btDevice.id, isEmpty);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(SharedPreferencesUtil().btDevices, isEmpty);
+      expect(changes, 1, reason: 'saved reconnect retires its target on this signal');
+      final keys = (await SharedPreferences.getInstance()).getKeys();
+      expect(keys.where((key) => key.startsWith('btDevice.')), isEmpty);
+    });
+
+    test('keeps the other saved devices', () async {
+      await SharedPreferencesUtil().btDeviceSet(pendant('AA:AA:AA:AA:AA:01'));
+      await SharedPreferencesUtil().btDeviceSet(pendant('AA:AA:AA:AA:AA:02'));
+
+      await SharedPreferencesUtil().btDeviceForget('aa:aa:aa:aa:aa:02');
+
+      expect(SharedPreferencesUtil().btDevice.id, isEmpty);
+      expect(SharedPreferencesUtil().btDevices.map((d) => d.id), ['AA:AA:AA:AA:AA:01']);
+    });
+
+    test('forgetting a saved device that is not active keeps the active one', () async {
+      await SharedPreferencesUtil().btDeviceSet(pendant('AA:AA:AA:AA:AA:01'));
+      await SharedPreferencesUtil().btDeviceSet(pendant('AA:AA:AA:AA:AA:02'));
+
+      await SharedPreferencesUtil().btDeviceForget('AA:AA:AA:AA:AA:01');
+
+      expect(SharedPreferencesUtil().btDevice.id, 'AA:AA:AA:AA:AA:02');
+      expect(SharedPreferencesUtil().btDevices.map((d) => d.id), ['AA:AA:AA:AA:AA:02']);
+    });
+
+    test('forgets a device stored before the saved list existed', () async {
+      SharedPreferences.setMockInitialValues({
+        'btDevice': '{"id":"AA:AA:AA:AA:AA:01","name":"Omi","type":"omi","rssi":0}',
+      });
+      await SharedPreferencesUtil.init();
+      expect(SharedPreferencesUtil().btDevices.single.id, 'AA:AA:AA:AA:AA:01');
+
+      await SharedPreferencesUtil().btDeviceForget('AA:AA:AA:AA:AA:01');
+
+      expect(SharedPreferencesUtil().btDevice.id, isEmpty);
+      expect(SharedPreferencesUtil().btDevices, isEmpty);
+    });
+  });
 }
