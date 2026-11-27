@@ -1461,29 +1461,39 @@ def _collect_visible_conversation_page(
         conversations: List[Dict[str, Any]] = []
         last_doc = None
         has_more = False
+        unconsumed_row_pending = False
         try:
             for doc in budgeted_stream_iter(conversations_ref, budget):
-                conversation = document_data_with_revision(doc)
-                is_visible = conversation is not None and visible(conversation)
-                if consume_row is not None:
-                    budget.check()
-                if not is_visible:
+                try:
+                    conversation = document_data_with_revision(doc)
+                    is_visible = conversation is not None and visible(conversation)
+                    if consume_row is not None:
+                        budget.check()
+                    if not is_visible:
+                        last_doc = doc
+                        continue
+                    if skipped_visible < offset:
+                        skipped_visible += 1
+                        last_doc = doc
+                        continue
+                    if consume_row is not None:
+                        consume_row(conversation, doc, len(conversations) + 1, 0)
                     last_doc = doc
-                    continue
-                if skipped_visible < offset:
-                    skipped_visible += 1
-                    last_doc = doc
-                    continue
-                if consume_row is not None:
-                    consume_row(conversation, doc, len(conversations) + 1, 0)
-                last_doc = doc
-                conversations.append(conversation)
-                if len(conversations) >= limit:
-                    has_more = True
-                    break
+                    conversations.append(conversation)
+                    if len(conversations) >= limit:
+                        has_more = True
+                        break
+                except ListReadBudgetExhausted:
+                    # Preparation can fail after the query yielded a row. Leave
+                    # its checkpoint untouched so the caller can retry this
+                    # page at the same visible offset.
+                    unconsumed_row_pending = True
+                    raise
         except ListReadBudgetExhausted:
-            # An empty page advances nothing, so saying more would invite the same request again.
-            has_more = bool(conversations)
+            # If a row was fetched but not prepared, the same offset is retryable.
+            # The client marks an empty truncated page as failed so load-more
+            # waits for an explicit retry instead of requesting this offset in a loop.
+            has_more = bool(conversations) or unconsumed_row_pending
         # This scan's offset counts visible rows, so the advance is the page size.
         return finish(conversations, last_doc, storage_rows=len(conversations), has_more=has_more)
 

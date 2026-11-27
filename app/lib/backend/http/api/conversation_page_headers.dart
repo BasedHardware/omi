@@ -25,9 +25,9 @@ class ConversationPageHeaders {
     );
   }
 
-  /// Whether to request another page: the server's answer when it sent one, else a full page that
-  /// was not cut short by the read budget. The server's answer covers a budget cut too: it says more
-  /// only when the cut page advanced, so the next request resumes past it rather than repeating it.
+  /// Whether another page is available: the server's answer when it sent one, else a full page that
+  /// was not cut short by the read budget. A truncated empty page may be retryable at the same
+  /// position; callers handle it as a failed page so automatic load-more does not repeat the offset.
   bool more({required int storageCount, required int pageSize, required bool truncated}) =>
       hasMore ?? (!truncated && storageCount >= pageSize);
 }

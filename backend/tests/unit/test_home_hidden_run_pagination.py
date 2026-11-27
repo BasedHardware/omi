@@ -613,3 +613,32 @@ def test_overlay_budget_exhaustion_resumes_at_the_failed_row(monkeypatch, routes
         suffix_rows.extend(row['id'] for row in last_page)
     assert suffix_rows == visible[failed_index:]
     assert 'X-Omi-List-Truncated' not in response.headers
+
+
+def test_discarded_first_row_preparation_failure_retries_same_offset(monkeypatch, routes):
+    from utils.other.list_budget import ListReadBudgetExhausted
+
+    data, visible = owner(before=4, hidden=0, after=0)
+    monkeypatch.setattr(db, 'db', CountingQuery(data))
+    monkeypatch.setenv('OMI_LIST_PAGE_WALL_BUDGET_ENABLED', 'true')
+    attempted = set()
+    original = db.prepare_conversation_for_read
+
+    def prepare(row, uid, *, read_budget):
+        if row['id'] == visible[0] and row['id'] not in attempted:
+            attempted.add(row['id'])
+            raise ListReadBudgetExhausted('deadline')
+        return original(row, uid, read_budget=read_budget)
+
+    monkeypatch.setattr(db, 'prepare_conversation_for_read', prepare)
+    first, response = call_route(routes, limit=3, include_discarded=True, offset=0)
+    assert first == []
+    assert response.headers['X-Omi-List-Truncated'] == 'true'
+    assert response.headers['X-Omi-Has-More'] == 'true'
+    assert response.headers['X-Omi-Conversation-Page-Size'] == '0'
+
+    # No row checkpoint was published, so the client retries the same offset.
+    retry, response = call_route(routes, limit=3, include_discarded=True, offset=0)
+    assert [row['id'] for row in retry] == visible[:3]
+    assert response.headers['X-Omi-Conversation-Page-Size'] == '3'
+    assert response.headers['X-Omi-Has-More'] == 'true'
