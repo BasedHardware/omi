@@ -43,7 +43,7 @@ class HomeRowShell extends StatelessWidget {
   final bool actionTrailing;
 
   /// The subtitle style of every Home row, the conversation meta line included.
-  static TextStyle get subtitleStyle => TextStyle(fontSize: 14, color: OmiColors.textTertiary);
+  static TextStyle get subtitleStyle => OmiType.subhead.copyWith(color: OmiColors.textTertiary);
 
   static const double tileExtent = 36;
 

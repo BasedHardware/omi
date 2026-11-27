@@ -413,6 +413,7 @@ class _ConversationsPageState extends State<ConversationsPage>
           _scheduleDeferred(conversationProvider.checkHasDailySummaries);
         }
       } catch (error, stack) {
+        // omi-ux-allow: silent-catch -- the provider's typed list state shows the failure (ConversationApiStatus with Try Again)
         Logger.error('Initial Home conversations failed: $error\n$stack');
       } finally {
         if (mounted) setState(() => _isBootstrapping = false);
@@ -434,6 +435,7 @@ class _ConversationsPageState extends State<ConversationsPage>
       try {
         await operation();
       } catch (error, stackTrace) {
+        // omi-ux-allow: silent-catch -- background warm-up; each provider reports its own failure where it is shown
         Logger.error('Deferred conversations-page work failed: $error\n$stackTrace');
       }
     });

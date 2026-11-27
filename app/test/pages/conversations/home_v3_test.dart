@@ -53,7 +53,6 @@ import 'package:omi/utils/reliability_experiments.dart';
 import 'package:omi/pages/conversations/widgets/conversation_state_tile.dart';
 import 'package:omi/pages/conversations/widgets/day_summary_link.dart';
 import 'package:omi/pages/episodes/live_episode_page.dart';
-import 'package:omi/pages/episodes/live_episode_row.dart';
 import 'package:omi/pages/home/home_navigation.dart';
 import 'package:omi/pages/episodes/finish_capture.dart';
 import 'package:omi/providers/app_provider.dart';
@@ -797,7 +796,6 @@ void main() {
           ['live-1', 'c-call', 'c-transcribing', 'c-writing', 'c-today', 'c-yesterday', 'c-yesterday-2', 'c-failed'],
           reason: 'the live conversation leads Today; the hidden one is off Home, the failed one stays in place '
               'with its Retry (David 2026-11-27, SCA-5226)');
-      expect(find.byType(LiveEpisodeRow), findsNothing);
       expect(find.byKey(const Key('conversation_tile_live')), findsOneWidget);
       expect(find.byKey(const Key('conversation_tile_writing')), findsOneWidget);
       expect(find.byKey(const Key('conversation_tile_transcribing')), findsOneWidget);

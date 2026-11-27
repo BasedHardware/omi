@@ -1,3 +1,6 @@
+// Home's one prompt slot (SCA-5226): at most one card above the list, chosen by a pure order
+// (payment, then firmware, then voice profile, then Review), so prompts never stack on Home.
+
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';

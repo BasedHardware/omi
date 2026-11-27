@@ -25,7 +25,6 @@ import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/pages/conversations/home/home_live_rows.dart';
 import 'package:omi/pages/conversations/home/home_model.dart';
 import 'package:omi/pages/episodes/live_episode_page.dart';
-import 'package:omi/pages/episodes/live_episode_row.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
@@ -724,18 +723,6 @@ void main() {
       expect(find.byKey(const Key('episode_notes_unavailable')), findsNothing);
     });
 
-    Widget homeRow() => Builder(
-          builder: (context) => Scaffold(
-            backgroundColor: OmiColors.surface0,
-            body: SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: OmiSpacing.md),
-                child: ListView(children: const [LiveEpisodeRow()]),
-              ),
-            ),
-          ),
-        );
-
     Widget placeholderRow() => Builder(
           builder: (context) => Scaffold(
             backgroundColor: OmiColors.surface0,
@@ -747,40 +734,6 @@ void main() {
             ),
           ),
         );
-
-    for (final (slug, title, state, textScale) in [
-      ('home-title-preview', 'Meeting Prep', _State.streaming, 1.0),
-      ('home-before-title', '', _State.streaming, 1.0),
-      ('home-no-preview', 'Meeting Prep', _State.listening, 1.0),
-      ('home-largest-type', 'Meeting Prep', _State.streaming, _largestTextScale),
-    ]) {
-      testWidgets('home live row: $slug ($theme)', (tester) async {
-        android = onAndroid;
-        final (preview, _) = await tester.runAsync(() => previewIn(state)) ?? (null, null);
-        final capture = captureFor(state, preview);
-        addTearDown(capture.dispose);
-        final episodes = episodesWith(episodeWith(title: title), now: DateTime.utc(2026, 10, 22, 2, 26, 24));
-        addTearDown(episodes.dispose);
-        await shoot(tester, name(slug, light),
-            light: light, home: homeRow(), capture: capture, episodes: episodes, textScale: textScale);
-        expect(find.byKey(const Key('home_live_episode_row')), findsOneWidget);
-        // The tile carries the same session length the page counts, in whole minutes.
-        expect(find.text('8m'), findsOneWidget);
-        expect(find.text(title.isEmpty ? en.episodeListeningNow : title), findsOneWidget);
-        // Newest on-device words stay visible on line two; an empty preview keeps Listening.
-        if (state == _State.streaming) {
-          expect(find.byKey(const Key('home_live_episode_preview')), findsOneWidget);
-          expect(find.textContaining('we can', findRichText: true), findsOneWidget);
-        } else {
-          expect(find.byKey(const Key('home_live_episode_preview')), findsNothing);
-          expect(find.text(title.isEmpty ? en.live : en.listening), findsOneWidget);
-        }
-        // The row keeps its size: the tile never outgrows it.
-        if (textScale == 1) {
-          expect(tester.getSize(find.byKey(const Key('home_live_episode_row'))).height, lessThan(80));
-        }
-      });
-    }
 
     for (final (slug, state, source, verified, showsPreview) in [
       ('admitted verified pendant', _State.streaming, 'omi', true, true),

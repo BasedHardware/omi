@@ -25,7 +25,6 @@ import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/services/live_preview/live_preview_controller.dart';
 import 'package:omi/ui/components/local_stt_recovery_notice.dart';
 import 'package:omi/ui/ui.dart';
-import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 
@@ -136,9 +135,11 @@ class _CaptureRow extends StatelessWidget {
 
     void reconnect() {
       OmiHaptics.medium();
-      final message = l10n.somethingWentWrong;
       capture.reconnectRecordingPendant().catchError((Object _) {
-        AppSnackbar.showSnackbar(message);
+        // Say so where the reader is, with the way forward: try the reconnect again.
+        if (context.mounted) {
+          OmiFeedback.error(context, l10n.somethingWentWrong, actionLabel: l10n.retry, onAction: reconnect);
+        }
       });
     }
 
