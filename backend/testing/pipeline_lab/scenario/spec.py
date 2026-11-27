@@ -169,7 +169,10 @@ CHECK_FIELDS = (
 # ``speakers`` expect keys: a minimum on a rate, a maximum on a rate or count, and the voice count.
 SPEAKER_MIN = ('attribution', 'owner_precision', 'owner_recall', 'named_accuracy', 'named_coverage')
 SPEAKER_MAX = ('wrong_name', 'owner_words')
-SPEAKER_KEYS = (*(f'{k}_min' for k in SPEAKER_MIN), *(f'{k}_max' for k in SPEAKER_MAX), 'voices', 'final_pass')
+SPEAKER_KEYS = (
+    *(f'{k}_min' for k in SPEAKER_MIN), *(f'{k}_max' for k in SPEAKER_MAX), 'voices', 'final_pass', 'resolution',
+)  # fmt: skip
+SPEAKER_RESOLUTIONS = ('resolved', 'capture', 'unavailable')  # models.conversation.ConversationSpeakers.status
 SPEAKER_BLOCK_KEYS = ('peer', 'gallery', 'truth', 'recording', 'receipts')
 SPEAKER_RECEIPTS = ('recording', 'processed')
 _IDENTITY = re.compile(r'^[a-z][a-z0-9-]{0,31}$')
@@ -637,6 +640,12 @@ def _speaker_expect(raw: Any, where: str) -> dict[str, Any]:
         elif key == 'final_pass':
             if not isinstance(value, str) or not value:
                 raise ScenarioError(f'{where}.final_pass: the expected run_batch_final_pass outcome, e.g. "success"')
+            out[key] = value
+        elif key == 'resolution':
+            if value not in SPEAKER_RESOLUTIONS:
+                raise ScenarioError(
+                    f'{where}.resolution: the stored speaker_resolution status, one of {list(SPEAKER_RESOLUTIONS)}'
+                )
             out[key] = value
         else:
             number = _number(value, f'{where}.{key}')
