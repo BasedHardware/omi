@@ -346,7 +346,12 @@ class LimitlessDeviceConnection extends DeviceConnection {
     // The Limitless pendant stops streaming BLE audio after an extended period
     // without a live server connection. Re-send the enable-data-stream command
     // so it resumes, just as _reinitializeAfterReconnect() does after BT reconnect.
-    if (_isInitialized) await _handleTransportReconnected();
+    // The socket outage may have exhausted the old health episode; retain the
+    // capture binding but start a fresh monitor for the reinitialized stream.
+    if (_isInitialized) {
+      _closeCustomLiveAudioWatch();
+      await _handleTransportReconnected();
+    }
   }
 
   @override

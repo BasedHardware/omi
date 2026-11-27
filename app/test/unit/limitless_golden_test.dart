@@ -1166,6 +1166,46 @@ void main() {
     expect(transport.writes.map((data) => decodeWrapperCommand(data)['messageNumber']), [6, 8, 21, 8]);
   });
 
+  test('socket reconnect rearms Custom Live health after an exhausted outage episode', () async {
+    final transport = FakeDeviceTransport();
+    const window = Duration(milliseconds: 80);
+    final connection = LimitlessDeviceConnection(
+      BtDevice(name: 'Limitless Pendant', id: 'fake-limitless', type: DeviceType.limitless, rssi: -50),
+      transport,
+      streamHealthWindow: window,
+      storageStatusTimeout: const Duration(milliseconds: 5),
+      setupSettleDelay: Duration.zero,
+      reconnectSettleDelay: Duration.zero,
+    );
+    addTearDown(connection.disconnect);
+    await connection.connect();
+    var socketConnected = false;
+    final outcomes = <LimitlessRealtimeHealthOutcome>[];
+    var activations = 0;
+    final exhausted = Completer<void>();
+    connection.watchCustomLiveAudio(
+      captureIsCurrent: () => true,
+      reactivationIsCurrent: () => socketConnected,
+      onEnabled: () => activations++,
+      report: (outcome) {
+        outcomes.add(outcome);
+        if (outcome == LimitlessRealtimeHealthOutcome.exhausted && !exhausted.isCompleted) exhausted.complete();
+      },
+    );
+
+    await exhausted.future.timeout(const Duration(seconds: 2));
+    expect(transport.writes, hasLength(2), reason: 'socket-down recovery does not spend BLE writes');
+
+    socketConnected = true;
+    final resumedRecovery = waitForProbeThenEnable(transport);
+    await connection.onNetworkSocketReconnected();
+    await resumedRecovery;
+
+    expect(outcomes, [LimitlessRealtimeHealthOutcome.exhausted]);
+    expect(activations, 2, reason: 'reinitializing the BLE stream installs a fresh health episode');
+    expect(transport.writes.map((data) => decodeWrapperCommand(data)['messageNumber']), [6, 8, 6, 8, 21, 8]);
+  });
+
   test('batch drain censors the current episode and restores the Custom Live watch', () async {
     final transport = FakeDeviceTransport();
     final connection = LimitlessDeviceConnection(
