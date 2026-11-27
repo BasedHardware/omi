@@ -7,9 +7,9 @@ Live prod signature (ro-prod, 2026-11-19, group ``CIqco6zElomJFg``, 243 events/2
     raised from utils/conversations/v3/models.py outline
     through utils/executors.py _tracked to the ASGI handler
 
-The Cloud Tasks builder routes are the request boundary for that call. They now
-answer the existing retryable contract (503 + ``Retry-After`` + the typed detail
-code) so the queue retries the task; a non-provider failure keeps its loud 500.
+The Cloud Tasks builder routes are the request boundary for that call. They
+answer the task-target contract (409 ``retry_response``); only the synchronous
+mobile caller receives 503 + ``Retry-After``.
 """
 
 import os
@@ -18,6 +18,7 @@ os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7
 os.environ.setdefault("OPENAI_API_KEY", "sk-test-not-real")
 
 import asyncio  # noqa: E402
+import json  # noqa: E402
 import logging  # noqa: E402
 from unittest.mock import AsyncMock  # noqa: E402
 
@@ -60,6 +61,12 @@ def assert_retryable(mapped: HTTPException) -> None:
     assert mapped.detail == RETRYABLE_CONVERSATION_PROCESSING_ERROR_DETAIL
     assert mapped.detail['code'] == RETRYABLE_CONVERSATION_PROCESSING_ERROR_CODE
     assert mapped.headers['Retry-After'] == '2'
+
+
+def assert_task_retry(response, reason: str) -> None:
+    assert response.status_code == 409
+    assert json.loads(response.body) == {'status': 'retry', 'reason': reason}
+    assert 'retry-after' not in response.headers
 
 
 def retryable_response_metric_total() -> float:
@@ -113,7 +120,7 @@ def reconcile_request():
 
 
 @pytest.mark.asyncio
-async def test_reconcile_route_answers_provider_5xx_as_retryable(monkeypatch, reconcile_request):
+async def test_reconcile_route_answers_provider_5xx_as_task_retry(monkeypatch, reconcile_request):
     async def fail(_uid, *, background):
         assert background is True
         assert request_log_trace_id() == 'a' * 32
@@ -121,10 +128,9 @@ async def test_reconcile_route_answers_provider_5xx_as_retryable(monkeypatch, re
 
     monkeypatch.setattr(service, 'reconcile', fail)
 
-    with pytest.raises(HTTPException) as raised:
-        await route.reconcile(route.ReconcileRequest(uid='u'), reconcile_request, _retry=0)
+    response = await route.reconcile(route.ReconcileRequest(uid='u'), reconcile_request, _retry=0)
 
-    assert_retryable(raised.value)
+    assert_task_retry(response, 'dependency_warming')
     assert request_log_trace_id() == '-'
 
 
@@ -137,6 +143,16 @@ async def test_reconcile_route_keeps_a_non_provider_failure_loud(monkeypatch, re
 
 
 @pytest.mark.asyncio
+async def test_reconcile_route_answers_owner_busy_as_a_locked_task_retry(monkeypatch, reconcile_request):
+    monkeypatch.setattr(service, 'reconcile', AsyncMock(return_value='busy'))
+    body = route.ReconcileRequest(uid='u', trigger='native_manual_ready')
+
+    response = await route.reconcile(body, reconcile_request, _retry=0)
+
+    assert_task_retry(response, 'locked')
+
+
+@pytest.mark.asyncio
 async def test_reconcile_route_kill_switch_restores_the_original_failure(monkeypatch, reconcile_request):
     monkeypatch.setenv(RETRYABLE_PROVIDER_FAILURE_SWITCH, 'off')
     monkeypatch.setattr(service, 'reconcile', AsyncMock(side_effect=provider_502()))
@@ -146,20 +162,23 @@ async def test_reconcile_route_kill_switch_restores_the_original_failure(monkeyp
 
 
 @pytest.mark.asyncio
-async def test_reconcile_route_re_raises_an_already_typed_answer(monkeypatch, reconcile_request):
-    """The composition boundary already recorded its metric; do not remap it."""
+async def test_reconcile_route_translates_an_already_typed_retry_answer(monkeypatch, reconcile_request):
+    """Translate the typed mobile retry answer without recording its metric twice."""
     typed = HTTPException(status_code=503, detail=RETRYABLE_CONVERSATION_PROCESSING_ERROR_DETAIL)
+    typed.__cause__ = provider_502()
+    before = retryable_response_metric_total()
     monkeypatch.setattr(service, 'reconcile', AsyncMock(side_effect=typed))
 
-    with pytest.raises(HTTPException) as raised:
-        await route.reconcile(route.ReconcileRequest(uid='u'), reconcile_request, _retry=0)
+    response = await route.reconcile(route.ReconcileRequest(uid='u'), reconcile_request, _retry=0)
 
-    assert raised.value is typed
+    assert_task_retry(response, 'dependency_warming')
+    assert retryable_response_metric_total() == before
 
 
 @pytest.mark.asyncio
 async def test_reconcile_route_does_not_override_a_typed_non_retryable_answer(monkeypatch, reconcile_request):
     typed = HTTPException(status_code=500, detail='deliberate')
+    typed.__cause__ = provider_502()
     monkeypatch.setattr(service, 'reconcile', AsyncMock(side_effect=typed))
 
     with pytest.raises(HTTPException) as raised:
@@ -169,7 +188,7 @@ async def test_reconcile_route_does_not_override_a_typed_non_retryable_answer(mo
 
 
 @pytest.mark.asyncio
-async def test_backfill_route_answers_provider_5xx_as_retryable(monkeypatch):
+async def test_backfill_route_answers_provider_5xx_as_task_retry(monkeypatch):
     monkeypatch.setenv('CONVERSATIONS_V3_BACKFILL', 'on')
     monkeypatch.setattr(backfill, 'run_step', AsyncMock(side_effect=provider_502()))
     body = route.BackfillRequest(uid='u', run_id='run-1', partition=0)
@@ -178,30 +197,27 @@ async def test_backfill_route_answers_provider_5xx_as_retryable(monkeypatch):
     )
     before = metric._value.get()
 
-    with pytest.raises(HTTPException) as raised:
-        await route.run_backfill(body, _retry=0)
+    response = await route.run_backfill(body, _retry=0)
 
-    assert_retryable(raised.value)
+    assert_task_retry(response, 'dependency_warming')
     assert metric._value.get() == before + 1
 
 
 @pytest.mark.asyncio
-async def test_backfill_route_keeps_owner_busy_as_its_own_503(monkeypatch):
+async def test_backfill_route_keeps_owner_busy_as_a_locked_task_retry(monkeypatch):
     """BackfillRetry must keep its own answer, not be remapped as a provider fault."""
     monkeypatch.setenv('CONVERSATIONS_V3_BACKFILL', 'on')
     monkeypatch.setattr(backfill, 'run_step', AsyncMock(side_effect=backfill.BackfillRetry('busy')))
     body = route.BackfillRequest(uid='u', run_id='run-1', partition=0)
 
-    with pytest.raises(HTTPException) as raised:
-        await route.run_backfill(body, _retry=0)
+    response = await route.run_backfill(body, _retry=0)
 
-    assert raised.value.status_code == 503
-    assert raised.value.detail == 'Owner busy; retry'
+    assert_task_retry(response, 'locked')
 
 
 @pytest.mark.asyncio
-async def test_backfill_route_re_raises_an_already_typed_answer(monkeypatch):
-    """A typed answer wrapping a provider fault is preserved without a second metric."""
+async def test_backfill_route_translates_an_already_typed_retry_answer(monkeypatch):
+    """Translate the boundary's typed mobile answer without a second metric."""
     monkeypatch.setenv('CONVERSATIONS_V3_BACKFILL', 'on')
     typed = HTTPException(status_code=503, detail=RETRYABLE_CONVERSATION_PROCESSING_ERROR_DETAIL)
     typed.__cause__ = provider_502()
@@ -209,10 +225,9 @@ async def test_backfill_route_re_raises_an_already_typed_answer(monkeypatch):
     monkeypatch.setattr(backfill, 'run_step', AsyncMock(side_effect=typed))
     body = route.BackfillRequest(uid='u', run_id='run-1', partition=0)
 
-    with pytest.raises(HTTPException) as raised:
-        await route.run_backfill(body, _retry=0)
+    response = await route.run_backfill(body, _retry=0)
 
-    assert raised.value is typed
+    assert_task_retry(response, 'dependency_warming')
     assert retryable_response_metric_total() == before
 
 
@@ -220,6 +235,7 @@ async def test_backfill_route_re_raises_an_already_typed_answer(monkeypatch):
 async def test_backfill_route_does_not_override_a_typed_non_retryable_answer(monkeypatch):
     monkeypatch.setenv('CONVERSATIONS_V3_BACKFILL', 'on')
     typed = HTTPException(status_code=500, detail='deliberate')
+    typed.__cause__ = provider_502()
     monkeypatch.setattr(backfill, 'run_step', AsyncMock(side_effect=typed))
     body = route.BackfillRequest(uid='u', run_id='run-1', partition=0)
 
