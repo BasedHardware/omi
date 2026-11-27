@@ -169,6 +169,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
     _batchDrainActive = false;
     _batchModeEpoch = null;
     _unconfirmedStoredPageIndices.clear();
+    _lastAcknowledgedIndex = -1;
     await super.disconnect();
   }
 
@@ -573,8 +574,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
   bool _publishAudioFramesFromPendantEnvelope(List<int> payload) {
     var pos = 0;
     var withheldStoredFrames = false;
-    final storedFrames = <List<int>>[];
-    final liveFrames = <List<int>>[];
+    final audioBatches = <(List<List<int>>, bool)>[];
 
     try {
       parse:
@@ -605,7 +605,8 @@ class LimitlessDeviceConnection extends DeviceConnection {
             pos = valueStart + length;
             if (fieldNumber == 2) {
               final storageBuffer = payload.sublist(valueStart, pos);
-              final pageFrames = _extractOpusFramesFromFlashPage(storageBuffer);
+              final flashPage = _extractStorageBufferFlashPage(storageBuffer);
+              final pageFrames = _extractOpusFramesFromFlashPage(flashPage ?? storageBuffer);
               final pageIndex = pageFrames.isEmpty ? null : _extractStorageBufferPageIndex(storageBuffer);
               final withheldByActiveDrain = _batchDrainActive && !_isBatchMode;
               final withheldByExistingBarrier = pageIndex != null && _unconfirmedStoredPageIndices.contains(pageIndex);
@@ -613,7 +614,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
                 if (pageIndex == null) {
                   // Without an index there is no safe ACK barrier to protect
                   // this page, so preserve its frames in the live delivery path.
-                  storedFrames.addAll(pageFrames);
+                  audioBatches.add((pageFrames, !(_batchDrainActive && !_isBatchMode)));
                 } else {
                   withheldStoredFrames = true;
                   if (_unconfirmedStoredPageIndices.add(pageIndex)) {
@@ -625,11 +626,12 @@ class LimitlessDeviceConnection extends DeviceConnection {
                   }
                 }
               } else {
-                storedFrames.addAll(pageFrames);
+                audioBatches.add((pageFrames, !(_batchDrainActive && !_isBatchMode)));
               }
             } else if (fieldNumber == 4) {
               final encodedLiveField = payload.sublist(fieldStart, pos);
-              liveFrames.addAll(_extractOpusFrames(encodedLiveField)[0] as List<List<int>>);
+              final liveFrames = _extractOpusFrames(encodedLiveField)[0] as List<List<int>>;
+              if (liveFrames.isNotEmpty) audioBatches.add((liveFrames, true));
             }
             break;
           case 5:
@@ -644,12 +646,12 @@ class LimitlessDeviceConnection extends DeviceConnection {
       // Publish complete audio fields parsed before a malformed trailing field.
     }
 
-    if (storedFrames.isEmpty && liveFrames.isEmpty && !withheldStoredFrames) return false;
-    // During reconnect, indexed pages in an active drain are withheld from the
-    // live stream and ACK-capped until replay. In other modes, stored frames can
-    // represent live progress and keep the recovery watchdog from false stalls.
-    _publishAudioFrames(storedFrames, fromRealtimeStream: !(_batchDrainActive && !_isBatchMode));
-    _publishAudioFrames(liveFrames, fromRealtimeStream: true);
+    if (audioBatches.isEmpty && !withheldStoredFrames) return false;
+    // Preserve stored/live field order. During reconnect, indexed pages in an
+    // active drain are withheld and ACK-capped until replay.
+    for (final batch in audioBatches) {
+      _publishAudioFrames(batch.$1, fromRealtimeStream: batch.$2);
+    }
     return true;
   }
 
@@ -674,6 +676,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
     _rawDataBuffer.clear();
     _fragmentBuffer.clear();
     _storageState = null;
+    _lastAcknowledgedIndex = -1;
     final pendingStatus = _storageStateCompleter;
     if (pendingStatus != null && !pendingStatus.isCompleted) pendingStatus.complete(null);
     _storageStateCompleter = null;
@@ -978,6 +981,49 @@ class LimitlessDeviceConnection extends DeviceConnection {
             final length = lengthResult[0] as int;
             final valueStart = lengthResult[1] as int;
             if (valueStart <= pos || length < 0 || length > storageData.length - valueStart) return null;
+            pos = valueStart + length;
+            break;
+          case 5:
+            if (pos + 4 > storageData.length) return null;
+            pos += 4;
+            break;
+          default:
+            return null;
+        }
+      }
+    } catch (_) {
+      return null;
+    }
+    return null;
+  }
+
+  List<int>? _extractStorageBufferFlashPage(List<int> storageData) {
+    var pos = 0;
+    try {
+      while (pos < storageData.length) {
+        final tagResult = _decodeVarint(storageData, pos);
+        final tag = tagResult[0] as int;
+        final afterTag = tagResult[1] as int;
+        if (tag == 0 || afterTag <= pos) return null;
+        pos = afterTag;
+        final fieldNum = tag >> 3;
+        switch (tag & 0x07) {
+          case 0:
+            final value = _decodeVarint(storageData, pos);
+            final next = value[1] as int;
+            if (next <= pos) return null;
+            pos = next;
+            break;
+          case 1:
+            if (pos + 8 > storageData.length) return null;
+            pos += 8;
+            break;
+          case 2:
+            final lengthResult = _decodeVarint(storageData, pos);
+            final length = lengthResult[0] as int;
+            final valueStart = lengthResult[1] as int;
+            if (valueStart <= pos || length < 0 || length > storageData.length - valueStart) return null;
+            if (fieldNum == 6) return storageData.sublist(valueStart, valueStart + length);
             pos = valueStart + length;
             break;
           case 5:

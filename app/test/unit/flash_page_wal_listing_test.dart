@@ -19,15 +19,23 @@ class _Listener implements IWalSyncListener {
 
 /// A Limitless pendant that reports [flashStatus] for its flash storage.
 class _FakePendant implements LimitlessDeviceConnection {
-  _FakePendant(this.flashStatus);
+  _FakePendant(this.flashStatus, {this.acknowledge});
 
   Map<String, int> flashStatus;
+  final Future<int?> Function(int)? acknowledge;
 
   @override
   Future<Map<String, int>?> getStorageStatus() async => flashStatus;
 
   @override
   Future<Map<String, String>> getDeviceInfo() async => {'modelNumber': 'Limitless Pendant'};
+
+  @override
+  Future<int?> acknowledgeProcessedData(int upToIndex) async {
+    final scripted = acknowledge;
+    if (scripted == null) return upToIndex;
+    return await scripted(upToIndex);
+  }
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -90,5 +98,42 @@ void main() {
     expect(rest.id, listed.id);
     expect(rest.storageOffset, 1050);
     expect(rest.seconds, 70);
+  });
+
+  test('bulk synced deletion continues after a flash page ACK refusal', () async {
+    final attempted = <int>[];
+    final pendant = _FakePendant(
+      _flash(oldest: 100, newest: 200),
+      acknowledge: (index) async {
+        attempted.add(index);
+        return index == 100 ? 99 : index;
+      },
+    );
+    final first = Wal(
+      timerStart: 1700000000,
+      codec: BleAudioCodec.opus,
+      seconds: 30,
+      status: WalStatus.synced,
+      storage: WalStorage.flashPage,
+      device: 'limitless-1',
+      storageTotalBytes: 100,
+      fileNum: 100,
+    );
+    final second = Wal(
+      timerStart: 1700000060,
+      codec: BleAudioCodec.opus,
+      seconds: 30,
+      status: WalStatus.synced,
+      storage: WalStorage.flashPage,
+      device: 'limitless-1',
+      storageTotalBytes: 200,
+      fileNum: 200,
+    );
+    final sync = _syncFor(pendant)..testWals = [first, second];
+
+    await expectLater(sync.deleteAllSyncedWals(), throwsStateError);
+
+    expect(attempted, [100, 200]);
+    expect(sync.testWals, [first], reason: 'the later page with a complete ACK is still removed');
   });
 }

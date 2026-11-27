@@ -97,7 +97,7 @@ void main() {
         ..testConnection = connection
         ..testWals = [_ringWal()];
 
-      await sync.deleteWal(_ringWal());
+      await expectLater(sync.deleteWal(_ringWal()), throwsStateError);
 
       expect(connection.clearRingCalls, 1);
       expect((await sync.getMissingWals()).map((w) => w.id), [_ringWal().id]);
@@ -106,19 +106,19 @@ void main() {
     test('keeps the wal when no device is set', () async {
       final sync = RingStorageSyncImpl(_Listener())..testWals = [_ringWal()];
 
-      await sync.deleteWal(_ringWal());
+      await expectLater(sync.deleteWal(_ringWal()), throwsStateError);
 
       expect((await sync.getMissingWals()).map((w) => w.id), [_ringWal().id]);
     });
 
-    test('keeps the wal when the connection cannot be established', () async {
+    test('keeps the wal and reports failure when the connection cannot be established', () async {
       // No test connection and no ServiceManager: the failed lookup must keep
-      // the wal (fail-closed) instead of dropping it, and must not throw.
+      // the wal and throw so callers cannot report a successful delete.
       final sync = RingStorageSyncImpl(_Listener())
         ..setDevice(_device)
         ..testWals = [_ringWal()];
 
-      await sync.deleteWal(_ringWal());
+      await expectLater(sync.deleteWal(_ringWal()), throwsStateError);
 
       expect((await sync.getMissingWals()).map((w) => w.id), [_ringWal().id]);
     });
@@ -143,7 +143,7 @@ void main() {
         ..testConnection = connection
         ..testWals = [_ringWal()];
 
-      await sync.deleteAllPendingWals();
+      await expectLater(sync.deleteAllPendingWals(), throwsStateError);
 
       expect((await sync.getMissingWals()).map((w) => w.id), [_ringWal().id]);
     });

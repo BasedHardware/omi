@@ -503,12 +503,12 @@ class RingStorageSyncImpl implements RingStorageSync {
     if (!_wals.any((w) => w.id == wal.id)) return;
     if (_isSyncing) {
       Logger.debug('RingStorageSync.deleteWal: skipping — sync in progress');
-      return;
+      throw StateError('Ring deletion is unavailable while sync is in progress');
     }
     final cleared = await _clearRingOnDevice();
     if (!cleared) {
       Logger.debug('RingStorageSync.deleteWal: ring clear not confirmed, keeping WAL');
-      return;
+      throw StateError('Device did not confirm the ring clear');
     }
     _wals = _wals.where((w) => w.id != wal.id).toList();
     listener.onWalUpdated();
@@ -528,12 +528,12 @@ class RingStorageSyncImpl implements RingStorageSync {
     if (!_wals.any((w) => w.status == WalStatus.miss)) return;
     if (_isSyncing) {
       Logger.debug('RingStorageSync.deleteAllPendingWals: skipping — sync in progress');
-      return;
+      throw StateError('Ring deletion is unavailable while sync is in progress');
     }
     final cleared = await _clearRingOnDevice();
     if (!cleared) {
       Logger.debug('RingStorageSync.deleteAllPendingWals: ring clear not confirmed, keeping WALs');
-      return;
+      throw StateError('Device did not confirm the ring clear');
     }
     _wals = _wals.where((w) => w.status != WalStatus.miss).toList();
     listener.onWalUpdated();

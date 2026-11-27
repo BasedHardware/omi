@@ -908,6 +908,35 @@ void main() {
     await connection.disconnect();
   }, timeout: const Timeout(Duration(seconds: 10)));
 
+  test('BLE reconnect resends an ACK already issued in the previous protocol session', () async {
+    final transport = FakeDeviceTransport();
+    final connection = LimitlessDeviceConnection(
+      BtDevice(name: 'Limitless Pendant', id: 'fake-limitless', type: DeviceType.limitless, rssi: -50),
+      transport,
+      setupSettleDelay: Duration.zero,
+      reconnectSettleDelay: Duration.zero,
+    );
+    addTearDown(connection.disconnect);
+    await connection.connect();
+    await connection.acknowledgeProcessedData(100);
+    int ackWrites() => transport.writes.where((data) => decodeWrapperCommand(data)['messageNumber'] == 7).length;
+    expect(ackWrites(), 1);
+
+    final realtimeReinitialized = Completer<void>();
+    transport.onWrite = (data) {
+      if (decodeWrapperCommand(data)['messageNumber'] == 8 && !realtimeReinitialized.isCompleted) {
+        realtimeReinitialized.complete();
+      }
+    };
+    transport.emitState(DeviceTransportState.disconnected);
+    await Future<void>.delayed(Duration.zero);
+    transport.emitState(DeviceTransportState.connected);
+    await realtimeReinitialized.future.timeout(const Duration(seconds: 2));
+
+    await connection.acknowledgeProcessedData(100);
+    expect(ackWrites(), 2, reason: 'the new BLE protocol session must receive the ACK again');
+  });
+
   test('silent Limitless realtime start probes status and retries activation only once', () async {
     final transport = FakeDeviceTransport();
     final device = BtDevice(name: 'Limitless Pendant', id: 'fake-limitless', type: DeviceType.limitless, rssi: -50);
@@ -1124,7 +1153,7 @@ void main() {
     final storedMessage = pendantMessage(
       storageBufferBytes(
         session: 7,
-        seq: 1,
+        seq: 26,
         index: 100,
         page: flashPageBytes(1750000000000, [
           audioWrapper(audioBlobOfFrames([storedFrame]))
@@ -1135,14 +1164,14 @@ void main() {
       limitlessRxCharUuid,
       bleWrapper(10, 0, 1, [
         ...intField(1, 1234),
-        ...storedMessage,
         ...realtimeAudioBytes([liveFrame]),
+        ...storedMessage,
         0x1b, // A malformed trailing field must not discard complete audio already parsed.
       ]),
     );
 
     await bothFrames.future.timeout(const Duration(seconds: 2));
-    expect(decoded, [storedFrame, liveFrame]);
+    expect(decoded, [liveFrame, storedFrame]);
   });
 
   test('unindexed stored frames stay live when batch-mode re-entry is unconfirmed', () async {
@@ -1233,7 +1262,7 @@ void main() {
           ...pendantMessage(
             storageBufferBytes(
               session: 7,
-              seq: 1,
+              seq: 26,
               index: 100,
               page: flashPageBytes(1750000000000, [
                 audioWrapper(audioBlobOfFrames([withheldFrame]))
@@ -1792,7 +1821,7 @@ void main() {
       pendantMessage(
         storageBufferBytes(
           session: 7,
-          seq: 1,
+          seq: 26,
           index: 100,
           page: flashPageBytes(1750000000000, [
             audioWrapper(audioBlobOfFrames([storedFrame]))
