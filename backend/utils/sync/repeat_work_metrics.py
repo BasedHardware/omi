@@ -187,7 +187,7 @@ def record_survivor_refresh(uid: str, conversation_id: str, episode_id: str | No
 
 
 @contextmanager
-def scoped_conversation(uid, conversation):
+def scoped_conversation(uid: str, conversation: Any):
     token = _scope.set((uid, conversation))
     try:
         yield

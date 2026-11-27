@@ -405,10 +405,10 @@ def test_detail_intent_survives_quiet_window_and_expiry_restores_wait(monkeypatc
 
 
 def test_empty_batch_preview_passes_notes_gate_before_transcript_custody(monkeypatch):
-    import inspect
     from types import SimpleNamespace
     from unittest.mock import Mock
     from utils.conversations import process_conversation as pc
+    from utils.conversations.processing_steps import run_inline
     from utils.episodes import member_notes
 
     monkeypatch.setenv('HOME_LIVE_MEMBER_NOTES_DEFERRED_ENABLED', 'true')
@@ -426,7 +426,7 @@ def test_empty_batch_preview_passes_notes_gate_before_transcript_custody(monkeyp
     monkeypatch.setattr(pc, 'bind_generation', custody)
     conversation = SimpleNamespace(id='c1', transcript_segments=[], structured={'title': 'Preview'})
     with pytest.raises(ReachedCustody):
-        inspect.unwrap(pc.process_conversation)('u', 'en', conversation, trigger=ProcessingTrigger.SYNC_UPDATE)
+        run_inline(pc._process_conversation_steps('u', 'en', conversation, trigger=ProcessingTrigger.SYNC_UPDATE))
     custody.assert_called_once()
     waits.assert_not_called()
     mark.assert_not_called()
