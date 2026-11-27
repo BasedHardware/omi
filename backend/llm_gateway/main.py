@@ -8,7 +8,7 @@ from omi_logging import configure_logging
 
 # Text until llm-gateway's log consumers are admitted for JSON
 # (docs/runbooks/structured-logging-rollout.md); OMI_LOG_FORMAT=json opts in.
-configure_logging('llm-gateway', default_format='text')
+configure_logging('llm-gateway', default_format='text', access_policy='keep')
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -80,6 +80,12 @@ async def request_correlation(
     finally:
         request_id_context.reset(token)
     response.headers[REQUEST_ID_HEADER] = request_id
+    if request.method == 'POST' and request.url.path == '/v1/images/generations':
+        logger.info(
+            'llm_gateway_access request_id=%s method=POST path=/v1/images/generations status=%s',
+            request_id,
+            response.status_code,
+        )
     return response
 
 

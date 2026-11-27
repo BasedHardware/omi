@@ -1754,12 +1754,13 @@ async def generate_app_icon_endpoint(
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
 ):
     """
-    Generate an app icon using AI (DALL-E).
+    Generate an app icon using AI.
     Returns the icon as a base64 encoded PNG image.
     """
     if generated_compute_configured():
         await run_blocking(db_executor, require_generated_compute, uid, 'app_generator', allow_byok=False)
     from utils.llm.app_generator import generate_app_icon
+    from utils.llm.gateway_client import ImageGatewayUnavailableError
     import base64
 
     # User-initiated LLM generation — same free-tier gate as chat (402 past cap).
@@ -1776,7 +1777,6 @@ async def generate_app_icon_endpoint(
         raise HTTPException(status_code=422, detail='App description is required')
 
     try:
-        # Generate icon using DALL-E
         with track_usage(uid, Features.APP_GENERATOR):
             icon_bytes = await generate_app_icon(app_name, app_description, category)
 
@@ -1786,8 +1786,14 @@ async def generate_app_icon_endpoint(
         return {'status': 'ok', 'icon_base64': icon_base64, 'mime_type': 'image/png'}
     except HTTPException:
         raise
+    except ImageGatewayUnavailableError:
+        raise HTTPException(
+            status_code=503,
+            detail={'code': 'icon_generation_unavailable', 'retryable': True},
+        )
     except Exception as e:
-        logger.error(f"Error generating icon: {e}")
+        gateway_status = e.response.status_code if isinstance(e, httpx.HTTPStatusError) else None
+        logger.error('Error generating icon: %s gateway_http_status=%s', type(e).__name__, gateway_status)
         raise HTTPException(status_code=500, detail='Failed to generate icon')
 
 

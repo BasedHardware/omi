@@ -611,6 +611,10 @@ def _gateway_timeout(timeout_seconds: float) -> httpx.Timeout:
     )
 
 
+class ImageGatewayUnavailableError(RuntimeError):
+    """The image gateway or provider is temporarily unavailable."""
+
+
 def generate_image_via_gateway(
     *,
     model: str,
@@ -622,20 +626,25 @@ def generate_image_via_gateway(
 ) -> Mapping[str, object]:
     """Call the gateway-owned image generation surface."""
 
-    with httpx.Client(timeout=timeout_seconds) as client:
-        response = client.post(
-            f'{get_llm_gateway_base_url()}/v1/images/generations',
-            headers=_gateway_headers(feature='app_generator'),
-            json={
-                'model': model,
-                'prompt': prompt,
-                'size': size,
-                'quality': quality,
-                'n': n,
-            },
-        )
-        response.raise_for_status()
-        body = response.json()
+    try:
+        with httpx.Client(timeout=timeout_seconds) as client:
+            response = client.post(
+                f'{get_llm_gateway_base_url()}/v1/images/generations',
+                headers=_gateway_headers(feature='app_generator'),
+                json={
+                    'model': model,
+                    'prompt': prompt,
+                    'size': size,
+                    'quality': quality,
+                    'n': n,
+                },
+            )
+            if response.status_code in {408, 502, 503, 504}:
+                raise ImageGatewayUnavailableError('Image gateway unavailable')
+            response.raise_for_status()
+            body = response.json()
+    except (httpx.NetworkError, httpx.TimeoutException, httpx.RemoteProtocolError) as exc:
+        raise ImageGatewayUnavailableError('Image gateway unavailable') from exc
     if not isinstance(body, Mapping):
         raise ValueError('gateway image response must be an object')
     return cast('Mapping[str, object]', body)

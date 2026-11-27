@@ -344,7 +344,9 @@ def test_chat_completions_uses_forwarded_byok_credentials(monkeypatch):
     assert provider.calls[0].credential_mode == 'byok'
 
 
-def test_image_generation_records_gateway_attempt(monkeypatch):
+def test_image_generation_records_gateway_attempt(monkeypatch, caplog):
+    caplog.set_level("INFO", logger="llm_gateway.gateway.metrics")
+
     class FakeImageClient:
         async def post(self, *_args, **_kwargs):
             return httpx.Response(200, json={'created': 1, 'data': [{'url': 'https://example.invalid/image'}]})
@@ -372,6 +374,121 @@ def test_image_generation_records_gateway_attempt(monkeypatch):
     assert trace.attempts[0].usage is not None
     assert trace.attempts[0].usage.unit_type == 'images'
     assert trace.attempts[0].usage.image_count == 2
+
+    terminal = [r.message for r in caplog.records if 'llm_gateway_terminal' in r.message]
+    assert len(terminal) == 1
+    assert 'surface=openai_images_generations' in terminal[0]
+    assert 'outcome=success error_class=none' in terminal[0]
+    assert 'rejection_reason=none upstream_http_status=200' in terminal[0]
+    assert 'upstream_error=' not in terminal[0]
+
+
+@pytest.mark.parametrize(
+    'provider_response,gateway_status,error_class,reason,error_fields',
+    [
+        (
+            httpx.Response(
+                400,
+                json={
+                    'error': {
+                        'type': 'invalid_request_error',
+                        'code': 'unknown_parameter',
+                        'param': 'size',
+                        'message': 'private app description',
+                        'user': 'private user identifier',
+                    }
+                },
+            ),
+            400,
+            'provider_http_400',
+            'unknown_parameter',
+            {'type': 'invalid_request_error', 'code': 'unknown_parameter', 'param': 'size'},
+        ),
+        (
+            httpx.Response(
+                400,
+                json={
+                    'error': {
+                        'type': 'invalid_request_error',
+                        'message': 'Your organization must be verified: private user identifier',
+                    }
+                },
+            ),
+            400,
+            'provider_http_400',
+            'organization_verification_required',
+            {'type': 'invalid_request_error', 'message': 'organization_verification_required'},
+        ),
+        (
+            httpx.Response(
+                500,
+                json={
+                    'error': {
+                        'type': 'server_error',
+                        'code': ['private user identifier'],
+                        'param': 'private app description',
+                    }
+                },
+            ),
+            502,
+            'provider_http_500',
+            'server_error',
+            {'type': 'server_error'},
+        ),
+        (
+            httpx.Response(400, text='private app description'),
+            502,
+            'transport_or_invalid_response',
+            'unknown',
+            {},
+        ),
+    ],
+)
+def test_image_generation_records_safe_rejections(
+    monkeypatch,
+    caplog,
+    provider_response,
+    gateway_status,
+    error_class,
+    reason,
+    error_fields,
+):
+    class FakeImageClient:
+        async def post(self, url, *, headers, json):
+            assert url == 'https://api.openai.com/v1/images/generations'
+            assert headers['Authorization'] == 'Bearer synthetic-provider-key'
+            assert json['prompt'] == 'private prompt'
+            return provider_response
+
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+    monkeypatch.setenv('OPENAI_API_KEY', 'synthetic-provider-key')
+    traces = []
+    monkeypatch.setattr(openai_compatible, '_get_image_generation_client', FakeImageClient)
+    monkeypatch.setattr(openai_compatible, 'schedule_attempt_trace', lambda _context, trace: traces.append(trace))
+    caplog.set_level('INFO', logger='llm_gateway.main')
+
+    response = TestClient(app).post(
+        '/v1/images/generations',
+        headers={**auth_headers(), 'X-Omi-User-Uid': 'private user identifier'},
+        json={'model': 'gpt-image-1', 'prompt': 'private prompt'},
+    )
+
+    assert response.status_code == gateway_status
+    assert len(traces) == 1
+    [attempt] = traces[0].attempts
+    assert attempt.error_class == error_class
+    assert attempt.usage_status == UsageStatus.INDETERMINATE
+    [terminal] = [r.message for r in caplog.records if 'llm_gateway_terminal' in r.message]
+    [access] = [r.message for r in caplog.records if 'llm_gateway_access' in r.message]
+    request_id = response.headers['x-omi-request-id']
+    assert f'request_id={request_id} surface=openai_images_generations' in terminal
+    assert f'outcome=error error_class={error_class}' in terminal
+    assert f'rejection_reason={reason} upstream_http_status={provider_response.status_code}' in terminal
+    assert json.loads(terminal.split('upstream_error=', 1)[1]) == error_fields
+    assert f'request_id={request_id} method=POST path=/v1/images/generations status={gateway_status}' in access
+    assert 'private prompt' not in caplog.text
+    assert 'private app description' not in caplog.text
+    assert 'private user identifier' not in caplog.text
 
 
 def test_image_generation_normalizes_auto_defaults_for_estimated_accounting(monkeypatch):

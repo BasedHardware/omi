@@ -54,6 +54,7 @@ from llm_gateway.gateway.executor import (
 )
 from llm_gateway.gateway.metrics import (
     observe_error,
+    observe_image_generation,
     observe_request_rejection,
     observe_route_result,
     observe_success,
@@ -416,77 +417,79 @@ async def create_image_generation(request: Request, caller: ServiceAuthDependenc
         payer='omi',
         fallback_feature='image_generation',
     )
-    trace = AttemptTrace()
+    started_at = time_request()
+    model = _string_request_value(request_body, 'model', default='unknown')
     api_key = os.getenv('OPENAI_API_KEY', '').strip()
-    if not api_key:
-        trace.record(
-            provider='openai',
-            configured_model=_string_request_value(request_body, 'model', default='unknown'),
-            route_artifact_id=None,
-            fallback_reason=None,
-            retry_ordinal=1,
-            outcome='error',
-            error_class='invalid_config',
-            usage_status=UsageStatus.INDETERMINATE,
-        )
-        schedule_attempt_trace(context, trace)
-        return JSONResponse(
-            status_code=503,
-            content={'error': {'message': 'provider request failed: invalid_config', 'type': 'api_error'}},
-        )
+    upstream_status = None
+    rejection_body: object = None
+    error_class = 'internal_error'
+    metadata = None
     try:
+        if not api_key:
+            error_class = 'invalid_config'
+            return JSONResponse(
+                status_code=503,
+                content={'error': {'message': 'provider request failed: invalid_config', 'type': 'api_error'}},
+            )
         response = await _get_image_generation_client().post(
             'https://api.openai.com/v1/images/generations',
             headers={'Authorization': f'Bearer {api_key}', 'Content-Type': 'application/json'},
             json=request_body,
         )
+        upstream_status = response.status_code
         body = response.json()
-        if response.status_code >= 400:
-            trace.record(
-                provider='openai',
-                configured_model=_string_request_value(request_body, 'model', default='unknown'),
-                route_artifact_id=None,
-                fallback_reason=None,
-                retry_ordinal=1,
-                outcome='error',
-                error_class=f'provider_http_{response.status_code}',
-                usage_status=UsageStatus.INDETERMINATE,
+        if response.is_error:
+            rejection_body = body
+        # Keep provider outages distinguishable from an internal gateway 500.
+        result = JSONResponse(status_code=502 if upstream_status >= 500 else upstream_status, content=body)
+        if response.is_success:
+            metadata = ProviderResponseMetadata(
+                usage=image_usage(
+                    count=_int_request_value(request_body, 'n', default=1),
+                    size=_string_request_value(request_body, 'size', default='auto'),
+                    quality=_string_request_value(request_body, 'quality', default='auto'),
+                )
             )
+            error_class = 'none'
         else:
-            trace.record(
-                provider='openai',
-                configured_model=_string_request_value(request_body, 'model', default='unknown'),
-                route_artifact_id=None,
-                fallback_reason=None,
-                retry_ordinal=1,
-                outcome='success',
-                error_class='none',
-                metadata=ProviderResponseMetadata(
-                    usage=image_usage(
-                        count=_int_request_value(request_body, 'n', default=1),
-                        size=_string_request_value(request_body, 'size', default='auto'),
-                        quality=_string_request_value(request_body, 'quality', default='auto'),
-                    )
-                ),
-            )
-        schedule_attempt_trace(context, trace)
-        return JSONResponse(status_code=response.status_code, content=body)
+            error_class = f'provider_http_{upstream_status}'
+        return result
     except (httpx.HTTPError, ValueError):
-        trace.record(
-            provider='openai',
-            configured_model=_string_request_value(request_body, 'model', default='unknown'),
-            route_artifact_id=None,
-            fallback_reason=None,
-            retry_ordinal=1,
-            outcome='error',
-            error_class='transport_or_invalid_response',
-            usage_status=UsageStatus.INDETERMINATE,
-        )
-        schedule_attempt_trace(context, trace)
+        error_class = 'transport_or_invalid_response'
         return JSONResponse(
             status_code=502,
             content={'error': {'message': 'provider request failed', 'type': 'api_error'}},
         )
+    except asyncio.CancelledError:
+        error_class = 'cancelled'
+        raise
+    finally:
+        outcome = 'success' if error_class == 'none' else 'error'
+        try:
+            observe_image_generation(
+                started_at,
+                request_id=request_id,
+                model=model,
+                outcome=outcome,
+                error_class=error_class,
+                upstream_http_status=upstream_status,
+                rejection_body=rejection_body,
+            )
+        except Exception:
+            report_observation_failure(api_surface=context.api_surface, request_id=request_id)
+        trace = AttemptTrace()
+        trace.record(
+            provider='openai',
+            configured_model=model,
+            route_artifact_id=None,
+            fallback_reason=None,
+            retry_ordinal=1,
+            outcome=outcome,
+            error_class=error_class,
+            usage_status=UsageStatus.INDETERMINATE if metadata is None else None,
+            metadata=metadata,
+        )
+        schedule_attempt_trace(context, trace)
 
 
 def _get_image_generation_client() -> httpx.AsyncClient:

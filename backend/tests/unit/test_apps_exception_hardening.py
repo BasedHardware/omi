@@ -21,6 +21,7 @@ install_auto_mock_modules(
     ]
 )
 
+import httpx
 import pytest
 from fastapi import HTTPException
 from fastapi.responses import HTMLResponse
@@ -86,6 +87,50 @@ async def test_generate_app_icon_endpoint_does_not_leak_exception():
         assert exc_info.value.status_code == 500
         assert exc_info.value.detail == "Failed to generate icon"
         assert SENSITIVE_TRACE not in str(exc_info.value.detail)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'gateway_status,expected_status', [(200, 200), (400, 500), (500, 500), (502, 503), (503, 503), (None, 503)]
+)
+async def test_generate_app_icon_maps_gateway_response(monkeypatch, gateway_status, expected_status):
+    monkeypatch.setenv('OMI_LLM_GATEWAY_SERVICE_TOKEN', 'synthetic-service-token')
+
+    def gateway_response(request):
+        assert request.url.path == '/v1/images/generations'
+        assert request.headers['Authorization'] == 'Bearer synthetic-service-token'
+        assert request.headers['X-Omi-Service-Caller'] == 'backend'
+        if gateway_status is None:
+            raise httpx.ReadTimeout(SENSITIVE_TRACE, request=request)
+        return httpx.Response(
+            gateway_status,
+            json=(
+                {'data': [{'b64_json': 'aWNvbg=='}]}
+                if gateway_status == 200
+                else {'error': {'message': SENSITIVE_TRACE}}
+            ),
+        )
+
+    request = GenerateAppIconRequest(name='Test App', description='Synthetic app description', category='other')
+    gateway_client = httpx.Client(transport=httpx.MockTransport(gateway_response))
+    with (
+        patch('utils.llm.gateway_client.httpx.Client', return_value=gateway_client),
+        patch('routers.apps.generated_compute_configured', return_value=False),
+        patch('routers.apps.enforce_chat_quota'),
+    ):
+        if expected_status == 200:
+            result = await generate_app_icon_endpoint(request, uid='test-user', x_app_platform='ios')
+            assert result == {'status': 'ok', 'icon_base64': 'aWNvbg==', 'mime_type': 'image/png'}
+        else:
+            with pytest.raises(HTTPException) as exc_info:
+                await generate_app_icon_endpoint(request, uid='test-user', x_app_platform='ios')
+            assert exc_info.value.status_code == expected_status
+            expected_detail = (
+                {'code': 'icon_generation_unavailable', 'retryable': True}
+                if expected_status == 503
+                else 'Failed to generate icon'
+            )
+            assert exc_info.value.detail == expected_detail
 
 
 @pytest.mark.asyncio
