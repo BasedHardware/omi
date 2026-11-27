@@ -19,6 +19,8 @@ abstract final class ReliabilityFlags {
     'receipt_long_poll': _ReceiptLongPoll.enabledFlag,
     'receipt_finished_note': _ReceiptFinishedNote.enabledFlag,
     'vendor_recognizer_on_opened_app': _VendorRecognizerOnOpenedApp.enabledFlag,
+    'no_live_player': _NoLivePlayer.enabledFlag,
+    'title_at_end': _TitleAtEnd.enabledFlag,
   };
 
   /// The cached answer for [name]; never throws and never waits. False before the account's
@@ -65,4 +67,12 @@ abstract final class _ReceiptFinishedNote {
 
 abstract final class _VendorRecognizerOnOpenedApp {
   static const enabledFlag = 'vendor_recognizer_on_opened_app';
+}
+
+abstract final class _NoLivePlayer {
+  static const enabledFlag = 'no_live_player';
+}
+
+abstract final class _TitleAtEnd {
+  static const enabledFlag = 'title_at_end';
 }
