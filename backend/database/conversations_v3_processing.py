@@ -3,7 +3,7 @@
 from database import conversations_v3_leases as leases
 from database.conversations_v3_fence import permits_native_source, wake_repairs
 from utils.conversations.v3.live import FINISH_STAMP_FIELD, FINISH_WINDOW_FIELD, finish_stamp_sample
-from utils.conversations.v3 import finish_timeline, metrics
+from utils.conversations.v3 import metrics
 
 import hashlib
 import json
@@ -22,6 +22,7 @@ from models.finalization_owner import python_owns_finalization
 from utils.conversations.v3 import Conflict, policy
 from utils.conversations import summary_delivery, terminal_settled
 from utils.conversations.summary_delivery import present
+from utils.conversations.v3 import finish_timeline
 from utils.conversations.fragment_visibility import is_relevance_discarded
 from utils.encryption import encrypt, decrypt
 
@@ -393,13 +394,13 @@ def settle_processing(
             )
             kind = row.get('kind') if row.get('kind') in metrics.MANUAL_END_KINDS else 'other'
             manual_visibility = ('visible' if visible else 'hidden', kind)
+            if visible:
+                shown_ended.append(row)
             # The response target of a live-window Finish first shows as a finished Home card here, once per row
             # (v3_manual_end_home_counted). A stamp older than FINISH_STAMP_MAX_AGE is dropped, not observed.
             sample = finish_stamp_sample(row.get(FINISH_STAMP_FIELD), datetime.now(timezone.utc)) if visible else None
             if sample is not None:
                 finish_latency.append(sample)
-            if visible:
-                shown_ended.append(row)
         tx.update(
             ref,
             {

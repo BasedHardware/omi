@@ -449,9 +449,9 @@ async def _manual_finish_admitted(
     then does that pass store the cut. Never raises and never delays admission's result.
     """
     from config.server_batch import manual_end_marker_enabled
+    from utils.conversations.v3 import finish_timeline
     from database import conversations as conversations_db, conversations_v3
     from utils.conversations.v3 import fast_finish, metrics as v3_metrics, triggers as v3_triggers
-    from utils.conversations.v3 import finish_timeline
     from utils.conversations.v3.policy import NATIVE_MANUAL_STOP
 
     # One end-to-end budget for the pass, from here: slot wait and every provider request count.
