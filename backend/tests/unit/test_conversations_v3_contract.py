@@ -466,6 +466,28 @@ def test_runtime_resolver_reports_unknown_holdout_membership(monkeypatch):
     assert runtime._in_rollout_cohort('synthetic', 'conversations-v3-holdout') is True
 
 
+def test_unbound_resolver_reports_unknown_holdout_membership(monkeypatch):
+    from config import rollout_cohorts as policy
+
+    monkeypatch.setattr(policy, '_membership_resolver', None)
+    with pytest.raises(policy.RolloutCohortUnavailable):
+        policy.in_rollout_cohort('synthetic', policy.V3_HOLDOUT_COHORT)
+    # Other unbound cohorts keep reading as a plain miss.
+    assert policy.in_rollout_cohort('synthetic', 'conversations-v3') is False
+
+
+def test_unbound_resolver_admits_holdout_with_fallback(monkeypatch):
+    from config import rollout_cohorts as policy
+
+    fallbacks = []
+    monkeypatch.delenv('CONVERSATIONS_V3_HOLDOUT', raising=False)
+    monkeypatch.setattr(policy, '_membership_resolver', None)
+    monkeypatch.setattr(switch, 'in_rollout_cohort', policy.in_rollout_cohort)
+    monkeypatch.setattr(switch, 'record_fallback', lambda **kw: fallbacks.append(kw))
+    assert switch.v3_intake_held_out('synthetic') is False
+    assert [(f['from_mode'], f['reason']) for f in fallbacks] == [('v3_holdout', 'unavailable')]
+
+
 def test_rollout_cohort_script_accepts_holdout_cohort(tmp_path, capsys):
     from scripts import rollout_cohort
 
