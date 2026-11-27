@@ -62,6 +62,10 @@ def assert_retryable(mapped: HTTPException) -> None:
     assert mapped.headers['Retry-After'] == '2'
 
 
+def retryable_response_metric_total() -> float:
+    return sum(child._value.get() for child in RETRYABLE_PROCESSING_RESPONSES_TOTAL._metrics.values())
+
+
 # ---------------------------------------------------------------------------
 # The boundary adapter
 # ---------------------------------------------------------------------------
@@ -201,10 +205,7 @@ async def test_backfill_route_re_raises_an_already_typed_answer(monkeypatch):
     monkeypatch.setenv('CONVERSATIONS_V3_BACKFILL', 'on')
     typed = HTTPException(status_code=503, detail=RETRYABLE_CONVERSATION_PROCESSING_ERROR_DETAIL)
     typed.__cause__ = provider_502()
-    metric = RETRYABLE_PROCESSING_RESPONSES_TOTAL.labels(
-        failure_class='provider_status', route='conversations_v3_backfill'
-    )
-    before = metric._value.get()
+    before = retryable_response_metric_total()
     monkeypatch.setattr(backfill, 'run_step', AsyncMock(side_effect=typed))
     body = route.BackfillRequest(uid='u', run_id='run-1', partition=0)
 
@@ -212,7 +213,20 @@ async def test_backfill_route_re_raises_an_already_typed_answer(monkeypatch):
         await route.run_backfill(body, _retry=0)
 
     assert raised.value is typed
-    assert metric._value.get() == before
+    assert retryable_response_metric_total() == before
+
+
+@pytest.mark.asyncio
+async def test_backfill_route_does_not_override_a_typed_non_retryable_answer(monkeypatch):
+    monkeypatch.setenv('CONVERSATIONS_V3_BACKFILL', 'on')
+    typed = HTTPException(status_code=500, detail='deliberate')
+    monkeypatch.setattr(backfill, 'run_step', AsyncMock(side_effect=typed))
+    body = route.BackfillRequest(uid='u', run_id='run-1', partition=0)
+
+    with pytest.raises(HTTPException) as raised:
+        await route.run_backfill(body, _retry=0)
+
+    assert raised.value is typed
 
 
 @pytest.mark.asyncio
