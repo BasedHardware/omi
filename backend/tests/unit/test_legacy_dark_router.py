@@ -43,55 +43,17 @@ async def _upload(module, BytesIO):
 @pytest.mark.asyncio
 @pytest.mark.parametrize('mode', [DRAINING, DARK])
 async def test_router_never_creates_a_legacy_job_outside_on(monkeypatch, mode):
-    from unittest.mock import AsyncMock, MagicMock
+    from unittest.mock import MagicMock
 
     module, saved, jobs, BytesIO = _router()
     try:
         monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: mode)
         monkeypatch.setattr(legacy_dark, 'read_ledger_row', lambda uid, content_id: None)
         module.create_sync_job = MagicMock()
-        module.accept_batch_upload = AsyncMock(return_value=None)  # batch declines: the fence answers
         response = await _upload(module, BytesIO)
         assert response.status_code == 409
         assert json.loads(response.body)['code'] == 'sync_content_retry_later'
         module.create_sync_job.assert_not_called()
-    finally:
-        _restore(saved)
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize('mode', [DRAINING, DARK])
-async def test_router_offers_batch_when_its_policy_reads_off_outside_on(monkeypatch, mode):
-    """SCA-2965: with legacy admission closed, batch is the only lane. An upload whose batch
-    policy reads off (a cold-start percent of 0) is offered to batch intake, not 409-looped."""
-    from unittest.mock import AsyncMock, MagicMock
-
-    from fastapi.responses import JSONResponse
-
-    module, saved, jobs, BytesIO = _router()
-    try:
-        monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: mode)
-        module.create_sync_job = MagicMock()
-        module.accept_batch_upload = AsyncMock(return_value=JSONResponse(status_code=202, content={'status': 'queued'}))
-        response = await _upload(module, BytesIO)
-        assert response.status_code == 202
-        module.accept_batch_upload.assert_awaited_once()
-        module.create_sync_job.assert_not_called()
-    finally:
-        _restore(saved)
-
-
-@pytest.mark.asyncio
-async def test_router_does_not_offer_batch_off_policy_uploads_at_on(monkeypatch):
-    from unittest.mock import AsyncMock
-
-    module, saved, jobs, BytesIO = _router()
-    try:
-        monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: ON)
-        module.accept_batch_upload = AsyncMock(return_value=None)
-        response = await _upload(module, BytesIO)
-        assert response.status_code == 202
-        module.accept_batch_upload.assert_not_awaited()
     finally:
         _restore(saved)
 
@@ -102,9 +64,6 @@ async def test_router_acknowledges_completed_legacy_content_in_dark(monkeypatch)
 
     module, saved, jobs, BytesIO = _router()
     try:
-        from unittest.mock import AsyncMock as _AsyncMock
-
-        module.accept_batch_upload = _AsyncMock(return_value=None)  # batch defers to the fence
         monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: DARK)
         row = {'status': 'completed', 'result': COMPLETED, 'job_id': 'legacy-job'}
         monkeypatch.setattr(legacy_dark, 'read_ledger_row', lambda uid, content_id: row)
@@ -183,9 +142,6 @@ async def test_router_reads_the_legacy_mode_off_the_event_loop(monkeypatch):
         return await passthrough(executor, fn, *args, **kwargs)
 
     try:
-        from unittest.mock import AsyncMock as _AsyncMock
-
-        module.accept_batch_upload = _AsyncMock(return_value=None)  # batch defers to the fence
         monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: DARK)
         monkeypatch.setattr(legacy_dark, 'read_ledger_row', lambda uid, content_id: None)
         module.run_blocking = recording_run_blocking

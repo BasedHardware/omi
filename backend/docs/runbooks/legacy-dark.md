@@ -1,6 +1,6 @@
 # Legacy dark: retiring legacy sync without a deploy
 
-Contract (h) of the legacy-retire swarm. Code: `utils/sync/legacy_dark.py`. Switch: `rollout_cohorts/_ramp.envs.<env>.legacy_sync`, scoped by the same entry's `percents.legacy-sync`, read through `utils.rollout.runtime_percent.legacy_sync_mode(uid)` (30s TTL, mode fails safe to `on` on read errors).
+Contract (h) of the legacy-retire swarm. Code: `utils/sync/legacy_dark.py`. Switch: `rollout_cohorts/_ramp.envs.<env>.legacy_sync`, scoped by the same entry's `percents.legacy-sync`, read through `utils.rollout.runtime_percent.legacy_sync_mode(uid)` (30s TTL; a read error keeps the last-known-good mode, and only a process that has never read the document serves `on`).
 
 ## Containment-only changes to retiring code
 
@@ -14,10 +14,11 @@ says so in its PR body and names the replacement path that carries the real fix.
 ## Cohort retirement
 
 `legacy-sync` is a percent from 0 to 100 using the deployed batch admission
-hash and bucket. Owners outside it retain `on`. Missing scope, invalid owners,
-pending reads and read errors retain `on`. The shared cache still serves
-last-known-good admission percents, but legacy retirement waits for a successful
-read before resuming. Mode and percent always come from one snapshot. No per-owner identifiers are
+hash and bucket. Owners outside it retain `on`. Missing scope, invalid owners
+and a process with no successful read yet (pending, or a failed first read)
+retain `on`. A read error after a successful read keeps the last-known-good mode
+and percents, like every other admission percent (SCA-2965: serving `on` there
+re-created a few hundred legacy jobs a week after legacy went dark). Mode and percent always come from one snapshot. No per-owner identifiers are
 stored in the control document. An ownerless sweep stops only at explicit 100%;
 partial sweeps check each owner before claims, repair or dispatch, and
 rotate dark entries by deferring scan deadlines so other owners progress. Accepted
@@ -71,7 +72,7 @@ Process Now, ladder debit and the full dark soak, are unchanged.
 | `draining` | no new legacy job: `admit_or_legacy` admits batch, recent unbound fresh promotion is disabled, intake never falls back to legacy (BYOK and unsupported languages go to `provider_stt`) | dispatches only already-accepted `sync_backfill_pending` entries; registers no new owner | running legacy tasks finish; `sr-` rows on the old binding drain |
 | `dark` | as `draining` | sweep and wake return 200 `legacy_dark` without claiming or dispatching; the sweep still runs enrichment repair (`reprocess.sweep`) and `summary_debt_repair.tick` until C4 moves them to `enrichment-maintenance` (lead ruling 10-19) | none (entry precondition) |
 
-Any failure to read the mode serves `on`. During the soak the legacy image, queues and scheduler job are untouched, so `on` is always the safe direction.
+A process that has never read the mode serves `on`; a later read error keeps the last-known-good mode. Writing `on` to `_ramp` is the rollback while the legacy image and queues exist. The sequencer Scheduler job is no longer declared in `jobs.yaml` or reconciled by the deploy (SCA-2965); see "Retiring the sequencer Scheduler job" below.
 
 ## Preconditions
 
@@ -208,6 +209,34 @@ Any FAIL read fails the window (`SOAK_WINDOW_FAIL`, exit 1; `data_loss` when it 
 3. Merge the deletion PRs in order C6, C9, C10, C11. Run the train, approve the index run, and verify the release identity (`OMI_BACKEND_RELEASE_SHA` and the absence of the deleted routes).
 4. Delete the queues, the `sync-backfill-uid-sequencer` job and the `backend-sync-backfill` service (lead, scripted).
 5. Lane 13 books the saving from billing once billed instance-hours fall.
+
+### Retiring the sequencer Scheduler job
+
+Since SCA-2965 the job is absent from `backend/deploy/scheduler/jobs.yaml` and the
+`sync-backfill-lifecycle` action neither reconciles it nor provisions its alerts.
+`scheduler_reconcile.py` never deletes, so after that change is serving, Release
+deletes the job in both projects and disables its three alert policies in the same
+step. Until then, full `scheduler_reconcile.py --check` runs report the job as
+`UNLISTED` drift.
+
+```bash
+source ~/.local/bin/gcp-agent-env.sh prod-operator
+gcloud scheduler jobs delete sync-backfill-uid-sequencer --project based-hardware --location us-central1 --quiet
+gcloud scheduler jobs delete sync-backfill-uid-sequencer --project based-hardware-dev --location us-central1 --quiet   # dev copy is PAUSED
+for NAME in 'Sync backfill UID sequencer stalled' \
+            'Sync backfill UID sequencer Scheduler execution failed' \
+            'Sync backfill UID sequencer Scheduler heartbeat missing'; do
+  for POLICY in $(gcloud monitoring policies list --project based-hardware --filter="displayName=\"$NAME\"" --format='value(name)'); do
+    gcloud monitoring policies update "$POLICY" --project based-hardware --no-enabled
+  done
+done
+gcloud scheduler jobs describe sync-backfill-uid-sequencer --project based-hardware --location us-central1   # expect NOT_FOUND
+```
+
+The heartbeat policy is a 10-minute absence condition, so it pages once the job
+stops unless it is disabled with the job. Rollback: recreate the job from the
+previous tree's `jobs.yaml` with `scheduler_reconcile.py --apply --jobs
+sync-backfill-uid-sequencer`, and re-enable the policies with `--enabled`.
 
 **Rollback after deletion:** redeploy the previous image, then
 
