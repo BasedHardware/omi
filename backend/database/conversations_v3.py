@@ -617,6 +617,15 @@ def _charge_locked_attempt(client, uid, now=None):
                 'event=v3_locked_closure_charge outcome=failed exception_type=%s', type(error).__name__
             )
         )
+        # The shared fallback telemetry (backend/AGENTS.md): the pass loads with the origin bound. No uid or tag.
+        record_fallback(
+            component='conversations_v3',
+            from_mode='locked_closure_allowance',
+            to_mode='origin_bound',
+            reason='unavailable',
+            outcome='degraded',
+            log=logger,
+        )
         return False
     if not charged:
         metrics.safe_metric(lambda: logger.info('event=v3_locked_closure_charge outcome=refused'))

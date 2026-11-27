@@ -840,6 +840,9 @@ def test_park_with_indexed_unlocked_windows_spends_the_paging_attempt(strict):
 # rows. One long recording owned up to ~1,000 locked 8-second windows left by the old moving cap cut.
 
 
+CHARGE = store._charge_locked_attempt
+
+
 def allowance(monkeypatch, rows, nbytes=1 << 30, owners='*', counted=True):
     """List the owner and stand in for the attempt charge (its own tests use a transactional client)."""
     monkeypatch.setenv('CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS', owners)
@@ -1218,12 +1221,43 @@ def test_an_attempt_is_charged_only_under_a_held_builder_lease(strict):
 @pytest.mark.parametrize('error', [FirestoreContentionExhausted('lease contention'), RuntimeError('unavailable')])
 def test_an_unwritable_charge_fails_closed_to_the_origin_bound(strict, monkeypatch, error):
     builder_lease(strict)
+    fallbacks = []
 
     def fail(*a, **kw):
         raise error
 
     monkeypatch.setattr(store, 'run_preloaded_transaction_with_contention_retry', fail)
+    monkeypatch.setattr(store, 'record_fallback', lambda **kw: fallbacks.append(kw))
     assert store._charge_locked_attempt(strict, UID) is False
+    assert fallbacks == [
+        {
+            'component': 'conversations_v3',
+            'from_mode': 'locked_closure_allowance',
+            'to_mode': 'origin_bound',
+            'reason': 'unavailable',
+            'outcome': 'degraded',
+            'log': store.logger,
+        }
+    ]
+    assert UID not in repr(fallbacks)
+
+
+def test_a_failed_charge_records_the_fallback_and_loads_with_the_original_bound(monkeypatch):
+    # Codex P1 (r4714766976): the real charge, failing in its transaction, on a listed owner's load.
+    allowance(monkeypatch, 20)
+    monkeypatch.setattr(store, '_charge_locked_attempt', CHARGE)
+    fallbacks = []
+    monkeypatch.setattr(store, 'record_fallback', lambda **kw: fallbacks.append(kw))
+
+    def fail(*a, **kw):
+        raise FirestoreContentionExhausted('lease contention')
+
+    monkeypatch.setattr(store, 'run_preloaded_transaction_with_contention_retry', fail)
+    with pytest.raises(Conflict, match='v3_derived_budget'):
+        store.load('u', firestore_client=MemoryQuery(fragmented(30)))  # past the origin bound: parks as today
+    assert len(store.load('u', firestore_client=MemoryQuery(fragmented(10)))[1]) == 10  # within it: loads as today
+    assert [(f['to_mode'], f['outcome']) for f in fallbacks] == [('origin_bound', 'degraded')] * 2
+    assert all("'u'" not in repr(f) for f in fallbacks)
 
 
 @pytest.mark.parametrize('rows', [30, 10])
