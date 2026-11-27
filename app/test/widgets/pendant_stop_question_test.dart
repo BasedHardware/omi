@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:posthog_flutter/posthog_flutter.dart' show PostHogMaskWidget;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
@@ -80,7 +81,8 @@ void main() {
       await mount(tester);
       enqueue();
       await tester.pumpAndSettle();
-      final field = find.byType(TextField);
+      final field = find.descendant(of: find.byType(PostHogMaskWidget), matching: find.byType(TextField));
+      expect(field, findsOneWidget);
       await tester.ensureVisible(field);
       await tester.enterText(field, '  My note.  ');
       await tester.pumpAndSettle();

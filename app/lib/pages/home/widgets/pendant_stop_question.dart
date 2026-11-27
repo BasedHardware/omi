@@ -3,6 +3,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:posthog_flutter/posthog_flutter.dart' show PostHogMaskWidget;
 
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/services/experiments/pendant_absence.dart';
@@ -123,13 +124,15 @@ class _QuestionBodyState extends State<_QuestionBody> {
         children: [
           for (final entry in labels.entries) ListTile(title: Text(entry.value), onTap: () => _answer(entry.key)),
           const SizedBox(height: OmiSpacing.sm),
-          TextField(
-            key: const Key('pendant-stop-note'),
-            controller: _note,
-            decoration: InputDecoration(labelText: l10n.pendantStopOptionalNote),
-            maxLines: 3,
-            minLines: 1,
-            maxLength: 500,
+          PostHogMaskWidget(
+            child: TextField(
+              key: const Key('pendant-stop-note'),
+              controller: _note,
+              decoration: InputDecoration(labelText: l10n.pendantStopOptionalNote),
+              maxLines: 3,
+              minLines: 1,
+              maxLength: 500,
+            ),
           ),
           ValueListenableBuilder(
             valueListenable: _note,
