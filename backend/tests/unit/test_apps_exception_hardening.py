@@ -66,7 +66,8 @@ async def test_generate_app_endpoint_does_not_leak_exception():
 
 
 @pytest.mark.asyncio
-async def test_generate_app_icon_endpoint_does_not_leak_exception():
+async def test_generate_app_icon_endpoint_does_not_leak_exception(monkeypatch):
+    monkeypatch.setenv('APP_ICON_GENERATION_ENABLED', 'true')
     request = GenerateAppIconRequest(
         name="FitnessBot",
         description="Tracks workouts",
@@ -94,6 +95,7 @@ async def test_generate_app_icon_endpoint_does_not_leak_exception():
     'gateway_status,expected_status', [(200, 200), (400, 500), (500, 500), (502, 503), (503, 503), (None, 503)]
 )
 async def test_generate_app_icon_maps_gateway_response(monkeypatch, gateway_status, expected_status):
+    monkeypatch.setenv('APP_ICON_GENERATION_ENABLED', 'true')
     monkeypatch.setenv('OMI_LLM_GATEWAY_SERVICE_TOKEN', 'synthetic-service-token')
 
     def gateway_response(request):
@@ -113,24 +115,48 @@ async def test_generate_app_icon_maps_gateway_response(monkeypatch, gateway_stat
 
     request = GenerateAppIconRequest(name='Test App', description='Synthetic app description', category='other')
     gateway_client = httpx.Client(transport=httpx.MockTransport(gateway_response))
-    with (
-        patch('utils.llm.gateway_client.httpx.Client', return_value=gateway_client),
-        patch('routers.apps.generated_compute_configured', return_value=False),
-        patch('routers.apps.enforce_chat_quota'),
-    ):
-        if expected_status == 200:
-            result = await generate_app_icon_endpoint(request, uid='test-user', x_app_platform='ios')
-            assert result == {'status': 'ok', 'icon_base64': 'aWNvbg==', 'mime_type': 'image/png'}
-        else:
-            with pytest.raises(HTTPException) as exc_info:
-                await generate_app_icon_endpoint(request, uid='test-user', x_app_platform='ios')
-            assert exc_info.value.status_code == expected_status
-            expected_detail = (
-                {'code': 'icon_generation_unavailable', 'retryable': True}
-                if expected_status == 503
-                else 'Failed to generate icon'
-            )
-            assert exc_info.value.detail == expected_detail
+    monkeypatch.setattr('utils.llm.gateway_client.httpx.Client', MagicMock(return_value=gateway_client))
+    monkeypatch.setattr('routers.apps.generated_compute_configured', lambda: False)
+    monkeypatch.setattr('routers.apps.enforce_chat_quota', MagicMock())
+
+    if expected_status == 200:
+        result = await generate_app_icon_endpoint(request, uid='test-user', x_app_platform='ios')
+        assert result == {'status': 'ok', 'icon_base64': 'aWNvbg==', 'mime_type': 'image/png'}
+        return
+
+    with pytest.raises(HTTPException) as exc_info:
+        await generate_app_icon_endpoint(request, uid='test-user', x_app_platform='ios')
+    assert exc_info.value.status_code == expected_status
+    expected_detail = (
+        {'code': 'icon_generation_unavailable', 'retryable': True}
+        if expected_status == 503
+        else 'Failed to generate icon'
+    )
+    assert exc_info.value.detail == expected_detail
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('switch', [None, 'false'])
+async def test_generate_app_icon_disabled_skips_provider(monkeypatch, switch):
+    if switch is None:
+        monkeypatch.delenv('APP_ICON_GENERATION_ENABLED', raising=False)
+    else:
+        monkeypatch.setenv('APP_ICON_GENERATION_ENABLED', switch)
+
+    request = GenerateAppIconRequest(name='Test App', description='Synthetic app description', category='other')
+    generate_icon = AsyncMock()
+    quota = MagicMock()
+    monkeypatch.setattr('utils.llm.app_generator.generate_app_icon', generate_icon)
+    monkeypatch.setattr('routers.apps.generated_compute_configured', lambda: False)
+    monkeypatch.setattr('routers.apps.enforce_chat_quota', quota)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await generate_app_icon_endpoint(request, uid='test-user', x_app_platform='ios')
+
+    quota.assert_called_once_with('test-user', platform='ios')
+    generate_icon.assert_not_called()
+    assert exc_info.value.status_code == 424
+    assert exc_info.value.detail == {'code': 'icon_generation_disabled', 'retryable': False}
 
 
 @pytest.mark.asyncio

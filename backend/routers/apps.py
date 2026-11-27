@@ -23,6 +23,7 @@ from fastapi import APIRouter, Body, Depends, Form, UploadFile, File, HTTPExcept
 from fastapi.responses import HTMLResponse
 
 from config import play_billing as play_billing_config
+from config.refactor_modes import default_off
 
 from langchain_core.messages import SystemMessage, HumanMessage
 from utils.apps import _clamp_review_score, fetch_app_chat_tools_from_manifest
@@ -1754,15 +1755,11 @@ async def generate_app_icon_endpoint(
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
 ):
     """
-    Generate an app icon using AI.
+    Generate an app icon using AI (DALL-E).
     Returns the icon as a base64 encoded PNG image.
     """
     if generated_compute_configured():
         await run_blocking(db_executor, require_generated_compute, uid, 'app_generator', allow_byok=False)
-    from utils.llm.app_generator import generate_app_icon
-    from utils.llm.gateway_client import ImageGatewayUnavailableError
-    import base64
-
     # User-initiated LLM generation — same free-tier gate as chat (402 past cap).
     await run_blocking(db_executor, enforce_chat_quota, uid, platform=x_app_platform)
 
@@ -1775,6 +1772,17 @@ async def generate_app_icon_endpoint(
 
     if not app_description:
         raise HTTPException(status_code=422, detail='App description is required')
+
+    # The provider retired the only image model in the gateway rate card.
+    if not default_off('APP_ICON_GENERATION_ENABLED'):
+        raise HTTPException(
+            status_code=424,
+            detail={'code': 'icon_generation_disabled', 'retryable': False},
+        )
+
+    from utils.llm.app_generator import generate_app_icon
+    from utils.llm.gateway_client import ImageGatewayUnavailableError
+    import base64
 
     try:
         with track_usage(uid, Features.APP_GENERATOR):
