@@ -1731,7 +1731,7 @@ void main() {
         expect(find.textContaining('0.5'), findsOneWidget);
 
         // Refreshing the same displayed offer does not discard the confirmed tap.
-        setBacklog('waiting_choice', hours: 0.5);
+        setBacklog('waiting_choice', hours: 0.501);
         await tester.pump();
         await tester.tap(confirm);
         await settleDetailTab(tester);

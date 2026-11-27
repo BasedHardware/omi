@@ -14,12 +14,8 @@ import 'package:omi/utils/l10n_extensions.dart';
 class ProcessingBacklogChoiceCard extends StatelessWidget {
   const ProcessingBacklogChoiceCard({super.key});
 
-  String _percent(BuildContext context, ProcessingBacklog backlog) =>
-      (NumberFormat.decimalPattern(Localizations.localeOf(context).toLanguageTag())..maximumFractionDigits = 0)
-          .format(backlog.estimatedPercent.round());
-
-  (double, double, bool) _estimate(ProcessingBacklog backlog) =>
-      (backlog.estimatedHours, backlog.estimatedPercent, backlog.exceedsRemaining);
+  NumberFormat _percentFormat(BuildContext context) =>
+      NumberFormat.decimalPattern(Localizations.localeOf(context).toLanguageTag())..maximumFractionDigits = 0;
 
   void _openConfirmation(BuildContext context) {
     if (!context.mounted) return;
@@ -37,16 +33,23 @@ class ProcessingBacklogChoiceCard extends StatelessWidget {
     final l10n = context.l10n;
     final hours = NumberFormat.decimalPattern(Localizations.localeOf(context).toLanguageTag())
       ..maximumFractionDigits = 1;
+    final percent = _percentFormat(context);
+    ({String hours, String percent, bool exceedsRemaining}) displayEstimate(ProcessingBacklog backlog) => (
+          hours: hours.format(backlog.estimatedHours),
+          percent: percent.format(backlog.estimatedPercent.round()),
+          exceedsRemaining: backlog.exceedsRemaining,
+        );
 
     while (!usage.isProcessingBacklog) {
       final backlog = usage.subscription?.processingBacklog;
       if (backlog == null || !backlog.isWaitingChoice) return;
+      final estimate = displayEstimate(backlog);
       final confirmed = await showOmiConfirm(
         context,
         title: l10n.processingAction,
         message: [
-          l10n.processingEstimate(hours.format(backlog.estimatedHours), _percent(context, backlog)),
-          if (backlog.exceedsRemaining) l10n.processingNewestFirst,
+          l10n.processingEstimate(estimate.hours, estimate.percent),
+          if (estimate.exceedsRemaining) l10n.processingNewestFirst,
         ].join('\n\n'),
         confirmLabel: l10n.processingAction,
         cancelLabel: l10n.paywallNotNow,
@@ -58,7 +61,7 @@ class ProcessingBacklogChoiceCard extends StatelessWidget {
       }
       final latest = usage.subscription?.processingBacklog;
       if (latest == null || !latest.isWaitingChoice) return;
-      if (_estimate(latest) == _estimate(backlog)) break;
+      if (displayEstimate(latest) == estimate) break;
     }
     if (usage.isProcessingBacklog) return;
     final success = await usage.processBacklog();
@@ -86,7 +89,7 @@ class ProcessingBacklogChoiceCard extends StatelessWidget {
       return const SizedBox.shrink();
     }
     final l10n = context.l10n;
-    final percent = _percent(context, backlog);
+    final percent = _percentFormat(context).format(backlog.estimatedPercent.round());
     return Padding(
       padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.sm, OmiSpacing.md, 0),
       child: DecoratedBox(
