@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:omi/services/wals/live_wal_receipt.dart';
 import 'package:omi/services/wals/recording_inventory.dart';
 import 'package:omi/utils/off_ui_isolate.dart';
 
@@ -92,6 +93,19 @@ void main() {
       expect((await File(entry.key).stat()).modified, entry.value.$2);
     }
     expect((await dir.list().toList()).length, before.length);
+  });
+  test('receipt sidecars fence references without appearing in exported index sources', () async {
+    final receiptDirectory = LiveWalReceipt.directory(dir);
+    await receiptDirectory.create();
+    final id = List.filled(32, 'a').join();
+    await File('${receiptDirectory.path}/audio_device_wr${id}_1.bin.json').writeAsString('{}');
+
+    final result = await captureRecordingInventory(documents: dir.path, phoneSeconds: now, memoryBuckets: {});
+
+    final indexFiles = result['index_files'] as List;
+    expect(indexFiles.where((item) => (item as Map)['kind'] == 'live_receipt'), isEmpty);
+    expect((result['buckets'] as Map).containsKey('live_receipt'), isFalse);
+    expect(result['receipt_scan_errors'], 1);
   });
   test('quarantine, legacy preferences and malformed indexes stay read-only and explicitly incomplete', () async {
     await file('audio_private-legacy.bin', [9]);

@@ -1519,6 +1519,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         }
         final file = File(filePath);
         if (writeId != null) _liveWalWrites.add(fileName);
+        var directorySyncFailureReported = false;
         try {
           String? digest;
           if (writeId != null) {
@@ -1529,8 +1530,12 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
             await file.create(exclusive: true);
             try {
               digest = await LiveWalReceipt.prepare(file, wal, writeId, data);
-            } catch (_) {
+            } catch (error) {
               _emitLiveWalReceipt(WalWriteReceiptResult.publishFailed);
+              if (error is LiveWalDirectorySyncException) {
+                _emitLiveWalReceipt(WalWriteReceiptResult.directorySyncFailed);
+                directorySyncFailureReported = true;
+              }
               // The exclusively reserved managed name and owner-stamped index
               // row preserve custody when the sidecar channel is unavailable.
               // Never overwrite audio protected by a sidecar left from an
@@ -1541,8 +1546,16 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
                 // survived cleanup, remove this empty exclusive reservation
                 // before leaving the WAL in memory for a later retry.
                 try {
-                  if (await file.length() == 0) await file.delete();
-                } catch (_) {}
+                  if (await file.length() == 0) {
+                    await file.delete();
+                    await LiveWalReceipt.syncAudioParentDirectory(file);
+                  }
+                } catch (cleanupError) {
+                  if (cleanupError is LiveWalDirectorySyncException && !directorySyncFailureReported) {
+                    _emitLiveWalReceipt(WalWriteReceiptResult.directorySyncFailed);
+                    directorySyncFailureReported = true;
+                  }
+                }
                 rethrow;
               }
               await LiveWalReceipt.writeReceiptlessAudio(file, data);
@@ -1568,6 +1581,10 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
                     await LiveWalReceipt.retireIncompleteAudioWrite(file, binding);
                   }
                 } catch (recoveryError) {
+                  if (recoveryError is LiveWalDirectorySyncException && !directorySyncFailureReported) {
+                    _emitLiveWalReceipt(WalWriteReceiptResult.directorySyncFailed);
+                    directorySyncFailureReported = true;
+                  }
                   Logger.debug('LocalWalSync: failed audio write cleanup deferred for ${wal.id}: $recoveryError');
                 }
               }
@@ -1583,6 +1600,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
             LiveWalReceipt.rememberWriterProof(wal, fileName, data.length, (id: writeId, owner: owner, digest: digest));
           }
         } catch (e) {
+          if (e is LiveWalDirectorySyncException && !directorySyncFailureReported) {
+            _emitLiveWalReceipt(WalWriteReceiptResult.directorySyncFailed);
+          }
           Logger.debug('LocalWalSync: flush write failed for ${wal.id}: $e');
           _releaseAdmission(data.length);
           if (_isPendantWal(wal)) _pendantBlockedByStorage = true;

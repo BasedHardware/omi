@@ -18,6 +18,15 @@ typedef LiveWalBinding = ({String id, String owner, String digest});
 typedef LiveWalIndexEntry = ({LiveWalBinding binding, Object row});
 typedef LiveWalReceiptPurgeResult = ({int removed, bool referenceScanIncomplete});
 
+class LiveWalDirectorySyncException extends FileSystemException {
+  LiveWalDirectorySyncException(this.cause, {required this.circuitOpened}) : super('live WAL directory sync failed');
+  final Object cause;
+  final bool circuitOpened;
+
+  @override
+  String toString() => 'LiveWalDirectorySyncException(circuitOpened: $circuitOpened, cause: $cause)';
+}
+
 class LiveWalPurgeSnapshot {
   LiveWalPurgeSnapshot(this.basenames, this.revision, this.documentsPath);
   Set<String> basenames;
@@ -39,6 +48,9 @@ typedef LiveWalReplay = ({List<Wal> rows, Map<LiveWalWithheld, int> withheld, bo
 
 class LiveWalReceipt {
   static const MethodChannel _durabilityChannel = MethodChannel('com.omi/live_wal_receipt_durability');
+  static const _directorySyncFailureLimit = 3;
+  static int _consecutiveDirectorySyncFailures = 0;
+  static bool _directorySyncBypassed = false;
   static Future<void> Function(Directory directory)? syncDirectoryForTesting;
   static const directoryName = '.wal-live-receipts';
   static const writeEnabled = !bool.fromEnvironment('OMI_LIVE_WAL_RECEIPT_OFF');
@@ -107,9 +119,28 @@ class LiveWalReceipt {
   static File _receipt(Directory documents, String name) => File(path.join(directory(documents).path, name + _pending));
 
   static Future<void> _syncDirectory(Directory directory) async {
-    final override = syncDirectoryForTesting;
-    if (override != null) return override(directory);
-    await _durabilityChannel.invokeMethod<void>('syncDirectory', {'path': directory.path});
+    if (_directorySyncBypassed) return;
+    try {
+      final override = syncDirectoryForTesting;
+      if (override != null) {
+        await override(directory);
+      } else {
+        await _durabilityChannel.invokeMethod<void>('syncDirectory', {'path': directory.path});
+      }
+      _consecutiveDirectorySyncFailures = 0;
+    } catch (error, stackTrace) {
+      _consecutiveDirectorySyncFailures++;
+      final circuitOpened = _consecutiveDirectorySyncFailures >= _directorySyncFailureLimit;
+      if (circuitOpened) _directorySyncBypassed = true;
+      Error.throwWithStackTrace(LiveWalDirectorySyncException(error, circuitOpened: circuitOpened), stackTrace);
+    }
+  }
+
+  static bool get directorySyncBypassedForTesting => _directorySyncBypassed;
+
+  static void resetDirectorySyncCircuitForTesting() {
+    _consecutiveDirectorySyncFailures = 0;
+    _directorySyncBypassed = false;
   }
 
   static Future<void> _syncConfirmedDirectory(Directory directory) async {
@@ -136,10 +167,17 @@ class LiveWalReceipt {
       await writeAudio(audio, bytes);
       await syncAudioParentDirectory(audio);
     } catch (error, stackTrace) {
+      Object? cleanupError;
+      StackTrace? cleanupStackTrace;
       try {
         await discardReceiptlessAudio(audio);
-      } catch (_) {
+      } catch (failure, failureStackTrace) {
         // Keep the WAL in memory; a later recovery scan remains conservative.
+        cleanupError = failure;
+        cleanupStackTrace = failureStackTrace;
+      }
+      if (cleanupError is LiveWalDirectorySyncException) {
+        Error.throwWithStackTrace(cleanupError, cleanupStackTrace!);
       }
       Error.throwWithStackTrace(error, stackTrace);
     }

@@ -55,7 +55,8 @@
             "budget_exhausted",
             "scan_unavailable",
             "index_unavailable",
-            "publish_failed"
+            "publish_failed",
+            "directory_sync_failed"
           ]
         },
         "recovered": {

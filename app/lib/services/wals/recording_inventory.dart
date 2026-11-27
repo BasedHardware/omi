@@ -364,9 +364,9 @@ Future<RecordingOrphanCensus> captureRecordingCensus(
     details['rows'] = result.error == null && !receiptReadError ? result.rows.length : null;
     details['invalid_minimum_schema_rows'] = result.invalidRows;
     invalidRows += result.invalidRows;
-    indexFiles.add(details);
+    if (meta.kind != 'live_receipt') indexFiles.add(details);
     loaderEvents.addAll(result.loaderEvents);
-    buckets.putIfAbsent(meta.kind, () => []).addAll(result.rows);
+    if (meta.kind != 'live_receipt') buckets.putIfAbsent(meta.kind, () => []).addAll(result.rows);
     if (meta.kind == 'capture_committed') {
       final expected = 'capture_committed_${sha256.convert(utf8.encode(currentOwner))}';
       final name = path.basename(meta.filePath).replaceFirst(RegExp(r'\.tmp$'), '');

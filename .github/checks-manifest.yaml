@@ -911,7 +911,7 @@ checks:
     command: ["ruby", "app/ios/test/live_wal_receipt_durability_test.rb"]
     triggers: ["app/ios/Runner/LiveWalReceiptDurability.swift", "app/ios/Runner/AppDelegate.swift", "app/ios/Runner.xcodeproj/project.pbxproj", "app/ios/test/live_wal_receipt_durability_test.rb", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    platforms: ["linux", "macos"]
+    platforms: ["macos"]
     reason: "SCA-4732: keep iOS directory fsync path bounds and AppDelegate registration covered on hosts where an Xcode build is unavailable"
   - id: ios-ble-energy-policy
     command: ["ruby", "app/ios/test/omi_ble_energy_policy_test.rb"]

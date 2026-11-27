@@ -34,7 +34,8 @@ enum WalWriteReceiptResult {
   budgetExhausted("budget_exhausted"),
   scanUnavailable("scan_unavailable"),
   indexUnavailable("index_unavailable"),
-  publishFailed("publish_failed");
+  publishFailed("publish_failed"),
+  directorySyncFailed("directory_sync_failed");
   const WalWriteReceiptResult(this.wireName);
   final String wireName;
 }

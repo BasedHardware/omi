@@ -122,7 +122,13 @@ def validate(doc, root=ROOT, prior=None):
                 # Execute, not substring-match: positive signal and wrong cohort/build negatives.
                 with sqlite3.connect(':memory:') as db:
                     db.execute('CREATE TABLE events(event TEXT, app_namespace TEXT, build_number TEXT, receipt_scan_truncated TEXT, census_complete TEXT)')
-                    db.executemany('INSERT INTO events VALUES (?, ?, ?, ?, ?)', [(event['wire_name'], 'mobile-test', '1', 'false', 'true'), (event['wire_name'], 'desktop-test', '1', 'false', 'true'), (event['wire_name'], 'mobile-test', '2', 'false', 'true'), ('unrelated', 'mobile-test', '1', 'false', 'true')])
+                    fixtures = [(event['wire_name'], 'mobile-test', '1', 'false', 'true'), (event['wire_name'], 'desktop-test', '1', 'false', 'true'), (event['wire_name'], 'mobile-test', '2', 'false', 'true'), ('unrelated', 'mobile-test', '1', 'false', 'true')]
+                    if consumer == 'orphan-audio-receiptless':
+                        fixtures.extend([
+                            (event['wire_name'], 'mobile-test', '1', 'true', 'true'),
+                            (event['wire_name'], 'mobile-test', '1', 'false', 'false'),
+                        ])
+                    db.executemany('INSERT INTO events VALUES (?, ?, ?, ?, ?)', fixtures)
                     rows = db.execute(query, {'app_namespace': 'mobile-test', 'build_number': '1'}).fetchall()
                     if rows != [(event['wire_name'], 1)]:
                         raise ValueError('query must select the event only in the specified namespace/build')

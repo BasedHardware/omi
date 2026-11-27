@@ -325,9 +325,14 @@ or reclaim. The directory scan examines at most 128 ordinary entries, skips
 Unscanned managed names remain receiptless. Unexpected or invalid sidecar
 entries are diagnostic and do not invalidate unrelated census results; a sidecar
 reserves its basename only after validation and an unchanged-file check.
-Receipt publication flushes the audio file and syncs the documents directory
-before indexing a receiptless fallback. If that barrier fails, the WAL stays in
-memory. Native directory sync runs off the UI thread. When pending receipts
+Receipt publication syncs its containing directories before audio bytes are
+written; every audio file is flushed before index admission, and receiptless
+audio also syncs the documents directory. A failed barrier leaves that WAL in
+memory and emits `WAL Write Receipt` with `directory_sync_failed`. After three
+consecutive native directory-sync failures, the process bypasses further
+directory barriers until restart so file persistence can recover; the event
+records that durability has degraded. Native directory sync runs off the UI
+thread. When pending receipts
 exist, deleted-account cleanup captures persisted main, backup, temporary and
 quarantine index references before account-purge index rewrites, then reuses
 that snapshot after WAL readiness. It reads at most 128 receipt entries per

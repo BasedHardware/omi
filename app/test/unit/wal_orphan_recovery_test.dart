@@ -86,6 +86,7 @@ void main() {
     SharedPreferences.setMockInitialValues({'uid': 'owner-a'});
     await SharedPreferencesUtil.init();
     SyncRateLimiter.instance.clear();
+    LiveWalReceipt.resetDirectorySyncCircuitForTesting();
     LiveWalReceipt.syncDirectoryForTesting = (_) async {};
     dir = await Directory.systemTemp.createTemp('orphan-recovery-');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -97,6 +98,7 @@ void main() {
   });
   tearDown(() async {
     LiveWalReceipt.syncDirectoryForTesting = null;
+    LiveWalReceipt.resetDirectorySyncCircuitForTesting();
     LiveWalReceipt.writeReceiptForTesting = null;
     LiveWalReceipt.writeAudioForTesting = null;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -390,7 +392,8 @@ void main() {
       Future<void> Function(List<Wal>)? persist,
       List<Map<String, Object?>>? events,
       Future<bool> Function()? reclaimOff,
-      void Function(Map<String, Object?>)? onReclaim}) async {
+      void Function(Map<String, Object?>)? onReclaim,
+      void Function(WalWriteReceipt)? receiptTelemetry}) async {
     final sync = LocalWalSyncImpl(_Listener(),
         now: clock ?? () => DateTime.fromMillisecondsSinceEpoch(now * 1000),
         uploadGate: gate,
@@ -403,6 +406,7 @@ void main() {
       events?.add(v);
       onEvent?.call(v);
     },
+        liveWalReceiptTelemetry: receiptTelemetry,
         deltaIndexAllowed: realPersistence ? () async => true : null,
         persistWals: realPersistence
             ? null
@@ -421,10 +425,10 @@ void main() {
 
   final receiptFrames = List.generate(50, (i) => [i]);
 
-  Future<void> captureReceiptAudio(LocalWalSyncImpl sync) async {
+  Future<void> captureReceiptAudio(LocalWalSyncImpl sync, {String sessionId = 'receipt-session'}) async {
     await sync.onAudioCodecChanged(BleAudioCodec.opusFS320);
     sync.setDeviceInfo('pendant', 'Omi DevKit');
-    sync.setActiveRecordingSessionId('receipt-session');
+    sync.setActiveRecordingSessionId(sessionId);
     for (final payload in receiptFrames) {
       sync.onFrameCaptured(WalFrame(payload: payload, syncKey: FrameSyncKey([payload.single, 0, 0])),
           captureRoot: 'receipt-capture');
@@ -608,6 +612,34 @@ void main() {
     expect(LiveWalReceipt.directory(dir).listSync().whereType<File>(), isEmpty);
   }, skip: LiveWalReceipt.writeEnabled ? false : 'Receipt writer is disabled by dart-define');
 
+  test('repeated directory sync failures emit telemetry and bypass the barrier until restart', () async {
+    var currentSeconds = now;
+    LiveWalReceipt.syncDirectoryForTesting = (_) async {
+      throw const FileSystemException('injected persistent directory sync failure');
+    };
+    final events = <WalWriteReceipt>[];
+    final writer = await ledger(
+      realCensus: true,
+      clock: () => DateTime.fromMillisecondsSinceEpoch(currentSeconds * 1000),
+      receiptTelemetry: events.add,
+    );
+    await captureReceiptAudio(writer);
+    await writer.finalizeCurrentSession();
+
+    final held = writer.testWals.singleWhere((wal) => wal.recordingSessionId == 'receipt-session');
+    expect(held.storage, WalStorage.mem);
+    expect(events.any((event) => event.result == WalWriteReceiptResult.directorySyncFailed), isTrue);
+    expect(LiveWalReceipt.directorySyncBypassedForTesting, isTrue);
+
+    currentSeconds += 60;
+    await captureReceiptAudio(writer, sessionId: 'retry-session');
+    await writer.finalizeCurrentSession();
+
+    expect(writer.testWals.where((wal) => wal.storage == WalStorage.mem), isEmpty);
+    expect(writer.testWals.any((wal) => wal.recordingSessionId == 'retry-session' && wal.storage == WalStorage.disk),
+        isTrue);
+  }, skip: LiveWalReceipt.writeEnabled ? false : 'Receipt writer is disabled by dart-define');
+
   test('partial audio write retires its published receipt durably and keeps the WAL in memory', () async {
     final synced = <String>[];
     LiveWalReceipt.syncDirectoryForTesting = (directory) async => synced.add(directory.path);
@@ -684,7 +716,12 @@ void main() {
       await file.writeAsString(body, flush: true);
     };
     var syncs = 0;
+    final audioParentSyncs = <String>[];
     LiveWalReceipt.syncDirectoryForTesting = (directory) async {
+      if (directory.path == dir.path) {
+        audioParentSyncs.add(directory.path);
+        return;
+      }
       if (directory.path != receiptDirectory.path) return;
       syncs++;
       if (syncs == 2) throw const FileSystemException('injected post-rename sync failure');
@@ -706,6 +743,8 @@ void main() {
     final reservedAudio =
         File('${dir.path}/${sidecar.uri.pathSegments.last.substring(0, sidecar.uri.pathSegments.last.length - 5)}');
     expect(await reservedAudio.exists(), isFalse);
+    expect(audioParentSyncs, hasLength(3),
+        reason: 'receipt-directory creation, audio reservation, and reservation deletion are synced');
   }, skip: LiveWalReceipt.writeEnabled ? false : 'Receipt writer is disabled by dart-define');
 
   for (final scenario in ['witness', 'no witness', 'new account']) {
