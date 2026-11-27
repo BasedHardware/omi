@@ -4307,6 +4307,7 @@ async def test_unbound_upload_preserves_backfill_pause_instead_of_429(monkeypatc
                 sys.modules[mod_name] = orig
 
 
+@pytest.mark.usefixtures('record_custody_not_acquired')
 @pytest.mark.asyncio
 async def test_byok_upload_enters_batch_admission_like_any_upload(monkeypatch):
     """David 10-19: no special BYOK path; the request keys are never needed by the batch stages."""

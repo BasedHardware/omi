@@ -642,6 +642,7 @@ async def test_coverage_derivatives_keep_original_early_clock_through_vad(monkey
     assert stamp - offsets[path] == 1800000000.0 - duration
 
 
+@pytest.mark.usefixtures('record_custody_not_acquired')
 def test_early_clock_does_not_forward_untrusted_client_session_bounds(client, monkeypatch):
     captured = {}
 
@@ -761,6 +762,7 @@ def test_offset_shifted_session_bounds_bind_the_live_conversation():
     )
 
 
+@pytest.mark.usefixtures('record_custody_not_acquired')
 def test_v2_route_shifts_recording_session_bounds_to_server_clock(client, monkeypatch):
     """The router applies the one offset before the bounds enter any dispatch."""
     from fastapi.responses import JSONResponse
@@ -1136,6 +1138,7 @@ def test_lineage_bound_skewed_segment_never_consults_the_closest_lookup(
 # --- fix round 2: the request offset derives from admitted data only ---
 
 
+@pytest.mark.usefixtures('record_custody_not_acquired')
 def test_v2_route_offset_ignores_inflated_claimed_end(client, monkeypatch):
     """An inflated ``audio_end_seconds`` can neither grow the offset nor the span.
 
