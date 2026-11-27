@@ -800,6 +800,7 @@ async def sync_local_files_v2(
         None, alias='X-Omi-Upload-Journal-Recovery', include_in_schema=False
     ),
     x_omi_upload_hold_age_ms: Optional[str] = Header(None, alias='X-Omi-Upload-Hold-Age-Ms', include_in_schema=False),
+    x_app_build: Optional[str] = Header(None, alias='X-App-Build', include_in_schema=False),
 ):
     """
     Async version of sync-local-files. Saves raw files and returns 202
@@ -817,7 +818,13 @@ async def sync_local_files_v2(
         upload_arrived_at = capture_received_at  # Direct/internal adapter without HTTP middleware.
     # Measurement only: how long the oldest file waited on the phone, and why.
     capture_end.observe_trace(
-        x_omi_upload_trace if isinstance(x_omi_upload_trace, str) else None, received_at=capture_received_at
+        x_omi_upload_trace if isinstance(x_omi_upload_trace, str) else None,
+        received_at=capture_received_at,
+        client_headers={
+            'x-app-platform': x_app_platform if isinstance(x_app_platform, str) else None,
+            'x-app-version': x_app_version if isinstance(x_app_version, str) else None,
+            'x-app-build': x_app_build if isinstance(x_app_build, str) else None,
+        },
     )
     try:
         files = await run_blocking(sync_executor, prepare_sync_uploads, files, uid)

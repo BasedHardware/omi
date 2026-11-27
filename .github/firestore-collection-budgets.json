@@ -31,6 +31,16 @@
   },
   "budgets": [
     {
+      "collection": "speaker_evidence_verification_runs",
+      "owner": "Backend / SCA-4873",
+      "unit": "separately authorized single-account verification exercise",
+      "reads_per_unit_budget": 128,
+      "reads_per_day_budget": 128,
+      "basis": "planning-bound",
+      "source": "backend/docs/runbooks/speaker-evidence-verification.md: one authorized exercise, up to 60 operator checks, one receipt read per matching task delivery, three reads per optimistic state transition and headroom for contention. Marker polling reads the separate deletion-marker collection. No unarmed traffic reads this collection.",
+      "reviewed": "2026-11-26"
+    },
+    {
       "collection": "pager_events",
       "owner": "SCA-2116 operations pager",
       "unit": "signed Grafana event admission",

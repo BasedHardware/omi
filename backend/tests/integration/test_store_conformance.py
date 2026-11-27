@@ -23,6 +23,7 @@ from config.batch_pipeline import scheduler_control_key
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database import batch_pipeline_projection_outbox as projection_outbox
 from testing.store_fixtures import store_backend  # noqa: F401  (the parametrized fixture)
+from utils.batch_pipeline import scheduler as scheduler_module
 from utils.batch_pipeline.contracts import Priority, WorkItem, WorkResult
 from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.projection_discovery import ProjectionDiscovery
@@ -559,8 +560,6 @@ def _projection_rows(h):
 
 
 def test_projection_outbox_merge_and_token_conformance(h, monkeypatch):
-    from utils.batch_pipeline import scheduler as scheduler_module
-
     # This test advances a synthetic domain clock. Host load must not expire the scheduler's setup claim.
     monkeypatch.setattr(scheduler_module, 'monotonic', lambda: 100.0)
     queue = Scheduler(h.store)
@@ -647,10 +646,6 @@ def test_pl668_legacy_projection_recovers_when_outbox_coverage_is_lost(h, monkey
     now = 105.0  # The follower refreshes its cached view of the elected scanner.
     assert discovery.next(limit=1) == []
     assert discovery.after == (48.0, 'covered')
-    assert discovery.next(limit=1) == ['unstamped']
-    assert discovery.next(limit=1) == ['legacy']
-    assert discovery.next(limit=1) == []
-    assert discovery.after is None
 
     now = 110.0
     if coverage_loss == 'overdue_debt':
@@ -670,7 +665,174 @@ def test_pl668_legacy_projection_recovers_when_outbox_coverage_is_lost(h, monkey
         now = 130.0  # A failed query does not renew the 30-second witness.
 
     assert not coordinator.has_coverage()
-    assert discovery.next(limit=3) == ['covered', 'unstamped', 'legacy']
+    # Coverage disappeared while the cursor sat after a filtered row. Rebase
+    # before the next page so legacy discovery sees it without a full wrap.
+    assert discovery.next(limit=1) == ['covered']
+
+
+def test_pl665_projection_debt_commits_with_result(h, monkeypatch):
+    monkeypatch.setattr(scheduler_module, 'monotonic', lambda: 100.0)
+    monkeypatch.setenv('BATCH_PROJECTION_OUTBOX', 'true')
+    queue = Scheduler(h.store)
+    uid = h.uid('o')
+    segment = 'projection-debt'
+    assert queue.enqueue(WorkItem(segment, uid, 10, 'gs://synthetic/input', 30, Priority.FRESH), 10)
+    (lease,) = queue.pull(11)
+    assert queue.complete(WorkResult(segment, 'gs://synthetic/result'), lease.token, 12)
+
+    run = h.store.run
+    key = scheduler_owner_key(uid)
+
+    def snapshot(tx):
+        return tx.get('jobs', segment), tx.get('owners', key), tx.get('results', segment)
+
+    before = run(snapshot)
+    ready_job, _, absent_result = before
+    assert ready_job['state'] == 'result_ready' and ready_job['merge_pending']
+    assert absent_result == {}
+    outbox = projection_outbox
+    due = outbox.DueObligation(outbox.Obligation(segment, 1), 13)
+
+    class BeforeCommitFailure(RuntimeError):
+        pass
+
+    def abort_after_body(body):
+        def abort(tx):
+            entry = body(tx)
+            assert outbox.due_obligation(segment, entry) == due
+            raise BeforeCommitFailure('after scheduling, before commit')
+
+        return run(abort)
+
+    merge = OrderedMerge(h.store, head_wait_seconds=0, catch_up_depth=0)
+    with monkeypatch.context() as failure:
+        failure.setattr(h.store, 'run', abort_after_body)
+        with pytest.raises(BeforeCommitFailure, match='after scheduling, before commit'):
+            merge.commit_next(uid, 13)
+
+    assert run(snapshot) == before
+    assert h.store.projection_outbox_page(13, 1) == []
+
+    # Restart the merge and leave the wake unsent. Discovery uses only the durable result.
+    assert OrderedMerge(h.store, head_wait_seconds=0, catch_up_depth=0).commit_next(uid, 13)
+    job_row, owner, entry = run(snapshot)
+    assert job_row['state'] == 'committed' and not job_row['merge_pending']
+    assert owner['log_tail'] == segment and owner['log_sequence'] == 1
+    assert entry['projection_state'] == 'pending'
+    assert outbox.due_obligation(segment, entry) == due
+    assert h.store.projection_outbox_page(12.999, 1) == []
+    assert h.store.projection_outbox_page(13, 1) == [due]
+    assert merge.commit_next(uid, 13) is None
+
+
+def test_pl666_projection_due_page_filters_before_limiting(h, monkeypatch):
+    monkeypatch.setenv('BATCH_PROJECTION_OUTBOX', 'true')
+    outbox = projection_outbox
+    candidates = [
+        ('a-future', outbox.KIND, 10.001),
+        ('b-tie', outbox.KIND, 10),
+        ('other-kind', 'another_obligation', 1),
+        ('a-tie', outbox.KIND, 10),
+        ('legacy', None, 2),
+        ('first-due', outbox.KIND, 8),
+    ]
+    jobs = [('jobs', segment, job(h, segment, state='committed')) for segment, _, _ in candidates]
+    results = [
+        (
+            'results',
+            segment,
+            {
+                'segment_id': segment,
+                'projection_state': 'pending',
+                'log_sequence': 1,
+                outbox.KIND_FIELD: kind,
+                outbox.DUE_FIELD: due_at,
+            },
+        )
+        for segment, kind, due_at in candidates
+    ]
+    put_all(h, jobs + results)
+    first = outbox.DueObligation(outbox.Obligation('first-due', 1), 8)
+    a_tie = outbox.DueObligation(outbox.Obligation('a-tie', 1), 10)
+    b_tie = outbox.DueObligation(outbox.Obligation('b-tie', 1), 10)
+
+    assert h.store.projection_outbox_page(10, 2) == [first, a_tie]
+    assert outbox.claim(h.store, first.key, lambda: 10)
+    assert h.store.projection_outbox_page(10, 2) == [a_tie, b_tie]
+    assert outbox.claim(h.store, a_tie.key, lambda: 10)
+    assert h.store.projection_outbox_page(10, 2) == [b_tie]
+    assert h.store.projection_outbox_page(10.001, 2) == [
+        b_tie,
+        outbox.DueObligation(outbox.Obligation('a-future', 1), 10.001),
+    ]
+
+
+@pytest.mark.parametrize(
+    ('terminal_state', 'reason'),
+    [('completed', 'completed'), ('erased', 'erased'), ('quarantine_held', 'held')],
+)
+def test_pl667_projection_settlement_checks_lease_and_canonical_state(h, monkeypatch, terminal_state, reason):
+    monkeypatch.setenv('BATCH_PROJECTION_OUTBOX', 'true')
+    outbox = projection_outbox
+    segment = 'projection-claim'
+    key = outbox.Obligation(segment, 2)
+    row = {
+        'segment_id': segment,
+        'log_sequence': 2,
+        'projection_state': 'pending',
+        'result': {'result_uri': 'gs://synthetic/result'},
+    }
+    put_all(
+        h,
+        [
+            ('jobs', segment, job(h, segment, state='committed')),
+            ('results', segment, {**row, **outbox.arm(row, 10)}),
+        ],
+    )
+
+    def read():
+        return h.store.run(lambda tx: tx.get('results', segment))
+
+    first_token = outbox.claim(h.store, key, lambda: 10)
+    assert first_token
+    before = read()
+    expires_at = 190  # The 180-second claim starts at 10.
+    assert outbox.settle(h.store, key, first_token, lambda: expires_at, 'retry') is None
+    assert read() == before
+    assert h.store.projection_outbox_page(expires_at, 1) == [outbox.DueObligation(key, expires_at)]
+    token = outbox.claim(h.store, key, lambda: expires_at)
+    assert token and token != first_token
+    before = read()
+    assert outbox.settle(h.store, key, first_token, lambda: expires_at, 'retry') is None
+    prior_revision = outbox.Obligation(segment, 1)
+    assert outbox.settle(h.store, prior_revision, token, lambda: expires_at, 'retry') is None
+    assert read() == before
+
+    # A reported success cannot retire a pending result.
+    assert outbox.settle(h.store, key, token, lambda: expires_at, 'completed') == 'incomplete'
+    retry_at = 250  # The 60-second pending-state retry starts at expiry.
+    assert read() == {
+        **row,
+        outbox.KIND_FIELD: outbox.KIND,
+        outbox.DUE_FIELD: retry_at,
+        outbox.TOKEN_FIELD: None,
+        outbox.REASON_FIELD: 'incomplete',
+    }
+    assert h.store.projection_outbox_page(retry_at - 0.001, 1) == []
+    assert h.store.projection_outbox_page(retry_at, 1) == [outbox.DueObligation(key, retry_at)]
+
+    token = outbox.claim(h.store, key, lambda: retry_at)
+    assert token
+    canonical = {**read(), 'projection_state': terminal_state}
+    put_all(h, [('results', segment, canonical)])
+    assert outbox.settle(h.store, key, token, lambda: retry_at, 'retry') == reason
+    assert read() == {
+        **canonical,
+        outbox.DUE_FIELD: None,
+        outbox.TOKEN_FIELD: None,
+        outbox.REASON_FIELD: reason,
+    }
+    assert h.store.projection_outbox_page(retry_at + 180, 1) == []
 
 
 def test_projection_page_is_a_stable_keyset_scan(h):

@@ -2,7 +2,7 @@
 
 from database import conversations_v3_leases as leases
 from database.conversations_v3_fence import permits_native_source, wake_repairs
-from utils.conversations.v3.live import FINISH_WINDOW_FIELD
+from utils.conversations.v3.live import FINISH_STAMP_FIELD, FINISH_WINDOW_FIELD, finish_stamp_sample
 from utils.conversations.v3 import finish_home_sli, metrics
 
 import hashlib
@@ -215,7 +215,7 @@ def store_summary(uid, cid, token, revision, structured, covers, *, live_input=N
         snapshot = ref.get(transaction=tx)
         deletion = account_deletion_document(uid, firestore_client=client).get(transaction=tx)
         if account_deletion_marker_blocks_access(
-            marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('status')
+            marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('wipe_status')
         ):
             raise Conflict('account_deletion')
         lease = held.get(transaction=tx).to_dict() or {}
@@ -345,12 +345,15 @@ def settle_processing(
     ref = store.user_conversations(client, uid).document(cid)
     held = leases.lease_ref(client, uid, 'summary-' + cid)
     eligible = []
+    # The committed attempt's Finish-to-visible sample; each attempt of the transaction body resets it.
+    finish_latency: list = []
 
     repairs = []
 
     @firestore.transactional
     def settle(tx):
         eligible.clear()
+        finish_latency.clear()
         repairs.clear()
         snapshot = ref.get(transaction=tx)
         row = snapshot.to_dict() or {}
@@ -407,6 +410,11 @@ def settle_processing(
             )
             kind = row.get('kind') if row.get('kind') in metrics.MANUAL_END_KINDS else 'other'
             manual_visibility = ('visible' if visible else 'hidden', kind)
+            # The response target of a live-window Finish first shows as a finished Home card here, once per row
+            # (v3_manual_end_home_counted). A stamp older than FINISH_STAMP_MAX_AGE is dropped, not observed.
+            sample = finish_stamp_sample(row.get(FINISH_STAMP_FIELD), datetime.now(timezone.utc)) if visible else None
+            if sample is not None:
+                finish_latency.append(sample)
         update = {
             'v3_process_pending': False,
             'v3_process_attempts': 0,
@@ -460,6 +468,8 @@ def settle_processing(
         metrics.safe_metric(lambda: metrics.MANUAL_END_HOME.labels(*manual_visibility).inc())
     if finish_settled:
         metrics.safe_metric(lambda: metrics.FINISH_NO_POINTER.labels('settled').inc())
+    for path, seconds in finish_latency:
+        metrics.safe_metric(lambda: metrics.FINISH_TO_VISIBLE.labels(path).observe(seconds))
     if settled and word_floor_outcomes is not None:
         metrics.safe_metric(lambda: metrics.observe_word_floor(*word_floor_outcomes))
     _observe_eligible(uid, cid, eligible)

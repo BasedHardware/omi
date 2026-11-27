@@ -109,6 +109,24 @@ transaction rechecks its live state and persists the cut or deferred batch
 request on its recording. A multi-unit batch request can cut only after the full
 native binding has projected. Set the switch to `off` on the API service to restore the lookup-miss 404.
 
+`CONVERSATIONS_V3_FINISH_NEWER_CAPTURE` defaults to `on`. When that Finish resolves to a live
+window, the same transaction reads at most `RECENT_FINISH_LIMIT` (8) recent sources. The newest sealed
+Listen capture that ended after the window's `finished_at`, is not one of its sources, carries
+`has_content`, is unclaimed and passes the recording-Finish checks is the newer capture. If its speech
+has landed, it takes the recording-scoped cut instead of the window tail and the response names it. If
+it is a server-batch capture whose speech has not landed (it may hold only silence), the transaction
+stores the window-tail cut and the capture's recording-scoped request together (two writes, both ledger
+reads first) and the response names the window. An exact tie, a capture already known empty, or one the
+cut declines keeps the window-tail cut. A retry never cuts the tail twice; a finished capture that can
+no longer answer leaves the tail cut rather than a 404. These outcomes count as `newer_*` (and
+`newer_dual_*`) in `omi_conversations_v3_finish_no_pointer_total`. A newer capture that was selected but
+declined the cut counts in `omi_conversations_v3_finish_newer_declined_total{reason}`, and the tail cut that
+answers counts as the tail's outcome. Each live-window Finish stamps its response target (the card the
+answer names; only the window tail in the stored-both case), and that card's first visible manual-end
+settlement observes `omi_conversations_v3_finish_to_visible_seconds{path=tail|newer|newer_dual}` once;
+a stamp older than 2 hours is dropped. Set it to `off` on the API service to restore the window-tail cut
+and skip the read.
+
 `CONVERSATIONS_V3_FAST_FINISH` defaults to `cohort` (the `v3-fast-finish` rollout cohort, empty
 until a member is added). For a member, or for every v3 owner with `on`, a manually
 finished v3 recording of up to 20 minutes is transcribed once through the prerecorded provider
@@ -7972,9 +7990,13 @@ Setting the repair flag to false stops only that scan.
 A lease-admitted finalizer processes its own completed server minimum before
 finishing its job, using the same summary gate and existing retry/fanout fences.
 It still skips a completed row that already contains a summary or is excluded
-by the repair safety policy. `finalization_status=queued` on a conversation is
-an admission projection, not current job state: inspect its durable job and
-actual output presence before diagnosing missing summaries.
+by the repair safety policy. The server-batch capture handoff settles the
+conversation's `finalization_status` with its bound job in the same transaction.
+Home still shows transcription in progress using the independent wait stamp.
+An authoritative discard also settles a queued conversation projection without
+changing the job receipt or retained audio. A later verified speech or full
+silence projection can settle a historical queued capture handoff. Inspect its
+durable job and actual output before diagnosing missing summaries.
 
 The 120-second budget is dispatch, not model completion.
 With the same master flag on, both sync and finalization enrichment adapters

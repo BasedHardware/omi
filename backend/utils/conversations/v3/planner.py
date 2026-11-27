@@ -1,7 +1,7 @@
 """Boundary and late-speech policy for derived conversations."""
 
 from config.conversations_v3 import transcript_size_cap_enabled
-from utils.conversations.v3.live import FINISH_RECORDING_FIELD, FINISH_WINDOW_FIELD
+from utils.conversations.v3.live import FINISH_RECORDING_FIELD, FINISH_STAMP_FIELD, FINISH_WINDOW_FIELD
 from utils.conversations.v3 import policy, visibility
 from utils.conversations.v3.outline import SILENCE, playback_origin, sitdown as is_sitdown
 from utils.conversations.v3.word_floor import text_word_count
@@ -633,19 +633,27 @@ def build(uid, window, recordings, existing=None, *, allocated=None, manual_end_
         dict.fromkeys([*(existing or {}).get('v3_recording_ids', []), *row['v3_recording_ids']])
     )
     tail_recording = recordings[lines[-1]['conversation_id']]
-    if manual_end and (
-        (
-            window.get('manual_end')
+    # The recordings whose Finish cut this row: a recording-scoped cut on its tail, or a cut naming this window.
+    finish_sources = [
+        *(
+            [tail_recording]
+            if window.get('manual_end')
             and tail_recording.get(FINISH_RECORDING_FIELD)
             and tail_recording.get('v3_manual_end')
-        )
-        or prior.get(FINISH_WINDOW_FIELD) == cid
-        or any(
-            recordings.get(rid, {}).get(FINISH_WINDOW_FIELD) == cid and recordings.get(rid, {}).get('v3_manual_end')
+            else []
+        ),
+        *(
+            recordings[rid]
             for rid in row['v3_recording_ids']
-        )
-    ):
+            if recordings.get(rid, {}).get(FINISH_WINDOW_FIELD) == cid and recordings[rid].get('v3_manual_end')
+        ),
+    ]
+    if manual_end and (finish_sources or prior.get(FINISH_WINDOW_FIELD) == cid):
         row[FINISH_WINDOW_FIELD] = cid
+        # The Finish stamp follows the cut to the card that shows it, once: a row keeps the first stamp it got.
+        stamps = [source[FINISH_STAMP_FIELD] for source in finish_sources if source.get(FINISH_STAMP_FIELD)]
+        if stamps and not row.get(FINISH_STAMP_FIELD):
+            row[FINISH_STAMP_FIELD] = stamps[0]
     row['_v3_claims'] = claims
     if retained or window.get('_held_provisional'):
         for rid in row['v3_recording_ids']:

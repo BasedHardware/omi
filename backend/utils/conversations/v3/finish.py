@@ -4,7 +4,11 @@ import logging
 from datetime import datetime, timezone
 from typing import Callable
 
-from config.conversations_v3 import conversations_v3_enabled, finish_no_pointer_enabled
+from config.conversations_v3 import (
+    conversations_v3_enabled,
+    finish_newer_capture_enabled,
+    finish_no_pointer_enabled,
+)
 from database import conversations_v3_live
 from models.conversation import CreateConversationResponse
 from models.conversation_enums import ConversationStatus
@@ -41,12 +45,16 @@ def finish_live_window(
         return None
 
     now = datetime.now(timezone.utc)
+    # A holdout named_only Finish answers for the named window alone, so it never redirects to a newer capture.
+    newer_capture = finish_newer_capture_enabled() and not named_only
     if window_id:
         window = conversations_v3_live.live_window_by_id(uid, window_id, now=now)
         if window is not None:
-            outcome, recording_id = conversations_v3_live.request_finish(uid, window['id'], now=now)
+            outcome, recording_id, capture = conversations_v3_live.request_finish(
+                uid, window['id'], now=now, newer_capture=newer_capture
+            )
             if outcome != 'no_live_window':
-                return _acknowledge(uid, window, outcome, recording_id, observe_recording)
+                return _acknowledge(uid, capture or window, outcome, recording_id, observe_recording)
         if named_only:
             named_outcome, named, recording_id = conversations_v3_live.request_named_finish(
                 uid, window_id, now=now, strict=True
@@ -77,8 +85,11 @@ def finish_live_window(
             logger.info('v3 named Finish found nothing; single-capture fallback outcome=%s', outcome)
             outcome = named_outcome
         return _acknowledge(uid, recording, outcome, recording['id'] if recording else '', observe_recording)
-    outcome, recording_id = conversations_v3_live.request_finish(uid, window['id'], now=now)
-    return _acknowledge(uid, window, outcome, recording_id, observe_recording)
+    # A capture that sealed after the window's last speech takes the cut, and the answer names it.
+    outcome, recording_id, capture = conversations_v3_live.request_finish(
+        uid, window['id'], now=now, newer_capture=newer_capture
+    )
+    return _acknowledge(uid, capture or window, outcome, recording_id, observe_recording)
 
 
 def _recovered(from_mode):
@@ -117,8 +128,14 @@ def _acknowledge(uid, window, outcome, recording_id, observe_recording=None):
     metrics.FINISH_NO_POINTER.labels(outcome).inc()
     if not recording_id:
         return None
+    # The SLI binds the recording the answer names, the same response target that carries the
+    # v3_finish_requested stamp: the newer capture on ``newer_*``, the window tail on ``newer_dual_*`` (the
+    # capture's request rides along unstamped and unbound) and on ``tail`` or a declined newer capture.
     if observe_recording is not None and deliberate_finish(outcome):
         observe_recording(recording_id)
+    # A Finish that found a newer capture is counted apart (``newer_*``; ``newer_dual_*`` when the window tail
+    # was cut and the capture requested too) and answered like the path that stored it.
+    outcome = outcome.removeprefix('newer_').removeprefix('dual_')
     if outcome in {'cut', 'consumed', 'recording_cut', 'named_recording_cut'}:
         triggers.enqueue_pending(uid, manual_end_id=recording_id)
     conversation = deserialize_conversation(window)

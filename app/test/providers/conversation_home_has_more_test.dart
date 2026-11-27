@@ -80,6 +80,47 @@ void main() {
     expect(provider.hasMoreConversations, isFalse);
   });
 
+  test('an empty truncated page keeps its offset for an explicit retry', () async {
+    final requests = <Uri>[];
+    var page = 0;
+    final api = ConversationApi(
+        baseUrl: 'http://127.0.0.1:1/',
+        send: (request) async {
+          requests.add(Uri.parse(request.url));
+          page++;
+          if (page == 1) {
+            return http.Response(jsonEncode([for (var i = 0; i < 50; i++) row(i).toJson()]), 200,
+                headers: {'x-omi-conversation-page-size': '50', 'x-omi-has-more': 'true'});
+          }
+          if (page == 2) {
+            return http.Response('[]', 200, headers: {
+              'x-omi-conversation-page-size': '0',
+              'x-omi-has-more': 'true',
+              'x-omi-list-truncated': 'true',
+            });
+          }
+          return http.Response(jsonEncode([row(50).toJson()]), 200,
+              headers: {'x-omi-conversation-page-size': '1', 'x-omi-has-more': 'false'});
+        });
+    final provider = ConversationProvider(conversationApi: api, isSignedIn: () => true);
+    addTearDown(provider.dispose);
+
+    expect(await provider.fetchConversations(), isTrue);
+    expect(provider.conversationServerOffset, 50);
+    expect(await provider.getMoreConversationsFromServer(), isFalse);
+    expect(provider.loadMoreFailed, isTrue);
+    expect(provider.hasMoreConversations, isTrue);
+    expect(provider.conversationServerOffset, 50);
+    expect(requests.map((request) => request.queryParameters['offset']), ['0', '50']);
+
+    // The failure footer retries only after an explicit action, at the unchanged offset.
+    expect(await provider.getMoreConversationsFromServer(), isTrue);
+    expect(provider.loadMoreFailed, isFalse);
+    expect(requests.last.queryParameters['offset'], '50');
+    expect(provider.conversationServerOffset, 51);
+    expect(provider.hasMoreConversations, isFalse);
+  });
+
   test('an older server without the headers keeps the full-page rule and sends no cursor', () async {
     final requests = <Uri>[];
     final api = ConversationApi(

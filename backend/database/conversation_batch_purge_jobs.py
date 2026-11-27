@@ -292,6 +292,7 @@ def finish_run(
     now: datetime | None = None,
     firestore_client: Any = None,
     collection: str = COLLECTION,
+    erased_audio_source_ids: list[str] | None = None,
 ) -> bool:
     """Record the owning run's outcome; only ``completed`` removes the obligation. False if not owner."""
     if outcome not in {'completed', 'held', 'failed', 'checkpointed', 'busy', 'artifact_pending'}:
@@ -324,10 +325,14 @@ def finish_run(
                 },
             )
             return False
+        release = {'run_token': None, 'lease_generation': None, 'lease_until': None, 'last_outcome': outcome}
         if outcome == 'completed':
+            if erased_audio_source_ids is not None and (row.get('audio_source_ids') or []) != erased_audio_source_ids:
+                # A late hold recorded more merge donors after this run claimed the job.
+                transaction.update(ref, {**release, 'due_at': current, 'last_outcome': 'rearmed'})
+                return False
             transaction.delete(ref)
             return True
-        release = {'run_token': None, 'lease_generation': None, 'lease_until': None, 'last_outcome': outcome}
         if outcome == 'checkpointed':
             # Progress was made: hand off at once and restart the lost-task backoff.
             transaction.update(ref, {**release, 'due_at': current, 'attempts': 0})
@@ -581,9 +586,18 @@ def run_erasure_job(
     if claim != 'run' or row is None or token is None:
         return claim
     uid, conversation_id = str(row['uid']), str(row['conversation_id'])
+    audio_source_ids = row.get('audio_source_ids') or []
 
-    def finish(outcome: str) -> bool:
-        return finish_run(job, generation, token, outcome, firestore_client=client, collection=ERASURE_COLLECTION)
+    def finish(outcome: str, *, erased_audio_source_ids: list[str] | None = None) -> bool:
+        return finish_run(
+            job,
+            generation,
+            token,
+            outcome,
+            firestore_client=client,
+            collection=ERASURE_COLLECTION,
+            erased_audio_source_ids=erased_audio_source_ids,
+        )
 
     try:
         tombstone = client.collection('users').document(uid).collection(TOMBSTONES).document(conversation_id)
@@ -592,7 +606,7 @@ def run_erasure_job(
             return 'no_tombstone' if finish('completed') else 'superseded'
         assert_account_deletion_permitted(uid)
         try:
-            erase(uid, conversation_id, [str(source) for source in row.get('audio_source_ids') or []])
+            erase(uid, conversation_id, [str(source) for source in audio_source_ids])
         except LegalHoldActive:
             raise
         except Exception as error:
@@ -611,7 +625,7 @@ def run_erasure_job(
         except Exception:
             pass  # The lease expires; the original failure is what the queue must see.
         raise
-    return 'erased' if finish('completed') else 'superseded'
+    return 'erased' if finish('completed', erased_audio_source_ids=audio_source_ids) else 'superseded'
 
 
 __all__ = [
