@@ -1494,6 +1494,7 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     transport.emitState(DeviceTransportState.connected);
     final command = await reenteredBatchMode.future.timeout(const Duration(seconds: 2));
+    await Future<void>.delayed(Duration.zero);
 
     expect(connection.isBatchMode, isTrue);
     final decoded = decodeWrapperCommand(command);
@@ -1506,6 +1507,86 @@ void main() {
         false,
       )),
     );
+  });
+
+  test('failed batch re-entry keeps the live parser and Custom Live monitor active', () async {
+    final transport = FakeDeviceTransport();
+    final connection = LimitlessDeviceConnection(
+      BtDevice(name: 'Limitless Pendant', id: 'fake-limitless', type: DeviceType.limitless, rssi: -50),
+      transport,
+      streamHealthWindow: const Duration(seconds: 5),
+      setupSettleDelay: Duration.zero,
+      reconnectSettleDelay: Duration.zero,
+    );
+    addTearDown(connection.disconnect);
+    await connection.connect();
+    var activations = 0;
+    final monitorRestored = Completer<void>();
+    connection.watchCustomLiveAudio(
+      captureIsCurrent: () => true,
+      onEnabled: () {
+        activations++;
+        if (activations == 2 && !monitorRestored.isCompleted) monitorRestored.complete();
+      },
+      report: (_) {},
+    );
+    await connection.enableBatchMode();
+    expect(connection.isBatchMode, isTrue);
+
+    final gotLiveFrame = Completer<void>();
+    final subscription = await connection.performGetBleAudioBytesListener(
+      onAudioBytesReceived: (_) {
+        if (!gotLiveFrame.isCompleted) gotLiveFrame.complete();
+      },
+    );
+    addTearDown(() => subscription?.cancel());
+    final reentryAttempted = Completer<void>();
+    transport.onWrite = (data) {
+      if (decodeWrapperCommand(data)['messageNumber'] == 8) {
+        if (!reentryAttempted.isCompleted) reentryAttempted.complete();
+        throw StateError('batch mode re-entry failed');
+      }
+    };
+
+    transport.emitState(DeviceTransportState.disconnected);
+    await Future<void>.delayed(Duration.zero);
+    transport.emitState(DeviceTransportState.connected);
+    await reentryAttempted.future.timeout(const Duration(seconds: 2));
+    await monitorRestored.future.timeout(const Duration(seconds: 2));
+
+    expect(connection.isBatchMode, isFalse, reason: 'unconfirmed mode keeps the live parser selected');
+    transport.emit(limitlessRxCharUuid, bleWrapper(10, 0, 1, realtimeAudioBytes([opusFrame(0xb8, 43, 40)])));
+    await gotLiveFrame.future.timeout(const Duration(seconds: 2));
+    expect(activations, 2, reason: 'the retained health monitor is restored after re-entry fails');
+  });
+
+  test('failed batch-mode enable clears the batch latch and restores the Custom Live monitor', () async {
+    final transport = FakeDeviceTransport();
+    final connection = LimitlessDeviceConnection(
+      BtDevice(name: 'Limitless Pendant', id: 'fake-limitless', type: DeviceType.limitless, rssi: -50),
+      transport,
+      streamHealthWindow: const Duration(seconds: 5),
+      setupSettleDelay: Duration.zero,
+    );
+    addTearDown(connection.disconnect);
+    await connection.connect();
+    var activations = 0;
+    final monitorRestored = Completer<void>();
+    connection.watchCustomLiveAudio(
+      captureIsCurrent: () => true,
+      onEnabled: () {
+        activations++;
+        if (activations == 2 && !monitorRestored.isCompleted) monitorRestored.complete();
+      },
+      report: (_) {},
+    );
+    transport.onWrite = (_) => throw StateError('batch mode enable failed');
+
+    await connection.enableBatchMode();
+    await monitorRestored.future.timeout(const Duration(seconds: 2));
+
+    expect(connection.isBatchMode, isFalse);
+    expect(activations, 2, reason: 'the retained health monitor is restored after batch mode enable fails');
   });
 
   test('a stale failed reconciliation cannot relatch batch mode after reconnect', () async {

@@ -15,6 +15,7 @@ import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/services/wals/sync_wake_scope.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
+import 'package:omi/utils/enums.dart';
 
 import '../../support/capture/capture_replay_world.dart';
 import '../../support/capture/scripted_device_connection.dart';
@@ -357,6 +358,33 @@ void main() {
     expect(connection.reactivationIsCurrent?.call(), isFalse);
   });
 
+  test('Limitless recovery watch restarts when the socket connects after an initial outage', () async {
+    await setRefactorFlags({'android-custom-live-audio-recovery-kill': false});
+    addTearDown(AnalyticsManager.resetForTesting);
+    world.controller.updateRecordingDevice(null);
+    await world.settle();
+    world.setConnected(false);
+    SharedPreferencesUtil().uid = 'capture-test-owner';
+    await SharedPreferencesUtil().saveCustomSttConfig(
+      const CustomSttConfig(provider: SttProvider.customLive, url: 'wss://local-stt.example.test'),
+    );
+    final device = BtDevice(id: 'limitless-initial-outage', name: 'Limitless', type: DeviceType.limitless, rssi: -40);
+    final connection = _WatchedLimitlessConnection();
+    world.deviceConnection = connection;
+    await world.controller.streamDeviceRecording(device: device);
+    await world.settle();
+
+    expect(world.controller.recordingState, RecordingState.deviceRecord);
+    expect(connection.reactivationIsCurrent?.call(), isFalse);
+    expect(connection.watchRestarts, isNot(contains(true)));
+
+    world.setConnected(true);
+    world.controller.onConnected();
+    await world.settle();
+
+    expect(connection.watchRestarts, contains(true));
+  });
+
   test('queued silence event cannot change ownership or run pause effects', () {
     final state = CaptureCoordinatorState.idle().copyWith(phase: CapturePhase.pendantLive);
     final transition = transitionCapture(
@@ -557,6 +585,7 @@ class _WatchedLimitlessConnection extends ScriptedDeviceConnection implements Li
   bool Function()? reactivationIsCurrent;
   int watchStarts = 0;
   int stopCalls = 0;
+  final List<bool> watchRestarts = [];
 
   @override
   bool get supportsCustomLiveRecovery => true;
@@ -572,6 +601,7 @@ class _WatchedLimitlessConnection extends ScriptedDeviceConnection implements Li
     required void Function(LimitlessRealtimeHealthOutcome) report,
     bool restart = false,
   }) {
+    watchRestarts.add(restart);
     if (this.captureIsCurrent?.call() ?? false) return;
     this.captureIsCurrent = captureIsCurrent;
     this.reactivationIsCurrent = reactivationIsCurrent;

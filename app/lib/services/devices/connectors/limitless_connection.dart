@@ -292,9 +292,9 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
   Future<void> _reinitializeAfterReconnect(int epoch) async {
     _realtimeSuppressed = realtimeSuppressionPolicy?.call() ?? _realtimeSuppressed;
-    // A drain owns the control mode across reconnects. A failed exit has no
-    // drain owner, so discard its stale latch and resume the requested mode.
-    if (_isBatchMode && !_batchDrainActive) {
+    // A reconnect leaves the pendant's control mode unknown. Keep parsing the
+    // live path until an active drain's batch-mode write is confirmed.
+    if (_batchDrainActive || _isBatchMode) {
       _isBatchMode = false;
       _batchModeEpoch = null;
     }
@@ -339,6 +339,9 @@ class LimitlessDeviceConnection extends DeviceConnection {
     } catch (e) {
       Logger.debug('Limitless: Re-initialization after reconnect failed: $e');
       DebugLogManager.logError(e, null, 'Limitless reconnect initialization failed');
+      if (_isCurrentSession(epoch) && !_isBatchMode && !_realtimeSuppressed) {
+        _armStreamHealthWatch(reason: 'reconnect_reinit_failed');
+      }
     }
   }
 

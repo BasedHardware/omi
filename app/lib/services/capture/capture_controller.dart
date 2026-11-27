@@ -67,6 +67,7 @@ import 'package:omi/services/telemetry/client_telemetry.dart';
 import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/capture_session_owner.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
+import 'package:omi/services/experiments/custom_live_audio_recovery_flag.dart';
 import 'package:omi/services/capture/capture_continuity_monitor.dart';
 import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/services/capture/capture_start_errors.dart';
@@ -2923,7 +2924,7 @@ class CaptureController extends ChangeNotifier
     unawaited(() async {
       var refreshFailed = false;
       final enabled = await AnalyticsManager().resolvedBooleanFeatureFlag(
-        'android-custom-live-audio-recovery-kill',
+        CustomLiveAudioRecoveryFlag.killSwitchFlag,
         refresh: true,
         missingIsUnresolved: true,
         onRefreshFailure: () => refreshFailed = true,
