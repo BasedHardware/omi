@@ -326,7 +326,7 @@ def request_finish(
                 stamp_path='newer',
                 stamp_request=not (tail_plan and tail_plan[1]),
             )
-            if both and outcome == 'recording_requested':
+            if tail_plan is not None and outcome == 'recording_requested':  # the stored-both case
                 tail_outcome, recording_id, patch = tail_plan
                 if recording_id:
                     if patch:
