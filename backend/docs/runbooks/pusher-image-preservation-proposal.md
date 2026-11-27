@@ -323,6 +323,15 @@ review, approval or hash field: the job resolves those itself.
   canary run and of the current run. The approver logins are recorded in the
   redacted receipt. Agents and humans share one GitHub account, so this proves
   that a prod environment approval happened, not who in particular approved.
+- Custody is unchanged by that check. The GitHub prod approval only lets the
+  jobs start. Before promote, Release still reviews the posted preview and
+  canary receipts, and David's authorization of the exact candidate must be in
+  Release custody, as stated at the top of this section. The job's approval
+  check does not replace either.
+- The qualification run's revision must already carry this revision's canary
+  inverse helper byte for byte (`INVERSE_HELPER_PATHS`). The first pilot
+  therefore needs a successful automatic qualification after this change merges;
+  a qualification from before it (for example the run at `1fe2c81a`) is refused.
 - Receipts come from those runs' artifacts and bind the candidate digest,
   source SHA, workflow revision and the target Deployment UID.
 
@@ -343,19 +352,47 @@ class, the canary's startup inputs equal the live Pusher's:
 - `runtime_config_map`: the canary's ConfigMap hash equals the hash of live
   `prod-omi-backend-config`, the same comparison the regular Helm path makes;
 - `pod_template`: every parity class in the canary inverse receipt is `equal`;
+- `dependency_versions`: every referenced Secret and ConfigMap other than the
+  runtime ConfigMap keeps the metadata identity (UID and resourceVersion) the
+  canary recorded at startup and again after its probe. A Secret rotated
+  between canary and promote refuses. Only a digest of that identity list is
+  in the receipt;
 - `live_template_since_canary`: the live Deployment UID and Pod template are
   the ones that parity measured.
 
 Only `equal`/`differs` is recorded. The job then patches only the Pusher image,
 dry-runs the exact live inverse, and checks readiness for every serving Pusher
-replica at the approved digest. If that inverse dry-run is refused, the job makes
-exactly one guarded reverse patch with fresh preconditions: it re-reads the
-Deployment and tests the same UID, the current resourceVersion, the container
-name and the candidate image. If the reverse is admitted, the job verifies the
-baseline rollout and readiness and ends `REVERSED` (the promote failed). If the
-reverse or that verification fails, it ends in `REFUSED_INVERSE` HOLD with no
-further patch. The run summary and the deploy-channel notifier carry the manual
-restore path below.
+replica at the approved digest.
+
+Once the forward write has been attempted, every failure goes through recovery;
+none ends as an ordinary refusal:
+
+- The inverse dry-run is refused, or the write, the post-write read or the
+  probe does not answer (for example a timeout). The job re-reads the
+  Deployment. If it has the same UID and the candidate image, the job makes
+  exactly one guarded reverse patch with fresh preconditions: it tests the same
+  UID, the current resourceVersion, the container name and the candidate image.
+  If the reverse is admitted, it verifies the baseline rollout and readiness and
+  ends `REVERSED` (the promote failed).
+- The state cannot be read or is not that candidate object, the reverse is
+  refused or unconfirmed, or the reverse rollout is not proven. The job ends in
+  HOLD (`REFUSED_INVERSE` after a refused inverse, otherwise
+  `UNCERTAIN_AFTER_WRITE`) with no further patch.
+- The forward rollout wait or its readiness check fails. The job holds
+  (`UNCERTAIN_AFTER_WRITE`) instead of reversing: the single rollout wait is
+  spent, and a second rollout would run past the job ceiling.
+
+The receipt records `deployment_uid_before`, `deployment_uid_observed`,
+`serving_image_observed` and `reverse_patch` (`not_attempted`,
+`rejected_on_preconditions`, `rejected`, `unconfirmed` or `succeeded`). Every
+HOLD writes the run summary and pages the deploy channel with those fields and
+the manual recovery below.
+
+Each path has at most one 160-minute rollout wait, because the post-move inverse
+is decided before the forward wait. The job ceiling is 220 minutes: the rollout
+wait, two 5-minute status reports, about 20 minutes of checks, and about 30
+minutes so the receipt, summary and page land first. It also bounds how long the
+run holds `prod-train`.
 
 ### Canary qualification run
 
@@ -371,8 +408,17 @@ Pusher, with the exact `pusher_image_digest` and
   canary's release name and isolated ConfigMap name are mapped to the live
   names first, and a catch-all class compares every field no other class names
   (for example `hostNetwork`);
+- records the metadata-only UID and resourceVersion of every Secret and
+  ConfigMap the canary references, at canary startup and again after the
+  semantic probe, and fails unless they are unchanged;
 - uploads the canary evidence, uploads the inverse receipt as its own artifact
   `pusher-prod-canary-inverse-receipt`, and removes the canary.
+
+The inverse helper and its import (`pusher_canary_inverse.py`,
+`pusher_image_rehearsal.py`) run from the immutable workflow-control revision
+that the receipt names, and the runtime checkout's copies must be byte-identical.
+Source admission binds both paths, and the automatic qualifier runs when either
+changes.
 
 It then stops before "Apply non-secret pusher runtime config": no shared
 ConfigMap apply and no Helm. A green conclusion means "canary qualified", and
@@ -380,12 +426,20 @@ the image-only promote accepts only a `canary_only` canary receipt. The inverse
 step runs only on this stop; a regular deploy can redeploy the serving image,
 where a candidate→baseline inverse does not apply.
 
-### Manual recovery after REFUSED_INVERSE
+### Manual recovery after a HOLD
 
-The job has already made its one reverse attempt, so read the serving image
-first. Run `rollout undo` only if the Deployment still reads the candidate;
-after a committed reverse, undo would move back to the candidate. If it already
-reads the pinned baseline, do not patch, and go to the rollout status and readback.
+The job may already have made its one reverse attempt; the receipt's
+`reverse_patch` says whether it was not attempted, rejected on preconditions,
+rejected, unconfirmed or succeeded. Do not run an unpinned `rollout undo`: after
+a committed reverse it would move back to the candidate. Instead:
+
+1. Confirm the Deployment UID equals the receipt's `deployment_uid_before`. If
+   it differs (`deployment_uid_observed`), the object was replaced: stop, change
+   nothing, and escalate to Release.
+2. If the pusher image already reads the pinned baseline, do not patch. Go to
+   the rollout status and readback.
+3. Otherwise find the revision whose pusher image is verified to read the pinned
+   baseline digest and restore exactly that revision with `--to-revision`.
 
 Under R44 the Pusher operator performs this restore with the prod environment
 credentials. Prerequisites: the prior production ReplicaSet is still retained
@@ -393,11 +447,15 @@ credentials. Prerequisites: the prior production ReplicaSet is still retained
 accepts the baseline object. Keep the Helm values untouched.
 
 ```sh
+kubectl -n prod-omi-backend get deployment prod-omi-pusher -o jsonpath='{.metadata.uid}{"\n"}'
 kubectl -n prod-omi-backend get deployment prod-omi-pusher \
   -o jsonpath='{.spec.template.spec.containers[?(@.name=="pusher")].image}{"\n"}'
 kubectl -n prod-omi-backend rollout history deployment/prod-omi-pusher
-# Only if the image above is the candidate:
-kubectl -n prod-omi-backend rollout undo deployment/prod-omi-pusher --to-revision=<last-admitted>
+# For a candidate revision N, verify its pusher image is the pinned baseline digest:
+kubectl -n prod-omi-backend rollout history deployment/prod-omi-pusher --revision=<N> \
+  -o jsonpath='{.spec.template.spec.containers[?(@.name=="pusher")].image}{"\n"}'
+# Only if the UID matched, the image above was not the baseline, and N verified:
+kubectl -n prod-omi-backend rollout undo deployment/prod-omi-pusher --to-revision=<N>
 kubectl -n prod-omi-backend rollout status deployment/prod-omi-pusher --timeout=9600s
 kubectl -n prod-omi-backend get deployment prod-omi-pusher \
   -o jsonpath='{.spec.template.spec.containers[?(@.name=="pusher")].image}{"\n"}'
