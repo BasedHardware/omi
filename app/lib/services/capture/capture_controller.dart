@@ -849,6 +849,7 @@ class CaptureController extends ChangeNotifier
   /// codec or resolver result cannot install transport across a same-id ABA.
   int _deviceIdentityRevision = 0;
   LimitlessDeviceConnection? _limitlessAudioConnection;
+  bool _limitlessCustomLiveSocketUnavailable = false;
 
   /// Depth of in-flight `reconnectActiveCaptureForTesting` probes. Nonzero only
   /// under explicit testing probes; while held, `updateRecordingDevice` may
@@ -2090,6 +2091,7 @@ class CaptureController extends ChangeNotifier
         return;
       }
       await conn?.onNetworkSocketReconnected();
+      _limitlessCustomLiveSocketUnavailable = false;
     }
 
     if (!_captureSessionIsCurrent(sessionToken) || _deviceIdentityStale(deviceRevision)) {
@@ -2810,9 +2812,10 @@ class CaptureController extends ChangeNotifier
   void _stopLimitlessCustomLiveWatch() {
     _limitlessAudioConnection?.stopCustomLiveAudioWatch();
     _limitlessAudioConnection = null;
+    _limitlessCustomLiveSocketUnavailable = false;
   }
 
-  void _refreshLimitlessCustomLiveWatch({bool refreshKillSwitch = true}) {
+  void _refreshLimitlessCustomLiveWatch({bool refreshKillSwitch = true, bool restartWatch = false}) {
     final connection = _limitlessAudioConnection;
     if (connection == null) return;
     final device = _recordingDevice;
@@ -2868,13 +2871,12 @@ class CaptureController extends ChangeNotifier
     }
     if (refreshKillSwitch) _refreshCustomLiveAudioKillSwitch();
     _recordingTelemetry.observeCustomLiveAudioEligibility();
-    if (AnalyticsManager.canResolveBooleanFeatureFlags &&
-        _customLiveAudioRecoveryKillSwitchEnabled == null &&
-        !_customLiveAudioRecoveryFlagUnresolvedRetriesExhausted) {
+    final recoveryGate = _customLiveAudioRecoveryGate;
+    if (recoveryGate == CustomLiveAudioRecoveryGate.pending) {
       connection.stopCustomLiveAudioWatch();
       return;
     }
-    if (_customLiveAudioRecoveryKilled) {
+    if (recoveryGate == CustomLiveAudioRecoveryGate.disabled) {
       connection.stopCustomLiveAudioWatch();
       _recordingTelemetry.observeCustomLiveAudioDetection(enabled: false);
       return;
@@ -2888,7 +2890,11 @@ class CaptureController extends ChangeNotifier
           _recordingTelemetry.observeCustomLiveAudioStall(outcome);
         }
       },
+      restart: restartWatch,
     );
+    if (_socket?.state != SocketServiceState.connected) {
+      _limitlessCustomLiveSocketUnavailable = true;
+    }
   }
 
   void _onCustomLiveAudioFlagContextChanged() {
@@ -2984,20 +2990,21 @@ class CaptureController extends ChangeNotifier
       _customLiveAudioRecoveryFlagIdentityEpoch = -1;
       if (resetFetchRetries) {
         _customLiveAudioRecoveryFlagFetchRetriesForEpoch = 0;
-        _customLiveAudioRecoveryFlagUnresolvedRetriesExhausted = false;
       }
       _refreshLimitlessCustomLiveWatch();
     });
   }
 
-  bool get _customLiveAudioRecoveryKilled {
-    return shouldDisableCustomLiveAudioRecovery(
+  CustomLiveAudioRecoveryGate get _customLiveAudioRecoveryGate {
+    return resolveCustomLiveAudioRecoveryGate(
       buildEnabled: customLiveCaptureFixEnabled,
       flagReadContextAvailable: AnalyticsManager.canResolveBooleanFeatureFlags,
       cachedKillSwitchEnabled: _customLiveAudioRecoveryKillSwitchEnabled,
       unresolvedRetryExhausted: _customLiveAudioRecoveryFlagUnresolvedRetriesExhausted,
     );
   }
+
+  bool get _customLiveAudioRecoveryKilled => _customLiveAudioRecoveryGate != CustomLiveAudioRecoveryGate.enabled;
 
   Future<void> _saveNativeBleStreamConfig(BtDevice device, BleAudioCodec codec) async {
     final audioTarget = _nativeBleAudioTarget(device);
@@ -3926,6 +3933,7 @@ class CaptureController extends ChangeNotifier
     // enable-data-stream command after its BLE audio times out).
     if (recordingState == RecordingState.deviceRecord) {
       _socketReconnectPending = true;
+      _limitlessCustomLiveSocketUnavailable = true;
       _sessionTransportInterrupted = true;
     }
 
@@ -4056,6 +4064,9 @@ class CaptureController extends ChangeNotifier
       return;
     }
     liveHeldAudio.reset();
+    if (recordingState == RecordingState.deviceRecord) {
+      _limitlessCustomLiveSocketUnavailable = true;
+    }
     _recordingTelemetry.observeSocketError();
     _transcriptionServiceStatuses = [];
     _transcriptServiceReady = false;
@@ -4083,6 +4094,13 @@ class CaptureController extends ChangeNotifier
     Object? failure;
     final stagedPhase = _capture.stagedReadModel.phase;
     final stagedLive = stagedPhase == CapturePhase.phoneLive || stagedPhase == CapturePhase.pendantLive;
+    if (stagedPhase == CapturePhase.pendantLive &&
+        recordingState == RecordingState.deviceRecord &&
+        _limitlessCustomLiveSocketUnavailable &&
+        !_socketReconnectPending) {
+      _limitlessCustomLiveSocketUnavailable = false;
+      _refreshLimitlessCustomLiveWatch(restartWatch: true);
+    }
     if (stagedLive && recordingState == RecordingState.interrupted && !_micInterrupted && !_phoneMicPaused) {
       if (_activeSource is PhoneMicSource) {
         failure = await _restartPhoneMicRecording();

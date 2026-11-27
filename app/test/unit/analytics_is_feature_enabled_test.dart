@@ -8,7 +8,13 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/utils/analytics/analytics_adapter.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 
-class _FlagAdapter implements AnalyticsAdapter, AnalyticsIdentityAdapter, AnalyticsFeatureFlagAdapter {
+class _FlagAdapter
+    implements
+        AnalyticsAdapter,
+        AnalyticsIdentityAdapter,
+        AnalyticsFeatureFlagAdapter,
+        AnalyticsBooleanFlagAdapter,
+        AnalyticsResolvedFlagAdapter {
   bool _initialized = false;
   final settles = <Completer<String>>[];
   final flagReads = <Completer<bool>>[];
@@ -52,6 +58,15 @@ class _FlagAdapter implements AnalyticsAdapter, AnalyticsIdentityAdapter, Analyt
     reloads.add(completer);
     return completer.future;
   }
+
+  @override
+  bool isBooleanFeatureEnabledCached(String key) => false;
+
+  @override
+  Future<bool> isBooleanFeatureEnabled(String key) async => false;
+
+  @override
+  Future<bool?> resolvedFeatureEnabled(String key) async => null;
 
   @override
   Future<String?> getFeatureFlagVariant(String key) {
@@ -274,5 +289,24 @@ void main() {
     await settleIdentity(adapter, 'user-b');
     adapter.reloads.last.complete(true);
     expect(await slow, isFalse, reason: "A's answer arrived after B settled");
+  });
+
+  test('a timed out resolved flag refresh is reported as a failure, not a missing flag', () async {
+    final adapter = _FlagAdapter();
+    AnalyticsManager.configure(adapter);
+    await AnalyticsManager.init();
+    await settleIdentity(adapter, 'user-a');
+    var refreshFailed = false;
+
+    final value = await AnalyticsManager().resolvedBooleanFeatureFlag(
+      'android-custom-live-audio-recovery-kill',
+      refresh: true,
+      missingIsUnresolved: true,
+      refreshTimeout: const Duration(milliseconds: 5),
+      onRefreshFailure: () => refreshFailed = true,
+    );
+
+    expect(value, isNull);
+    expect(refreshFailed, isTrue);
   });
 }

@@ -185,10 +185,13 @@ class LimitlessDeviceConnection extends DeviceConnection {
     bool Function()? reactivationIsCurrent,
     required void Function() onEnabled,
     required void Function(LimitlessRealtimeHealthOutcome) report,
+    bool restart = false,
   }) {
     // The existing binding checks the recording, capture policy and STT config.
     // Keep its timer and spent retry budget while it still owns the link.
-    if (_customLiveHealth?.isClosed != true && (_customLiveWatch?.captureIsCurrent() ?? false)) return;
+    final restartSpentEpisode = restart && (_customLiveHealth?.isRecoveryExhausted ?? false);
+    if (!restartSpentEpisode && _customLiveHealth?.isClosed != true && (_customLiveWatch?.captureIsCurrent() ?? false))
+      return;
     stopCustomLiveAudioWatch();
     // The coordinator may install the listener while the first BLE setup settles.
     bool start(int epoch) {
@@ -367,8 +370,14 @@ class LimitlessDeviceConnection extends DeviceConnection {
     // The socket outage may have exhausted the old health episode; retain the
     // capture binding but start a fresh monitor for the reinitialized stream.
     if (_isInitialized) {
+      final epoch = connectionEpoch;
       _closeCustomLiveAudioWatch();
       await _handleTransportReconnected();
+      // Reinitialization logs and swallows write failures. Restore a monitor
+      // after it returns so a failed reconnect still has a bounded retry path.
+      if (_isCurrentSession(epoch) && !_isBatchMode && !_realtimeSuppressed) {
+        _armStreamHealthWatch(reason: 'socket_reconnect_fallback');
+      }
     }
   }
 
@@ -535,22 +544,72 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
   /// Handle reassembled payload in real-time mode
   void _handleRealTimePayload(List<int> payload) {
-    // Pendant message field 2 is the stored-buffer envelope; field 4 (0x22)
-    // carries live frames. Classify before scanning either payload because
-    // arbitrary live Opus bytes can contain the flash wrapper marker 0x1a.
-    if (payload.isEmpty || payload.first != 0x12) {
+    if (!_publishAudioFramesFromPendantEnvelope(payload)) {
       final result = _extractOpusFrames(payload);
-      final extractedFrames = result[0] as List<List<int>>;
-      if (extractedFrames.isNotEmpty) {
-        _publishAudioFrames(extractedFrames, fromRealtimeStream: true);
+      final frames = result[0] as List<List<int>>;
+      if (frames.isNotEmpty) _publishAudioFrames(frames, fromRealtimeStream: true);
+    }
+  }
+
+  /// Handles protobuf fields in any order. Field 2 contains stored pages;
+  /// field 4 contains live frames. Raw frame payloads still use the fallback.
+  bool _publishAudioFramesFromPendantEnvelope(List<int> payload) {
+    var pos = 0;
+    var foundAudioField = false;
+    final storedFrames = <List<int>>[];
+    final liveFrames = <List<int>>[];
+
+    try {
+      while (pos < payload.length) {
+        final fieldStart = pos;
+        final tagResult = _decodeVarint(payload, pos);
+        final tag = tagResult[0] as int;
+        pos = tagResult[1] as int;
+        if (tag == 0 || pos <= fieldStart) return false;
+
+        final fieldNumber = tag >> 3;
+        final wireType = tag & 0x07;
+        switch (wireType) {
+          case 0:
+            final value = _decodeVarint(payload, pos);
+            if ((value[1] as int) <= pos) return false;
+            pos = value[1] as int;
+            break;
+          case 1:
+            if (pos + 8 > payload.length) return false;
+            pos += 8;
+            break;
+          case 2:
+            final lengthResult = _decodeVarint(payload, pos);
+            final length = lengthResult[0] as int;
+            final valueStart = lengthResult[1] as int;
+            if (valueStart <= pos || length < 0 || length > payload.length - valueStart) return false;
+            pos = valueStart + length;
+            if (fieldNumber == 2) {
+              foundAudioField = true;
+              storedFrames.addAll(_extractOpusFramesFromFlashPage(payload.sublist(valueStart, pos)));
+            } else if (fieldNumber == 4) {
+              foundAudioField = true;
+              final encodedLiveField = payload.sublist(fieldStart, pos);
+              liveFrames.addAll(_extractOpusFrames(encodedLiveField)[0] as List<List<int>>);
+            }
+            break;
+          case 5:
+            if (pos + 4 > payload.length) return false;
+            pos += 4;
+            break;
+          default:
+            return false;
+        }
       }
-      return;
+    } catch (_) {
+      return false;
     }
 
-    final storedFrames = _extractOpusFramesFromFlashPage(payload);
-    if (storedFrames.isNotEmpty) {
-      _publishAudioFrames(storedFrames, fromRealtimeStream: false);
-    }
+    if (!foundAudioField) return false;
+    _publishAudioFrames(storedFrames, fromRealtimeStream: false);
+    _publishAudioFrames(liveFrames, fromRealtimeStream: true);
+    return true;
   }
 
   void _publishAudioFrames(List<List<int>> frames, {required bool fromRealtimeStream}) {
@@ -597,8 +656,8 @@ class LimitlessDeviceConnection extends DeviceConnection {
     final generation = _streamHealthGeneration;
     _streamHealthTimer?.cancel();
     _streamHealthTimer = null;
-    _resetStreamActivationCounters();
     if (_customLiveHealth != null || (_customLiveWatch?.start(connectionEpoch) ?? false)) return;
+    _resetStreamActivationCounters();
     if (resetAttempts) _streamReactivationAttempts = 0;
     _streamHealthTimer = Timer(
       _streamHealthWindow,
@@ -1560,6 +1619,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
           // reconnect initialization will explicitly select real-time mode.
           _isBatchMode = false;
           _batchModeEpoch = null;
+          if (!_realtimeSuppressed) _armStreamHealthWatch(reason: 'batch_mode_disable_unreconciled');
         } else if (_batchModeEpoch == epoch) {
           _isBatchMode = false;
           _batchModeEpoch = null;

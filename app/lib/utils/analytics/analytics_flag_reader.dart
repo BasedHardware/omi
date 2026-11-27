@@ -26,7 +26,7 @@ extension AnalyticsFlagReader on AnalyticsManager {
 
   /// One fenced read per flag value: no adapter/identity, tracking off or an identity switch mid-read → null.
   Future<T?> _readFlag<T>(Future<T> Function(AnalyticsFeatureFlagAdapter adapter) read,
-      {Duration timeout = AnalyticsManager._initTimeout}) async {
+      {Duration timeout = AnalyticsManager._initTimeout, void Function()? onFailure}) async {
     final adapter = AnalyticsManager._adapter;
     if (adapter == null ||
         !adapter.isInitialized ||
@@ -46,6 +46,7 @@ extension AnalyticsFlagReader on AnalyticsManager {
       }
       return value;
     } catch (_) {
+      onFailure?.call();
       return null;
     }
   }

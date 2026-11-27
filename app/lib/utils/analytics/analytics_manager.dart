@@ -614,12 +614,19 @@ class AnalyticsManager {
     required bool refresh,
     bool missingIsUnresolved = false,
     void Function()? onRefreshFailure,
+    Duration refreshTimeout = const Duration(seconds: 5),
   }) =>
       _readFlag<bool?>((adapter) async {
         if (adapter is! AnalyticsBooleanFlagAdapter) return null;
         final boolean = adapter as AnalyticsBooleanFlagAdapter;
         if (refresh) {
-          if (await adapter.reloadFeatureFlags()) {
+          bool reloaded;
+          try {
+            reloaded = await adapter.reloadFeatureFlags().timeout(refreshTimeout);
+          } catch (_) {
+            reloaded = false;
+          }
+          if (reloaded) {
             if (missingIsUnresolved && adapter is AnalyticsResolvedFlagAdapter) {
               final resolved = await (adapter as AnalyticsResolvedFlagAdapter).resolvedFeatureEnabled(key);
               if (resolved == null) return null;
@@ -633,7 +640,7 @@ class AnalyticsManager {
           return boolean.isBooleanFeatureEnabledCached(key);
         }
         return null;
-      }, timeout: const Duration(seconds: 6));
+      }, timeout: const Duration(seconds: 6), onFailure: refresh ? onRefreshFailure : null);
 
   bool isBooleanFeatureEnabledCached(String key) {
     final adapter = _adapter;

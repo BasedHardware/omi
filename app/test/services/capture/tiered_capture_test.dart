@@ -570,6 +570,7 @@ class _WatchedLimitlessConnection extends ScriptedDeviceConnection implements Li
     bool Function()? reactivationIsCurrent,
     required void Function() onEnabled,
     required void Function(LimitlessRealtimeHealthOutcome) report,
+    bool restart = false,
   }) {
     if (this.captureIsCurrent?.call() ?? false) return;
     this.captureIsCurrent = captureIsCurrent;

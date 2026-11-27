@@ -14,6 +14,7 @@ class LimitlessRealtimeHealth {
     required this.isCurrent,
     required this.reactivate,
     required this.report,
+    this.reactivationTimeout = const Duration(seconds: 5),
     Duration Function()? elapsed,
   }) : _elapsed = elapsed ?? _monotonicClock() {
     _lastFrame = _elapsed();
@@ -24,6 +25,7 @@ class LimitlessRealtimeHealth {
   final bool Function() isCurrent;
   final Future<bool> Function() reactivate;
   final void Function(LimitlessRealtimeHealthOutcome) report;
+  final Duration reactivationTimeout;
   final Duration Function() _elapsed;
 
   Timer? _timer;
@@ -36,6 +38,7 @@ class LimitlessRealtimeHealth {
   bool _closed = false;
 
   bool get isClosed => _closed;
+  bool get isRecoveryExhausted => _attempted && _recoveryDeadline == null;
 
   static Duration Function() _monotonicClock() {
     final clock = Stopwatch()..start();
@@ -125,7 +128,7 @@ class LimitlessRealtimeHealth {
         close();
         return;
       }
-      wroteEnable = await reactivate();
+      wroteEnable = await reactivate().timeout(reactivationTimeout);
     } catch (_) {
       // Failed or skipped writes share the episode's bounded retry budget.
     } finally {

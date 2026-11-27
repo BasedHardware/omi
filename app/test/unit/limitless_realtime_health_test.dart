@@ -57,6 +57,7 @@ void main() {
           return pendingWrite.future;
         },
         report: outcomes.add,
+        reactivationTimeout: window * 3,
       );
 
       time.elapse(window);
@@ -129,6 +130,35 @@ void main() {
       expect(outcomes, [LimitlessRealtimeHealthOutcome.exhausted]);
       time.elapse(window * 5);
       expect(attempts, 2, reason: 'a failed episode is bounded instead of retrying forever');
+      monitor.close();
+    });
+  });
+
+  test('a timed out reactivation releases the in-flight guard for its bounded retry', () {
+    fakeAsync((time) {
+      var attempts = 0;
+      final outcomes = <LimitlessRealtimeHealthOutcome>[];
+      final neverCompletes = Completer<bool>();
+      final monitor = LimitlessRealtimeHealth(
+        window: window,
+        elapsed: () => time.elapsed,
+        isCurrent: () => true,
+        reactivate: () {
+          attempts++;
+          return neverCompletes.future;
+        },
+        report: outcomes.add,
+        reactivationTimeout: const Duration(seconds: 2),
+      );
+
+      time.elapse(window);
+      time.flushMicrotasks();
+      expect(attempts, 1);
+      time.elapse(window + const Duration(seconds: 2));
+      time.flushMicrotasks();
+      expect(attempts, 2, reason: 'a never completing call cannot hold the retry guard forever');
+      time.elapse(window * 2);
+      expect(outcomes, [LimitlessRealtimeHealthOutcome.exhausted]);
       monitor.close();
     });
   });

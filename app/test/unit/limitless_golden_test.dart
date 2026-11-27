@@ -1099,6 +1099,51 @@ void main() {
     expect(transport.writes.map((data) => decodeWrapperCommand(data)['messageNumber']), [6, 8]);
   });
 
+  test('real-time envelope parses reordered stored and live fields', () async {
+    final transport = FakeDeviceTransport();
+    final connection = LimitlessDeviceConnection(
+      BtDevice(name: 'Limitless Pendant', id: 'fake-limitless', type: DeviceType.limitless, rssi: -50),
+      transport,
+      streamHealthWindow: const Duration(minutes: 1),
+      setupSettleDelay: Duration.zero,
+    );
+    addTearDown(connection.disconnect);
+    final decoded = <List<int>>[];
+    final bothFrames = Completer<void>();
+    final subscription = await connection.performGetBleAudioBytesListener(
+      onAudioBytesReceived: (frame) {
+        decoded.add(frame);
+        if (decoded.length == 2 && !bothFrames.isCompleted) bothFrames.complete();
+      },
+    );
+    addTearDown(() => subscription?.cancel());
+    await connection.connect();
+
+    final storedFrame = opusFrame(0xb8, 41, 40);
+    final liveFrame = opusFrame(0xb8, 42, 40);
+    final storedMessage = pendantMessage(
+      storageBufferBytes(
+        session: 7,
+        seq: 1,
+        index: 100,
+        page: flashPageBytes(1750000000000, [
+          audioWrapper(audioBlobOfFrames([storedFrame]))
+        ]),
+      ),
+    );
+    transport.emit(
+      limitlessRxCharUuid,
+      bleWrapper(10, 0, 1, [
+        ...intField(1, 1234),
+        ...storedMessage,
+        ...realtimeAudioBytes([liveFrame])
+      ]),
+    );
+
+    await bothFrames.future.timeout(const Duration(seconds: 2));
+    expect(decoded, [storedFrame, liveFrame]);
+  });
+
   test('stored flash-page frames do not satisfy realtime health and retries probe status first', () async {
     final transport = FakeDeviceTransport();
     final connection = LimitlessDeviceConnection(
@@ -1135,14 +1180,17 @@ void main() {
         10,
         0,
         1,
-        pendantMessage(
-          storageBufferBytes(
-            session: 7,
-            seq: 1,
-            index: 100,
-            page: flashPageBytes(1750000000000, [audioWrapper(audioBlobOfFrames(frames))]),
-          ),
-        ),
+        [
+          ...intField(1, 1234),
+          ...pendantMessage(
+            storageBufferBytes(
+              session: 7,
+              seq: 1,
+              index: 100,
+              page: flashPageBytes(1750000000000, [audioWrapper(audioBlobOfFrames(frames))]),
+            ),
+          )
+        ],
       ),
     );
 
@@ -1219,6 +1267,67 @@ void main() {
     expect(outcomes, [LimitlessRealtimeHealthOutcome.exhausted]);
     expect(activations, 2, reason: 'reinitializing the BLE stream installs a fresh health episode');
     expect(transport.writes.map((data) => decodeWrapperCommand(data)['messageNumber']), [6, 8, 6, 8, 21, 8]);
+  });
+
+  test('failed socket reinitialization restores the retained Custom Live monitor', () async {
+    final transport = FakeDeviceTransport();
+    final connection = LimitlessDeviceConnection(
+      BtDevice(name: 'Limitless Pendant', id: 'fake-limitless', type: DeviceType.limitless, rssi: -50),
+      transport,
+      streamHealthWindow: const Duration(milliseconds: 80),
+      setupSettleDelay: Duration.zero,
+      reconnectSettleDelay: Duration.zero,
+    );
+    addTearDown(connection.disconnect);
+    await connection.connect();
+    var activations = 0;
+    connection.watchCustomLiveAudio(
+      captureIsCurrent: () => true,
+      onEnabled: () => activations++,
+      report: (_) {},
+    );
+    expect(activations, 1);
+
+    transport.onWrite = (_) => throw StateError('reconnect write failed');
+    await connection.onNetworkSocketReconnected();
+
+    expect(activations, 2, reason: 'a swallowed setup failure must not leave the watch closed');
+  });
+
+  test('socket connection restarts a Custom Live monitor whose retry episode was spent while connecting', () async {
+    final transport = FakeDeviceTransport();
+    const window = Duration(milliseconds: 80);
+    final connection = LimitlessDeviceConnection(
+      BtDevice(name: 'Limitless Pendant', id: 'fake-limitless', type: DeviceType.limitless, rssi: -50),
+      transport,
+      streamHealthWindow: window,
+      storageStatusTimeout: const Duration(milliseconds: 5),
+      setupSettleDelay: Duration.zero,
+    );
+    addTearDown(connection.disconnect);
+    await connection.connect();
+    var socketConnected = false;
+    var activations = 0;
+    final exhausted = Completer<void>();
+    void watch({bool restart = false}) => connection.watchCustomLiveAudio(
+          captureIsCurrent: () => true,
+          reactivationIsCurrent: () => socketConnected,
+          onEnabled: () => activations++,
+          report: (outcome) {
+            if (outcome == LimitlessRealtimeHealthOutcome.exhausted && !exhausted.isCompleted) exhausted.complete();
+          },
+          restart: restart,
+        );
+
+    watch();
+    await exhausted.future.timeout(const Duration(seconds: 2));
+    socketConnected = true;
+    final recovery = waitForProbeThenEnable(transport);
+    watch(restart: true);
+    await recovery;
+
+    expect(activations, 2);
+    expect(transport.writes.map((data) => decodeWrapperCommand(data)['messageNumber']), [6, 8, 21, 8]);
   });
 
   test('batch drain censors the current episode and restores the Custom Live watch', () async {
@@ -1298,14 +1407,27 @@ void main() {
     );
     addTearDown(connection.disconnect);
     await connection.connect();
+    var activations = 0;
+    final restored = Completer<void>();
+    connection.watchCustomLiveAudio(
+      captureIsCurrent: () => true,
+      onEnabled: () {
+        activations++;
+        if (activations == 2 && !restored.isCompleted) restored.complete();
+      },
+      report: (_) {},
+    );
     await connection.enableBatchMode();
     expect(connection.isBatchMode, isTrue);
+    expect(activations, 1);
 
     transport.onWrite = (_) => throw StateError('realtime mode write failed');
     await connection.disableBatchMode();
 
     expect(connection.isBatchMode, isFalse,
         reason: 'unknown device mode must not route live audio into the flash parser');
+    await restored.future.timeout(const Duration(seconds: 2));
+    expect(activations, 2, reason: 'the retained Custom Live binding is restored after both writes fail');
   });
 
   test('stale batch mode clears and reconnect resumes realtime after disable failure', () async {

@@ -30,12 +30,29 @@ void main() {
 
   test('a readable but unresolved kill switch blocks recovery', () {
     expect(disabled(contextAvailable: true, killSwitch: null), isTrue);
+    expect(
+      resolveCustomLiveAudioRecoveryGate(
+        buildEnabled: true,
+        flagReadContextAvailable: true,
+        cachedKillSwitchEnabled: null,
+      ),
+      CustomLiveAudioRecoveryGate.pending,
+    );
   });
 
   test('a missing kill switch permits recovery after its bounded lookup retry', () {
     expect(
       disabled(contextAvailable: true, killSwitch: null, unresolvedRetryExhausted: true),
       isFalse,
+    );
+    expect(
+      resolveCustomLiveAudioRecoveryGate(
+        buildEnabled: true,
+        flagReadContextAvailable: true,
+        cachedKillSwitchEnabled: null,
+        unresolvedRetryExhausted: true,
+      ),
+      CustomLiveAudioRecoveryGate.enabled,
     );
   });
 
