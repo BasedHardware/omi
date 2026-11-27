@@ -647,6 +647,10 @@ def _literal_key(node: ast.AST, constants: dict[str, str]) -> str | None:
     return None
 
 
+def _is_boolean_helper(name: str) -> bool:
+    return 'default_on' in name or 'default_off' in name
+
+
 def _is_env_call(node: ast.AST, constants: dict[str, str], *, reads_env_mapping: bool = False) -> str | None:
     """Env key for os.getenv(K), os.environ.get(K), os.environ[K], *env*(K) and shared boolean helpers."""
     if isinstance(node, ast.Call) and node.args:
@@ -664,16 +668,7 @@ def _is_env_call(node: ast.AST, constants: dict[str, str], *, reads_env_mapping:
             )
         ):
             return key
-        if 'env' in name.lower() or name in {
-            '_default_on',
-            'default_on',
-            'modes_default_on',
-            'rollout_default_on',
-            '_default_off',
-            'default_off',
-            'modes_default_off',
-            'rollout_default_off',
-        }:
+        if 'env' in name.lower() or _is_boolean_helper(name):
             return key
     if isinstance(node, ast.Subscript) and isinstance(node.value, ast.Attribute) and node.value.attr == 'environ':
         return _literal_key(node.slice, constants)
@@ -758,20 +753,7 @@ def _extract_helpers(
     """Extract grammar (truthy, compared, default) for wrapper functions like _default_on/default_on."""
     helpers: dict[str, tuple[set[str], set[str], str | None]] = {}
     for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef) and (
-            'default_on' in node.name
-            or 'default_off' in node.name
-            or node.name in {
-                '_default_on',
-                'default_on',
-                'modes_default_on',
-                'rollout_default_on',
-                '_default_off',
-                'default_off',
-                'modes_default_off',
-                'rollout_default_off',
-            }
-        ):
+        if isinstance(node, ast.FunctionDef) and _is_boolean_helper(node.name):
             truthy: set[str] = set()
             compared: set[str] = set()
             default: str | None = None
@@ -890,27 +872,9 @@ def scan_env_reads(source: Source, module_paths: list[str]) -> dict[str, EnvRead
                 if isinstance(node, ast.Call):
                     func = node.func
                     name = (
-                        func.attr
-                        if isinstance(func, ast.Attribute)
-                        else func.id
-                        if isinstance(func, ast.Name)
-                        else ''
+                        func.attr if isinstance(func, ast.Attribute) else func.id if isinstance(func, ast.Name) else ''
                     )
-                    if (
-                        name in helpers
-                        or 'default_on' in name
-                        or 'default_off' in name
-                        or name in {
-                            '_default_on',
-                            'default_on',
-                            'modes_default_on',
-                            'rollout_default_on',
-                            '_default_off',
-                            'default_off',
-                            'modes_default_off',
-                            'rollout_default_off',
-                        }
-                    ):
+                    if name in helpers or _is_boolean_helper(name):
                         wrapper_name = name
                 if wrapper_name:
                     if wrapper_name in helpers:

@@ -484,124 +484,88 @@ def test_boolean_wrapper_resolves_constant_env_key(tmp_path: Path, helper: str) 
     assert {'false', '0', 'off'}.issubset(read.compared)
 
 
-def test_default_on_wrapper_boolean_tokens(tmp_path: Path) -> None:
+def _context_with_flag(results: Results, reads: dict[str, contract.EnvRead], key: str, val: str) -> contract.Context:
+    prod = results.baseline.models['prod']
+    listen = prod.deployments['gke/backend-listen']
+    mutated_listen = replace(listen, env={**listen.env, key: val})
+    mutated_model = replace(prod, deployments={**prod.deployments, 'gke/backend-listen': mutated_listen})
+    mutated_readers = replace(results.baseline.readers, all_reads={**results.baseline.readers.all_reads, **reads})
+    return replace(results.baseline, models={'prod': mutated_model}, readers=mutated_readers)
+
+
+def test_default_on_wrapper_boolean_tokens(tmp_path: Path, results: Results) -> None:
     rel = 'backend/config/synthetic_wrapped_switch.py'
     key = 'SYNTHETIC_WRAPPED_SWITCH_ENABLED'
-
-    def make_context(val: str):
-        manifest_overrides = _manifest_mutation(
-            lambda m: _prod(m)['gke']['backend-listen']['env'].__setitem__(
-                key, {'value': val, 'category': 'ops_kill'}
-            )
-        )()
-        source = OverlaySource(
-            tmp_path,
-            {
-                rel: (
-                    "import os\n"
-                    f"SWITCH_ENV = {key!r}\n"
-                    "def _default_on(name):\n"
-                    "    return os.getenv(name, 'true').lower() not in {'false', '0', 'off'}\n"
-                    "def enabled():\n"
-                    "    return _default_on(SWITCH_ENV)\n"
-                ),
-                **manifest_overrides,
-            },
-        )
-        reads = contract.scan_env_reads(source, [rel])
-        readers = contract.Readers(
-            by_entrypoint={'backend-listen': {key: reads[key]}},
-            all_reads=reads,
-        )
-        return contract.build_context(source, readers=readers)
+    source = OverlaySource(
+        tmp_path,
+        {
+            rel: (
+                "import os\n"
+                f"SWITCH_ENV = {key!r}\n"
+                "def _default_on(name):\n"
+                "    return os.getenv(name, 'true').lower() not in {'false', '0', 'off'}\n"
+                "def enabled():\n"
+                "    return _default_on(SWITCH_ENV)\n"
+            ),
+        },
+    )
+    reads = contract.scan_env_reads(source, [rel])
 
     # Valid literals must produce no boolean-token violation
     for valid in ('false', '0', 'off', 'true'):
-        ctx = make_context(valid)
+        ctx = _context_with_flag(results, reads, key, valid)
         violations = contract.check_boolean_tokens(ctx)
-        assert not any(v.invariant == 'boolean-token' and v.scope.endswith(f'/{key}') for v in violations), (
-            f"Expected no violation for valid token {valid!r}, got: {violations}"
-        )
+        assert not any(
+            v.invariant == 'boolean-token' and v.scope.endswith(f'/{key}') for v in violations
+        ), f"Expected no violation for valid token {valid!r}, got: {violations}"
 
     # Invalid typos like 'flase' must produce a boolean-token violation
     for invalid in ('flase', 'disabled', 'random'):
-        ctx = make_context(invalid)
+        ctx = _context_with_flag(results, reads, key, invalid)
         violations = contract.check_boolean_tokens(ctx)
-        assert any(v.invariant == 'boolean-token' and v.scope.endswith(f'/{key}') for v in violations), (
-            f"Expected boolean-token violation for typo/invalid token {invalid!r}"
-        )
+        assert any(
+            v.invariant == 'boolean-token' and v.scope.endswith(f'/{key}') for v in violations
+        ), f"Expected boolean-token violation for typo/invalid token {invalid!r}"
 
 
-def test_default_on_wrapper_on_values_flavor(tmp_path: Path) -> None:
+def test_default_on_wrapper_on_values_flavor(tmp_path: Path, results: Results) -> None:
     rel = 'backend/config/synthetic_action_item_switch.py'
     key = 'SYNTHETIC_ACTION_ITEM_PRESERVE_ENABLED'
-
-    def make_context(val: str):
-        manifest_overrides = _manifest_mutation(
-            lambda m: _prod(m)['gke']['backend-listen']['env'].__setitem__(
-                key, {'value': val, 'category': 'ops_kill'}
+    source = OverlaySource(
+        tmp_path,
+        {
+            rel: (
+                "import os\n"
+                f"SWITCH_ENV = {key!r}\n"
+                "_ON_VALUES = frozenset({'1', 'true', 'on', 'yes', 'enabled'})\n"
+                "def _default_on(name):\n"
+                "    raw = os.getenv(name, '').strip().lower()\n"
+                "    return not raw or raw in _ON_VALUES\n"
+                "def enabled():\n"
+                "    return _default_on(SWITCH_ENV)\n"
             )
-        )()
-        source = OverlaySource(
-            tmp_path,
-            {
-                rel: (
-                    "import os\n"
-                    f"SWITCH_ENV = {key!r}\n"
-                    "_ON_VALUES = frozenset({'1', 'true', 'on', 'yes', 'enabled'})\n"
-                    "def _default_on(name):\n"
-                    "    raw = os.getenv(name, '').strip().lower()\n"
-                    "    return not raw or raw in _ON_VALUES\n"
-                    "def enabled():\n"
-                    "    return _default_on(SWITCH_ENV)\n"
-                ),
-                **manifest_overrides,
-            },
-        )
-        reads = contract.scan_env_reads(source, [rel])
-        readers = contract.Readers(
-            by_entrypoint={'backend-listen': {key: reads[key]}},
-            all_reads=reads,
-        )
-        return contract.build_context(source, readers=readers)
-
-    reads = contract.scan_env_reads(
-        OverlaySource(
-            tmp_path,
-            {
-                rel: (
-                    "import os\n"
-                    f"SWITCH_ENV = {key!r}\n"
-                    "_ON_VALUES = frozenset({'1', 'true', 'on', 'yes', 'enabled'})\n"
-                    "def _default_on(name):\n"
-                    "    raw = os.getenv(name, '').strip().lower()\n"
-                    "    return not raw or raw in _ON_VALUES\n"
-                    "def enabled():\n"
-                    "    return _default_on(SWITCH_ENV)\n"
-                )
-            },
-        ),
-        [rel],
+        },
     )
+    reads = contract.scan_env_reads(source, [rel])
     read = reads[key]
     assert {'1', 'true', 'on', 'yes', 'enabled'}.issubset(read.truthy)
     assert {'0', 'false', 'off', 'no'}.issubset(read.compared)
 
     # All on-values and falsy values must produce no boolean-token violation
     for valid in ('1', 'true', 'on', 'yes', 'enabled', '0', 'false', 'off', 'no'):
-        ctx = make_context(valid)
+        ctx = _context_with_flag(results, reads, key, valid)
         violations = contract.check_boolean_tokens(ctx)
-        assert not any(v.invariant == 'boolean-token' and v.scope.endswith(f'/{key}') for v in violations), (
-            f"Expected no violation for valid token {valid!r}, got: {violations}"
-        )
+        assert not any(
+            v.invariant == 'boolean-token' and v.scope.endswith(f'/{key}') for v in violations
+        ), f"Expected no violation for valid token {valid!r}, got: {violations}"
 
     # Invalid typos like 'flase' must produce a boolean-token violation
     for invalid in ('flase', 'disabled', 'random'):
-        ctx = make_context(invalid)
+        ctx = _context_with_flag(results, reads, key, invalid)
         violations = contract.check_boolean_tokens(ctx)
-        assert any(v.invariant == 'boolean-token' and v.scope.endswith(f'/{key}') for v in violations), (
-            f"Expected boolean-token violation for typo/invalid token {invalid!r}"
-        )
+        assert any(
+            v.invariant == 'boolean-token' and v.scope.endswith(f'/{key}') for v in violations
+        ), f"Expected boolean-token violation for typo/invalid token {invalid!r}"
 
 
 def test_kill_switch_logger_mapping_read_is_in_inventory() -> None:
@@ -625,6 +589,7 @@ def test_ops_kill_without_reader_still_fails(results: Results) -> None:
     context = replace(results.baseline, models={'prod': model})
     violations = contract.check_kill_switches(context)
     assert any(violation.key == f'kill-switch-reader|prod|gke/backend-listen/{key}' for violation in violations)
+
 
 # Real pre-fix commits from the 2026-10-18 rollout, each with the invariant that must catch it and its fix:
 # #22098 → #22138, #22121's first commit → its fix, #22149's FIX-FIRST head → its fix. Commit SHAs, not secrets.
