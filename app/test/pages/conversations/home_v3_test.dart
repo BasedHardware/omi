@@ -1654,6 +1654,10 @@ void main() {
       expect(tester.getRect(pause).right, lessThan(tester.getRect(ask).left));
       expect(tester.getRect(ask).right, lessThan(tester.getRect(end).left));
       expect(tester.getSize(ask).width, greaterThan(100), reason: 'Ask Omi keeps the middle');
+      // One tray holds the three, 6pt larger on every side.
+      final tray = find.byKey(const ValueKey('detail_live_tray'));
+      expect(tester.getSize(tray).height, 68);
+      expect(tester.getRect(pause).left - tester.getRect(tray).left, 6);
       await tester.tap(pause);
       await tester.pump(const Duration(milliseconds: 300));
       expect(home.capture.pauseCalls, 1);

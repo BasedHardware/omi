@@ -28,6 +28,7 @@ import 'package:omi/utils/audio/partial_audio_coverage.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/pages/conversations/widgets/live_conversation_pause_button.dart';
+import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/widgets/footer_glass.dart';
 import 'package:omi/widgets/home_bottom_bar.dart' show kAskOmiGlyph;
 
@@ -944,21 +945,47 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     final live = v3 && widget.conversation?.v3?.tileState == ConversationTileState.live;
     final showPlayer = widget.selectedTab == ConversationTab.transcript && hasAudio && !_noPlayerWhileLive(v3);
     if (live) {
+      final exp = ExperimentalDesign.of(context);
+      final currentLiveId = context.select<ConversationsV3Provider?, String?>((v3) => v3?.live?.id);
+      final liveDevice = context.select<ConversationsV3Provider?, String?>((v3) => v3?.live?.v3?.captureDeviceId);
+      // Experimental design: when this phone captures the conversation, Pause, Ask Omi and End sit
+      // on one dark tray, as one control.
+      final tray = exp &&
+          context.select<CaptureProvider?, bool>((capture) =>
+              capture != null &&
+              LiveConversationEndButton.phoneCaptures(widget.conversation!, capture,
+                  currentLiveId: currentLiveId, liveCaptureDeviceId: liveDevice));
       // End is on both tabs: beside Ask Omi, or beside the player's round Ask button.
+      final row = Row(children: [
+        // Experimental design: Pause opposite End, Ask Omi between them.
+        if (exp) LiveConversationPauseButton(conversation: widget.conversation!, trailingGap: tray ? 6 : 10),
+        if (showPlayer) ...[
+          Expanded(child: KeyedSubtree(key: const ValueKey('detail_audio_player'), child: _buildPlayer())),
+          SizedBox(width: tray ? 6 : 10),
+          _buildAskButton(context),
+        ] else
+          Expanded(child: _buildAskBar(context)),
+        LiveConversationEndButton(
+            conversation: widget.conversation!,
+            leadingGap: tray ? 6 : 10,
+            onEndSuppressionChanged: widget.onLiveEndSuppressionChanged),
+      ]);
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
-        child: Row(children: [
-          // Experimental design: Pause opposite End, Ask Omi between them.
-          if (ExperimentalDesign.of(context)) LiveConversationPauseButton(conversation: widget.conversation!),
-          if (showPlayer) ...[
-            Expanded(child: KeyedSubtree(key: const ValueKey('detail_audio_player'), child: _buildPlayer())),
-            const SizedBox(width: 10),
-            _buildAskButton(context),
-          ] else
-            Expanded(child: _buildAskBar(context)),
-          LiveConversationEndButton(
-              conversation: widget.conversation!, onEndSuppressionChanged: widget.onLiveEndSuppressionChanged),
-        ]),
+        child: !tray
+            ? row
+            : Container(
+                key: const ValueKey('detail_live_tray'),
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? const Color(0xFF2C2C2E)
+                      : const Color(0xFF3A3A3C),
+                  borderRadius: BorderRadius.circular(34),
+                  boxShadow: const [BoxShadow(color: Color(0x33000000), blurRadius: 28, offset: Offset(0, 8))],
+                ),
+                child: row,
+              ),
       );
     }
     return Padding(

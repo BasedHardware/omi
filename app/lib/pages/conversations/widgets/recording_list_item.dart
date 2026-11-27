@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/pages/conversations/widgets/conversation_state_tile.dart';
 import 'package:omi/services/experiments/experimental_design.dart';
 import 'package:omi/models/local_recording.dart';
 import 'package:omi/pages/on_device/on_device_queue_banner.dart';
@@ -81,12 +82,13 @@ class RecordingListItem extends StatelessWidget {
                     child: Row(
                       children: [
                         Container(
-                          width: 40,
-                          height: 40,
+                          width: ExperimentalDesign.of(context) ? ConversationStateTile.extentOf(context) : 40,
+                          height: ExperimentalDesign.of(context) ? ConversationStateTile.extentOf(context) : 40,
                           decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
-                          child: Icon(Icons.graphic_eq, color: OmiColors.textTertiary, size: 20),
+                          child: Icon(Icons.graphic_eq,
+                              color: OmiColors.textTertiary, size: ExperimentalDesign.of(context) ? 22 : 20),
                         ),
-                        const SizedBox(width: 14),
+                        SizedBox(width: ExperimentalDesign.of(context) ? 12 : 14),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -95,16 +97,19 @@ class RecordingListItem extends StatelessWidget {
                                 '$timeStr · ${OmiDuration.compact(recording.seconds, context.l10n)}',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: OmiType.callout.copyWith(fontWeight: FontWeight.w600),
+                                style: ExperimentalDesign.of(context)
+                                    ? experimentalRowTitleStyle(context)
+                                    : OmiType.callout.copyWith(fontWeight: FontWeight.w600),
                               ),
-                              const SizedBox(height: 3),
+                              SizedBox(height: ExperimentalDesign.of(context) ? 1 : 3),
                               _OnDeviceStatus(
                                 recording: recording,
                                 fallback: Text(
                                   statusLabel,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(color: statusColor, fontSize: 12),
+                                  style:
+                                      TextStyle(color: statusColor, fontSize: ExperimentalDesign.of(context) ? 15 : 12),
                                 ),
                               ),
                             ],

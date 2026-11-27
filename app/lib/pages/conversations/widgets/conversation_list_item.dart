@@ -682,6 +682,23 @@ class _ConversationListItemState extends State<ConversationListItem> {
     );
   }
 
+  /// [lines] as they are, or in the experimental design as one block at least as tall as the icon
+  /// tile with the lines centred in it, so the text sits level with the tile's middle.
+  List<Widget> _centredOnTile(BuildContext context, List<Widget> lines) {
+    if (!ExperimentalDesign.of(context)) return lines;
+    return [
+      ConstrainedBox(
+        constraints: BoxConstraints(minHeight: ConversationStateTile.extentOf(context)),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: lines,
+        ),
+      ),
+    ];
+  }
+
   Widget _buildMobileLayout(BuildContext context) {
     final discarded = widget.conversation.discarded && !widget.conversation.isFoldedNoise;
     final discardedSnippet = widget.homeCard?.preview ??
@@ -701,27 +718,30 @@ class _ConversationListItemState extends State<ConversationListItem> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        widget.homeCard != null &&
-                                widget.homeCard!.startedAt == null &&
-                                widget.conversation.structured.title.trim().isEmpty
-                            ? context.l10n.recording
-                            : conversationRowTitle(context, widget.conversation),
-                        style: experimentalRowTitleStyle(context),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      if (discardedSnippet.isNotEmpty) ...[
-                        const SizedBox(height: 4),
+                      // Title and meta: in the experimental design, one block centred on the tile.
+                      ..._centredOnTile(context, [
                         Text(
-                          discardedSnippet,
-                          style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, height: 1.35),
-                          maxLines: 2,
+                          widget.homeCard != null &&
+                                  widget.homeCard!.startedAt == null &&
+                                  widget.conversation.structured.title.trim().isEmpty
+                              ? context.l10n.recording
+                              : conversationRowTitle(context, widget.conversation),
+                          style: experimentalRowTitleStyle(context),
+                          maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                      ],
-                      SizedBox(height: ExperimentalDesign.of(context) ? 1 : 3),
-                      _buildMetaOrStatus(context),
+                        if (discardedSnippet.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            discardedSnippet,
+                            style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, height: 1.35),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                        SizedBox(height: ExperimentalDesign.of(context) ? 1 : 3),
+                        _buildMetaOrStatus(context),
+                      ]),
                       if (widget.conversation.processingDeferred &&
                           widget.conversation.homeStep != 'failed' &&
                           !widget.conversation.isTranscriptionAllowanceHeld)
