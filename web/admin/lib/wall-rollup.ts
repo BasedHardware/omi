@@ -9,6 +9,7 @@ import { AggregateRows } from "./wall-posthog";
 import { DAY_MS, isoDay } from "./qualified-activity";
 import { DATASET, keyId, ROLLUP_VERSION } from "./wall-rollup-extract";
 import { RollupRequest, rollupSql } from "./wall-rollup-sql";
+import { PRODUCT_SAMPLING_FIRST_DAY } from "./posthog-sampling";
 
 export interface RollupStatus {
   through: string | null;
@@ -38,6 +39,9 @@ export async function readRollup(
   if (process.env.OMI_TV_ROLLUP_ENABLED !== "1") return null;
   try {
     const spec = rollupSql(request);
+    // daily-1 discarded capture sampling rates and foreground evidence.
+    // A coverage receipt cannot make a window including those days usable.
+    if (isoDay(spec.stop) > PRODUCT_SAMPLING_FIRST_DAY) return null;
     const [result] = await db.query({
       ...opts,
       query: spec.query,
@@ -97,10 +101,11 @@ export async function rollupStatus(
       const [rows] = await db.query({
         ...opts,
         query: `SELECT FORMAT_DATE('%F',MAX(day)) through FROM \`${DATASET}.coverage\`
-      WHERE day >= DATE_SUB(CURRENT_DATE('UTC'),INTERVAL 400 DAY) AND day<CURRENT_DATE('UTC') AND definition=@definition AND key_id=@keyId`,
+      WHERE day >= DATE_SUB(CURRENT_DATE('UTC'),INTERVAL 400 DAY) AND day<CURRENT_DATE('UTC') AND day<@samplingStart AND definition=@definition AND key_id=@keyId`,
         params: {
           definition: ROLLUP_VERSION,
           keyId: keyId(process.env.CRON_SECRET || ""),
+          samplingStart: new BigQueryDate(PRODUCT_SAMPLING_FIRST_DAY),
         },
       });
       value = {

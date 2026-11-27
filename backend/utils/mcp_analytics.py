@@ -27,6 +27,7 @@ from datetime import datetime, timezone
 from typing import Any, List, Mapping, Optional
 
 import database.redis_db as redis_db
+from utils import mcp_daily_rollup
 from utils.executors import postprocess_executor, submit_with_context
 from utils.product_telemetry import emit_product_event
 from utils.mcp_server.constants import MCP_MAX_BATCH_MESSAGES
@@ -414,15 +415,44 @@ def schedule_mcp_tool_use_succeeded(*, uid: str, tool_name: Any, client_name: An
 
     No current transport signal verifies initiation; never infer it from OAuth,
     arguments or client names. Keep scheduled_agent successes in the raw stream
-    for downstream qualification and cadence analysis. No sampling or Redis.
+    for downstream qualification and cadence analysis. The raw event never
+    touches Redis; the daily rollup (``utils.mcp_daily_rollup``) is queued
+    separately and fails open.
     """
+    occurred_at = datetime.now(timezone.utc)
     emit_mcp_tool_use_succeeded(
         uid=uid,
         tool_name=tool_name,
         client_name=client_name,
         initiator=initiator,
-        occurred_at=datetime.now(timezone.utc),
+        occurred_at=occurred_at,
     )
+    schedule_mcp_daily_rollup(
+        uid=uid, tool_name=tool_name, client_name=client_name, initiator=initiator, occurred_at=occurred_at
+    )
+
+
+def schedule_mcp_daily_rollup(
+    *, uid: str, tool_name: Any, client_name: Any, initiator: str, occurred_at: Optional[datetime] = None
+) -> None:
+    """Queue the Redis accumulation for the ``MCP Daily Activity`` snapshot off the request path.
+
+    The UTC day comes from the success time, not from when the queued task runs."""
+    tool = mcp_tool_enum(tool_name)
+    if not uid or uid == MCP_ANONYMOUS_DISTINCT_ID or tool == "unknown" or not mcp_daily_rollup.enabled():
+        return
+    try:
+        submit_with_context(
+            postprocess_executor,
+            mcp_daily_rollup.record_success,
+            uid=uid,
+            client=client_name if client_name in _MCP_CLIENT_NAMES else "unknown",
+            tool=tool,
+            initiator=initiator if initiator in {"user", "scheduled_agent", "unknown"} else "unknown",
+            now=occurred_at or datetime.now(timezone.utc),
+        )
+    except Exception:  # noqa: BLE001 - optional telemetry must fail open
+        mcp_daily_rollup.record_rollup_degradation('executor_submit', 'skip', 'enqueue_failed')
 
 
 def emit_mcp_tool_use_succeeded(

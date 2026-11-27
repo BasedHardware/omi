@@ -3,12 +3,7 @@ import {
   buildResponseReliabilityPayload,
   responseReliabilityQueries,
 } from "../response-reliability";
-import {
-  DESKTOP_HEALTH_EVENT_COUNT_MULTIPLIER,
-  DESKTOP_HEALTH_EVENT_SAMPLING_CUTOVER,
-  DESKTOP_HEALTH_EVENT_WEIGHT_SQL,
-  desktopHealthEventWeightSql,
-} from "../telemetry/desktop-health-sampling";
+import { DESKTOP_HEALTH_EVENT_WEIGHT_SQL } from "../telemetry/desktop-health-sampling";
 import {
   fallbackObservationsFromLegacy,
   fallbackObservationsFromAggregates,
@@ -19,10 +14,9 @@ import {
 it("weights only the physical PostHog arm and both fallback query volumes at event time", () => {
   const { chat, voice } = responseReliabilityQueries(30);
   const [physical, floating] = voice.split("UNION ALL");
-  expect(DESKTOP_HEALTH_EVENT_COUNT_MULTIPLIER).toBe(10);
-  expect(DESKTOP_HEALTH_EVENT_SAMPLING_CUTOVER).toBe("2026-10-17T03:43:08Z");
+  // Per-row weight from the ingestion tag: untagged pre-cutover rows weigh one.
   expect(DESKTOP_HEALTH_EVENT_WEIGHT_SQL).toBe(
-    "if(timestamp >= toDateTime('2026-10-17 03:43:08', 'UTC'), 10, 1)"
+    "100 / greatest(coalesce(toFloat(properties.omi_sample_pct), 100), 0.01)"
   );
   expect(physical).toContain(
     `sum(${DESKTOP_HEALTH_EVENT_WEIGHT_SQL}) AS event_count`
@@ -42,21 +36,6 @@ it("weights only the physical PostHog arm and both fallback query volumes at eve
   ])
     expect(query).toContain(
       `sum(${DESKTOP_HEALTH_EVENT_WEIGHT_SQL}) AS event_count`
-    );
-  expect(desktopHealthEventWeightSql("2026-10-22T00:00:00Z")).toContain(
-    "timestamp >= toDateTime('2026-10-22 00:00:00', 'UTC')"
-  );
-});
-it("stays disarmed without a confirmed instant and rejects non-UTC/invalid constants", () => {
-  expect(desktopHealthEventWeightSql(null)).toBe("1");
-  for (const value of [
-    "provisional",
-    "2026-10-22",
-    "2026-10-22T00:00:00+01:00",
-    "2026-99-99T00:00:00Z",
-  ])
-    expect(() => desktopHealthEventWeightSql(value)).toThrow(
-      "Invalid desktop health sampling cutover"
     );
 });
 it("corrected counts flow through volume panels while success ratios and latency remain ratios", () => {
