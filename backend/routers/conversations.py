@@ -708,7 +708,14 @@ def process_in_progress_conversation(
     # Experiment end_open_conversation: End also cuts the owner's v3 conversation, at the End time the app
     # sent in this header (else now), and wakes the builder at once, so it closes whatever the listening
     # session's recording below is doing. Off: the header is ignored and nothing is written.
-    cut_id = v3_manual_cuts.record_end(uid, ended_at=v3_manual_cuts.parse_ended_at(ended_at))
+    # Experiment live_words_cascade: the request may also carry the live words the phone was showing for the
+    # conversation being ended (live_tail); they are kept with the cut for that conversation's summary and
+    # nowhere else. A request without them stores its End exactly as before.
+    live_tail = getattr(request, 'live_tail', None)
+    if live_tail is None:
+        cut_id = v3_manual_cuts.record_end(uid, ended_at=v3_manual_cuts.parse_ended_at(ended_at))
+    else:
+        cut_id = v3_manual_cuts.record_end(uid, ended_at=v3_manual_cuts.parse_ended_at(ended_at), live_tail=live_tail)
     conversation = retrieve_in_progress_conversation(uid)
     named = request.live_conversation_id if request else None
     if (
