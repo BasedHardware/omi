@@ -38,7 +38,6 @@ from config.conversations_v3 import (
     SPEECH_LANDED_FIELD,
     boundary_seconds,
     capture_continuity_enabled,
-    finish_fast_rewake_enabled,
     live_title_enabled,
     manual_end_home_visible_enabled,
     max_window_seconds,
@@ -70,7 +69,7 @@ from utils.conversations.v3 import (
 )
 from utils.conversations.v3 import manual_cuts, refinement, preview_wakes, rederive_plan, summary_wake
 from utils.conversations.v3 import live_tail
-from utils.conversations.v3 import capture_device
+from utils.conversations.v3 import capture_device, finish_rewake
 from utils.conversations.v3.word_floor import MIN_TASK_WORDS, has_unspaced_script, text_word_count
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.meeting_treatment import deduplicated_transcribed_speech_seconds
@@ -89,14 +88,6 @@ OUTLINE_PUBLICATION_DEADLINE = timedelta(hours=2)
 
 RACES = frozenset({'source_changed', 'lease_lost'})
 RACE_RETRY = timedelta(minutes=1)
-
-# A Finish's own write (its cut, or its fast transcript) can land while another pass holds the owner: that
-# pass commits around it (source_moved) or races, and the minute wake above would hold the Finish for up
-# to a minute more. A recent Finish recording is woken again this soon instead. One wake per owner per
-# slot, and only while the Finish is this recent, so a chain stays short; the minute wake stays the backstop.
-FINISH_REWAKE = timedelta(seconds=3)
-FINISH_REWAKE_SLOT_SECONDS = 10
-FINISH_REWAKE_WINDOW = timedelta(minutes=3)
 
 # Conflicts that fail identically until the data or code changes. Other races (summary/processing
 # source changes) stay retryable errors.
@@ -693,55 +684,6 @@ async def _reconcile_outlines(
     return outlines, cache
 
 
-def _recent_finish(row, now):
-    """A recording the owner finished (cut or requested) within ``FINISH_REWAKE_WINDOW``."""
-    if not row or row.get('deleted') or row.get('discarded'):
-        return False
-    if row.get('v3_manual_end') is not True and row.get('v3_manual_end_requested') is not True:
-        return False
-    finished = row.get('finished_at')
-    # Either side of now: a Finish written during this pass, or a device clock slightly ahead, is recent too.
-    return isinstance(finished, datetime) and abs(now - finished) <= FINISH_REWAKE_WINDOW
-
-
-async def _wake_finish_soon(uid, reason, now):
-    slot = int(now.timestamp()) // FINISH_REWAKE_SLOT_SECONDS
-    await run_blocking(db_executor, enqueue, uid, at=now + FINISH_REWAKE, wake_key=f'finish-rewake-{slot}')
-    metrics.safe_metric(lambda: metrics.FINISH_REWAKES.labels(reason).inc())
-
-
-async def _rewake_moved_finish(uid, recordings, moved):
-    """Best effort; the minute wake already scheduled covers any failure here."""
-    try:
-        if not finish_fast_rewake_enabled():
-            return
-        now = datetime.now(timezone.utc)
-        # The loaded snapshot can predate the Finish write that moved the recording: judge the stored row.
-        if not any(_recent_finish(recordings.get(rid), now) for rid in moved):
-            current = await run_blocking(db_executor, store.finish_markers, uid, moved)
-            if not any(_recent_finish(row, now) for row in current.values()):
-                return
-        await _wake_finish_soon(uid, 'source_moved', now)
-    except Exception as error:
-        metrics.safe_metric(
-            lambda: logger.warning('event=v3_finish_rewake outcome=error exception_type=%s', type(error).__name__)
-        )
-
-
-async def _rewake_raced_finish(uid, recordings):
-    """Best effort; the caller has already scheduled the minute wake."""
-    try:
-        if not finish_fast_rewake_enabled():
-            return
-        now = datetime.now(timezone.utc)
-        if any(row.get('v3_pending') and _recent_finish(row, now) for row in recordings.values()):
-            await _wake_finish_soon(uid, 'raced', now)
-    except Exception as error:
-        metrics.safe_metric(
-            lambda: logger.warning('event=v3_finish_rewake outcome=error exception_type=%s', type(error).__name__)
-        )
-
-
 async def _after_projection(
     uid,
     key,
@@ -766,7 +708,7 @@ async def _after_projection(
         metrics.safe_metric(lambda: metrics.RACES.labels('source_moved').inc())
         await run_blocking(db_executor, enqueue, uid, at=datetime.now(timezone.utc) + RACE_RETRY)
         if not derive and not on_open:
-            await _rewake_moved_finish(uid, recordings, moved)
+            await finish_rewake.after_moved(uid, recordings, moved)
     for group in groups if not derive else ():
         if not (group['locked'] if custom_timing else group['finished']):
             # A different minute than the currently executing task avoids
@@ -1465,7 +1407,7 @@ async def reconcile(
                 )
                 raise error from dispatch
             if not on_open:
-                await _rewake_raced_finish(uid, recordings)
+                await finish_rewake.after_raced(uid, recordings)
             metrics.safe_metric(lambda: metrics.RECONCILES.labels('raced').inc())
             metrics.safe_metric(lambda: metrics.RACES.labels(reason).inc())
             metrics.safe_metric(lambda: logger.info('v3 reconcile raced reason=%s', reason))
