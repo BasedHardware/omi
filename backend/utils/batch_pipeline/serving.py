@@ -222,6 +222,17 @@ class Serving:
         lease = self.leader if leader is None else leader
         return not periodic or lease is None or lease.acquire()
 
+    def _maintenance_leader(self, *, run_held_expiry: bool):
+        # The held-expiry supervisor owns SERVING_MAINTENANCE. Any maintenance
+        # pass that skips its inline expiry tick uses the separate lease.
+        if not run_held_expiry and self.legacy_metrics_leader is not None:
+            return self.legacy_metrics_leader
+        return self.leader
+
+    def refresh_serving_fresh_guard(self) -> bool:
+        """Use the same lease as the serving loop, which leaves expiry to its supervisor."""
+        return self.refresh_fresh_guard(leader=self._maintenance_leader(run_held_expiry=False))
+
     def _reconcile_owner(self, owner_id: str, recovered: str | None) -> list[str]:
         # The settled job remains result_ready/merge_pending until the fenced
         # commit; pending/persisted receipts then own projection/follow-up retry.
@@ -251,12 +262,10 @@ class Serving:
             if owner_id is None or recovered is None:
                 raise ValueError('owner-only recovery requires an owner and recovered unit')
             return self._reconcile_owner(owner_id, recovered)
-        # Legacy /metrics fallback omits held expiry because it is not the
-        # supervising process. Give its remaining maintenance a separate
-        # cadence so repeated scrapes cannot retain the supervisor's lease.
-        maintenance_leader = self.leader
-        if periodic and not run_held_expiry and self.legacy_metrics_leader is not None:
-            maintenance_leader = self.legacy_metrics_leader
+        # Metrics and explicit request paths may skip inline expiry. Keep their
+        # maintenance on the separate lease so they cannot retain the
+        # supervisor's expiry lease while omitting its tick.
+        maintenance_leader = self._maintenance_leader(run_held_expiry=run_held_expiry)
         if self._leads(periodic, leader=maintenance_leader):
             maintenance_options = {}
             if maintenance_leader is not self.leader:
@@ -555,12 +564,12 @@ async def _supervise_backlog_heartbeat(stop):
 
 async def _supervise_fresh_guard(stop):
     # General maintenance (and its sync executor) may be occupied for minutes.
-    # Keep the same maintenance leader, but borrow a DB thread only for this
-    # bounded count pair. FreshGuard coalesces overlaps and enforces 60s spacing.
+    # Keep the same lease as the serving loop, but borrow a DB thread only for
+    # this bounded count pair. FreshGuard coalesces overlaps and enforces 60s spacing.
     while not stop.is_set():
         try:
             service = await run_blocking(db_executor, serving_for_stage, current_stage())
-            await run_blocking(db_executor, service.refresh_fresh_guard)
+            await run_blocking(db_executor, service.refresh_serving_fresh_guard)
         except Exception as error:
             logging.getLogger(__name__).error(
                 'event=batch_fresh_guard outcome=retry exception_type=%s', type(error).__name__

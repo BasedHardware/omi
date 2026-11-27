@@ -8,6 +8,13 @@ queue recovery and the other fallback maintenance continue under the fallback
 lease. Repeated metrics scrapes therefore cannot retain the supervisor's lease
 or starve its held dead-letter expiry tick.
 
+The explicit `POST /reconcile` path and the `/recover-quarantine` fallback when
+`BATCH_PIPELINE_RECOVERY_OWNER_ONLY_ENABLED=false` also skip inline held expiry.
+Their global maintenance keeps its existing cleanup and recovery work, while
+fresh-guard election uses the separate lease shared with the serving loop. These
+requests cannot retain `serving_maintenance` while omitting its expiry tick, so
+repeated calls cannot starve the dedicated held-expiry supervisor.
+
 ## Required serving configuration
 
 The process that owns the held-expiry supervisor must run with

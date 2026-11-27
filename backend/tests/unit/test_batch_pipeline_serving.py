@@ -745,6 +745,60 @@ def test_repeated_legacy_metrics_uses_separate_lease_from_held_expiry_supervisor
     supervisor.held_dead_letter.tick.assert_called_once()
 
 
+def test_explicit_reconcile_that_skips_held_expiry_uses_separate_lease():
+    store = MemoryStore()
+    metrics = SimpleNamespace(fresh_guard=Mock(), delivered_share=Mock(), refresh=Mock())
+    cleanup, enrichment = Mock(), Mock()
+    service = Serving(
+        store,
+        metrics=metrics,
+        cleanup=cleanup,
+        enrichment_sweep=enrichment,
+        leader=LeaderLease(store, SERVING_MAINTENANCE, ttl_seconds=60, holder='expiry-supervisor'),
+        legacy_metrics_leader=LeaderLease(store, SERVING_LEGACY_METRICS, ttl_seconds=60, holder='request'),
+    )
+    service.held_dead_letter.tick = Mock()
+
+    service.reconcile(run_held_expiry=False)
+
+    assert store.rows['leases', SERVING_LEGACY_METRICS]['holder'] == 'request'
+    assert ('leases', SERVING_MAINTENANCE) not in store.rows
+    cleanup.assert_called_once()
+    enrichment.assert_called_once()
+    service.held_dead_letter.tick.assert_not_called()
+
+    supervisor = Serving(
+        store,
+        leader=LeaderLease(store, SERVING_MAINTENANCE, ttl_seconds=60, holder='expiry-supervisor'),
+    )
+    supervisor.held_dead_letter.tick = Mock()
+    supervisor.sweep_held_dead_letters(periodic=True)
+    assert store.rows['leases', SERVING_MAINTENANCE]['holder'] == 'expiry-supervisor'
+    supervisor.held_dead_letter.tick.assert_called_once()
+
+
+def test_serving_loop_and_fresh_guard_share_the_skipped_expiry_lease():
+    store = MemoryStore()
+
+    def instance(holder):
+        return Serving(
+            store,
+            metrics=SimpleNamespace(fresh_guard=Mock(), delivered_share=Mock(), refresh=Mock()),
+            leader=LeaderLease(store, SERVING_MAINTENANCE, ttl_seconds=60, holder=holder),
+            legacy_metrics_leader=LeaderLease(store, SERVING_LEGACY_METRICS, ttl_seconds=60, holder=holder),
+        )
+
+    serving_instance, guard_follower = instance('serving'), instance('guard-follower')
+
+    serving_instance.reconcile(periodic=True, run_held_expiry=False)
+
+    assert store.rows['leases', SERVING_LEGACY_METRICS]['holder'] == 'serving'
+    assert ('leases', SERVING_MAINTENANCE) not in store.rows
+    assert not guard_follower.refresh_serving_fresh_guard()
+    guard_follower.metrics.fresh_guard.deactivate.assert_called_once()
+    assert ('leases', SERVING_MAINTENANCE) not in store.rows
+
+
 @pytest.mark.parametrize(
     'scrape_flag,serving_flag', [(None, 'false'), ('true', 'false'), (None, 'true'), ('true', 'true')]
 )
@@ -814,7 +868,6 @@ async def test_recovery_request_awaits_paid_intent_before_response_and_projectio
 
 @pytest.mark.asyncio
 async def test_recovery_request_disables_held_expiry_when_owner_only_falls_back_to_global_maintenance(api, monkeypatch):
-    from database.batch_pipeline_recovery_discovery import RecoveryCaller
     from routers import batch_pipeline as routes
     from utils.batch_pipeline import serving
 
@@ -822,9 +875,15 @@ async def test_recovery_request_disables_held_expiry_when_owner_only_falls_back_
     service = routes.serving_for_stage('dev')
     monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_MODE', 'on')
     monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_OWNER_ONLY_ENABLED', 'false')
+    monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', 'true')
     service.recovery = Mock()
     service.recovery.recover_async = AsyncMock(return_value='recovered')
-    service._maintain = Mock()
+    service.metrics = SimpleNamespace(fresh_guard=Mock(), delivered_share=Mock(), refresh=Mock())
+    service.cleanup = Mock()
+    service.enrichment_sweep = Mock()
+    service.leader = LeaderLease(store, SERVING_MAINTENANCE, ttl_seconds=60, holder='expiry-supervisor')
+    service.legacy_metrics_leader = LeaderLease(store, SERVING_LEGACY_METRICS, ttl_seconds=60, holder='recovery')
+    service.held_dead_letter.tick = Mock()
     monkeypatch.setattr(serving, 'run_blocking', _inline_serving_call)
 
     result = await routes.recover_quarantine(
@@ -832,11 +891,14 @@ async def test_recovery_request_disables_held_expiry_when_owner_only_falls_back_
     )
 
     assert result == {'status': 'recovered'}
-    service._maintain.assert_called_once_with(
-        recover_quarantine=False,
-        recovery_caller=RecoveryCaller.RECONCILE,
-        run_held_expiry=False,
-    )
+    assert store.rows['leases', SERVING_LEGACY_METRICS]['holder'] == 'recovery'
+    assert ('leases', SERVING_MAINTENANCE) not in store.rows
+    service.cleanup.assert_called_once()
+    service.enrichment_sweep.assert_called_once()
+    service.held_dead_letter.tick.assert_not_called()
+    service.sweep_held_dead_letters(periodic=True)
+    assert store.rows['leases', SERVING_MAINTENANCE]['holder'] == 'expiry-supervisor'
+    service.held_dead_letter.tick.assert_called_once()
 
 
 def test_recovery_task_rejects_foreign_stage_and_missing_oidc(api, monkeypatch):
