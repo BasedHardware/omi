@@ -322,11 +322,11 @@
       "collection_pattern": "batch_pipeline_*_jobs",
       "owner": "Goal: Pipeline provider-STT recovery (SCA-3362)",
       "unit": "scheduled provider-STT recovery pass",
-      "reads_per_unit_budget": 100,
-      "reads_per_day_budget": 72000,
+      "reads_per_unit_budget": 800,
+      "reads_per_day_budget": 576000,
       "basis": "planning-bound",
-      "source": "One indexed page of at most 25 jobs and at most three transactional rereads per job in FirestoreProviderSttOutbox.sweep_running. Production enrichment-maintenance runs at most 720 scheduled passes per day. The development schedule is paused.",
-      "reviewed": "2026-11-23"
+      "source": "FirestoreProviderSttOutbox.sweep_running reads up to 25 jobs in one query. Each job gets up to three transaction attempts, each with two job/outbox reads and three live owner-privacy reads (deletion marker, user and token). A full cold pass costs 150 document reads without retries or shadowing, or 400 across three attempts per job. Privacy shadow can add one observation and up to four candidate reads per attempt, bringing the count to 775. Reserve 800 per pass as a planning estimate to allow for shared privacy kill-switch polls and query index reads. At 720 scheduled production passes/day this is 576000 reads/day. Development is paused. Revisit if transport or scheduler retries materially increase billed reads.",
+      "reviewed": "2026-11-27"
     },
     {
       "site": "backend/database/batch_pipeline_admission_view.py",
