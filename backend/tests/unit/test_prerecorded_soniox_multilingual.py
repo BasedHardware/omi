@@ -225,3 +225,20 @@ def test_without_return_language_only_words_are_returned(vendors):
         result = stt.modulate_prerecorded_from_bytes_with_soniox(wav_bytes(), language='multi')
 
     assert result == SONIOX_WORDS
+
+
+def test_a_failed_soniox_first_attempt_is_never_followed_by_a_second_soniox_submission(vendors):
+    from config.prerecorded_stt import TranscriptionOutcome
+    from utils.stt.outcomes import TranscriptionFailure
+
+    vendors.soniox.side_effect = SonioxBatchError('timeout', submitted=True)
+    vendors.velma.side_effect = TranscriptionFailure(
+        TranscriptionOutcome.PROVIDER_BUDGET_EXHAUSTED, provider='modulate', retryable=False
+    )
+
+    with parakeet_caller('sync_fresh'), pytest.raises(TranscriptionFailure):
+        stt.modulate_prerecorded_from_bytes_with_soniox(wav_bytes(), language='multi')
+
+    # The credit-refusal failover hop would raise AssertionError('failover hop') if it fired.
+    assert vendors.soniox.call_count == 1
+    assert vendors.velma.call_count == 1

@@ -791,19 +791,19 @@ def modulate_prerecorded_from_bytes_with_soniox(
 ) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
     """Run Modulate, then one bounded Soniox submission only for credit/quota refusal.
 
-    Legacy sync's multilingual audio runs Soniox first instead (``soniox_multilingual``), and Modulate as here
-    when Soniox fails. Coordinators that own their paid attempts keep Modulate-first."""
-    if (
+    Legacy sync's multilingual audio runs Soniox first instead (``soniox_multilingual``) and Modulate when it
+    fails; Soniox then never gets that audio a second time. Coordinators owning their attempts keep Modulate."""
+    soniox_first = (
         attempts == 0
         and not _held_single_attempt.get()
         and _verification_deadline.get() is None
         and soniox_multilingual.applies(language)
-    ):
-        served = soniox_multilingual.transcribe(audio_bytes, language=language, diarize=diarize)
-        if served is not None:
-            if provider_served is not None:
-                provider_served(SONIOX_PROVIDER)
-            return served if return_language else served[0]
+    )
+    served = soniox_multilingual.transcribe(audio_bytes, language=language, diarize=diarize) if soniox_first else None
+    if served is not None:
+        if provider_served is not None:
+            provider_served(SONIOX_PROVIDER)
+        return served if return_language else served[0]
     try:
         result = modulate_prerecorded_from_bytes(
             audio_bytes,
@@ -819,6 +819,7 @@ def modulate_prerecorded_from_bytes_with_soniox(
         # Held-piece and prompt-verification coordinators own their paid attempts.
         if (
             reason is None
+            or soniox_first
             or _modulate_prior_failure.get()
             or not soniox_failover_enabled()
             or attempts >= 2
