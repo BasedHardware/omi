@@ -92,10 +92,11 @@ def test_kill_switch_off_and_zero_hours_disable_the_stamp(monkeypatch):
     assert guarantee.first_week_stamp(PAID, PAID + HOUR) is None
 
 
-def test_feature_flag_defaults_off_but_explicit_true_enables():
-    assert guarantee.first_week_enabled(environ={}) is False
+def test_feature_flag_defaults_on_but_explicit_false_disables():
+    assert guarantee.first_week_enabled(environ={}) is True
     assert guarantee.first_week_enabled(environ={guarantee.FIRST_WEEK_ENABLED_ENV: 'true'}) is True
-    assert guarantee.first_week_stamp(PAID, PAID + HOUR, environ={}) is None
+    assert guarantee.first_week_enabled(environ={guarantee.FIRST_WEEK_ENABLED_ENV: 'false'}) is False
+    assert guarantee.first_week_stamp(PAID, PAID + HOUR, environ={}) is not None
 
 
 def test_window_is_stored_not_recomputed_from_age(monkeypatch):
@@ -177,6 +178,47 @@ def test_paid_since_ignores_a_trial_that_was_never_charged():
         users_db.paid_since_patch(
             stored,
             {'plan': 'unlimited', 'status': 'active', 'current_period_start': PAID},
+        )
+        == {}
+    )
+
+
+def test_pending_new_paid_plan_gets_epoch_on_first_active_payment_only():
+    basic = {'plan': 'basic', 'status': 'active'}
+    pending = {
+        'plan': 'unlimited',
+        'status': 'inactive',
+        'current_period_start': PAID,
+        '_first_week_payment_status': 'past_due',
+    }
+    marker_patch = users_db.pending_paid_start_patch(basic, pending)
+    marker = marker_patch[users_db.FIRST_WEEK_PENDING_PAID_START_FIELD]
+    assert marker == {'period_start': PAID, 'plan': 'unlimited', 'provider': None}
+
+    active = {
+        'plan': 'unlimited',
+        'status': 'active',
+        'current_period_start': PAID,
+        '_first_week_payment_status': 'active',
+        '_first_week_paid_since': PAID,
+    }
+    stored_pending = {'plan': 'unlimited', 'status': 'inactive', 'current_period_start': PAID}
+    assert users_db.paid_since_patch(
+        stored_pending,
+        active,
+        stored_user_pending_paid_start=marker,
+    ) == {'paid_since': PAID}
+    assert users_db.pending_paid_start_patch(
+        stored_pending,
+        active,
+        stored_user_pending_paid_start=marker,
+    ) == {users_db.FIRST_WEEK_PENDING_PAID_START_FIELD: None}
+
+    # A legacy paid account has no pending marker and still never gets backfilled.
+    assert (
+        users_db.paid_since_patch(
+            stored_pending,
+            active,
         )
         == {}
     )
@@ -474,7 +516,11 @@ def test_campaign_off_flag_off_writer_keeps_subscription_payload_unchanged(monke
 def test_conversation_codec_uses_stored_creation_time_for_the_window(monkeypatch):
     _clear(monkeypatch)
     monkeypatch.setenv(guarantee.FIRST_WEEK_ENABLED_ENV, 'true')
-    monkeypatch.setattr(conversations_db, 'first_week_open', lambda _row, now=None: True)
+    monkeypatch.setattr(
+        conversations_db,
+        'first_week_open',
+        lambda row, now=None: guarantee.first_week_open(row, now=PAID + 2 * HOUR),
+    )
     monkeypatch.setattr(
         users_db,
         'first_week_stamp_for',
@@ -495,6 +541,14 @@ def test_conversation_codec_uses_stored_creation_time_for_the_window(monkeypatch
         {'id': 'historical', 'structured': {}},
         conversation_state={'created_at': PAID + HOUR, 'processing_tier': 'historical'},
     )
+    carried_without_outcome = conversations_db.encode_conversation_for_write(
+        'uid',
+        {'id': 'carried', 'structured': {}},
+        conversation_state={
+            'created_at': PAID + HOUR,
+            'first_week_summary': guarantee.first_week_stamp(PAID, PAID + HOUR, interval='monthly'),
+        },
+    )
     closed_stamp = guarantee.first_week_stamp(PAID, PAID + HOUR, interval='monthly')
     closed = conversations_db.encode_conversation_for_write(
         'uid',
@@ -508,6 +562,8 @@ def test_conversation_codec_uses_stored_creation_time_for_the_window(monkeypatch
     )
 
     assert valid['first_week_summary']['paid_since'] == PAID
+    assert valid['first_week_outcome'] is None
+    assert carried_without_outcome['first_week_outcome'] is None
     assert 'first_week_summary' not in old_delta
     assert 'first_week_summary' not in missing_time
     assert 'first_week_summary' not in historical
@@ -520,6 +576,11 @@ def test_conversation_codec_uses_stored_creation_time_for_the_window(monkeypatch
 def test_conversation_codec_does_not_create_a_closed_window_stamp(monkeypatch):
     _clear(monkeypatch)
     monkeypatch.setenv(guarantee.FIRST_WEEK_ENABLED_ENV, 'true')
+    monkeypatch.setattr(
+        conversations_db,
+        'first_week_open',
+        lambda row, now=None: guarantee.first_week_open(row, now=PAID + 8 * 24 * HOUR),
+    )
     monkeypatch.setattr(
         users_db,
         'first_week_stamp_for',
@@ -869,12 +930,14 @@ def test_closeout_classifies_from_the_outbox_attempt_receipt(monkeypatch):
             'uid': 'uid',
             'first_week_summary': guarantee.first_week_stamp(PAID, PAID, interval='monthly'),
             'first_week_outcome': None,
+            'summary_output_present': True,
+            'summary_completed_at': PAID + 8 * 24 * HOUR + 1,
         },
     )
     outbox_id = hashlib.sha256(b'uid\0c').hexdigest()
     client.collection('sync_reprocess_outbox').document(outbox_id).data.update(
         first_week_attempts=1,
-        first_week_last_class='attempt_failed',
+        first_week_last_class='summarized',
     )
 
     result = closeout.close_one(conversation, now=PAID + 8 * 24 * HOUR, client=client)

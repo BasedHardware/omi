@@ -1718,8 +1718,10 @@ def get_user_by_stripe_customer_id(customer_id: str):
 
 
 PAID_START_STATUSES = frozenset({'active'})
+PENDING_PAID_START_STATUSES = frozenset({'incomplete', 'past_due', 'unpaid'})
 FIRST_WEEK_PAID_PLAN_IDS = PAID_PLAN_IDS - {'operator'}
 FIRST_WEEK_TRIALING_FIELD = 'first_week_trialing'
+FIRST_WEEK_PENDING_PAID_START_FIELD = 'first_week_pending_paid_start'
 
 
 def _plan_value(subscription: Any) -> str:
@@ -1745,12 +1747,77 @@ def _is_paid_plan(subscription: Any) -> bool:
     )
 
 
+def _pending_paid_start_matches(marker: Any, incoming: dict) -> bool:
+    if not isinstance(marker, dict):
+        return False
+    period_start = incoming.get('current_period_start')
+    if not isinstance(period_start, (int, float)) or isinstance(period_start, bool) or period_start <= 0:
+        return False
+    provider = incoming.get('provider')
+    provider = getattr(provider, 'value', provider)
+    return (
+        marker.get('period_start') == int(period_start)
+        and marker.get('plan') == _plan_value(incoming)
+        and marker.get('provider') == provider
+    )
+
+
+def pending_paid_start_patch(
+    stored: Any,
+    incoming: dict,
+    *,
+    stored_user_paid_since: Any = None,
+    stored_user_pending_paid_start: Any = None,
+) -> dict[str, Any]:
+    """Remember a new paid plan that is not active yet, then clear it on transition.
+
+    This distinguishes a first subscription that first appears ``past_due`` from
+    a legacy paid account that later recovers from a failed renewal. Only the
+    former may receive a first-paid epoch when an active payment assertion lands.
+    """
+    marker = stored_user_pending_paid_start
+    status = incoming.get('_first_week_payment_status')
+    if not _is_paid_plan(incoming):
+        return {FIRST_WEEK_PENDING_PAID_START_FIELD: None} if marker else {}
+    if isinstance(stored_user_paid_since, int) and not isinstance(stored_user_paid_since, bool):
+        if stored_user_paid_since > 0:
+            return {FIRST_WEEK_PENDING_PAID_START_FIELD: None} if marker else {}
+    if not isinstance(status, str):
+        return {}
+    if status == 'trialing' or status in PAID_START_STATUSES:
+        return {FIRST_WEEK_PENDING_PAID_START_FIELD: None} if marker else {}
+    if status not in PENDING_PAID_START_STATUSES:
+        return {FIRST_WEEK_PENDING_PAID_START_FIELD: None} if marker else {}
+
+    period_start = incoming.get('current_period_start')
+    if not isinstance(period_start, (int, float)) or isinstance(period_start, bool) or period_start <= 0:
+        return (
+            {FIRST_WEEK_PENDING_PAID_START_FIELD: None}
+            if marker and not _pending_paid_start_matches(marker, incoming)
+            else {}
+        )
+    if _pending_paid_start_matches(marker, incoming):
+        return {}
+    if _is_paid_plan(stored):
+        return {FIRST_WEEK_PENDING_PAID_START_FIELD: None} if marker else {}
+    provider = incoming.get('provider')
+    provider = getattr(provider, 'value', provider)
+    return {
+        FIRST_WEEK_PENDING_PAID_START_FIELD: {
+            'period_start': int(period_start),
+            'plan': _plan_value(incoming),
+            'provider': provider,
+        }
+    }
+
+
 def paid_since_patch(
     stored: Any,
     incoming: dict,
     *,
     stored_user_paid_since: Any = None,
     stored_user_first_week_trialing: Any = None,
+    stored_user_pending_paid_start: Any = None,
     now: float | None = None,
 ) -> dict[str, int]:
     """The commercial first-paid epoch, set once on the free->paid transition.
@@ -1781,7 +1848,8 @@ def paid_since_patch(
         return {'paid_since': carried}
     if status and status not in PAID_START_STATUSES:
         return {}
-    if _is_paid_plan(stored) and not (prior_trial and trial_conversion):
+    pending_start = _pending_paid_start_matches(stored_user_pending_paid_start, incoming)
+    if _is_paid_plan(stored) and not (prior_trial and trial_conversion) and not pending_start:
         return {}
     paid_at = incoming.get('_first_week_paid_since')
     if not isinstance(paid_at, (int, float)) or isinstance(paid_at, bool) or paid_at <= 0:
@@ -1834,7 +1902,13 @@ def update_user_subscription(uid: str, subscription_data: dict):
                 @transactional
                 def apply_paid_subscription(transaction):
                     snapshot = user_ref.get(
-                        field_paths=['subscription', 'paid_since', FIRST_WEEK_TRIALING_FIELD], transaction=transaction
+                        field_paths=[
+                            'subscription',
+                            'paid_since',
+                            FIRST_WEEK_TRIALING_FIELD,
+                            FIRST_WEEK_PENDING_PAID_START_FIELD,
+                        ],
+                        transaction=transaction,
                     )
                     data = snapshot.to_dict() or {}
                     paid_patch = paid_since_patch(
@@ -1842,9 +1916,17 @@ def update_user_subscription(uid: str, subscription_data: dict):
                         paid_since_input,
                         stored_user_paid_since=data.get('paid_since'),
                         stored_user_first_week_trialing=data.get(FIRST_WEEK_TRIALING_FIELD),
+                        stored_user_pending_paid_start=data.get(FIRST_WEEK_PENDING_PAID_START_FIELD),
+                    )
+                    pending_patch = pending_paid_start_patch(
+                        data.get('subscription'),
+                        paid_since_input,
+                        stored_user_paid_since=data.get('paid_since'),
+                        stored_user_pending_paid_start=data.get(FIRST_WEEK_PENDING_PAID_START_FIELD),
                     )
                     transaction.update(
-                        user_ref, {'subscription': subscription_data_to_store, **paid_patch, **trialing_patch}
+                        user_ref,
+                        {'subscription': subscription_data_to_store, **paid_patch, **trialing_patch, **pending_patch},
                     )
 
                 run_transactional(db, apply_paid_subscription, transient=True)

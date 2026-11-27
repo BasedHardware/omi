@@ -17,7 +17,12 @@ from database._client import get_customer_firestore_client, get_data_plane_fires
 from database.account_deletion_policy import account_deletion_marker_blocks_access
 from database.fsr_read_cache import writing
 from config.summary_guarantee import first_week_enabled
-from database.users import FIRST_WEEK_TRIALING_FIELD, paid_since_patch
+from database.users import (
+    FIRST_WEEK_PENDING_PAID_START_FIELD,
+    FIRST_WEEK_TRIALING_FIELD,
+    paid_since_patch,
+    pending_paid_start_patch,
+)
 from utils.referral_campaign import (
     CampaignPolicy,
     GRANT_FIELD,
@@ -388,7 +393,16 @@ def write_commercial_subscription(
                 context,
                 stored_user_paid_since=user.get('paid_since'),
                 stored_user_first_week_trialing=user.get(FIRST_WEEK_TRIALING_FIELD),
+                stored_user_pending_paid_start=user.get(FIRST_WEEK_PENDING_PAID_START_FIELD),
                 now=now.timestamp(),
+            )
+            paid_patch.update(
+                pending_paid_start_patch(
+                    user.get('subscription'),
+                    context,
+                    stored_user_paid_since=user.get('paid_since'),
+                    stored_user_pending_paid_start=user.get(FIRST_WEEK_PENDING_PAID_START_FIELD),
+                )
             )
             payment_status = context.get('_first_week_payment_status')
             if isinstance(payment_status, str):

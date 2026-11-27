@@ -212,6 +212,35 @@ def test_first_week_empty_failure_persists_durable_attempt_receipt(store, monkey
     assert store.rows[CONVERSATION]['first_week_summary'] == stamp
     assert store.rows[CONVERSATION]['first_week_attempts'] == 1
     assert store.rows[CONVERSATION]['first_week_last_class'] == 'attempt_failed'
+    assert store.rows[CONVERSATION]['first_week_outcome'] is None
+
+
+def test_first_week_nonempty_attempt_failure_persists_receipt(store, monkeypatch):
+    monkeypatch.setenv('FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED', 'true')
+    stamp = {
+        'policy_id': 'first_week_summary.v1',
+        'paid_since': 100,
+        'window_end_at': 100 + 7 * 24 * 60 * 60,
+        'interval': 'monthly',
+    }
+    store.rows[OUTBOX].update(dormant=False, first_week_summary=stamp)
+    store.rows[CONVERSATION].update(summary_output_present=False, summary_completed_at=None)
+
+    recorded = summary_processing.record_first_week_attempt_failure(
+        store,
+        outbox.COLLECTION,
+        KEY,
+        'worker',
+        'old-token',
+        expected_version=1,
+    )
+
+    assert recorded is True
+    assert store.rows[OUTBOX]['first_week_attempts'] == 1
+    assert store.rows[OUTBOX]['first_week_last_class'] == 'attempt_failed'
+    assert store.rows[CONVERSATION]['first_week_summary'] == stamp
+    assert store.rows[CONVERSATION]['first_week_attempts'] == 1
+    assert store.rows[CONVERSATION]['first_week_outcome'] is None
 
 
 def test_three_owned_empty_outputs_exhaust_once_and_preserve_structured_content(store):

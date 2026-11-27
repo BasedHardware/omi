@@ -416,7 +416,7 @@ def _first_week_for_write(
     if created_at is None:
         return None
     stamp = users_db.first_week_stamp_for(uid, created_at)
-    if stamp and not first_week_open(stamp, now=datetime.now(timezone.utc).timestamp()):
+    if stamp and not first_week_open({'first_week_summary': stamp}, now=datetime.now(timezone.utc).timestamp()):
         return None
     return stamp
 
@@ -452,6 +452,8 @@ def _prepare_conversation_for_write(
                 data[field] = stored_value
         if 'created_at' not in data and 'created_at' in conversation_state:
             data['created_at'] = conversation_state['created_at']
+    if isinstance(data.get('first_week_summary'), Mapping):
+        data.setdefault('first_week_outcome', None)
     summary_delivery.prepare(data, uid, first_week=first_week)
     if owner_diagnostics.FIELD in data:
         try:

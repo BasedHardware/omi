@@ -226,6 +226,8 @@ def test_active_purchase_acknowledges_binds_and_grants_omi_pro(env):
     assert (row.plan, row.status, row.provider) == (PlanType.unlimited_v2, SubscriptionStatus.active, 'play')
     assert row.current_period_end == NOW + 30 * DAY and row.cancel_at_period_end is False
     assert row.stripe_subscription_id is None
+    # The configured trial offer is an active entitlement, not proof of a first charge.
+    assert '_first_week_payment_status' not in env.users.writes[-1][1]
     # Same side effects as a Stripe Omi Pro upgrade.
     assert env.effects == [
         'credits',
@@ -238,6 +240,17 @@ def test_active_purchase_acknowledges_binds_and_grants_omi_pro(env):
     assert doc['uid'] == UID and doc['base_plan_id'] == 'monthly' and doc['auto_renewing'] is True
     assert doc['obfuscated_account_id'] == play_billing.obfuscated_account_id(UID)
     assert env.store.pointers[UID] == play_db.token_key(TOKEN)
+
+
+def test_confirmed_nontrial_play_purchase_passes_paid_start_context(env):
+    env.publisher.resources[TOKEN] = resource()
+    env.publisher.resources[TOKEN]['lineItems'][0]['offerDetails']['offerId'] = 'standard-offer'
+
+    _verify()
+
+    written = env.users.writes[-1][1]
+    assert written['_first_week_payment_status'] == 'active'
+    assert written['_first_week_paid_since'] == NOW - DAY
 
 
 def test_token_replay_by_the_same_user_is_idempotent(env):

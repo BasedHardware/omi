@@ -204,7 +204,16 @@ def _grant(uid: str, state: PlayState, token_hash: str) -> Subscription:
         uid,
         {play_db.USER_POINTER_FIELD: token_hash, play_db.PENDING_FIELD: None, play_db.CUSTOMER_FIELD: True},
     )
-    users_db.update_user_subscription(uid, subscription.model_dump())
+    subscription_data = subscription.model_dump()
+    if state.state in PAID_STATES and state.offer_id != config.trial_offer_id():
+        # The Publisher API has confirmed an active non-trial offer. A configured
+        # trial offer is deliberately excluded: ACTIVE entitlement alone does not
+        # prove that its first charge has happened.
+        subscription_data.update(
+            _first_week_payment_status='active',
+            _first_week_paid_since=state.start,
+        )
+    users_db.update_user_subscription(uid, subscription_data)
     redis_db.set_credits_invalidation_signal(uid)
     conversations_db.unlock_all_conversations(uid)
     memories_db.unlock_all_memories(uid)

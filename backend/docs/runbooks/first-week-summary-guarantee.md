@@ -33,7 +33,7 @@ never stamp a window; the read is the commercial subscription.
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED` | off | Explicit opt-in for the deadline, lane and counter |
+| `FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED` | on | Kill switch for the deadline, lane and counter; production manifests explicitly keep it off until activation |
 | `FIRST_WEEK_SUMMARY_DEADLINE_HOURS` | `168` | Stored window length; `0` disables stamping |
 | `ENRICHMENT_FIRST_WEEK_TASKS_QUEUE` | `enrichment-first-week` | Reserved lane; empty falls back to `enrichment-fresh` |
 
@@ -56,7 +56,7 @@ demotion skip is what protects them for the rest of the window.
 
 `omi_first_week_summary_outcome_total{outcome,interval}` counts each stamped
 conversation once, at its window close, from the 2-minute `first_week_summary_closeout`
-phase on backend-integration. It has its own lease, scan budget and query, so a
+phase on backend-sync, invoked by the `sync-backfill-uid-sequencer` scheduler. It has its own lease, scan budget and query, so a
 slow or unindexed page fails only this phase and never the repair phases.
 
 The first-week stamp preserves the existing 60–120 second first-summary dispatch
@@ -78,8 +78,8 @@ Prometheus counter is the live operational signal and can miss the final update
 if a process exits after the Firestore transaction.
 
 - `summarized`: a usable summary was durable by the window end.
-- `attempt_failed`: an admitted generation attempt produced no usable summary
-  (for example, the empty-output budget was exhausted).
+- `attempt_failed`: at least one generation attempt ran, but no usable summary
+  completed before the window closed (including a summary delivered late).
 - `no_attempt`: none at the window end.
 
 `blocked_byok` is `no_attempt`: no generation attempt was admitted. Attempt
@@ -95,11 +95,12 @@ activation-bounded cohort.
 
 ## Read and generation budget before activation
 
-The code default, production overlay, and `batch-pipeline-worker` chart keep
-`FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED=false` until the approved read-only census
-records the eligible workload. The chart binds the flag off on the GPU
-deployment and its record-seal worker, sweeper, and repair jobs. While disabled, the added
-production reads and summary attempts are zero. Before enabling, record the
+The code default is on. Production overlays and the `batch-pipeline-worker`
+chart explicitly keep `FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED=false` until the
+approved read-only census and activation gates are complete. The chart binds the
+flag off on the GPU deployment and its record-seal worker, sweeper, and repair
+jobs. While disabled, the added production reads and summary attempts are zero.
+Before enabling, record the
 census-backed expected extra summaries/day and reads/day, including:
 
 - one conversation scheduling-metadata read per first-week-enabled outbox mark

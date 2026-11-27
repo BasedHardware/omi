@@ -89,7 +89,7 @@ def classify(row: Mapping[str, Any]) -> tuple[str, str]:
     if row.get('summary_output_present') and (completed is None or end is None or completed <= end):
         return 'summarized', interval
     attempts = row.get('first_week_attempts')
-    if type(attempts) is int and attempts > 0 and row.get('first_week_last_class') == 'attempt_failed':
+    if type(attempts) is int and attempts > 0:
         return 'attempt_failed', interval
     return 'no_attempt', interval
 

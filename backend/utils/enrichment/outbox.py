@@ -47,7 +47,11 @@ from config.record_latency import record_notes_eager_enabled
 from database import record_notes_hold
 from database._client import get_firestore_client
 from database import users as users_db
-from database.summary_processing import record_empty_failure, EmptyFailureOutcome
+from database.summary_processing import (
+    EmptyFailureOutcome,
+    record_empty_failure,
+    record_first_week_attempt_failure,
+)
 from models.finalization_owner import REFUSAL as FINALIZATION_OWNER_REFUSAL, python_owns_finalization
 
 Row: TypeAlias = dict[str, Any]
@@ -946,6 +950,20 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
                 else:
                     record_delivery('summary', 'failed')
                     empty_blocked = True
+        except Exception:
+            if process_context and isinstance(row.get('first_week_summary'), dict):
+                try:
+                    record_first_week_attempt_failure(
+                        get_firestore_client(),
+                        COLLECTION,
+                        document_id,
+                        owner,
+                        task_token,
+                        expected_version=row.get('version'),
+                    )
+                except Exception:
+                    logger.exception('event=first_week_attempt_receipt outcome=unavailable')
+            raise
         finally:
             ADMITTED_OWNER.reset(admitted_token)
             summary_delivery.REPAIR_CONTEXT.reset(context_token)

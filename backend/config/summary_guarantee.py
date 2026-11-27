@@ -1,6 +1,6 @@
 """Universal first-summary deadlines with independent repair and preservation controls."""
 
-from config.refactor_switches import default_off as rollout_default_off
+from config.refactor_switches import default_off as rollout_default_off, default_on as rollout_default_on
 
 from contextvars import ContextVar
 from collections.abc import Mapping
@@ -95,10 +95,10 @@ FIRST_WEEK_DEFAULT_HOURS = 168
 
 
 def first_week_enabled(*, environ: Mapping[str, str] | None = None) -> bool:
-    """Opt-in guarantee; default off until activation gates are complete."""
+    """Kill switch for the first-week guarantee; enabled by default."""
     values = os.environ if environ is None else environ
-    legacy_enabled = values.get(FIRST_WEEK_ENABLED_ENV, 'false').strip().lower() == 'true'
-    return rollout_default_off(FIRST_WEEK_ENABLED_ENV, legacy_enabled, environ=environ)
+    legacy_enabled = values.get(FIRST_WEEK_ENABLED_ENV, 'true').strip().lower() == 'true'
+    return rollout_default_on(FIRST_WEEK_ENABLED_ENV, legacy_enabled, environ=environ)
 
 
 def first_week_window_seconds(*, environ: Mapping[str, str] | None = None) -> int:
