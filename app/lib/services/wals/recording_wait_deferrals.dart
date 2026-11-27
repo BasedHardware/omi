@@ -10,8 +10,9 @@ import 'package:path/path.dart' as path;
 class RecordingWaitDeferrals {
   RecordingWaitDeferrals(this._now, {bool persist = false}) : _prefs = persist ? SharedPreferencesUtil() : null;
 
-  static const maxWaitSeconds = 300;
   static const defaultWaitSeconds = 30;
+  static const _maxLocalWaitSeconds = 300;
+  static const _maxServerWaitSeconds = 1800;
   static const _maxBaseSeconds = 240; // Leave room for jitter even at the cap.
   static const _streakRetention = Duration(minutes: 30);
   static const _prefKey = 'recordingCustodyWaitsV2';
@@ -38,20 +39,23 @@ class RecordingWaitDeferrals {
     _loadOwner();
     if (_waits.isEmpty) return false;
     final now = _now().millisecondsSinceEpoch;
-    final deadline = _waits[_storageKey(key)]?.deadlineMs ?? 0;
-    return deadline > now && deadline - now <= maxWaitSeconds * 1000;
+    final wait = _waits[_storageKey(key)];
+    return wait != null && wait.deadlineMs > now && _validDeadline(wait.deadlineMs, wait.baseSeconds, now);
   }
 
-  Future<void> defer(Set<String> keys, int? seconds) async {
+  Future<void> defer(Set<String> keys, int? retryAfterSeconds, {int? recordingWaitSeconds}) async {
     if (keys.isEmpty) return;
     _loadOwner();
     final now = _now().millisecondsSinceEpoch;
-    _waits.removeWhere((_, wait) => !_validDeadline(wait.deadlineMs, now));
-    final hint = (seconds == null || seconds <= 0) ? defaultWaitSeconds : min(seconds, maxWaitSeconds);
+    _waits.removeWhere((_, wait) => !_validDeadline(wait.deadlineMs, wait.baseSeconds, now));
+    final seconds = recordingWaitSeconds ?? retryAfterSeconds;
+    final hintLimit = recordingWaitSeconds != null ? _maxServerWaitSeconds : _maxLocalWaitSeconds;
+    final hint = (seconds == null || seconds <= 0) ? defaultWaitSeconds : min(seconds, hintLimit);
     final storageKeys = keys.map(_storageKey).toList();
     final previousBase = storageKeys.fold(0, (base, key) => max(base, _waits[key]?.baseSeconds ?? 0));
     final base = max(hint, min(_maxBaseSeconds, previousBase * 2));
-    final jitter = min(maxWaitSeconds - base, max(1, base ~/ 4));
+    // A long server hint is already above the local backoff and jitter window.
+    final jitter = min(max(_maxLocalWaitSeconds, hint) - base, max(1, base ~/ 4));
     final deadline = now + (base + _random.nextInt(jitter + 1)) * 1000;
     for (final key in storageKeys) {
       _waits[key] = (deadlineMs: deadline, baseSeconds: base);
@@ -69,8 +73,8 @@ class RecordingWaitDeferrals {
     if (changed) await _save();
   }
 
-  bool _validDeadline(int deadline, int now) =>
-      deadline >= now - _streakRetention.inMilliseconds && deadline <= now + maxWaitSeconds * 1000;
+  bool _validDeadline(int deadline, int base, int now) =>
+      deadline >= now - _streakRetention.inMilliseconds && deadline - now <= max(_maxLocalWaitSeconds, base) * 1000;
 
   void _loadOwner() {
     final prefs = _prefs;
@@ -93,7 +97,7 @@ class RecordingWaitDeferrals {
         if (value is List && value.length == 2 && value[0] is int && value[1] is int) {
           final deadline = value[0] as int;
           final base = value[1] as int;
-          if (base > 0 && base <= maxWaitSeconds && _validDeadline(deadline, now)) {
+          if (base > 0 && base <= _maxServerWaitSeconds && _validDeadline(deadline, base, now)) {
             _waits[entry.key] = (deadlineMs: deadline, baseSeconds: base);
           }
         }

@@ -10,9 +10,14 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import socket
 import subprocess
 import sys
 import tempfile
+import time
+from urllib.error import HTTPError, URLError
+from urllib.parse import quote
+from urllib.request import ProxyHandler, Request, build_opener
 
 ROOT = Path(__file__).resolve().parents[2]
 REPO = "BasedHardware/omi"
@@ -29,6 +34,11 @@ ADMISSION = {
     "validatingadmissionpolicies.admissionregistration.k8s.io",
     "validatingadmissionpolicybindings.admissionregistration.k8s.io",
 }
+ADMISSION_RESOURCES = ADMISSION | {
+    "mutatingadmissionpolicies.admissionregistration.k8s.io",
+    "mutatingadmissionpolicybindings.admissionregistration.k8s.io",
+}
+DEPENDENCY_RESOURCES = {"configmap", "secret"}
 STORAGE_METADATA = {"uid", "resourceVersion", "generation", "creationTimestamp", "managedFields"}
 DEPLOYMENT_REVISION = "deployment.kubernetes.io/revision"
 
@@ -42,8 +52,8 @@ def require(condition, reason):
         raise Refused(reason)
 
 
-def run(args, reason, *, stdin=None):
-    result = subprocess.run(args, input=stdin, cwd=ROOT, capture_output=True, text=True, check=False, timeout=120)
+def run(args, reason, *, stdin=None, timeout=120):
+    result = subprocess.run(args, input=stdin, cwd=ROOT, capture_output=True, text=True, check=False, timeout=timeout)
     require(result.returncode == 0, reason)
     return result.stdout
 
@@ -55,6 +65,34 @@ def version(obj):
     result = [metadata["uid"], metadata["resourceVersion"]]
     require(all(isinstance(item, str) and item for item in result), "object_identity_missing")
     return result
+
+
+def partial_metadata_version(response, name, namespace):
+    content_type = response.headers.get("Content-Type", "").lower().replace(" ", "")
+    require(
+        "application/json" in content_type
+        and "as=partialobjectmetadata" in content_type
+        and "g=meta.k8s.io" in content_type
+        and "v=v1" in content_type,
+        "secret_metadata_only_response_unavailable",
+    )
+    try:
+        result = json.load(response)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        require(False, "secret_metadata_only_response_invalid")
+    require(
+        isinstance(result, dict)
+        and result.get("apiVersion") == "meta.k8s.io/v1"
+        and result.get("kind") == "PartialObjectMetadata"
+        and set(result) <= {"apiVersion", "kind", "metadata"}
+        and isinstance(result.get("metadata"), dict),
+        "secret_metadata_only_response_invalid",
+    )
+    metadata = result["metadata"]
+    require(
+        metadata.get("name") == name and metadata.get("namespace") == namespace, "secret_metadata_identity_mismatch"
+    )
+    return version(result)
 
 
 def comparable(obj):
@@ -151,6 +189,60 @@ class Cluster:
             return None
         return result
 
+    def secret_version(self, name, *, namespace, optional=False):
+        """Read only Secret identity through Kubernetes PartialObjectMetadata negotiation."""
+        require(NAME.fullmatch(name) and NAME.fullmatch(namespace), "invalid_dependency_inventory")
+        with socket.socket() as listener:
+            listener.bind(("127.0.0.1", 0))
+            port = listener.getsockname()[1]
+
+        proxy = None
+        try:
+            proxy = subprocess.Popen(
+                [*self.command, "proxy", "--address=127.0.0.1", f"--port={port}"],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            deadline = time.monotonic() + 10
+            while True:
+                require(proxy.poll() is None, "secret_metadata_proxy_unavailable")
+                try:
+                    with socket.create_connection(("127.0.0.1", port), timeout=0.2):
+                        break
+                except OSError:
+                    require(time.monotonic() < deadline, "secret_metadata_proxy_unavailable")
+                    time.sleep(0.05)
+
+            path = f"/api/v1/namespaces/{quote(namespace, safe='')}/secrets/{quote(name, safe='')}"
+            request = Request(
+                f"http://127.0.0.1:{port}{path}",
+                headers={"Accept": "application/json;as=PartialObjectMetadata;g=meta.k8s.io;v=v1"},
+            )
+            try:
+                opener = build_opener(ProxyHandler({}))
+                with opener.open(request, timeout=30) as response:
+                    return partial_metadata_version(response, name, namespace)
+            except HTTPError as error:
+                if optional and error.code == 404:
+                    return None
+                raise Refused("secret_metadata_read_failed") from None
+            except (OSError, URLError, TimeoutError):
+                raise Refused("secret_metadata_read_failed") from None
+        except OSError:
+            raise Refused("secret_metadata_proxy_unavailable") from None
+        finally:
+            if proxy is not None:
+                try:
+                    if proxy.poll() is None:
+                        proxy.terminate()
+                    proxy.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    proxy.kill()
+                    proxy.wait()
+                except OSError:
+                    pass
+
     def identity(self):
         return self.call("auth", "whoami", "-o", "json")["status"]["userInfo"]
 
@@ -190,6 +282,9 @@ class Cluster:
 
     def transition(self, obj, expected, desired, *, dry_run=True, allow_same=False):
         require(dry_run or self.isolated, "production_write_refused")
+        return self._submit_image_patch(obj, expected, desired, dry_run=dry_run, allow_same=allow_same)
+
+    def _submit_image_patch(self, obj, expected, desired, *, dry_run, allow_same=False):
         patch = guarded_patch(obj, expected, desired, allow_same=allow_same)
         mode = "--dry-run=server" if dry_run else "--dry-run=none"
         admitted = self.call(
@@ -203,7 +298,7 @@ class Cluster:
             mode,
             "-o",
             "json",
-            reason="server_dry_run_rejected" if dry_run else "isolated_patch_failed_reconcile_before_retry",
+            reason="server_dry_run_rejected" if dry_run else self.patch_failure_reason,
             stdin=json.dumps(patch),
         )
         require(
@@ -211,6 +306,8 @@ class Cluster:
             "admission_changed_more_than_image",
         )
         return admitted
+
+    patch_failure_reason = "isolated_patch_failed_reconcile_before_retry"
 
 
 def config_references(value):
@@ -267,6 +364,34 @@ def validate_proof(proof):
         set(proof["evidence"]) == evidence_fields
         and all(PROOF_ID.fullmatch(ref) for ref in proof["evidence"].values()),
         "release_evidence_missing",
+    )
+    admission_resources = proof["extra_admission_resources"]
+    require(
+        isinstance(admission_resources, list)
+        and all(isinstance(resource, str) and resource in ADMISSION_RESOURCES for resource in admission_resources)
+        and len(set(admission_resources)) == len(admission_resources),
+        "invalid_admission_inventory",
+    )
+    dependencies = proof["live_dependencies"]
+    require(
+        isinstance(dependencies, list)
+        and all(
+            isinstance(item, dict)
+            and set(item) == {"resource", "name", "version"}
+            and isinstance(item["resource"], str)
+            and item["resource"] in DEPENDENCY_RESOURCES
+            and isinstance(item["name"], str)
+            and NAME.fullmatch(item["name"])
+            and (
+                item["version"] is None
+                or isinstance(item["version"], list)
+                and len(item["version"]) == 2
+                and all(isinstance(part, str) and part for part in item["version"])
+            )
+            for item in dependencies
+        )
+        and len({(item["resource"], item["name"]) for item in dependencies}) == len(dependencies),
+        "invalid_dependency_inventory",
     )
     expiry = datetime.fromisoformat(proof["valid_until"])
     require(expiry.tzinfo and datetime.now(timezone.utc) < expiry, "release_proof_expired")
@@ -394,6 +519,7 @@ def check_provenance(proof):
             ],
             "development_qualification_failed",
         )
+        qualification_receipt = read_json(artifacts / "pusher-dev-deployment-receipt.json")
 
     for image in (f"{dev_repository}@{digest}", candidate, proof["prior_image"]):
         remote_digest = run(
@@ -401,15 +527,23 @@ def check_provenance(proof):
             "registry_digest_unavailable",
         ).strip()
         require(remote_digest == image.split("@")[1], "registry_digest_mismatch")
+    return qualification_receipt
 
 
 def read_admission(cluster, reviewed_resources):
+    require(
+        isinstance(reviewed_resources, list)
+        and all(isinstance(resource, str) and resource in ADMISSION_RESOURCES for resource in reviewed_resources)
+        and len(set(reviewed_resources)) == len(reviewed_resources),
+        "invalid_admission_inventory",
+    )
     namespace = cluster.get("namespace", NAMESPACE)
     policies = {}
     versions = [version(namespace)]
     discovered = cluster.admission_resources()
     require(ADMISSION <= discovered, "mandatory_admission_api_unavailable")
-    for resource in sorted(discovered | set(reviewed_resources)):
+    require(discovered <= ADMISSION_RESOURCES and set(reviewed_resources) <= discovered, "invalid_admission_inventory")
+    for resource in sorted(discovered):
         listing = cluster.get(resource)
         require(not listing["metadata"].get("continue"), "incomplete_admission_inventory")
         objects = sorted(listing["items"], key=lambda obj: obj["metadata"]["name"])
@@ -462,23 +596,26 @@ class Rehearsal:
         for item in self.proof["live_dependencies"]:
             kind, name = item["resource"], item["name"]
             require(
-                NAME.fullmatch(kind) and NAME.fullmatch(name) and (kind, name) not in expected,
+                kind in DEPENDENCY_RESOURCES and NAME.fullmatch(name) and (kind, name) not in expected,
                 "invalid_dependency_inventory",
             )
             expected[kind, name] = item["version"]
         references = list(config_references(live["spec"]["template"]["spec"]))
         refs = {ref for ref, _ in references}
         require(
-            SHARED in refs and refs <= expected.keys() and expected[SHARED] is not None,
-            "shared_reference_or_dependency_missing",
+            SHARED in refs and refs == expected.keys() and expected[SHARED] is not None,
+            "dependency_inventory_mismatch",
         )
         require(
             all(optional or expected[ref] is not None for ref, optional in references),
             "required_dependency_absent",
         )
         for (kind, name), identity_version in sorted(expected.items()):
-            actual = self.live.get(kind, name, namespace=NAMESPACE, optional=True)
-            require(version(actual) == identity_version, "live_dependency_changed")
+            if kind == "secret":
+                actual_version = self.live.secret_version(name, namespace=NAMESPACE, optional=True)
+            else:
+                actual_version = version(self.live.get(kind, name, namespace=NAMESPACE, optional=True))
+            require(actual_version == identity_version, "live_dependency_changed")
         validate_proof(self.proof)
         return live, isolated, [live_versions, isolated_versions]
 
@@ -531,6 +668,20 @@ class Rehearsal:
 
     def verify_inverse(self, rehearsal, result):
         result["stage"] = "observe_live_candidate"
+        self.check_receipt(rehearsal, result)
+        live, prior, policies = self.observe(self.candidate, self.prior, post_move=True)
+        result["observed_candidate"] = version(live)
+        require(version(live)[1] != rehearsal["live_baseline"][1], "live_candidate_not_persisted")
+        self.check_rehearsed_state(rehearsal, prior, policies)
+        result["stage"] = "server_dry_run_exact_live_inverse"
+        reverse = self.live.transition(live, self.candidate, self.prior)
+        require(
+            comparable(reverse) == post_move_baseline(prior, live, self.prior), "live_inverse_differs_from_rehearsal"
+        )
+        self.recheck(live, prior, policies, post_move=True)
+        return live, prior, policies
+
+    def check_receipt(self, rehearsal, result):
         require(
             rehearsal["status"] == "PASS"
             and rehearsal["mode"] == "rehearse"
@@ -548,24 +699,26 @@ class Rehearsal:
             and rehearsal["live_baseline"] == self.proof["live_deployment"],
             "rehearsal_receipt_mismatch",
         )
-        live, prior, policies = self.observe(self.candidate, self.prior, post_move=True)
-        result["observed_candidate"] = version(live)
-        require(version(live)[1] != rehearsal["live_baseline"][1], "live_candidate_not_persisted")
+
+    def check_rehearsed_state(self, rehearsal, prior, policies):
         require(
             version(prior) == rehearsal["isolated_restored"] and policies == rehearsal["admission_versions"],
             "rehearsed_baseline_or_policy_changed",
         )
-        result["stage"] = "server_dry_run_exact_live_inverse"
-        reverse = self.live.transition(live, self.candidate, self.prior)
-        require(
-            comparable(reverse) == post_move_baseline(prior, live, self.prior), "live_inverse_differs_from_rehearsal"
-        )
-        self.recheck(live, prior, policies, post_move=True)
 
 
 def read_json(path):
     with path.open(encoding="utf-8") as handle:
         return json.load(handle)
+
+
+def proof_receipt_fields(proof):
+    # The proof carries identities and evidence IDs, never runtime values.
+    return {
+        "proof_id": proof["id"],
+        "proof_sha256": hashlib.sha256(json.dumps(proof, sort_keys=True).encode()).hexdigest(),
+        **{key: proof[key] for key in ("prior_image", "candidate_image", "source_sha", "qualification_run_id")},
+    }
 
 
 def main():
@@ -589,21 +742,7 @@ def main():
             Cluster(args.isolated_kubeconfig, args.isolated_context, isolated=True),
             proof,
         )
-        # Bind the Release evidence packet, which carries identities and evidence IDs, never runtime values.
-        proof_sha = hashlib.sha256(json.dumps(proof, sort_keys=True).encode()).hexdigest()
-        result.update(
-            proof_id=proof["id"],
-            proof_sha256=proof_sha,
-            **{
-                key: proof[key]
-                for key in (
-                    "prior_image",
-                    "candidate_image",
-                    "source_sha",
-                    "qualification_run_id",
-                )
-            },
-        )
+        result.update(proof_receipt_fields(proof))
         if args.mode == "rehearse":
             result["stage"] = "verify_provenance"
             check_provenance(proof)

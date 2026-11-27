@@ -21,6 +21,15 @@ class DirectBackendProductionAdmissionTests(unittest.TestCase):
     def test_inventory_is_admitted_and_uses_checked_out_source_identity(self) -> None:
         self.assertEqual(CHECKER.validate(ROOT), [])
 
+    def test_image_only_control_checkout_cannot_use_candidate_source(self):
+        text = (ROOT / CHECKER.PUSHER_WORKFLOW).read_text(encoding="utf-8")
+        legacy, separator, image_only = text.partition("\n  pusher-image-only:\n")
+        self.assertTrue(CHECKER.pusher_image_only_checkout_is_bound(text))
+        for ref in ("main", "${{ inputs.branch }}"):
+            with self.subTest(ref=ref):
+                mutated = image_only.replace("ref: ${{ github.workflow_sha }}", f"ref: {ref}", 1)
+                self.assertFalse(CHECKER.pusher_image_only_checkout_is_bound(legacy + separator + mutated))
+
     def test_listen_exporter_job_checks_out_exact_admitted_source(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
