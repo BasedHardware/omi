@@ -154,7 +154,7 @@ FINISH_HELD = Counter(
 
 NOTES_FINISH_FIRST = Counter(
     'omi_conversations_v3_notes_finish_first_total',
-    'Notes drains that moved a manual Finish ahead of other pending rows',
+    'Finishes the v3 notes drain moved ahead of at least one other pending row',
 )
 
 SUMMARY_LATENCY = Histogram('omi_conversations_v3_end_to_summary_seconds', 'End to stored summary')

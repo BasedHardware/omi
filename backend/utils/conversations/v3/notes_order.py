@@ -17,13 +17,43 @@ def _finished(row):
     return finished if isinstance(finished, datetime) else _OLDEST
 
 
+def passive_finish(row):
+    """A media or background window the owner finished that shows on Home.
+
+    ``policy.manual_intent`` leaves these out (they get no full notes), but the owner is waiting on the
+    card. The stored ``home_hidden`` is the planner's projection of ``CONVERSATIONS_V3_MANUAL_END_HOME_VISIBLE``
+    for the row, so a passive Finish that Home hides stays in the scan's order.
+    """
+    return bool(
+        policy.flag(row, 'v3_derived')
+        and policy.flag(row, 'manual_end')
+        and policy.field(row, 'kind') in {'media', 'background'}
+        and row.get('home_hidden') is False
+    )
+
+
+def _finish(row):
+    return row is not None and (policy.manual_intent(row) or passive_finish(row))
+
+
 def finish_first(rows):
-    """The owner's manual Finishes first, newest first; every other row keeps the scan's order."""
-    finishes = [row for row in rows if row is not None and policy.manual_intent(row)]
+    """The owner's Finishes first, every other row after them in the scan's order.
+
+    Visible passive Finishes lead: they settle without a model call, so they cost a manual Finish behind them
+    almost nothing, while one behind a 20 to 40 s summary would wait that long. Each group is newest first.
+    """
+    finishes = [row for row in rows if _finish(row)]
     if not finishes or not notes_finish_first_enabled():
         return rows
-    finishes.sort(key=_finished, reverse=True)
-    ordered = finishes + [row for row in rows if row is None or not policy.manual_intent(row)]
-    if any(moved is not kept for moved, kept in zip(ordered, rows)):
-        metrics.safe_metric(lambda: metrics.NOTES_FINISH_FIRST.inc())
+    finishes.sort(key=lambda row: (passive_finish(row), _finished(row)), reverse=True)
+    ordered = finishes + [row for row in rows if not _finish(row)]
+    # Count each Finish that moved ahead of at least one other pending row, not reorders among Finishes.
+    ahead, seen_other = 0, False
+    for row in rows:
+        if not _finish(row):
+            seen_other = True
+        elif seen_other:
+            ahead += 1
+    if ahead:
+        metrics.safe_metric(lambda: metrics.NOTES_FINISH_FIRST.inc(ahead))
     return ordered

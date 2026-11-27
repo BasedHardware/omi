@@ -51,7 +51,7 @@ async def test_finishes_drain_first_newest_first_and_the_rest_keep_scan_order(dr
     rows = [
         _row('a'),
         _row('b', manual=True, finished=10),
-        _row('c', kind='background', manual=True, finished=99),  # passive: never a Finish
+        _row('c', kind='background', manual=True, finished=99, home_hidden=True),  # passive and hidden
         _row('d'),
         _row('e', manual=True, finished=30),
     ]
@@ -61,7 +61,27 @@ async def test_finishes_drain_first_newest_first_and_the_rest_keep_scan_order(dr
     await service.drain_processing('u')
 
     assert drain == ['e', 'b', 'a', 'c', 'd']
-    assert service.metrics.NOTES_FINISH_FIRST._value.get() == before + 1
+    # Two Finishes (b and e) moved ahead of other rows; the counter counts Finishes, not drains.
+    assert service.metrics.NOTES_FINISH_FIRST._value.get() == before + 2
+
+
+@pytest.mark.asyncio
+async def test_a_passive_finish_that_shows_on_home_drains_first(drain, monkeypatch):
+    # A media or background manual end visible on Home settles without a model call: it leads the Finishes.
+    rows = [
+        _row('a'),
+        _row('m', manual=True, finished=30),
+        _row('p', kind='media', manual=True, finished=10, home_hidden=False),
+        _row('q', kind='background', manual=True, finished=40, home_hidden=True),  # Home hides it
+        _row('s', kind='background', manual=False, finished=50, home_hidden=False),  # not a Finish
+    ]
+    monkeypatch.setattr(service, 'pending_processing', lambda uid: rows)
+    before = service.metrics.NOTES_FINISH_FIRST._value.get()
+
+    await service.drain_processing('u')
+
+    assert drain == ['p', 'm', 'a', 'q', 's']
+    assert service.metrics.NOTES_FINISH_FIRST._value.get() == before + 2
 
 
 @pytest.mark.asyncio
@@ -89,7 +109,7 @@ async def test_kill_switch_keeps_the_scan_order(drain, monkeypatch):
     assert drain == ['a', 'b']
 
 
-def test_missing_rows_and_finish_times_keep_their_place():
+def test_a_finish_without_finished_at_goes_last_among_finishes_and_missing_rows_keep_scan_order():
     rows = [None, _row('a'), _row('b', manual=True, finished_at=None), _row('c', manual=True, finished=5)]
 
     ordered = notes_order.finish_first(rows)

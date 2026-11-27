@@ -13,7 +13,13 @@ reconcile requests running to the 600 s dispatch deadline, 53 of 3,000 sampled o
 
 ## What changed
 
-The drain puts manual-intent rows first, newest first. Other rows keep their order after them.
+The drain puts Finishes first. A media or background window the owner finished that shows on Home
+leads, because it settles without a model call; manual-intent rows follow. Each group is newest first.
+Other rows keep their order after them.
+
+Not changed here: `pending_processing` still takes the first 128 due rows in document-id order before
+this reorder, so in an owner backlog deeper than that a Finish with a high document id may not be in
+the page, and waits for a later drain. Querying Finishes first is a follow-up.
 
 ## Cost
 
@@ -25,6 +31,7 @@ Set `CONVERSATIONS_V3_NOTES_FINISH_FIRST=off` on backend-sync.
 
 ## Readback
 
-- `omi_conversations_v3_notes_finish_first_total` counts the drains where a Finish moved ahead.
+- `omi_conversations_v3_notes_finish_first_total` counts each Finish moved ahead of at least one other
+  pending row.
 - The Finish-to-Home SLI (SCA-4489) should show fewer Finishes whose summary trails their outline by
   more than one summary call.

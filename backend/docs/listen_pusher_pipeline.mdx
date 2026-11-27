@@ -110,12 +110,16 @@ request on its recording. A multi-unit batch request can cut only after the full
 native binding has projected. Set the switch to `off` on the API service to restore the lookup-miss 404.
 
 `CONVERSATIONS_V3_NOTES_FINISH_FIRST` defaults to `on`. The notes drain after a builder pass
-(`drain_processing`) processes its due `v3_process_pending` rows one at a time. Rows with manual-end intent
-(`policy.manual_intent`: derived, `manual_end`, not media or background) go first, newest `finished_at` first.
-Every other row keeps the scan's document-id order after them. The scan, the rows, the leases and the
-model calls are unchanged. A drain that moved a Finish ahead counts in
-`omi_conversations_v3_notes_finish_first_total`. Set it to `off` on backend-sync to restore document-id
-order.
+(`drain_processing`) processes its due `v3_process_pending` rows one at a time. Finishes go first. A
+media or background window the owner finished that shows on Home (`manual_end` with `home_hidden` false,
+the planner's projection of `CONVERSATIONS_V3_MANUAL_END_HOME_VISIBLE`) leads, because it settles without a
+model call. Rows with manual-end intent (`policy.manual_intent`: derived, `manual_end`, not media or
+background) follow. Each group is newest `finished_at` first. Every other row keeps the scan's document-id
+order after them. The scan, the rows, the leases and the model calls are unchanged. The scan itself
+(`pending_processing`) still takes the first 128 due rows in document-id order, so in a deeper backlog a
+Finish past that page waits for a later drain. Each Finish moved ahead of at least one other pending row
+counts once in `omi_conversations_v3_notes_finish_first_total`. Set it to `off` on backend-sync to restore
+document-id order.
 
 `CONVERSATIONS_V3_FINISH_NEWER_CAPTURE` defaults to `on`. When that Finish resolves to a live
 window, the same transaction reads at most `RECENT_FINISH_LIMIT` (8) recent sources. The newest sealed
