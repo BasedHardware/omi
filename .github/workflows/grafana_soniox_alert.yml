@@ -1,0 +1,104 @@
+name: Provision Soniox Grafana alert
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Apply only the Soniox daily-hours alert, or restore its captured pre-apply state
+        type: choice
+        options: [apply, restore]
+        default: apply
+        required: true
+      source_run_id:
+        description: Original alert-only apply run ID (restore only)
+        type: string
+        required: false
+      source_sha:
+        description: Full source SHA from the original alert-only apply run (restore only)
+        type: string
+        required: false
+
+permissions:
+  actions: read
+  contents: read
+
+env:
+  # Bound stalled checkout transfers so actions/checkout can retry promptly.
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
+
+jobs:
+  validate:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Validate operation and source coordinates
+        env:
+          OPERATION: ${{ inputs.operation }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          if [[ "$OPERATION" == restore ]]; then
+            [[ "$SOURCE_RUN_ID" =~ ^[1-9][0-9]*$ ]] || { echo 'restore requires a positive source_run_id' >&2; exit 1; }
+            [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'restore requires a full lowercase source_sha' >&2; exit 1; }
+          fi
+          python3 backend/scripts/provision_monitoring_alerts.py --soniox-alert-only --lint
+
+  provision-soniox-alert:
+    if: github.ref == 'refs/heads/main'
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: prod
+    concurrency:
+      # Match the alert-write lock in grafana_dashboard_provisioning.yml.
+      group: grafana-alert-provisioning-prod
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+      - name: Apply only the Soniox daily-hours alert
+        if: inputs.operation == 'apply'
+        env:
+          MONITOR_GRAFANA_TOKEN: ${{ secrets.MONITOR_GRAFANA_TOKEN }}
+          SOURCE_SHA: ${{ github.sha }}
+          SOURCE_RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 backend/scripts/provision_monitoring_alerts.py \
+            --soniox-alert-only \
+            --apply \
+            --source-sha "$SOURCE_SHA" \
+            --source-run-id "$SOURCE_RUN_ID" \
+            --backup-file "$RUNNER_TEMP/grafana-alert-backup.json"
+      - name: Download the selected apply snapshot
+        if: inputs.operation == 'restore'
+        uses: actions/download-artifact@v7
+        with:
+          name: grafana-soniox-alert-backup-${{ inputs.source_run_id }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.source_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: ${{ runner.temp }}/soniox-alert-rollback
+      - name: Restore or remove only the Soniox daily-hours alert
+        if: inputs.operation == 'restore'
+        env:
+          MONITOR_GRAFANA_TOKEN: ${{ secrets.MONITOR_GRAFANA_TOKEN }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+        run: |
+          set -euo pipefail
+          python3 backend/scripts/restore_soniox_alert.py \
+            --backup-file "$RUNNER_TEMP/soniox-alert-rollback/grafana-alert-backup.json" \
+            --expected-source-sha "$SOURCE_SHA" \
+            --expected-source-run-id "$SOURCE_RUN_ID" \
+            --apply --confirm-soniox-alert-restore
+      - name: Preserve pre-apply alert snapshot for rollback
+        if: always() && inputs.operation == 'apply'
+        uses: actions/upload-artifact@v7
+        with:
+          name: grafana-soniox-alert-backup-${{ github.run_id }}
+          path: ${{ runner.temp }}/grafana-alert-backup.json
+          if-no-files-found: ignore
+          retention-days: 15

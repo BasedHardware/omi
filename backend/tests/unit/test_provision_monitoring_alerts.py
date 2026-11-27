@@ -49,7 +49,10 @@ class FakeGrafana:
             return {'uid': 'folder'}
         self.writes.append((method, path, body, editable))
         if not self.ignore_writes:
-            self.live[body['uid']] = copy.deepcopy(body)
+            if method == 'DELETE':
+                self.live.pop(path.rsplit('/', 1)[-1], None)
+            else:
+                self.live[body['uid']] = copy.deepcopy(body)
         return body
 
 
@@ -69,7 +72,13 @@ def test_apply_backs_up_before_writes_and_strips_runtime_fields(provisioner, tmp
     api = FakeGrafana({'example': old})
     backup = tmp_path / 'backup.json'
     assert provisioner.reconcile(api, desired, backup=backup) == []
-    assert json.loads(backup.read_text()) == {'rules': [old], 'created_uids': ['new']}
+    assert json.loads(backup.read_text()) == {
+        'schema_version': 1,
+        'source_sha': '',
+        'source_run_id': '',
+        'rules': [old],
+        'created_uids': ['new'],
+    }
     assert backup.stat().st_mode & 0o777 == 0o600
     assert [write[0] for write in api.writes] == ['PUT', 'POST']
     assert all('id' not in write[2] and 'updated' not in write[2] for write in api.writes)
@@ -80,6 +89,71 @@ def test_noop_does_not_write_and_preserves_extra_live_rules(provisioner, tmp_pat
     assert provisioner.reconcile(api, {'example': rule()}, backup=tmp_path / 'backup') == [
         'extra: live but uncommitted (retained)'
     ]
+    assert api.writes == []
+
+
+def test_soniox_only_scope_writes_one_uid_and_captures_its_inverse(provisioner, tmp_path, monkeypatch):
+    uid = provisioner.SONIOX_DAILY_HOURS_UID
+    soniox = {**rule(uid), 'execErrState': 'KeepLast'}
+    canaries = {
+        canary_uid: {
+            **rule(canary_uid),
+            'isPaused': False,
+            'execErrState': 'Alerting',
+            'noDataState': 'Alerting',
+        }
+        for canary_uid in provisioner.CANARY_UIDS
+    }
+    desired = {uid: soniox, 'unrelated': rule('unrelated'), **canaries}
+    scoped = provisioner.select_rules(desired, soniox_alert_only=True)
+    assert set(scoped) == {uid}
+
+    prior = {**rule(uid), 'title': 'captured prior definition'}
+    api = FakeGrafana(
+        {
+            uid: prior,
+            'unrelated': {**rule('unrelated'), 'title': 'leave unchanged'},
+            **canaries,
+        }
+    )
+    probed = []
+    monkeypatch.setitem(
+        provisioner.reconcile.__globals__,
+        'probe_datasources',
+        lambda api, rules: probed.append(set(rules)) or [],
+    )
+    backup = tmp_path / 'soniox-backup.json'
+    source_sha = 'a' * 40
+    source_run_id = '46045070289'
+    assert (
+        provisioner.reconcile(
+            api,
+            scoped,
+            backup=backup,
+            source_sha=source_sha,
+            source_run_id=source_run_id,
+            soniox_alert_only=True,
+            canary_rules=desired,
+        )
+        == []
+    )
+
+    assert [write[1] for write in api.writes] == [provisioner.API + '/' + uid]
+    assert probed == [set(provisioner.CANARY_UIDS)]
+    snapshot = json.loads(backup.read_text())
+    assert snapshot['source_sha'] == source_sha
+    assert snapshot['source_run_id'] == source_run_id
+    assert [saved['uid'] for saved in snapshot['rules']] == [uid]
+    assert snapshot['soniox_alert_rollback'] == {'uid': uid, 'desired': provisioner.definition(desired[uid])}
+    assert api.live['unrelated']['title'] == 'leave unchanged'
+
+
+def test_soniox_only_read_check_ignores_unrelated_live_rules(provisioner):
+    uid = provisioner.SONIOX_DAILY_HOURS_UID
+    desired = {uid: rule(uid)}
+    api = FakeGrafana({uid: rule(uid), 'unrelated': rule('unrelated')})
+
+    assert provisioner.reconcile(api, desired, soniox_alert_only=True) == []
     assert api.writes == []
 
 

@@ -56,6 +56,7 @@ FIELDS = (
     'missingSeriesEvalsToResolve',
 )
 API = '/api/v1/provisioning/alert-rules'
+SONIOX_DAILY_HOURS_UID = 'omi-batch-soniox-daily-hours'
 CANARY_UIDS = ('omi-datasource-prometheus', 'omi-datasource-cloud-monitoring', 'omi-datasource-gmp')
 EXPRESSION_DATASOURCES = ('__expr__', '-100')
 
@@ -217,7 +218,7 @@ class Grafana:
         if len(data) > 8_000_000:
             raise ValueError('Grafana response exceeds size limit')
         try:
-            return json.loads(data)
+            return json.loads(data) if data else None
         except (ValueError, UnicodeError):
             raise ValueError('Grafana response is not JSON') from None
 
@@ -303,14 +304,29 @@ def probe_datasources(api: Grafana, rules: dict[str, dict]) -> list[str]:
     return failures
 
 
-def reconcile(api: Grafana, desired: dict[str, dict], *, backup: Path | None = None) -> list[str]:
+def reconcile(
+    api: Grafana,
+    desired: dict[str, dict],
+    *,
+    backup: Path | None = None,
+    source_sha: str = '',
+    source_run_id: str = '',
+    soniox_alert_only: bool = False,
+    canary_rules: dict[str, dict] | None = None,
+) -> list[str]:
     live = api.rules()
     # The Redis phone cutover has its own approval and readback scope.
     bulk_desired = {uid: rule for uid, rule in desired.items() if uid != REDIS_PAGER_UID}
     if backup is None:
-        return drift(bulk_desired, {uid: rule for uid, rule in live.items() if uid != REDIS_PAGER_UID})
+        observed = (
+            {uid: rule for uid, rule in live.items() if uid in bulk_desired}
+            if soniox_alert_only
+            else {uid: rule for uid, rule in live.items() if uid != REDIS_PAGER_UID}
+        )
+        return drift(bulk_desired, observed)
     needs_canaries = any(rule.get('execErrState') == 'KeepLast' for rule in bulk_desired.values())
-    canaries = {uid: desired[uid] for uid in CANARY_UIDS if uid in desired}
+    canary_source = canary_rules if canary_rules is not None else desired
+    canaries = {uid: canary_source[uid] for uid in CANARY_UIDS if uid in canary_source}
     if needs_canaries and len(canaries) != len(CANARY_UIDS):
         raise ValueError('KeepLast requires every committed datasource canary')
     for rule in canaries.values():
@@ -356,9 +372,22 @@ def reconcile(api: Grafana, desired: dict[str, dict], *, backup: Path | None = N
     # Exclusive creation refuses symlinks/overwrites and preserves the pre-write state.
     fd = os.open(backup, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, 'w') as handle:
-        json.dump(
-            {'rules': list(live.values()), 'created_uids': sorted(bulk_desired.keys() - live.keys())}, handle, indent=2
+        snapshot_rules = (
+            [live[uid] for uid in bulk_desired if uid in live] if soniox_alert_only else list(live.values())
         )
+        snapshot = {
+            'schema_version': 1,
+            'source_sha': source_sha,
+            'source_run_id': str(source_run_id),
+            'rules': snapshot_rules,
+            'created_uids': sorted(bulk_desired.keys() - live.keys()),
+        }
+        if soniox_alert_only:
+            snapshot['soniox_alert_rollback'] = {
+                'uid': SONIOX_DAILY_HOURS_UID,
+                'desired': definition(bulk_desired[SONIOX_DAILY_HOURS_UID]),
+            }
+        json.dump(snapshot, handle, indent=2)
         handle.flush()
         os.fsync(handle.fileno())
 
@@ -384,7 +413,12 @@ def reconcile(api: Grafana, desired: dict[str, dict], *, backup: Path | None = N
         if failures:
             return failures
     apply_rules(item for item in planned if item[0] not in canaries)
-    bulk_live = {uid: rule for uid, rule in api.rules().items() if uid != REDIS_PAGER_UID}
+    current = api.rules()
+    bulk_live = (
+        {uid: current[uid] for uid in bulk_desired if uid in current}
+        if soniox_alert_only
+        else {uid: rule for uid, rule in current.items() if uid != REDIS_PAGER_UID}
+    )
     return drift(bulk_desired, bulk_live)
 
 
@@ -403,6 +437,15 @@ def check_redis_pilot(
     return drift({REDIS_PAGER_UID: desired}, {uid: rule for uid, rule in current.items() if uid == REDIS_PAGER_UID})
 
 
+def select_rules(rules: dict[str, dict], *, soniox_alert_only: bool) -> dict[str, dict]:
+    if not soniox_alert_only:
+        return rules
+    rule = rules.get(SONIOX_DAILY_HOURS_UID)
+    if rule is None:
+        raise ValueError(f'{SONIOX_DAILY_HOURS_UID}: committed alert is missing')
+    return {SONIOX_DAILY_HOURS_UID: rule}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--rules', type=Path, default=RULES)
@@ -410,6 +453,13 @@ def main() -> int:
     parser.add_argument('--token-env', default='MONITOR_GRAFANA_TOKEN')
     parser.add_argument('--apply', action='store_true')
     parser.add_argument('--backup-file', type=Path)
+    parser.add_argument('--source-sha', default=os.environ.get('GITHUB_SHA', ''))
+    parser.add_argument('--source-run-id', default=os.environ.get('GITHUB_RUN_ID', ''))
+    parser.add_argument(
+        '--soniox-alert-only',
+        action='store_true',
+        help='apply only omi-batch-soniox-daily-hours and capture its inverse',
+    )
     parser.add_argument('--lint', action='store_true')
     parser.add_argument('--regenerate', action='store_true', help='offline: rebuild combined export from split sources')
     parser.add_argument('--probe-datasources', action='store_true', help='read-only canary queries through Grafana')
@@ -420,7 +470,12 @@ def main() -> int:
         if args.redis_pilot_alias_host and args.redis_pilot_url is None:
             raise ValueError('--redis-pilot-alias-host requires --redis-pilot-url')
         if args.redis_pilot_url is not None and (
-            args.apply or args.backup_file or args.regenerate or args.lint or args.probe_datasources
+            args.apply
+            or args.backup_file
+            or args.regenerate
+            or args.lint
+            or args.probe_datasources
+            or args.soniox_alert_only
         ):
             raise ValueError('--redis-pilot-url is a standalone read-only check')
         if args.regenerate:
@@ -429,7 +484,17 @@ def main() -> int:
             regenerate_export(args.rules)
             print(f'Regenerated {len(load_rules(args.rules))} combined/split alert definitions')
             return 0
-        rules = load_rules(args.rules)
+        all_rules = load_rules(args.rules)
+        rules = select_rules(all_rules, soniox_alert_only=args.soniox_alert_only)
+        if (
+            args.soniox_alert_only
+            and args.apply
+            and (
+                not re.fullmatch(r'[0-9a-f]{40}', args.source_sha)
+                or not re.fullmatch(r'[1-9][0-9]*', args.source_run_id)
+            )
+        ):
+            raise ValueError('Soniox-only apply requires a full source SHA and GitHub run ID')
         if args.probe_datasources and (args.lint or args.apply or args.backup_file):
             raise ValueError('datasource probes are read-only and cannot be combined with other modes')
         if args.lint:
@@ -446,7 +511,15 @@ def main() -> int:
         elif args.probe_datasources:
             differences = probe_datasources(api, rules)
         else:
-            differences = reconcile(api, rules, backup=args.backup_file)
+            differences = reconcile(
+                api,
+                rules,
+                backup=args.backup_file,
+                source_sha=args.source_sha,
+                source_run_id=args.source_run_id,
+                soniox_alert_only=args.soniox_alert_only,
+                canary_rules=all_rules if args.soniox_alert_only else None,
+            )
         for difference in differences:
             print('DRIFT ' + difference)
         if differences:

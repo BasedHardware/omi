@@ -977,6 +977,27 @@
       ]
     },
     {
+      "id": "grafana_soniox_alert_provisioning",
+      "risk": "high",
+      "sources": [
+        ".github/workflows/grafana_soniox_alert.yml",
+        "backend/scripts/provision_monitoring_alerts.py",
+        "backend/scripts/restore_soniox_alert.py"
+      ],
+      "tests": [
+        "tests/unit/test_provision_monitoring_alerts.py",
+        "tests/unit/test_restore_soniox_alert.py",
+        "tests/unit/test_grafana_soniox_workflow.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "alert-only apply writes only omi-batch-soniox-daily-hours",
+        "KeepLast datasource canaries are read and probed without being written by the scoped route",
+        "rollback artifact is bound to its source SHA and run ID and captures only the scoped rule state",
+        "rollback changes only the Soniox UID, refuses concurrent drift, and verifies the restored state"
+      ]
+    },
+    {
       "id": "monitoring_log_and_route_migration",
       "risk": "high",
       "sources": [

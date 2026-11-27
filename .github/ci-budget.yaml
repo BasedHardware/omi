@@ -2185,6 +2185,42 @@
       },
       "runs_on": "ubuntu-latest"
     },
+    "grafana_soniox_alert.yml/provision-soniox-alert": {
+      "budget_p50_minutes": 5,
+      "display_name": "provision-soniox-alert",
+      "expected_runs_class": "non-pr",
+      "expected_runs_per_day": 1,
+      "if": "github.ref == 'refs/heads/main'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "validate",
+      "owner": "CI maintainers",
+      "rationale": "Manual production-only apply or restore; the prod Environment and shared Grafana alert concurrency group gate and serialize the single-rule mutation. One run per day is a conservative manual-operation ceiling; 5 minutes is a conservative unobserved p50 estimate.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "grafana_soniox_alert.yml/validate": {
+      "budget_p50_minutes": 5,
+      "display_name": "validate",
+      "expected_runs_class": "non-pr",
+      "expected_runs_per_day": 1,
+      "if": "github.ref == 'refs/heads/main'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Manual production-only apply or restore validation; workflow_dispatch on main runs a single lint and source-coordinate check before the gated write job. One run per day is a conservative manual-operation ceiling; 5 minutes is a conservative unobserved p50 estimate.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
     "main.yml/sync": {
       "budget_p50_minutes": 5,
       "display_name": "sync",
@@ -6495,6 +6531,37 @@
               ],
               "required": "true",
               "type": "choice"
+            }
+          }
+        }
+      }
+    },
+    "grafana_soniox_alert.yml": {
+      "name": "Provision Soniox Grafana alert",
+      "owner": "CI maintainers",
+      "rationale": "Manual-only production route for the Soniox daily-hours alert. Separate apply and restore operations run only on main; prod Environment approval and the existing Grafana alert concurrency group serialize writes, and restore is bound to its apply artifact.",
+      "triggers": {
+        "workflow_dispatch": {
+          "inputs": {
+            "operation": {
+              "default": "apply",
+              "description": "Apply only the Soniox daily-hours alert, or restore its captured pre-apply state",
+              "options": [
+                "apply",
+                "restore"
+              ],
+              "required": "true",
+              "type": "choice"
+            },
+            "source_run_id": {
+              "description": "Original alert-only apply run ID (restore only)",
+              "required": "false",
+              "type": "string"
+            },
+            "source_sha": {
+              "description": "Full source SHA from the original alert-only apply run (restore only)",
+              "required": "false",
+              "type": "string"
             }
           }
         }
