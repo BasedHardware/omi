@@ -1108,6 +1108,7 @@ async def accept_upload(
                         'client_device_id': client_device_id,
                         'client_platform': client_platform,
                     },
+                    record_origin=record_origin,
                 )
                 if alias is not None:
                     staged, proposal = alias
@@ -1159,7 +1160,7 @@ async def accept_upload(
                 },
             )
             phase = 'stage_audio'
-            uri = await run_blocking(storage_executor, artifacts.stage_audio, item, frozen)
+            uri = await run_blocking(storage_executor, artifacts.stage_audio, item, frozen, record_origin=record_origin)
             # Provider units are funded by the provider stage, not GPU compute admission.
             items.append(replace(item, audio_uri=uri, requires_compute_admission=not provider))
             phase = 'decode'

@@ -1569,12 +1569,21 @@ class ConversationProvider extends ChangeNotifier {
       notifyListeners();
       return false;
     }
-    loadMoreFailed = false;
     if (homeMode == 'indexed' && pageResult.page.homeMode != homeMode) {
       // A gate rollback or an older backend invalidated the indexed continuation.
       return _fetchConversations(restoreMergeWatches: false);
     }
     final newConversations = pageResult.items;
+    if (pageResult.truncated && pageResult.storageCount == 0 && newConversations.isEmpty) {
+      // The server could not prepare the first row, so retry at the same offset.
+      // Treat this as a failed page: the UI offers an explicit retry instead of
+      // auto-loading the unchanged offset over and over.
+      loadMoreFailed = true;
+      setLoadingConversations(false);
+      notifyListeners();
+      return false;
+    }
+    loadMoreFailed = false;
     _conversationServerOffset += _recordServerPageIds(newConversations, pageResult.storageCount);
     _conversationServerHasMore = pageResult.page
         .more(storageCount: pageResult.storageCount, pageSize: _conversationPageSize, truncated: pageResult.truncated);

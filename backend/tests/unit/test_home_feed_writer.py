@@ -35,6 +35,14 @@ def test_prepare_home_only_writes_do_not_dirty_themselves():
     assert writer.augment_home_writes([source]) == [source]
 
 
+def test_folded_receipts_skip_home_while_content_writes_still_invalidate():
+    receipt = {'go_finalization_custody.go_sync_reference_operations.op_fixture': Value(string_value='settled')}
+    source = update(**receipt)
+    assert writer.augment_home_writes([source]) == [source]
+    edited = update(**receipt, user_title=Value(string_value='edited'))
+    assert len(writer.augment_home_writes([edited])) > 1
+
+
 def test_live_title_claim_leaves_home_ready_but_publication_invalidates_it():
     state = Value(string_value='attempted')
     claim = update(v3_live_title_state=state)

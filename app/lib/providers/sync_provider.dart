@@ -705,10 +705,12 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     );
     await _refreshWals(generation);
     if (!_isCurrent(generation)) return const RecordingTransferDrainResult.contended();
+    final heldOnly = result?.localUploadHeldOnly ?? false;
     return RecordingTransferDrainResult(
-      attempted: true,
+      attempted: !heldOnly,
       failed: (result?.localUploadFailures ?? 0) > 0,
       needsReconciliation: uploadedWals.isNotEmpty,
+      heldOnly: heldOnly,
     );
   }
 
@@ -1068,6 +1070,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       } else if (checkFlashStall && _walService.getSyncs().flashStallReason == FlashSyncStallReason.unknown) {
         DebugLogManager.logWarning('SyncProvider: $context stalled — could not confirm all pendant audio');
         _updateSyncState(_syncState.toError(message: _pendantAudioUnconfirmedMessage()), generation);
+      } else if (result?.localUploadHeldOnly == true) {
+        _updateSyncState(_syncState.toIdle(), generation);
       } else if ((result?.localUploadFailures ?? 0) == 0) {
         DebugLogManager.logInfo('SyncProvider: $context completed with no new conversations');
         _updateSyncState(_syncState.toCompleted(conversations: []), generation);

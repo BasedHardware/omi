@@ -611,6 +611,14 @@ def test_live_snapshot_failure_or_disagreement_keeps_recordings_visible(monkeypa
     assert home_membership.project_list('u', rows, request, None, filtered=False) == (
         rows[1:] if echo == 'e:a' else rows
     )
+    response = SimpleNamespace(headers={})
+    assert home_membership.project_list('u', rows, request, response, filtered=False) == (
+        rows[1:] if echo == 'e:a' else rows
+    )
+
+    assert response.headers.get(home_membership.SUPPRESSED_HEADER, '') == ('a' if echo == 'e:a' else '')
+    if not echo:
+        assert home_membership.PAGE_SIZE_HEADER not in response.headers
 
 
 @pytest.mark.parametrize('linked', [False, True])

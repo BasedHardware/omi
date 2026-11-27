@@ -15,7 +15,7 @@ db.execute('CREATE TABLE events (event TEXT, person_id TEXT, timestamp INTEGER, 
 for row in payload['rows']:
     db.execute(
         'INSERT INTO events VALUES (?, ?, ?, ?)',
-        ('Phone Battery Sample', row['person_id'], row['timestamp'], json.dumps(row['properties'])),
+        (row.get('event', 'Phone Battery Sample'), row['person_id'], row['timestamp'], json.dumps(row['properties'])),
     )
 
 for name, fn in {
@@ -24,6 +24,8 @@ for name, fn in {
     'fixtureIsNull': lambda v: v is None,
     'now': lambda: 100000,
     'dateDiff': lambda unit, start, end: end - start,
+    'greatest': lambda *values: max(v for v in values if v is not None),
+    'fixtureMatch': lambda value, pattern: value is not None and re.search(pattern, value) is not None,
 }.items():
     db.create_function(name, -1, fn)
 
@@ -39,16 +41,16 @@ class CountIf:
         return self.n
 
 
-class UniqExactIf:
+class SumIf:
     def __init__(self):
-        self.values = set()
+        self.total = 0
 
     def step(self, value, condition):
-        if condition:
-            self.values.add(value)
+        if condition and value is not None:
+            self.total += value
 
     def finalize(self):
-        return len(self.values)
+        return self.total
 
 
 class QuantileIf:
@@ -69,18 +71,15 @@ class QuantileIf:
 
 
 db.create_aggregate('countIf', 1, CountIf)
-db.create_aggregate('uniqExactIf', 2, UniqExactIf)
+db.create_aggregate('sumIf', 2, SumIf)
 db.create_aggregate('fixtureQuantileIf', 3, QuantileIf)
 query = payload['query']
 query = re.sub(r'properties\.([\w$]+)', lambda m: f"json_extract(properties, '$.\"{m[1]}\"')", query)
 query = re.sub(r'INTERVAL (\d+) DAY', lambda m: str(int(m[1]) * 86400), query)
 query = query.replace('lagInFrame(', 'lag(').replace('isNull(', 'fixtureIsNull(')
+query = query.replace('match(', 'fixtureMatch(')
 query = re.sub(r'\bif\(', 'iif(', query)
 query = re.sub(r'quantileIf\((0\.[59])\)\(', r'fixtureQuantileIf(\1, ', query)
-# HogQL resolves output aliases before joined input columns; SQLite needs
-# qualification where both joined CTEs contain os/build.
-head, tail = query.rsplit('FROM intervals', 1)
-tail = tail.replace('GROUP BY os, build', 'GROUP BY intervals.os, intervals.build')
-tail = tail.replace('ORDER BY os, build', 'ORDER BY intervals.os, intervals.build')
-query = head + 'FROM intervals' + tail
+# The pendant fixture uses one model per firmware/OS group.
+query = query.replace('any(model)', 'min(model)')
 print(json.dumps(db.execute(query).fetchall()))

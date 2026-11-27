@@ -579,9 +579,11 @@ async def test_stage_alias_has_no_language_or_asr_and_cancellation_never_enqueue
         persist_result=Mock(return_value='gs://synthetic/marker#1'),
     )
     monkeypatch.setattr(intake.time, 'time', lambda: NOW)
-    result = await intake.stage_alias(adapter, artifacts, copy, unit, {})
+    result = await intake.stage_alias(adapter, artifacts, copy, unit, {}, record_origin=False)
     assert result[0].source_alias_of == SOURCE and result[0].requires_compute_admission is False
     assert artifacts.stage_audio.call_count == artifacts.persist_result.call_count == 1
+    assert artifacts.stage_audio.call_args.kwargs == {'record_origin': False}
+    assert artifacts.persist_result.call_args.kwargs == {'record_origin': False}
     assert artifacts.persist_result.call_args.args[1] == {
         'source_alias_version': 1,
         'source_reuse_key': KEY,
@@ -589,7 +591,7 @@ async def test_stage_alias_has_no_language_or_asr_and_cancellation_never_enqueue
     }
     artifacts.persist_result.side_effect = asyncio.CancelledError()
     with pytest.raises(asyncio.CancelledError):
-        await intake.stage_alias(adapter, artifacts, copy, unit, {})
+        await intake.stage_alias(adapter, artifacts, copy, unit, {}, record_origin=False)
     assert not store.ref('jobs', COPY).get().exists
 
 

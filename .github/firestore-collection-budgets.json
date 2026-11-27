@@ -31,6 +31,16 @@
   },
   "budgets": [
     {
+      "collection": "speaker_evidence_verification_runs",
+      "owner": "Backend / SCA-4873",
+      "unit": "separately authorized single-account verification exercise",
+      "reads_per_unit_budget": 128,
+      "reads_per_day_budget": 128,
+      "basis": "planning-bound",
+      "source": "backend/docs/runbooks/speaker-evidence-verification.md: one authorized exercise, up to 60 operator checks, one receipt read per matching task delivery, three reads per optimistic state transition and headroom for contention. Marker polling reads the separate deletion-marker collection. No unarmed traffic reads this collection.",
+      "reviewed": "2026-11-26"
+    },
+    {
       "collection": "pager_events",
       "owner": "SCA-2116 operations pager",
       "unit": "signed Grafana event admission",
@@ -79,6 +89,26 @@
       "basis": "planning-bound",
       "source": "backend/docs/llm_gateway.mdx: only a committed replay or lookup reads the result, once per transaction attempt. The planning budget assumes up to five transaction attempts and 100,000 keyed HTTP requests per day, including replays and lookups. Revisit before increasing traffic above that planned envelope.",
       "reviewed": "2026-11-19"
+    },
+    {
+      "collection": "batch_privacy_late_sweeps",
+      "owner": "Goal: Margin (SCA-3508)",
+      "unit": "due post-window artifact sweep slice",
+      "reads_per_unit_budget": 250,
+      "reads_per_day_budget": 1471680,
+      "basis": "planning-bound",
+      "source": "Planning allocation at a one-minute cadence: four shared proof and execution slots per minute times 1,440 minutes. Each slot budgets the full 100-document artifact page (576,000/day) plus 150 reads for intent, cursor, scope, authority and retry reads (864,000/day). Two backlog count queries capped at 10,001 index entries each add at most 22 billed reads per minute (31,680/day). Total 1,471,680/day. Optional Postgres owner reconciliation adds up to two primary point reads per mirror key. Validate billed readback before raising cadence.",
+      "reviewed": "2026-11-24"
+    },
+    {
+      "collection": "conversation_batch_purge_jobs",
+      "owner": "Goal: Margin (SCA-3508 delayed erasure)",
+      "unit": "delayed conversation backlog observation",
+      "reads_per_unit_budget": 11,
+      "reads_per_day_budget": 15840,
+      "basis": "planning-bound",
+      "source": "One capped aggregation over up to 10,001 delayed schedule entries each minute, excluding the existing immediate-purge query. Delayed dispatch adds up to four point snapshots per minute only when explicitly enabled. Budget the additional owner-wide scans and dispatch before enabling execution.",
+      "reviewed": "2026-11-26"
     },
     {
       "collection": "conversation_erasure_jobs",

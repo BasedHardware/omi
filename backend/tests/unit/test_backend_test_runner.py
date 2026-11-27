@@ -57,6 +57,46 @@ def test_runner_blocks_unused_langsmith_plugin_but_keeps_asyncio(tmp_path, file_
     assert "1 passed" in result.stdout
 
 
+def test_shard_summary_names_failing_tests(tmp_path):
+    probe = tmp_path / "test_shard_summary_probe.py"
+    probe.write_text(
+        "import pytest\n"
+        "def test_passes():\n"
+        "    pass\n"
+        "@pytest.mark.parametrize('value', ['<bad value>'])\n"
+        "def test_fails(value):\n"
+        "    assert not value\n",
+        encoding="utf-8",
+    )
+    selected_tests = tmp_path / "selected-tests.txt"
+    selected_tests.write_text(bash_path(probe, cwd=BACKEND_DIR) + "\n", encoding="utf-8")
+    summary = tmp_path / "summary.md"
+
+    result = subprocess.run(
+        bash_command(TEST_RUNNER, cwd=BACKEND_DIR),
+        cwd=BACKEND_DIR,
+        env=os.environ
+        | {
+            "PYTHON": bash_path(Path(sys.executable), cwd=BACKEND_DIR),
+            "BACKEND_UNIT_TEST_FILE_LIST": bash_path(selected_tests, cwd=BACKEND_DIR),
+            "BACKEND_PYTEST_FILE_ISOLATION": "1",
+            "BACKEND_PYTEST_PARALLEL_SESSION": "0",
+            "BACKEND_PYTEST_WORKERS": "1",
+            "BACKEND_UNIT_SHARD_SUMMARY": "1",
+            "GITHUB_STEP_SUMMARY": str(summary),
+        },
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=30,
+    )
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    lines = summary.read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 1
+    assert lines[0].endswith("test_shard_summary_probe.py::test_fails[&lt;bad value&gt;]</code> (call)")
+
+
 @pytest.mark.parametrize("file_isolation", ["0", "1"])
 def test_explicit_file_list_honors_hermetic_e2e_paths(tmp_path, file_isolation):
     selected_tests = tmp_path / "selected-tests.txt"

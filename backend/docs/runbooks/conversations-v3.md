@@ -1,9 +1,9 @@
 # Recording-derived conversations v3
 
-The code default is `CONVERSATIONS_V3_STAGE=beta`, and the deployed source (`runtime_env/_base.yaml`)
-is `beta` again since 2026-11-18 (it held at `cohort` on 2026-11-17 while reconcile commit
-conflicts were fixed). Change the stage only there, never by a live-only env edit, which the next
-workflow deploy would revert. `CONVERSATIONS_V3=off`
+The code default is `CONVERSATIONS_V3_STAGE=beta`; the deployed source (`runtime_env/_base.yaml`)
+is `all` (step 2 below; it was `cohort` on 2026-11-17 and `beta` from 2026-11-18). Change the stage
+only there, never by a live-only env edit, which the next workflow deploy would revert. Rollback is
+the source back to `beta` (TestFlight-seen owners) plus a train. `CONVERSATIONS_V3=off`
 stops marking new mobile pendant documents. Stages are `cohort`, `beta`, `all`;
 `rollout_cohorts/conversations-v3` is for named qualification accounts. Admission
 needs a v3-capable app: only those builds call `GET /v1/conversations/live`, on any
@@ -24,10 +24,11 @@ Provision the dedicated queue on dev/prod before enabling admission; the prod
 ops manifest declares its bounded concurrency/retry policy. The same stage must reach backend/API, backend-listen (including realtime role),
 backend-sync, backend-sync-backfill, sync-backfill-worker, backend-integration,
 and pusher wherever their deployed image can create or finalize pendant rows.
-The desktop backend must use the same value for capability/episode responses;
-its desktop creates remain one-to-one. Refresh the runtime image/service census
+The desktop backend reads the code default (`beta`): it mounts no conversations or
+episodes router, so no capability/episode response depends on it, and its desktop
+creates remain one-to-one. A desktop route that reads the stage must first carry it. Refresh the runtime image/service census
 before rollout. `backend/deploy/runtime_env/_base.yaml` is the shared stage
-source; composition binds Cloud Run services/jobs and desktop directly, and
+source; composition binds Cloud Run services/jobs directly (not desktop), and
 backend-listen/pusher through the generated shared ConfigMap. The uninstalled
 sync-backfill-worker pilot references that ConfigMap. STT-only parakeet workers
 do not create/finalize/read conversation documents. A stage edit must be composed
@@ -438,18 +439,34 @@ The ceiling is attempts x the most one attempt can read:
   six batches can commit, and fetches at most twice that many derived documents plus one sentinel (5,389),
   repeats included:
   a row that a claim read and a time query both return, or that spans several interval queries, counts each
-  time. Add up to 400 sources and the seeds;
+  time. Add up to 400 sources and the seeds. An on-open load's seeds are the open window's recording ids, which the
+  planner appends uncapped: an allowance load reads at most 400 of them, each once, and parks on
+  `v3_source_closure_budget` before reading any when there are more (main reads every entry before that same park);
 - the commit: up to about 24k reads, and each batch runs its body at most three times, whatever restarts it
   (main's contention retry, or a cold transcript pointer). The commit loads each batch's pointers from the lake
   before its transaction, so pointers never replay the body; a fourth run parks before it reads. So up to about
-  72k (3 x 24k);
-- the pointer preload: at most 32 lake object reads per batch (192 per attempt), and no Firestore reads;
+  72k (3 x 24k). The preload and the three-run cap apply to every listed owner's builder commit that has pointer
+  rows, inside the origin bound too: every such load is charged. A commit inside the origin bound keeps main's
+  batches (the batch cap and the row clamp apply only past it), so it reads what main's pass of the same closure
+  reads, with at most three runs per batch instead of main's replays. An inline-only commit inside the bound is
+  main's path unchanged;
+- the load's own lake reads: decoding a fetched row or source whose transcript is a lake pointer costs about one
+  object GET, repeats included, because the decoded memo holds only 32 entries. At most 5,388 decoded derived
+  documents (the sentinel is never decoded), 400 sources and the open window: about 5.8k GETs;
+- the pointer preload: at most 32 lake object reads per batch (192 per attempt past the origin bound; inside it, one
+  per pointer row committed, which main's transaction loads anyway), and no Firestore reads;
 - renewals: a few reads.
 
-That is about 78k reads per attempt, and 20 x 78k, about **1.6M reads per listed owner per day**, as a
-ceiling. Measured attempts read 6.5k to 22k, so a typical day is well under it. A listed owner can spend its 20
+That is about 78k Firestore reads and about 6k lake object GETs per attempt past the origin bound. Per listed owner per day, the ceiling
+is **about 1.6M Firestore reads (20 x 78k) and about 0.12M lake GETs (20 x 6k)**. The lake term is zero while the
+closure's rows are inline, which is every row in prod today: prod admits no lake writes (`OBJECT_LAKE_WRITE_ENABLED`
+false, and the prod stage is not a lake write stage). If lake writes are ever admitted, each offloaded row's upload
+also runs the upload-candidate protocol (owner-fence reads and candidate transactions, reuse included); restate
+this ceiling before that rollout. Measured attempts read 6.5k to 22k, so a typical day is well under it. A listed owner can spend its 20
 attempts early in the UTC day and then runs at the origin bound, parking as before, until 00:00Z resets the
-day: in the readback, a `v3_locked_passes` of 20 with pending still owed is that case, not a regression. Parked retries after the
+day: in the readback, a `v3_locked_passes` of 20 with pending still owed is that case, not a regression. The
+readback reports both terms: Firestore reads per attempt, and lake object GETs on the lake bucket (Cloud Monitoring
+`storage.googleapis.com/api/request_count`, method `ReadObject`, an aggregate read with `ro-prod`). Parked retries after the
 budget is spent run at the origin bound, as for any parked owner today. Admit owners one at a time first. A
 step expected to exceed 10M reads a day (more than about six listed owners) needs the Firestore cost owner
 (SCA-2173).
@@ -795,11 +812,20 @@ Rollout owner: lead2. Step 0: set CONVERSATIONS_V3_FIRST_APP_BUILD through the s
 from the first TestFlight build containing this PR. Then dev named accounts,
 live/sync/late qualification and
 current App Store/TestFlight fallback acceptance; prod named cohort only. Step 1:
-beta in prod after that acceptance. Step 2: all within 12 hours if first-speech
-visibility, end-to-summary latency, conversations/calls/cost per user-day,
-share/delete/processing error rates, pending age and stuck counts remain clean,
-and late rewrite cost share is at most 5%. Stage rollback or kill switch affects
-new intake only; previously marked recordings continue draining.
+beta in prod after that acceptance. Step 2 expands to all owners with a recent
+v3-capable app. Keep the stage at beta until lead2 records a full clean beta hour
+before merge. Reconcile 5xx must be below 1%, reconciles must commit every hour,
+pending recordings older than one hour must be near zero, outline calls must be
+at most one per conversation, and late rewrite cost share must be at most 5%.
+First-speech visibility, end-to-summary latency, conversations/calls/cost per
+user-day, and share/delete/processing error rates must stay clean.
+
+Use production request logs and approved aggregate builder and accounting
+readbacks for the pre-merge gate. Missing samples do not qualify the ramp.
+Verify that the backend-sync GMP profile exposes the builder series after
+the train, then repeat the gate readout at one and four hours. Stage rollback
+or kill switch affects new intake only; previously marked recordings continue
+draining.
 
 Delete the old episode implementation in a follow-up only after stage all for
 14 days, kill switch unused for seven days, episode calls below 1% of active

@@ -96,6 +96,7 @@ def test_real_conversation_route_preserves_locked_allowance_recovery(monkeypatch
         'list_read_budget_for_request',
         lambda *a, **k: SimpleNamespace(
             truncated=False,
+            remaining_seconds=30.0,
             observe=lambda outcome: None,
         ),
     )

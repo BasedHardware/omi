@@ -13,10 +13,12 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/models/sync_state.dart';
 import 'package:omi/pages/conversations/on_the_way_page.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
+import 'package:omi/services/wals/mobile_batch_upload_hold.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:omi/services/wals/sync_reconciler.dart';
@@ -24,6 +26,7 @@ import 'package:omi/services/wals/sync_transfer_keep_alive.dart';
 import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
+import 'package:omi/services/wals/wal_syncs.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -218,6 +221,39 @@ void main() {
     );
     await provider!.initialized;
   }
+
+  test('a held-only phone drain keeps the WAL pending and the provider idle', () async {
+    final service = _Service(gate, (_) async => const SyncJobFetch(SyncJobFetchOutcome.transient));
+    final phone = service.syncs.phone;
+    final now = DateTime.now();
+    final wal = Wal(
+      timerStart: now.millisecondsSinceEpoch ~/ 1000,
+      codec: BleAudioCodec.opus,
+      seconds: 1,
+      totalFrames: BleAudioCodec.opus.getFramesPerSecond(),
+      storage: WalStorage.disk,
+      status: WalStatus.miss,
+      device: 'omimobilebatch1',
+      recordingSessionId: 'held-recording',
+    );
+    final hold = MobileBatchUploadHold(enabled: () => true, wake: () {}, now: () => now);
+    addTearDown(hold.dispose);
+    hold.sealed(wal);
+    expect(hold.published(wal), isTrue);
+    phone.mobileBatchUploadHold = hold;
+    phone.testWals = [wal];
+    await start(service);
+
+    final fullDrain = await WalSyncs(service, phoneSync: phone).syncAll();
+    expect(fullDrain?.localUploadHeldOnly, isTrue);
+    final result = await provider!.drainForTesting();
+
+    expect(result.heldOnly, isTrue);
+    expect(result.attempted, isFalse);
+    expect(result.failed, isFalse);
+    expect(provider!.syncState.status, SyncStatus.idle);
+    expect(provider!.missingWals, [wal]);
+  });
 
   test('startup surfaces a completed server job without requiring another upload', () async {
     final wal = _uploaded('persisted-job');

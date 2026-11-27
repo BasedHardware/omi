@@ -1013,8 +1013,9 @@ void main() {
     });
   });
 
-  test('after restart a shared conversation uploads one session while the other waits for custody', () async {
-    var now = DateTime.utc(2026, 11, 20);
+  test('after restart one session honors a 30-minute custody wait while the other uploads', () async {
+    final waitStartedAt = DateTime.utc(2026, 11, 20);
+    var now = waitStartedAt;
     const owner = 'record-wait-owner';
     await SharedPreferencesUtil().saveString('uid', owner);
     var canAccept = false;
@@ -1038,7 +1039,7 @@ void main() {
               uploadAttempts.add(files.map((file) => file.uri.pathSegments.last).toList());
               if (recordingSessionId == 'waiting-session' && !canAccept) {
                 throw const SyncUploadHttpException(503, 'Custody pending',
-                    reasonCode: 'record_capture_pending', recordingWaitSeconds: 30);
+                    reasonCode: 'record_capture_pending', recordingWaitSeconds: 1800);
               }
               return UploadFilesResult.queued('accepted-$recordingSessionId');
             },
@@ -1059,6 +1060,7 @@ void main() {
     await expectLater(first.syncWal(wal: waiting), throwsA(isA<SyncUploadHttpException>()));
     expect(waiting.status, WalStatus.miss);
 
+    now = waitStartedAt.add(const Duration(minutes: 6));
     final restarted = createLedger()..testWals = await WalFileManager.loadWals();
     final restored = restarted.testWals.singleWhere((wal) => wal.recordingSessionId == 'waiting-session');
     final retainedFile = File('${tempDir.path}/${restored.filePath}');
@@ -1078,7 +1080,11 @@ void main() {
     expect(await retainedFile.readAsBytes(), [1, 0, 0, 0, 42]);
 
     canAccept = true;
-    now = now.add(const Duration(seconds: 37));
+    now = waitStartedAt.add(const Duration(minutes: 29, seconds: 59));
+    await expectLater(restarted.syncWal(wal: restored), throwsA(isA<SyncRecordingWaitException>()));
+    expect(uploadAttempts, hasLength(2));
+
+    now = waitStartedAt.add(const Duration(minutes: 30));
     await restarted.syncAll();
 
     expect(uploadAttempts.last, ['waiting.bin']);

@@ -31,6 +31,7 @@ from google.oauth2 import id_token
 from google.protobuf import duration_pb2
 from google.protobuf import timestamp_pb2
 
+from database import speaker_evidence_verification as verification
 from utils.log_sanitizer import sanitize
 from utils.sync.backfill_order import direct_schedule_at
 
@@ -636,7 +637,16 @@ def enqueue_audio_merge_job_deferred(payload: Dict[str, Any], delay_seconds: int
     )
 
 
-def enqueue_account_deletion_wipe(wipe_job_id: str) -> None:
+def account_deletion_queue_path() -> str:
+    project = os.getenv('SYNC_TASKS_PROJECT', '')
+    location = os.getenv('SYNC_TASKS_LOCATION', '')
+    queue = os.getenv('ACCOUNT_DELETION_TASKS_QUEUE', '')
+    if not all((project, location, queue)):
+        return ''
+    return tasks_v2.CloudTasksClient.queue_path(project, location, queue)
+
+
+def enqueue_account_deletion_wipe(wipe_job_id: str, *, verification_uid: str = '') -> None:
     """Wake one durable deletion job without exposing a user identifier.
 
     The Firestore job is canonical. Cloud Tasks diagnostics must not contain a
@@ -647,13 +657,24 @@ def enqueue_account_deletion_wipe(wipe_job_id: str) -> None:
         raise ValueError('wipe_job_id must be non-empty')
     job_hash = hashlib.sha256(wipe_job_id.encode('utf-8')).hexdigest()[:32]
     task_id = f"account-delete-{job_hash}-{uuid.uuid4().hex}"
-    enqueue_named_task(
+
+    payload = {'job_id': wipe_job_id}
+    task = (
+        verification.reserve_task(verification_uid, wipe_job_id, account_deletion_queue_path(), task_id)
+        if verification_uid
+        else None
+    )
+    if task is not None:
+        payload[verification.TASK_FIELD] = task.run.token
+    created = enqueue_named_task(
         os.getenv('ACCOUNT_DELETION_TASKS_QUEUE', ''),
         os.getenv('ACCOUNT_DELETION_HANDLER_URL', ''),
         task_id,
-        {'job_id': wipe_job_id},
+        payload,
         audience=_account_deletion_oidc_audience(),
     )
+    if created and task is not None:
+        verification.confirm_enqueue(task)
 
 
 def _listen_finalization_handler_url() -> str:
