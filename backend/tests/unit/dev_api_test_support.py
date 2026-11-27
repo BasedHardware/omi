@@ -13,6 +13,7 @@ from testing.import_isolation import AutoMockModule, load_module_fresh, stub_mod
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 # Import real collector owners once, outside the temporary fake-module context.
+import database.batch_privacy_owner_cache  # noqa: F401
 import database.firestore_cache_metrics  # noqa: F401
 import database.firestore_read_metrics  # noqa: F401
 import utils.capture.shadow  # noqa: F401

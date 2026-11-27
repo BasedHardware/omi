@@ -3381,8 +3381,6 @@ def patch_user_conversation(
             return 'locked'
 
         updates = {}
-        if title is not None:
-            updates.update({'structured.title': title, 'user_title': title})
         if discarded is True:
             revision = _user_lifecycle_revision(current)
             if revision is None:
@@ -3399,6 +3397,8 @@ def patch_user_conversation(
             if restore_updates is None:
                 return 'conflict'
             updates.update(restore_updates)
+        if title is not None:
+            updates.update({'structured.title': title, 'user_title': title, 'summary_due_at': None})
         transaction.update(conversation_ref, updates)
         return 'updated'
 

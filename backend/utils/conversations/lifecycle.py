@@ -22,6 +22,8 @@ from datetime import datetime, timedelta, timezone
 from contextlib import contextmanager
 from typing import Any, Mapping, Optional
 
+from google.api_core.exceptions import NotFound
+
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_store import FirestoreStore
 from utils.sync.stage import current_stage
@@ -823,8 +825,8 @@ def discard_by_relevance(
     )
 
 
-def restore_discarded(uid: str, conversation_id: str) -> bool:
-    """Register recording debt before an explicit restore makes the row visible."""
+def _register_restore_obligation(uid: str, conversation_id: str, *, reject_locked: bool = False) -> bool:
+    """Register recording debt before exposing a restored conversation."""
 
     # Raw document read: the pre-read needs only the row's own fields, and the
     # photo-attaching getter would add a query this path does not need.
@@ -838,6 +840,8 @@ def restore_discarded(uid: str, conversation_id: str) -> bool:
     current = snapshot.to_dict() if snapshot.exists else None
     if not current or conversations_db.is_soft_deleted(current):
         return False
+    if reject_locked and current.get('is_locked'):
+        raise ConversationLockedError('conversation is locked')
 
     def register(tx):
         from utils.batch_pipeline.live import register_recording
@@ -845,6 +849,8 @@ def restore_discarded(uid: str, conversation_id: str) -> bool:
         current = tx.get('conversations', f'{uid}/{conversation_id}')
         if not current or conversations_db.is_soft_deleted(current):
             return None
+        if reject_locked and current.get('is_locked'):
+            raise ConversationLockedError('conversation is locked')
         if current.get('record_lane_owner') != 'batch_live_v1':
             return True
         # The finalizer's proven-empty predicate, plus the capture's own audio-closed
@@ -870,6 +876,13 @@ def restore_discarded(uid: str, conversation_id: str) -> bool:
             return False
         if not registered:
             raise RestoredRecordingRegistrationUnavailable('recording registration refused; retry restore')
+    return True
+
+
+def restore_discarded(uid: str, conversation_id: str) -> bool:
+    """Register recording debt before an explicit restore makes the row visible."""
+    if not _register_restore_obligation(uid, conversation_id):
+        return False
     # A crash here leaves at most one idempotent obligation parked behind the
     # discarded row. Seal/partial workers refuse it until metadata commits.
     try:
@@ -891,6 +904,10 @@ def apply_user_conversation_patch(
     discarded: bool | None = None,
 ) -> bool:
     """Atomically apply a user title/discard patch behind the lifecycle owner."""
+    if discarded is False and not _register_restore_obligation(uid, conversation_id, reject_locked=True):
+        raise NotFound(f'Conversation {conversation_id} not found')
+    # If the metadata patch fails, any idempotent obligation stays parked
+    # behind the discarded row until an explicit restore succeeds.
     try:
         return conversations_db.patch_user_conversation(
             uid,
