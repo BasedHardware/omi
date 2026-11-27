@@ -220,6 +220,7 @@ ALLOWED_COMPONENTS = frozenset(
         'speaker_assignments',
         'daily_summary',
         'feature_flags',
+        'conversations_v3',
         'other',
     }
 )

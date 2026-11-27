@@ -43,6 +43,8 @@ from config.conversations_v3 import (
     manual_end_home_visible_enabled,
     max_window_seconds,
     settle_on_landing_enabled,
+    size_quarantine_enabled,
+    size_quarantine_filters,
     stretch_cohesion_enabled,
 )
 from utils.conversations.v3.triggers import enqueue, changed
@@ -393,6 +395,81 @@ async def _load_live_batch(uid, token, parked, unlocked_page=None):
             # Only a pass that seeded pending rows may change the remembered pending page.
             return (*result, size or None)
     raise AssertionError('bounded pending batch sizes are empty')
+
+
+_SIZE_ERROR_DOCUMENT = re.compile(r"/documents/users/[^/]+/conversations/([^/'\"\\\s]+)")
+
+
+def size_error_document(error):
+    """The conversation id a Firestore document-size rejection names, or None. Never logged: it holds ids.
+
+    Pure string checks on store's size marker (no store call): this runs on the event loop.
+    """
+    text = str(error) if error is not None else ''
+    match = _SIZE_ERROR_DOCUMENT.search(text) if store.DOCUMENT_TOO_LARGE in text else None
+    return match.group(1) if match else None
+
+
+def _size_quarantine(reason, pending_limit, page, commit, oversized):
+    """The pending recordings a one-seed pass's rejected commit pins to its seed (SCA-2918), or ().
+
+    A one-seed park otherwise re-seeds the same oldest recording every backoff and freezes the owner's
+    whole backlog behind it. Quarantine needs positive attribution: Firestore must name the oversize
+    document (``oversized``), and it must be the seed, a row the seed claims or feeds, or a source the
+    commit writes for those rows. Nothing the load pulls in on its own (the open window and unlocked seeds)
+    reaches, through claims, time neighbours and sources transitively, is charged to the seed: it loads on every pass, so
+    quarantining seeds would only walk healthy ones into the same rejection. The set is the seed plus the
+    pending sources the commit writes for the seed's rows: they would be seeded into the same rejection.
+    Recordings only loaded alongside (time siblings of unrelated rows) are not set aside. ``commit`` is the
+    (recordings, existing rows, planned rows) of the rejected commit.
+    """
+    if reason != 'document_too_large' or pending_limit != 1 or page is None or not size_quarantine_enabled():
+        return ()
+    if len(page.pending_ids) != 1 or oversized is None or not commit:
+        return ()
+    recordings, existing, planned = commit
+    (seed,) = page.pending_ids
+    reached = _reached(page.independent, recordings, existing, planned, page.neighbours)
+    if seed not in recordings or oversized in reached:
+        return ()
+    rows = {c.get('conversation_id') for c in recordings[seed].get('claims') or [] if isinstance(c, dict)}
+    rows |= {row['id'] for row in planned if seed in (row.get('v3_recording_ids') or ())}
+    rows.discard(None)
+    fed = {rid for row in planned if row['id'] in rows for rid in row.get('v3_recording_ids') or ()}
+    members = {seed} | {
+        rid
+        for rid, recording in recordings.items()
+        if rid in fed
+        or any(isinstance(c, dict) and c.get('conversation_id') in rows for c in recording.get('claims') or [])
+    }
+    if oversized not in rows | members:
+        return ()
+    return (seed, *sorted(rid for rid in members - {seed} if recordings[rid].get('v3_pending')))
+
+
+def _quarantine_park(error, pending_limit, page):
+    """record_blocked's quarantine argument for a blocked pass: empty unless its rejection is attributable."""
+    commit = error.size_commit if isinstance(error, Conflict) else None
+    found = _size_quarantine(str(error), pending_limit, page, commit, size_error_document(error.__cause__))
+    return {'quarantine': found} if found else {}
+
+
+def _reached(starts, recordings, existing, planned, neighbours=None):
+    """Every loaded document ``starts`` reach through claims and time neighbours (recording -> row) and sources (row -> recording)."""
+    rows = {**existing, **{row['id']: row for row in planned}}
+    seen, frontier = set(), set(starts)
+    while frontier:
+        doc = frontier.pop()
+        if doc in seen:
+            continue
+        seen.add(doc)
+        claims = (recordings.get(doc) or {}).get('claims') or ()
+        frontier.update(c.get('conversation_id') for c in claims if isinstance(c, dict) and c.get('conversation_id'))
+        frontier.update((neighbours or {}).get(doc, ()))
+        row = rows.get(doc) or {}
+        frontier.update(row.get('v3_recording_ids') or ())
+        frontier.update(p['recording_id'] for p in row.get('recording_pieces') or () if p.get('recording_id'))
+    return seen
 
 
 def _lane_without_seed(options, page):
@@ -1088,7 +1165,15 @@ async def reconcile(
         report['blocked_reason'] = reason
         if not derive:
             # A backfill conflict must not park the owner's live builder.
-            await run_blocking(db_executor, store.record_blocked, uid, token, reason, on_open=on_open)
+            await run_blocking(
+                db_executor,
+                store.record_blocked,
+                uid,
+                token,
+                reason,
+                on_open=on_open,
+                **_quarantine_park(error, bounded_pending_limit, unlocked_page),
+            )
         blocked = reason
         primary_failed = False
     except BaseException as error:
@@ -1116,9 +1201,11 @@ async def reconcile(
         await drain_processing(uid)
     if moved:
         return 'committed'
+    # Size-quarantined recordings stay pending for repair; they must not keep the owner's pass chain hot.
+    skip = {*deferred, *(unlocked_page.quarantined if unlocked_page is not None else ())}
     pending = (
-        await run_blocking(db_executor, has_pending, uid, deferred)
-        if deferred
+        await run_blocking(db_executor, has_pending, uid, skip)
+        if skip
         else await run_blocking(db_executor, has_pending, uid)
     )
     if pending:
@@ -1385,7 +1472,10 @@ def _commit(
         # same way on every retry; park the owner instead of cycling the shared queue with 500s.
         kind = store.size_error(error)
         if kind == 'document':
-            raise Conflict('document_too_large') from error
+            conflict = Conflict('document_too_large')
+            # What the rejected commit wrote, for the size quarantine's attribution.
+            conflict.size_commit = (recordings, existing, rows)
+            raise conflict from error
         if kind == 'request':
             raise Conflict('request_too_large') from error
         raise
@@ -1592,6 +1682,7 @@ async def sweep():
     client = await run_blocking(db_executor, store.get_firestore_client)
     now = datetime.now(timezone.utc)
     users = set()
+    stale: dict[str, set[str]] = {}
     cursor = None
     while True:
         query = (
@@ -1610,12 +1701,32 @@ async def sweep():
             since = row['v3_pending_since']
             parts = doc.reference.path.split('/')
             if len(parts) == 4 and parts[0] == 'users':
-                users.add(parts[1])
+                stale.setdefault(parts[1], set()).add(parts[3])
                 metrics.PENDING_AGE.observe((now - since).total_seconds())
         if len(rows) < 1000:
             break
         cursor = rows[-1]
-    for uid in users:
+    for uid, ids in stale.items():
+        # Recordings set aside for size stay pending until repaired; they alone must not wake the owner
+        # every sweep (SCA-2918). One lease read per stale owner, against the full stale-pending scan above.
+        if size_quarantine_filters():
+            try:
+                held = await run_blocking(db_executor, store.size_quarantined, uid)
+            except Exception as error:
+                # One unreadable lease must not stop the sweep: treat the owner as not quarantined and wake it.
+                logger.warning('event=v3_size_quarantine_read outcome=error exception_type=%s', type(error).__name__)
+                record_fallback(
+                    component='conversations_v3',
+                    from_mode='size_quarantine_filter',
+                    to_mode='unfiltered_wake',
+                    reason='unavailable',
+                    outcome='recovered',
+                    log=logger,
+                )
+                held = frozenset()
+            if ids <= held:
+                continue
+        users.add(uid)
         await run_blocking(db_executor, enqueue, uid)
     cursor = None
     while True:
@@ -1892,6 +2003,7 @@ def has_pending(uid: str, deferred: Collection[str] = ()) -> bool:
     pending = (
         store.user_conversations(store.get_firestore_client(), uid)
         .where(filter=FieldFilter('v3_pending', '==', True))
+        .select(['v3_pending'])  # Only ids are needed: up to 65 for an owner holding a full quarantine.
         .limit(len(deferred) + 1)
         .stream()
     )
