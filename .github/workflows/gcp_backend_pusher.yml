@@ -648,6 +648,47 @@ jobs:
           } >> "$GITHUB_ENV"
           CONFIG_MAP_NAME_OVERRIDE="$PUSHER_CANARY_CONFIG" backend/scripts/deploy-backend-config.sh
 
+      # The inverse receipt names GITHUB_WORKFLOW_SHA as its producer, so the helper
+      # and its first-party import run from that immutable revision, not from the
+      # runtime source checkout; the runtime copies must also be byte-identical
+      # (source admission binds the same paths) or the step refuses.
+      - name: Stage the canary inverse helper from workflow controls
+        if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod' && inputs.pusher_canary_only
+        run: |
+          set -euo pipefail
+          helper_paths=(.github/scripts/pusher_canary_inverse.py .github/scripts/pusher_image_rehearsal.py)
+          controls="$RUNNER_TEMP/pusher-canary-inverse-controls"
+          rm -rf "$controls"
+          mkdir -p "$controls"
+          git archive "$GITHUB_WORKFLOW_SHA" -- "${helper_paths[@]}" | tar -x -C "$controls"
+          if ! git diff --quiet "$GITHUB_WORKFLOW_SHA" -- "${helper_paths[@]}"; then
+            echo "The runtime checkout's canary inverse helper differs from the workflow-control revision." >&2
+            exit 1
+          fi
+          echo "PUSHER_CANARY_INVERSE=$controls/.github/scripts/pusher_canary_inverse.py" >> "$GITHUB_ENV"
+
+      # Round-1 delta-2: the dependency evidence starts before the canary's first pod
+      # loads its environment. Metadata only (UID and resourceVersion) of every
+      # Secret and ConfigMap the canary will reference, its isolated runtime
+      # ConfigMap included; the canary Deployment must not exist yet.
+      - name: Snapshot canary dependency versions before the canary starts
+        if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod' && inputs.pusher_canary_only
+        run: |
+          set -euo pipefail
+          test -f "$PUSHER_CANARY_INVERSE"
+          test -n "$PUSHER_CANARY" -a -n "$PUSHER_CANARY_CONFIG"
+          python3 "$PUSHER_CANARY_INVERSE" --snapshot \
+            --namespace prod-omi-backend \
+            --name "$PUSHER_CANARY" \
+            --candidate-image "$PUSHER_IMAGE_REPOSITORY@$PUSHER_IMAGE_DIGEST" \
+            --baseline-deployment prod-omi-pusher \
+            --canary-config-map "$PUSHER_CANARY_CONFIG" \
+            --live-config-map prod-omi-backend-config \
+            --run-id "$GITHUB_RUN_ID" \
+            --source-sha "$CHECKED_OUT_SHA" \
+            --workflow-sha "$GITHUB_WORKFLOW_SHA" \
+            --output pusher-prod-canary-dependencies-prestart.json
+
       - name: Create isolated production Pusher and listener canary
         if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod'
         run: |
@@ -699,26 +740,6 @@ jobs:
       # canary move and before any Pusher promote. It is read-only. It runs only
       # on the canary_only producer: a regular deploy may redeploy the serving
       # image, where a candidate→baseline inverse does not apply.
-      #
-      # The receipt names GITHUB_WORKFLOW_SHA as its producer, so the helper and its
-      # first-party import run from that immutable revision, not from the runtime
-      # source checkout; the runtime copies must also be byte-identical (source
-      # admission binds the same paths) or the step refuses.
-      - name: Stage the canary inverse helper from workflow controls
-        if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod' && inputs.pusher_canary_only
-        run: |
-          set -euo pipefail
-          helper_paths=(.github/scripts/pusher_canary_inverse.py .github/scripts/pusher_image_rehearsal.py)
-          controls="$RUNNER_TEMP/pusher-canary-inverse-controls"
-          rm -rf "$controls"
-          mkdir -p "$controls"
-          git archive "$GITHUB_WORKFLOW_SHA" -- "${helper_paths[@]}" | tar -x -C "$controls"
-          if ! git diff --quiet "$GITHUB_WORKFLOW_SHA" -- "${helper_paths[@]}"; then
-            echo "The runtime checkout's canary inverse helper differs from the workflow-control revision." >&2
-            exit 1
-          fi
-          echo "PUSHER_CANARY_INVERSE=$controls/.github/scripts/pusher_canary_inverse.py" >> "$GITHUB_ENV"
-
       - name: Prove the canary inverse admission at one replica
         if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod' && inputs.pusher_canary_only
         run: |
@@ -735,6 +756,7 @@ jobs:
             --run-id "$GITHUB_RUN_ID" \
             --source-sha "$CHECKED_OUT_SHA" \
             --workflow-sha "$GITHUB_WORKFLOW_SHA" \
+            --prestart pusher-prod-canary-dependencies-prestart.json \
             --output pusher-prod-canary-inverse-receipt.json
 
       - name: Exercise isolated production Pusher finalization semantics
@@ -810,7 +832,7 @@ jobs:
             --expected-canary-workflow-sha "$GITHUB_SHA"
 
       # Condition 3 of the round-1 delta review: the Secret and ConfigMap identities
-      # recorded at canary startup must still hold after the semantic probe.
+      # recorded before the canary started must still hold after the semantic probe.
       # Metadata only (UID and resourceVersion); no value is read.
       - name: Recheck canary dependency versions after the probe
         if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod' && inputs.pusher_canary_only
@@ -846,7 +868,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: pusher-prod-canary-inverse-receipt
-          path: pusher-prod-canary-inverse-receipt.json
+          path: |
+            pusher-prod-canary-inverse-receipt.json
+            pusher-prod-canary-dependencies-prestart.json
           if-no-files-found: error
           retention-days: 90
 
@@ -1282,6 +1306,10 @@ jobs:
           set -euo pipefail
           umask 077
           mkdir -p "$RUNNER_TEMP/pusher-image-only"
+          # Made durable before every live patch; read by the detector even if this
+          # process dies before printing its receipt.
+          export PUSHER_IMAGE_ONLY_WRITE_MARKER="$RUNNER_TEMP/pusher-image-only/write-attempted"
+          rm -f "$PUSHER_IMAGE_ONLY_WRITE_MARKER"
           export LIVE_CONTEXT
           LIVE_CONTEXT="$(kubectl config current-context)"
           python3 .github/scripts/pusher_image_only.py | tee "$RUNNER_TEMP/pusher-image-only/receipt.json"
@@ -1291,7 +1319,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: pusher-image-only-receipt
-          path: ${{ runner.temp }}/pusher-image-only/receipt.json
+          path: |
+            ${{ runner.temp }}/pusher-image-only/receipt.json
+            ${{ runner.temp }}/pusher-image-only/write-attempted
           if-no-files-found: ignore
           retention-days: 90
 
@@ -1300,38 +1330,10 @@ jobs:
         if: always()
         run: |
           set -euo pipefail
-          receipt="$RUNNER_TEMP/pusher-image-only/receipt.json"
-          python3 - "$receipt" >> "$GITHUB_OUTPUT" <<'PYTHON'
-          import json, os, re, sys
-
-          path = sys.argv[1]
-          receipt = {}
-          if os.path.exists(path) and os.path.getsize(path):
-              try:
-                  receipt = json.load(open(path, encoding="utf-8"))
-              except ValueError:
-                  receipt = {"status": "HOLD", "reason": "UNCERTAIN_AFTER_WRITE", "hold_stage": "receipt_unreadable"}
-
-          def safe(value):
-              # The page is interpolated by the notifier: keep a closed character set.
-              return re.sub(r"[^A-Za-z0-9 ._:/=@,-]", "_", str(value))[:120]
-
-          status = receipt.get("status") or ""
-          page = ""
-          if status in {"HOLD", "REVERSED"}:
-              fields = ("reason", "hold_stage", "reverse_patch", "deployment_uid_before", "deployment_uid_observed", "serving_image_observed")
-              details = ", ".join(f"{key}={safe(receipt.get(key, 'n/a'))}" for key in fields)
-              if status == "HOLD":
-                  page = (
-                      f"HOLD, no further patch. {details}. Restore only per the runbook Manual recovery after a HOLD: "
-                      "confirm the Deployment UID, then rollout undo --to-revision of the revision verified to hold "
-                      "the pinned baseline digest, never an unpinned undo. See the run summary."
-                  )
-              else:
-                  page = f"REVERSED, promote did not complete. {details}. See the run summary."
-          print(f"status={safe(status)}")
-          print(f"page={page}")
-          PYTHON
+          # A write marker with a missing, empty or invalid receipt is a HOLD that pages.
+          python3 .github/scripts/pusher_image_only_detect.py output \
+            "$RUNNER_TEMP/pusher-image-only/receipt.json" \
+            "$RUNNER_TEMP/pusher-image-only/write-attempted" >> "$GITHUB_OUTPUT"
 
       # The escalation uses only existing credentials: the job summary and the
       # deploy-channel notifier. No issue is opened (the job token has no
@@ -1340,53 +1342,9 @@ jobs:
         if: always() && (steps.hold.outputs.status == 'HOLD' || steps.hold.outputs.status == 'REVERSED')
         run: |
           set -euo pipefail
-          python3 - "$RUNNER_TEMP/pusher-image-only/receipt.json" >> "$GITHUB_STEP_SUMMARY" <<'PYTHON'
-          import json, sys
-
-          try:
-              receipt = json.load(open(sys.argv[1], encoding="utf-8"))
-          except (OSError, ValueError):
-              receipt = {"status": "HOLD", "reason": "UNCERTAIN_AFTER_WRITE", "hold_stage": "receipt_unreadable"}
-          held = receipt.get("status") == "HOLD"
-          lines = [
-              "### Pusher image-only " + ("HOLD" if held else "REVERSED") + f": `{receipt.get('reason')}`",
-              "",
-              (
-                  "Recovery after the forward write could not prove the baseline, so the job held with no further patch."
-                  if held
-                  else "The one guarded reverse restored the pinned baseline with every replica ready; the promote did not complete."
-              ),
-              "",
-          ]
-          for key in (
-              "stage", "hold_stage", "reason", "post_write_failure", "inverse_refusal", "live_inverse_server_dry_run",
-              "reverse_patch", "reverse_refusal", "deployment_uid_before", "deployment_uid_observed",
-              "requested_image", "serving_image_observed", "serving_image", "ready_replicas",
-          ):
-              if key in receipt:
-                  lines.append(f"- `{key}`: `{receipt[key]}`")
-          if held:
-              uid = receipt.get("deployment_uid_before", "<deployment_uid_before>")
-              lines += [
-                  "",
-                  "**Manual restore (Release prod-operator):** " + str(receipt.get("manual_restore_path")),
-                  "",
-                  "```sh",
-                  "# 1. Stop and escalate unless this prints the receipt's deployment_uid_before: " + str(uid),
-                  "kubectl -n prod-omi-backend get deployment prod-omi-pusher -o jsonpath='{.metadata.uid}{\"\\n\"}'",
-                  "# 2. Pick the revision N whose pusher image reads the pinned baseline digest:",
-                  "kubectl -n prod-omi-backend rollout history deployment/prod-omi-pusher",
-                  "kubectl -n prod-omi-backend rollout history deployment/prod-omi-pusher --revision=N -o jsonpath='{.spec.template.spec.containers[?(@.name==\"pusher\")].image}{\"\\n\"}'",
-                  "# 3. Restore that verified revision only, then wait and read back:",
-                  "kubectl -n prod-omi-backend rollout undo deployment/prod-omi-pusher --to-revision=N",
-                  "kubectl -n prod-omi-backend rollout status deployment/prod-omi-pusher --timeout=160m",
-                  "python3 backend/scripts/deploy_status_report.py --env prod --include-gke --gke-service pusher",
-                  "```",
-                  "",
-                  "Runbook: backend/docs/runbooks/pusher-image-preservation-proposal.md, Manual recovery after a HOLD.",
-              ]
-          print("\n".join(lines))
-          PYTHON
+          python3 .github/scripts/pusher_image_only_detect.py summary \
+            "$RUNNER_TEMP/pusher-image-only/receipt.json" \
+            "$RUNNER_TEMP/pusher-image-only/write-attempted" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Notify Release of the held image-only write
         if: always() && steps.hold.outputs.status == 'HOLD'

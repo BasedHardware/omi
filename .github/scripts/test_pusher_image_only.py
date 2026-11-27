@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import tempfile
 from types import SimpleNamespace
 import unittest
 import unittest.mock
@@ -14,6 +15,7 @@ from unittest.mock import patch
 
 import pusher_canary_inverse as inverse_script
 import pusher_image_only as control
+import pusher_image_only_detect as detect
 import pusher_image_rehearsal as helper
 from pusher_release_receipt import config_fingerprint
 
@@ -212,7 +214,9 @@ class ImageOnlyTest(unittest.TestCase):
     def setUp(self):
         self.fake = FakeLive()
         self.live = control.ReadOnlyCluster(self.fake)
-        self.writer = control.LiveWriter(self.fake)
+        self.marker_dir = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        self.marker = self.marker_dir / "write-attempted"
+        self.writer = control.LiveWriter(self.fake, self.marker)
         self.packet = packet_for("preview")
         self.command = self.enterContext(patch.object(control, "run", return_value=""))
         self.enterContext(patch.object(control, "check_qualification", return_value={"qualified": True}))
@@ -526,9 +530,81 @@ class ImageOnlyTest(unittest.TestCase):
         self.assertEqual(self.status_report.call_args_list, [unittest.mock.call(strict=False)] * 2)
         self.assertEqual(len(live_patches(self.fake)), 1)
 
+    def replace_during_rollout(self, *, on_image):
+        """A different Deployment object (new UID) appears while the rollout of `on_image` is awaited."""
+        def rollout(args, reason, **_kwargs):
+            if reason == "rollout_unconfirmed" and helper.current_image(self.fake.target) == on_image:
+                self.fake.target = copy.deepcopy(self.fake.target)
+                self.fake.target["metadata"]["uid"] = "replacement-uid"
+            return ""
+
+        self.command.side_effect = rollout
+
+    def test_forward_serving_refuses_a_replacement_deployment(self):
+        self.replace_during_rollout(on_image=CANDIDATE)
+        result = self.result("promote")
+        with self.assertRaises(control.Hold):
+            control.execute("promote", self.promote_packet(), self.live, result, writer=self.writer)
+        self.assertEqual(result["post_write_failure"], "deployment_replaced_after_patch")
+        self.assertEqual((result["deployment_uid_observed"], result["patched_deployment_uid"]), ("replacement-uid", "deploy-uid"))
+        self.assertNotIn("serving_image", result)
+        self.assertEqual(len(live_patches(self.fake)), 1)
+
+    def test_reverse_serving_refuses_a_replacement_deployment(self):
+        self.refuse()
+        self.replace_during_rollout(on_image=control.BASELINE)
+        result = self.result("promote")
+        with self.assertRaises(control.Hold):
+            control.execute("promote", self.promote_packet(), self.live, result, writer=self.writer)
+        self.assertEqual((result["reason"], result["hold_stage"]), ("REFUSED_INVERSE", "reverse_serving_unverified"))
+        self.assertEqual(result["reverse_refusal"], "deployment_replaced_after_patch")
+        self.assertEqual(result["reverse_patch"], "succeeded")
+        self.assertEqual(result["deployment_uid_observed"], "replacement-uid")
+        self.assertNotIn("serving_image", result)
+
+    def test_success_binds_the_patched_deployment_uid(self):
+        result = self.result("promote")
+        control.execute("promote", self.promote_packet(), self.live, result, writer=self.writer)
+        self.assertEqual(result["patched_deployment_uid"], "deploy-uid")
+        self.assertEqual(result["serving_deployment_uid"], "deploy-uid")
+
+    def test_serving_identity_with_another_uid_is_refused(self):
+        ready = self.ready.side_effect
+        self.ready.side_effect = lambda *args, **kwargs: ready(*args, **kwargs) | {"deployment_uid": "replacement-uid"}
+        result = self.result("promote")
+        with self.assertRaises(control.Hold):
+            control.execute("promote", self.promote_packet(), self.live, result, writer=self.writer)
+        self.assertEqual(result["post_write_failure"], "deployment_replaced_after_patch")
+
+    def test_every_live_patch_is_preceded_by_a_durable_marker(self):
+        self.refuse()
+        seen = []
+        original = self.fake.call
+
+        def call(*args, **kwargs):
+            if "--dry-run=none" in args:
+                seen.append(self.marker.read_text(encoding="utf-8").count("\n"))
+            return original(*args, **kwargs)
+
+        self.fake.call = call
+        with self.assertRaises(control.Reversed):
+            control.execute("promote", self.promote_packet(), self.live, self.result("promote"), writer=self.writer)
+        # One marker line already on disk before the forward patch, two before the reverse.
+        self.assertEqual(seen, [1, 2])
+        lines = [json.loads(line) for line in self.marker.read_text(encoding="utf-8").splitlines()]
+        self.assertEqual([line["desired"] for line in lines], [CANDIDATE, control.BASELINE])
+
+    def test_an_unwritable_marker_refuses_before_any_live_patch(self):
+        blocked = self.marker_dir / "not-a-directory"
+        blocked.write_text("", encoding="utf-8")
+        writer = control.LiveWriter(self.fake, blocked / "write-attempted")
+        with self.assertRaisesRegex(helper.Refused, "write_marker_unavailable"):
+            writer.patch_image(self.fake.deployment(), control.TARGET, control.BASELINE, CANDIDATE)
+        self.assertEqual(live_patches(self.fake), [])
+
     def test_rollback_failure_after_its_write_holds(self):
         self.fake = FakeLive(image=CANDIDATE)
-        self.live, self.writer = control.ReadOnlyCluster(self.fake), control.LiveWriter(self.fake)
+        self.live, self.writer = control.ReadOnlyCluster(self.fake), control.LiveWriter(self.fake, self.marker)
         self.ready.side_effect = helper.Refused("pusher_replica_replacement_incomplete")
         self.command.return_value = control.BASELINE.split("@")[1]
         result = self.result("rollback")
@@ -543,11 +619,14 @@ def canary_dependencies(live):
     digest = inverse_script.inventory_sha256(
         control.dependency_versions(control.ReadOnlyCluster(live), live.target), exclude=control.SHARED
     )
+    full = "e" * 64  # The canary's own full inventory (isolated ConfigMap included), stable throughout.
     return {
-        "names": [["secret", "backend-secrets"]],
-        "excluded": "runtime_config_map",
-        "startup_sha256": digest,
-        "probe_sha256": digest,
+        "names": [["configmap", f"prod-omi-backend-config-canary-{CANARY_RUN}"], ["secret", "backend-secrets"]],
+        "runtime_config_map": f"prod-omi-backend-config-canary-{CANARY_RUN}",
+        "prestart_sha256": full,
+        "startup_sha256": full,
+        "probe_sha256": full,
+        "shared_sha256": digest,
         "stable": True,
     }
 
@@ -648,6 +727,8 @@ class EvidenceGateTest(unittest.TestCase):
             ("missing-live-binding", "canary_inverse_receipt_refused"),
             ("unstable-dependencies", "canary_inverse_receipt_refused"),
             ("unprobed-dependencies", "canary_inverse_receipt_refused"),
+            ("started-before-snapshot", "canary_inverse_receipt_refused"),
+            ("runtime-config-map-unbound", "canary_inverse_receipt_refused"),
         )
         for case, reason in cases:
             with self.subTest(case=case):
@@ -674,6 +755,10 @@ class EvidenceGateTest(unittest.TestCase):
                     inverse["dependencies"]["probe_sha256"] = "f" * 64
                 elif case == "unprobed-dependencies":
                     inverse["dependencies"].update(probe_sha256=None, stable=False)
+                elif case == "started-before-snapshot":
+                    inverse["dependencies"]["prestart_sha256"] = "f" * 64
+                elif case == "runtime-config-map-unbound":
+                    inverse["dependencies"]["names"] = [["secret", "backend-secrets"]]
                 else:
                     inverse["preconditions"]["container"] = "listener"
                 mocks = self.canary_mocks(artifacts, validation=validation)
@@ -1041,6 +1126,7 @@ class MainTest(unittest.TestCase):
             "REQUESTED_DIGEST": DIGEST,
             "KUBECONFIG": "live-kubeconfig",
             "LIVE_CONTEXT": "live",
+            "PUSHER_IMAGE_ONLY_WRITE_MARKER": str(Path(self.enterContext(tempfile.TemporaryDirectory())) / "write-attempted"),
         }
 
     def run_main(self, *, execute=None, env=None, approvers=("Git-on-my-level",)):
@@ -1144,21 +1230,90 @@ class MainTest(unittest.TestCase):
         self.assertIn("actions: read", permissions)
         self.assertNotIn("issues", permissions)
         self.assertNotIn("gh issue create", job)
-        detect = job.split("- name: Detect a held or reversed image-only write", 1)[1].split("- name:", 1)[0]
-        self.assertIn("--to-revision", detect)
-        self.assertIn("never an unpinned undo", detect)
-        for key in ("reverse_patch", "deployment_uid_before", "deployment_uid_observed"):
-            self.assertIn(key, detect)
-        # Every HOLD pages, whatever its reason.
+        # Every HOLD pages, whatever its reason; the page text comes from the detector.
         notifier = job.split("- name: Notify Release of the held image-only write", 1)[1].split("- name:", 1)[0]
         self.assertIn("if: always() && steps.hold.outputs.status == 'HOLD'", notifier)
         self.assertIn("release_version: ${{ steps.hold.outputs.page }}", notifier)
-        summary = job.split("- name: Summarize the held or reversed image-only write", 1)[1].split("- name:", 1)[0]
-        self.assertIn("GITHUB_STEP_SUMMARY", summary)
-        self.assertIn("manual_restore_path", summary)
-        self.assertIn("rollout undo deployment/prod-omi-pusher --to-revision=N", summary)
-        self.assertNotRegex(summary, r"rollout undo deployment/prod-omi-pusher\s*\"")
+        for key in ("reverse_patch", "deployment_uid_before", "deployment_uid_observed"):
+            self.assertIn(key, detect.PAGE_FIELDS)
         self.assertIn("steps.hold.outputs.status == 'REVERSED'", job)
+
+
+class DetectorTest(unittest.TestCase):
+    """The workflow's page decision, run through the same module and CLI the workflow calls."""
+
+    def setUp(self):
+        self.directory = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        self.receipt, self.marker = self.directory / "receipt.json", self.directory / "write-attempted"
+
+    def output(self):
+        with patch("builtins.print") as printed:
+            self.assertEqual(detect.main(["output", str(self.receipt), str(self.marker)]), 0)
+        return dict(call.args[0].split("=", 1) for call in printed.call_args_list)
+
+    def mark_write(self):
+        control.mark_write_attempt(self.marker, expected=control.BASELINE, desired=CANDIDATE)
+
+    def test_a_writer_that_died_after_its_marker_pages_uncertain_after_write(self):
+        self.mark_write()
+        for state in ("missing", "empty", "truncated", "not-an-object"):
+            with self.subTest(receipt=state):
+                if state == "missing":
+                    self.receipt.unlink(missing_ok=True)
+                else:
+                    self.receipt.write_text({"empty": "", "truncated": '{"status": "PA', "not-an-object": "[1]"}[state])
+                outputs = self.output()
+                self.assertEqual(outputs["status"], "HOLD")
+                self.assertIn("reason=UNCERTAIN_AFTER_WRITE", outputs["page"])
+                self.assertIn("hold_stage=receipt_missing_after_write", outputs["page"])
+                self.assertIn("--to-revision", outputs["page"])
+
+    def test_no_marker_and_no_receipt_does_not_page(self):
+        self.assertEqual(self.output(), {"status": "", "page": ""})
+
+    def test_a_plain_refusal_after_a_marker_still_pages(self):
+        self.mark_write()
+        self.receipt.write_text(json.dumps({"status": "REFUSED", "reason": "missing_invalid_or_unavailable_evidence"}))
+        outputs = self.output()
+        self.assertEqual(outputs["status"], "HOLD")
+        self.assertIn("reason=UNCERTAIN_AFTER_WRITE", outputs["page"])
+
+    def test_final_receipts_page_on_hold_and_reversed_only(self):
+        for status, paged in (("PASS", False), ("REFUSED", False), ("HOLD", True), ("REVERSED", True)):
+            with self.subTest(status=status):
+                self.receipt.write_text(json.dumps({"status": status, "reason": "REFUSED_INVERSE", "deployment_uid_before": "u"}))
+                outputs = self.output()
+                self.assertEqual(outputs["status"], status)
+                self.assertEqual(bool(outputs["page"]), paged)
+
+    def test_page_text_is_a_closed_character_set(self):
+        self.receipt.write_text(json.dumps({"status": "HOLD", "reason": 'x"$(id)`<b>', "hold_stage": "a;b"}))
+        page = self.output()["page"]
+        self.assertRegex(page, r"^[A-Za-z0-9 ._:/=@,-]+$")
+
+    def test_summary_checks_uid_then_skips_the_patch_when_baseline_is_already_specified(self):
+        self.assertEqual(detect.BASELINE, control.BASELINE)
+        self.receipt.write_text(json.dumps({"status": "HOLD", "reason": "UNCERTAIN_AFTER_WRITE", "deployment_uid_before": "deploy-uid"}))
+        with patch("builtins.print") as printed:
+            detect.main(["summary", str(self.receipt), str(self.marker)])
+        text = printed.call_args.args[0]
+        uid, skip, undo = (text.index(marker) for marker in ("deploy-uid", "do not patch: skip to step 4", "--to-revision=N"))
+        self.assertLess(uid, skip)
+        self.assertLess(skip, undo)
+        self.assertIn(control.BASELINE, text)
+        self.assertNotRegex(text, r"rollout undo deployment/prod-omi-pusher\s*$")
+        self.assertNotIn("rollout undo deployment/prod-omi-pusher\n", text)
+
+    def test_the_workflow_runs_this_detector_with_the_writer_marker(self):
+        job = (control.ROOT / ".github/workflows/gcp_backend_pusher.yml").read_text(encoding="utf-8").split("\n  pusher-image-only:\n", 1)[1]
+        execute = job.split("- name: Verify evidence and execute the selected image-only operation", 1)[1].split("- name:", 1)[0]
+        self.assertIn('export PUSHER_IMAGE_ONLY_WRITE_MARKER="$RUNNER_TEMP/pusher-image-only/write-attempted"', execute)
+        detector = job.split("- name: Detect a held or reversed image-only write", 1)[1].split("- name:", 1)[0]
+        self.assertIn("if: always()", detector)
+        self.assertIn("pusher_image_only_detect.py output", detector)
+        self.assertIn('"$RUNNER_TEMP/pusher-image-only/write-attempted"', detector)
+        summary = job.split("- name: Summarize the held or reversed image-only write", 1)[1].split("- name:", 1)[0]
+        self.assertIn("pusher_image_only_detect.py summary", summary)
 
 
 class CanaryOnlyWorkflowTest(unittest.TestCase):
@@ -1223,6 +1378,7 @@ class CanaryOnlyWorkflowTest(unittest.TestCase):
         # the inverse must not run, fail or gate that path.
         for name in (
             "Stage the canary inverse helper from workflow controls",
+            "Snapshot canary dependency versions before the canary starts",
             "Prove the canary inverse admission at one replica",
             "Recheck canary dependency versions after the probe",
             "Upload the canary inverse receipt",
@@ -1249,8 +1405,14 @@ class CanaryOnlyWorkflowTest(unittest.TestCase):
             self.assertIn(path, stage)
         recheck = self.blocks["Recheck canary dependency versions after the probe"]
         self.assertIn("--recheck", recheck)
+        self.assertIn("--snapshot", self.blocks["Snapshot canary dependency versions before the canary starts"])
+        self.assertIn("--prestart pusher-prod-canary-dependencies-prestart.json", self.blocks["Prove the canary inverse admission at one replica"])
         order = [
+            "Create isolated proposed production Pusher ConfigMap",
             "Stage the canary inverse helper from workflow controls",
+            # Before the canary Deployment exists, so before its first pod loads its environment.
+            "Snapshot canary dependency versions before the canary starts",
+            "Create isolated production Pusher and listener canary",
             "Prove the canary inverse admission at one replica",
             "Exercise isolated production Pusher finalization semantics",
             "Recheck canary dependency versions after the probe",

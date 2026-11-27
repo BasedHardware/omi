@@ -72,13 +72,19 @@ class FakeMetadata:
             ("configmap", LIVE_CONFIG): ["config-uid", "1"],
         }
         self.reads = []
+        self.deployments = {"prod-omi-pusher": live_deployment()}
+        self.pods = []
 
     def secret_version(self, name, *, namespace, optional=False):
         self.reads.append(("secret", name))
         return self.versions.get(("secret", name))
 
-    def get(self, kind, name, *, namespace=None, optional=False):
+    def get(self, kind, name=None, *, namespace=None, optional=False):
         self.reads.append((kind, name))
+        if kind == "deployment.apps":
+            return copy.deepcopy(self.deployments.get(name))
+        if kind == "pods":
+            return {"items": [{"metadata": {"name": pod}} for pod in self.pods]}
         observed = self.versions.get((kind, name))
         return None if observed is None else {"metadata": {"uid": observed[0], "resourceVersion": observed[1], "name": name}}
 
@@ -122,10 +128,28 @@ class InverseTest(unittest.TestCase):
                 assign(changed, op["path"], op["value"])
         return changed
 
+    def prestart(self):
+        """The pre-start snapshot, taken while the canary Deployment does not exist yet.
+
+        It is taken from the unmodified live fixture, so the parity tests below can
+        change `self.baseline` without also changing the canary's references.
+        """
+        self.metadata.deployments["prod-omi-pusher"] = live_deployment()
+        return inverse.prestart_snapshot(
+            self.metadata,
+            namespace="prod-omi-backend",
+            name=CANARY,
+            live_name="prod-omi-pusher",
+            run_id=42,
+            canary_config_map=CANARY_CONFIG,
+            live_config_map=LIVE_CONFIG,
+        )
+
     def record(self, **overrides):
         arguments = {
             "workflow_sha": WORKFLOW_SHA,
             "cluster": self.metadata,
+            "prestart": self.prestart(),
             "canary_config_map": CANARY_CONFIG,
             "live_config_map": LIVE_CONFIG,
         } | overrides
@@ -193,7 +217,7 @@ class InverseTest(unittest.TestCase):
 
     def test_template_parity_only_maps_the_canary_names(self):
         # Without the ConfigMap mapping, the isolated ConfigMap reference is a real difference.
-        classes = self.record(canary_config_map=None, live_config_map=None)["template_parity"]["classes"]
+        classes = self.record(live_config_map=None)["template_parity"]["classes"]
         self.assertEqual(classes["container_envFrom"], "differs")
         self.assertEqual(classes["dependency_references"], "differs")
         # A live reference to some other ConfigMap is never mapped away.
@@ -224,29 +248,75 @@ class InverseTest(unittest.TestCase):
         self.assertEqual(ops[3]["value"], CANDIDATE)
         self.assertEqual(ops[4]["value"], BASELINE)
 
+    def test_prestart_snapshot_covers_the_isolated_config_map_before_the_canary_exists(self):
+        snapshot = self.prestart()
+        self.assertEqual(snapshot["names"], [["configmap", CANARY_CONFIG], ["secret", "backend-secrets"]])
+        self.assertTrue(snapshot["canary_absent"])
+        self.assertNotIn("secret-uid", json.dumps(snapshot))
+        self.assertNotIn(("configmap", LIVE_CONFIG), self.metadata.reads)
+        for started in ("deployment", "pod"):
+            with self.subTest(started=started):
+                metadata = FakeMetadata()
+                if started == "deployment":
+                    metadata.deployments[CANARY] = canary_deployment()
+                else:
+                    metadata.pods = [f"{CANARY}-abc12"]
+                self.metadata = metadata
+                with self.assertRaisesRegex(inverse.Refused, "canary_already_started"):
+                    self.prestart()
+
     def test_records_metadata_only_dependency_versions_at_startup(self):
         dependencies = self.record()["dependencies"]
-        self.assertEqual(dependencies["names"], [["secret", "backend-secrets"]])
-        self.assertEqual(dependencies["excluded"], "runtime_config_map")
+        self.assertEqual(dependencies["names"], [["configmap", CANARY_CONFIG], ["secret", "backend-secrets"]])
+        self.assertEqual(dependencies["runtime_config_map"], CANARY_CONFIG)
+        self.assertEqual(dependencies["prestart_sha256"], dependencies["startup_sha256"])
+        self.assertNotEqual(dependencies["shared_sha256"], dependencies["startup_sha256"])
         self.assertEqual((dependencies["probe_sha256"], dependencies["stable"]), (None, False))
-        self.assertEqual(len(dependencies["startup_sha256"]), 64)
         self.assertNotIn("secret-uid", json.dumps(dependencies))
         self.assertIn(("secret", "backend-secrets"), self.metadata.reads)
 
+    def test_rotation_during_canary_startup_refuses(self):
+        for key, change in (
+            (("secret", "backend-secrets"), ["secret-uid", "3"]),
+            (("configmap", CANARY_CONFIG), ["canary-config-uid", "2"]),
+            (("configmap", CANARY_CONFIG), ["recreated-config-uid", "1"]),
+        ):
+            with self.subTest(key=key, change=change):
+                self.metadata = FakeMetadata()
+                prestart = self.prestart()
+                self.metadata.versions[key] = change
+                with self.assertRaisesRegex(inverse.Refused, "canary_dependencies_changed_during_startup"):
+                    self.record(prestart=prestart)
+
+    def test_canary_references_must_match_the_prestart_inventory(self):
+        prestart = self.prestart()
+        self.canary["spec"]["template"]["spec"]["containers"][1]["env"].append(
+            {"name": "T", "valueFrom": {"secretKeyRef": {"name": "other-secret", "key": "T"}}}
+        )
+        self.metadata.versions[("secret", "other-secret")] = ["other-uid", "1"]
+        with self.assertRaisesRegex(inverse.Refused, "canary_dependency_references_differ"):
+            self.record(prestart=prestart)
+
     def recheck(self, receipt):
         with patch.object(inverse, "kubectl_json", side_effect=self.kubectl):
-            return inverse.recheck(
-                receipt, self.metadata, namespace="prod-omi-backend", name=CANARY, run_id=42, canary_config_map=CANARY_CONFIG
-            )
+            return inverse.recheck(receipt, self.metadata, namespace="prod-omi-backend", name=CANARY, run_id=42)
 
     def test_recheck_after_the_probe_requires_stable_dependency_versions(self):
         receipt = self.record()
         checked = self.recheck(receipt)
         self.assertEqual(checked["dependencies"]["probe_sha256"], receipt["dependencies"]["startup_sha256"])
         self.assertTrue(checked["dependencies"]["stable"])
-        for change in (["secret-uid", "3"], ["other-uid", "2"], None):
-            with self.subTest(change=change):
-                self.metadata.versions[("secret", "backend-secrets")] = change
+        original = dict(self.metadata.versions)
+        for key, change in (
+            (("secret", "backend-secrets"), ["secret-uid", "3"]),
+            (("secret", "backend-secrets"), ["other-uid", "2"]),
+            (("secret", "backend-secrets"), None),
+            # The isolated runtime ConfigMap is part of the stability inventory.
+            (("configmap", CANARY_CONFIG), ["canary-config-uid", "2"]),
+            (("configmap", CANARY_CONFIG), ["recreated-config-uid", "1"]),
+        ):
+            with self.subTest(key=key, change=change):
+                self.metadata.versions = dict(original) | {key: change}
                 with self.assertRaisesRegex(inverse.Refused, "canary_dependencies_changed|required_dependency_absent"):
                     self.recheck(receipt)
 
@@ -264,7 +334,7 @@ class InverseTest(unittest.TestCase):
             with patch.object(inverse, "kubectl_json", side_effect=self.kubectl), patch.object(
                 inverse, "live_cluster", return_value=self.metadata
             ), patch("builtins.print"):
-                code = inverse.main([*self.argv(output), "--canary-config-map", CANARY_CONFIG, "--recheck"])
+                code = inverse.main([*self.argv(output), "--recheck"])
             receipt = json.loads(output.read_text(encoding="utf-8"))
         self.assertEqual((code, receipt["status"], receipt["reason"]), (1, "REFUSED", "canary_dependencies_changed"))
 
@@ -330,64 +400,50 @@ class InverseTest(unittest.TestCase):
                     "prod-omi-pusher",
                     workflow_sha=WORKFLOW_SHA,
                     cluster=self.metadata,
+                    prestart=self.prestart(),
+                    canary_config_map=CANARY_CONFIG,
                 )
+
+    def run_main(self, output, *extra):
+        with patch.object(inverse, "kubectl_json", side_effect=self.kubectl), patch.object(
+            inverse, "live_cluster", return_value=self.metadata
+        ), patch("builtins.print"):
+            return inverse.main([*self.argv(output), "--canary-config-map", CANARY_CONFIG, "--live-config-map", LIVE_CONFIG, *extra])
+
+    def test_main_snapshot_record_and_recheck_round_trip(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            prestart, output = Path(tmp) / "prestart.json", Path(tmp) / "receipt.json"
+            self.metadata.deployments["prod-omi-pusher"] = copy.deepcopy(self.baseline)
+            self.assertEqual(self.run_main(prestart, "--snapshot"), 0)
+            self.assertEqual(self.run_main(output, "--prestart", str(prestart)), 0)
+            self.assertEqual(self.run_main(output, "--recheck"), 0)
+            receipt = json.loads(output.read_text(encoding="utf-8"))
+        dependencies = receipt["dependencies"]
+        self.assertTrue(dependencies["stable"])
+        self.assertEqual(dependencies["prestart_sha256"], dependencies["probe_sha256"])
+
+    def test_main_record_without_a_prestart_snapshot_fails_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "receipt.json"
+            self.assertEqual(self.run_main(output), 1)
+            receipt = json.loads(output.read_text(encoding="utf-8"))
+        self.assertEqual((receipt["status"], receipt["reason"]), ("REFUSED", "canary_prestart_snapshot_missing"))
 
     def test_main_writes_a_refused_receipt_and_fails_closed(self):
         self.canary = canary_deployment(image=BASELINE)
-        with tempfile.TemporaryDirectory() as tmp, patch.object(inverse, "kubectl_json", side_effect=self.kubectl), patch.object(
-            inverse, "live_cluster", return_value=self.metadata
-        ), patch("builtins.print"):
-            output = Path(tmp) / "receipt.json"
-            code = inverse.main(
-                [
-                    "--namespace",
-                    "prod-omi-backend",
-                    "--name",
-                    "prod-omi-pusher-canary-42",
-                    "--candidate-image",
-                    CANDIDATE,
-                    "--baseline-deployment",
-                    "prod-omi-pusher",
-                    "--run-id",
-                    "42",
-                    "--source-sha",
-                    SOURCE,
-                    "--workflow-sha",
-                    WORKFLOW_SHA,
-                    "--output",
-                    str(output),
-                ]
-            )
+        with tempfile.TemporaryDirectory() as tmp:
+            prestart, output = Path(tmp) / "prestart.json", Path(tmp) / "receipt.json"
+            prestart.write_text(json.dumps(self.prestart()), encoding="utf-8")
+            code = self.run_main(output, "--prestart", str(prestart))
             receipt = json.loads(output.read_text(encoding="utf-8"))
         self.assertEqual(code, 1)
         self.assertEqual((receipt["status"], receipt["reason"]), ("REFUSED", "canary_does_not_hold_candidate"))
 
     def test_main_rejects_an_unpinned_baseline(self):
         self.baseline = live_deployment(image=live_deployment()["spec"]["template"]["spec"]["containers"][0]["image"])
-        with tempfile.TemporaryDirectory() as tmp, patch.object(inverse, "kubectl_json", side_effect=self.kubectl), patch.object(
-            inverse, "live_cluster", return_value=self.metadata
-        ), patch("builtins.print"):
+        with tempfile.TemporaryDirectory() as tmp:
             output = Path(tmp) / "receipt.json"
-            code = inverse.main(
-                [
-                    "--namespace",
-                    "prod-omi-backend",
-                    "--name",
-                    "prod-omi-pusher-canary-42",
-                    "--candidate-image",
-                    CANDIDATE,
-                    "--baseline-deployment",
-                    "prod-omi-pusher",
-                    "--run-id",
-                    "42",
-                    "--source-sha",
-                    SOURCE,
-                    "--workflow-sha",
-                    WORKFLOW_SHA,
-                    "--output",
-                    str(output),
-                ]
-            )
+            code = self.run_main(output)
             receipt = json.loads(output.read_text(encoding="utf-8"))
         self.assertEqual(code, 1)
         self.assertEqual(receipt["reason"], "baseline_image_unpinned_or_equal")

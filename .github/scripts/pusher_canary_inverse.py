@@ -17,8 +17,10 @@ this helper and its rehearsal dependency from the immutable workflow-control
 revision (`INVERSE_HELPER_PATHS`), and source admission binds the same paths.
 
 It also records the metadata-only identity (UID and resourceVersion, never data)
-of every Secret and ConfigMap the canary references, once at canary startup and
-again after the semantic probe (`--recheck`), and refuses unless they are stable.
+of every Secret and ConfigMap the canary will reference, including its isolated
+runtime ConfigMap: first before the canary Deployment exists (`--snapshot`, so
+before its first pod loads its environment), again when the inverse is recorded,
+and again after the semantic probe (`--recheck`). Any change refuses.
 """
 
 from __future__ import annotations
@@ -284,13 +286,56 @@ def inventory_sha256(inventory, *, exclude=None):
     return hashlib.sha256(encoded).hexdigest()
 
 
-def dependency_record(inventory, canary_config_map):
-    exclude = ("configmap", canary_config_map) if canary_config_map else None
+def inventory_names(inventory):
+    return [[item["resource"], item["name"]] for item in inventory]
+
+
+def prestart_snapshot(cluster, *, namespace, name, live_name, run_id, canary_config_map, live_config_map):
+    """Before the canary exists: the full inventory it will reference, isolated ConfigMap included.
+
+    The canary is rendered from the same chart as the live Pusher, so its references
+    are the live template's with the runtime ConfigMap renamed to the isolated one.
+    The recorded inventory later has to match the canary's own references exactly.
+    """
+    require(
+        all(NAME.fullmatch(value or "") for value in (namespace, name, live_name, canary_config_map, live_config_map)),
+        "invalid_canary_name",
+    )
+    require(type(run_id) is int and run_id > 0, "invalid_canary_identity")
+    require(cluster.get("deployment.apps", name, namespace=namespace, optional=True) is None, "canary_already_started")
+    require(
+        not any(pod["metadata"]["name"].startswith(f"{name}-") for pod in cluster.get("pods", namespace=namespace)["items"]),
+        "canary_already_started",
+    )
+    live = cluster.get("deployment.apps", live_name, namespace=namespace)
+    pod_spec = _rename(live["spec"]["template"]["spec"], {live_config_map: canary_config_map})
+    inventory = dependency_inventory(cluster, pod_spec, namespace)
+    require(["configmap", canary_config_map] in inventory_names(inventory), "runtime_config_map_unreferenced")
     return {
-        "names": [[item["resource"], item["name"]] for item in inventory if (item["resource"], item["name"]) != exclude],
-        "excluded": "runtime_config_map" if exclude else None,
-        "startup_sha256": inventory_sha256(inventory, exclude=exclude),
+        "schema": 1,
+        "status": "PASS",
+        "run_id": run_id,
+        "canary_deployment": name,
+        "canary_absent": True,
+        "names": inventory_names(inventory),
+        "sha256": inventory_sha256(inventory),
+    }
+
+
+def dependency_record(inventory, prestart, canary_config_map):
+    """Startup evidence: the canary's own references equal the pre-start snapshot, unchanged."""
+    require(prestart.get("status") == "PASS" and prestart.get("canary_absent") is True, "canary_prestart_snapshot_missing")
+    require(inventory_names(inventory) == prestart["names"], "canary_dependency_references_differ")
+    require(inventory_sha256(inventory) == prestart["sha256"], "canary_dependencies_changed_during_startup")
+    return {
+        "names": inventory_names(inventory),
+        "runtime_config_map": canary_config_map,
+        "prestart_sha256": prestart["sha256"],
+        "startup_sha256": inventory_sha256(inventory),
         "probe_sha256": None,
+        # Compared with the live Pusher's inventory, whose runtime ConfigMap differs
+        # by design and is compared by content hash instead.
+        "shared_sha256": inventory_sha256(inventory, exclude=("configmap", canary_config_map)),
         "stable": False,
     }
 
@@ -314,14 +359,17 @@ def record(
     *,
     workflow_sha,
     cluster,
-    canary_config_map=None,
+    prestart,
+    canary_config_map,
     live_config_map=None,
 ):
     require(NAME.fullmatch(namespace) and NAME.fullmatch(name) and NAME.fullmatch(live_name), "invalid_canary_name")
     require(
-        all(NAME.fullmatch(value) for value in (canary_config_map, live_config_map) if value is not None),
+        NAME.fullmatch(canary_config_map or "")
+        and all(NAME.fullmatch(value) for value in (live_config_map,) if value is not None),
         "invalid_canary_name",
     )
+    require(prestart.get("run_id") == run_id and prestart.get("canary_deployment") == name, "canary_prestart_snapshot_missing")
     require(
         type(run_id) is int
         and run_id > 0
@@ -378,7 +426,7 @@ def record(
         },
         "admitted_image": baseline,
         "dependencies": dependency_record(
-            dependency_inventory(cluster, canary["spec"]["template"]["spec"], namespace), canary_config_map
+            dependency_inventory(cluster, canary["spec"]["template"]["spec"], namespace), prestart, canary_config_map
         ),
         # The live object the parity was measured against. Promote re-reads it and
         # refuses unless this exact template is still the one it would patch.
@@ -394,8 +442,8 @@ def record(
     }
 
 
-def recheck(receipt, cluster, *, namespace, name, run_id, canary_config_map=None):
-    """After the semantic probe: re-read the same references and require identical versions."""
+def recheck(receipt, cluster, *, namespace, name, run_id):
+    """After the semantic probe: re-read the full inventory and require the pre-start versions."""
     require(
         receipt.get("status") == "PASS"
         and receipt.get("run_id") == run_id
@@ -406,13 +454,14 @@ def recheck(receipt, cluster, *, namespace, name, run_id, canary_config_map=None
     )
     canary = kubectl_json(["get", "deployment", name, "--namespace", namespace, "-o", "json"])
     require(version(canary)[0] == receipt["deployment"]["uid"], "canary_replaced_during_probe")
-    probe = dependency_record(dependency_inventory(cluster, canary["spec"]["template"]["spec"], namespace), canary_config_map)
+    inventory = dependency_inventory(cluster, canary["spec"]["template"]["spec"], namespace)
     dependencies = receipt["dependencies"]
     require(
-        probe["names"] == dependencies["names"] and probe["startup_sha256"] == dependencies["startup_sha256"],
+        inventory_names(inventory) == dependencies["names"]
+        and inventory_sha256(inventory) == dependencies["prestart_sha256"] == dependencies["startup_sha256"],
         "canary_dependencies_changed",
     )
-    return receipt | {"dependencies": dependencies | {"probe_sha256": probe["startup_sha256"], "stable": True}}
+    return receipt | {"dependencies": dependencies | {"probe_sha256": inventory_sha256(inventory), "stable": True}}
 
 
 def live_cluster(context):
@@ -439,7 +488,14 @@ def parse_args(argv):
     parser.add_argument("--workflow-sha", required=True, help="GITHUB_WORKFLOW_SHA of the producing run")
     parser.add_argument("--context", help="kubeconfig context (default: the current context)")
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument(
+    parser.add_argument("--prestart", type=Path, help="pre-start dependency snapshot written by --snapshot")
+    phase = parser.add_mutually_exclusive_group()
+    phase.add_argument(
+        "--snapshot",
+        action="store_true",
+        help="before the canary exists: write its full dependency inventory to --output",
+    )
+    phase.add_argument(
         "--recheck",
         action="store_true",
         help="re-read the dependency versions recorded in --output after the probe and require them unchanged",
@@ -452,6 +508,19 @@ def main(argv=None):
     result = {"schema": 1, "status": "REFUSED"}
     try:
         cluster = live_cluster(args.context)
+        if args.snapshot:
+            result = prestart_snapshot(
+                cluster,
+                namespace=args.namespace,
+                name=args.name,
+                live_name=args.baseline_deployment,
+                run_id=args.run_id,
+                canary_config_map=args.canary_config_map,
+                live_config_map=args.live_config_map,
+            )
+            write_json(args.output, result)
+            print(json.dumps(result, sort_keys=True))
+            return 0
         if args.recheck:
             previous = read_json(args.output)
             result = previous | {"status": "REFUSED"}
@@ -461,7 +530,6 @@ def main(argv=None):
                 namespace=args.namespace,
                 name=args.name,
                 run_id=args.run_id,
-                canary_config_map=args.canary_config_map,
             )
             write_json(args.output, result)
             print(json.dumps(result, sort_keys=True))
@@ -482,6 +550,7 @@ def main(argv=None):
             args.baseline_deployment,
             workflow_sha=args.workflow_sha,
             cluster=cluster,
+            prestart=read_json(args.prestart) if args.prestart else {},
             canary_config_map=args.canary_config_map,
             live_config_map=args.live_config_map,
         )

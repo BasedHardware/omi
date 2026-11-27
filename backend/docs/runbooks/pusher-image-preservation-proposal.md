@@ -354,9 +354,9 @@ class, the canary's startup inputs equal the live Pusher's:
 - `pod_template`: every parity class in the canary inverse receipt is `equal`;
 - `dependency_versions`: every referenced Secret and ConfigMap other than the
   runtime ConfigMap keeps the metadata identity (UID and resourceVersion) the
-  canary recorded at startup and again after its probe. A Secret rotated
-  between canary and promote refuses. Only a digest of that identity list is
-  in the receipt;
+  canary held from before its first pod started through its probe. A Secret
+  rotated between canary and promote refuses. Only digests of that identity
+  list are in the receipt;
 - `live_template_since_canary`: the live Deployment UID and Pod template are
   the ones that parity measured.
 
@@ -382,8 +382,16 @@ none ends as an ordinary refusal:
   (`UNCERTAIN_AFTER_WRITE`) instead of reversing: the single rollout wait is
   spent, and a second rollout would run past the job ceiling.
 
+Final serving verification, forward and reverse, requires the Deployment UID
+that was patched: a replacement object with the same image and generation ends
+in HOLD, never PASS or REVERSED. Before each live patch the job makes a
+write-attempt marker durable in the run's temp directory. If the process dies
+before printing its receipt, the detector (`pusher_image_only_detect.py`) sees
+the marker with a missing, empty or invalid receipt and pages
+`UNCERTAIN_AFTER_WRITE`.
+
 The receipt records `deployment_uid_before`, `deployment_uid_observed`,
-`serving_image_observed` and `reverse_patch` (`not_attempted`,
+`patched_deployment_uid`, `serving_image_observed` and `reverse_patch` (`not_attempted`,
 `rejected_on_preconditions`, `rejected`, `unconfirmed` or `succeeded`). Every
 HOLD writes the run summary and pages the deploy channel with those fields and
 the manual recovery below.
@@ -409,8 +417,12 @@ Pusher, with the exact `pusher_image_digest` and
   names first, and a catch-all class compares every field no other class names
   (for example `hostNetwork`);
 - records the metadata-only UID and resourceVersion of every Secret and
-  ConfigMap the canary references, at canary startup and again after the
-  semantic probe, and fails unless they are unchanged;
+  ConfigMap the canary will reference, its isolated runtime ConfigMap
+  included, before the canary Deployment exists (so before its first pod loads
+  its environment). It records them again when the inverse is recorded and
+  after the semantic probe, and fails unless the full inventory is unchanged.
+  The isolated and production runtime ConfigMaps are different objects, so
+  promote compares those two by content hash;
 - uploads the canary evidence, uploads the inverse receipt as its own artifact
   `pusher-prod-canary-inverse-receipt`, and removes the canary.
 

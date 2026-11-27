@@ -245,10 +245,41 @@ class ReadOnlyCluster:
         return submit_image_patch(self._cluster, obj, name, expected, desired, dry_run=True, allow_same=allow_same)
 
 
+def mark_write_attempt(marker, *, expected, desired):
+    """Durably record that a live patch is about to be sent, before it is sent.
+
+    If the process dies after the patch and before printing its receipt, the
+    workflow's detector still sees this marker and pages UNCERTAIN_AFTER_WRITE.
+    A marker that cannot be made durable refuses the write.
+    """
+    try:
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        line = json.dumps({"expected": expected, "desired": desired}, sort_keys=True) + "\n"
+        descriptor = os.open(marker, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        try:
+            os.write(descriptor, line.encode("utf-8"))
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+        directory = os.open(marker.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    except OSError:
+        raise Refused("write_marker_unavailable") from None
+
+
 class LiveWriter(ReadOnlyCluster):
     """The single guarded live patch. Only the promote and rollback paths hold it."""
 
+    def __init__(self, cluster, marker):
+        super().__init__(cluster)
+        require(isinstance(marker, Path), "write_marker_unavailable")
+        self._marker = marker
+
     def patch_image(self, obj, name, expected, desired):
+        mark_write_attempt(self._marker, expected=expected, desired=desired)
         return submit_image_patch(self._cluster, obj, name, expected, desired, dry_run=False)
 
 
@@ -554,12 +585,20 @@ def check_canary_inverse(inverse, packet, deployment, workflow_sha):
         and set(parity["classes"]) == set(PARITY_CLASSES)
         and all(value in {"equal", "differs"} for value in parity["classes"].values())
         and isinstance(inverse.get("dependencies"), dict)
-        and set(inverse["dependencies"]) == {"names", "excluded", "startup_sha256", "probe_sha256", "stable"}
-        and inverse["dependencies"]["excluded"] == "runtime_config_map"
+        and set(inverse["dependencies"])
+        == {"names", "runtime_config_map", "prestart_sha256", "startup_sha256", "probe_sha256", "shared_sha256", "stable"}
+        # The full inventory, isolated runtime ConfigMap included, held from before
+        # the canary's first pod through its probe.
+        and inverse["dependencies"]["runtime_config_map"] == canary_config_map(run_id)
+        and ["configmap", canary_config_map(run_id)] in inverse["dependencies"]["names"]
         and inverse["dependencies"]["stable"] is True
-        and isinstance(inverse["dependencies"]["startup_sha256"], str)
-        and len(inverse["dependencies"]["startup_sha256"]) == 64
-        and inverse["dependencies"]["probe_sha256"] == inverse["dependencies"]["startup_sha256"]
+        and all(
+            isinstance(inverse["dependencies"][key], str) and len(inverse["dependencies"][key]) == 64
+            for key in ("prestart_sha256", "shared_sha256")
+        )
+        and inverse["dependencies"]["prestart_sha256"]
+        == inverse["dependencies"]["startup_sha256"]
+        == inverse["dependencies"]["probe_sha256"]
         and isinstance(live, dict)
         and set(live) == {"name", "uid", "template_sha256"}
         and live["name"] == TARGET
@@ -608,7 +647,7 @@ def check_effective_environment(live, artifacts, before, result):
         ),
         "dependency_versions": (
             "equal"
-            if inventory_sha256(before["dependencies"], exclude=SHARED) == inverse["dependencies"]["probe_sha256"]
+            if inventory_sha256(before["dependencies"], exclude=SHARED) == inverse["dependencies"]["shared_sha256"]
             else "differs"
         ),
         "live_template_since_canary": (
@@ -624,6 +663,10 @@ def check_effective_environment(live, artifacts, before, result):
 
 def canary_target(run_id):
     return f"prod-omi-pusher-canary-{run_id}"
+
+
+def canary_config_map(run_id):
+    return f"prod-omi-backend-config-canary-{run_id}"
 
 
 def verify_canary_cleanup(cluster, run_id):
@@ -744,11 +787,19 @@ def verify_serving(live, before, changed, image, result):
         deploy_status_report(strict=False)
         raise
     deployed = live.deployment()
+    patched_uid = version(changed)[0]
+    # A replacement Deployment with the same image and generation is not the object
+    # this run patched; it must never read as PASS or REVERSED.
+    require(
+        version(deployed)[0] == patched_uid == before["deployment"][0],
+        "deployment_replaced_after_patch",
+    )
     require(
         deployed["metadata"]["generation"] == changed["metadata"]["generation"] and image_of(deployed, TARGET) == image,
         "deployment_generation_changed_after_patch",
     )
     identity = verify_ready(live, deployed, image)
+    require(identity["deployment_uid"] == patched_uid, "deployment_replaced_after_patch")
     after = state(live)
     require(
         after["namespace_uid"] == before["namespace_uid"]
@@ -813,7 +864,7 @@ def execute(mode, packet, live, result, *, writer=None):
     result.update(stage="live_patch_attempted", live_write_attempted=True, reverse_patch="not_attempted")
     try:
         changed = writer.patch_image(baseline, TARGET, BASELINE, candidate)
-        result.update(patch_observed=version(changed), requested_image=candidate)
+        result.update(patch_observed=version(changed), patched_deployment_uid=version(changed)[0], requested_image=candidate)
         result["stage"] = "read_post_move_state"
         after = live.deployment()
         require(
@@ -910,7 +961,11 @@ def reverse_once(live, writer, before, candidate, result, *, trigger):
         hold(live, result, "reverse_preconditions_unproven", reason=trigger)
     try:
         reversed_obj = writer.patch_image(fresh, TARGET, candidate, BASELINE)
-        result.update(reverse_patch="succeeded", reverse_patch_observed=version(reversed_obj))
+        result.update(
+            reverse_patch="succeeded",
+            reverse_patch_observed=version(reversed_obj),
+            reverse_patched_deployment_uid=version(reversed_obj)[0],
+        )
     except Exception as error:  # Any outcome but a confirmed reverse is uncertain: hold.
         result.update(
             reverse_patch="rejected" if isinstance(error, Refused) else "unconfirmed",
@@ -953,7 +1008,7 @@ def rollback(packet, live, writer, result):
     result.update(stage="live_patch_attempted", live_write_attempted=True, reverse_patch="not_attempted")
     try:
         changed = writer.patch_image(live.deployment(), TARGET, packet["candidate_image"], BASELINE)
-        result.update(patch_observed=version(changed), requested_image=BASELINE)
+        result.update(patch_observed=version(changed), patched_deployment_uid=version(changed)[0], requested_image=BASELINE)
         result["stage"] = "verify_serving"
         identity = verify_serving(live, before, changed, BASELINE, result)
     except Exception as error:
@@ -992,7 +1047,7 @@ def main():
         with tempfile.TemporaryDirectory(prefix="pusher-image-only-") as _tmp:
             raw = Cluster(Path(os.environ["KUBECONFIG"]), os.environ["LIVE_CONTEXT"], isolated=False)
             live = ReadOnlyCluster(raw)
-            writer = LiveWriter(raw) if mode in {"promote", "rollback"} else None
+            writer = LiveWriter(raw, Path(os.environ["PUSHER_IMAGE_ONLY_WRITE_MARKER"])) if mode in {"promote", "rollback"} else None
             execute(mode, packet, live, result, writer=writer)
         result.update(status="PASS", stage="complete")
     except Hold as error:
