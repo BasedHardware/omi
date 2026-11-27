@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
@@ -17,6 +18,7 @@ import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
+import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/wal_file_manager.dart';
 import '../support/faulting_wal_writer.dart';
 
@@ -1152,6 +1154,40 @@ void main() {
       expect(pauses, isEmpty, reason: 'the server already scoped the pause; no local backoff on top');
       expect(sync.testWals.every((wal) => wal.status == WalStatus.miss), isTrue,
           reason: 'a 503 consumes no retry budget');
+    });
+
+    test('a 503 failure line in the shared debug log carries the server reason and pacing', () async {
+      // Customer logs showed only "Server is temporarily unavailable": the reason the app
+      // already parsed from the response was never written, so support could not tell an
+      // Omi refusal from platform shedding without server-side logs.
+      await DebugLogManager.setEnabled(true);
+      addTearDown(() => DebugLogManager.setEnabled(false));
+      await DebugLogManager.clear();
+      final sync = await buildDrain(
+        failure: () => const SyncUploadHttpException(503, 'Server is temporarily unavailable',
+            reasonCode: 'sync_dispatch_busy', retryAfterSeconds: 30),
+        pauses: <Duration>[],
+        attempts: <List<String>>[],
+      );
+
+      await sync.syncAll();
+
+      Map<String, dynamic>? extra;
+      for (var attempt = 0; attempt < 100 && extra == null; attempt++) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        final lines = await (await DebugLogManager.getLogFile())!.readAsLines();
+        for (final line in lines) {
+          final entry = jsonDecode(line) as Map<String, dynamic>;
+          if (entry['message'] case final String message when message.startsWith('Local upload HTTP failure')) {
+            extra = entry['extra'] as Map<String, dynamic>;
+          }
+        }
+      }
+      expect(extra, isNotNull, reason: 'the refused batch must reach the shared debug log');
+      expect(extra!['statusCode'], 503);
+      expect(extra['reasonCode'], 'sync_dispatch_busy');
+      expect(extra['retryAfterSeconds'], 30);
+      expect(extra.containsKey('recordingWaitSeconds'), isFalse, reason: 'absent server fields stay absent');
     });
 
     test('a 503 without Retry-After pauses between batches with a growing backoff', () async {
