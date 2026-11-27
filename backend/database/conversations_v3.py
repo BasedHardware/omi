@@ -573,7 +573,7 @@ def clear_terminal_pending(uid, token, *, firestore_client=None):
             raise Conflict('lease_lost')
         deletion = deletion_ref.get(transaction=tx)
         if account_deletion_marker_blocks_access(
-            marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('status')
+            marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('wipe_status')
         ):
             raise Conflict('account_deletion')
 
@@ -1380,7 +1380,7 @@ def commit_projection(
         watch.phase('deletion_marker')
         deletion = account_deletion_document(uid, firestore_client=client).get(transaction=tx)
         if account_deletion_marker_blocks_access(
-            marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('status')
+            marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('wipe_status')
         ):
             raise Conflict('account_deletion')
         if lease.get('token') != token or not lease.get('until') or lease['until'] <= now:
@@ -2489,7 +2489,7 @@ def write_live_title_preview(uid, token, cid, revision, *, title=None, firestore
             return False
         deletion = deletion_ref.get(transaction=tx)
         if account_deletion_marker_blocks_access(
-            marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('status')
+            marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('wipe_status')
         ):
             return False
         row = ref.get(transaction=tx).to_dict() or {}

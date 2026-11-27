@@ -1197,6 +1197,7 @@ def _complete_server_batch_capture_txn(
         conversation_ref,
         {
             'status': 'completed',
+            'finalization_status': 'completed',
             **manual_stop_patch(current, job, job_ref.id, revision),
             'relevance_decision': terminal['relevance_decision'],
             'home_transcription_pending_at': now,

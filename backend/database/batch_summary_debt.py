@@ -4,6 +4,7 @@ import logging
 
 from google.cloud import firestore
 from database.conversation_finalization_schema import FINALIZATION_JOBS_COLLECTION
+from utils.batch_pipeline import empty_transcription
 from utils.conversations import summary_delivery as delivery
 
 logger = logging.getLogger(__name__)
@@ -12,7 +13,8 @@ logger = logging.getLogger(__name__)
 def arm_projection_summary(uid, client, transaction, payload, current):
     """Read the bound job before assignment writes; content and proof commit together.
 
-    A capture handoff retains finalization_job_id (and a stale queued status).
+    A historical capture handoff may retain a stale queued status alongside
+    finalization_job_id.
     Never infer that this generation finished from the conversation's lifecycle
     alone. Bind the proof to both job id and revision so a new finalizer restores
     the ordinary generation fence. This creates no task: projection and repair
@@ -23,17 +25,29 @@ def arm_projection_summary(uid, client, transaction, payload, current):
     shape without creating a finalization job.
     """
     if (
-        not delivery.projection_debt_enabled()
-        or payload.get('record_lane_owner') != 'batch_live_v1'
+        payload.get('record_lane_owner') != 'batch_live_v1'
         or payload.get('status') != 'completed'
-        or not payload.get('transcript_segments')
         or (payload.get('record_projection_revision') or 0) <= ((current or {}).get('record_projection_revision') or 0)
-        or payload.get('summary_completed_at')
-        or payload.get('summary_output_present')
     ):
+        return
+    has_transcript = bool(payload.get('transcript_segments'))
+    settle_finalization = payload.get('finalization_status') in ('queued', 'leased') and (
+        has_transcript or empty_transcription.terminal(payload)
+    )
+    arm_summary = (
+        delivery.projection_debt_enabled()
+        and has_transcript
+        and not payload.get('summary_completed_at')
+        and not payload.get('summary_output_present')
+    )
+    if not settle_finalization and not arm_summary:
         return
     verified, proof = verify_projection_finalization(uid, client, transaction, payload)
     if not verified:
+        return
+    if settle_finalization and proof is not None:
+        payload['finalization_status'] = 'completed'
+    if not arm_summary:
         return
     if proof is not None:
         payload['summary_projection_finalization'] = proof

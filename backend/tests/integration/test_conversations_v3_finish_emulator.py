@@ -18,9 +18,13 @@ from database import batch_pipeline_projection as completion
 from database import conversations_v3_live as store
 from database.batch_pipeline_store import FirestoreStore
 from database.sync_ledger import sync_content_ledger_ref
+from tests.integration.test_server_batch_completion_emulator import assert_deltas
+from tests.integration.test_server_batch_completion_emulator import seeded as server_batch_completion
 from utils.batch_pipeline.contracts import ProjectionBinding
 from utils.batch_pipeline.scheduler import owner_key
+from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.v3 import live
+from utils.conversations.v3.policy import NATIVE_MANUAL_STOP
 
 
 @pytest.fixture
@@ -35,6 +39,20 @@ def owner(monkeypatch):
         yield client, uid, client.collection('users').document(uid).collection('conversations')
     finally:
         client.close()
+
+
+def test_native_finish_keeps_stop_intent_and_settles_capture_status(server_batch_completion):
+    _, row, job, projection, baseline, _, complete = server_batch_completion
+    finished_at = datetime(2026, 11, 26, 12, tzinfo=timezone.utc)
+    row.update({'recording': True, 'finished_at': finished_at, 'finalization_status': 'queued'})
+    job.update({'processing_trigger': ProcessingTrigger.CLIENT_FINALIZE.value})
+
+    assert complete() == complete() == 'completed'
+    result = row.get().to_dict()
+    assert result['finalization_status'] == 'completed'
+    assert result[NATIVE_MANUAL_STOP] == {'job_id': job.id, 'revision': 1, 'finished_at': finished_at}
+    assert result['home_transcription_pending_at'] is not None
+    assert_deltas(projection, baseline, leased=-1, completed=1, success=1)
 
 
 def test_recent_source_query_ranges_orders_projects_and_limits(owner):
