@@ -72,8 +72,12 @@ invalidate configured Redis after acknowledged authority Commits. The
 reconciler captures Commit-time scope and keeps it on the intent. Existing
 deletion obligations keep their regular schedule. The new artifact sweep and
 second conversation pass hold durable execution dates in separate queues.
-Eligible rows persist without a TTL while execution is closed. A result's
-original reservation window survives retirement of its active upload marker.
+Eligible rows persist without a TTL while execution is closed. Admission
+preserves an audio receipt's original reservation window when retiring its
+active upload marker. The staging reaper preserves the window for results.
+If normal retention already deleted an object and left its terminal receipt,
+the sweep clears the receipt and reconciles its mirror without touching storage.
+An absent or invalid address without that cleanup evidence still enters retry.
 Account opt-outs execute only against receipts with a trusted `batch_live_v1`
 lane. An unstamped candidate whose lane cannot be proven enters recovery debt.
 

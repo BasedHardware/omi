@@ -116,6 +116,19 @@ def _account_is_erased(client, uid, transaction):
     return (marker.to_dict() or {}).get('wipe_status') == 'completed' and not user.exists
 
 
+def _already_cleaned(receipt, owner_key):
+    # Normal retention installs this TTL and removes the URI and cleanup
+    # fields in one write, after deleting the object. A missing URI alone
+    # provides no proof of cleanup.
+    expiry = receipt.get('expires_at')
+    return (
+        receipt.get('owner_key') == owner_key
+        and isinstance(expiry, datetime)
+        and expiry.utcoffset() is not None
+        and not {'uri', 'cleanup_after', 'cleanup_hold'}.intersection(receipt)
+    )
+
+
 def _pin(uid, data, storage):
     uri = data.get('uri')
     if not isinstance(uri, str) or not uri:
@@ -392,17 +405,18 @@ def _run(client, event, now):
                 )
             if _authorize(client, event.reference, authority, uid, reason, event, artifact=snapshot) != 'ready':
                 return 'changed'
-            storage = rpc_deadline.bind_storage_client(create_storage_client())
-            try:
-                uri = _pin(uid, receipt, storage)
-            except PermanentSweepError as error:
-                return _receipt_failure(client, event, authority, uid, reason, now, snapshot, error)
-            if uri:
-                authority.remote(
-                    lambda: delete_batch_object(uid, uri, timeout=5, storage_client=storage),
-                    target=f'late-batch:{namespace}:{uri}',
-                )
-                POST_WINDOW_OPERATIONS.labels(reason, 'object_storage').inc()
+            if not _already_cleaned(receipt, key):
+                storage = rpc_deadline.bind_storage_client(create_storage_client())
+                try:
+                    uri = _pin(uid, receipt, storage)
+                except PermanentSweepError as error:
+                    return _receipt_failure(client, event, authority, uid, reason, now, snapshot, error)
+                if uri:
+                    authority.remote(
+                        lambda: delete_batch_object(uid, uri, timeout=5, storage_client=storage),
+                        target=f'late-batch:{namespace}:{uri}',
+                    )
+                    POST_WINDOW_OPERATIONS.labels(reason, 'object_storage').inc()
             changes = {'after': snapshot.id, 'needs_postgres': True, 'execute_at': now + PAGE_RETRY}
             if _advance(client, event.reference, authority, event, uid, reason, changes, artifact=snapshot):
                 POST_WINDOW_OPERATIONS.labels(reason, 'firestore').inc()

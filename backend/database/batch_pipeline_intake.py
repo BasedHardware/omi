@@ -206,7 +206,10 @@ def admit(
                     or artifact.get('erasure_requested')
                 ):
                     raise ValueError('audio staging reservation missing or reclaimed')
-                artifact.pop('write_pending_until', None)
+                deadline = artifact.pop('write_pending_until', None)
+                if isinstance(deadline, datetime):
+                    # Admission ends the active upload, but a policy Commit during it still owes erasure.
+                    artifact['late_erasure_pending_until'] = deadline
                 tx.put('artifacts', key, artifact)
             proposal = (source_aliases or {}).get(item.segment_id)
             if proposal is not None:
