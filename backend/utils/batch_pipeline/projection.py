@@ -663,7 +663,7 @@ class Projector:
         if prechecked:
             try:
                 with projection_phase('predecessor', policy, unit_key=segment_id):
-                    self.store.check(session)
+                    self.store.check(session, speculative=True)
             except ProjectionReplay:
                 return
             except BatchPrivacyBlocked as error:

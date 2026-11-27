@@ -8,6 +8,7 @@ positions are preserved. Install in every writer process before enabling readers
 import functools
 import hashlib
 import inspect
+import os
 from typing import Any, cast
 from uuid import uuid4
 
@@ -39,6 +40,9 @@ from database.batch_account_authority_schema import (
 )
 from database.home_feed_writer import augment_home_writes, affects_home, bulk_erasure_scope
 from database.batch_privacy_attempt import CONVERSATION_AUTHORITY_FIELDS, TOKEN_FIELD, SCHEMA_FIELD, TOKEN_SCHEMA
+from database.batch_privacy_tokenless import invalidate
+from database.privacy_check_metrics import ACCOUNT_AUTHORITY_WRITES
+from utils.executors import db_executor, run_blocking
 
 # Protobuf builds this class dynamically; the installed module has no typed declaration.
 Status = cast(Any, status_pb2).Status
@@ -217,8 +221,6 @@ def _observe_account_writes(request: Any) -> None:
     try:
         observations = account_write_observations(request)
         if observations:
-            from database.privacy_check_metrics import ACCOUNT_AUTHORITY_WRITES
-
             for family, group, certified in observations:
                 ACCOUNT_AUTHORITY_WRITES.labels(family, group, 'true' if certified else 'false').inc()
     except Exception:
@@ -235,11 +237,13 @@ def token_write(path: str) -> Write:
     )
 
 
-def augment_commit(request: Any) -> tuple[Any, int]:
+def augment_commit(request: Any, *, tokens_out: set[str] | None = None) -> tuple[Any, int]:
     writes = (request.get('writes') if isinstance(request, dict) else request.writes) or ()
     count = len(writes)
     home_writes = augment_home_writes(writes)
     tokens = authority_tokens(writes)
+    if tokens_out is not None:
+        tokens_out.update(tokens)
     if not tokens and len(home_writes) == count:
         return request, count
     prepared = CommitRequest(request)
@@ -257,6 +261,15 @@ def augment_commit(request: Any) -> tuple[Any, int]:
     return prepared, count
 
 
+def _invalidate_tokenless(tokens: set[str]) -> None:
+    # The Firestore Commit has already succeeded. Cache failures cannot change
+    # its outcome; the absolute precheck deadline bounds an uncertain delivery.
+    try:
+        invalidate(tokens)
+    except Exception:
+        pass
+
+
 def _wrap_commit(original: Any) -> Any:
     if getattr(original, '_omi_batch_privacy_fence', False):
         return original
@@ -266,8 +279,9 @@ def _wrap_commit(original: Any) -> Any:
         if request is not None and any(value is not None for value in fields.values()):
             raise ValueError('request and flattened commit fields cannot both be supplied')
         source = request if request is not None else fields
-        prepared, count = augment_commit(source)
-        return prepared, count, source
+        tokens: set[str] = set()
+        prepared, count = augment_commit(source, tokens_out=tokens)
+        return prepared, count, source, tokens
 
     def response(value, count):
         if len(value.write_results) == count:
@@ -280,8 +294,13 @@ def _wrap_commit(original: Any) -> Any:
 
         @functools.wraps(original)
         async def async_wrapped(client, request=None, **kwargs):
-            prepared, count, source = prepare(request, kwargs)
+            prepared, count, source, tokens = prepare(request, kwargs)
             result = await original(client, request=prepared, **kwargs)
+            if tokens and os.getenv('REDIS_DB_HOST') and not os.getenv('FIRESTORE_EMULATOR_HOST'):
+                try:
+                    await run_blocking(db_executor, _invalidate_tokenless, tokens)
+                except Exception:
+                    pass
             _observe_account_writes(source)
             return response(result, count)
 
@@ -291,8 +310,10 @@ def _wrap_commit(original: Any) -> Any:
 
         @functools.wraps(original)
         def sync_wrapped(client, request=None, **kwargs):
-            prepared, count, source = prepare(request, kwargs)
+            prepared, count, source, tokens = prepare(request, kwargs)
             result = original(client, request=prepared, **kwargs)
+            if tokens and os.getenv('REDIS_DB_HOST') and not os.getenv('FIRESTORE_EMULATOR_HOST'):
+                _invalidate_tokenless(tokens)
             _observe_account_writes(source)
             return response(result, count)
 

@@ -92,7 +92,7 @@ class LocalProjectionStore:
     def session(self, segment_id, binding, now, *, part_index, part_count, policy):
         return LocalSession(self.root, part_index, policy)
 
-    def check(self, session):
+    def check(self, session, *, speculative=False):
         return None
 
 

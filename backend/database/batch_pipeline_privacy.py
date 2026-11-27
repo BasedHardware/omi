@@ -19,6 +19,7 @@ from database.batch_account_authority_schema import PRIVACY_COLLECTION as PRIVAC
 from database.batch_privacy_attempt import SCHEMA_FIELD, TOKEN_FIELD, TOKEN_SCHEMA, current_attempt, token_version
 from database import privacy_check_metrics as metrics
 from database import batch_privacy_owner_cache as shared_cache
+from database import batch_privacy_tokenless as tokenless
 from database import batch_privacy_negative_cache as negative_cache
 from database.privacy_ttl_cache import BoundedTTLCache, disabled as ttl_disabled, enabled as ttl_enabled, is_missing
 
@@ -121,6 +122,148 @@ def read_batch_owner_snapshot(
         )
 
 
+def read_projection_audit_authority(client, transaction, uid, ids, generation, read_budget):
+    """Read a fresh audit decision and the authority clock evidence, without exports."""
+    ref = client.collection(PRIVACY_COLLECTION).document(privacy_owner_key(uid))
+    snapshot = metrics.read_snapshot('batch', ref, transaction=transaction, read_budget=read_budget)
+    try:
+        _assert_batch_write_allowed_live(
+            client,
+            transaction,
+            uid,
+            conversation_ids=ids,
+            expected_generation=generation,
+            read_budget=read_budget,
+            privacy_snapshot=snapshot,
+            authority_out=[],  # Force the full walk, including negative lookups.
+        )
+    except BatchPrivacyBlocked:
+        allowed = False
+    else:
+        allowed = True
+    return allowed, getattr(snapshot, 'read_time', None), getattr(snapshot, 'update_time', None)
+
+
+@metrics.with_batch_plan
+def check_projection_precheck(
+    client,
+    transaction,
+    uid,
+    *,
+    ids,
+    generation,
+    read_time,
+    verified_out,
+    audit_hits: list[tokenless.EnforcedHit] | None = None,
+):
+    """Allow speculative projection planning. This does not export a proof."""
+    if transaction is not None and (mode := tokenless.mode(client, uid, precheck=True)):
+        ids = tuple(ids)
+        result = _tokenless_projection_check(
+            client,
+            transaction,
+            uid,
+            ids,
+            generation,
+            mode=mode,
+            read_time=read_time,
+            verified_out=verified_out,
+            precheck=True,
+            audit_hits=audit_hits,
+        )
+        if result is not None:
+            return result
+    return assert_batch_write_allowed(
+        client,
+        transaction,
+        uid,
+        conversation_ids=ids,
+        expected_generation=generation,
+        verified_out=verified_out,
+        shared_owner_cache=True,
+    )
+
+
+def _tokenless_projection_check(
+    client,
+    transaction,
+    uid,
+    ids,
+    generation,
+    *,
+    mode,
+    read_time=None,
+    verified_out=None,
+    precheck=False,
+    audit_hits=None,
+):
+    ids = frozenset(ids)
+    site = 'precheck' if precheck else 'certified'
+    owner = privacy_owner_key(uid)
+    probe = tokenless.lookup(client, owner, ids, generation, site)
+    if probe is None:
+        return None
+    if precheck:
+        metrics.called('batch')
+        if mode == 'enforce' and (candidate := probe.candidate(read_time)) is not None:
+            tokenless.CACHE.labels(site, 'hit').inc()
+            metrics.decision('batch')
+            if audit_hits is not None:
+                audit_hits.append(tokenless.EnforcedHit(ids, generation, *candidate))
+            return generation
+
+    authority: list[Any] = []
+    verified: set[str] = set()
+
+    def observe(allowed):
+        try:
+            snapshot = authority[0] if authority else None
+            if snapshot is None and mode == 'shadow' and probe.raw:
+                # Account-level denials can precede the token lookup. Obtain its
+                # live revision only for comparison, without replacing the refusal.
+                ref = client.collection(PRIVACY_COLLECTION).document(owner)
+                snapshot = metrics.read_snapshot('batch', ref, transaction=transaction)
+            candidate = (
+                probe.candidate(read_time if precheck else getattr(snapshot, 'read_time', None))
+                if mode == 'shadow'
+                else None
+            )
+            probe.observe(
+                snapshot,
+                candidate,
+                allowed=allowed,
+                verified=verified,
+                version=token_version(snapshot) if allowed and snapshot is not None else None,
+            )
+        except Exception:
+            tokenless.CACHE.labels(site, 'observation_error').inc()
+
+    try:
+        result = _assert_batch_write_allowed_live(
+            client,
+            transaction,
+            uid,
+            conversation_ids=ids,
+            expected_generation=generation,
+            verified_out=verified,
+            authority_out=authority,
+        )
+    except BatchPrivacyBlocked as error:
+        metrics.decision('batch', error.reason.value)
+        observe(False)
+        raise
+    except Exception:
+        metrics.decision('batch', 'authority_unavailable')
+        raise
+    else:
+        metrics.decision('batch')
+        observe(True)
+        return result
+    finally:
+        if verified_out is not None:
+            verified_out.update(verified)
+
+
 @metrics.with_batch_plan
 def assert_batch_write_allowed(
     client: Any,
@@ -151,6 +294,26 @@ def assert_batch_write_allowed(
     live walk that issued its reads without the negative cache.
     """
     metrics.called('batch')
+    if (
+        shared_owner_cache
+        and snapshots is None
+        and live_version_out is None
+        and read_budget is None
+        and transaction is not None
+        and (tokenless_mode := tokenless.mode(client, uid, precheck=False))
+    ):
+        conversation_ids = tuple(conversation_ids)
+        observed = _tokenless_projection_check(
+            client,
+            transaction,
+            uid,
+            conversation_ids,
+            expected_generation,
+            mode=tokenless_mode,
+            verified_out=verified_out,
+        )
+        if observed is not None:
+            return observed
     shared_eligible = (
         shared_owner_cache
         and transaction is not None
@@ -723,6 +886,7 @@ def _assert_batch_write_allowed_live(
     walk_out: dict | None = None,
     verified_out: set | None = None,
     live_version_out: list | None = None,
+    authority_out: list | None = None,
 ) -> int:
     """Fence a mutation. Admission records the returned generation for replay.
 
@@ -738,7 +902,12 @@ def _assert_batch_write_allowed_live(
     # Full-row exports and nontransactional preflights always read live. The
     # disabled path retains its exact original read order/counts. Do not poll
     # the older TTL cache's Firestore kill doc or involve Redis in this path.
-    negative_on = lever_enabled('privacy_negative_lookup_cache', uid) and transaction is not None and snapshots is None
+    negative_on = (
+        authority_out is None
+        and lever_enabled('privacy_negative_lookup_cache', uid)
+        and transaction is not None
+        and snapshots is None
+    )
     negative_shadow = negative_on and lever_enabled('privacy_checks_shadow', uid)
     started = negative_cache.LOOKUPS.clock() if negative_on else None
     if negative_on and privacy_snapshot is None:
@@ -775,6 +944,8 @@ def _assert_batch_write_allowed_live(
         raise BatchPrivacyBlocked('data_protection_changed')
     if privacy_snapshot is None:
         privacy_snapshot = read(client.collection(PRIVACY_COLLECTION).document(key))
+    if authority_out is not None:
+        authority_out.append(privacy_snapshot)
     privacy = privacy_snapshot.to_dict() or {}
     generation = int(privacy.get('generation', 0))
     if (

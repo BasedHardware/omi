@@ -20,4 +20,7 @@ ACCOUNT_FIELD_GROUPS = {
         'wipe_auth_deleted_at': 'deletion',
     },
 }
-USER_POLICY_FIELDS = frozenset(ACCOUNT_FIELD_GROUPS[USER_COLLECTION]) | {SPEAKER_PRIVACY_VERSION}
+USER_POLICY_FIELDS = frozenset(ACCOUNT_FIELD_GROUPS[USER_COLLECTION]) | {
+    SPEAKER_PRIVACY_VERSION,
+    'store_recording_permission',
+}

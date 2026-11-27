@@ -265,7 +265,7 @@ class ResultLog:
             return True
         return False
 
-    def check(self, session):
+    def check(self, session, *, speculative=False):
         row = self.results[session.segment_id]
         if row.get('projection'):
             raise ProjectionReplay(row['projection'])

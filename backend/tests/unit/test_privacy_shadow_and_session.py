@@ -647,3 +647,168 @@ def test_owner_candidate_can_exhaust_shared_artifact_deadline_after_live_allow(w
     assert TOKEN in live_reads and SOURCE in live_reads
     assert reads == live_reads  # Failed candidate budget checks issue no SDK reads.
     assert counter._value.get() == before + 1
+
+
+@pytest.fixture
+def tokenless_world(shared_owner_world, monkeypatch):
+    from database import batch_privacy_tokenless as tokenless
+
+    db, reads, revision, redis = shared_owner_world
+    clock = [time.time()]
+    original = StrictFirestoreDocument.get
+
+    def get(ref, **kwargs):
+        snap = original(ref, **kwargs)
+        snap.read_time = datetime.fromtimestamp(clock[0], timezone.utc)
+        return snap
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', get)
+    monkeypatch.setattr(tokenless, 'time', SimpleNamespace(time=lambda: clock[0]))
+    monkeypatch.setattr(tokenless, '_redis', lambda: redis)
+    monkeypatch.setattr(tokenless, 'disabled', lambda: False)
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"bpp_tokenless_owner_cache":100,"bpp_shared_owner_cache":0}')
+    return db, reads, revision, redis, clock
+
+
+def tokenless_precheck(db, clock, *, ids=('source',), generation=7, skew=0, audit_hits=None):
+    return privacy.check_projection_precheck(
+        db,
+        db.transaction(),
+        UID,
+        ids=ids,
+        generation=generation,
+        read_time=datetime.fromtimestamp(clock[0] + skew, timezone.utc),
+        verified_out=set(),
+        audit_hits=audit_hits,
+    )
+
+
+def test_tokenless_precheck_pins_deadline_and_exact_redirect_scope(tokenless_world):
+    db, reads, _, redis, clock = tokenless_world
+    survivor = ('users', UID, 'conversations', 'survivor')
+    db.rows[SOURCE].update(deleted=True, sync_merged_into='survivor')
+    db.rows[survivor] = {}
+    hits = []
+    assert tokenless_precheck(db, clock, audit_hits=hits) == 7
+    assert survivor in reads and hits == []
+    (key,) = redis.keys()
+    proof = redis.get(key)
+    assert len(json.loads(proof)[3]) == 2
+
+    clock[0] += 299
+    reads.clear()
+    assert tokenless_precheck(db, clock, audit_hits=hits) == 7
+    assert reads == [] and redis.get(key) == proof
+    (hit,) = hits
+    assert (hit.ids, hit.generation) == (frozenset({'source'}), 7)
+    assert (hit.read_at, hit.deadline) == tuple(json.loads(proof)[5:7])
+
+    reads.clear()
+    assert tokenless_precheck(db, clock, ids=('source', 'survivor')) == 7
+    assert TOKEN in reads  # Exact requested set, even though the survivor was walked.
+    redis.set(key, proof)
+    clock[0] += 1
+    reads.clear()
+    assert tokenless_precheck(db, clock) == 7
+    assert TOKEN in reads
+
+
+@pytest.mark.parametrize('skew', [-5.01, 5.01])
+def test_tokenless_precheck_falls_back_for_clock_skew(tokenless_world, skew):
+    db, reads, _, _, clock = tokenless_world
+    assert tokenless_precheck(db, clock) == 7
+    db.rows[TOMBSTONE] = {}
+    reads.clear()
+    with pytest.raises(privacy.BatchPrivacyBlocked, match='conversation_deleted'):
+        tokenless_precheck(db, clock, skew=skew)
+    assert TOMBSTONE in reads
+
+
+@pytest.mark.parametrize('fault', ['generation', 'scope', 'malformed', 'redis', 'kill'])
+def test_tokenless_invalid_evidence_falls_back(tokenless_world, monkeypatch, fault):
+    from redis.exceptions import ConnectionError
+    from database import batch_privacy_tokenless as tokenless
+
+    db, reads, _, redis, clock = tokenless_world
+    assert tokenless_precheck(db, clock) == 7
+    (key,) = redis.keys()
+    if fault == 'scope':
+        db._database_string = 'projects/another/databases/(default)'
+    elif fault == 'malformed':
+        redis.set(key, b'bad-json')
+    elif fault == 'redis':
+
+        def fail(_):
+            raise ConnectionError('synthetic Redis error')
+
+        monkeypatch.setattr(redis, 'get', fail)
+    elif fault == 'kill':
+        monkeypatch.setattr(tokenless, 'disabled', lambda: True)
+    db.rows[TOMBSTONE] = {}
+    reads.clear()
+    with pytest.raises(privacy.BatchPrivacyBlocked):
+        tokenless_precheck(db, clock, generation=8 if fault == 'generation' else 7)
+    assert TOKEN in reads or TOMBSTONE in reads
+
+
+def test_recent_marker_wins_over_pending_fill_and_certified_guard_refuses(tokenless_world):
+    from database import batch_privacy_tokenless as tokenless
+
+    db, _, _, redis, clock = tokenless_world
+    owner = privacy.privacy_owner_key(UID)
+    probe = tokenless.lookup(db, owner, {'source'}, 7, 'precheck')
+    assert probe is not None and probe.raw is None
+    snapshot = db.collection('batch_pipeline_privacy').document(owner).get()
+    tokenless.invalidate([f'{db._database_string}/documents/batch_pipeline_privacy/{owner}'])
+    probe.observe(snapshot, None, allowed=True, verified={'source'}, version=('token', 'revision', 0))
+    assert redis.get(probe.key).startswith(b'changed:')
+
+    db.rows[TOMBSTONE] = {}
+    with pytest.raises(privacy.BatchPrivacyBlocked, match='conversation_deleted'):
+        tokenless_precheck(db, clock)
+
+
+def test_tokenless_shadow_evaluates_both_sites_and_cannot_authorize_writes(tokenless_world, monkeypatch):
+    from database import batch_privacy_tokenless as tokenless
+
+    db, reads, _, redis, clock = tokenless_world
+    assert tokenless_precheck(db, clock) == 7
+    (key,) = redis.keys()
+    proof = redis.get(key)
+    shadow_config = '{"bpp_tokenless_owner_cache":100,"bpp_tokenless_owner_shadow":100,"bpp_shared_owner_cache":0}'
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', shadow_config)
+    calls = (
+        ('precheck', lambda: tokenless_precheck(db, clock)),
+        ('certified', lambda: check(db, expected_generation=7, shared_owner_cache=True)),
+    )
+    for site, call in calls:
+        matches = tokenless.SHADOW.labels(site, 'match')._value
+        before = matches.get()
+        assert call() == 7
+        assert matches.get() == before + 1
+        assert redis.get(key) == proof
+
+    db.rows[TOMBSTONE] = {}  # Simulate missed invalidation with an old authority revision.
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"bpp_tokenless_owner_cache":100,"bpp_shared_owner_cache":0}')
+    reads.clear()
+    assert tokenless_precheck(db, clock) == 7
+    assert not reads
+    with pytest.raises(privacy.BatchPrivacyBlocked, match='conversation_deleted'):
+        check(db, expected_generation=7, shared_owner_cache=True)
+
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', shadow_config)
+    for site, call in calls:
+        mismatches = tokenless.SHADOW.labels(site, 'mismatch')._value
+        before = mismatches.get()
+        with pytest.raises(privacy.BatchPrivacyBlocked, match='conversation_deleted'):
+            call()
+        assert mismatches.get() == before + 1
+        assert redis.get(key) == proof
+
+
+@pytest.mark.parametrize('profile', ['sidecar', 'sync', 'projection_pump'])
+def test_projection_audit_metrics_are_scraped(profile):
+    path = Path(__file__).parents[2] / 'deploy' / f'cloud_run_gmp_{profile}.yaml'
+    rules = yaml.safe_load(path.read_text())['spec']['endpoints'][0]['metricRelabeling']
+    for name in ('omi_batch_pipeline_tokenless_audit_total', 'omi_batch_pipeline_tokenless_audit_incomplete_total'):
+        assert kept(name, rules)

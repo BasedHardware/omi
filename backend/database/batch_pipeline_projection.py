@@ -49,6 +49,7 @@ from database.batch_pipeline_projection_finish import (
     projection_finish_state_fields,
 )
 from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyBlocked, BatchPrivacyReason
+from database.batch_privacy_tokenless_audit import submit_projection_precheck_audit
 from database.batch_pipeline_projection_privacy import HOLD_REASONS
 from database.batch_pipeline_artifact_missing import artifact_missing, REASON_CODE as ARTIFACT_MISSING_REASON
 from database.sync_ledger_ownership import batch_projection_ledger_owner_matches
@@ -257,12 +258,17 @@ class ProjectionStore:
         self._mirror(binding)
         return receipt
 
-    def check(self, session):
+    def check(self, session, *, speculative=False):
         @firestore.transactional
         def read(transaction):
-            session.prepare(transaction)
+            session.prepare(transaction, speculative=speculative)
+            if speculative and session.tokenless_precheck_hits:
+                return session.tokenless_precheck_hits.pop()
+            return None
 
-        self.run(read, policy=session.policy)
+        hit = self.run(read, policy=session.policy)
+        if hit is not None:
+            submit_projection_precheck_audit(self.store, session.binding.owner_id, hit)
 
     def settle_deleted_output(self, segment_id, binding, now, receipt, *, part_index=None, policy=None):
         """Retire only an already-assigned output, preserving all input speech accounting."""

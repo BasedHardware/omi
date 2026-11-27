@@ -24,6 +24,7 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 
 from database._client import get_firestore_client
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed
+from database.privacy_check_metrics import BatchPrivacyPath, with_batch_privacy_path
 from database.sync_ledger import (
     is_valid_completed_sync_content_result,
     is_valid_held_sync_content_result,
@@ -41,6 +42,7 @@ from utils.sync.deleted_conversation import (
 logger = logging.getLogger(__name__)
 
 
+@with_batch_privacy_path(BatchPrivacyPath.SYNC_STATUS)
 def get_completed_legacy_status(job_id: str, uid: str, job: dict[str, Any] | None) -> dict[str, Any] | None:
     # No Firestore client or lookup on the dark path, including TTL misses.
     if os.getenv('SYNC_DURABLE_STATUS_RECONCILIATION', 'false').strip().lower() != 'true':

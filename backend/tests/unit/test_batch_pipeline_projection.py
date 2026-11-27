@@ -850,6 +850,7 @@ def test_privacy_disposition_requires_transactional_input_tombstone_proof(bindin
             'segment_id': 'segment',
             'capture_at': 1000,
             'previous_segment_id': None,
+            'projection_state': 'pending',
             'result': result,
         }
     )

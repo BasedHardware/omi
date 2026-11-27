@@ -253,7 +253,7 @@ class ChainLog:
     def session(self, sid, binding, now, **_):
         return Session(self, sid, binding)
 
-    def check(self, session):
+    def check(self, session, *, speculative=False):
         self.lanes.spend('check_transaction')
         session.prepare(None)
 

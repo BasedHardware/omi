@@ -16,8 +16,10 @@ from config.batch_pipeline import (
     HELD_DEAD_LETTER_SECONDS,
 )
 
+from database.privacy_check_metrics import BatchPrivacyPath, with_batch_privacy_path
 from database.batch_pipeline_privacy import (
     assert_batch_write_allowed,
+    check_projection_precheck,
     BatchPrivacyBlocked,
     BatchPrivacyReason,
 )
@@ -31,6 +33,7 @@ from database.batch_pipeline_projection_protocol import (
 )
 from database.batch_pipeline_projection_finish import projection_finish_state_fields
 from database.privacy_ttl_cache import ttl_seconds
+from database.batch_privacy_tokenless import EnforcedHit
 
 from database.sync_ledger import sync_content_ledger_ref, LEDGER_RETENTION_DAYS
 from database.sync_ledger_ownership import batch_projection_ledger_owner_matches
@@ -152,6 +155,7 @@ class ProjectionSession:
         self._privacy_fence_ids: set[str] | None = None
         self.followup_privacy_proof: FollowupPrivacyProof | None = None
         self._followup_privacy_failed = False
+        self.tokenless_precheck_hits: list[EnforcedHit] = []
 
     def receipt(self) -> dict:
         parts = self.entry.get('projection_parts') or {}
@@ -211,7 +215,7 @@ class ProjectionSession:
         transaction.update(self.result_ref, changes)
         return False
 
-    def guard(self, transaction, conversation_ids=()):
+    def guard(self, transaction, conversation_ids=(), *, precheck_time=None):
         # Decision-only: the fence budget counts the distinct documents this
         # prepare actually verified, including every redirect hop the walk read
         # (plus any refusing id below). No full-row export, so a certified memo
@@ -222,6 +226,17 @@ class ProjectionSession:
         versions = [] if self.capture_followup_privacy and not self._followup_privacy_failed else None
         expires_at = monotonic() + ttl_seconds() if versions is not None else 0.0
         try:
+            if precheck_time is not None:
+                return check_projection_precheck(
+                    self.client,
+                    transaction,
+                    self.binding.owner_id,
+                    ids=conversation_ids,
+                    generation=self.binding.privacy_generation,
+                    read_time=precheck_time,
+                    verified_out=checked,
+                    audit_hits=self.tokenless_precheck_hits,
+                )
             generation = assert_batch_write_allowed(
                 self.client,
                 transaction,
@@ -268,7 +283,7 @@ class ProjectionSession:
                 if len(self._privacy_fence_ids) > 256:
                     raise BatchPrivacyBlocked('conversation_fence_budget')
 
-    def _prepare_privacy(self, transaction, *, privacy_deleted=False):
+    def _prepare_privacy(self, transaction, *, privacy_deleted=False, precheck_time=None):
         ids = _input_privacy_ids(
             self.binding, self.job, detach_source_alias=getattr(self, 'detach_source_alias', False)
         )
@@ -322,7 +337,7 @@ class ProjectionSession:
             return True
 
         try:
-            self.guard(transaction, ids)
+            self.guard(transaction, ids, precheck_time=precheck_time)
         except BatchPrivacyBlocked as error:
             if error.reason != BatchPrivacyReason.CONVERSATION_DELETED or not settling_deletion:
                 raise
@@ -358,9 +373,20 @@ class ProjectionSession:
                 # it. Reconcile its receipt, while later input parts still owe
                 # their own assignments. Never authorize input deletion here.
 
-    def prepare(self, transaction, *, replay=True, privacy_deleted=False, privacy_refusal=None, privacy_replay=False):
+    @with_batch_privacy_path(BatchPrivacyPath.PROJECTION_PREPARE)
+    def prepare(
+        self,
+        transaction,
+        *,
+        replay=True,
+        privacy_deleted=False,
+        privacy_refusal=None,
+        privacy_replay=False,
+        speculative=False,
+    ):
         if privacy_deleted and privacy_refusal is not None:
             raise ProjectionBlocked('privacy dispositions must be distinct')
+        self.tokenless_precheck_hits.clear()
         self._privacy_refusal_transaction = None
         self._privacy_replay_transaction = None
         self._source_deletion_transaction = None
@@ -368,7 +394,8 @@ class ProjectionSession:
         self._privacy_fence_ids = set()
         self.followup_privacy_proof = None
         self._followup_privacy_failed = False
-        self.job = self.store.ref('jobs', self.segment_id).get(transaction=transaction).to_dict() or {}
+        job_snapshot = self.store.ref('jobs', self.segment_id).get(transaction=transaction)
+        self.job = job_snapshot.to_dict() or {}
         self.entry = self.result_ref.get(transaction=transaction).to_dict() or {}
         assert_delivery_claim(self.segment_id, self.entry)
         owner = self.owner_ref.get(transaction=transaction).to_dict() or {}
@@ -404,7 +431,26 @@ class ProjectionSession:
         ):
             raise ProjectionBlocked('immutable result binding mismatch')
         try:
-            self._prepare_privacy(transaction, privacy_deleted=privacy_deleted)
+            # An observed receipt can trigger replay effects. Only the initial
+            # unassigned precheck can speculate, never a replay or proof export.
+            precheck_time = None
+            if speculative and not (
+                privacy_deleted
+                or privacy_refusal is not None
+                or privacy_replay
+                or self.capture_followup_privacy
+                or self.entry.get('projection_state') != 'pending'
+                or self.entry.get('projection')
+                or self.entry.get('projection_parts')
+                or self.entry.get('projection_privacy_refusal')
+                or checkpoint(self.entry)
+                or self.job.get('conversation_ids')
+                or self.job.get('requires_compute_admission')
+                or self.binding.record_origin
+                or self.binding.native_record
+            ):
+                precheck_time = getattr(job_snapshot, 'read_time', None)
+            self._prepare_privacy(transaction, privacy_deleted=privacy_deleted, precheck_time=precheck_time)
         except BatchPrivacyBlocked as error:
             if privacy_refusal != error.reason or error.reason not in HOLD_REASONS:
                 raise
