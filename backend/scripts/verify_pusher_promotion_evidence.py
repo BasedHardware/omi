@@ -78,6 +78,11 @@ CONTROL_PATHS = (
     "config/diarization-cohort-stages.json",
     "backend/testing/release_fixtures",
     ".github/scripts/verify_backend_release_admission.py",
+    # The canary inverse helper and its only first-party import. The canary job
+    # runs them from the workflow-control revision; admission keeps the runtime
+    # checkout's copies byte-identical so the receipt's producer is unambiguous.
+    ".github/scripts/pusher_canary_inverse.py",
+    ".github/scripts/pusher_image_rehearsal.py",
     ".github/workflows/gcp_backend_pusher.yml",
     ".github/workflows/gcp_backend_pusher_auto_deploy.yml",
     ".github/workflows/release-eligibility.yml",

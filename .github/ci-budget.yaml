@@ -1570,7 +1570,7 @@
       "runs_on": "${{ (inputs.mode == 'evidence' || inputs.mode == 'image-only') && 'ubuntu-22.04' || 'ubuntu-latest' }}"
     },
     "gcp_backend_pusher.yml/deploy": {
-      "budget_p50_minutes": 7,
+      "budget_p50_minutes": 8,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 1,
@@ -1579,7 +1579,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Manual prod/dev deploy, about one dispatch a day. SCA-4874 narrows this job to the default dispatch and adds one bookkeeping minute for the new protected mode input. The job remains manual-only with no PR runs.",
+      "rationale": "Manual prod/dev deploy, about one dispatch a day. SCA-4763 adds a one-replica canary inverse server dry-run (read-only admission probe) after canary readiness, one more minute. The canary_only input stops before shared-config apply and Helm, so that branch costs less than the budget; no PR or scheduled runs.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1588,7 +1588,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_backend_pusher.yml/pusher-image-only": {
-      "budget_p50_minutes": 20,
+      "budget_p50_minutes": 22,
       "display_name": "pusher-image-only",
       "expected_runs_class": "non-pr",
       "expected_runs_per_day": 1,
@@ -1597,7 +1597,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "Omi Release",
-      "rationale": "Manual protected production Pusher only. Preview and canary verification are read-only. The runtime forecast also covers guarded promotion and rollback rollout waits, with no PR or scheduled runs.",
+      "rationale": "Manual protected production Pusher only. SCA-4763 replaces the isolated rehearsal with live server dry-runs and GitHub API verification of the non-secret evidence input; preview and canary verification stay read-only. The forecast covers one guarded rollout wait per run (forward, the single reverse after a failed post-move gate, or rollback); the 220-minute job ceiling is that one 160-minute wait plus checks, receipts and paging. No PR or scheduled runs.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1606,7 +1606,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_backend_pusher_auto_deploy.yml/deploy": {
-      "budget_p50_minutes": 7,
+      "budget_p50_minutes": 8,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0,
@@ -1615,7 +1615,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder. 2026-10-21 plan B B2: pusher/Dockerfile now copies backend/omi_logging.py, so that file joins the qualification trigger closure; main-push only, the one-minute bump records the trigger change. 2026-10-22 plan B B3: a qualification may name the backend-pusher role image, so backend/Dockerfile.roles joins the trigger closure; expected runs stay main-push-driven with no PR runs, and the one-minute bump records the trigger change",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder. 2026-10-21 plan B B2: pusher/Dockerfile now copies backend/omi_logging.py, so that file joins the qualification trigger closure; main-push only, the one-minute bump records the trigger change. 2026-10-22 plan B B3: a qualification may name the backend-pusher role image, so backend/Dockerfile.roles joins the trigger closure; expected runs stay main-push-driven with no PR runs, and the one-minute bump records the trigger change. SCA-4763: the canary inverse helper (.github/scripts/pusher_canary_inverse.py) and its import (.github/scripts/pusher_image_rehearsal.py) join the trigger closure because source admission binds them; both change rarely, main-push only with no PR runs, and the one-minute bump records the trigger change",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -5488,7 +5488,7 @@
     "gcp_backend_pusher.yml": {
       "name": "Deploy Backend Pusher to GKE",
       "owner": "CI maintainers",
-      "rationale": "SCA-4874 adds the protected image-only dispatch input under the existing manual trigger and prod-train lock. No PR or scheduled runs.",
+      "rationale": "SCA-4763 adds the non-secret pusher_image_only_evidence dispatch input and the pusher_canary_only stop under the existing manual trigger and prod-train lock. No PR or scheduled runs.",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
@@ -5523,6 +5523,12 @@
               "required": "true",
               "type": "choice"
             },
+            "pusher_canary_only": {
+              "default": "false",
+              "description": "Production Pusher only: stop after the isolated canary qualifies (no shared-config apply, no Helm)",
+              "required": "false",
+              "type": "boolean"
+            },
             "pusher_dev_qualification_run_id": {
               "default": "",
               "description": "Production Pusher only: successful gcp_backend_pusher_auto_deploy.yml run ID that qualified the digest",
@@ -5545,6 +5551,11 @@
               ],
               "required": "false",
               "type": "choice"
+            },
+            "pusher_image_only_evidence": {
+              "default": "",
+              "description": "Protected production Pusher image-only evidence: non-secret JSON of run and record ids (schema 2)",
+              "required": "false"
             },
             "pusher_role_image_digest": {
               "default": "",
@@ -5574,7 +5585,7 @@
     "gcp_backend_pusher_auto_deploy.yml": {
       "name": "Auto Deploy Backend Pusher to GKE (Development)",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory. 2026-10-21 plan B B2: backend/omi_logging.py added to the pusher source-closure paths. 2026-10-22 plan B B3: backend/Dockerfile.roles added \u2014 a qualification may name the backend-pusher role image, so its image definition joins the bake trigger closure",
+      "rationale": "Initial workflow inventory. 2026-10-21 plan B B2: backend/omi_logging.py added to the pusher source-closure paths. 2026-10-22 plan B B3: backend/Dockerfile.roles added \u2014 a qualification may name the backend-pusher role image, so its image definition joins the bake trigger closure. SCA-4763: the canary inverse helper and pusher_image_rehearsal.py added, so a change to the code that produces the canary inverse receipt requires a fresh qualification",
       "triggers": {
         "push": {
           "branches": [
@@ -5608,6 +5619,8 @@
             "backend/scripts/firebase_release_probe_token.py",
             "backend/testing/release_fixtures/transcription-release-probe.json",
             "backend/testing/release_fixtures/transcription-release-probe.wav",
+            ".github/scripts/pusher_canary_inverse.py",
+            ".github/scripts/pusher_image_rehearsal.py",
             ".github/workflows/gcp_backend_pusher_auto_deploy.yml",
             ".github/workflows/gcp_backend_pusher.yml"
           ]
