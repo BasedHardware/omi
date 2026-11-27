@@ -193,9 +193,19 @@ def test_builder_commit_times_only_the_card_it_newly_ended(meters, monkeypatch):
 
 
 def test_home_visibility_at_commit_uses_the_home_filters():
-    assert service._home_visible(card())
-    assert not service._home_visible(card(home_hidden=True))
-    assert not service._home_visible(card(sync_merged_into='other'))
+    assert finish_timeline.home_visible(card())
+    assert not finish_timeline.home_visible(card(home_hidden=True))
+    assert not finish_timeline.home_visible(card(sync_merged_into='other'))
+    assert not finish_timeline.home_visible(card(discarded=True))
+
+
+def test_notes_start_is_observed_only_for_a_first_attempt(meters):
+    finish, ended = meters
+
+    finish_timeline.observe_notes_started(card(v3_process_attempts=1))
+    finish.labels.assert_not_called()
+    finish_timeline.observe_notes_started(card())
+    assert [call.args for call in finish.labels.call_args_list] == [('notes_started', 'tail')]
 
 
 def _sync_keep():

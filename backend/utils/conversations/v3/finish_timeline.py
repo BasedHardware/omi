@@ -87,12 +87,25 @@ def first_manual_end_commit(row: Mapping[str, Any], prior: Optional[Mapping[str,
     )
 
 
+def home_visible(row: Mapping[str, Any]) -> bool:
+    """The Home feed's row filters for a derived row (database/home_feed._visible), as the settle applies them."""
+    # Imported here: batch admission imports this module and needs neither.
+    from database import conversations
+    from utils.conversations.fragment_visibility import is_relevance_discarded
+
+    return bool(
+        not row.get('sync_merged_into')
+        and not is_relevance_discarded(row)
+        and conversations.is_visible_conversation(row, hide_home=True, presentation=True)
+    )
+
+
 def observe_card_finished(
     row: Mapping[str, Any],
     prior: Optional[Mapping[str, Any]],
     *,
     pass_started: datetime,
-    visible: Callable[[Mapping[str, Any]], bool],
+    visible: Callable[[Mapping[str, Any]], bool] = home_visible,
     now: Optional[datetime] = None,
 ) -> None:
     """After a builder commit: ``builder_started`` and ``card_finished`` for a newly ended, Home-visible card."""
@@ -116,3 +129,9 @@ def first_notes_attempt(row: Mapping[str, Any]) -> bool:
         and not row.get('backfilled')
         and not row.get('home_hidden')
     )
+
+
+def observe_notes_started(row: Mapping[str, Any]) -> None:
+    """``notes_started`` for ``row`` (as read before ``begin_processing``) on its first notes attempt only."""
+    if first_notes_attempt(row):
+        observe('notes_started', row)
