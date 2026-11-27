@@ -36,6 +36,40 @@ worktree. Leave `CONVERSATIONS_V3_FIRST_APP_BUILD` unset in source. At rollout,
 lead2 sets it through the shared runtime source from the first TestFlight build
 containing this PR; unset/invalid yields unknown and cannot qualify deletion evidence.
 
+## Per-owner holdout
+
+An owner in the `conversations-v3-holdout` rollout cohort keeps legacy intake for NEW captures at
+every stage. Use it to return specific heavy owners to legacy at `all` without a roll. Stage
+admission (`conversations_v3_enabled`) ignores the holdout. New-intake sites ask
+`v3_intake_held_out` after admission:
+
+- `triggers.mark_new` (in-progress create, sync ingest, batch projection): no `recording` marker on new rows.
+  A listen v3 rotation successor is the same capture continuing, so it stays v3.
+- Manual cuts (`record_end`, `ends_around`): experiment-off End handling.
+- Home list: legacy read mode (offset paging, `show_held`). It still shows the owner's existing
+  `v3_derived` cards, and their new legacy pieces held for notes.
+- `GET /v1/conversations/live`: an existing active v3 window is still served (`v3:true`).
+  Without one, the answer is `v3:false`.
+
+Finish, episodes and the builders keep stage admission, so existing v3 recordings drain on the
+v3 path and an active v3 capture can still be finished. While a legacy row is in progress beside an
+older v3 window, a Finish that names a different id finishes only that named window (or its just-sealed
+capture) and leaves the legacy row recording. An unnamed Finish, or a miss, runs the legacy Finish. The cohort starts empty. Add or remove
+one owner per command from a private UID file (never pass a UID on the command line):
+
+```bash
+GCP_AGENT_TIER=prod-operator python backend/scripts/rollout_cohort.py --uid-file <private-file> \
+  --cohort conversations-v3-holdout --project based-hardware --environment prod --add --apply
+# --remove instead of --add writes an explicit false and returns the owner to normal admission.
+```
+
+Allow about 60 s for the per-process cohort cache, plus up to 120 s for the capability read cache.
+The capture in flight keeps its layer; only new rows move. An unknown membership read admits as
+before and counts `omi_fallback_total{component="feature_flags",from_mode="v3_holdout"}`, so a cold
+cache can still admit a held-out owner. Check: once the writers have resolved membership, the owner
+gets no new `recording`-marked rows. `CONVERSATIONS_V3_HOLDOUT=off` (default on) skips the check and
+its read; members stay stored.
+
 ## Internal live recap beta
 
 `CONVERSATIONS_V3_LIVE_RECAP_COHORT` controls the authenticated API detail
@@ -218,6 +252,46 @@ rejects for size (whole document or one property) parks the owner as `document_t
 instead of retrying. To roll back, set `CONVERSATIONS_V3_TRANSCRIPT_SIZE_CAP=off` on builder
 and backfill runners.
 
+The cap budgets `transcript_segments` only. A finished row that predates it, a source recording
+already at 1 MiB, or recording aliases can still fill a document. `CONVERSATIONS_V3_SIZE_QUARANTINE`
+defaults to on. When a live pass that seeded exactly one pending recording parks on `document_too_large`,
+it may set work aside in `v3_size_quarantine` on the builder lease (all or nothing, at most 64 ids):
+- **Attribution.** Firestore's error must name the oversize document. It must be the seed, a row the seed
+  claims or feeds, or a source the commit writes for those rows. It must also lie outside everything the
+  lease's open window and any unlocked seed reach through claims, time neighbours and sources: those load
+  on every pass. An unnamed or unattributable rejection parks with the usual backoff.
+- **The set** is the seed plus the pending sources the rejected commit writes for the seed's rows. Time
+  siblings of unrelated rows are not set aside. The early attempt is re-armed, so the next seed runs on the
+  following wake.
+- **Skipping.** Seeding is the only thing that skips quarantined ids: closures still load them, so claims
+  are never filtered. Seeding skips them only on a bounded pass (`CONVERSATIONS_V3_BOUNDED_PENDING` on), and
+  the pass chain and the 5-minute sweep don't wake an owner whose only stale pending rows are quarantined
+  under exactly that condition. A failed lease read in the sweep counts as not quarantined and wakes the owner,
+  recorded as `omi_fallback_total{component="conversations_v3",to_mode="unfiltered_wake",outcome="recovered"}`.
+- **Pruning.** While seeding skips held ids (the switch and bounded pending on), each size park first drops held ids that are no longer `v3_pending`
+  (landed, deleted or repaired). A failed prune read keeps the list, records
+  `omi_fallback_total{component="conversations_v3",from_mode="size_quarantine_prune",outcome="degraded"}` and
+  still parks with the usual backoff. Otherwise nothing is read for pruning and the list is not changed. A
+  closure that still doesn't fit parks with the usual backoff and records
+  `omi_fallback_total{component="conversations_v3",outcome="exhausted"}` and
+  `reconciles_total{outcome="size_quarantine_full"}`. Each new quarantine records `outcome="degraded"` and
+  `reconciles_total{outcome="size_quarantined"}`.
+- **Re-attempt.** Each id is held for 24 hours from when it was set aside (`v3_size_quarantine_at`). After
+  that it is seeded again: the sweep wakes the owner, a repaired recording commits, and one still oversize
+  is set aside again on that attempt with a fresh hold. An id with no timestamp is not held.
+- **Readback.** The lease keeps naming quarantined rows after the park clears. Report three numbers, never
+  added together: owners recovering (park cleared, the backlog outside the quarantine draining), work
+  quarantined (held ids per `held_quarantine`: inside their hold and still `v3_pending`, which is what
+  seeding skips; owners holding any; owners whose list is full), and owners parking without attribution
+  (still parked on `document_too_large` with nothing quarantined). A repaired recording that landed leaves
+  the work-quarantined count at once, though the raw list keeps naming it until the next prune.
+- **Repair and rollback.** Repair the oversize document, then either wait for the hold to lapse or clear it
+  as in the retry step below. Set the switch off on live builders to restore head-of-line retries; stored
+  ids are then ignored.
+
+See the [size quarantine](../listen_pusher_pipeline/changes/2026-11-26-v3-size-quarantine.md)
+change note.
+
 `CONVERSATIONS_V3_MAX_WINDOW_SECONDS` defaults to 10800 (three hours).
 The first transcript line whose recorded start reaches the limit starts a new
 stretch. The earlier live stretch locks and enters normal processing, and the
@@ -350,7 +424,9 @@ A new failed bounded pass records `v3_bounded_pending_attempted` (and, with unlo
 `v3_unlocked_paging_attempted`) on the builder lease and observes the usual backoff. An operator
 clears the park by deleting `v3_blocked_count`, `v3_blocked_reason`, `v3_backoff_until`,
 `v3_bounded_pending_attempted` and `v3_unlocked_paging_attempted` on
-`users/{uid}/conversation_v3_leases/builder`.
+`users/{uid}/conversation_v3_leases/builder`. After repairing a size-quarantined recording, retry it at once
+by also deleting `v3_size_quarantine` and `v3_size_quarantine_at` on that lease (or only the repaired ids
+from both).
 
 Each source has a durable `v3_pending` obligation. Tasks use the dedicated `conversations-v3`
 Cloud Tasks queue and the configured sync origin/OIDC identity unless

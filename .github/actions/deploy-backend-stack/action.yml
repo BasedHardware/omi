@@ -894,6 +894,12 @@ runs:
       env:
         SYNC_LEDGER_FENCE_MODE: ${{ env.SYNC_LEDGER_FENCE_MODE }}
       run: |
+        # The selected carrier's manifest and Helm values are one source snapshot.
+        # Workflow validation still reads the immutable deploy control.
+        chart_args=()
+        if [[ "${{ inputs.cloud_run_service }}" != all ]]; then
+          chart_args=(--chart-root "$GITHUB_WORKSPACE")
+        fi
         canary_args=()
         if [[ "${{ inputs.integration_canary }}" == true ]]; then
           canary_args=(--integration-canary-state "$RUNNER_TEMP/integration-canary-private.json"
@@ -904,6 +910,7 @@ runs:
           --manifest "$GITHUB_WORKSPACE/backend/deploy/runtime_env.yaml" \
           --check-workflows \
           --workflow-root "$DEPLOY_WORKFLOW_ROOT" \
+          "${chart_args[@]}" \
           "${canary_args[@]}" \
           --cloud-run-state "$RUNNER_TEMP/backend-runtime-env-state.json"
 
@@ -1458,6 +1465,10 @@ runs:
       env:
         SYNC_LEDGER_FENCE_MODE: ${{ env.SYNC_LEDGER_FENCE_MODE }}
       run: |
+        chart_args=()
+        if [[ "${{ inputs.cloud_run_service }}" != all ]]; then
+          chart_args=(--chart-root "$GITHUB_WORKSPACE")
+        fi
         canary_args=()
         if [[ "${{ inputs.integration_canary }}" == true ]]; then
           canary_args=(--integration-canary-state "$RUNNER_TEMP/integration-canary-private.json"
@@ -1472,6 +1483,7 @@ runs:
           --manifest "$GITHUB_WORKSPACE/backend/deploy/runtime_env.yaml" \
           --check-workflows \
           --workflow-root "$DEPLOY_WORKFLOW_ROOT" \
+          "${chart_args[@]}" \
           "${canary_args[@]}" "${routing_args[@]}" \
           --cloud-run-service "${{ inputs.cloud_run_service }}" \
           --check-live-cloud-run

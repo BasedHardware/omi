@@ -192,6 +192,11 @@ def entries():
             neutrals={'pick': (_pick_none, 'row selection only; no window is live, so both bands read')},
         ),
         DriverEntry(
+            'database.conversations_v3_live.live_window_lookup',
+            base={'uid': SHAPE_UID, 'now': FROZEN_NOW, 'max_idle': timedelta(hours=2)},
+            neutrals={'pick': (_pick_none, 'row selection only; no window is live, so both bands read')},
+        ),
+        DriverEntry(
             'database.conversations_v3_live.request_recording_finish',
             base={'uid': SHAPE_UID, 'now': FROZEN_NOW},
             setup=_finish_source,
@@ -201,6 +206,7 @@ def entries():
             'database.conversations_v3_live.request_named_finish',
             base={'uid': SHAPE_UID, 'now': FROZEN_NOW},
             domains={'named_id': ['source', 'window']},
+            neutrals={'strict': (True, 'refuses a superseded capture after the same reads; no query changes')},
             setup=_named_finish_sources,
             patchers=(_transaction_without_rpc,),
         ),
