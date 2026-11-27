@@ -93,7 +93,8 @@ func TestPL001DueQuietReplayAdvancesOrRetires(t *testing.T) {
 	// Match exercise_pl001_due_quiet_replay_advances_or_retires in the Python emulator proof.
 	store, bench, ref := quietFixture(t)
 	a := queue.AdmittingForTest(t, ref.Owner)
-	setRecordingLease(t, bench, ref, store.Clock.Now().Add(300*time.Second))
+	leaseExpiry := store.Clock.Now().Add(300 * time.Second)
+	setRecordingLease(t, bench, ref, leaseExpiry)
 	check, err := store.ArmQuiet(t.Context(), a, ref, 120, false)
 	if err != nil {
 		t.Fatal(err)
@@ -118,7 +119,7 @@ func TestPL001DueQuietReplayAdvancesOrRetires(t *testing.T) {
 	successor, successorVersion := readJob()
 	due := field[time.Time](successor, "reconcile_after_at")
 	if successor["status"] != quietWaiting || successor["dispatch_generation"] != check.Generation+1 ||
-		wake.Check.Generation != check.Generation+1 || !due.After(check.Due) ||
+		wake.Check.Generation != check.Generation+1 || !due.Equal(leaseExpiry) ||
 		!due.Equal(wake.Check.Due) || !due.Equal(field[time.Time](successor, "due_at")) {
 		t.Fatalf("no durable successor: %+v, %v", wake, successor)
 	}

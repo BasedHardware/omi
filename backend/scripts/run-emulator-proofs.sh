@@ -81,6 +81,10 @@ run_proof "destructive gate contention (same-kind block / stale takeover fence)"
 # Purge fixtures deliberately refuse cloud fallback. Make a wrong proof host a
 # failure here, rather than recording a successful invocation of skipped tests.
 if [[ "$FIRESTORE_EMULATOR_HOST" == 127.0.0.1:* || "$FIRESTORE_EMULATOR_HOST" == localhost:* ]]; then
+  # The quiet replay proof clears its jobs between scenarios.
+  run_proof "quiet replay (durable successor, stale wake and retirement)" \
+    env GOOGLE_CLOUD_PROJECT=demo-quiet-replay GCLOUD_PROJECT=demo-quiet-replay FIREBASE_PROJECT_ID=demo-quiet-replay \
+    "$PYTHON" -m scripts.quiet_finalization_replay_emulator_test
   run_proof "pipeline ledger and finalization jobs (ordering and account erasure)" \
     "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_pipeline_ledger_firestore.py
   run_proof "conversation purge (coalescing, pre-PR consumers, rollback and WAL)" \

@@ -28,6 +28,7 @@ def exercise_pl001_due_quiet_replay_advances_or_retires(client):
     """Match TestPL001DueQuietReplayAdvancesOrRetires against real indexed fields."""
     uid, cid, session_id = 'synthetic-quiet-replay', 'capture', 'session'
     start = datetime(2026, 10, 22, tzinfo=timezone.utc)
+    lease_expiry = start + timedelta(seconds=300)
     now = start
     user = client.collection('users').document(uid)
     row = user.collection('conversations').document(cid)
@@ -47,7 +48,7 @@ def exercise_pl001_due_quiet_replay_advances_or_retires(client):
             'recording_session_id': session_id,
             'conversation_id': cid,
             'lifecycle_phase': 'in_progress',
-            'lease_expires_at': start + timedelta(seconds=300),
+            'lease_expires_at': lease_expiry,
         }
     )
     with patch.object(checks, '_now', side_effect=lambda: now):
@@ -64,7 +65,7 @@ def exercise_pl001_due_quiet_replay_advances_or_retires(client):
         assert successor['status'] == 'waiting_quiet'
         assert successor['dispatch_generation'] == generation + 1
         assert successor['due_at'] == successor['reconcile_after_at'] == deferred['due_at']
-        assert successor['reconcile_after_at'] > now
+        assert successor['reconcile_after_at'] == lease_expiry
         assert checks.evaluate_quiet_check(job_id, generation, firestore_client=client) == {'status': 'stale'}
         assert job.get().update_time == successor_snapshot.update_time
 
