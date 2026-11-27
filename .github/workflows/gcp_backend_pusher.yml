@@ -887,7 +887,10 @@ jobs:
           fi
           kubectl -n prod-omi-backend delete service "$LISTENER_CANARY" --ignore-not-found=true --wait=true || cleanup_failed=1
           kubectl -n prod-omi-backend delete deployment "$LISTENER_CANARY" --ignore-not-found=true --wait=true || cleanup_failed=1
-          helm -n prod-omi-backend uninstall "$PUSHER_CANARY" --wait || cleanup_failed=1
+          # A run that refuses before the canary install has no release to remove (run 46027266977).
+          if helm -n prod-omi-backend status "$PUSHER_CANARY" >/dev/null 2>&1; then
+            helm -n prod-omi-backend uninstall "$PUSHER_CANARY" --wait || cleanup_failed=1
+          fi
           kubectl -n prod-omi-backend delete configmap "$PUSHER_CANARY_CONFIG" --ignore-not-found=true --wait=true || cleanup_failed=1
           exit "$cleanup_failed"
 
