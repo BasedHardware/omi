@@ -156,12 +156,14 @@ may go past the origin bound:
 
 Rewritable rows keep the original bound. Such a closure may commit in at most
 `CONVERSATIONS_V3_LOCKED_MAX_BATCHES` (default 6) projection batches. Otherwise the commit raises
-`LockedBatchCap` (`v3_derived_budget`) before any transaction, and the builder retries below the seeds it
-used (32, 8, 1); it parks only at one seed.
+`LockedBatchCap` (`v3_derived_budget`) before any transaction, and the builder retries down the load
+ladder below the seeds it read (pending + unlocked: 32 + 8, 8 + 8, 1 + 1, then one of either kind). It
+re-enters at most three times and parks only at one seed.
 
-At most `CONVERSATIONS_V3_LOCKED_DAILY_PASSES` (default 48) such commits run per owner per UTC day,
-counted in `v3_locked_day` and `v3_locked_passes` on the builder lease. After that, the owner's passes
-that day use the origin bound.
+At most `CONVERSATIONS_V3_LOCKED_DAILY_PASSES` (default 48) allowance attempts run per owner per UTC
+day. A builder load past the origin bound counts one in `v3_locked_day` and `v3_locked_passes` on the
+builder lease, before any paid work, whether the pass then commits or not. After that, or if the count
+cannot be written, the owner's passes use the origin bound.
 
 An empty list, or a size, the cap or the daily passes set to `0`, restores the origin bound.
 

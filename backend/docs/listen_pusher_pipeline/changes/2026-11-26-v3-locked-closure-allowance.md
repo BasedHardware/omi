@@ -28,17 +28,34 @@ allowance keeps the batch count from being driven by stored speech.
 
 **Per-owner ceiling.** While pending remains, a pending-seeded request runs up to 3 inline passes, and the owner is
 woken each minute. Uncapped, one listed owner could therefore spend up to 3 x 30k reads a minute (about 130M a day).
-`CONVERSATIONS_V3_LOCKED_DAILY_PASSES` (default 48) caps the committed allowance passes per owner per UTC day. The
-final batch counts them on the builder lease. Past the cap, the owner's passes that day load with the origin bound
-and park as before. The bound is about 1.44M reads for allowance passes plus up to about 0.15M for parked retries:
-about 1.6M reads per listed owner per day.
+`CONVERSATIONS_V3_LOCKED_DAILY_PASSES` (default 48) caps allowance **attempts** per owner per UTC day, not commits. A
+builder load that first exceeds the origin bound counts one attempt (`v3_locked_day`, `v3_locked_passes` on the builder
+lease) in its own small transaction, before the outline or any write, re-checking the cap. A pass that then fails,
+races, hits the batch cap or parks has still spent its attempt; each batch-cap retry that loads past the origin bound
+is another attempt. If the day is spent, or the count cannot be written (contention exhausted, Firestore error), the
+pass gets the origin bound, which this closure exceeds, so it falls down the load ladder and parks as before. The
+counter never adds a failure of its own.
+
+Worst case per listed owner per day:
+- an attempt costs its load (up to about 4.5k reads), the count (1 read, 1 write) and a commit of up to about 24k
+  reads; a capped attempt reads nothing at commit;
+- under lock contention a commit batch can re-run, up to 5 transaction attempts per batch (main's retry policy), so
+  the pathological ceiling for one attempt is about 4.5k + 5 x 24k, about 125k reads;
+- 48 attempts: about 1.44M reads without contention, about 6M at the pathological ceiling;
+- parked retries after the cap run at the origin bound: up to about 24 a day (backoff), each a load ladder of up to
+  about 6.5k reads, so about 0.16M.
+
+So about 1.6M reads per listed owner per day in practice, and at most about 6.2M if every batch of every attempt
+exhausts its contention retries.
 
 **Lease.** The caller renews the pass's lease (`builder`, or `backfill-builder` for a derive pass) once before the
 commit. The commit now renews it before every later batch, so a 6-batch commit cannot outlive the 240 s lease after
 writing a prefix. This applies to every owner and costs one renewal transaction per later batch.
 `CONVERSATIONS_V3_COMMIT_LEASE_RENEWAL=off` restores the single renewal.
 
-A failed renewal stops the commit after the committed prefix and leaves pending owed:
+A failed renewal stops the commit after the batches already written. That committed prefix stays: it is existing,
+tolerated behaviour for any multi-batch commit, not something this change removes. Pending stays owed, and the next
+pass completes the closure:
 - `lease_lost` makes the pass `raced`, with a wake the next minute;
 - exhausted renewal contention is the reconcile 409 retry.
 
@@ -50,8 +67,10 @@ daily cap apply wherever it does. Derive (`load_derive`, partition budget) and l
 `DERIVED_LIMIT`) keep today's bounds for a listed owner; a heavy derive is planned as its own run.
 
 **Seed retry.** A pass whose commit would exceed the batch cap raises `LockedBatchCap` before any transaction. The
-builder re-enters below the seeds it used (32, 8, 1), as a load-time overflow does, and parks only at one seed. The
-ceiling only falls, so a pass re-enters at most twice. Each retry repeats the load and the outline.
+builder re-enters down the same ladder a load-time overflow uses, pending and unlocked seeds alike: 32 pending + 8
+unlocked, 8 + 8, 1 + 1, then one seed of either kind (the single lanes). The step comes from the seeds the pass read,
+and it only moves down, so a pass re-enters at most three times and parks only at one seed. Each retry repeats the
+load and the outline.
 
 **Runtimes.** `store.load()` runs on every runtime that runs builder passes: the on-open builder on `backend` and
 `backend-integration`, and builder tasks on `backend-sync` and `backend-sync-backfill`. `pusher` and

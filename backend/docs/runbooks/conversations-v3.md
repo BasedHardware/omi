@@ -323,21 +323,27 @@ one-line windows) parks with `v3_bounded_pending_attempted` already set. To admi
 
 The next pass loads the locked claimants within the allowance and commits in at most
 `CONVERSATIONS_V3_LOCKED_MAX_BATCHES` batches. That is about 6.5k to 30k reads per pass. A pass whose
-commit would need more batches writes nothing and retries below the seeds it used (32, then 8, then 1),
-as a load-time overflow does; it parks only at one seed. Only builder passes get the allowance: derive
+commit would need more batches writes nothing and retries down the same ladder a load-time overflow
+uses, pending and unlocked seeds alike: 32 pending + 8 unlocked, then 8 + 8, then 1 + 1, then one seed of
+either kind. The step comes from the seeds the pass read, so it re-enters at most three times, and it parks
+only at one seed. Only builder passes get the allowance: derive
 and re-derive keep their partition bounds, so a heavy derive is planned as its own run.
 
 **Per-owner ceiling.** While pending remains, a pending-seeded request can run up to 3 inline passes, and
 the owner is woken again each minute. Without a cap that is up to 3 x 30k reads a minute (about 130M a
-day) for one listed owner. `CONVERSATIONS_V3_LOCKED_DAILY_PASSES` (default 48) caps the committed
-allowance passes per owner per UTC day; the count is kept on the builder lease. The bound is about
-48 x 30k = 1.44M reads, plus parked retries. Those run at the origin bound, up to about 24 a day at
-about 6k reads. In total that is about 1.6M reads per listed owner per day. Admit owners one at a time
-first. A step expected to exceed 10M reads a day (more than about six listed owners at the cap) needs
+day) for one listed owner. `CONVERSATIONS_V3_LOCKED_DAILY_PASSES` (default 48) caps allowance
+**attempts** per owner per UTC day: a builder load past the origin bound counts one on the builder lease
+before any paid work, whether the pass then commits, fails or parks. A spent day, or a count that cannot
+be written, gives the origin bound (the owner parks as before). The bound is about 48 x 30k = 1.44M reads,
+plus parked retries at the origin bound (up to about 24 a day at about 6.5k reads). In total that is about
+1.6M reads per listed owner per day. Under lock contention a commit batch can re-run up to 5 times, so the
+pathological ceiling is about 48 x 125k, about 6.2M a day per owner. Admit owners one at a time first. A step expected to exceed 10M reads a day (more than about six listed owners at the cap) needs
 the Firestore cost owner (SCA-2173).
 
 An owner that still parks needs the fragment repair (SCA-2918). To undo, add a secret version without the tag (or `none`) and roll the four loaders.
 `CONVERSATIONS_V3_COMMIT_LEASE_RENEWAL=off` stops the lease renewal before each later projection batch.
+A renewal that fails mid-commit leaves the batches already written: a committed prefix, as any multi-batch
+commit can today. Pending stays owed, and the next pass completes the closure.
 See the [locked-closure allowance change note](../listen_pusher_pipeline/changes/2026-11-26-v3-locked-closure-allowance.md).
 
 A new failed bounded pass records `v3_bounded_pending_attempted` (and, with unlocked windows,

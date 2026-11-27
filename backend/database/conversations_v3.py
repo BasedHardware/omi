@@ -107,9 +107,10 @@ LOCKED_DERIVED_ALLOWANCE = _env_allowance('CONVERSATIONS_V3_LOCKED_DERIVED_ALLOW
 LOCKED_DERIVED_BYTES = _env_allowance('CONVERSATIONS_V3_LOCKED_DERIVED_BYTES', 8 * 1024 * 1024)
 LOCKED_MAX_BATCHES = _env_int('CONVERSATIONS_V3_LOCKED_MAX_BATCHES', 6)
 # A listed owner may run up to 3 inline passes per request while pending remains, so the per-owner ceiling is
-# set by passes, not by one pass: at most this many committed allowance passes per owner per UTC day. That is
-# about 48 x 30k = 1.44M reads, plus parked retries. At the cap, the next pass that day loads with the origin
-# bound (and parks if it overflows, at today's retry cost). 0 turns the allowance off.
+# set by passes, not by one pass: at most this many allowance ATTEMPTS per owner per UTC day, counted when a
+# builder load first exceeds the origin bound (before any paid work), whether the pass then commits, fails or
+# parks. At the cap, or if the count cannot be written, the pass gets the origin bound (and parks if it
+# overflows, at today's retry cost). 0 turns the allowance off.
 LOCKED_DAILY_PASSES = _env_allowance('CONVERSATIONS_V3_LOCKED_DAILY_PASSES', 48)
 LOCKED_DAY_FIELD, LOCKED_PASSES_FIELD = 'v3_locked_day', 'v3_locked_passes'
 CLAIM_READ_CHUNK = 100
@@ -334,9 +335,9 @@ BOUNDED_RETRY_REASONS = frozenset({'v3_derived_budget', 'v3_source_closure_budge
 class LockedBatchCap(Conflict):
     """A locked-claimant closure needs more commit batches than LOCKED_MAX_BATCHES (reason v3_derived_budget).
 
-    Raised before any transaction. The builder retries with fewer pending seeds (32, 8, 1) before parking,
-    as it does for a load-time overflow: eight seeds can fit the load allowance and still need too many
-    batches when one seed would commit."""
+    Raised before any transaction. The builder retries down its load ladder (pending and unlocked seeds,
+    service.SEED_CEILINGS) before parking, as it does for a load-time overflow: eight seeds can fit the load
+    allowance and still need too many batches when one seed would commit."""
 
 
 def mark_bounded_attempt(uid, token, *, firestore_client=None):
@@ -445,6 +446,38 @@ def locked_closure_owner(uid):
 def _locked_passes_today(lease, now=None):
     day = (now or datetime.now(timezone.utc)).date().isoformat()
     return int(lease.get(LOCKED_PASSES_FIELD) or 0) if lease.get(LOCKED_DAY_FIELD) == day else 0
+
+
+def _count_locked_attempt(client, uid, now=None):
+    """Count one locked-closure attempt on the owner's UTC day, before any paid work or write.
+
+    Attempts, not commits: a pass that later fails, races or parks still spent its load and outline, so the daily
+    cap (LOCKED_DAILY_PASSES) bounds every allowance pass. The count is re-checked in the transaction. False, the
+    origin bound, when the day is spent or the count cannot be written: the counter never becomes a new failure."""
+    ref = leases.lease_ref(client, uid, 'builder')
+
+    @firestore.transactional
+    def count(tx):
+        lease = ref.get(transaction=tx).to_dict() or {}
+        at = now or datetime.now(timezone.utc)
+        used = _locked_passes_today(lease, at)
+        if used >= LOCKED_DAILY_PASSES:
+            return False
+        tx.update(ref, {LOCKED_DAY_FIELD: at.date().isoformat(), LOCKED_PASSES_FIELD: used + 1})
+        return True
+
+    try:
+        counted = bool(run_preloaded_transaction_with_contention_retry(client, count))
+    except Exception as error:
+        metrics.safe_metric(
+            lambda: logger.warning(
+                'event=v3_locked_closure_count outcome=failed exception_type=%s', type(error).__name__
+            )
+        )
+        return False
+    if not counted:
+        metrics.safe_metric(lambda: logger.info('event=v3_locked_closure_count outcome=daily_cap'))
+    return counted
 
 
 def _locked_allowance(uid, lease=None, *, key='builder'):
@@ -708,6 +741,9 @@ def load(
             continue
         if policy.builder_eligible({**unreadable[rid], '_v3_unreadable': False}):
             raise Conflict('recording_decode_unavailable')
+    if extra_rows and _past_origin_bound(uid, existing) and not _count_locked_attempt(client, uid):
+        # Over today's attempts, or the count could not be written: today's bound, which this closure exceeds.
+        raise Conflict('v3_derived_budget')
     _mark_successor_pending(coll, recordings)
     attach_finish_predecessors(coll, recordings, existing)
     if unlocked_page is not None:
@@ -1294,10 +1330,6 @@ def commit_projection(
                 open_ids[0] if open_ids else (lease.get('open_id') if lease.get('open_id') not in existing else None)
             ),
         }
-        if final and heavy:
-            # One committed allowance pass for the owner's daily cap (LOCKED_DAILY_PASSES).
-            lease_update[LOCKED_DAY_FIELD] = now.date().isoformat()
-            lease_update[LOCKED_PASSES_FIELD] = _locked_passes_today(lease, now) + 1
         if final and bounded_pending_limit is not None:
             remembered_limit = bounded_pending_limit if bounded_pending_limit < 32 else None
             if lease.get('v3_bounded_pending_limit') != remembered_limit:

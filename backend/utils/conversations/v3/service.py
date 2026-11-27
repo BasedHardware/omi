@@ -351,10 +351,27 @@ async def _release_reconcile_lease(uid, key, token, *, primary_failed):
         )
 
 
-async def _load_live_batch(uid, token, parked, unlocked_page=None, pending_cap=None):
+# The bounded load ladder as (pending, unlocked, total) seed ceilings: the full page, eight seeds, one seed of each
+# kind, then one seed of either kind (the single lanes). A commit-time locked-closure batch cap re-enters at the
+# next ceiling below the seeds the pass read, so a pass re-enters at most three times and parks at one seed.
+SEED_CEILINGS = ((32, 8, 40), (8, 8, 16), (1, 1, 2), (1, 1, 1))
+
+
+def _seed_limits(options):
+    pending = options.get('pending_limit', 32)
+    return pending, options.get('unlocked_limit', min(8, pending))
+
+
+def _within(options, ceiling):
+    pending, unlocked = _seed_limits(options)
+    return pending <= ceiling[0] and unlocked <= ceiling[1] and pending + unlocked <= ceiling[2]
+
+
+async def _load_live_batch(uid, token, parked, unlocked_page=None, seed_ceiling=None):
     """Reduce pending seeds without clipping any selected source's ownership closure.
 
-    ``pending_cap`` is the retry after a commit-time locked-closure batch cap: seed at most that many."""
+    ``seed_ceiling`` is the retry after a commit-time locked-closure batch cap: only the ladder's attempts
+    within that (pending, unlocked, total) ceiling run."""
     if parked in store.BOUNDED_RETRY_REASONS:
         # Spend a legacy park's one early attempt under this lease before any paid work.
         await run_blocking(db_executor, store.mark_bounded_attempt, uid, token)
@@ -365,14 +382,16 @@ async def _load_live_batch(uid, token, parked, unlocked_page=None, pending_cap=N
         sizes = (1,)
     elif parked in budget_reasons or remembered == 8:
         sizes = (8, 1)
-    if pending_cap is not None:
-        sizes = tuple(size for size in sizes if size <= pending_cap) or (1,)
     attempts: list[dict[str, Any]] = [{'pending_limit': size} if size < 32 else {} for size in sizes]
     if unlocked_page is not None:
         # One pending and one unlocked seed can overflow together while each fits alone. Seed one lane at a
         # time, leading with the other lane on alternate minutes so neither starves the other.
         lanes = [{'pending_limit': 1, 'unlocked_limit': 0}, {'pending_limit': 0, 'unlocked_limit': 1}]
         attempts += lanes[::-1] if datetime.now(timezone.utc).minute % 2 else lanes
+    if seed_ceiling is not None:
+        attempts = [options for options in attempts if _within(options, seed_ceiling)]
+        if not attempts:
+            raise Conflict('v3_derived_budget')
     overflow = None
     for index, options in enumerate(attempts):
         try:
@@ -399,17 +418,20 @@ async def _load_live_batch(uid, token, parked, unlocked_page=None, pending_cap=N
     raise AssertionError('bounded pending batch sizes are empty')
 
 
-def _smaller_seed_page(error, limit, page=None):
-    """The next pending ceiling after a commit-time locked-closure batch cap, or None to park.
+def _smaller_seed_ceiling(error, page, ceiling=None):
+    """The next SEED_CEILINGS step after a commit-time locked-closure batch cap, or None to park.
 
-    Strictly below the pending seeds the pass actually loaded (at most its limit: 32, 8 or 1), so the retries
-    end at one seed, and a page that already held one seed parks without repeating the load and outline."""
-    if not isinstance(error, store.LockedBatchCap) or not limit:
+    Chosen from the seeds of both kinds the pass actually read, so a page that held one seed parks without
+    repeating the load and outline. It is strictly below the pass's own ceiling, so the retries cannot loop."""
+    if not isinstance(error, store.LockedBatchCap) or page is None:
         return None
-    seeded = min(limit, page.seeds[0]) if page is not None else limit
-    if seeded <= 1:
+    pending, unlocked = page.seeds
+    if pending + unlocked <= 1:
         return None
-    return 8 if seeded > 8 else 1
+    following = SEED_CEILINGS[1] if pending > 8 else SEED_CEILINGS[2] if pending + unlocked > 2 else SEED_CEILINGS[3]
+    if ceiling is not None and following[2] >= ceiling[2]:
+        return None
+    return following
 
 
 def _lane_without_seed(options, page):
@@ -447,7 +469,7 @@ async def _wake_after_backoff(uid, page, token):
 def _measure_reconcile_writes(run):
     @wraps(run)
     async def measured(*args, **kwargs):
-        if kwargs.get('_pass', 0) or kwargs.get('_pending_cap'):  # The outer pass owns the whole chain.
+        if kwargs.get('_pass', 0) or kwargs.get('_seed_ceiling'):  # The outer pass owns the whole chain.
             return await run(*args, **kwargs)
         caller = 'backfill' if kwargs.get('derive') else 'on_open' if kwargs.get('on_open') else 'builder'
         with metrics.measure_reconcile_writes(caller):
@@ -486,7 +508,7 @@ async def reconcile(
     background=False,
     report=None,
     _pass=0,
-    _pending_cap=None,
+    _seed_ceiling=None,
 ):
     """One builder pass. ``derive`` is one planned backfill partition ([since, until), one owner).
 
@@ -562,7 +584,7 @@ async def reconcile(
         elif not on_open and bounded_pending_enabled():
             unlocked_page = UnlockedPage()
             recordings, existing, cached, bounded_pending_limit = await _load_live_batch(
-                uid, token, parked, unlocked_page, _pending_cap
+                uid, token, parked, unlocked_page, _seed_ceiling
             )
         else:
             recordings, existing, cached = await run_blocking(
@@ -1095,12 +1117,15 @@ async def reconcile(
         if reason not in BLOCKED:
             metrics.safe_metric(lambda: metrics.RECONCILES.labels('error').inc())
             raise
-        smaller_seeds = None if on_open or derive else _smaller_seed_page(error, bounded_pending_limit, unlocked_page)
+        smaller_seeds = None if on_open or derive else _smaller_seed_ceiling(error, unlocked_page, _seed_ceiling)
         if smaller_seeds is not None:
-            # The locked-closure batch cap fails before any write, and fewer seeds may fit (Codex P2 on
-            # #26443). Retry below the seeds this pass used, as a load-time overflow does; park at one seed.
+            # The locked-closure batch cap fails before any write, and fewer seeds of either kind may fit (Codex
+            # P2s on #26443). Retry down the load ladder, pending and unlocked lanes alike; park at one seed.
             metrics.safe_metric(
-                lambda: logger.info('event=v3_locked_closure_batches retry pending_limit=%d', smaller_seeds)
+                lambda: logger.info(
+                    'event=v3_locked_closure_batches retry pending_limit=%d unlocked_limit=%d seeds=%d',
+                    *smaller_seeds,
+                )
             )
             primary_failed = False
         else:
@@ -1134,7 +1159,7 @@ async def reconcile(
             internal_end=internal_end,
             report=report,
             _pass=_pass,
-            _pending_cap=smaller_seeds,
+            _seed_ceiling=smaller_seeds,
         )
     if blocked is not None:
         if not derive and not on_open:
