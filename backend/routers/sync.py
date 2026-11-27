@@ -21,6 +21,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import shutil
 import threading
 import time
@@ -746,6 +747,22 @@ def sync_local_files(uid: str = Depends(auth.get_current_user_uid)):
     )
 
 
+_CLOUD_TRACE_ID = re.compile(r'([0-9a-fA-F]{32})(?:/|$)')
+
+
+def _log_designed_refusal(uid: str, reason: str, cloud_trace_context: Optional[str]) -> None:
+    """Write the one record that marks this request's 503 as a designed refusal.
+
+    The Cloud Run rollout guard (cloud-run-guard.json ``designed_refusals``)
+    excludes a sync-local-files 503 from its error rate only when one of these
+    lines names the request's trace id; every other 503 counts as a failure.
+    Call it exactly once, immediately before returning or raising the 503.
+    """
+    match = _CLOUD_TRACE_ID.match(cloud_trace_context) if isinstance(cloud_trace_context, str) else None
+    trace = match.group(1).lower() if match else '-'
+    logger.info('sync_upload_refused uid=%s status=503 reason=%s trace=%s', uid, reason, trace)
+
+
 def _backfill_day_cap_defers(uid: str, lane: SyncLane, repair_identity: Optional[str], allowance: Any) -> bool:
     """Whether the unlimited_v2 backfill day cap defers this upload (historical lane only, never repairs)."""
     if lane is not SyncLane.BACKFILL or repair_identity is not None or not backfill_hours_cap.cap_enabled():
@@ -866,6 +883,7 @@ async def sync_local_files_v2(
     ledger_fence_mode = await run_blocking(db_executor, get_sync_ledger_fence_mode)
     if ledger_fence_mode is SyncLedgerFenceMode.STANDBY:
         future_capture_request.mark(FutureCaptureOutcome.PREFLIGHT_REFUSED)
+        _log_designed_refusal(uid, 'sync_ledger_fence_cutover', x_cloud_trace_context)
         # The one-time hard-revision-retirement cutover intentionally blocks
         # before app-managed raw-file persistence or a content claim. Clients
         # retain their WAL/audio and retry after the services become active.
@@ -969,6 +987,7 @@ async def sync_local_files_v2(
     )
     if lane_decision.lane == SyncLane.BACKFILL and os.getenv('SYNC_BACKFILL_ENABLED', 'true').lower() != 'true':
         future_capture_request.mark(FutureCaptureOutcome.PREFLIGHT_REFUSED)
+        _log_designed_refusal(uid, 'backfill_disabled', x_cloud_trace_context)
         return JSONResponse(
             status_code=503,
             headers={'Retry-After': '3600', 'X-Omi-Rate-Limit-Reason': 'backfill_capacity'},
@@ -1035,7 +1054,7 @@ async def sync_local_files_v2(
             critical_executor, _backfill_day_cap_defers, uid, lane_decision.lane, repair_identity, allowance
         ):
             future_capture_request.mark(FutureCaptureOutcome.PREFLIGHT_REFUSED)
-            logger.info('sync_upload_refused uid=%s status=503 reason=backfill_day_cap', uid)
+            _log_designed_refusal(uid, 'backfill_day_cap', x_cloud_trace_context)
             return JSONResponse(
                 status_code=503,
                 headers={
@@ -1115,6 +1134,7 @@ async def sync_local_files_v2(
                 raise
             if os.getenv('SYNC_BACKFILL_ENABLED', 'true').lower() != 'true':
                 future_capture_request.mark(FutureCaptureOutcome.PREFLIGHT_REFUSED)
+                _log_designed_refusal(uid, 'retained_recovery_disabled', x_cloud_trace_context)
                 raise HTTPException(503, detail='Historical recovery is paused; retain local audio')
             lane_decision = replace(
                 lane_decision,
@@ -1165,6 +1185,7 @@ async def sync_local_files_v2(
                 and not client_device_context.client_device_id
             ):
                 future_capture_request.mark(FutureCaptureOutcome.IDENTITY_REQUIRED)
+                _log_designed_refusal(uid, 'capture_clock_identity_required', x_cloud_trace_context)
                 return JSONResponse(
                     status_code=503,
                     headers={'Retry-After': '30'},
@@ -1417,6 +1438,7 @@ async def sync_local_files_v2(
         if estimated_capture or retained_capture:
             # A repaired clock must retain its per-source isolation even when
             # the batch cohort/language/capacity path declines this upload.
+            _log_designed_refusal(uid, 'repaired_clock_batch_declined', x_cloud_trace_context)
             return JSONResponse(
                 status_code=503,
                 headers={'Retry-After': '30'},
@@ -1660,6 +1682,7 @@ async def sync_local_files_v2(
                     await run_blocking(db_executor, release_backfill_slot, uid, job_id)
                     backfill_slot_acquired = False
                 if dispatch_hold:
+                    _log_designed_refusal(uid, 'dispatch_hold', x_cloud_trace_context)
                     return JSONResponse(
                         status_code=503,
                         headers={
