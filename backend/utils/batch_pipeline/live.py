@@ -658,7 +658,7 @@ async def admit_recording(store, pending, *, now=None, provider_outbox_factory=N
         conversation_id=conversation_id,
         privacy_generation=pending['privacy_generation'],
     )
-    protection, untrusted_pin = await authorize_record_language(artifacts, seed, row.get('language'))
+    protection, untrusted_pin = await authorize_record_language(store, artifacts, seed, row.get('language'))
     # These read hints belong to the encrypted worker manifest. Keep the
     # walker output for operator plans and partial continuations stable.
     iterator = retained_record_units(

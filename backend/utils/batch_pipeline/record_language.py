@@ -25,7 +25,7 @@ from utils.stt import batch_language, language_gate
 from utils.executors import db_executor, storage_executor, sync_executor, record_language_executor, run_blocking
 
 
-async def authorize_record_language(artifacts, item, language):
+async def authorize_record_language(store, artifacts, item, language):
     """Use the profile from the admission's existing privacy authorization."""
     if (
         normalized_stt_language(language) in UNSUPPORTED
@@ -34,7 +34,7 @@ async def authorize_record_language(artifacts, item, language):
     ):
         return await run_blocking(db_executor, artifacts.authorize, item), False
     snapshots = {}
-    protection = await run_blocking(db_executor, artifacts.authorize, item, snapshots=snapshots)
+    protection = await run_blocking(db_executor, batch_artifact_authorize, store, item, snapshots=snapshots)
     return protection, pin_untrusted(snapshots['user'])
 
 

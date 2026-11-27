@@ -1002,7 +1002,7 @@ async def test_native_admission_stages_references_and_drains_after_rollback(
     monkeypatch, server_only, barrier_change, language, profile_proof
 ):
     from types import SimpleNamespace
-    from utils.batch_pipeline import live
+    from utils.batch_pipeline import live, record_language
     from database.batch_pipeline_staging import artifact_id
 
     unit_reads = []
@@ -1089,11 +1089,11 @@ async def test_native_admission_stages_references_and_drains_after_rollback(
     monkeypatch.setattr(live, 'create_storage_client', Client)
     listings = []
 
-    def authorize(item, *, snapshots=None):
-        if snapshots is not None:
-            snapshots['user'] = user
+    def authorize_with_snapshots(store, item, *, snapshots):
+        snapshots['user'] = user
         return SimpleNamespace(level='standard')
 
+    monkeypatch.setattr(record_language, 'batch_artifact_authorize', authorize_with_snapshots)
     monkeypatch.setattr(
         live,
         'list_audio_chunks',
@@ -1138,7 +1138,7 @@ async def test_native_admission_stages_references_and_drains_after_rollback(
         lambda *args: SimpleNamespace(
             key_for_owner=lambda uid: b'a' * 32,
             stage_audio=stage,
-            authorize=authorize,
+            authorize=lambda item: SimpleNamespace(level='standard'),
         ),
     )
     monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'false')

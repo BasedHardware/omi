@@ -846,6 +846,39 @@ async def test_auto_partial_freezes_audio_proof_without_changing_custody(source,
     assert pending(source)['state'] == 'record_pending'
 
 
+@pytest.mark.parametrize(
+    'disabled_switch',
+    ['BATCH_MULTILINGUAL_PROFILE_ROUTING_ENABLED', 'BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED'],
+)
+async def test_partial_profile_rollback_keeps_declared_language(source, audio, monkeypatch, disabled_switch):
+    from utils.batch_pipeline import record_language
+    from utils.batch_pipeline.audio import read_context
+
+    monkeypatch.setenv('BATCH_MULTILINGUAL_PROFILE_ROUTING_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED', 'true')
+    monkeypatch.setenv(disabled_switch, 'false')
+    source[1].rows[ROW[:2]]['live_stt_language_sessions'] = [{'zh': 30}, {'en': 4, 'zh': 21}]
+    classify = AsyncMock()
+    monkeypatch.setattr(record_language, 'classify_wav', classify)
+
+    audio.add(100)
+    assert finish(source) == 'partial_finished'
+    await audio.drain()
+    await audio.drain()
+
+    jobs = [
+        job
+        for path, job in source[1].rows.items()
+        if path[0] == 'batch_pipeline_dev_jobs' and not job.get('partial_coordinator')
+    ]
+    assert len(jobs) == 1
+    classify.assert_not_called()
+    work = live.WorkItem(**{key: jobs[0][key] for key in live.WorkItem.__dataclass_fields__ if key in jobs[0]})
+    context = read_context(audio.artifacts.fetch_audio(work))
+    assert (context['stt_language'], context['stt_language_evidence']) == ('en', 'declared')
+    assert work.language_receipt_enabled is None
+
+
 async def test_over_cap_rows_use_real_worker_bounds_and_two_pages(source, audio):
     for i in range(129):
         audio.add(100 + 40 * i, frames=16)

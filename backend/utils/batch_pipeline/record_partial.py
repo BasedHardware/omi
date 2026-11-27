@@ -276,7 +276,9 @@ async def admit_page(
     row = pending['record_snapshot']
     from utils.batch_pipeline.language_receipt import auto_language_cohort
 
-    protection, untrusted_pin = await authorize_record_language(artifacts, seed_for(pending), row.get('language'))
+    protection, untrusted_pin = await authorize_record_language(
+        store, artifacts, seed_for(pending), row.get('language')
+    )
     receipt_enabled = untrusted_pin or auto_language_cohort(
         server_batch_only=row.get('server_batch_only') is True,
         client_platform=row.get('client_platform'),
