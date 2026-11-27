@@ -229,10 +229,6 @@ env:
     value: "0"
   - name: PLAYBACK_ON_DEMAND_ENABLED
     value: "true"
-  - name: SYNC_POLL_BACKOFF_ENABLED
-    value: "false"
-  - name: SYNC_POLL_BACKOFF_PERCENT
-    value: "0"
   - name: AUDIO_ARCHIVE_LIVE_ENABLED
     value: "true"
   - name: AUDIO_ARCHIVE_READ_ENABLED

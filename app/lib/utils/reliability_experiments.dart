@@ -96,6 +96,33 @@ class ReliabilityExperiments {
         'the title keeps saying Transcribing… or Writing summary… until the summary is stored. Off: Home lists only '
         'completed rows, so "Processing…" stays until the summary is stored, and a tile in the pipeline shows a '
         'spinner or a pen.',
+    'no_live_player': 'The conversation page of a conversation still in progress has no audio player: its bar is '
+        'Ask Omi and, where it applies, End Conversation; a tap on a transcript line does not seek, and no audio '
+        'is loaded for it. The player comes back when the conversation ends. Off: the Transcript tab shows the '
+        'player over the audio saved so far.',
+    'title_at_end': 'A conversation still in progress reads "Listening" on Home and on its page, whatever name '
+        'the server holds for it; its name shows once it has ended. With the server\'s experiment of the same name '
+        'no name is made before the end at all. Off: a name the server made from the first minutes shows while '
+        'the conversation is still open.',
+    'live_words_cascade': 'Needs vendor_recognizer_on_opened_app; alone it does nothing. Parts 2 and 3 also need '
+        'end_open_conversation (the End instant comes from it). (1) The merged live words '
+        'put the vendor first: per stretch of audio time the list shows the vendor\'s words where it has them and '
+        'the phone\'s own recogniser\'s words only where the vendor has none (stored text still replaces both). The '
+        'phone\'s recogniser is not started when the account\'s language is multi-language or outside its list, so '
+        'those accounts see the vendor\'s words only. The local counters report words the vendor replaced, words '
+        'only the phone\'s recogniser had, and seconds of sent audio with words from neither. (2) Ending a '
+        'conversation cuts the live words at the End instant (the X-Omi-Ended-At time), per word: Home\'s Listening '
+        'row, the Listening page and the open conversation\'s grey lines show only words spoken after it, and the '
+        'display connection is told, so the vendor line in progress is broken there. (3) The End request carries '
+        'the live words shown for the conversation being ended (live_tail: plain words with times, newest 600 '
+        'words), for its first summary. (4) A grey word stays until a stored line covers its moment of audio '
+        '(within 2 s) or, where stored text exists to compare with, until it is five minutes old; this replaces '
+        'the rule that dropped every live line older than the last stored line minus 10 s. A conversation that '
+        'has ended keeps the live words of its own time range on its page by the same rule, and a silence as long '
+        'as a conversation restarts the Listening row\'s stretch without wiping the earlier words. (5) The '
+        'phone\'s recogniser\'s phrases are joined into one paragraph of the draft (a new one after a 3 s pause or '
+        '600 characters) instead of one line per phrase. Off: the phone\'s recogniser comes first and the vendor fills its holes, an '
+        'End leaves the live words as they are, and the End request carries no words.',
   };
 
   static Set<String> _selected = localSelectionAllowed ? parse(compileTimeValue) : const {};

@@ -128,6 +128,7 @@ class Recorder:
             usd=charged,
             segments=derive_segments(response.words),
             source=getattr(self.adapter, 'source', 'vendor'),
+            source_detail=getattr(self.adapter, 'source_detail', None),
         )
         cassette.save(self.root)
         return cassette

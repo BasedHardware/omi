@@ -17,17 +17,18 @@ void main() {
         },
       );
 
-      await keepAlive.acquire();
-      await keepAlive.acquire();
+      final releaseFirst = await keepAlive.acquireScoped();
+      final releaseSecond = await keepAlive.acquireScoped();
       expect(keepAlive.refCount, 2);
       expect(starts, 1);
       expect(stops, 0);
 
-      await keepAlive.release();
+      await releaseFirst();
+      await releaseFirst();
       expect(keepAlive.isHeld, isTrue);
       expect(stops, 0);
 
-      await keepAlive.release();
+      await releaseSecond();
       expect(keepAlive.isHeld, isFalse);
       expect(stops, 1);
     });
@@ -42,14 +43,15 @@ void main() {
         },
       );
 
-      await keepAlive.acquire();
-      await keepAlive.acquire();
+      final releaseFirst = await keepAlive.acquireScoped();
+      final releaseSecond = await keepAlive.acquireScoped();
       await keepAlive.releaseAll();
 
       expect(keepAlive.refCount, 0);
       expect(stops, 1);
 
-      await keepAlive.release();
+      await releaseFirst();
+      await releaseSecond();
       await keepAlive.releaseAll();
       expect(stops, 1);
     });
@@ -68,8 +70,8 @@ void main() {
         },
       );
 
-      await keepAlive.acquire();
-      await keepAlive.release();
+      final release = await keepAlive.acquireScoped();
+      await release();
 
       expect(starts, 0);
       expect(stops, 0);
@@ -89,13 +91,13 @@ void main() {
         },
       );
 
-      await keepAlive.acquire();
-      await keepAlive.acquire();
-      await keepAlive.release();
+      final releaseFirst = await keepAlive.acquireScoped();
+      final releaseSecond = await keepAlive.acquireScoped();
+      await releaseFirst();
       expect(starts, 1);
       expect(stops, 0);
 
-      await keepAlive.release();
+      await releaseSecond();
       expect(stops, 1);
     });
 
@@ -111,7 +113,7 @@ void main() {
         },
       );
 
-      await keepAlive.acquire();
+      await keepAlive.acquireScoped();
       expect(keepAlive.isHeld, isTrue);
       await keepAlive.releaseAll();
       expect(keepAlive.isHeld, isFalse);
@@ -131,17 +133,20 @@ void main() {
           installNativeHandler: (handler) => nativeHandler = handler,
         );
 
-        await keepAlive.acquire();
-        await keepAlive.acquire();
+        final releaseExpiredFirst = await keepAlive.acquireScoped();
+        final releaseExpiredSecond = await keepAlive.acquireScoped();
         expect(starts, 1);
         expect(keepAlive.refCount, 2);
 
         await nativeHandler!(MethodCall('expired', {'reason': reason}));
         expect(keepAlive.refCount, 0);
 
-        await keepAlive.acquire();
+        final releaseCurrent = await keepAlive.acquireScoped();
         expect(starts, 2, reason: 'the old native task no longer backs a Dart ref');
-        await keepAlive.release();
+        await releaseExpiredFirst();
+        await releaseExpiredSecond();
+        expect(keepAlive.refCount, 1);
+        await releaseCurrent();
         expect(stops, 1);
       });
     }

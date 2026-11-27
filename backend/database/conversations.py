@@ -34,7 +34,6 @@ from database.account_deletion_policy import account_deletion_marker_blocks_acce
 from google.api_core.exceptions import AlreadyExists, Conflict, FailedPrecondition, NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
-from google.cloud.firestore_v1.field_path import FieldPath
 from prometheus_client import Counter, REGISTRY
 from threading import Lock
 import utils.other.hume as hume
@@ -1732,6 +1731,8 @@ def persist_processing_result_with_lifecycle(
     existing row onto ``completed``. It must not raise; the persist outcome is
     independent of observers.
     """
+    from database.conversations_v3_fence import permits, wake_repairs
+    from database.conversation_processing_result import stamp_native_visibility, update_fields
     from database.recurring_voice_privacy import filter_processing_write
 
     conversation_data.pop('updated_at', None)
@@ -1753,10 +1754,12 @@ def persist_processing_result_with_lifecycle(
     ledger_stages: tuple[str, ...] = ()
     source_revision = 0
     family_enabled = terminal_settled.serving(uid)
+    repairs = []
 
     @firestore.transactional
     def _persist(transaction) -> Literal['stored', 'fenced'] | conversations_v3_fence.PersistenceDecline:
         nonlocal stale_sync_revision, first_completed, summary_receipt, summary_changed, notes_refresh_state_write, delivery_outcome, terminal_refusal, ledger_stages, source_revision
+        repairs.clear()
         terminal_refusal = None
         summary_changed = False
         summary_receipt = None
@@ -1838,7 +1841,7 @@ def persist_processing_result_with_lifecycle(
                 or until <= datetime.now(timezone.utc)
             ):
                 return declined('smart_merge_refused', transient=True)
-        if not conversations_v3_fence.permits(transaction, db, uid, conversation_data['id']):
+        if not permits(transaction, db, uid, conversation_data['id'], existing, repairs=repairs):
             return 'fenced'
         # A processor that read before another sync append cannot replace that
         # transcript or publish a summary derived from an obsolete revision.
@@ -2004,6 +2007,7 @@ def persist_processing_result_with_lifecycle(
                 )
 
         _offload_processing_transcript(uid, write_data, existing)
+        stamp_native_visibility(existing, write_data)
         summary_receipt = summary_delivery.merge_result(existing, write_data, uid)
         ledger_stages = pipeline_ledger.summary_stages(summary_receipt)
         delivery_outcome = summary_terminal_outcome(existing, write_data)
@@ -2013,7 +2017,7 @@ def persist_processing_result_with_lifecycle(
         if any(flag in write_data for flag in home_visibility_index.FLAGS):
             home_visibility_index.stamp(write_data, existing)
         if family_enabled:
-            transaction.update(conversation_ref, _processing_result_update_fields(write_data))
+            transaction.update(conversation_ref, update_fields(write_data))
         else:
             transaction.set(conversation_ref, write_data, merge=True)
         if notes_refresh_state_write is not None:
@@ -2034,6 +2038,9 @@ def persist_processing_result_with_lifecycle(
         else:
             outcome = run_preloaded_transactional(db, _persist)
     except (transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
+        return False
+    if repairs:
+        wake_repairs(uid, repairs)
         return False
     if v3_processing:
         if outcome == 'fenced':
@@ -3026,6 +3033,8 @@ def update_conversation_summary(uid: str, conversation_id: str, app_id: Optional
         'app_result_not_found' if app_id given but no matching apps_results entry,
         'app_result_ambiguous' if multiple entries share that app_id.
     """
+    from database.conversation_processing_result import cleared_native_visibility
+
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
 
@@ -3043,6 +3052,7 @@ def update_conversation_summary(uid: str, conversation_id: str, app_id: Optional
                     'structured.overview': content,
                     'structured.sections': firestore.DELETE_FIELD,
                     'updated_at': updated_at,
+                    **cleared_native_visibility(doc_snapshot.to_dict() or {}, has_notes=bool(content.strip())),
                 },
             )
             return 'ok'
@@ -3611,26 +3621,6 @@ def claim_conversation_status_in_txn(
             updates['terminal_family'] = terminal_family
             updates['terminal_family_at'] = terminal_family_at
     return updates
-
-
-def _processing_result_update_fields(data: Mapping[str, Any]) -> dict:
-    """Preserve set(merge=True)'s recursive leaf mask in one update of an existing row.
-
-    Empty maps replace that map; arrays and scalars are leaves. FieldPath quotes
-    literal dotted/backtick keys rather than treating them as update paths.
-    """
-    fields = {}
-
-    def visit(value, path):
-        if isinstance(value, dict) and value:
-            for key, child in value.items():
-                visit(child, (*path, key))
-        else:
-            fields[FieldPath(*path).to_api_repr()] = value
-
-    for key, value in data.items():
-        visit(value, (key,))
-    return fields
 
 
 def claim_conversation_status(

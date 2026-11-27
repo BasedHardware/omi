@@ -194,6 +194,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     scenario_run.add_argument('--stt-budget-usd', type=float, help='spend cap for --stt record-vendor')
     scenario_run.add_argument(
+        '--windows',
+        choices=('vad', 'fixed'),
+        default='vad',
+        help='--stt record-local: transcribe VAD-packed speech spans (default) or fixed 30 s windows',
+    )
+    scenario_run.add_argument(
+        '--speakers',
+        choices=('replay', 'record-local'),
+        default='replay',
+        help='speakers scenarios: speaker peer cassettes only (default), or record a miss with the local models',
+    )
+    scenario_run.add_argument(
         '--trace-calls', action='store_true', help='record the backend files each scenario calls (for scenario reach)'
     )
     scenario_reach = scenario_sub.add_parser(
@@ -204,6 +216,12 @@ def build_parser() -> argparse.ArgumentParser:
         'summary', parents=[common], help='markdown verdict summary of a `scenario run --keep` directory'
     )
     scenario_summary.add_argument('run_dir')
+    scenario_summary.add_argument(
+        '--require-committed',
+        action='store_true',
+        help='exit 1 unless every committed scenario ran (--repeat times) and evaluated its checks',
+    )
+    scenario_summary.add_argument('--repeat', type=int, default=1, help='repeats --require-committed expects')
     scenario_check = scenario_sub.add_parser('check', parents=[common], help='validate files, print planned timelines')
     scenario_check.add_argument('files', nargs='+')
     scenario_stack = scenario_sub.add_parser(
@@ -211,11 +229,31 @@ def build_parser() -> argparse.ArgumentParser:
     )
     scenario_stack.add_argument('stack_action', choices=('up', 'down', 'status'))
     scenario_compare = scenario_sub.add_parser(
-        'compare', parents=[common], help='run the same scenarios on two backend refs and list what differs'
+        'compare',
+        parents=[common],
+        help='run the same scenarios on several arms (ref, overlay, env) and list what differs from the baseline',
     )
-    scenario_compare.add_argument('base', help='base ref (branch, tag or sha; not fetched)')
+    scenario_compare.add_argument(
+        'base', nargs='?', help='base ref (branch, tag or sha; not fetched): the two-ref form, arms base and head'
+    )
     scenario_compare.add_argument('head', nargs='?', help='head ref (default: this working tree, as --worktree)')
     scenario_compare.add_argument('--worktree', action='store_true', help='head is this working tree')
+    scenario_compare.add_argument(
+        '--arms', help='JSON file: [arm, ...] or {"baseline": NAME, "arms": [...]}; arm = {name, ref, overlay, env}'
+    )
+    scenario_compare.add_argument(
+        '--arm',
+        action='append',
+        dest='arm_specs',
+        help='an arm as JSON ({"name", "ref", "overlay", "env"}) or NAME[@REF] (repeatable; ref omitted = this tree)',
+    )
+    scenario_compare.add_argument('--baseline', help='the arm every other arm is compared with (default: the first)')
+    scenario_compare.add_argument(
+        '--metric',
+        action='append',
+        dest='metric_names',
+        help='metric extractor to report (repeatable; default every registered one, scenario/metrics.py)',
+    )
     scenario_compare.add_argument(
         '--scenario', action='append', dest='files', help='scenario file or name (repeatable; default all committed)'
     )
@@ -571,13 +609,24 @@ def _scenario(args: argparse.Namespace, as_json: bool) -> int:
         if args.scenario_command == 'stack':
             return stack.stack_command(args.stack_action, as_json=as_json)
         if args.scenario_command == 'summary':
-            from testing.pipeline_lab.scenario.verdict import markdown_summary
+            from testing.pipeline_lab.scenario.verdict import coverage_problems, markdown_summary
 
+            problems: list[str] = []
             try:
                 sys.stdout.write(markdown_summary(Path(args.run_dir)))
+                if args.require_committed:
+                    expected = sorted(path.stem for path in stack.SCENARIO_DIR.glob('*.json'))
+                    problems = coverage_problems(Path(args.run_dir), expected, args.repeat)
+                    if problems:
+                        sys.stdout.write('\n**Coverage: incomplete**\n\n' + ''.join(f'- {p}\n' for p in problems))
+                    else:
+                        sys.stdout.write(
+                            f'\nCoverage: all {len(expected)} committed scenario(s) ran x{args.repeat} and '
+                            'evaluated their checks.\n'
+                        )
             except (OSError, ValueError) as error:
                 raise ScenarioError(f'{args.run_dir}: no readable verdict.json ({error})') from None
-            return 0
+            return 1 if problems else 0
         if args.scenario_command == 'reach':
             from testing.pipeline_lab.scenario import reach
 
@@ -591,16 +640,31 @@ def _scenario(args: argparse.Namespace, as_json: bool) -> int:
 
             if args.head and args.worktree:
                 raise ScenarioError('give a head ref or --worktree, not both')
-            return compare.compare_refs(
-                args.base,
-                args.head,
+            configured = bool(args.arms or args.arm_specs)
+            if configured and (args.base or args.head or args.worktree):
+                raise ScenarioError('give BASE [HEAD|--worktree], or --arms/--arm, not both')
+            if args.arms and args.arm_specs:
+                raise ScenarioError('give --arms FILE or --arm specs, not both')
+            if not configured and not args.base:
+                raise ScenarioError('give a base ref, or arms with --arms FILE or --arm SPEC')
+            if args.baseline and not configured:
+                raise ScenarioError('--baseline names one of --arms/--arm (the two-ref form compares with base)')
+            options = dict(
                 names=args.files or None,
                 keep=args.keep,
                 timeout=args.timeout,
                 jobs=args.jobs,
                 clock=args.clock,
                 as_json=as_json,
+                metric_names=args.metric_names or None,
             )
+            if not configured:
+                return compare.compare_refs(args.base, args.head, **options)
+            if args.arms:
+                arms, baseline = compare.load_arms(args.arms)
+            else:
+                arms, baseline = [compare.parse_arm_spec(spec) for spec in args.arm_specs], None
+            return compare.compare_arm_set(arms, args.baseline or baseline, **options)
         return stack.run_files(
             args.files,
             keep=args.keep,
@@ -612,6 +676,8 @@ def _scenario(args: argparse.Namespace, as_json: bool) -> int:
             stt=args.stt,
             stt_budget_usd=args.stt_budget_usd,
             trace_calls=args.trace_calls,
+            windows=args.windows,
+            speakers=args.speakers,
         )
     except (ScenarioError, RuntimeError) as error:
         if as_json:

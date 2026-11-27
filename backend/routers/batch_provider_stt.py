@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
 from config.batch_pipeline import merge_head_wait_seconds, provider_merge_membership_enabled
+from database.firestore_transaction_retry import transaction_retry_deadline_scope
 from database.outbox import Outbox, OutboxKind, outbox_for
 from utils.batch_pipeline.provider_drain import OwnerDrainCoalescer
 from utils.batch_pipeline.provider_stt import ProviderSttConsumer
@@ -22,8 +23,12 @@ from utils.executors import run_blocking, sync_executor
 from utils.sync.stage import current_stage
 from utils.workers.consumer import Result, http_response, run_push, run_push_async
 
+from utils.workers.retry import firestore_retry_reason, retry_response
+
 ROUTE = '/v2/batch-pipeline/provider-stt/run'
 _BOUNDED_ID = 128
+# Leave time before the 600s POST cutoff for an attempt already in flight.
+_TRANSACTION_RETRY_WINDOW_SECONDS = 480.0
 
 
 def verify_provider_stt_task(request: Request) -> int:
@@ -113,4 +118,11 @@ async def run_provider_stt(request: Request, _retry_count: int = Depends(verify_
         or not _bounded(body['wake_token'])
     ):
         return _malformed()
-    return http_response(await run_delivery_async(body['row_id'], body['wake_token']))
+    try:
+        with transaction_retry_deadline_scope(time.monotonic() + _TRANSACTION_RETRY_WINDOW_SECONDS):
+            return http_response(await run_delivery_async(body['row_id'], body['wake_token']))
+    except Exception as error:
+        reason = firestore_retry_reason(error)
+        if reason is None:
+            raise
+        return retry_response(reason)

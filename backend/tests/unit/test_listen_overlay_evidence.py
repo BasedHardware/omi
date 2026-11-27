@@ -67,7 +67,6 @@ def test_image_only_reference_render_and_server_dry_run(rollback, fault):
     primary.update(name='backend-listen', image=old)
     primary['env'] += [
         {'name': 'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'value': 'false'},
-        {'name': 'SYNC_POLL_BACKOFF_ENABLED', 'value': 'false'},
     ]
     if fault == 'reconnect':
         primary['env'].append({'name': 'LISTEN_BATCH_RECONNECT_ENABLED', 'value': 'true'})
@@ -356,12 +355,13 @@ def test_rendered_key_union_includes_removed_and_added_keys():
     assert ('ADDED', 'added') in {(r['key'], r['effect']) for r in result['env']}
 
 
-@pytest.mark.parametrize('references', [False, True, 'image-only'])
+@pytest.mark.parametrize('references', [False, True, 'image-only', 'digest'])
 @pytest.mark.parametrize(
     'fault', [None, 'live-movement', 'wrong-source', 'wrong-image', 'wrong-attempt', 'helm-movement', 'missing-runtime']
 )
 def test_complete_producer_uses_only_bounded_reads_and_refuses_changed_binding(tmp_path, fault, references):
-    image_only = references == 'image-only'
+    digest_only = references == 'digest'
+    image_only = references in {'image-only', 'digest'}
     private_file = tmp_path / 'private.yaml'
     private_file.write_text('privateEnv:\n  PRIVATE_TOKEN: "never-publish-this-value"\n')
     event_file = tmp_path / 'event.json'
@@ -417,7 +417,22 @@ def test_complete_producer_uses_only_bounded_reads_and_refuses_changed_binding(t
         primary['image'] = 'gcr.io/based-hardware/backend:' + req['image_tag']
         if image_only:
             primary.update(name='backend-listen', image='gcr.io/based-hardware/backend:96f0631')
-            req['image_only_from'] = primary['image']
+            if digest_only:
+                inverse = 'gcr.io/based-hardware/backend@sha256:' + 'e' * 64
+                req.update(
+                    image_only={
+                        'from': primary['image'],
+                        'baseline': {inverse: 16, 'gcr.io/based-hardware/backend@sha256:' + 'a' * 64: 24},
+                        'inverse': inverse,
+                        'source_sha': 'b' * 40,
+                    },
+                    image_tag='',
+                    image='gcr.io/based-hardware/backend@sha256:' + 'f' * 64,
+                )
+                inputs['image_tag'] = ''
+                event_file.write_text(json.dumps({'inputs': {**inputs, 'evidence_request_id': 'a' * 32}}))
+            else:
+                req['image_only_from'] = primary['image']
         for row in primary['env']:
             key = row['name']
             row.clear()
@@ -441,8 +456,16 @@ def test_complete_producer_uses_only_bounded_reads_and_refuses_changed_binding(t
             if args[0] == 'git':
                 if 'merge-base' in args:
                     return b''
+                if 'cat-file' in args:
+                    assert digest_only
+                    return b'commit'
                 return (('0' if fault == 'wrong-source' else 'b') * 40).encode()
+            if args[0] == 'docker':
+                assert digest_only and args[4] == req['image']
+                return b'b' * 40
             if args[0] == 'gcloud':
+                if digest_only:
+                    assert args[4] == req['image_only']['inverse']
                 return ('sha256:' + ('0' if fault == 'wrong-image' else 'e') * 64).encode()
             if 'history' in args:
                 n = getattr(self, 'histories', 0) + 1
@@ -457,9 +480,7 @@ def test_complete_producer_uses_only_bounded_reads_and_refuses_changed_binding(t
             if image_only and args[0] == 'kubectl':
                 assert args[-1] == '--dry-run=server'
                 admitted = copy.deepcopy(predecessor)
-                admitted['spec']['template']['spec']['containers'][0]['image'] = (
-                    'gcr.io/based-hardware/backend:' + req['image_tag']
-                )
+                admitted['spec']['template']['spec']['containers'][0]['image'] = json.loads(args[8])[-1]['value']
                 return json.dumps(admitted).encode()
             assert args[0] == 'helm' and args[-2:] == ['--dry-run=client', '--output=json']
             value = 'never-publish-this-value' if '-f' in args[-4:] else 'chart-private-default'
@@ -517,7 +538,17 @@ def test_complete_producer_uses_only_bounded_reads_and_refuses_changed_binding(t
             if image_only:
                 assert pods.call_count == 1
                 assert result['image_diff']['path'] == evidence.IMAGE_PATH
-                assert result['image_diff']['before'] == req['image_only_from']
+                if digest_only:
+                    assert result['image_diff']['before'] == req['image_only']['from']
+                    assert result['image_diff']['after'] == req['image']
+                    assert result['inverse'] == [req['image'], req['image_only']['inverse']]
+                    assert result['image_only'] == req['image_only']
+                    assert pods.call_args.args[-1] == req['image_only']['baseline']
+                    assert pods.call_args.kwargs == {'check_endpoints': True}
+                    for required in evidence.REQUIRED_LISTEN_ANCESTORS:
+                        assert any(cmd[-3:] == ['--is-ancestor', required, 'b' * 40] for cmd in reader.commands)
+                else:
+                    assert result['image_diff']['before'] == req['image_only_from']
             elif references:
                 assert pods.call_count == 2
                 assert result['inverse'] == [
@@ -556,8 +587,15 @@ def test_evidence_is_retired_once_the_candidate_declares_private_secret_env(tmp_
 
 def test_real_subprocess_output_is_capped_and_private_error_is_never_echoed(tmp_path):
     reader = evidence.Reader()
+    # Keep the writer alive after flushing so this exercises the live output bound.
     with pytest.raises(evidence.Refused, match='read_output_bound'):
-        reader.run([sys.executable, '-c', 'import sys;sys.stdout.write("x"*(20*1024*1024))'])
+        reader.run(
+            [
+                sys.executable,
+                '-c',
+                'import sys, time; sys.stdout.write("x" * (20 * 1024 * 1024)); sys.stdout.flush(); time.sleep(5)',
+            ]
+        )
     request = tmp_path / 'invalid.json'
     request.write_text('{"private_payload":"never-log-this-canary",broken}')
     result = subprocess.run(
@@ -608,3 +646,182 @@ def test_reader_cleanup_permission_denial_is_ignored_only_after_terminal_poll(mo
         reader.run(['offline-synthetic-child'])
     assert killed == [(Child.pid, evidence.signal.SIGKILL)]
     assert waited == [True]
+
+
+def mixed_baseline():
+    prefix = 'gcr.io/based-hardware/backend'
+    inverse = prefix + '@sha256:' + 'b' * 64
+    return {
+        'from': prefix + ':96f0631',
+        'baseline': {prefix + '@sha256:' + 'a' * 64: 24, inverse: 16},
+        'inverse': inverse,
+        'source_sha': 'c' * 40,
+    }
+
+
+@pytest.mark.parametrize('fault', [None, 'wrong-counts', 'missing-endpoint', 'foreign-pod'])
+def test_mixed_baseline_matches_ready_service_endpoints(fault):
+    attestation = mixed_baseline()
+    counts = attestation['baseline']
+    live = deployment()
+    live['spec'].update(replicas=40, selector={'matchLabels': {'app': 'listen'}})
+    live['status'] = {
+        'observedGeneration': 3,
+        **dict.fromkeys(('replicas', 'updatedReplicas', 'readyReplicas', 'availableReplicas'), 40),
+    }
+    pods = []
+    endpoints = []
+    for digest, count in counts.items():
+        for _ in range(count):
+            name = f'listen-pod-{len(pods)}'
+            pods.append(
+                {
+                    'metadata': {
+                        'name': name,
+                        'uid': name,
+                        'resourceVersion': '12',
+                        'ownerReferences': [
+                            {'kind': 'ReplicaSet', 'name': 'listen-rs', 'uid': 'rs-uid', 'controller': True}
+                        ],
+                    },
+                    'status': {
+                        'conditions': [{'type': 'Ready', 'status': 'True'}],
+                        'containerStatuses': [
+                            {'name': 'backend-listen', 'ready': True, 'imageID': 'docker-pullable://' + digest}
+                        ],
+                    },
+                }
+            )
+            endpoints.append(
+                {
+                    'conditions': {'ready': True},
+                    'targetRef': {'kind': 'Pod', 'namespace': evidence.NS, 'name': name, 'uid': name},
+                }
+            )
+    if fault == 'wrong-counts':
+        pods[0]['status']['containerStatuses'][0]['imageID'] = attestation['inverse']
+    if fault == 'foreign-pod':
+        endpoints[0]['targetRef']['uid'] = 'foreign'
+    if fault == 'missing-endpoint':
+        endpoints[0]['conditions']['terminating'] = True
+    replica_set = {
+        'metadata': {'uid': 'rs-uid', 'ownerReferences': [{'kind': 'Deployment', 'controller': True, 'uid': 'uid'}]}
+    }
+    with patch.object(
+        evidence.Reader,
+        'run',
+        side_effect=[
+            json.dumps({'items': pods}).encode(),
+            json.dumps(replica_set).encode(),
+            json.dumps({'items': [{'endpoints': endpoints}]}).encode(),
+        ],
+    ):
+        if fault:
+            with pytest.raises(evidence.Refused):
+                evidence.serving_pods(evidence.Reader(), live, 'backend-listen', counts, check_endpoints=True)
+        else:
+            assert (
+                len(evidence.serving_pods(evidence.Reader(), live, 'backend-listen', counts, check_endpoints=True))
+                == 40
+            )
+
+
+@pytest.mark.parametrize('operation', ['deploy', 'rollback'])
+@pytest.mark.parametrize('fault', [None, 'proof', 'peak', 'tag-inverse', 'missing-ancestor'])
+def test_protected_digest_apply_rechecks_proof_and_patches_only_the_pinned_image(operation, fault):
+    attestation = mixed_baseline()
+    image = 'gcr.io/based-hardware/backend@sha256:' + 'e' * 64
+    initial = deployment()
+    initial['spec']['template']['spec']['containers'][0].update(name='backend-listen', image=attestation['from'])
+    manifest = yaml.safe_dump(initial).encode()
+    target = next(iter(indexed(initial)))
+
+    class Fake:
+        def __init__(self):
+            self.live = copy.deepcopy(initial)
+            self.writes = []
+
+        def run(self, args):
+            if args[0] == 'helm':
+                return manifest
+            if args[:2] == ['kubectl', 'config']:
+                return b'gke_based-hardware_us-central1_prod-omi-gke'
+            if args[0] == 'git':
+                if 'cat-file' in args:
+                    return b'commit'
+                if fault == 'missing-ancestor' and evidence.REQUIRED_LISTEN_ANCESTORS[-1] in args:
+                    raise evidence.Refused('read_failed')
+                return b''
+            if args[0] == 'docker':
+                assert operation == 'deploy' and args[4] == image
+                return attestation['source_sha'].encode()
+            if args[0] == 'gcloud':
+                assert args[4] == attestation['inverse']
+                return args[4].split('@')[1].encode()
+            assert args[:5] == ['kubectl', '-n', evidence.NS, 'patch', 'deployment']
+            patch = json.loads(args[8])
+            before, after = (entry['value'] for entry in patch[-2:])
+            assert self.live['spec']['template']['spec']['containers'][0]['image'] == before
+            updated = copy.deepcopy(self.live)
+            updated['spec']['template']['spec']['containers'][0]['image'] = after
+            if args[-1] != '--dry-run=server':
+                self.live = updated
+                self.writes.append(after)
+            return json.dumps(updated).encode()
+
+        def reference_objects(self, keys):
+            assert keys == [target]
+            return {target: self.live}
+
+        def obj(self, kind, name, namespace):
+            return self.live
+
+    reader = Fake()
+    with patch.object(evidence, 'release_revision', return_value=936), patch.object(
+        evidence, 'serving_pods', return_value={f'listen-{n}': {} for n in range(40)}
+    ) as pods, patch.object(evidence.time, 'gmtime') as clock:
+        clock.return_value.tm_hour = 14 if fault == 'peak' else 22
+        _, _, _, _, proof = evidence.image_only_plan(reader, 936, attestation['from'], image, attestation=attestation)
+        if operation == 'rollback':
+            reader.live['spec']['template']['spec']['containers'][0]['image'] = image
+        if fault == 'proof':
+            proof['inverse_manifest_sha256'] = '0' * 64
+        if fault == 'tag-inverse':
+            attestation['inverse'] = attestation['from']
+        intent = {
+            'revision': 936,
+            'image_diff': proof,
+            'image': image,
+            'image_only': attestation,
+            'control_sha': 'd' * 40,
+            'operation': operation,
+        }
+        env = {
+            'IMAGE_ONLY_PROOF': json.dumps(intent),
+            'GITHUB_REPOSITORY': 'BasedHardware/omi',
+            'GITHUB_EVENT_NAME': 'workflow_dispatch',
+            'GITHUB_REF': 'refs/heads/main',
+            'GITHUB_RUN_ATTEMPT': '1',
+            'GITHUB_SHA': intent['control_sha'],
+            'EXPECTED_SHA': attestation['source_sha'],
+        }
+        if operation == 'deploy':
+            env['BACKEND_LISTEN_SOURCE_SHA'] = env['EXPECTED_SHA']
+        pods.reset_mock()
+        if fault:
+            with pytest.raises(evidence.Refused):
+                evidence.apply_image_only(reader, env)
+            assert not reader.writes
+        else:
+            expected = image if operation == 'deploy' else attestation['inverse']
+            assert evidence.apply_image_only(reader, env)['operation'] == operation
+            assert reader.writes == [expected]
+            assert pods.call_count == (1 if operation == 'deploy' else 0)
+            assert evidence.verify_image_only(reader, env) == {'image': expected, 'ready_pods': 40}
+
+
+def test_chart_only_argv_keeps_backend_digest():
+    digest = 'sha256:' + 'a' * 64
+    argv = evidence.helm_args('chart', 'values', digest, 'based-hardware', 'based-hardware', [])
+    assert f'image.digest={digest}' in argv
+    assert not any(arg.startswith('image.tag=') for arg in argv)
