@@ -38955,5 +38955,135 @@
       "repeat_interval": "4h"
     },
     "record": null
+  },
+  {
+    "uid": "omi-batch-soniox-daily-hours",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Backend-sync",
+    "title": "Batch Soniox - over 1,500 audio-h/day",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "(sum(increase(omi_batch_pipeline_vendor_attempt_audio_seconds_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill|backend-integration\",provider=\"soniox\"}[24h])) / 3600) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 1500",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-11-27T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "Batch Soniox transcribed more than 1,500 audio-hours (about $180 at $0.12/h) in the last 24 hours",
+      "threshold": "sum(increase(omi_batch_pipeline_vendor_attempt_audio_seconds_total{provider=soniox}[24h])) / 3600 > 1500, for 5m",
+      "user_impact": "None directly: Soniox has no daily cap, so units keep transcribing. This pages on spend instead of holding users on a cap (David 2026-11-27).",
+      "scope": "gmp-cloud-run omi_batch_pipeline_vendor_attempt_audio_seconds_total{provider=soniox} on the three sync services: every settled Soniox attempt in the batch provider-STT stage (any outcome), i.e. languages Parakeet cannot serve (Soniox first since table soniox-unsupported-1127), failover from Modulate, and English overflow while Modulate is down. Excludes live and legacy prerecorded Soniox.",
+      "verification": "Expected normal volume after soniox-unsupported-1127 at 100% vendor routing: roughly 600-1,000 audio-h/day (the ~528 h/day of unsupported-language Modulate units on 2026-11-27, #26431 multilingual-profile units and existing failover of ~132 h/day). 1,500 h/day is clearly above that and below a runaway.",
+      "evaluated_bad": "A runaway: Modulate down for a day with GPU saturation pushing English overflow to Soniox, or language ID misclassifying supported speech as unsupported at scale",
+      "evaluated_good": "Under 1,500 audio-h/day of Soniox batch audio",
+      "safe_next_action": "Check the route mix (omi_batch_pipeline_vendor_route_decisions_total by route,reason) and Modulate health. To stop starting units on Soniox, restore the previous table (en-overflow-1116, Soniox failover-only) in BATCH_VENDOR_ROUTE_TABLE on the sync services; units already admitted keep their route. Raise the threshold if the volume is legitimate growth.",
+      "dashboard_url": "https://monitor.omi.me/d/6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
+      "runbook": "backend/docs/runbooks/batch-vendor-routing-capacity.md"
+    },
+    "labels": {
+      "component": "sync",
+      "impact": "infrastructure",
+      "severity": "warning",
+      "instatus_component": "api",
+      "alert_identity": "omi-batch-soniox-daily-hours",
+      "tier": "page",
+      "audience": "human",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h"
+    },
+    "record": null
   }
 ]

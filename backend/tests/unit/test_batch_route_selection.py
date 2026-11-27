@@ -244,13 +244,29 @@ def test_soniox_is_failover_capacity_under_the_real_prerecorded_admission(monkey
     assert (decision.selected, decision.reason) == ('soniox', Reason.FAILOVER)
 
 
-def test_soniox_is_failover_only(monkeypatch):
+def test_a_failover_only_soniox_is_never_primary(monkeypatch):
     _soniox_admitted(monkeypatch)
     table = copy.deepcopy(TABLE)
     table['routes']['soniox']['price_usd_per_audio_hour'] = 0.001  # cheapest, still never primary
     _cohort(monkeypatch, table)
     decision = _select(UNSUPPORTED)
     assert decision.selected == 'modulate' and decision.failover == ('soniox',)
+
+
+def test_an_ordered_table_can_start_unsupported_units_on_soniox(monkeypatch):
+    _soniox_admitted(monkeypatch)
+    table = copy.deepcopy(TABLE)
+    table['selection'] = 'ordered'
+    table['routes']['soniox']['failover_only'] = False
+    for row in table['rows']:
+        if row['language_class'] == '*':  # where this table puts languages Parakeet cannot serve
+            row['options'].sort(key=lambda option: option['route'] != 'soniox')
+    _cohort(monkeypatch, table)
+    decision = _select(UNSUPPORTED)
+    assert decision.selected == 'soniox' and decision.failover == ('modulate',)
+    assert decision.route.provider_reason == 'unsupported_language'
+    monkeypatch.setattr(rs, '_health', Health(down={'soniox'}))
+    assert _select(UNSUPPORTED).selected == 'modulate'
 
 
 # --- health ----------------------------------------------------------------------------------------
@@ -403,12 +419,12 @@ def test_malformed_table_serves_last_valid_then_builtin(monkeypatch):
 
 
 def test_invalid_schema_is_rejected_without_logging_content(monkeypatch, caplog):
-    bad = {**copy.deepcopy(TABLE), 'routes': {**TABLE['routes'], 'soniox': _route(0.10)}}  # not failover-only
+    bad = {**copy.deepcopy(TABLE), 'routes': {**TABLE['routes'], 'gpu': _route(0.07, failover_only=True)}}
     _cohort(monkeypatch, bad)
     with caplog.at_level(logging.WARNING):
         assert rs.current_table() == (c.BUILTIN_TABLE, VendorRouteTableOutcome.BUILTIN)
     assert 'outcome=rejected served=builtin' in caplog.text
-    assert '0.1' not in caplog.text and 'soniox' not in caplog.text
+    assert '0.07' not in caplog.text and 'gpu' not in caplog.text
 
 
 @pytest.mark.parametrize('payload', ['null', ' null ', '[]', '"t1"'])
