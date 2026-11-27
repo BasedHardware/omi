@@ -132,7 +132,7 @@ def never_force(conversation: Mapping[str, Any], *, now: float) -> str | None:
         return 'generation_owned'
     if conversation.get('finalization_status') == 'blocked_byok':
         return 'generation_owned'
-    if conversation.get('finalization_job_id') and not projection_owns_finalization(conversation):
+    if conversation.get('finalization_job_id') and not projection_owns_finalization(dict(conversation)):
         return 'generation_owned'
     if conversation.get('summary_completed_at') or conversation.get('summary_output_present'):
         return 'already_summarized'
@@ -178,7 +178,7 @@ def custody_refusal(conversation: Mapping[str, Any], row: Mapping[str, Any] | No
 
 
 def _split_path(path: str) -> tuple[str, str] | None:
-    parts = path.split('/') if isinstance(path, str) else []
+    parts = path.split('/')
     if len(parts) != 4 or parts[0] != 'users' or parts[2] != 'conversations':
         return None
     if not parts[1] or not parts[3]:
