@@ -62,6 +62,7 @@ class ReconciliationInvocation:
             '--check-only' not in self.tokens
             and '--dry-run' not in self.tokens
             and '--validate-proposal' not in self.tokens
+            and '--plan-additions' not in self.tokens
         )
 
     @property

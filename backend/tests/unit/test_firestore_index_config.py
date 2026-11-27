@@ -136,36 +136,47 @@ def _reconcile_workflow():
     return path.read_text()
 
 
-# Static tripwires, not behavioral coverage: the automatic lane can only be
-# exercised by a real push to main. They pin the two expressions whose failure
-# modes are silent -- an empty environment binds no GitHub Environment at all
-# (bypassing the prod approval), and an unresolved lock serializes nothing.
-def test_reconcile_workflow_applies_a_merged_manifest_change_automatically():
-    # #11684 / #11731: the manifest fix merged and changed nothing in prod for
-    # ~5h because workflow_dispatch was the only trigger.
-    workflow = _reconcile_workflow()
-    trigger, _, _ = workflow.partition('\njobs:')
-    assert '  push:\n' in trigger
-    assert "branches: [ \"main\" ]" in trigger
-    assert "      - 'firestore.indexes.json'" in trigger
+# Static tripwires for the push receipt and the production writer's dispatch,
+# environment approval and queue. Runtime readiness is checked separately.
+def test_reconcile_workflow_reports_pending_production_schema_on_main_push():
+    workflow = _parse_reconcile_workflow()
+    push = workflow[True]['push']
+    assert push['branches'] == ['main']
+    assert 'firestore.indexes.json' in push['paths']
+    validation = workflow['jobs']['validate_merged_prod_indexes']
+    assert 'concurrency' not in workflow
+    assert validation['if'] == "github.ref == 'refs/heads/main' && github.event_name == 'push'"
+    assert validation['permissions'] == {'contents': 'read'}
+    assert 'environment' not in validation
+    assert 'concurrency' not in validation
+    assert any(
+        'SCHEMA_PENDING source=$GITHUB_SHA owner=release-owner deadline=$deadline' in step.get('run', '')
+        for step in validation['steps']
+    )
 
 
-def test_reconcile_workflow_never_binds_an_empty_environment_on_an_automatic_run():
-    resolved = "${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'prod' }}"
-    workflow = _reconcile_workflow()
-    assert f'environment: {resolved}' in workflow
-    assert f'group: firestore-schema-{resolved}' in workflow
-    # A bare inputs reference renders empty on push.
-    assert 'environment: ${{ github.event.inputs.environment }}' not in workflow
-    assert 'group: deploy-backend-stack-' not in workflow
+def test_reconcile_workflow_binds_the_dispatch_environment_and_its_writer_lock():
+    writer = _parse_reconcile_workflow()['jobs']['reconcile_composite_indexes']
+    environment = "${{ github.event.inputs.environment }}"
+    assert writer['if'] == (
+        "github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && "
+        "github.event.inputs.operation == 'composite-indexes'"
+    )
+    assert writer['environment'] == environment
+    assert writer['concurrency'] == {'group': f'firestore-schema-{environment}', 'cancel-in-progress': False}
 
 
 def test_reconcile_workflow_keeps_the_typed_confirmation_on_the_manual_path():
-    workflow = _reconcile_workflow()
-    assert 'if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then' in workflow
-    assert 'APPLY_FIRESTORE_INDEXES' in workflow
-    # Any trigger other than the two authorized ones must fail closed.
-    assert 'elif [[ "$EVENT_NAME" != "push" ]]; then' in workflow
+    workflow = _parse_reconcile_workflow()
+    assert workflow[True]['workflow_dispatch']['inputs']['confirmation']['required'] is True
+    writer = workflow['jobs']['reconcile_composite_indexes']
+    guard = writer['steps'][0]
+    assert guard['env']['EVENT_NAME'] == "${{ github.event_name }}"
+    assert guard['env']['CONFIRMATION'] == "${{ github.event.inputs.confirmation }}"
+    assert (
+        'if [[ "$EVENT_NAME" != "workflow_dispatch" || "$CONFIRMATION" != "APPLY_FIRESTORE_INDEXES" ]]; then'
+        in guard['run']
+    )
 
 
 def test_reconcile_workflow_detects_but_never_automatically_applies_field_exemptions():
@@ -187,13 +198,11 @@ def test_reconcile_workflow_detects_but_never_automatically_applies_field_exempt
     assert '--confirmation APPLY_FIRESTORE_FIELD_EXEMPTIONS' in destructive
 
 
-def _reconcile_workflow_steps(job_name):
+def _parse_reconcile_workflow():
     import yaml
 
-    path = Path(__file__).resolve().parents[3] / '.github/workflows/gcp_firestore_indexes.yml'
-    # PyYAML parses the bare `on:` trigger key as the boolean True; the jobs we
-    # care about are unaffected, so read the document as-is.
-    return yaml.safe_load(path.read_text())['jobs'][job_name]['steps']
+    # PyYAML parses GitHub Actions' bare `on:` trigger key as boolean True.
+    return yaml.safe_load(_reconcile_workflow())
 
 
 def test_field_exemption_check_only_runs_where_the_apply_operation_is_accepted():
@@ -206,7 +215,7 @@ def test_field_exemption_check_only_runs_where_the_apply_operation_is_accepted()
 
     check_steps = [
         step
-        for step in _reconcile_workflow_steps('reconcile_composite_indexes')
+        for step in _parse_reconcile_workflow()['jobs']['reconcile_composite_indexes']['steps']
         if '--check-only' in str(step.get('run', ''))
     ]
 

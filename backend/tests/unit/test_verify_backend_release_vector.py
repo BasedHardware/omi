@@ -496,38 +496,32 @@ def test_dev_firestore_readiness_requires_read_only_credentials_for_the_runtime_
 
 
 def test_static_firestore_index_migration_is_approved_and_main_scoped() -> None:
-    """Static guard: serving-schema writes stay outside backend deployment workflows.
+    """Schema writes remain pinned, confirmed and environment-protected.
 
-    The lane is no longer dispatch-only. #11684/#11731: the manifest fix merged
-    and nothing applied it, so /v3/memories 503'd for ~5h. A merged manifest
-    change now triggers the migration, and the prod GitHub Environment's
-    required reviewer -- not a typed string a push cannot supply -- is what
-    approves it. The typed confirmation is still mandatory on the manual path.
-
-    The lock also left the backend-stack domain: reconciliation is create-only
-    and monotone, so it cannot invalidate a readiness answer, while sharing the
-    group let a `waiting` deploy approval hold schema repair hostage during the
-    same incident.
+    SCA-2225: a pending automatic prod migration blocked the release owner's
+    pinned reconcile for three hours. Push validates locally and reports an
+    owned pending deadline; the explicit release dispatch retains all guards.
+    Development still applies automatically under its shared manual/dev lock.
     """
 
     workflow = BACKEND_DIR.parent / '.github/workflows/gcp_firestore_indexes.yml'
     text = workflow.read_text(encoding='utf-8')
-    resolved_environment = (
-        "${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'prod' }}"
-    )
+    resolved_environment = "${{ github.event.inputs.environment }}"
 
     assert 'workflow_dispatch:' in text
     assert 'APPLY_FIRESTORE_INDEXES' in text
-    assert 'if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then' in text
-    assert 'elif [[ "$EVENT_NAME" != "push" ]]; then' in text
+    assert 'if [[ "$EVENT_NAME" != "workflow_dispatch" || "$CONFIRMATION" != "APPLY_FIRESTORE_INDEXES" ]]; then' in text
+    assert 'elif [[ "$EVENT_NAME" != "push" ]]; then' not in text
+    assert '\nconcurrency:' not in text
+    assert 'SCHEMA_PENDING source=$GITHUB_SHA owner=release-owner deadline=$deadline' in text
     assert "github.ref == 'refs/heads/main'" in text
     assert "  push:\n    branches: [ \"main\" ]\n    paths:\n      - 'firestore.indexes.json'\n" in text
-    # An empty environment binds no GitHub Environment and bypasses the prod
-    # approval; an unresolved group serializes nothing.
+    # Manual environments are validated before auth; each writer acquires the
+    # exact environment group without locking credential-free push/PR checks.
     assert f'group: firestore-schema-{resolved_environment}' in text
     assert f'environment: {resolved_environment}' in text
     assert 'group: deploy-backend-stack-' not in text
-    assert 'environment: ${{ github.event.inputs.environment }}' not in text
+    assert 'environment: ${{ github.event.inputs.environment }}' in text
     assert 'ref: ${{ github.sha }}' in text
     assert 'git rev-parse HEAD' in text
     assert 'if [[ "$checked_sha" != "$GITHUB_SHA" ]]; then' in text

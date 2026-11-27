@@ -1,12 +1,9 @@
 name: Reconcile Firestore Indexes
 
 on:
-  # A merged manifest change is a schema migration that nothing else applies:
-  # both backend deploy lanes only gate on the serving schema. Without this
-  # trigger the fix for issue #11684 sat merged and unapplied (PR #11731), so
-  # /v3/memories 503'd for ~5h on a required index that existed only on paper.
-  # This queues the migration automatically; the prod GitHub Environment's
-  # required reviewer is still what approves it (see the confirmation step).
+  # Push validates declarations locally. The release owner dispatches main;
+  # reconciliation uses that immutable run SHA, possibly newer than this push.
+  # The dependent release still proves its own source READY (R15 step 0).
   push:
     branches: [ "main" ]
     paths:
@@ -42,16 +39,8 @@ on:
           - composite-indexes
           - field-exemptions
 
-# Deliberately NOT the backend-stack lock. Composite reconciliation is create-only,
-# so an index state only ever moves MISSING -> CREATING -> READY and cannot invalidate
-# a readiness answer. The explicitly dispatched field-exemption operation does remove
-# single-field index entries, so it shares this schema lock but never runs automatically.
-# Keeping both schema mutations serialized here preserves one auditable owner without
-# letting a backend deploy waiting for approval block schema repair.
-concurrency:
-  group: firestore-schema-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'prod' }}
-  cancel-in-progress: false
-
+# Only schema writer jobs acquire the environment lock. Read-only push/PR
+# checks cannot occupy it while a release-pinned dispatch waits to reconcile.
 env:
   # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
   # retries instead of hanging 7-10 min until the TCP reset (#22890).
@@ -96,23 +85,6 @@ jobs:
             --plan-additions | tee "$RUNNER_TEMP/index-plan.txt"
           sed -n '/^eligible=/p' "$RUNNER_TEMP/index-plan.txt" >> "$GITHUB_OUTPUT"
 
-  # Read-only PR counterpart of the main-line writer. Since the 10-22 WIF
-  # tightening both deploy pools admit only refs/heads/main, so the former PR
-  # prebuild jobs (which wrote index builds through omi-ci-schema-prod@ /
-  # omi-ci-deployer-dev@ behind an environment approval) have failed at the
-  # Google Auth step on every eligible PR. PRs now get a dedicated read-only
-  # identity -- pool omi-gha-ci-pr, service account omi-ci-index-check@, whose
-  # only role lists indexes and field configs (no document access, no writes)
-  # -- and only ever plan: index builds start on main, behind the prod
-  # environment's required reviewer, exactly like every other schema write.
-  # The dev prebuild job is gone for the same reason: its only function was
-  # writing builds to based-hardware-dev, and development converges on merge
-  # via reconcile_development_composite_indexes below.
-  #
-  # No `environment:` on purpose. Reads need no approval, and the WIF binding
-  # pins the stable pull_request subject GitHub documents only for jobs that
-  # reference no environment; re-adding one breaks the subject match and the
-  # auth fails closed.
   check_pr_prod_indexes:
     needs: plan_pr_indexes
     if: >-
@@ -120,7 +92,6 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository
     permissions:
       contents: read
-      id-token: write
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -138,7 +109,7 @@ jobs:
           git fetch --no-tags origin "$MAIN_SHA" "$HEAD_SHA"
           git show "$MAIN_SHA:firestore.indexes.json" > "$RUNNER_TEMP/base-indexes.json"
           git show "$HEAD_SHA:firestore.indexes.json" > "$RUNNER_TEMP/pr-indexes.json"
-      # Recheck the diff before auth; never import or run candidate PR code.
+      # Recheck locally; never import or run candidate PR code.
       - name: Validate add-only declarations
         run: |
           set -euo pipefail
@@ -147,40 +118,45 @@ jobs:
             --add-only-base "$RUNNER_TEMP/base-indexes.json" \
             --plan-additions | tee "$RUNNER_TEMP/index-plan.txt"
           grep -qx 'eligible=true' "$RUNNER_TEMP/index-plan.txt"
-      - name: Google Auth for read-only PR index check
-        uses: google-github-actions/auth@v3
-        with:
-          # Read-only PR identity: the provider's attribute condition admits
-          # only pull_request events of this one workflow file from
-          # BasedHardware/omi (repository 776121034, owner 162546372).
-          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-ci-pr/providers/github
-          service_account: omi-ci-index-check@based-hardware.iam.gserviceaccount.com
-      - name: Set up gcloud
-        uses: google-github-actions/setup-gcloud@v3
-      # vars.RUNTIME_GCP_PROJECT_ID is environment-scoped (prod/development
-      # only; not defined at repository level), and this job deliberately
-      # binds no environment -- so the prod project id is pinned literally.
-      # The PR check is prod-only by design.
-      - name: Plan additive PR indexes read-only (no writes)
+      - name: Report PR declarations pending production reconciliation
         run: |
-          python3 backend/scripts/reconcile_firestore_indexes.py \
-            --project "based-hardware" \
-            --manifest "$RUNNER_TEMP/pr-indexes.json" \
-            --add-only-base "$RUNNER_TEMP/base-indexes.json" \
-            --dry-run
+          echo 'Declarations validated locally; production readiness is not established.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Owner: release owner for this change. Dispatch main for cumulative reconciliation, record its immutable run SHA, and prove named indexes READY for the dependent release source before deployment (R15 step 0).' >> "$GITHUB_STEP_SUMMARY"
+
+  validate_merged_prod_indexes:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout immutable merged declarations
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Validate generated manifest locally without cloud access
+        run: |
+          PYTHONPATH=backend python3 -c 'from pathlib import Path; from scripts.reconcile_firestore_indexes import verify_manifest_source; verify_manifest_source(Path("firestore.indexes.json"))'
+      - name: Report production schema pending release-owner reconciliation
+        run: |
+          deadline="$(date -u -d '+2 hours' +%Y-%m-%dT%H:%M:%SZ)"
+          receipt="SCHEMA_PENDING source=$GITHUB_SHA owner=release-owner deadline=$deadline"
+          echo "$receipt"
+          echo "$receipt" >> "$GITHUB_STEP_SUMMARY"
+          echo 'Local validation only; production readiness is not established. Release owner: dispatch main for cumulative reconciliation and approve the owned run. If main advanced, the writer reconciles the newer immutable dispatch SHA, not this pending source. Record SCHEMA_SOURCE, then prove this pending source and the dependent release source READY with the existing source-pinned readiness gate (R15 step 0). A newer writer result does not close an older pending receipt by itself.' >> "$GITHUB_STEP_SUMMARY"
 
   reconcile_composite_indexes:
-    # This is the explicit, human-approved writer. Backend deploy workflows
-    # remain read-only and can only gate on the serving schema.
-    #
-    # `github.event.inputs.environment` is empty on push, which would bind no
-    # GitHub Environment at all and silently bypass the prod approval. Resolve
-    # it explicitly instead: automatic runs always target prod, where the
-    # required reviewer is the approval gate for the migration.
+    # Only a confirmed dispatch may write production schema. The same job also
+    # handles manual development under the automatic development writer's lock.
     if: >-
       github.ref == 'refs/heads/main' &&
-      (github.event_name == 'push' || github.event.inputs.operation == 'composite-indexes')
-    environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'prod' }}
+      github.event_name == 'workflow_dispatch' &&
+      github.event.inputs.operation == 'composite-indexes'
+    environment: ${{ github.event.inputs.environment }}
+    concurrency:
+      group: firestore-schema-${{ github.event.inputs.environment }}
+      cancel-in-progress: false
     permissions:
       contents: 'read'
       id-token: 'write'
@@ -190,7 +166,7 @@ jobs:
       - name: Validate Firestore migration input
         env:
           EVENT_NAME: ${{ github.event_name }}
-          RESOLVED_ENVIRONMENT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'prod' }}
+          RESOLVED_ENVIRONMENT: ${{ github.event.inputs.environment }}
           CONFIRMATION: ${{ github.event.inputs.confirmation }}
         run: |
           set -euo pipefail
@@ -198,18 +174,8 @@ jobs:
             echo "Invalid environment: $RESOLVED_ENVIRONMENT. Must be 'development' or 'prod'."
             exit 1
           fi
-          # A push cannot carry a typed confirmation. Its authorization is the
-          # prod GitHub Environment's required reviewer, which has already been
-          # granted before this step runs and is strictly stronger than a string
-          # typed by whoever dispatched the run. Keep the typed confirmation
-          # mandatory on the manual path so its safety is unchanged.
-          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
-            if [[ "$CONFIRMATION" != "APPLY_FIRESTORE_INDEXES" ]]; then
-              echo "Refusing Firestore schema mutation without APPLY_FIRESTORE_INDEXES confirmation."
-              exit 1
-            fi
-          elif [[ "$EVENT_NAME" != "push" ]]; then
-            echo "Unsupported trigger for a Firestore schema migration: $EVENT_NAME."
+          if [[ "$EVENT_NAME" != "workflow_dispatch" || "$CONFIRMATION" != "APPLY_FIRESTORE_INDEXES" ]]; then
+            echo "Refusing Firestore schema mutation without a confirmed workflow dispatch."
             exit 1
           fi
           echo "Reconciling Firestore indexes in $RESOLVED_ENVIRONMENT via $EVENT_NAME."
@@ -227,18 +193,21 @@ jobs:
             exit 1
           fi
           echo "Reconciling Firestore indexes from dispatched commit $checked_sha."
+          receipt="SCHEMA_SOURCE source=$checked_sha operation=composite-indexes mode=cumulative-dispatch"
+          echo "$receipt"
+          echo "$receipt" >> "$GITHUB_STEP_SUMMARY"
 
       # Prod: GitHub WIF as omi-ci-schema-prod@ (index/field config only, no
       # document access; credential-hygiene WS-C). Development keeps JSON.
       - name: Google Auth for Firestore schema migration (prod WIF)
-        if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'prod') == 'prod' }}
+        if: ${{ github.event.inputs.environment == 'prod' }}
         uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
           service_account: omi-ci-schema-prod@based-hardware.iam.gserviceaccount.com
 
       - name: Google Auth for Firestore schema migration
-        if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'prod') != 'prod' }}
+        if: ${{ github.event.inputs.environment != 'prod' }}
         uses: google-github-actions/auth@v3
         with:
           # Development: GitHub WIF as the dev deployer, no JSON key (credential hygiene WS-D).
@@ -276,32 +245,18 @@ jobs:
       # RUNTIME_GCP_PROJECT_ID is based-hardware-dev, so a non-prod run of this check
       # interrogates a project that holds none of the data the exemption is about.
       - name: Detect unapplied Firestore field exemptions
-        if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'prod') == 'prod' }}
+        if: ${{ github.event.inputs.environment == 'prod' }}
         run: |
           python3 backend/scripts/reconcile_firestore_field_exemptions.py \
             --project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" \
             --check-only
 
   reconcile_development_composite_indexes:
-    # Development had no automatic migration path at all. An automatic run
-    # resolves its environment to prod (see the job above), and the manual
-    # dispatch is the only thing that ever targeted development -- so a merged
-    # manifest addition reached prod's review queue while development silently
-    # kept a schema that no longer matched main. Every development backend
-    # deploy then failed its Firestore readiness gate until somebody noticed
-    # and dispatched the reconcile by hand, which is exactly what happened to
-    # the `hourly_usage` (year, month) index added by PR #11979.
-    #
-    # Composite reconciliation is create-only -- an index only moves
-    # MISSING -> CREATING -> READY -- and development carries no required
-    # reviewer, so it can simply converge on the same merge that queues the
-    # production migration. Production's approval gate is untouched: this job
-    # never runs against it.
+    # Development converges automatically on merge. Manual development
+    # composites share this exact lock with the dispatched job above.
     if: >-
       github.ref == 'refs/heads/main' && github.event_name == 'push'
     environment: development
-    # The workflow-level group keys automatic runs to prod. Serialize
-    # development against its own manual dispatches instead of against them.
     concurrency:
       group: firestore-schema-development
       cancel-in-progress: false
@@ -369,6 +324,9 @@ jobs:
       github.event.inputs.operation == 'field-exemptions' &&
       github.event.inputs.environment == 'prod'
     environment: prod
+    concurrency:
+      group: firestore-schema-prod
+      cancel-in-progress: false
     permissions:
       contents: 'read'
       id-token: 'write'
@@ -397,6 +355,9 @@ jobs:
             exit 1
           fi
           echo "Applying Firestore field exemptions from dispatched commit $checked_sha."
+          receipt="SCHEMA_SOURCE source=$checked_sha operation=field-exemptions mode=cumulative-dispatch"
+          echo "$receipt"
+          echo "$receipt" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Google Auth for Firestore field exemptions
         uses: google-github-actions/auth@v3
