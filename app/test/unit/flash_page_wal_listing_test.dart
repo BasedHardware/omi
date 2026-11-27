@@ -119,6 +119,26 @@ void main() {
     expect(resumed.seconds, 70);
   });
 
+  test('refresh keeps cached flash WALs when the connection drops during enumeration', () async {
+    final pendant = _FakePendant(_flash(oldest: 1000, newest: 1099));
+    final sync = _syncFor(pendant);
+    await sync.refreshWalsFromDevice();
+    final listed = (await sync.getMissingWals()).single;
+
+    sync.testConnection = null;
+    var connectionRequests = 0;
+    sync.testEnsureConnection = (_) async {
+      connectionRequests++;
+      return connectionRequests == 1 ? pendant : null;
+    };
+
+    expect(await sync.refreshWalsFromDevice(), isFalse);
+    final retained = await sync.getMissingWals();
+    expect(connectionRequests, 2);
+    expect(retained.single.id, listed.id);
+    expect(retained.single.storageOffset, listed.storageOffset);
+  });
+
   test('partial drain resumes after durable pages even when their ACK is withheld', () {
     expect(
       FlashPageWalSyncImpl.resumePageAfterDurablePage(startPage: 100, lastDurablePageIndex: 149),

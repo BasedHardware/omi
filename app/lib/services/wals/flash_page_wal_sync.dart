@@ -64,9 +64,20 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
   set testDevice(BtDevice? device) => _device = device;
 
   DeviceConnection? _testConnection;
+  Future<DeviceConnection?> Function(String deviceId)? _testEnsureConnection;
 
   @visibleForTesting
   set testConnection(DeviceConnection? connection) => _testConnection = connection;
+
+  @visibleForTesting
+  set testEnsureConnection(Future<DeviceConnection?> Function(String deviceId)? ensureConnection) =>
+      _testEnsureConnection = ensureConnection;
+
+  Future<DeviceConnection?> _ensureConnection(String deviceId) async {
+    final testEnsureConnection = _testEnsureConnection;
+    if (testEnsureConnection != null) return testEnsureConnection(deviceId);
+    return ServiceManager.instance().device.ensureConnection(deviceId);
+  }
 
   @override
   void setLocalSync(LocalWalSync localSync) {
@@ -114,7 +125,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
       lastDurablePageIndex < startPage ? startPage : lastDurablePageIndex + 1;
 
   Future<Map<String, int>?> _getStorageStatus(String deviceId) async {
-    var connection = _testConnection ?? await ServiceManager.instance().device.ensureConnection(deviceId);
+    var connection = _testConnection ?? await _ensureConnection(deviceId);
     if (connection == null) return null;
 
     try {
@@ -221,8 +232,15 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
       // the refreshed device range overlaps its locally pending page range.
       int timerStart = listed?.timerStart ?? DateTime.now().millisecondsSinceEpoch ~/ 1000 - estimatedSeconds;
 
-      var connection = _testConnection ?? await ServiceManager.instance().device.ensureConnection(deviceId);
-      if (connection == null) return [];
+      var connection = _testConnection ?? await _ensureConnection(deviceId);
+      if (connection == null) {
+        _storageStatusUnavailable = true;
+        _lastStallReason = FlashSyncStallReason.unknown;
+        return _wals
+            .where(
+                (wal) => wal.device == deviceId && wal.storage == WalStorage.flashPage && wal.status == WalStatus.miss)
+            .toList();
+      }
       var pd = await device.getDeviceInfo(connection);
       String deviceModel = pd.modelNumber.isNotEmpty ? pd.modelNumber : "Limitless";
 
