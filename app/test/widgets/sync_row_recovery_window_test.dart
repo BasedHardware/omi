@@ -208,7 +208,7 @@ void main() {
     await tester.tap(find.text('Delete').last);
     await tester.pump(const Duration(milliseconds: 500));
 
-    final l10n = AppLocalizations.of(tester.element(find.byType(Scaffold).first))!;
+    final l10n = AppLocalizations.of(tester.element(find.byType(Scaffold).first));
     expect(retaining.deleteCalls, 1);
     expect(find.text(l10n.failedToDeleteSomeItems), findsOneWidget);
   });
@@ -228,7 +228,7 @@ void main() {
     await tester.tap(find.text('Delete').last);
     await tester.pump(const Duration(milliseconds: 500));
 
-    final l10n = AppLocalizations.of(tester.element(find.byType(Scaffold).first))!;
+    final l10n = AppLocalizations.of(tester.element(find.byType(Scaffold).first));
     expect(retaining.deleteCalls, 1);
     expect(find.text(l10n.failedToDeleteSomeItems), findsOneWidget);
   });

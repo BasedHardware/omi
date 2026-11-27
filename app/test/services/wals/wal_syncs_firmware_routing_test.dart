@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/services/experiments/pendant_ring_drain_gate.dart';
+import 'package:omi/services/devices/ring_protocol.dart';
 import 'package:omi/services/wals/ring_drain_policy.dart';
 import 'package:omi/services/wals/ring_storage_sync.dart';
 import 'package:omi/services/wals/flash_page_wal_sync.dart';
@@ -107,14 +108,14 @@ class _FailingSdcard extends _SpySdcard {
 }
 
 class _DeleteSpyPhone extends _PhoneSync {
-  _DeleteSpyPhone(this.events) : super(events: events);
-  final List<String> events;
+  _DeleteSpyPhone(this._deleteEvents) : super(events: _deleteEvents);
+  final List<String> _deleteEvents;
 
   @override
-  Future<void> deleteAllSyncedWals() async => events.add('phone-delete');
+  Future<void> deleteAllSyncedWals() async => _deleteEvents.add('phone-delete');
 
   @override
-  Future<void> deleteAllPendingWals() async => events.add('phone-pending-delete');
+  Future<void> deleteAllPendingWals() async => _deleteEvents.add('phone-pending-delete');
 }
 
 class _DeleteSpySdcard extends SDCardWalSyncImpl {
@@ -509,6 +510,13 @@ void main() {
   });
 
   group('end-to-end routing decision', () {
+    test('unsupported multi-file deletion gate is limited to known legacy firmware', () {
+      expect(RingProtocol.hasUnsupportedMultiFileStorageFirmware('3.0.16'), isTrue);
+      expect(RingProtocol.hasUnsupportedMultiFileStorageFirmware('3.0.17'), isFalse);
+      expect(RingProtocol.hasUnsupportedMultiFileStorageFirmware('3.0.20'), isFalse);
+      expect(RingProtocol.hasUnsupportedMultiFileStorageFirmware('Unknown'), isFalse);
+    });
+
     test('a ring-buffer device with a raw Unknown object now routes to ring', () {
       // Before the fix this classified false (raw 'Unknown') -> multi-file
       // enumerator -> recordings never discovered.
@@ -576,6 +584,42 @@ void main() {
       expect(await syncs.refreshWalsFromDevice(), isFalse);
       expect(storage.refreshCalls, 0, reason: 'the old firmware cannot confirm the cached multi-file row');
       expect(sdcard.refreshCalls, 1);
+    });
+
+    test('unconfirmed pre-multi-file delete remains cached through inventory refresh', () async {
+      final device = BtDevice(
+        id: 'pendant',
+        name: 'Omi',
+        type: DeviceType.omi,
+        rssi: -40,
+        firmwareRevision: '3.0.16',
+      );
+      final wal = Wal(
+        timerStart: 1704067200,
+        codec: BleAudioCodec.opus,
+        seconds: 60,
+        status: WalStatus.miss,
+        storage: WalStorage.sdcard,
+        device: device.id,
+        fileNum: 2,
+      );
+      final storage = StorageSyncImpl(_Listener())
+        ..setDevice(device)
+        ..testWals = [wal];
+      final sdcard = _SpySdcard();
+      final syncs = WalSyncs(
+        _Listener(),
+        sdcardSync: sdcard,
+        storageSync: storage,
+        flashPageSync: _ReadyFlashPage(),
+        phoneSync: _PhoneSync(),
+      )..setDevice(device);
+
+      await expectLater(syncs.deleteWal(wal), throwsStateError);
+
+      expect(await storage.getMissingWals(), [wal]);
+      expect(await syncs.refreshWalsFromDevice(), isFalse);
+      expect(await storage.getMissingWals(), [wal]);
     });
 
     test('multi-file firmware requires both device inventories to confirm', () async {

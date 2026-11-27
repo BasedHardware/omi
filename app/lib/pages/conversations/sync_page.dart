@@ -14,7 +14,6 @@ import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/user_provider.dart';
-import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/logger.dart';
@@ -137,7 +136,7 @@ class WalListItem extends StatelessWidget {
             confirmLabel: context.l10n.delete,
             destructive: true,
           );
-          if (confirmed) {
+          if (confirmed && context.mounted) {
             try {
               await syncProvider.deleteWal(wal, firmwareVersion: _deviceFirmwareVersion(context, wal));
             } catch (error) {
@@ -262,7 +261,7 @@ class WalListItem extends StatelessWidget {
                           confirmLabel: context.l10n.delete,
                           destructive: true,
                         );
-                        if (confirmed) {
+                        if (confirmed && context.mounted) {
                           try {
                             await syncProvider.deleteWal(wal, firmwareVersion: _deviceFirmwareVersion(context, wal));
                           } catch (error) {

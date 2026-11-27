@@ -246,7 +246,7 @@ void main() {
 
   testWidgets('failed recording deletion keeps the detail page open and reports the failure', (tester) async {
     final sync = await _openDeleteFlow(tester, failDelete: true);
-    final l10n = AppLocalizations.of(tester.element(find.byType(WalItemDetailPage)))!;
+    final l10n = AppLocalizations.of(tester.element(find.byType(WalItemDetailPage)));
 
     await tester.tap(find.byIcon(Icons.more_horiz));
     await tester.pumpAndSettle();
@@ -265,7 +265,7 @@ void main() {
 
   testWidgets('successful recording deletion returns to the previous screen', (tester) async {
     final sync = await _openDeleteFlow(tester, failDelete: false);
-    final l10n = AppLocalizations.of(tester.element(find.byType(WalItemDetailPage)))!;
+    final l10n = AppLocalizations.of(tester.element(find.byType(WalItemDetailPage)));
 
     await tester.tap(find.byIcon(Icons.more_horiz));
     await tester.pumpAndSettle();
@@ -285,7 +285,7 @@ void main() {
   testWidgets('recording detail stays open when deletion returns but retains the WAL', (tester) async {
     final sync = await _openDeleteFlow(tester, failDelete: false);
     sync.retainOnDelete = true;
-    final l10n = AppLocalizations.of(tester.element(find.byType(WalItemDetailPage)))!;
+    final l10n = AppLocalizations.of(tester.element(find.byType(WalItemDetailPage)));
 
     await tester.tap(find.byIcon(Icons.more_horiz));
     await tester.pumpAndSettle();

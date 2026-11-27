@@ -687,7 +687,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
               // Update WAL to reflect remaining pages (for next sync attempt)
               final resumePage = resumePageAfterDurablePage(
                 startPage: startPage,
-                lastDurablePageIndex: lastDurablePageIndex!,
+                lastDurablePageIndex: lastDurablePageIndex,
               );
               wal.storageOffset = resumePage;
               final remainingPages = endPage >= resumePage ? endPage - resumePage + 1 : 0;

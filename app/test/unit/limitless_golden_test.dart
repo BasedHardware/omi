@@ -1101,7 +1101,7 @@ void main() {
       onAudioBytesReceived: (frame) {
         decodedFrames++;
         lastDecodedFrame = List<int>.from(frame);
-        if (nextFrame != null && !nextFrame!.isCompleted) nextFrame!.complete();
+        if (nextFrame != null && !nextFrame.isCompleted) nextFrame.complete();
       },
     );
     addTearDown(() => subscription?.cancel());
@@ -1120,7 +1120,7 @@ void main() {
         limitlessRxCharUuid,
         bleWrapper(10, 0, 1, realtimeAudioBytes([opusFrame(0xb8, i, 40)])),
       );
-      await nextFrame!.future.timeout(const Duration(seconds: 2));
+      await nextFrame.future.timeout(const Duration(seconds: 2));
       await Future<void>.delayed(const Duration(milliseconds: 25));
     }
 
@@ -1134,7 +1134,7 @@ void main() {
       limitlessRxCharUuid,
       bleWrapper(11, 0, 1, realtimeAudioBytes([liveFrameWithFlashShapeBytes])),
     );
-    await nextFrame!.future.timeout(const Duration(seconds: 2));
+    await nextFrame.future.timeout(const Duration(seconds: 2));
 
     expect(decodedFrames, 21);
     expect(lastDecodedFrame, liveFrameWithFlashShapeBytes);

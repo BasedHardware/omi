@@ -195,8 +195,11 @@ class LimitlessDeviceConnection extends DeviceConnection {
     // The existing binding checks the recording, capture policy and STT config.
     // Keep its timer and spent retry budget while it still owns the link.
     final restartSpentEpisode = restart && (_customLiveHealth?.isRecoverySpent ?? false);
-    if (!restartSpentEpisode && _customLiveHealth?.isClosed != true && (_customLiveWatch?.captureIsCurrent() ?? false))
+    if (!restartSpentEpisode &&
+        _customLiveHealth?.isClosed != true &&
+        (_customLiveWatch?.captureIsCurrent() ?? false)) {
       return;
+    }
     stopCustomLiveAudioWatch();
     // The coordinator may install the listener while the first BLE setup settles.
     bool start(int epoch) {

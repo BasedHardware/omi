@@ -9,6 +9,7 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
+import 'package:omi/services/devices/ring_protocol.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/device_capture_clock.dart';
@@ -29,6 +30,9 @@ class StorageSyncImpl implements StorageSync {
   DeviceConnection? _activeSyncConnection;
   int? _activeSyncEpoch;
   bool _firmwareStopRequested = false;
+
+  bool get _firmwareCannotDeleteMultiFileWals =>
+      RingProtocol.hasUnsupportedMultiFileStorageFirmware(_device?.firmwareRevision);
 
   IWalSyncListener listener;
   LocalWalSync? _localSync;
@@ -282,6 +286,10 @@ class StorageSyncImpl implements StorageSync {
       if (wal.status != WalStatus.synced) throw StateError("Owning device is unavailable; only cached row removed");
       return;
     }
+    if (_firmwareCannotDeleteMultiFileWals) {
+      listener.onWalUpdated();
+      throw StateError('Connected firmware does not support multi-file storage deletion');
+    }
     // A delete that was attempted drops the row whatever the reply said: the
     // positional file index is potentially burned (FC-deleted-device-file-
     // stays-addressable) and the next listing re-adds a file that survived.
@@ -318,6 +326,12 @@ class StorageSyncImpl implements StorageSync {
     // covers drops; the other device's pending rows keep their local rows.
     final stale = _previousDeviceWalIds(WalStatus.synced);
     final toDelete = _wals.where((w) => w.status == WalStatus.synced && !stale.contains(w.id)).toList();
+    if (_firmwareCannotDeleteMultiFileWals && toDelete.isNotEmpty) {
+      _wals = _wals.where((w) => !stale.contains(w.id)).toList();
+      _logStaleRowsDropped('synced', stale.length);
+      listener.onWalUpdated();
+      throw StateError('Connected firmware does not support multi-file storage deletion');
+    }
     final outcome = await _deleteWalsOnDevice(toDelete);
     _wals = _wals
         .where((w) => !stale.contains(w.id) && (w.status != WalStatus.synced || !outcome.attempted.contains(w.id)))
@@ -336,6 +350,12 @@ class StorageSyncImpl implements StorageSync {
     // deleteAllSyncedWals); they drop locally like the single-row path.
     final stale = _previousDeviceWalIds(WalStatus.miss);
     final toDelete = _wals.where((w) => w.status == WalStatus.miss && !stale.contains(w.id)).toList();
+    if (_firmwareCannotDeleteMultiFileWals && toDelete.isNotEmpty) {
+      _wals = _wals.where((w) => !stale.contains(w.id)).toList();
+      _logStaleRowsDropped('miss', stale.length);
+      listener.onWalUpdated();
+      throw StateError('Connected firmware does not support multi-file storage deletion');
+    }
     final outcome = await _deleteWalsOnDevice(toDelete);
     // Attempted deletes drop their rows whatever the reply said (a positional
     // index a delete may have removed is burned; the listing re-adds

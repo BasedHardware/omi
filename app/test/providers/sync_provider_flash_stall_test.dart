@@ -8,9 +8,7 @@ import 'package:omi/app_globals.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/devices/connectors/limitless_connection.dart';
-import 'package:omi/services/wals/flash_page_wal_sync.dart';
 import 'package:omi/services/wals.dart';
-import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Regression coverage for the silent-success bug: a Limitless flash-page
@@ -222,8 +220,7 @@ void main() {
       supportedLocales: AppLocalizations.supportedLocales,
       home: const Scaffold(),
     ));
-    final localizedMessage =
-        AppLocalizations.of(globalNavigatorKey.currentContext!)!.pendantAudioUnconfirmedSyncBlocked;
+    final localizedMessage = AppLocalizations.of(globalNavigatorKey.currentContext!).pendantAudioUnconfirmedSyncBlocked;
 
     await provider.syncWals();
 

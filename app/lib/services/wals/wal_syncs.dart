@@ -16,7 +16,6 @@ import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
-import 'package:version/version.dart';
 
 class WalSyncs implements IWalSync {
   late LocalWalSyncImpl _phoneSync;
@@ -230,12 +229,7 @@ class WalSyncs implements IWalSync {
   /// Firmware before 3.0.17 only exposes the legacy SD-card inventory; the
   /// multi-file stats read is unsupported and cannot confirm a deletion.
   static bool isMultiFileStorageFirmware(String? version) {
-    if (version == null || version.isEmpty || version == 'Unknown' || isRingBufferFirmware(version)) return false;
-    try {
-      return Version.parse(version) >= Version.parse('3.0.17');
-    } catch (_) {
-      return false;
-    }
+    return RingProtocol.isMultiFileStorageFirmware(version);
   }
 
   WalSyncs(
@@ -346,7 +340,8 @@ class WalSyncs implements IWalSync {
       if (usesIndependentRingDrain && (_ringPass != null || ring.isSyncing)) return false;
       // The independent ring reader uses INFO without a discovery STOP and
       // reports whether that authoritative read completed.
-      storageInventoryConfirmed = await _ringSync.refreshWalsFromDevice();
+      storageInventoryConfirmed =
+          await _ringSync.refreshWalsFromDevice() && !_storageSync.hasCachedWalsForDevice(_device!.id);
     } else if (_usesLegacySdcard && !isMultiFileStorageFirmware(fw)) {
       // Old firmware has no multi-file stats command; the SD-card list below
       // is its authoritative device inventory. Any cached multi-file rows for
