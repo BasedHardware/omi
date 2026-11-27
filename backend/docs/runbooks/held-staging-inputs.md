@@ -78,9 +78,10 @@ are unchanged. Missing indexes fail urgency discovery rather than silently
 falling back to the slow name cursor.
 
 The legacy stream reuses `*_batch_timeliness_assignment_held`. Replacement
-streams require the new prod/dev `*_batch_staged_input_age` composite indexes
-on `(state, recovery_state, audio_staged_at, __name__)`. They are declared in
-`database/batch_pipeline_indexes.py` and the generated Firestore manifest.
+streams require the prod/dev `*_batch_staged_input_age` composite indexes
+on `(state, recovery_state, audio_staged_at, __name__)`, plus the allowance-hold
+and exhausted-allowance retry staging-input composites (`*_batch_staged_allowance_*`)
+declared in `database/batch_pipeline_indexes.py` and `firestore.indexes.json`.
 The repository index guard/deploy gate must establish them READY before this
 serving rollout. Follow the [index apply/deploy workflow](../../../.github/agent-docs/firestore-queries-and-indexes.md#apply-and-deploy)
 for production approval and READY verification. This lane does not create live
@@ -108,17 +109,24 @@ There is no automatic exit from `dead/input_expiring`: polling and nightly
 `held_expired` redrive cannot undo it. The existing operator GPU requeue restores
 the compute queue; the existing assignment release restores `committed/pending`
 only after its target is restorable and every original assignment/privacy fence
-passes. Both remain available with the new switch off. Manual release never
-resets a paid attempt budget or manufactures a restorable target.
+passes; and `RecoveryStore.release_allowance_input` (used via
+`redrive_staging_inputs.py --scope allowance`) releases pre-expiry or retained
+`allowance_held`/exhausted-`retry` inputs only after verifying exact staged
+object generation, privacy/erasure generation, content ledger ownership, and live
+funded-batch entitlement (decrementing `allowance_holds.held_count` when leaving
+`allowance_held`). All manual exits remain available with `BATCH_INPUT_EXPIRING_ENABLED`
+off and never bypass entitlement checks or manufacture a restorable target.
 
 ## Manual redrive (never scheduled)
 
 Run from the repository root with its own `backend/.venv`. This tool never reads
 audio. Dry-run makes only Firestore reads and prints aggregate counts and
 the plan SHA-256, never IDs, URIs, transcripts or exception bodies. It examines
-at most 128 rows per page, ordered by `enqueued_at`, then document name. It selects
-GPU/assignment staging holds (including retained `input_expiring` terminals)
-at age **>=51 days**. Other examined rows are skipped, not authorized for writes.
+at most 128 rows per page, ordered by `enqueued_at`, then document name. Default
+`--scope held` selects GPU/assignment staging holds (including retained `input_expiring`
+terminals) at age **>=51 days**; `--scope allowance` selects `allowance_held`,
+exhausted-allowance `retry`, and `dead/input_expiring` (`input_expiring_leg=allowance`)
+units at age **>=51 days**. Other examined rows are skipped, not authorized for writes.
 Apply first checks the exact generation pinned by each reviewed `audio_uri` using
 a metadata-only GCS GET with `if_generation_match`. Missing, mismatched, unpinned,
 permission-denied or otherwise unproven inputs are counted as

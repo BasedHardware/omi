@@ -50,16 +50,27 @@ class AgeQuery:
         clock = self.orders[0]
         self.client.calls.append((clock, self.size, self.after))
         rows = []
-        assert all(op in {'in', '<='} for _, op, _ in self.filters)
+        assert all(op in {'==', 'in', '<='} for _, op, _ in self.filters)
+
+        def get(doc, field):
+            value = doc
+            for part in field.split('.'):
+                value = value.get(part) if isinstance(value, dict) else None
+            return value
+
         for key, job in self.client.rows.items():
             if len(key) != 2 or key[0] != 'batch_pipeline_prod_jobs' or clock not in job:
                 continue
             _, sid = key
             if any(
                 (
-                    job.get(field) not in value
-                    if op == 'in'
-                    else type(job.get(field)) not in (int, float) or job[field] > value
+                    get(job, field) != value
+                    if op == '=='
+                    else (
+                        get(job, field) not in value
+                        if op == 'in'
+                        else type(get(job, field)) not in (int, float) or get(job, field) > value
+                    )
                 )
                 for field, op, value in self.filters
             ):
@@ -106,7 +117,7 @@ def test_due_row_behind_long_name_cursor_fires_before_cursor_page_in_one_tick(se
 
     monkeypatch.setattr(sweep, 'held_candidates', ordinary_page)
     assert sweep.HeldDeadLetter(store).tick(NOW_TERMINAL) == {'expired': 1, 'requeued': 0}
-    assert age.calls == [('enqueued_at', 128, None), ('audio_staged_at', 128, None)]
+    assert age.calls == [('enqueued_at', 128, None), ('audio_staged_at', 128, None)] * 3
 
 
 @pytest.mark.parametrize('leg', ['gpu', 'assignment'])
@@ -126,18 +137,26 @@ def test_becoming_due_after_completed_pass_expires_next_maintenance_tick(setup, 
     assert row(client)['dead_letter_reason'] == 'input_expiring'
     assert store.run(lambda tx: tx.get('leases', sweep.CURSOR_KEY)) == completed
     assert ordinary.call_count == dead.call_count == 1
-    assert len(age.calls) == 4  # Two bounded streams on each maintenance tick.
+    assert len(age.calls) == 12  # Six bounded streams on each maintenance tick.
 
 
 def test_sleeping_urgency_checkpoint_advances_only_its_own_cursor(setup, monkeypatch):
     client, store, age = urgent_runner(setup, monkeypatch)
+    empty_cursors = {
+        'enqueued_at': None,
+        'audio_staged_at': None,
+        'allowance_held_enqueued_at': None,
+        'allowance_held_audio_staged_at': None,
+        'allowance_retry_enqueued_at': None,
+        'allowance_retry_audio_staged_at': None,
+    }
     sleeping = {
         'next_at': NOW_TERMINAL + 86400,
         'held_after': 'ordinary-cursor',
         'redrive_day': 1,
         'redrive_done': True,
         'dead_after': 'dead-cursor',
-        'input_after': {'enqueued_at': None, 'audio_staged_at': None},
+        'input_after': dict(empty_cursors),
     }
     store.run(lambda tx: tx.put('leases', sweep.CURSOR_KEY, sleeping))
     for i in range(129):
@@ -157,16 +176,16 @@ def test_sleeping_urgency_checkpoint_advances_only_its_own_cursor(setup, monkeyp
     assert advanced == {
         **sleeping,
         'input_after': {
+            **empty_cursors,
             'enqueued_at': {'at': ENQUEUED - 1, 'id': 'restaged-127'},
-            'audio_staged_at': None,
         },
     }
     assert sweep.HeldDeadLetter(store).tick(NOW_TERMINAL + 1) == {'expired': 1, 'requeued': 0}
     assert row(client)['dead_letter_reason'] == 'input_expiring'
-    assert age.calls[2][2]['__name__'].id == 'restaged-127'
+    assert age.calls[6][2]['__name__'].id == 'restaged-127'
     assert store.run(lambda tx: tx.get('leases', sweep.CURSOR_KEY)) == {
         **sleeping,
-        'input_after': {'enqueued_at': None, 'audio_staged_at': None},
+        'input_after': dict(empty_cursors),
     }
     ordinary.assert_not_called()
 
@@ -224,7 +243,7 @@ def test_skipped_prefix_cannot_pin_legacy_urgency_cursor(setup, monkeypatch, pre
     assert sweep.HeldDeadLetter(store).tick(NOW_TERMINAL) == {'expired': 0, 'requeued': 0}
     assert row(client)['state'] == 'quarantined'
     assert sweep.HeldDeadLetter(store).tick(NOW_TERMINAL + sweep.INTERVAL_SECONDS) == {'expired': 1, 'requeued': 0}
-    assert age.calls[2][2]['enqueued_at'] == ENQUEUED - 1
+    assert age.calls[6][2]['enqueued_at'] == ENQUEUED - 1
     assert row(client)['dead_letter_reason'] == 'input_expiring'
     assert sweep.INTERVAL_SECONDS < 86400
 
@@ -248,7 +267,14 @@ def test_current_object_clock_orders_replacements_and_legacy_objects(setup, monk
     page, cursors = queries.input_expiring_candidates(age, 'batch_pipeline_prod', NOW_TERMINAL)
     assert [sid for sid, _ in page] == ['bad', 'replacement']
     assert [staged_enqueue(job) for _, job in page] == [ENQUEUED - 2, ENQUEUED - 1]
-    assert cursors == {'enqueued_at': None, 'audio_staged_at': None}
+    assert cursors == {
+        'enqueued_at': None,
+        'audio_staged_at': None,
+        'allowance_held_enqueued_at': None,
+        'allowance_held_audio_staged_at': None,
+        'allowance_retry_enqueued_at': None,
+        'allowance_retry_audio_staged_at': None,
+    }
 
 
 def test_fresh_restage_is_skipped_until_its_own_terminal_day(setup, monkeypatch):
@@ -307,3 +333,34 @@ def test_kill_off_has_no_urgency_queries(setup, monkeypatch):
     monkeypatch.setattr(sweep, 'input_expiring_candidates', query)
     assert sweep.HeldDeadLetter(store).tick(NOW_TERMINAL) == {'expired': 0, 'requeued': 0}
     query.assert_not_called()
+
+
+@pytest.mark.parametrize('allowance_state', ['allowance_held', 'retry'])
+def test_existing_sweep_reaches_allowance_holds_without_polling(setup, monkeypatch, allowance_state):
+    from tests.unit.test_batch_input_retention import _seed_allowance
+
+    client, store, _, key = _seed_allowance(setup, allowance_state)
+    age = AgeClient(client.rows)
+    store.run(lambda tx: tx.put('leases', sweep.CURSOR_KEY, {'held_after': 'zzzz-long-held-cursor'}))
+    monkeypatch.setattr(
+        sweep,
+        'input_expiring_candidates',
+        lambda client, namespace, now, **kwargs: queries.input_expiring_candidates(age, namespace, now, **kwargs),
+    )
+    monkeypatch.setattr(sweep, 'held_candidates', lambda *args, **kwargs: [])
+    monkeypatch.setattr(sweep, 'dead_held_candidates', lambda *args, **kwargs: [])
+    monkeypatch.setattr(sweep, 'held_expired_stock', lambda *args: 0)
+
+    # Fresh restaged allowance hold must be skipped before its own terminal day.
+    row(client)['audio_staged_at'] = NOW_TERMINAL
+    assert sweep.HeldDeadLetter(store).tick(NOW_TERMINAL) == {'expired': 0, 'requeued': 0}
+    assert row(client)['state'] == allowance_state
+
+    # At exact terminal day for the restaged object, sweep expires it cleanly and updates hold counter.
+    assert sweep.HeldDeadLetter(store).tick(NOW_TERMINAL + TERMINAL_SECONDS) == {'expired': 1, 'requeued': 0}
+    assert row(client)['state'] == 'dead'
+    assert row(client)['dead_letter_reason'] == 'input_expiring'
+    assert row(client)['input_expiring_leg'] == 'allowance'
+    if allowance_state == 'allowance_held':
+        assert client.rows['batch_pipeline_prod_allowance_holds', key]['held_count'] == 0
+        assert client.rows['batch_pipeline_prod_allowance_holds', key]['active'] is False

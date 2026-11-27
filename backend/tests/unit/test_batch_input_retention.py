@@ -559,3 +559,236 @@ def test_unapproved_redrive_never_reads_object_metadata():
     with pytest.raises(cli.Refused, match='approval_digest_changed'):
         cli.apply_plan(Mock(), [], 'approved', 'wrong', NOW_TERMINAL, storage_client=storage)
     assert not storage.mock_calls
+
+
+def _seed_allowance(setup, state='allowance_held'):
+    from utils.batch_pipeline.scheduler import owner_key
+
+    client, store, binding, *_ = setup
+    key = owner_key(binding.owner_id)
+    job = row(client)
+    for field in ('quarantine_reason', 'recovery_state'):
+        job.pop(field, None)
+    job.update(
+        audio_uri=URI,
+        enqueued_at=ENQUEUED,
+        state=state,
+        merge_pending=state == 'retry',
+        available_at=ENQUEUED,
+        compute_decision={'outcome': 'held', 'reason': 'allowance_exhausted', 'at': ENQUEUED},
+    )
+    if state == 'allowance_held':
+        job['allowance_held_at'] = ENQUEUED
+        client.rows['batch_pipeline_prod_allowance_holds', key] = {
+            'owner_id': binding.owner_id,
+            'held_count': 1,
+            'active': True,
+            'revision': 1,
+        }
+    return client, store, binding, key
+
+
+@pytest.mark.parametrize('allowance_state', ['allowance_held', 'retry'])
+def test_allowance_staging_input_lifecycle_and_hold_accounting(setup, allowance_state):
+    client, store, _, key = _seed_allowance(setup, allowance_state)
+    before = deepcopy(client.rows)
+    recovery = RecoveryStore(store)
+    assert recovery.expire_held('bad', NOW_TERMINAL - 1) == 'held'
+    assert client.rows == before
+    assert recovery.expire_held('bad', NOW_TERMINAL) == 'expired'
+    expired = row(client)
+    assert expired['state'] == 'dead'
+    assert expired['merge_pending'] is False
+    assert expired['dead_letter_reason'] == 'input_expiring'
+    assert expired['input_expiring_leg'] == 'allowance'
+    assert expired['input_expiring_at'] == NOW_TERMINAL
+    if allowance_state == 'allowance_held':
+        hold = client.rows['batch_pipeline_prod_allowance_holds', key]
+        assert hold['held_count'] == 0 and hold['active'] is False
+    assert row(client)['enqueued_at'] == ENQUEUED
+    assert not setup[3].mock_calls
+
+
+@pytest.mark.parametrize('allowance_state', ['allowance_held', 'retry'])
+def test_allowance_input_expiry_respects_fences_and_fresh_restage(setup, allowance_state):
+    client, store, binding, _ = _seed_allowance(setup, allowance_state)
+    recovery = RecoveryStore(store)
+    row(client)['audio_staged_at'] = NOW_TERMINAL
+    before = deepcopy(client.rows)
+    assert recovery.expire_held('bad', NOW_TERMINAL) == 'held'
+    assert client.rows == before
+
+    row(client)['audio_staged_at'] = ENQUEUED
+    client.rows['batch_pipeline_prod_results', 'bad'] = {'segment_id': 'bad', 'projection_state': 'pending'}
+    assert recovery.expire_held('bad', NOW_TERMINAL) == 'held'
+    client.rows.pop(('batch_pipeline_prod_results', 'bad'))
+
+    client.rows['batch_pipeline_privacy', privacy_owner_key(binding.owner_id)] = {'generation': 1}
+    with pytest.raises(BatchPrivacyBlocked):
+        recovery.expire_held('bad', NOW_TERMINAL)
+
+
+@pytest.mark.parametrize('allowance_state', ['allowance_held', 'retry'])
+def test_allowance_recovery_enforces_entitlement_privacy_generation_and_fences(setup, monkeypatch, allowance_state):
+    from database import batch_pipeline_store
+
+    monkeypatch.setattr(batch_pipeline_store, 'service_frontier', lambda *a, **kw: 0.0)
+    client, store, binding, key = _seed_allowance(setup, allowance_state)
+    snapshot = deepcopy(row(client))
+    units = [{'id': 'bad', 'leg': 'allowance', 'job': snapshot, 'entry': {}}]
+    digest = cli.plan_digest(units, NOW_TERMINAL, 128, None, scope='allowance')
+    storage = Mock()
+    blob = storage.bucket.return_value.blob.return_value
+    blob.generation = 1
+
+    # Unentitled operator release must refuse and preserve both job and allowance hold counter.
+    assert cli.apply_plan(
+        store, units, digest, digest, NOW_TERMINAL, storage_client=storage, entitlement_check=lambda _uid: False
+    ) == {'refused': 1}
+    assert row(client) == snapshot
+
+    # Privacy-blocked owner must fail closed even when entitled.
+    client.rows['batch_pipeline_privacy', privacy_owner_key(binding.owner_id)] = {'generation': 1}
+    assert cli.apply_plan(
+        store, units, digest, digest, NOW_TERMINAL, storage_client=storage, entitlement_check=lambda _uid: True
+    ) == {'refused': 1}
+    client.rows.pop(('batch_pipeline_privacy', privacy_owner_key(binding.owner_id)))
+
+    # Entitled pre-expiry recovery with matching GCS generation promotes cleanly to ready and decrements hold_count.
+    assert cli.apply_plan(
+        store, units, digest, digest, NOW_TERMINAL, storage_client=storage, entitlement_check=lambda _uid: True
+    ) == {'requeued': 1}
+    released = row(client)
+    assert released['state'] == 'ready' and released['compute_decision'] == {'outcome': 'unattempted'}
+    assert released['merge_pending'] is True
+    if allowance_state == 'allowance_held':
+        hold = client.rows['batch_pipeline_prod_allowance_holds', key]
+        assert hold['held_count'] == 0 and hold['active'] is False
+
+
+def test_allowance_dead_terminal_redrive_and_discovery(setup, monkeypatch):
+    from database import batch_pipeline_store
+
+    monkeypatch.setattr(batch_pipeline_store, 'service_frontier', lambda *a, **kw: 0.0)
+    client, store, binding, _ = _seed_allowance(setup, 'allowance_held')
+    assert RecoveryStore(store).expire_held('bad', NOW_TERMINAL) == 'expired'
+    client.rows['batch_pipeline_prod_intakes', binding.job_id] = {
+        'owner_id': binding.owner_id,
+        'content_id': binding.content_id,
+        'segment_ids': list(binding.segment_ids),
+        'lane': 'backfill',
+        'total_files': 2,
+    }
+    status = durable_status(store, binding.owner_id, binding.job_id)
+    assert (
+        isinstance(status, dict) and status['status'] == 'failed' and status['reason_code'] == 'batch_artifact_missing'
+    )
+    assert not store.run(lambda tx: Scheduler.redrive_in_transaction(tx, tx.get('jobs', 'bad'), NOW_TERMINAL + 1))
+
+    snapshot = deepcopy(row(client))
+    units = [{'id': 'bad', 'leg': 'allowance', 'job': snapshot, 'entry': {}}]
+    digest = cli.plan_digest(units, NOW_TERMINAL + 1, 128, None, scope='allowance')
+    storage = Mock()
+    storage.bucket.return_value.blob.return_value.generation = 1
+    assert cli.apply_plan(
+        store, units, digest, digest, NOW_TERMINAL + 1, storage_client=storage, entitlement_check=lambda _uid: True
+    ) == {'requeued': 1}
+    assert row(client)['state'] == 'ready'
+    assert 'dead_letter_reason' not in row(client)
+    assert 'input_expiring_leg' not in row(client)
+
+
+def test_allowance_redrive_discovery_is_bounded_and_selects_held_retry_and_dead():
+    from scripts.redrive_staging_inputs import _discover_allowance as _unused  # noqa: F401
+
+    as_of = ENQUEUED + 100 * 86400
+    rows = [
+        SimpleNamespace(
+            id='held-1',
+            to_dict=lambda: {
+                'segment_id': 'held-1',
+                'state': 'allowance_held',
+                'audio_uri': URI,
+                'enqueued_at': ENQUEUED,
+                'audio_staged_at': as_of - 51 * 86400,
+            },
+        ),
+        SimpleNamespace(
+            id='retry-1',
+            to_dict=lambda: {
+                'segment_id': 'retry-1',
+                'state': 'retry',
+                'compute_decision': {'outcome': 'held', 'reason': 'allowance_exhausted'},
+                'audio_uri': URI,
+                'enqueued_at': ENQUEUED,
+            },
+        ),
+        SimpleNamespace(
+            id='dead-1',
+            to_dict=lambda: {
+                'segment_id': 'dead-1',
+                'state': 'dead',
+                'dead_letter_reason': 'input_expiring',
+                'input_expiring_leg': 'allowance',
+                'audio_uri': URI,
+                'enqueued_at': ENQUEUED,
+            },
+        ),
+    ]
+    call_idx = {'i': 0}
+
+    class FakeQuery:
+        def where(self, *a):
+            return self
+
+        def order_by(self, *a):
+            return self
+
+        def start_after(self, *a):
+            return self
+
+        def limit(self, n):
+            return self
+
+        def document(self, sid):
+            return SimpleNamespace(id=sid, get=lambda **kw: SimpleNamespace(to_dict=lambda: {}))
+
+        def stream(self, **kw):
+            idx = call_idx['i']
+            call_idx['i'] += 1
+            return [rows[idx]] if idx < len(rows) else []
+
+    client = SimpleNamespace(collection=lambda name: FakeQuery())
+    units, examined, cursor = cli.discover(client, as_of, 128, scope='allowance')
+    assert [u['id'] for u in units] == ['held-1', 'retry-1', 'dead-1']
+    assert [u['leg'] for u in units] == ['allowance', 'allowance', 'allowance']
+    assert examined == 3 and cursor is None
+
+
+def test_held_input_leg_preserves_provider_routed_assignment_holds_while_excluding_gpu_and_allowance():
+    from utils.batch_pipeline.input_retention import held_input_leg
+
+    provider_route = {'stt_route': 'provider'}
+    assert held_input_leg({'state': 'committed', 'recovery_state': 'held', 'stt_route': provider_route}) == 'assignment'
+    assert (
+        held_input_leg(
+            {
+                'state': 'quarantined',
+                'quarantine_reason': 'worker_failed',
+                'recovery_state': 'held',
+                'stt_route': provider_route,
+            }
+        )
+        is None
+    )
+    assert held_input_leg({'state': 'allowance_held', 'stt_route': provider_route}) is None
+    assert (
+        held_input_leg(
+            {
+                'state': 'retry',
+                'compute_decision': {'outcome': 'held', 'reason': 'allowance_exhausted'},
+                'stt_route': provider_route,
+            }
+        )
+        is None
+    )

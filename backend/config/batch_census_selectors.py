@@ -150,7 +150,7 @@ EXCEPTIONS: dict[str, SelectorException] = {
         128,
         'held input expiry pass per clock',
         'Qualify a stamped input expiry deadline',
-        '09da7b2912e046db6f0f12cd3a97f317827a24ec958d107bcc07a8d733a8eb9d',
+        '1c1b2064ce317ad19f39ff553b46ec77bc55d55ea83ba064dfa031906fa94038',
     ),
     'database.batch_pipeline_quarantine_recovery.recovery_candidates': _legacy(
         'Legacy quarantine state page precedes execution fences',
@@ -290,7 +290,7 @@ EXCEPTIONS: dict[str, SelectorException] = {
         20,
         'timeliness publisher refresh',
         'Publish versioned age samples',
-        'bb1b9b5e5078d9411d6e413d0e8f21d5fb69698dcfd61b2865c130ccca5b9a97',
+        'ca2c7ee63ef31439d43b756dc2eeec6b9a82f1817dca67c8cf1216058eba95b1',
     ),
     'database.batch_pipeline_store.timeliness_sample.<locals>.committed_walk': _legacy(
         'Bounded committed cohort samples projection debt',

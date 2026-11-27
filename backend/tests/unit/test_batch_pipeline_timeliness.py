@@ -804,3 +804,60 @@ def test_held_oldest_rejects_nonnumeric_or_boolean_record_pending_clocks(bad_clo
     assert (
         _sample(jobs=[{'state': 'record_pending', 'enqueued_at': bad_clock}])['held_oldest']['record_pending'] is None
     )
+
+
+def test_staged_input_accounts_for_allowance_held_and_exhausted_retry_but_excludes_non_allowance():
+    from utils.batch_pipeline.input_retention import STAGING_BUCKET
+
+    staged_uri = f'gs://{STAGING_BUCKET}/synthetic/audio#1'
+    base_now = EPOCH + 70 * 86400
+    oldest_allowance = base_now - 60 * 86400
+    older_retry = base_now - 55 * 86400
+    newer_restage = base_now - 5 * 86400
+    sample = _sample(
+        jobs=[
+            # Non-allowance retries / decisionless / allowed rows must not count toward staged_input.
+            {
+                'state': 'retry',
+                'compute_decision': {'outcome': 'held', 'reason': 'fair_use_restricted'},
+                'audio_uri': staged_uri,
+                'enqueued_at': oldest_allowance - 86400,
+            },
+            {
+                'state': 'retry',
+                'compute_decision': {'outcome': 'allowed', 'reason': 'funded'},
+                'last_policy_hold': {'reason': 'allowance_exhausted'},
+                'audio_uri': staged_uri,
+                'enqueued_at': oldest_allowance - 86400,
+            },
+            # Restaged allowance_held uses audio_staged_at without masking older un-restaged exhausted retry.
+            {
+                'state': 'allowance_held',
+                'audio_uri': staged_uri,
+                'enqueued_at': oldest_allowance - 10,
+                'audio_staged_at': newer_restage,
+            },
+            {
+                'state': 'retry',
+                'compute_decision': {'outcome': 'held', 'reason': 'allowance_exhausted'},
+                'audio_uri': staged_uri,
+                'enqueued_at': older_retry,
+            },
+            {'state': 'allowance_held', 'audio_uri': staged_uri, 'enqueued_at': oldest_allowance},
+        ],
+        now=base_now,
+    )
+    assert sample['held_oldest']['staged_input'] == oldest_allowance
+
+    retry_only = _sample(
+        jobs=[
+            {
+                'state': 'retry',
+                'compute_decision': {'outcome': 'held', 'reason': 'allowance_exhausted'},
+                'audio_uri': staged_uri,
+                'enqueued_at': older_retry,
+            }
+        ],
+        now=base_now,
+    )
+    assert retry_only['held_oldest']['staged_input'] == older_retry
