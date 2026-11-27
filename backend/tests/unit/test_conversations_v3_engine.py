@@ -10,6 +10,7 @@ import zlib
 import pytest
 
 from utils.conversations.v3 import outline, planner
+from utils.conversations.v3.live import FINISH_RECORDING_FIELD, FINISH_STAMP_FIELD, FINISH_WINDOW_FIELD
 
 NOW = datetime(2026, 11, 16, 12, tzinfo=timezone.utc)
 
@@ -22,6 +23,26 @@ def recording(cid='r', at=NOW, segments=None, **extra):
         'recording': True,
         'transcript_segments': segments or [{'text': 'hello world', 'start': 0, 'end': 10, 'is_user': True}],
         **extra,
+    }
+
+
+def native_ready_fields(end):
+    intent = {'finished_at': end, 'revision': 1, 'job_id': 'job'}
+    return {
+        'finished_at': end,
+        'status': 'completed',
+        'record_lane_owner': 'batch_live_v1',
+        'record_audio_closed': True,
+        'record_upload_revision': 7,
+        'record_sealed_at': end.timestamp(),
+        'finalization_job_id': 'job',
+        'finalization_revision': 1,
+        'private_cloud_sync_enabled': True,
+        'data_protection_level': 'standard',
+        'v3_native_manual_stop': intent,
+        'v3_manual_end': True,
+        'v3_native_manual_ready_revision': 7,
+        'v3_native_manual_ready_proof': {'seal': end.timestamp(), 'intent': intent},
     }
 
 
@@ -43,6 +64,61 @@ def test_five_minute_silence_boundary():
     assert len(outline.stretches([row], NOW + timedelta(hours=1))) == 2
     row['transcript_segments'][1]['start'] = 309.999
     assert len(outline.stretches([row], NOW + timedelta(hours=1))) == 1
+
+
+@pytest.mark.parametrize('gap', [0, 1])
+def test_native_manual_cut_keeps_final_tail_and_separates_next_recording(gap):
+    end = NOW + timedelta(seconds=30)
+    previous = recording(
+        'previous',
+        segments=[
+            {'text': 'opening thought', 'start': 0, 'end': 10},
+            {'text': 'final decision', 'start': 21, 'end': 30},
+        ],
+        finished_at=end,
+        v3_native_manual_stop={'finished_at': end, 'revision': 1, 'job_id': 'job'},
+    )
+    successor = recording('next', at=end + timedelta(seconds=gap))
+    assert len(outline.stretches([previous, successor], end + timedelta(seconds=15))) == 1
+    previous.update(native_ready_fields(end))
+    old, new = outline.stretches([previous, successor], end + timedelta(seconds=15))
+    assert old['manual_end'] and old['finished']
+    assert [line['text'] for line in old['lines']] == ['opening thought', 'final decision']
+    assert not new['manual_end'] and not new['finished']
+    assert {line['conversation_id'] for line in new['lines']} == {'next'}
+
+
+def test_ambiguous_native_overlap_keeps_existing_natural_policy():
+    end = NOW + timedelta(seconds=10)
+    previous = recording('previous', **native_ready_fields(end))
+    overlapping = recording(
+        'overlapping', at=NOW + timedelta(seconds=8), segments=[{'text': 'other source', 'start': 0, 'end': 10}]
+    )
+    (group,) = outline.stretches([previous, overlapping], end + timedelta(seconds=15))
+    assert not group['manual_end'] and not group['finished']
+    (group,) = outline.stretches([previous, overlapping], end + timedelta(minutes=6))
+    assert not group['manual_end'] and group['finished']
+
+
+@pytest.mark.parametrize(
+    'change',
+    [
+        {'record_upload_revision': 8},
+        {'record_sealed_at': NOW.timestamp() + 20},
+        {'record_audio_closed': False},
+        {'record_upload_sessions': {'producer': True}},
+        {'record_audio_partial': {'generation': 1}},
+        {'v3_native_manual_ready_proof': None},
+        {'finalization_revision': 2},
+    ],
+)
+def test_stale_native_readiness_does_not_fall_back_to_legacy_manual_end(change):
+    end = NOW + timedelta(seconds=10)
+    source = recording('native', **{**native_ready_fields(end), **change})
+    (group,) = outline.stretches([source], end + timedelta(seconds=20))
+    assert not group['finished'] and not group['manual_end']
+    (group,) = outline.stretches([source], end + timedelta(minutes=6))
+    assert group['finished'] and not group['manual_end']
 
 
 def test_three_hour_window_cap_is_deterministic_on_the_recorded_clock():
@@ -657,6 +733,45 @@ def test_copy_carries_the_recording_location_and_keeps_its_own():
     assert planner.build('u', window, {'r': row}, prior)['geolocation'] == kept
 
 
+def test_native_tail_cannot_cut_when_earlier_overlapping_speech_continues_past_stop():
+    end = NOW + timedelta(seconds=30)
+    overlapping = recording('overlapping', segments=[{'text': 'continuous speech', 'start': 0, 'end': 60}])
+    native = recording('native', at=NOW + timedelta(seconds=10), **native_ready_fields(end))
+    successor = recording('successor', at=NOW + timedelta(seconds=70))
+    (group,) = outline.stretches([overlapping, native, successor], NOW + timedelta(seconds=90))
+    assert not group['manual_end'] and not group['finished']
+    assert [line['conversation_id'] for line in group['lines']] == ['overlapping', 'native', 'successor']
+
+
+def test_inert_native_stop_does_not_mask_legacy_manual_end():
+    end = NOW + timedelta(seconds=12)
+    legacy = recording('legacy', finished_at=end, v3_manual_end=True, v3_native_manual_stop={'finished_at': end})
+    (group,) = outline.stretches([legacy], end + timedelta(seconds=1))
+    assert group['legacy_manual_end'] and group['finished']
+    assert not group['native_manual_end']
+
+
+@pytest.mark.parametrize('cohesion', [False, True])
+@pytest.mark.parametrize('silence_gap', [timedelta(minutes=5), timedelta(minutes=15)])
+def test_outline_reuses_identical_prefix_and_numbered_lines_after_append(cohesion, silence_gap):
+    row = recording(segments=[{'text': 'Hablamos de la entrega', 'start': 0, 'end': 10, 'is_user': True}])
+
+    def render(cache_prefix):
+        (group,) = outline.stretches([row], NOW + timedelta(hours=1), silence_gap=silence_gap)
+        return outline.messages(
+            group, timezone.utc, cohesion=cohesion, silence_gap=silence_gap, cache_prefix=cache_prefix
+        )
+
+    legacy = render(False)
+    initial = render(True)
+    row['transcript_segments'].append({'text': 'Mañana confirmamos', 'start': 6 * 10, 'end': 70, 'is_user': True})
+    updated = render(True)
+    assert initial[0] == updated[0] == ('system', outline.OUTLINE_CACHE_PREFIX)
+    assert initial[2][1].split('\n\nStretch')[0] == 'Transcript:\n' + legacy[1][1].split('\n\nTranscript:\n')[1]
+    assert updated[2][1].startswith(initial[2][1].split('\n\nStretch')[0] + '\n')
+    assert updated[2][1].endswith('Stretch 12:00 to 12:01.')
+
+
 @pytest.mark.parametrize('cohesion', [False, True])
 def test_transcript_size_cap_replans_failed_projection(monkeypatch, cohesion):
 
@@ -694,3 +809,64 @@ def test_transcript_size_cap_replans_failed_projection(monkeypatch, cohesion):
     for row in recovered:
         compressed = zlib.compress(json.dumps(row['transcript_segments']).encode())
         assert len(base64.b64encode(bytes(28) + compressed.hex().encode())) < planner.TRANSCRIPT_BUDGET
+
+
+def test_finish_stamp_follows_the_cut_to_its_card_once():
+    """Dual-card Finish: A's window carries A's stamp; B's own card, from an unstamped request, carries none."""
+    stamp = {'at': NOW, 'path': 'newer_dual'}
+    a = recording('a', finished_at=NOW + timedelta(seconds=10), v3_manual_end=True, **{FINISH_WINDOW_FIELD: 'window'})
+    a[FINISH_STAMP_FIELD] = stamp
+    later = NOW + timedelta(minutes=10)
+    b = recording('b', later, finished_at=later + timedelta(seconds=10), v3_manual_end=True)
+    b[FINISH_RECORDING_FIELD] = True
+    prior = {'id': 'window', 'started_at': NOW, 'finished_at': NOW + timedelta(seconds=10)}
+
+    def built(row, existing=None):
+        group = outline.stretches([row], row['finished_at'] + timedelta(seconds=1))[0]
+        return planner.build('u', planner.windows([group], [[entry()]])[0], {row['id']: row}, existing)
+
+    window = built(a, prior)
+    assert window['id'] == 'window' and window[FINISH_WINDOW_FIELD] == 'window'
+    assert window[FINISH_STAMP_FIELD] == stamp
+    b_card = built(b)
+    assert b_card['manual_end'] is True and b_card[FINISH_WINDOW_FIELD] == b_card['id']
+    assert FINISH_STAMP_FIELD not in b_card
+    # A later Finish stamp on the same source never replaces the one the card already carries.
+    a[FINISH_STAMP_FIELD] = {'at': NOW + timedelta(minutes=1), 'path': 'tail'}
+    assert built(a, window)[FINISH_STAMP_FIELD] == stamp
+
+
+def test_a_rebuilt_row_keeps_a_segment_the_final_pass_split_without_duplicating_it():
+    from utils.conversations.final_pass_split import split_segment_id
+
+    line = {'id': 's1', 'text': 'one two three four five six', 'start': 0, 'end': 10, 'is_user': True}
+    row = recording(segments=[line])
+    group = outline.stretches([row], NOW + timedelta(hours=1))[0]
+    window = planner.windows([group], [[entry()]])[0]
+    built = planner.build('u', window, {'r': row})
+    first = {**built['transcript_segments'][0], 'text': 'one two three', 'end': 5}
+    second = {**first, 'id': split_segment_id('s1', 1), 'text': 'four five six', 'start': 5, 'end': 10}
+    published = {**built, 'transcript_segments': [first, second], 'status': 'completed', 'v3_locked': True}
+    assert not planner.is_unlocked(published)
+    rebuilt = planner.build('u', window, {'r': row}, published)
+    assert [s['text'] for s in rebuilt['transcript_segments']] == ['one two three', 'four five six']
+    assert planner._holds_line(published, window['lines'][0])
+
+
+def test_a_split_line_replanned_under_a_new_id_is_not_appended_again():
+    from utils.conversations.final_pass_split import split_segment_id
+
+    text = 'we should ship the speaker fix on friday morning'
+    row = recording(segments=[{'id': 'new-id', 'text': text, 'start': 0, 'end': 10, 'is_user': True}])
+    group = outline.stretches([row], NOW + timedelta(hours=1))[0]
+    window = planner.windows([group], [[entry()]])[0]
+    built = planner.build('u', window, {'r': row})
+    base = {**built['transcript_segments'][0], 'id': 'old-id'}
+    first = {**base, 'text': 'we should ship the speaker', 'end': 5}
+    second = {**base, 'id': split_segment_id('old-id', 1), 'text': 'fix on friday morning', 'start': 5, 'end': 10}
+    published = {**built, 'transcript_segments': [first, second], 'status': 'completed'}
+    rebuilt = planner.build('u', window, {'r': row}, published)
+    assert [s['text'] for s in rebuilt['transcript_segments']] == [
+        'we should ship the speaker',
+        'fix on friday morning',
+    ]

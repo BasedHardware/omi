@@ -886,8 +886,17 @@ class RecoveryFailureReason(StrEnum):
     ABANDONED_RUNNING = 'abandoned_running'
 
 
+class FlexFirstOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    ATTEMPT = 'attempt'
+    FLEX = 'flex'
+    UNCONFIRMED_TIER = 'unconfirmed_tier'
+    STOPPED_AFTER_ERROR = 'stopped_after_error'
+    FALLBACK_STANDARD = 'fallback_standard'
+
+
 class ConvStructureFlexFallbackReason(StrEnum):
-    """Why a conversation structure request fell back from Flex to Standard."""
+    """Why a request fell back from Flex to Standard."""
 
     UNKNOWN = 'unknown'
     TIMEOUT = 'timeout'
@@ -977,6 +986,8 @@ class FallbackReason(StrEnum):
     PREAMBLE_TIMEOUT = 'preamble_timeout'
     STORE_CREDENTIALS_UNAVAILABLE = 'store_credentials_unavailable'
     STORE_API_ERROR = 'store_api_error'
+    # A bounded lookup stopped at its read cap before it could prove absence (v3 holdout /live).
+    LOOKUP_CAP = 'lookup_cap'
 
 
 class NotesAgentForceReason(StrEnum):

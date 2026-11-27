@@ -47,7 +47,7 @@ def world(monkeypatch, tmp_path):
         for n in range(state.units):
             yield audio_unit(100 + n, b'\x01\x00' * 16000)
 
-    def stage(item, body):
+    def stage(item, body, *, record_origin):
         state.staged.append(item)
         state.staged_contexts.append(read_context(body))
         if getattr(state, 'after_stage', None):

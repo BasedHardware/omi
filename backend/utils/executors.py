@@ -5,6 +5,7 @@ Provides shared executors with strict separation (bulkhead pattern):
   small session/code cache reads. Must never starve — gates every request.
 - quiet_replay_executor: bounded quiet-check replay leaves, separate from the DB coordinator.
 - db_executor: Firestore CRUD and Redis data mutations. High volume, moderate latency.
+- conversation_list_executor: deadline-bounded conversation list scans and row preparation.
 - record_barrier_executor: pusher recording custody transactions, isolated from
   integrations and webhook DB work even during Firestore retries.
 - context_executor: optional context reads and fresh mount fences, four workers,
@@ -284,6 +285,14 @@ critical_executor = MonitoredThreadPoolExecutor(
 db_executor = MonitoredThreadPoolExecutor(
     name="db", max_workers=int(os.getenv('PUSHER_DB_EXECUTOR_WORKERS', '32')), thread_name_prefix="db"
 )
+# List row decoding can outlive the HTTP request and cannot be cancelled once
+# it enters a synchronous Firestore or correction-overlay call. Keep those
+# abandoned reads away from the DB pool used to finalize their successful prefix.
+conversation_list_executor = MonitoredThreadPoolExecutor(
+    name="conversation_list",
+    max_workers=int(os.getenv('CONVERSATION_LIST_EXECUTOR_WORKERS', '32')),
+    thread_name_prefix='conversation-list',
+)
 # Optional read-cache checks cannot queue behind, or consume, serving DB workers.
 # Shadow allowance IO cannot occupy the serving DB pool or grow an unbounded queue.
 free_allowance_executor = MonitoredThreadPoolExecutor(
@@ -390,6 +399,7 @@ _ALL_EXECUTORS = [
     quiet_replay_executor,
     critical_executor,
     db_executor,
+    conversation_list_executor,
     free_allowance_executor,
     read_cache_shadow_executor,
     record_barrier_executor,
@@ -470,6 +480,53 @@ def get_context_executor() -> MonitoredThreadPoolExecutor:
             )
             _ALL_EXECUTORS.append(_context_executor)
         return _context_executor
+
+
+_fast_finish_chunk_executor: MonitoredThreadPoolExecutor | None = None
+_fast_finish_chunk_executor_lock = threading.Lock()
+
+
+def get_fast_finish_chunk_executor() -> MonitoredThreadPoolExecutor:
+    """Leaf provider requests for v3 fast-finish chunks: six at once per process.
+
+    The pass that submits them coordinates from ``storage_executor``, never from this pool. The queue
+    is bounded by its callers, not here: two short-pass slots of four chunks plus one long-pass slot
+    of three is eleven submissions at most, and a submission-slot bound would race the done callback
+    that frees it. A long pass's three leave three workers for short Finishes.
+    """
+    global _fast_finish_chunk_executor
+    with _fast_finish_chunk_executor_lock:
+        if _fast_finish_chunk_executor is None:
+            _fast_finish_chunk_executor = MonitoredThreadPoolExecutor(
+                name='fast_finish_chunk', max_workers=6, thread_name_prefix='ff-chunk'
+            )
+            _ALL_EXECUTORS.append(_fast_finish_chunk_executor)
+        return _fast_finish_chunk_executor
+
+
+_fast_finish_io_executor: MonitoredThreadPoolExecutor | None = None
+_fast_finish_io_executor_lock = threading.Lock()
+
+
+def get_fast_finish_io_executor() -> MonitoredThreadPoolExecutor:
+    """Bounded leaf work of a v3 fast-finish pass, so the pass can stop waiting at its deadline.
+
+    Runs the pass's Firestore calls (row refresh, funding, privacy, the transcript write and the cut),
+    its language resolution (the vendor probe and the self-hosted gate, with the privacy checks before
+    them) and, fire-and-forget, the long-budget Redis settle after the slot is released. The Firestore
+    client cannot bound a transaction commit and probe timeouts add up per phase, so the pass waits for
+    each call only until its bound and then abandons it: a queued call is cancelled, a running one ends
+    on its own timeouts. A pass has one call outstanding at a time and at most three passes run, so
+    eight workers leave room for abandoned calls and settles still running.
+    """
+    global _fast_finish_io_executor
+    with _fast_finish_io_executor_lock:
+        if _fast_finish_io_executor is None:
+            _fast_finish_io_executor = MonitoredThreadPoolExecutor(
+                name='fast_finish_io', max_workers=8, thread_name_prefix='ff-io'
+            )
+            _ALL_EXECUTORS.append(_fast_finish_io_executor)
+        return _fast_finish_io_executor
 
 
 _rollout_executor: MonitoredThreadPoolExecutor | None = None

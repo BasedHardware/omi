@@ -2,6 +2,7 @@
 
 from contextlib import contextmanager
 from contextvars import ContextVar
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Iterator, Mapping
 
@@ -27,6 +28,24 @@ def request_log_trace_id() -> str:
 
 class Conflict(RuntimeError):
     """Retryable v3 ownership and source-revision conflicts."""
+
+    # (recordings, existing, planned rows) of a projection commit Firestore rejected for size (SCA-2918).
+    size_commit: tuple[Mapping, Mapping, list] | None = None
+
+
+@dataclass
+class UnlockedPage:
+    remaining: frozenset[str] = frozenset()
+    cursor: str | None = None
+    seeds: tuple[int, int] = (0, 0)  # (pending, unlocked) seeds this load read
+    pending_ids: tuple[str, ...] = ()  # the pending recordings this load seeded
+    quarantined: frozenset[str] = frozenset()  # pending recordings set aside for size (v3_size_quarantine)
+    # Documents this load pulled in on their own, not through a pending seed: the lease's open window and
+    # its direct sources. A size rejection of one of them is not the seed's to answer for.
+    independent: frozenset[str] = frozenset()
+    # The derived rows each recording's time-neighbour query loaded: an independent document's neighbours
+    # load on every pass too, so the attribution veto follows these edges as well as claims and sources.
+    neighbours: dict[str, frozenset[str]] = field(default_factory=dict)
 
 
 def preview_wakes(rows, recordings) -> dict[str, datetime]:

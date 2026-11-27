@@ -310,6 +310,8 @@ from utils.other.storage import (
     precache_conversation_audio,
 )
 
+from utils.conversations.v3 import Conflict as V3Conflict
+from utils.conversations.v3 import live_tail as v3_live_tail
 from utils.conversations.v3 import policy as v3_policy, service as v3_service
 from utils.conversations.v3.word_floor import MIN_HOME_WORDS, MIN_TASK_WORDS, text_word_count
 
@@ -727,7 +729,14 @@ def _get_structured(
             known_spellings=conversation_known_spellings(uid),
             uid=uid,
             conversation_id=prompt_conversation_id,
-            transcript=action_items_transcript,
+            # Reliability experiment live_words_cascade: while the v3 summary pass writes the notes of a
+            # conversation a user End closed, the words the phone was showing that no stored line covers
+            # yet follow the transcript in this prompt, marked as a draft (utils/conversations/v3/
+            # live_tail.py). The prompt is the only reader, so only what the notes say can reflect those
+            # words: the wake-word and discard checks above, memory extraction and the stored transcript
+            # use the transcript alone. Outside that pass, and with the experiment off, this returns the
+            # transcript unchanged.
+            transcript=v3_live_tail.in_prompt(action_items_transcript),
             started_at=conv_started_at,
             timezone_name=tz_str,
             language_code=language_code,
@@ -768,7 +777,14 @@ def _get_structured(
             )
         validate_structured_source_segment_ids(structured, transcript_segment_ids)
         return structured, False
-    except (ConversationAbsorbed, SyncConversationPersistenceFenced, member_notes.LiveMemberNotesDeferred):
+    except (
+        ConversationAbsorbed,
+        SyncConversationPersistenceFenced,
+        member_notes.LiveMemberNotesDeferred,
+        V3Conflict,
+        v3_service.models.BackfillNotesDeletionBlocked,
+        v3_service.models.BackfillNotesAdmissionTimeout,
+    ):
         raise
     except Exception as e:
         if funded_processing.enabled(uid, 'batch') and _is_funded_budget_denial(e):
@@ -2774,11 +2790,8 @@ def process_conversation(
     # A v3 backfill window runs the live notes path (same trigger, relevance, speakers, meeting
     # context and floors) but is historical: like silent backfill it takes no derived effects.
     historical_tier = historical_minimum.historical_tier.is_historical(conversation)
-    historical = (
-        silent_backfill
-        or historical_tier
-        or (v3_policy.flag(conversation, 'v3_derived') and v3_policy.flag(conversation, 'backfilled'))
-    )
+    v3_backfilled = v3_policy.flag(conversation, 'v3_derived') and v3_policy.flag(conversation, 'backfilled')
+    historical = silent_backfill or historical_tier or v3_backfilled
     backlog_authorized = trigger is ProcessingTrigger.BACKLOG_CHOICE
     mode = PROCESSING_MODES[trigger]
     force_process, is_reprocess = mode.run_now, mode.reprocess
@@ -2840,7 +2853,8 @@ def process_conversation(
         for settle in final_pass_settlements:
             settle(current)
         final_pass_settlements.clear()
-        if current and completed is not None and not historical:
+        # Only v3 backfill copies skip this; silent-backfill recovery keeps its telemetry.
+        if current and completed is not None and not v3_backfilled:
             record_capture_loss(completed)
             _observe_owner_recognition_completion(completed)
         if persistence_observer is not None:

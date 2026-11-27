@@ -45,8 +45,12 @@ class FinishedCapturePage extends StatefulWidget {
       final v3 = row.v3;
       if (row.discarded || v3?.recording == true) continue;
       final holds = row.id == recordingId ||
-          v3?.recordingIds.contains(recordingId) == true ||
-          v3?.recordingPieces.any((piece) => piece.recordingId == recordingId) == true;
+          (v3 != null &&
+              (v3.recordingPieces.any((piece) => piece.recordingId == recordingId) ||
+                  (!row.isLocked &&
+                      row.status == ConversationStatus.completed &&
+                      v3.completedDerived &&
+                      v3.recordingIds.contains(recordingId))));
       if (!holds) continue;
       if (best == null || row.createdAt.isAfter(best.createdAt)) best = row;
     }

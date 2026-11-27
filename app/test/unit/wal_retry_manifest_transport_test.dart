@@ -36,7 +36,7 @@ void main() {
 
     final expiry = DateTime.now().millisecondsSinceEpoch ~/ 1000 + 120;
     final handle = '$expiry.${'a' * 64}';
-    const pending = '{"code":"record_capture_pending","retry_after_seconds":30}';
+    const pending = '{"code":"record_capture_pending","retry_after_seconds":1800}';
     var invite = true;
     var issueHandle = true;
     var probeStatus = 503;
@@ -106,7 +106,7 @@ void main() {
       // Same name and size, different content: no probe.
       await file.writeAsBytes(wal.reversed.toList()..[0] = 8);
       await refused(['manifest', 'multipart']);
-      invite = false; // Isolated WAL after the original 30s memo expires.
+      invite = false; // Isolated WAL after the original memo expires.
       await refused(['manifest', 'multipart']);
       invite = true;
       probeStatus = 204; // Cleared at probe, pending again at ordinary admission.
@@ -129,12 +129,13 @@ void main() {
       Future<UploadFilesResult> throughGate(SyncUploadGate gate) =>
           gate.upload([file], conversationId: 'target', claimLiveCapture: true);
       await expectLater(throughGate(openGate()), waiting);
+      now = now.add(const Duration(minutes: 6));
       final afterRestart = openGate();
       calls.clear();
       await expectLater(throughGate(afterRestart), throwsA(isA<SyncRecordingWaitException>()));
       expect(calls, isEmpty);
       expect(await file.length(), wal.length);
-      now = now.add(const Duration(minutes: 6));
+      now = now.add(const Duration(minutes: 24));
       uploadStatus = 202;
       expect((await throughGate(afterRestart)).jobId, 'queued-job');
       expect(calls, ['manifest', 'multipart']);

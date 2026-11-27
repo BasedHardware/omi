@@ -29,6 +29,7 @@ from utils.observability.reasons import (
     UploadTraceGateReason,
     reason_label,
 )
+from utils.product_metrics import extract_app_build
 
 FIELD = 'capture_end'
 # The phone's VAD and the server's transcript place the last speech a few
@@ -46,6 +47,10 @@ CLIENT_END_TYPES = {'user_initiated': 'user_initiated', 'silence_backstop': 'sil
 TRACE_GATES = frozenset(
     'none rate_limited auto_upload_off background retries_exhausted in_flight offline server_hold other'.split()
 )
+# Recent iOS and Android Codemagic release build tags (SCA-4753).
+# Rotate with mobile releases, keeping at most six exact builds.
+UPLOAD_TRACE_RELEASE_BUILDS = frozenset({'1367', '1504', '1514', '1515', '1516', '1520'})
+UPLOAD_TRACE_SIX_HOURS = 21600
 
 
 def enabled() -> bool:
@@ -93,9 +98,36 @@ def _seal_to_accept() -> Histogram:
     return _collector(
         Histogram,
         'omi_sync_seal_to_accept_seconds',
-        'Seconds from a phone file being sealed to the server accepting it, by the gate that held it',
+        'Seconds from the oldest phone file being sealed to the upload reaching the handler, by client gate',
         ['gate'],
-        buckets=(5, 10, 30, 60, 120, 300, 600, 1800, 3600, 7200, 14400, 43200, 86400),
+        buckets=(
+            5,
+            10,
+            30,
+            60,
+            120,
+            300,
+            600,
+            1800,
+            3600,
+            7200,
+            14400,
+            UPLOAD_TRACE_SIX_HOURS,
+            43200,
+            86400,
+            259200,
+            604800,
+        ),
+    )
+
+
+@cache
+def _upload_trace_age() -> Counter:
+    return _collector(
+        Counter,
+        'omi_sync_upload_trace_age_total',
+        'Uploads with a valid trace, by age of the oldest sealed phone file, platform and release build band',
+        ['age', 'platform', 'build_band'],
     )
 
 
@@ -304,11 +336,19 @@ def parse_trace(header: str | None, *, received_at: float) -> tuple[str, float] 
     return (gate if gate in TRACE_GATES else 'other'), max(0.0, received_at - sealed)
 
 
-def observe_trace(header: str | None, *, received_at: float) -> None:
+def observe_trace(
+    header: str | None, *, received_at: float, client_headers: Mapping[str, str | None] | None = None
+) -> None:
     if not enabled():
         return
     parsed = parse_trace(header, received_at=received_at)
-    if parsed is not None:
-        _seal_to_accept().labels(gate=reason_label(ReasonFamily.CAPTURE_END, parsed[0], UploadTraceGateReason)).observe(
-            parsed[1]
-        )
+    if parsed is None:
+        return
+    gate, age = parsed
+    _seal_to_accept().labels(gate=reason_label(ReasonFamily.CAPTURE_END, gate, UploadTraceGateReason)).observe(age)
+    platform = ((client_headers or {}).get('x-app-platform') or '').strip().lower()
+    _upload_trace_age().labels(
+        age='gt_6h' if age > UPLOAD_TRACE_SIX_HOURS else 'le_6h',
+        platform=platform if platform in ('ios', 'android') else 'unknown',
+        build_band=extract_app_build(client_headers, build_allowlist=UPLOAD_TRACE_RELEASE_BUILDS),
+    ).inc()

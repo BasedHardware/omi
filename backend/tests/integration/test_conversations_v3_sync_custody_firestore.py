@@ -312,6 +312,7 @@ def test_v3_processing_persist_distinguishes_retryable_and_terminal_declines(pro
 )
 async def test_reconcile_route_uses_real_processing_persistence_outcome(processing_store, monkeypatch, outcome):
     db, user, coll = processing_store
+    monkeypatch.setenv('CONVERSATIONS_V3_BOUNDED_PENDING', 'off')
     now = datetime.now(timezone.utc)
     row = {
         'id': 'capture',
@@ -328,7 +329,7 @@ async def test_reconcile_route_uses_real_processing_persistence_outcome(processi
     stored = {
         **row,
         'sync_content_revision': 2 if outcome in {'stale_revision', 'deleted'} else 1,
-        'deleted': outcome == 'deleted',
+        'deleted': False,
     }
     coll.document(row['id']).set(stored)
     before_row = coll.document(row['id']).get().to_dict()
@@ -348,10 +349,13 @@ async def test_reconcile_route_uses_real_processing_persistence_outcome(processi
         monkeypatch.setattr(db, '_batch_identity_membership_current', lambda *_: False)
     monkeypatch.setattr(service, 'has_pending', lambda *_: False)
     original_begin_processing = service.writers.begin_processing
-    monkeypatch.setattr(service.writers, 'begin_processing', lambda *_: True)
+    monkeypatch.setattr(service.writers, 'begin_processing', lambda *_, **__: True)
     monkeypatch.setattr(created, 'deliver', AsyncMock())
 
     def persist(_uid, _language, conversation, *, persistence_observer, **_kwargs):
+        if outcome == 'deleted':
+            # Delete after the leased worker rereads the row, so persist owns the decline.
+            coll.document(row['id']).update({'deleted': True})
         payload = {**row, 'status': 'completed', 'data_protection_level': 'standard'}
         kwargs = {'expected_capture_group': ('old-group', 1)} if outcome == 'capture_group' else {}
         persistence_observer(db.persist_processing_result_with_lifecycle(user.id, payload, **kwargs))

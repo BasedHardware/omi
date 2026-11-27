@@ -23,6 +23,7 @@
      "privacy_generation": 0,
      "service": "modulate"
     },
+    "record_origin": false,
     "requires_compute_admission": false,
     "result": {
      "outcome": "success"
@@ -99,6 +100,7 @@
      "privacy_generation": 0,
      "service": "modulate"
     },
+    "record_origin": false,
     "requires_compute_admission": false,
     "result": {
      "outcome": "success"
@@ -175,6 +177,7 @@
      "privacy_generation": 0,
      "service": "modulate"
     },
+    "record_origin": false,
     "requires_compute_admission": false,
     "result": {
      "outcome": "success"
@@ -251,6 +254,7 @@
      "privacy_generation": 0,
      "service": "modulate"
     },
+    "record_origin": false,
     "requires_compute_admission": false,
     "result": {
      "outcome": "success"
@@ -327,6 +331,7 @@
      "privacy_generation": 0,
      "service": "modulate"
     },
+    "record_origin": false,
     "requires_compute_admission": false,
     "result": {
      "outcome": "success"
@@ -403,6 +408,7 @@
      "privacy_generation": 0,
      "service": "modulate"
     },
+    "record_origin": false,
     "requires_compute_admission": false,
     "result": {
      "outcome": "success"
@@ -479,6 +485,7 @@
      "privacy_generation": 0,
      "service": "modulate"
     },
+    "record_origin": false,
     "requires_compute_admission": false,
     "result": {
      "outcome": "success"

@@ -339,7 +339,11 @@ class SyncUploadGate {
         if (error is SyncUploadHttpException && isRecordingScopedSyncWaitReasonCode(error.reasonCode)) {
           if (owner == SharedPreferencesUtil().uid) {
             // Install pacing under the same mutex that admits subsequent uploads.
-            await _recordingWaits.defer(waitKeys, error.recordingWaitSeconds ?? error.retryAfterSeconds);
+            await _recordingWaits.defer(
+              waitKeys,
+              error.retryAfterSeconds,
+              recordingWaitSeconds: error.recordingWaitSeconds,
+            );
           }
           // The WAL stays pending until its record is complete.
           _mirrorUpload(

@@ -7,6 +7,7 @@ from typing import Any
 
 from google.cloud import firestore
 
+from database import speaker_evidence_verification as verification
 from database._client import run_transactional
 from database.account_deletion_marker import account_deletion_document, account_deletion_firestore_client
 from database.conversation_revisions import firestore_revision_datetime
@@ -64,19 +65,24 @@ def store_evidence(
 
     # A child write preserves the parent update_time used by late identity CAS.
     # Parent deletion and the existing recursive deletion sweeps fence or purge it.
+    rehearsal = verification.wait_for_deletion_marker(uid, client)
     try:
         marker_present = run_transactional(client, persist)
     except _DeletionMarkerPresent:
         metrics.REFUSED_MARKER_PRESENT.inc()
+        verification.record_writer_result(rehearsal, 'refused_marker_present')
         raise
     except Exception:
         metrics.WRITER_FAILED.inc()
+        verification.record_writer_result(rehearsal, 'failed')
         raise
     # The SDK returns the callback result only after acknowledging the commit.
     if marker_present:
         metrics.COMMITTED_MARKER_PRESENT.inc()
+        verification.record_writer_result(rehearsal, 'committed_marker_present')
     else:
         metrics.COMMITTED_MARKER_ABSENT.inc()
+        verification.record_writer_result(rehearsal, 'committed_marker_absent')
 
 
 def get_evidence(uid: str, conversation_id: str, *, firestore_client: Any = None) -> SpeakerEvidence | None:

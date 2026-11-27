@@ -44,6 +44,19 @@ def _snapshot_for(result: Mapping[str, Any], index: int, at: Optional[float]) ->
     return list(seen['conversations']) if seen else []
 
 
+def _facts_for(
+    result: Mapping[str, Any], index: int, at: Optional[float], final: Mapping[str, Any]
+) -> Mapping[str, Any]:
+    """The facts a check was evaluated against: a timed check's own, captured at its checkpoint
+    (``scenario/ops.py`` ``_on_checkpoint``), else the run's end. A result written before checkpoints carried
+    their facts, or a checkpoint that never ran (evaluated at the end), falls back to the end-of-run facts."""
+    if at is None:
+        return final
+    seen = (result.get('checkpoints') or {}).get(str(index))
+    facts = seen.get('facts') if isinstance(seen, Mapping) else None
+    return facts if isinstance(facts, Mapping) else final
+
+
 def scenario_verdict(name: str, result: Mapping[str, Any], scenario: Any = None) -> dict[str, Any]:
     """One ``verdict.json`` scenario row from a ``result.json`` and the scenario it ran (``spec.Scenario``)."""
     checks = []
@@ -57,12 +70,13 @@ def scenario_verdict(name: str, result: Mapping[str, Any], scenario: Any = None)
     if scenario is not None and len(rows) == len(scenario.checks):
         for index, (check, row) in enumerate(zip(scenario.checks, rows)):
             snapshot = _snapshot_for(result, index, check.at)
+            seen_facts = _facts_for(result, index, check.at, facts)
             checks.append(
                 {
                     'label': check.label or row.get('check'),
                     'passed': bool(row.get('ok')),
                     'expected': expected_of(check),
-                    'actual': actual_of(check, snapshot, result.get('finish_target'), facts),
+                    'actual': actual_of(check, snapshot, result.get('finish_target'), seen_facts),
                     'at': check.at,
                 }
             )
@@ -147,6 +161,37 @@ def write_json(path: Path, value: Any) -> None:
 
 def read_json(path: Path) -> Any:
     return json.loads(path.read_text())
+
+
+# ---- coverage (CI: every committed scenario ran) ------------------------------------------------------
+
+
+def coverage_problems(run_dir: Path, expected: Sequence[str], repeat: int = 1) -> list[str]:
+    """Why a run does not cover ``expected`` scenarios ``repeat`` times each (empty = it does). A run that
+    executed nothing, skipped a scenario, ran fewer repeats, or evaluated no check of a scenario must not
+    read as a pass: CI's ``scenario summary --require-committed`` fails on any of these."""
+    run_dir = Path(run_dir)
+    verdict_value = read_json(run_dir / 'verdict.json')
+    run = read_json(run_dir / 'run.json') if (run_dir / 'run.json').is_file() else {}
+    rows = [row for row in verdict_value.get('scenarios') or [] if isinstance(row, Mapping)]
+    problems = []
+    if not expected:
+        problems.append('no committed scenario was found to require')
+    if not rows:
+        problems.append('the verdict lists no scenario')
+    by_name = {str(row.get('name')): row for row in rows}
+    missing = sorted(set(expected) - set(by_name))
+    if missing:
+        problems.append(f'{len(missing)} committed scenario(s) did not run: {", ".join(missing)}')
+    if int(run.get('repeat') or 1) < repeat:
+        problems.append(f'run.json repeat {run.get("repeat", 1)} (want {repeat})')
+    for name in sorted(set(expected) & set(by_name)):
+        row = by_name[name]
+        if repeat > 1 and int(row.get('repeats') or 1) < repeat:
+            problems.append(f'{name}: {row.get("repeats") or 1} repeat(s) (want {repeat})')
+        if not row.get('checks') and row.get('outcome') != 'error':
+            problems.append(f'{name}: no check was evaluated')
+    return problems
 
 
 # ---- summary (markdown, for a pull request or a CI job summary) -------------------------------------

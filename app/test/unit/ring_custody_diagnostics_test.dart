@@ -95,6 +95,39 @@ void main() {
     expect(invalid.last['next_plausible'], null);
     expect(jsonEncode(section), isNot(contains('abababab')));
   });
+  test('ring activity and a successful retry preserve the last unconfirmed mute readback', () {
+    recorder.event('pendant', RingDiagnosticEvent.captureMuteReadback,
+        epoch: 1, requestedMuted: true, observedMuted: false, reason: RingDiagnosticReason.commandFailed);
+    final mismatchAt = now.millisecondsSinceEpoch;
+    now = now.add(const Duration(hours: 6));
+    recorder.event('pendant', RingDiagnosticEvent.captureMuteReadback,
+        epoch: 2, requestedMuted: true, observedMuted: true);
+    for (var i = 0; i < RingCustodyDiagnostics.maxEvents; i++) {
+      recorder.event('pendant', RingDiagnosticEvent.readBegin);
+    }
+
+    final section = build();
+    expect((section['events'] as List).every((event) => event['event'] == 'readBegin'), isTrue);
+    expect(section['capture_mute_readbacks'], {
+      'last_unconfirmed': {
+        'at_ms': mismatchAt,
+        'event': 'captureMuteReadback',
+        'reason': 'commandFailed',
+        'connection_epoch': 1,
+        'requested_muted': true,
+        'observed_muted': false,
+      },
+      'last_confirmed': {
+        'at_ms': now.millisecondsSinceEpoch,
+        'event': 'captureMuteReadback',
+        'reason': 'none',
+        'connection_epoch': 2,
+        'requested_muted': true,
+        'observed_muted': true,
+      },
+    });
+    expect(build('other-device')['capture_mute_readbacks'], isEmpty);
+  });
   test('neighbours refer to adjacent records; a new read clears first samples only', () {
     recorder.beginRead('pendant', epoch: 1, ringId: 42, start: 0, records: 3);
     observe(0, phone());

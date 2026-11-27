@@ -55,6 +55,12 @@ class TranscriptWidget extends StatefulWidget {
   final VoidCallback? onTapWhenSearchEmpty;
   final Function(TranscriptSegment)? onSegmentTap;
   final Function(int segmentIndex)? onEditSegmentText;
+
+  /// Keeps the newest line in view while the reader is at the end: new lines, and growth of
+  /// [trailingItem], scroll the list to its end. A reader who scrolls away is left where they are and
+  /// gets a jump-to-latest button; returning to the end (by hand or with the button) resumes the
+  /// follow. The Listening page passes it always; the conversation page ([isConversationDetail])
+  /// passes it only while its conversation is still in progress.
   final bool followLatest;
   final TranscriptScrollState? scrollState;
   final double jumpToLatestButtonBottom;
@@ -152,6 +158,9 @@ class TranscriptWidget extends StatefulWidget {
     this.onToggleSegmentSelection,
   }) : assert(leadingItems.length == leadingItemIds.length);
 
+  /// The clear space every transcript keeps under its last row, on top of [bottomMargin].
+  static const double footerHeight = 120;
+
   @override
   State<TranscriptWidget> createState() => _TranscriptWidgetState();
 }
@@ -228,6 +237,10 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   bool _pendingAnchorRestore = false;
   bool _isAtBottom = true;
   bool _followAgain = false;
+  // The conversation page's list is not painted while it is being placed at its end (on opening,
+  // and when its lines first arrive), so the reader never sees it travel there.
+  bool _placingAtEnd = false;
+  bool _followingToEnd = false;
   Future<void>? _activeFollow;
   // Reader drag tracking: while a programmatic follow owns the scrollable,
   // the scrollable may ignore pointers or replace its recognizers, orphaning
@@ -317,7 +330,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     widget.onScrollControllerReady?.call(_scrollController);
 
     // A live transcript opens at its latest line; a saved conversation reads from the top.
-    if ((widget.segments.isNotEmpty || widget.leadingItems.isNotEmpty) && widget.followLatest) {
+    if ((widget.segments.isNotEmpty || widget.leadingItems.isNotEmpty || widget.trailingItem != null) &&
+        widget.followLatest) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         if (widget.followLatest && _userHasScrolled) {
@@ -326,10 +340,14 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
           } else {
             _restoreAnchor();
           }
+        } else if (widget.isConversationDetail) {
+          _placeAtEndUnseen();
         } else {
-          _scrollToBottomGently(animated: widget.isConversationDetail);
+          _scrollToBottomGently(animated: false);
         }
       });
+      // Opening is a placement, not a movement: the page appears at its latest line.
+      _placingAtEnd = widget.isConversationDetail && !_userHasScrolled;
     }
 
     if (widget.followCurrentSegment && widget.followTargetSegmentId != null) {
@@ -375,7 +393,16 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
         widget.segments.length != oldWidget.segments.length ||
         widget.leadingItems.length != oldWidget.leadingItems.length ||
         widget.layoutIdentity != oldWidget.layoutIdentity;
-    final shouldFollow = !_userHasScrolled && !widget.isConversationDetail;
+    if (widget.followLatest && !oldWidget.followLatest && widget.isConversationDetail && _scrollController.hasClients) {
+      // The follow was off (a line was playing, lines were being chosen): take the reader's place as
+      // it is now, so the follow resumes only for a reader who is at the end.
+      final position = _scrollController.position;
+      _isAtBottom = position.maxScrollExtent - position.pixels <= 24;
+      _userHasScrolled = !_isAtBottom;
+      _userInterruptedAutoScroll = false;
+    }
+    // A saved conversation is read from where the reader is; one still in progress follows its end.
+    final shouldFollow = !_userHasScrolled && (widget.followLatest || !widget.isConversationDetail);
 
     if (contentChanged && !shouldFollow) _pendingAnchorRestore = true;
     // The same list at the same length and version holds the ids already indexed. A live capture
@@ -403,9 +430,18 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     }
 
     if (contentChanged) {
+      // The lines of a conversation in progress arriving for the first time are an opening too.
+      final firstLines = shouldFollow &&
+          widget.followLatest &&
+          widget.isConversationDetail &&
+          oldWidget.segments.isEmpty &&
+          widget.segments.isNotEmpty;
+      if (firstLines) _placingAtEnd = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        if (shouldFollow) {
+        if (firstLines) {
+          _placeAtEndUnseen();
+        } else if (shouldFollow) {
           _scrollToBottomGently();
         } else {
           _restoreAnchor();
@@ -449,7 +485,19 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
         widget.scrollState?.update(offset: currentScroll, isAtBottom: true, layoutIdentity: widget.layoutIdentity);
       }
     }
-    _setIsAtBottom(isAtBottom);
+    // A follow in flight is on its way to the end: the jump button must not flash while it travels.
+    if (!_followingToEnd || isAtBottom) _setIsAtBottom(isAtBottom);
+  }
+
+  /// Places the list at its end with nothing painted until it is there. A long list measures its
+  /// rows as it reaches them, so the placement can take a few frames; the reader sees only the result.
+  Future<void> _placeAtEndUnseen() async {
+    if (!_placingAtEnd) setState(() => _placingAtEnd = true);
+    try {
+      await _scrollToBottomGently(animated: false);
+    } finally {
+      if (mounted) setState(() => _placingAtEnd = false);
+    }
   }
 
   /// Cancels any in-flight follow on behalf of a reader gesture.
@@ -527,8 +575,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     _readerDragTakenOverByNative = false;
     _readerDragRecovered = false;
     if (recovered && _isUserScrolling && !_isAutoScrolling && !_isRestoringAnchor) {
-      _captureCurrentPosition();
       _isUserScrolling = false;
+      _captureCurrentPosition();
       _userGestureEnded();
     }
   }
@@ -612,7 +660,9 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   }
 
   Future<void> _runFollowToBottom({required bool animated}) async {
+    if (MediaQuery.maybeDisableAnimationsOf(context) ?? false) animated = false;
     _isAutoScrolling = true;
+    _followingToEnd = true;
     _userInterruptedAutoScroll = false;
     var firstPass = true;
     try {
@@ -624,11 +674,21 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
         // updates settle.
         for (var attempt = 0; attempt < 20; attempt++) {
           final target = _scrollController.position.maxScrollExtent;
+          final distance = (target - _scrollController.offset).abs();
+          // On the conversation page an end that is far away (lines loaded in bulk, the app back from
+          // the background) is a placement; only text arriving under the reader's eyes travels.
+          if (widget.isConversationDetail && distance > _scrollController.position.viewportDimension * 1.5) {
+            // Placed for the rest of this follow: the few points left once the rows are measured
+            // are part of the same placement.
+            animated = false;
+          }
           if (animated) {
+            // A line or two of new words settles quickly; a longer stretch takes the full half second.
+            final near = distance <= 160;
             await _scrollController.animateTo(
               target,
-              duration: Duration(milliseconds: firstPass ? 500 : 100),
-              curve: Curves.easeInOut,
+              duration: Duration(milliseconds: firstPass ? (near ? 220 : 500) : 100),
+              curve: firstPass && near ? Curves.easeOutCubic : Curves.easeInOut,
             );
           } else {
             _scrollController.jumpTo(target);
@@ -660,6 +720,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       }
     } finally {
       _isAutoScrolling = false;
+      _followingToEnd = false;
     }
   }
 
@@ -698,7 +759,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       return;
     }
 
-    if (_endAnchored) {
+    if (widget.followLatest) {
       _interruptAutoScroll();
       _userHasScrolled = true;
     }
@@ -859,7 +920,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       people: people,
       l10n: context.l10n,
       unresolved: widget.unresolvedSpeakers,
-      deferShortVoices: widget.followLatest,
+      // Live-capture naming belongs to the Listening page; the conversation page names stored lines.
+      deferShortVoices: _endAnchored,
     );
     final searchBarHeight = widget.searchQuery.isNotEmpty ? 100.0 : 0.0;
     Widget buildRow(BuildContext context, int idx) {
@@ -881,7 +943,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       if (segmentIndex == widget.segments.length) {
         const key = ValueKey('transcript_bottom_spacing');
         final trailing = widget.trailingItem;
-        final height = widget.bottomMargin + 120;
+        final height = widget.bottomMargin + TranscriptWidget.footerHeight;
         if (trailing == null) return SizedBox(key: key, height: height);
         return Column(
           key: key,
@@ -963,11 +1025,12 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       ),
     );
 
-    if (!widget.followLatest) return transcriptList;
+    final list = Opacity(opacity: _placingAtEnd ? 0 : 1, child: transcriptList);
+    if (!widget.followLatest) return list;
 
     return Stack(
       children: [
-        Positioned.fill(child: transcriptList),
+        Positioned.fill(child: list),
         PositionedDirectional(
           end: 16,
           bottom: widget.jumpToLatestButtonBottom,
@@ -977,7 +1040,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
               opacity: animation,
               child: ScaleTransition(scale: animation, child: child),
             ),
-            child: _isAtBottom
+            child: _isAtBottom || _placingAtEnd
                 ? const SizedBox.shrink(key: ValueKey('transcript_jump_to_latest_hidden'))
                 : Semantics(
                     button: true,

@@ -121,6 +121,8 @@ def live_source_block(raw):
     """Why a source recording must not be replanned now (None: it is sealed and settled)."""
     if raw.get('deleted') or raw.get('sync_merged_into'):
         return 'deleted'
+    if raw.get('discarded'):
+        return 'discarded'
     if raw.get('data_protection_level') == 'private':
         return 'private'
     if raw.get('v3_backfill_run'):
@@ -531,7 +533,7 @@ def undo_live_rederive(uid, held_leases, run_id, entries, *, firestore_client=No
     def undo(tx):
         deletion = account_deletion_document(uid, firestore_client=client).get(transaction=tx)
         if account_deletion_marker_blocks_access(
-            marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('status')
+            marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('wipe_status')
         ):
             raise Conflict('account_deletion')
         docs = {cid: coll.document(cid).get(transaction=tx) for cid in ids}

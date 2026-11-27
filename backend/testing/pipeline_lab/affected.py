@@ -20,7 +20,8 @@ Each changed path gets the earliest stage it can influence, by three rules in or
 Scenarios (``scenario/scenarios/*.json``) a path names, first match wins:
 
 1. ``SCENARIO_TABLE``: the scenario file itself; audio fixtures and the cassette code (the scenarios with an
-   ``audio_file``); the scenario harness and the scenario view (every scenario); the product areas every
+   ``audio_file``); the product's speaker code and the lab's speaker code and corpora (the scenarios with a
+   ``speakers`` block, plus every scenario whose measured reach holds the file); the scenario harness and the scenario view (every scenario); the product areas every
    scenario exercises by design: the conversations v3 runtime, Finish, fast finish, visibility, the Home
    routes, the manual-finish hook, and the production profile (every scenario); dependency locks.
 2. **Measured reach.** ``scenario/reach.json`` lists, per committed scenario, the backend files in which a
@@ -108,10 +109,27 @@ SCENARIO_ROOTS = (f'{LAB}.scenario.run', f'{LAB}.scenario.ops', f'{LAB}.scenario
 SCENARIO_DIR = 'backend/testing/pipeline_lab/scenario/scenarios'
 SCENARIO_REACH = 'backend/testing/pipeline_lab/scenario/reach.json'
 _SCN = 'backend/testing/pipeline_lab/scenario'
+# Product speaker code: the speakers stage (day replay) and the speaker scenarios.
+SPEAKER_PRODUCT = (
+    'backend/utils/speakers/*',
+    'backend/utils/stt/speaker*',
+    'backend/utils/stt/diarization*',
+    'backend/utils/conversations/speaker_resolution.py',
+    'backend/utils/conversations/final_pass*',
+    'backend/utils/conversations/processing_speakers.py',
+    'backend/database/speaker_*',
+    'backend/diarizer/final_pass.py',
+    'backend/diarizer/embedding.py',
+    'backend/config/*speaker*',
+)
 # (glob, selector, reason). Selectors: 'self' (the scenario file), 'uses' (scenarios whose JSON names the file),
-# 'audio' (scenarios with an audio_file), 'all', None (none). First match wins.
+# 'audio' (scenarios with an audio_file), 'speakers' (scenarios with a speakers block, plus measured reach for a
+# .py file), 'all', None (none). First match wins.
 SCENARIO_TABLE: tuple[tuple[str, Optional[str], str], ...] = (
     (f'{SCENARIO_DIR}/*.json', 'self', 'the scenario file'),
+    ('backend/testing/pipeline_lab/speakers/*.md', None, 'documentation'),
+    ('backend/testing/pipeline_lab/speakers/*', 'speakers', 'speaker peer, gallery, staged units, corpora, cassettes'),
+    *((glob, 'speakers', 'product speaker code') for glob in SPEAKER_PRODUCT),
     (f'{_SCN}/fixtures/audio/*', 'uses', 'audio fixture: the scenarios whose audio_file names it'),
     (f'{_SCN}/fixtures/*', 'audio', 'audio fixtures and committed STT cassettes'),
     (f'{_SCN}/audio.py', 'audio', 'audio_file words'),
@@ -157,6 +175,11 @@ PATH_TABLE: tuple[tuple[str, Optional[str], str], ...] = (
     ('backend/testing/pipeline_lab/ledger.py', ALL, 'spend cap'),
     ('backend/testing/pipeline_lab/llm_proxy/*', 'discard', 'LLM calls start in the chain'),
     ('backend/testing/pipeline_lab/cassette/*', 'transcribe', 'STT cassettes'),
+    ('backend/testing/pipeline_lab/speakers/*', 'speakers', 'speaker lab code: peer, bench, corpora, scoring'),
+    *(
+        (glob, 'speakers', 'speaker identity: diarization, embeddings, resolver, final pass')
+        for glob in SPEAKER_PRODUCT
+    ),
     ('backend/testing/pipeline_lab/timeline/*', 'ingest', 'day timeline'),
     ('backend/testing/pipeline_lab/seed/*', 'discard', 'start state seeded by the chain; corpus add-day'),
     ('backend/testing/pipeline_lab/affected.py', None, 'this map'),
@@ -448,11 +471,22 @@ class StageMap:
                 return [n for n in names if Path(rel).name in world.texts.get(n, '')], why
             if selector == 'audio':
                 return [n for n in names if n in world.audio], why
+            if selector == 'speakers':
+                found = set(world.speakers)
+                if rel.endswith('.py'):
+                    found |= set(self._reach_names(rel)[0])
+                return sorted(n for n in names if n in found), why
             if selector == 'all':
                 return list(names), why
             return [], why
         if not rel.startswith('backend/') or not rel.endswith('.py'):
             return [], ''
+        return self._reach_names(rel)
+
+    def _reach_names(self, rel: str) -> tuple[list[str], str]:
+        """Scenarios whose measured reach holds ``rel``, or (unmeasured) whose runner imports it."""
+        world = self.world()
+        names = world.names
         measured = [n for n in names if rel in world.reach.get(n, ())]
         unmeasured = [n for n in names if n not in world.reach]
         static = self.in_scenarios(rel)
@@ -511,6 +545,7 @@ class ScenarioWorld:
     texts: dict[str, str]
     audio: set[str]
     reach: dict[str, set[str]]
+    speakers: set[str] = field(default_factory=set)
 
     @classmethod
     def read(cls, source: Source) -> 'ScenarioWorld':
@@ -519,7 +554,18 @@ class ScenarioWorld:
         files = sorted(source.matching([f'{SCENARIO_DIR}/*.json']))
         texts = {Path(f).stem: source.read(f) or '' for f in files}
         audio = {name for name, text in texts.items() if '"audio_file"' in text}
-        return cls(sorted(texts), texts, audio, load_reach(source.read, SCENARIO_REACH))
+        speakers = {name for name, text in texts.items() if _has_speakers(text)}
+        return cls(sorted(texts), texts, audio, load_reach(source.read, SCENARIO_REACH), speakers)
+
+
+def _has_speakers(text: str) -> bool:
+    import json
+
+    try:
+        value = json.loads(text)
+    except ValueError:
+        return False
+    return isinstance(value, dict) and value.get('speakers') is not None
 
 
 def scenario_names(source: Source, repo: Path) -> list[str]:

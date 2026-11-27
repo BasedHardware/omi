@@ -290,13 +290,15 @@ def test_actual_restore_condition_recovers_cancelled_and_failed_steps(step_id, o
         'cancelled()', str(outcome == 'cancelled')
     )
 
-    def evaluate(snapshot_outcome):
+    def evaluate(snapshot_outcome, binding=''):
         states = {'cloud-run-traffic-snapshot': snapshot_outcome, step_id: outcome}
-        rendered = re.sub(r'steps\.([a-z0-9-]+)\.outcome', lambda m: repr(states.get(m[1], 'success')), expression)
+        rendered = expression.replace('inputs.selected_split_binding', repr(binding))
+        rendered = re.sub(r'steps\.([a-z0-9-]+)\.outcome', lambda m: repr(states.get(m[1], 'success')), rendered)
         return eval(rendered.replace('&&', ' and ').replace('||', ' or ').replace('\n', ' '), {'__builtins__': {}})
 
     assert evaluate('success')
     assert not evaluate('skipped')
+    assert not evaluate('success', binding='a' * 64)
 
 
 @pytest.mark.parametrize('failure', ['source', 'scope', 'duplicate', 'ingress', 'secret', 'quality-conflict'])

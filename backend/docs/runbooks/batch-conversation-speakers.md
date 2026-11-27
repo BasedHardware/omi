@@ -118,14 +118,62 @@ segments and manual labels keep their existing authority. When some required
 segments lack reconstructable evidence, covered segments may receive revalidated
 updates; unplaced segments keep their labels. This reports `partial_coverage`,
 includes `coverage` and `coverage_reasons`, leaves conversation-wide speaker
-resolution unavailable, and performs no recurring learning. No reconstructable
-words means no updates. Mixed-speaker segments and diarizer gap words also abstain
-individually, with `failed_unassigned_words` if any remain; covered segments may
-already have changed, and recurring learning is suppressed.
+resolution unavailable (unless the resolved-voice mapping below applies), and
+performs no recurring learning. No reconstructable
+words means no updates. A segment whose words the pass gives to two to eight voices
+splits at each voice change (`utils/conversations/final_pass_split.py`): the first
+piece keeps the segment id and later pieces take `uuid5('<id>:split:<k>')`, so
+references to the segment still resolve and a later pass reads the pieces back
+(their text must spell the projection segment). Words in a diarizer gap join the
+neighbouring voice while they are at most a quarter of the segment's words.
+Manual segments, segments a segment-level manual receipt covers (including a `not_me`
+rejection), corrected (`original_text`) and translated segments, already-split pieces,
+segments of more than eight runs, and segments whose words do not spell their text
+never split; they and segments mostly in a gap abstain, with
+`failed_unassigned_words` if any remain; covered segments may already have changed,
+and recurring learning is suppressed. The result carries `split_segments` and
+`split_refusals`, logged as `batch_final_pass_split`. The conversations-v3 planner
+recognises a split segment as published (its pieces span the original timing), so a
+replan does not re-add it. Splitting runs only on a conversation's first pass, never on
+the identity-only retry (notes may already cite the segment). Each piece keeps a saved
+sync audio window re-timed to the piece and its own measured speech seconds. The late
+identity repair skips a conversation holding split pieces (`split_by_final_pass`): it
+regroups by the units' original labels and would merge the pieces back. Kill switch:
+`BATCH_FINAL_PASS_SPLIT_MIXED_SEGMENTS_ENABLED=false` (default on, read per call) stops
+new splits; existing pieces are still read back and relabeled.
 
-Expired, merged, shared or privacy-fenced references, conflicting overlapping
-capture clocks, and read-budget failures refuse the whole invocation before
-application. Shared-unit refusal is deliberately whole-pass, even if other units
+A partial pass on a conversation the resolver already marked `resolved` keeps it
+resolved. Each final-pass voice maps to the resolver voice holding more than half of
+its assigned words, and updated segments reuse that id. The map must be one to one:
+a split (two final voices on one resolver voice) or a merge (a resolver voice mostly
+held by a final voice mapped elsewhere) falls back. So does any speaker id left with
+two scopes or two identities on automatic segments, because the app numbers voices
+by id alone. A fallback, or a prior status other than `resolved`, keeps the earlier
+behaviour: new ids and `unavailable`. Manual segments are never updated.
+`partial_resolution` in the result and the `batch_final_pass_partial_resolution`
+log say which branch ran. Kill switch: `BATCH_FINAL_PASS_KEEP_RESOLVED_ON_PARTIAL_ENABLED=false`
+(default on, read per call).
+
+Expired, merged, shared or privacy-fenced references and read-budget failures
+refuse the whole invocation before application. A conversations-v3 row reads the
+units projected onto its own source recordings (`v3_recording_ids`): their receipts
+name the recording, and the row holds copies of the recording's projected segments.
+Any other receipt owner is still a merge (`skipped_merged`) or a shared unit, and the
+privacy fence covers the row and those recordings. Each source recording must exist,
+be unlocked and still claim the row; its claims and deleted spans are fingerprinted
+before inference and re-checked with every unit reference after it, so a revoked
+claim or a new deletion refuses. A source unit also holds sibling conversations'
+speech and speech the owner deleted, so only the row's own speech reaches the
+diarizer and voice evidence: samples outside its own segments' words (unit clock,
+padded 0.25 s, joined across pauses up to 1 s) are silenced, and batch identity
+turns are clipped to the same stretches. No recurring profile is learned from
+source-recording units. Kill switch: `BATCH_FINAL_PASS_V3_SOURCES_ENABLED=false`
+restores the `skipped_merged` refusal; `BATCH_FINAL_PASS_APPEND_CONFLICTING_UNITS_ENABLED=false`
+restores the conflicting-clock refusal. Both default on and are read per call. A unit whose capture clock
+overlaps audio already placed with different samples is appended after the
+timeline (one second of silence first) rather than refusing: labels only need each
+unit's words on its own audio, and they map back by segment id. Identical overlaps
+still share their samples. Shared-unit refusal is deliberately whole-pass, even if other units
 are usable. Artifact privacy generation and deletion fences apply before/after
 reads; references and expiry are rechecked after inference. Staged audio/results
 retain their cleanup deadlines. Point words preserve transcript text but never

@@ -17,6 +17,8 @@ FIELD_SITES = {
         ('_acknowledge', 'status', 'ConversationStatus.processing', ('status',)),
     ],
     'database/batch_summary_debt.py': [
+        # A new batch projection can settle a historical, proved handoff.
+        ('arm_projection_summary', 'finalization_status', "'completed'", ('finalization_status',)),
         ('arm_projection_summary', 'summary_due_at', "candidate['summary_due_at']", ('summary_due_at',)),
         (
             'arm_projection_summary',
@@ -159,11 +161,14 @@ FIELD_SITES = {
                 'structured',
                 'summary_covers_through',
                 'title_locked',
+                'v3_backfill_attempts',
+                'v3_backfill_process_pending',
                 'v3_notes_written',
                 'v3_process_attempts',
                 'v3_process_failed',
                 'v3_process_failure_reason',
                 'v3_process_fingerprint',
+                'v3_process_pending',
                 'v3_rewrites',
             ),
         ),
@@ -205,6 +210,7 @@ FIELD_SITES = {
         ('plan_partitions', 'status', "'pending'", ('documents', 'forced_cut', 'since', 'status', 'until')),
         ('resume_run', 'status', "'pending'", ('status',)),
         ('resume_run', 'status', "(run or {}).get('status')", ('outcome', 'status')),
+        ('run_step', 'status', "'blocked'", ('notes_failed', 'notes_processed', 'notes_remaining', 'reason', 'status')),
         ('run_step', 'status', "'blocked'", ('reason', 'status')),
         ('run_step', 'status', "'committed'", ('status',)),
         ('run_step', 'status', "'deriving'", ('code_sha', 'status')),
@@ -297,7 +303,7 @@ FIELD_SITES = {
             ),
         ),
     ],
-    'utils/conversations/v3/service.py': [
+    'utils/conversations/v3/rederive_plan.py': [
         (
             '_retire_patch',
             'summary_due_at',
@@ -313,7 +319,47 @@ FIELD_SITES = {
                 'v3_rederive_live_run',
             ),
         ),
-        ('reconcile.plan', 'status', "prior['status']", ('status',)),
+    ],
+    'utils/conversations/v3/service.py': [
+        ('_plan_projection', 'status', "'in_progress'", ('status',)),
+        ('_plan_projection', 'status', "prior['status']", ('status',)),
+        # Unmatched native Finish tiles stay addressable with their stale work settled.
+        (
+            'reconcile',
+            'status',
+            "'completed'",
+            (
+                'home_hidden',
+                'manual_end',
+                'status',
+                'summary_due_at',
+                'summary_retryable',
+                'sync_content_revision',
+                'tile_state',
+                'v3_created_pending',
+                'v3_derived',
+                'v3_process_pending',
+                'v3_unlocked',
+            ),
+        ),
+        (
+            'reconcile',
+            'summary_due_at',
+            'None',
+            (
+                'home_hidden',
+                'manual_end',
+                'status',
+                'summary_due_at',
+                'summary_retryable',
+                'sync_content_revision',
+                'tile_state',
+                'v3_created_pending',
+                'v3_derived',
+                'v3_process_pending',
+                'v3_unlocked',
+            ),
+        ),
         ('recording_short_path.guarded', 'status', 'ConversationStatus.completed', ('status',)),
     ],
     'utils/batch_pipeline/empty_transcription.py': [
@@ -1213,15 +1259,39 @@ FIELD_SITES = {
         ),
         (
             '_complete_server_batch_capture_txn',
+            'finalization_status',
+            "'completed'",
+            (
+                'finalization_status',
+                'home_transcription_deadline_at',
+                'home_transcription_pending_at',
+                'relevance_decision',
+                'status',
+            ),
+        ),
+        (
+            '_complete_server_batch_capture_txn',
             'home_transcription_deadline_at',
             'now + timedelta(seconds=home_transcription_deadline_seconds())',
-            ('home_transcription_deadline_at', 'home_transcription_pending_at', 'relevance_decision', 'status'),
+            (
+                'finalization_status',
+                'home_transcription_deadline_at',
+                'home_transcription_pending_at',
+                'relevance_decision',
+                'status',
+            ),
         ),
         (
             '_complete_server_batch_capture_txn',
             'home_transcription_pending_at',
             'now',
-            ('home_transcription_deadline_at', 'home_transcription_pending_at', 'relevance_decision', 'status'),
+            (
+                'finalization_status',
+                'home_transcription_deadline_at',
+                'home_transcription_pending_at',
+                'relevance_decision',
+                'status',
+            ),
         ),
         # Zero-preview server-batch transaction: job terminal, conversation
         # terminal/relevance update, and the relevance input snapshot.
@@ -1248,7 +1318,13 @@ FIELD_SITES = {
             '_complete_server_batch_capture_txn',
             'status',
             "'completed'",
-            ('home_transcription_deadline_at', 'home_transcription_pending_at', 'relevance_decision', 'status'),
+            (
+                'finalization_status',
+                'home_transcription_deadline_at',
+                'home_transcription_pending_at',
+                'relevance_decision',
+                'status',
+            ),
         ),
         ('_complete_server_batch_capture_txn', 'status', "'completed'", ('status',)),
         (
@@ -1784,6 +1860,8 @@ FIELD_SITES = {
         ('recover_deferred_processing_failure_txn', 'status', "'completed'", ('deferred', 'status')),
     ],
     'database/conversations.py': [
+        # A confirmed discard settles only the conversation's projection.
+        ('_settle_discarded_finalization_projection', 'finalization_status', "'completed'", ('finalization_status',)),
         ('claim_conversation_status._claim', 'status', 'claimed_status.value', ('status',)),
         ('claim_conversation_status_in_txn', 'status', 'claimed_status', ('status',)),
         ('claim_conversation_status_in_txn', 'terminal_family', 'terminal_family', ('terminal_family',)),
@@ -4849,6 +4927,10 @@ KNOWN_TERMINAL_WRITERS = {
             'database/conversations_v3.py',
             'commit_projection.commit',
         ): 'known_extra_writer: lifecycle v3 projection; lease/revision/claim fenced',
+        (
+            'database/conversations_v3.py',
+            'undo_backfill_group.undo',
+        ): 'known_extra_writer: backfill undo restores converted donors and removes backfill copies; backfill lease fenced',
         (
             'utils/conversations/v3/service.py',
             'recording_short_path.guarded',

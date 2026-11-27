@@ -7,6 +7,8 @@ import 'package:omi/services/devices/ring_protocol.dart';
 import 'package:omi/services/wals/flash_page_wal_sync.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/ring_storage_sync.dart';
+import 'package:omi/services/wals/ring_drain_policy.dart';
+import 'package:omi/services/wals/sync_transfer_keep_alive.dart';
 import 'package:omi/services/wals/sdcard_wal_sync.dart';
 import 'package:omi/services/wals/storage_sync.dart';
 import 'package:omi/services/wals/wal.dart';
@@ -32,10 +34,147 @@ class WalSyncs implements IWalSync {
   RingStorageSyncImpl get ring => _ringSync;
 
   final IWalSyncListener listener;
+  final SyncTransferKeepAlive _keepAlive;
 
   bool _isCancelled = false;
   BtDevice? _device;
   String? _firmwareVersion;
+  static const _ringProbeInterval = Duration(seconds: 15);
+  Future<bool>? _ringPass;
+  Timer? _ringProbe;
+  int _ringGeneration = 0;
+  int? _ringPassGeneration;
+  bool Function()? _shouldDrainRing;
+  bool _independentDrainAllowed = true;
+  bool _retryRingAfterSettlement = false;
+  int _uploadCancellation = 0;
+  int get uploadCancellation => _uploadCancellation;
+  int get ringCancellation => _ringGeneration;
+  bool _ringPausedByUser = false;
+
+  bool get usesIndependentRingDrain =>
+      ringDrainRecoveryEnabled &&
+      _independentDrainAllowed &&
+      _shouldDrainRing != null &&
+      isRingBufferFirmware(_resolvedFirmware);
+
+  /// SCA-4753 samples the same decision that routes the connected pendant.
+  /// No cohort applies before policy is configured or for non-ring firmware.
+  String? get drainCohort {
+    if (_shouldDrainRing == null || !isRingBufferFirmware(_resolvedFirmware)) return null;
+    return usesIndependentRingDrain ? 'on' : 'holdout';
+  }
+
+  void configureRingDrain(
+    bool Function() shouldDrain, {
+    bool independentDrainAllowed = true,
+    void Function()? onDurableChunk,
+  }) {
+    _shouldDrainRing = shouldDrain;
+    _independentDrainAllowed = independentDrainAllowed;
+    _ringPausedByUser = false;
+    ring.independentDiscovery = ringDrainRecoveryEnabled && independentDrainAllowed;
+    ring.onDurableChunk = onDurableChunk;
+    unawaited(wakeRingDrain());
+  }
+
+  void disableRingDrain() {
+    _shouldDrainRing = null;
+    ring.independentDiscovery = false;
+    ring.onDurableChunk = null;
+    _cancelRingDrain();
+  }
+
+  void _cancelRingDrain() {
+    _ringGeneration++;
+    _retryRingAfterSettlement = false;
+    _ringProbe?.cancel();
+    _ringProbe = null;
+    ring.cancelSync();
+  }
+
+  /// Reports durable audio produced during this request, including a partial
+  /// read, so the original manual sync can submit it after the last write.
+  Future<bool> wakeManualRingDrain() async {
+    final chunks = ring.durableChunkCount;
+    await wakeRingDrain(manual: true);
+    return ring.durableChunkCount != chunks;
+  }
+
+  Future<bool> wakeRingDrain({
+    bool manual = false,
+    String? deviceId,
+    bool fromBle = false,
+    bool discoveryOnly = false,
+  }) {
+    if (!usesIndependentRingDrain || _device == null || (_ringPass == null && ring.isSyncing)) {
+      return Future.value(false);
+    }
+    if (deviceId != null && deviceId != _device!.id) return Future.value(false);
+    if (fromBle && (_ringPausedByUser || _shouldDrainRing?.call() != true)) return Future.value(false);
+    if (!fromBle && !discoveryOnly) _ringPausedByUser = false;
+    final active = _ringPass;
+    if (active != null) {
+      final generation = _ringGeneration;
+      if (manual) {
+        // The active probe may have been discovery-only. Wait for it to
+        // settle before taking the manual snapshot on the same connection.
+        return active.then((_) async {
+          if (generation != _ringGeneration) return false;
+          return wakeRingDrain(manual: true);
+        });
+      }
+      // Reconnect can arrive while STOP and writes are settling.
+      if (!fromBle && !discoveryOnly && _ringPassGeneration != generation) {
+        _retryRingAfterSettlement = true;
+      }
+      return active;
+    }
+    // Live marks/INFO can arrive several times per second, including in response
+    // to our own commands. Let the scheduled probe cover those notifications.
+    if (fromBle && _ringProbe != null) return Future.value(false);
+    _ringProbe?.cancel();
+    _ringProbe = null;
+    final generation = _ringPassGeneration = _ringGeneration;
+    final phoneGeneration = phone.sessionGeneration;
+    bool current() => generation == _ringGeneration && phoneGeneration == phone.sessionGeneration;
+    var completedRange = false;
+    final pass = Future<bool>.microtask(() async {
+      if (!current()) return false;
+      await ring.refreshWalsFromDevice();
+      if (!current() || discoveryOnly || !(manual || _shouldDrainRing?.call() == true)) return false;
+      if ((await ring.getMissingWals()).isEmpty || !current()) return false;
+      final release = await _keepAlive.acquireScoped();
+      try {
+        if (!current()) return false;
+        DebugLogManager.logInfo('Sync Phase 0: Ring-buffer sync', {'fw': _resolvedFirmware ?? ''});
+        await ring.syncAll();
+        completedRange = current() && (await ring.getMissingWals()).isEmpty;
+        return completedRange;
+      } finally {
+        await release();
+      }
+    }).catchError((Object error, StackTrace stack) {
+      Logger.debug('WalSyncs: independent ring drain failed: $error');
+      return false;
+    });
+    _ringPass = pass.whenComplete(() {
+      _ringPass = null;
+      final retry = _retryRingAfterSettlement;
+      _retryRingAfterSettlement = false;
+      if (retry) {
+        unawaited(wakeRingDrain());
+      } else if (current() && !_ringPausedByUser && _shouldDrainRing?.call() == true) {
+        // Refresh immediately after a completed snapshot. Failed or empty
+        // probes back off so a quiet or disk-constrained device stays quiet.
+        _ringProbe = Timer(completedRange ? Duration.zero : _ringProbeInterval, () {
+          _ringProbe = null;
+          unawaited(wakeRingDrain());
+        });
+      }
+    });
+    return _ringPass!;
+  }
 
   /// Called from DeviceProvider when a device connects/disconnects so the
   /// firmware-version gate in syncAll() can route to the right Phase-0 sync.
@@ -45,8 +184,13 @@ class WalSyncs implements IWalSync {
   /// is frequently still 'Unknown' and would misroute ring-buffer devices to
   /// the multi-file enumerator (so their recordings never enumerate).
   void setDevice(BtDevice? device, {String? firmwareVersion}) {
+    final wasRing = usesIndependentRingDrain;
+    final changedDevice = _device?.id != device?.id;
     _device = device;
     _firmwareVersion = firmwareVersion;
+    if (changedDevice || (wasRing && !usesIndependentRingDrain)) _cancelRingDrain();
+    _ringSync.setDevice(device?.copyWith(firmwareRevision: _resolvedFirmware));
+    if (usesIndependentRingDrain && (changedDevice || !wasRing)) unawaited(wakeRingDrain());
     // Ring status shares the legacy characteristic but has a different layout.
     _sdcardSync.setDevice(_usesLegacySdcard
         ? (device?.firmwareRevision == _resolvedFirmware
@@ -96,7 +240,8 @@ class WalSyncs implements IWalSync {
     WalCoverageTelemetryEmitter? phoneCoverageTelemetry,
     Future<int?> Function()? phoneFreeDiskBytes,
     Future<void> Function(List<Wal>)? phonePersistWals,
-  }) {
+    SyncTransferKeepAlive? keepAlive,
+  }) : _keepAlive = keepAlive ?? SyncTransferKeepAlive.instance {
     _phoneSync = phoneSync ??
         LocalWalSyncImpl(
           listener,
@@ -185,6 +330,10 @@ class WalSyncs implements IWalSync {
         ? firmwareVersion
         : _resolvedFirmware;
     if (isRingBufferFirmware(fw)) {
+      if (usesIndependentRingDrain) {
+        if (_ringPass == null && !ring.isSyncing) await wakeRingDrain(discoveryOnly: true);
+        return;
+      }
       await _ringSync.refreshWalsFromDevice();
     } else {
       await _storageSync.refreshWalsFromDevice();
@@ -281,6 +430,7 @@ class WalSyncs implements IWalSync {
 
   @override
   Future stop() async {
+    disableRingDrain();
     await _phoneSync.stop();
     await _sdcardSync.stop();
     await _flashPageSync.stop();
@@ -301,7 +451,8 @@ class WalSyncs implements IWalSync {
       'phone': allMissing.where((w) => w.storage == WalStorage.disk || w.storage == WalStorage.mem).length,
     });
 
-    // Protect the live path before a potentially multi-hour device drain.
+    if (_isCancelled) return resp;
+    // Give recent capture files first claim on the upload pass.
     Logger.debug("WalSyncs: Phase -1 - Uploading already-local live-capture recordings");
     DebugLogManager.logInfo('Sync Phase -1: Uploading live-capture phone files first');
     progress?.onWalSyncedProgress(0.0, phase: SyncPhase.uploadingToCloud);
@@ -320,10 +471,13 @@ class WalSyncs implements IWalSync {
       resp.localUploadPermanentError ??= preDrainResult.localUploadPermanentError;
     }
 
+    if (_isCancelled) return resp;
     Object? deviceError;
     StackTrace? deviceStack;
     try {
-      await _downloadDeviceSources(progress: progress);
+      if (!usesIndependentRingDrain) {
+        await _downloadDeviceSources(progress: progress);
+      }
     } catch (error, stack) {
       // Device protocols own their bounded first-data/idle deadlines and settle
       // their reader before returning/throwing. Do not race a timed-out future
@@ -353,16 +507,19 @@ class WalSyncs implements IWalSync {
       resp.localUploadFailures += partialRes.localUploadFailures;
       resp.localUploadPermanentFailures += partialRes.localUploadPermanentFailures;
       resp.localUploadPermanentError ??= partialRes.localUploadPermanentError;
+      resp.localUploadHeldOnly = partialRes.localUploadHeldOnly && (preDrainResult?.localUploadHeldOnly ?? true);
     }
 
     // Keep the device failure visible after the phone ledger has had its turn.
     // The original device record is still pending; this is not a completed sync.
     if (deviceError != null) Error.throwWithStackTrace(deviceError, deviceStack!);
 
-    DebugLogManager.logEvent('sync_completed', {
-      'newConversations': resp.newConversationIds.length,
-      'updatedConversations': resp.updatedConversationIds.length,
-    });
+    if (!resp.localUploadHeldOnly) {
+      DebugLogManager.logEvent('sync_completed', {
+        'newConversations': resp.newConversationIds.length,
+        'updatedConversations': resp.updatedConversationIds.length,
+      });
+    }
 
     return resp;
   }
@@ -377,6 +534,7 @@ class WalSyncs implements IWalSync {
     if (useRing) {
       await _ringSync.refreshWalsFromDevice();
       final ringMissing = await _ringSync.getMissingWals();
+      if (_isCancelled) return;
       if (ringMissing.isNotEmpty) {
         Logger.debug("WalSyncs: Phase 0 - Ring-buffer sync (fw=$fwVersion)");
         DebugLogManager.logInfo('Sync Phase 0: Ring-buffer sync', {'fw': fwVersion ?? ''});
@@ -386,6 +544,7 @@ class WalSyncs implements IWalSync {
     } else {
       await _storageSync.refreshWalsFromDevice();
       final storageMissing = await _storageSync.getMissingWals();
+      if (_isCancelled) return;
       if (storageMissing.isNotEmpty) {
         Logger.debug("WalSyncs: Phase 0 - Downloading ${storageMissing.length} multi-file storage files to phone");
         DebugLogManager.logInfo('Sync Phase 0: Multi-file storage sync', {'fw': fwVersion ?? ''});
@@ -406,6 +565,7 @@ class WalSyncs implements IWalSync {
       progress?.onWalSyncedProgress(0.0, phase: SyncPhase.downloadingFromDevice);
       final missingSDCardWals = (await _sdcardSync.getMissingWals()).where((w) => w.status == WalStatus.miss).toList();
 
+      if (_isCancelled) return;
       if (missingSDCardWals.isNotEmpty) {
         DebugLogManager.logInfo('SD card sync over BLE', {'walCount': missingSDCardWals.length});
         await _sdcardSync.syncAll(progress: progress);
@@ -426,6 +586,7 @@ class WalSyncs implements IWalSync {
     // pointer instead of a stale cached WAL — no app relaunch needed.
     await _flashPageSync.refreshWalsFromDevice();
     final flashMissing = (await _flashPageSync.getMissingWals()).where((w) => w.status == WalStatus.miss).toList();
+    if (_isCancelled) return;
     if (flashMissing.isNotEmpty) {
       progress?.onWalSyncedProgress(0.0, phase: SyncPhase.downloadingFromDevice);
       await _flashPageSync.syncAll(progress: progress);
@@ -443,7 +604,20 @@ class WalSyncs implements IWalSync {
     if (wal.storage == WalStorage.sdcard) {
       progress?.onWalSyncedProgress(0.0, phase: SyncPhase.downloadingFromDevice);
       if (wal.fileNum == -1) {
-        return _ringSync.syncWal(wal: wal, progress: progress);
+        final generation = _ringGeneration;
+        final active = _ringPass;
+        if (active != null) {
+          final completed = await active;
+          if (generation != _ringGeneration) throw StateError('Ring transfer cancelled');
+          if (completed) return null;
+        }
+        try {
+          return await _ringSync.syncWal(wal: wal, progress: progress);
+        } finally {
+          if (usesIndependentRingDrain && generation == _ringGeneration && _shouldDrainRing?.call() == true) {
+            unawaited(wakeRingDrain());
+          }
+        }
       }
       if (_storageSync.owns(wal)) {
         return _storageSync.syncWal(wal: wal, progress: progress);
@@ -463,8 +637,16 @@ class WalSyncs implements IWalSync {
 
   @override
   void cancelSync() {
+    _ringPausedByUser = true;
+    _cancelRingDrain();
+    cancelUploadPass();
+  }
+
+  /// Upload deadlines own legacy device phases, but never the independent ring.
+  void cancelUploadPass() {
+    _uploadCancellation++;
     _isCancelled = true;
-    _ringSync.cancelSync();
+    if (!usesIndependentRingDrain) _ringSync.cancelSync();
     _storageSync.cancelSync();
     _sdcardSync.cancelSync();
     _flashPageSync.cancelSync();
@@ -472,9 +654,12 @@ class WalSyncs implements IWalSync {
   }
 
   void clearUserData() {
+    setDevice(null);
     _phoneSync.clearUserData();
     cancelSync();
   }
+
+  bool get isLegacyStorageSyncing => _storageSync.isSyncing || (!usesIndependentRingDrain && _ringSync.isSyncing);
 
   bool get isStorageSyncing => _storageSync.isSyncing || _ringSync.isSyncing;
 

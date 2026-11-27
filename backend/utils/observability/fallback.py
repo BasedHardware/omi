@@ -219,7 +219,9 @@ ALLOWED_COMPONENTS = frozenset(
         'conversation_notes',
         'speaker_assignments',
         'daily_summary',
+        'mcp_daily_rollup',
         'feature_flags',
+        'conversations_v3',
         'other',
     }
 )

@@ -418,6 +418,19 @@ async def test_open_windows_and_rows_over_until_are_untouched(owner, strict):
 
 
 @pytest.mark.asyncio
+async def test_discarded_source_and_its_claimed_window_stay_untouched(owner, strict):
+    discarded = source('discarded', AT, discarded=True)
+    window = fragment('held', discarded)
+    owner(discarded, window)
+    before = conversations(strict)
+    outcome, report = await rederive()
+    assert outcome == 'committed'
+    assert conversations(strict) == before
+    assert report['sources_blocked_discarded'] == 1
+    assert report['protected_source_blocked'] == 1
+
+
+@pytest.mark.asyncio
 async def test_edited_and_locked_rows_are_skipped_and_their_speech_stays_with_them(owner, strict):
     sources, rows = lunch()
     rows[2]['user_title'] = 'My lunch title'
@@ -960,14 +973,23 @@ async def test_undo_of_a_later_run_over_an_earlier_runs_rows_can_be_rerun(owner,
 
 
 @pytest.mark.asyncio
-async def test_undo_refuses_once_the_owner_account_deletion_began(owner, strict, ledger):
+@pytest.mark.parametrize('wipe_status', ['cancelled', 'billing_failed', 'pending'])
+async def test_undo_respects_owner_account_deletion_marker(owner, strict, ledger, wipe_status):
     sources, rows = lunch(count=3)
     owner(*sources, *rows)
+    original = conversations(strict)
     await rederive()
     after = conversations(strict)
-    strict.rows[account_deletion_document(UID, firestore_client=strict).path] = {'status': 'pending'}
-    assert backfill.undo_run(UID, RUN) == {'outcome': 'busy', 'reason': 'account_deletion'}
-    assert conversations(strict) == after
+    strict.rows[account_deletion_document(UID, firestore_client=strict).path] = {'wipe_status': wipe_status}
+    outcome = backfill.undo_run(UID, RUN)
+    if wipe_status == 'pending':
+        assert outcome == {'outcome': 'busy', 'reason': 'account_deletion'}
+        assert conversations(strict) == after
+        assert priors(strict)
+    else:
+        assert outcome['outcome'] == 'undone'
+        assert conversations(strict) == original
+        assert not priors(strict)
 
 
 @pytest.mark.asyncio
@@ -1542,6 +1564,21 @@ async def test_a_range_too_large_for_one_pass_blocks_with_its_own_reason(owner, 
     assert conversations(strict) == before and not priors(strict)
 
 
+@pytest.mark.asyncio
+async def test_a_locked_closure_owner_keeps_the_derived_limit(owner, strict, monkeypatch):
+    # The locked-claimant allowance (SCA-2918) is for builder passes only: a listed owner's re-derive is
+    # bounded by DERIVED_LIMIT exactly as before.
+    sources, rows = lunch(count=3)
+    owner(*sources, *rows)
+    before = conversations(strict)
+    monkeypatch.setenv('CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS', '*')
+    monkeypatch.setattr(store, 'LOCKED_DERIVED_ALLOWANCE', 2048)
+    monkeypatch.setattr(store, 'DERIVED_LIMIT', 2)
+    outcome, report = await rederive()
+    assert outcome == 'blocked' and report['blocked_reason'] == 'v3_derived_budget'
+    assert conversations(strict) == before and not priors(strict)
+
+
 def test_a_resumed_attempt_keeps_the_first_copy_of_a_row(strict):
     first = {'id': 'c0', 'raw': {'id': 'c0', 'title': 'before'}, 'claims': [{'recording_id': 'r0', 'index': 0}]}
     later = {'id': 'c0', 'raw': {'id': 'c0', 'title': 'later'}, 'claims': [{'recording_id': 'r0', 'index': 3}]}
@@ -1551,11 +1588,17 @@ def test_a_resumed_attempt_keeps_the_first_copy_of_a_row(strict):
     assert kept['raw'] == first['raw'] and kept['claims'] == first['claims']
 
 
-def test_priors_are_never_written_once_the_owner_account_deletion_began(strict, monkeypatch):
-    strict.rows[account_deletion_document(UID, firestore_client=strict).path] = {'status': 'pending'}
-    with pytest.raises(store.Conflict, match='account_deletion'):
-        runs.save_priors(UID, RUN, [{'id': 'c0', 'raw': {'id': 'c0'}, 'claims': []}], firestore_client=strict)
-    assert not priors(strict)
+@pytest.mark.parametrize('wipe_status', ['cancelled', 'billing_failed', 'pending'])
+def test_priors_respect_owner_account_deletion_marker(strict, wipe_status):
+    strict.rows[account_deletion_document(UID, firestore_client=strict).path] = {'wipe_status': wipe_status}
+    entry = {'id': 'c0', 'raw': {'id': 'c0'}, 'claims': []}
+    if wipe_status == 'pending':
+        with pytest.raises(store.Conflict, match='account_deletion'):
+            runs.save_priors(UID, RUN, [entry], firestore_client=strict)
+        assert not priors(strict)
+    else:
+        assert runs.save_priors(UID, RUN, [entry], firestore_client=strict) == 1
+        assert len(priors(strict)) == 1
 
 
 def test_the_window_classifier_counts_each_kind_once():

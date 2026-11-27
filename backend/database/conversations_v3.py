@@ -4,10 +4,12 @@ Only lifecycle calls commit_projection. Speech uses the existing conversation
 codec; cached outlines are encrypted. Nothing is cleared after a lost race.
 """
 
+import hashlib
 import json
 import logging
 import os
 import time
+from bisect import bisect_right
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -17,7 +19,13 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from database import home_visibility_index
+from database.conversations_v3_projection_budget import (
+    encoded_bytes as _encoded_bytes,
+    log_largest_write,
+    partition_rows,
+)
 from database._client import firestore_failure_reason, get_firestore_client
+from database import transcript_pointer
 from database.transcript_pointer import (
     MAX_PRELOAD_DOCUMENTS,
     TranscriptBlobAbsent,
@@ -45,9 +53,17 @@ from config.record_wal_duplicate import (
     SETTLED_FIELD,
     has_retained_custody,
 )
-from config.conversations_v3 import boundary_seconds, skip_unchanged_writes_enabled, stretch_cohesion_enabled
+from config.conversations_v3 import (
+    bounded_pending_enabled,
+    boundary_seconds,
+    commit_lease_renewal_enabled,
+    size_quarantine_filters,
+    skip_unchanged_writes_enabled,
+    stretch_cohesion_enabled,
+)
 from utils.conversations import terminal_settled
-from utils.conversations.v3 import Conflict, metrics, policy, preview_wakes, request_log_trace_id
+from utils.conversations.v3 import Conflict, UnlockedPage, metrics, policy, preview_wakes, request_log_trace_id
+from utils.observability.fallback import record_fallback
 from utils.open_loops.extraction import OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD, OPEN_LOOP_EXTRACTIONS_FIELD
 
 logger = logging.getLogger(__name__)
@@ -73,6 +89,52 @@ def _env_int(name, default):
 DERIVED_LIMIT = _env_int('CONVERSATIONS_V3_DERIVED_LIMIT', 1024)
 DERIVED_BYTES = _env_int('CONVERSATIONS_V3_DERIVED_BYTES', 16 * 1024 * 1024)
 SOURCE_LIMIT = _env_int('CONVERSATIONS_V3_SOURCE_LIMIT', 400)
+
+
+def _env_allowance(name, default):
+    try:
+        value = int(os.getenv(name, ''))
+    except ValueError:
+        return default
+    return value if value >= 0 else default
+
+
+# Locked claimants: rows the planner keeps fixed (preserve_finished_windows), so they are read-only in a pass.
+# Old moving cap cuts left a long recording owning up to ~1,000 locked one-line windows (2026-11-26: 21
+# owners, a single seed's closure 1,026-1,994 rows, median row 8 s). The locked rows may use this
+# extra room. Rewritable rows keep DERIVED_LIMIT and DERIVED_BYTES.
+# Off by default. Only owners listed in CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS get the allowance: the
+# list holds comma-separated owner tags (sha256(uid)[:12], the `owner=` tag of the blocked log), or `*`
+# for every owner. Every commit batch rereads the whole loaded closure to fence revisions, so a pass costs
+# about (batches x closure) reads: 6.5k to 15k measured. The cost is bounded by the commit itself. A listed
+# owner's closure past the origin bound may need at most LOCKED_MAX_BATCHES batches; otherwise it parks before
+# any transaction. load() never admits more rows than those batches can hold for its sources and the lease
+# (_committable_rows; other fixed writes and prepared-byte splits can still park at the cap, the backstop), and it
+# reads at most LOCKED_FETCH_FACTOR x its row bound + 1 of derived documents, repeats included. The bytes allowance stays
+# small (8 MiB) because stored speech is what splits batches (BATCH_ROW_BYTES).
+# An empty list, or a size, the batch cap or the daily passes set to 0, is the kill switch: the origin bound
+# applies to every row.
+LOCKED_DERIVED_ALLOWANCE = _env_allowance('CONVERSATIONS_V3_LOCKED_DERIVED_ALLOWANCE', 2048)
+LOCKED_DERIVED_BYTES = _env_allowance('CONVERSATIONS_V3_LOCKED_DERIVED_BYTES', 8 * 1024 * 1024)
+LOCKED_MAX_BATCHES = _env_allowance('CONVERSATIONS_V3_LOCKED_MAX_BATCHES', 6)
+LOCKED_FETCH_FACTOR = 2
+# The per-owner daily budget, in allowance ATTEMPTS: every builder load of a listed owner is charged one on the
+# builder lease before it reads anything, whether it then commits, hits the batch cap and retries smaller, fits
+# the origin bound, is interrupted after a committed prefix, or parks. A spent day, or a charge that cannot be
+# written, loads with the origin bound. The ceiling is attempts x the most one attempt can read: the charge, a load
+# of at most 2 x 2,694 + 1 derived documents plus 400 sources and the seeds (on open, at most 400 seed ids, each
+# read once) (about 5.9k), and a commit of up to about
+# 24k reads whose batches each run at most three transactions (main's contention retry), so about 78k Firestore
+# reads; 20 x 78k is about 1.6M Firestore reads per listed owner per day. Object-lake reads are separate: the load
+# decodes each fetched row and source, about one lake GET per pointer row (repeats included, since the decoded memo
+# holds only 32), so at most 5,388 + 400 + 2, about 5.8k; the commit preloads at most 32 per batch, 192 in all.
+# About 6k lake GETs per attempt and 0.12M per owner per day, and none while rows stay inline. 0 turns it off.
+LOCKED_DAILY_PASSES = _env_allowance('CONVERSATIONS_V3_LOCKED_DAILY_PASSES', 20)
+LOCKED_DAY_FIELD, LOCKED_PASSES_FIELD = 'v3_locked_day', 'v3_locked_passes'
+# Body runs per batch of a listed owner's builder commit past the origin bound, or with pointer rows inside it: main's
+# contention retry starts at most three transactions (run_preloaded_transaction_with_contention_retry), and the commit
+# preloads pointers so none replays.
+LOCKED_BATCH_EXECUTIONS = 3
 CLAIM_READ_CHUNK = 100
 
 
@@ -135,6 +197,7 @@ def decode_row(uid, snapshot, *, data=None) -> dict[str, Any] | None:
 SOURCE_FENCE_FIELDS = (
     'recording',
     'deleted',
+    'discarded',
     'deleted_spans',
     'sync_merged_into',
     'data_protection_level',
@@ -146,14 +209,26 @@ SOURCE_FENCE_FIELDS = (
 
 
 def source_fence(raw):
-    return {key: (raw or {}).get(key) for key in SOURCE_FENCE_FIELDS}
+    row = raw or {}
+    fields = SOURCE_FENCE_FIELDS
+    if policy.NATIVE_MANUAL_STOP in row or policy.NATIVE_MANUAL_READY in row:
+        fields += policy.NATIVE_MANUAL_SOURCE_FIELDS
+    return {key: row.get(key) for key in fields}
 
 
-def recording_input(uid, snapshot):
+def terminal_recording(row):
+    return row.get('deleted') or row.get('discarded') or row.get('sync_merged_into')
+
+
+def recording_input(uid, snapshot, *, skip_terminal=False):
     if not snapshot.exists:
         return None
     raw = snapshot.to_dict() or {}
-    if raw.get('data_protection_level') != 'private' and raw.get('started_at'):
+    if (
+        not (skip_terminal and terminal_recording(raw))
+        and raw.get('data_protection_level') != 'private'
+        and raw.get('started_at')
+    ):
         try:
             row = decode_row(uid, snapshot)
         except (ValueError, TypeError, FileNotFoundError, TranscriptBlobAbsent, TranscriptShredded, Conflict):
@@ -202,7 +277,8 @@ def adoptable(uid, ids, *, firestore_client=None):
     """Derived rows that already own a planned id but were outside the loaded closure.
 
     Only live derived rows qualify: a deleted or tombstoned target keeps raising, so a rebuild can
-    never resurrect a window the user deleted.
+    never resurrect a window the user deleted. Settled native tiles are returned
+    so the planner can reserve their IDs without adopting their speech.
     """
     client = firestore_client or get_firestore_client()
     coll = user_conversations(client, uid)
@@ -210,7 +286,11 @@ def adoptable(uid, ids, *, firestore_client=None):
     for cid in ids:
         snapshot = coll.document(cid).get()
         raw = snapshot.to_dict() or {} if snapshot.exists else {}
-        if not raw.get('v3_derived') or raw.get('deleted') or raw.get('recording'):
+        if (
+            not (raw.get('v3_derived') or raw.get(policy.NATIVE_MANUAL_SETTLED))
+            or raw.get('deleted')
+            or raw.get('recording')
+        ):
             continue
         tombstone = client.collection('users').document(uid).collection('deleted_conversations').document(cid).get()
         if tombstone.exists:
@@ -244,13 +324,34 @@ def save_outline(uid, token, fingerprint, entries, *, key='builder', preview=Non
 BLOCKED_BACKOFF_MAX = timedelta(hours=1)
 
 
-def record_blocked(uid, token, reason, *, firestore_client=None):
+# Pending recordings whose closure a one-seed pass could not commit for size (SCA-2918). Seeding is the only
+# thing that skips them: closures still load them, so claims are never filtered. They stay v3_pending, and the
+# lease keeps naming them after the park clears, until an operator repairs the oversize document.
+SIZE_QUARANTINE_FIELD = 'v3_size_quarantine'
+# When each held id was set aside. A hold lapses after SIZE_QUARANTINE_HOLD: the id is seeded again, so a
+# repaired recording commits and a still-oversize one is set aside again on that attempt. An id with no
+# timestamp is not held.
+SIZE_QUARANTINE_AT_FIELD = 'v3_size_quarantine_at'
+SIZE_QUARANTINE_HOLD = timedelta(hours=24)
+SIZE_QUARANTINE_MAX = 64
+
+
+def record_blocked(uid, token, reason, *, on_open=False, quarantine=(), firestore_client=None):
     """Deterministic conflicts back off per owner instead of retrying through the shared queue.
 
     Fenced by the builder token: a stale pass must not park an owner after a successor committed.
+    ``quarantine`` names the pending recordings a one-seed pass's rejected commit pinned to its seed: they
+    are set aside at once (all or nothing, up to SIZE_QUARANTINE_MAX), so a later seed sharing them is never
+    seeded into the same rejection. The early attempt is re-armed so the next seed runs on the following
+    wake. Held ids no longer pending (landed, deleted or repaired) are pruned first. A list too full for the
+    closure parks with the usual backoff and reports it.
     """
     client = firestore_client or get_firestore_client()
     ref = leases.lease_ref(client, uid, 'builder')
+    # Pruning only runs while live seeding skips held ids (the switch and bounded pending on): otherwise
+    # the park is today's exactly, with no extra read and no list change.
+    pruning = reason == 'document_too_large' and size_quarantine_filters()
+    settled = _settled_quarantine(client, uid, ref) if pruning else frozenset()
 
     @firestore.transactional
     def park(tx):
@@ -260,42 +361,434 @@ def record_blocked(uid, token, reason, *, firestore_client=None):
             return False
         count = int(row.get('v3_blocked_count') or 0) + 1
         delay = min(BLOCKED_BACKOFF_MAX, timedelta(minutes=5) * (2 ** min(count - 1, 6)))
-        tx.update(ref, {'v3_blocked_count': count, 'v3_blocked_reason': reason, 'v3_backoff_until': now + delay})
-        return True
+        update = {
+            'v3_blocked_count': count,
+            'v3_blocked_reason': reason,
+            'v3_backoff_until': now + delay,
+            'v3_unlocked_paging_attempted': (
+                bool(row.get('v3_unlocked_paging_attempted'))
+                or (not on_open and bounded_pending_enabled() and bool(row.get('unlocked_ids')))
+            ),
+            'v3_bounded_pending_attempted': (
+                bool(row.get('v3_bounded_pending_attempted')) if on_open else bounded_pending_enabled()
+            ),
+        }
+        stored = list(row.get(SIZE_QUARANTINE_FIELD) or [])
+        stamps = dict(row.get(SIZE_QUARANTINE_AT_FIELD) or {})
+        live = _held_ids(row, now) if pruning else frozenset(stored)
+        # Lapsed holds leave the list with settled ids: a lapsed id is being re-attempted, not held.
+        held = [rid for rid in stored if rid not in settled and rid in live]
+        added = [rid for rid in dict.fromkeys(quarantine) if rid not in held]
+        wanted = bool(added and pruning)  # Only set aside what live seeding will actually skip.
+        quarantined = wanted and len(held) + len(added) <= SIZE_QUARANTINE_MAX
+        if quarantined:
+            held = [*held, *added]
+            # The backlog outside the set-aside closure is not blocked: run the next seed without the backoff.
+            update['v3_bounded_pending_attempted'] = False
+        if held != stored or quarantined:
+            # A re-quarantined lapsed id starts a fresh hold.
+            update[SIZE_QUARANTINE_FIELD] = held
+            update[SIZE_QUARANTINE_AT_FIELD] = {rid: now if rid in added else stamps.get(rid, now) for rid in held}
+        tx.update(ref, update)
+        return 'quarantined' if quarantined else 'full' if wanted else True
 
-    return run_preloaded_transaction_with_contention_retry(client, park)
+    result = run_preloaded_transaction_with_contention_retry(client, park)
+    if result == 'quarantined':
+        # The builder stops retrying these obligations and carries on with the rest: a degraded mode,
+        # and it outlives the park (a later commit clears the park, not the quarantine).
+        metrics.safe_metric(lambda: metrics.RECONCILES.labels('size_quarantined').inc())
+        record_fallback(
+            component='conversations_v3',
+            from_mode='pending_retry',
+            to_mode='size_quarantine',
+            reason='document_size_limit',
+            outcome='degraded',
+            log=logger,
+        )
+    elif result == 'full':
+        # Quarantine stopped engaging for this owner: it is back to head-of-line backoff until repair.
+        metrics.safe_metric(lambda: metrics.RECONCILES.labels('size_quarantine_full').inc())
+        record_fallback(
+            component='conversations_v3',
+            from_mode='pending_retry',
+            to_mode='size_quarantine',
+            reason='document_size_limit',
+            outcome='exhausted',
+            log=logger,
+        )
+    return bool(result)
+
+
+def _settled_quarantine(client, uid, ref):
+    """Held quarantine ids that are no longer v3_pending (landed, deleted or repaired): one field read each.
+
+    Best effort: a failed read keeps every held id, so the park transaction still records its backoff.
+    """
+    try:
+        held = frozenset((ref.get().to_dict() or {}).get(SIZE_QUARANTINE_FIELD) or ())
+        return held - _still_pending(client, uid, held)
+    except Exception as error:
+        logger.warning('event=v3_size_quarantine_prune outcome=error exception_type=%s', type(error).__name__)
+        record_fallback(
+            component='conversations_v3',
+            from_mode='size_quarantine_prune',
+            to_mode='keep_held',
+            reason='unavailable',
+            outcome='degraded',
+            log=logger,
+        )
+        return frozenset()
+
+
+def _still_pending(client, uid, ids):
+    """The ids among ``ids`` whose recording is still v3_pending: one field-masked BatchGet, none when empty."""
+    if not ids:
+        return frozenset()
+    coll = user_conversations(client, uid)
+    snapshots = client.get_all([coll.document(rid) for rid in sorted(ids)], field_paths=['v3_pending'])
+    return frozenset(s.id for s in snapshots if s.exists and (s.to_dict() or {}).get('v3_pending') is True)
+
+
+def held_quarantine(uid, *, firestore_client=None):
+    """The readback's work-quarantined set for one owner: ids inside their hold that are still pending.
+
+    This is what live seeding actually skips. A repaired recording that landed leaves it at once, without
+    another size park, though the lease list keeps naming it until the next prune or its hold lapses.
+    """
+    if not size_quarantine_filters():
+        return frozenset()
+    client = firestore_client or get_firestore_client()
+    row = leases.lease_ref(client, uid, 'builder').get().to_dict() or {}
+    return _still_pending(client, uid, _held_ids(row, datetime.now(timezone.utc)))
+
+
+def _held_ids(row, now):
+    """The lease's quarantined ids whose hold has not lapsed (SIZE_QUARANTINE_HOLD since they were set aside)."""
+    stamps = row.get(SIZE_QUARANTINE_AT_FIELD) or {}
+    return frozenset(
+        rid
+        for rid in row.get(SIZE_QUARANTINE_FIELD) or ()
+        if isinstance(stamps.get(rid), datetime) and now - stamps[rid] < SIZE_QUARANTINE_HOLD
+    )
+
+
+def size_quarantined(uid, *, firestore_client=None):
+    """Recordings held for size on the owner's builder lease, empty unless live seeding skips them."""
+    if not size_quarantine_filters():
+        return frozenset()
+    client = firestore_client or get_firestore_client()
+    row = leases.lease_ref(client, uid, 'builder').get().to_dict() or {}
+    return _held_ids(row, datetime.now(timezone.utc))
+
+
+BOUNDED_RETRY_REASONS = frozenset({'v3_derived_budget', 'v3_source_closure_budget', 'document_too_large'})
+
+
+class LockedBatchCap(Conflict):
+    """A locked-claimant closure needs more commit batches than LOCKED_MAX_BATCHES (reason v3_derived_budget).
+
+    Raised before any transaction. The builder retries down its load ladder (pending and unlocked seeds,
+    service.SEED_CEILINGS) before parking, as it does for a load-time overflow: eight seeds can fit the load
+    allowance and still need too many batches when one seed would commit."""
+
+
+def mark_bounded_attempt(uid, token, *, firestore_client=None):
+    """Spend a legacy park's one early attempt under the acquired builder lease, before any paid work.
+
+    A transient failure in that attempt (a provider error Cloud Tasks retries) must not reopen the bypass.
+    """
+    client = firestore_client or get_firestore_client()
+    ref = leases.lease_ref(client, uid, 'builder')
+
+    @firestore.transactional
+    def mark(tx):
+        row = ref.get(transaction=tx).to_dict() or {}
+        if row.get('token') == token and _early_bounded_retry(row, row.get('v3_blocked_reason')):
+            updates = {'v3_bounded_pending_attempted': True}
+            if row.get('unlocked_ids'):
+                updates['v3_unlocked_paging_attempted'] = True
+            tx.update(ref, updates)
+
+    run_preloaded_transaction_with_contention_retry(client, mark)
 
 
 def backoff_until(uid, *, firestore_client=None):
     return backoff_state(uid, firestore_client=firestore_client)[0]
 
 
+def _early_bounded_retry(row, reason):
+    return not row.get('v3_bounded_pending_attempted') or (
+        reason == 'v3_derived_budget' and row.get('unlocked_ids') and not row.get('v3_unlocked_paging_attempted')
+    )
+
+
 def backoff_state(uid, *, firestore_client=None):
     """(v3_backoff_until, v3_blocked_reason) from the owner's builder lease doc."""
     client = firestore_client or get_firestore_client()
     row = leases.lease_ref(client, uid, 'builder').get().to_dict() or {}
-    return row.get('v3_backoff_until'), row.get('v3_blocked_reason')
+    reason = row.get('v3_blocked_reason')
+    if bounded_pending_enabled() and reason in BOUNDED_RETRY_REASONS and _early_bounded_retry(row, reason):
+        return None, reason
+    return row.get('v3_backoff_until'), reason
 
 
-def load(uid, *, conversation_id=None, firestore_client=None):
+TERMINAL_PENDING_SCAN_LIMIT = 50
+TERMINAL_PENDING_CLEAR = {'v3_pending': False, 'v3_pending_since': None}
+
+
+def _direct_documents(row):
+    """A derived row and the sources it names directly."""
+    pieces = (p.get('recording_id') for p in row.get('recording_pieces') or () if p.get('recording_id'))
+    return frozenset({row['id'], *(row.get('v3_recording_ids') or ()), *pieces})
+
+
+def _record_neighbour(neighbours, asked, row):
+    """Charge a time-queried row to each recording whose own window it overlaps (all of them if undated)."""
+    start, end = row.get('started_at'), row.get('finished_at')
+    dated = isinstance(start, datetime) and isinstance(end, datetime)
+    for rid, left, right in asked:
+        if not dated or (end >= left and start <= right):
+            neighbours[rid] = neighbours.get(rid, frozenset()) | {row['id']}
+
+
+def _oldest_pending(coll, limit):
+    return coll.where(filter=FieldFilter('v3_pending', '==', True)).order_by('v3_pending_since').limit(limit)
+
+
+def clear_terminal_pending(uid, token, *, firestore_client=None):
+    """Clear terminal markers and return the page limit to use for the remaining backlog."""
     client = firestore_client or get_firestore_client()
     if account_deletion_blocks_user_work(uid):
         raise Conflict('account_deletion')
     coll = user_conversations(client, uid)
+    page = list(_oldest_pending(coll, TERMINAL_PENDING_SCAN_LIMIT).stream())
+    candidates = {doc.id: doc.update_time for doc in page if _is_discarded_or_deleted(doc.to_dict() or {})}
+    held = leases.lease_ref(client, uid, 'builder')
+    deletion_ref = account_deletion_document(uid, firestore_client=client)
+
+    @firestore.transactional
+    def clear(tx):
+        lease = held.get(transaction=tx).to_dict() or {}
+        if lease.get('token') != token or not lease.get('until') or lease['until'] <= datetime.now(timezone.utc):
+            raise Conflict('lease_lost')
+        deletion = deletion_ref.get(transaction=tx)
+        if account_deletion_marker_blocks_access(
+            marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('wipe_status')
+        ):
+            raise Conflict('account_deletion')
+
+        matching = []
+        for rid, revision in candidates.items():
+            ref = coll.document(rid)
+            snapshot = ref.get(transaction=tx)
+            row = snapshot.to_dict() or {}
+            if (
+                snapshot.exists
+                and snapshot.update_time == revision
+                and row.get('v3_pending') is True
+                and _is_discarded_or_deleted(row)
+            ):
+                matching.append(ref)
+        for ref in matching:
+            tx.update(ref, TERMINAL_PENDING_CLEAR)
+        remembered = lease.get('v3_bounded_pending_limit')
+        # When the smaller page would already include the whole backlog, try the full page.
+        # Only the final projection commit can clear the saved limit.
+        return remembered if remembered in (1, 8) and len(page) - len(matching) >= remembered else None
+
+    return run_preloaded_transaction_with_contention_retry(client, clear)
+
+
+def _is_discarded_or_deleted(row):
+    return row.get('recording') and (row.get('discarded') or row.get('deleted'))
+
+
+def locked_closure_owner(uid):
+    """The owner is on the locked-claimant allowlist (read per pass, so an env edit applies on the next one)."""
+    listed = {tag.strip().lower() for tag in os.getenv('CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS', '').split(',')}
+    listed.discard('')
+    return '*' in listed or hashlib.sha256(str(uid).encode()).hexdigest()[:12] in listed
+
+
+def _locked_passes_today(lease, now=None):
+    day = (now or datetime.now(timezone.utc)).date().isoformat()
+    return int(lease.get(LOCKED_PASSES_FIELD) or 0) if lease.get(LOCKED_DAY_FIELD) == day else 0
+
+
+def _charge_locked_attempt(client, uid, token, now=None):
+    """Charge one allowance attempt to the owner's UTC day under the caller's own builder lease, before the load reads.
+
+    ``token`` is the lease token of the pass doing the load. Only that exact live lease is charged: a stale pass, or
+    a load without a token, gets today's bound and charges nothing.
+
+    Attempts, not commits (Release FIX-FIRST and panel F2 on #26443): every builder load of a listed owner spends
+    one, so the daily cap bounds capped retries, interrupted commits and smaller pages alike. The day's count is
+    checked inside the transaction. False, today's bound, when the lease is not held, the day is spent, or the charge
+    cannot be written: the charge never becomes a failure of its own."""
+    ref = leases.lease_ref(client, uid, 'builder')
+
+    @firestore.transactional
+    def charge(tx):
+        lease = ref.get(transaction=tx).to_dict() or {}
+        at = now or datetime.now(timezone.utc)
+        if not token or lease.get('token') != token or not lease.get('until') or lease['until'] <= at:
+            return False
+        used = _locked_passes_today(lease, at)
+        if used >= LOCKED_DAILY_PASSES:
+            return False
+        tx.update(ref, {LOCKED_DAY_FIELD: at.date().isoformat(), LOCKED_PASSES_FIELD: used + 1})
+        return True
+
+    try:
+        charged = bool(run_preloaded_transaction_with_contention_retry(client, charge))
+    except Exception as error:
+        metrics.safe_metric(
+            lambda: logger.warning(
+                'event=v3_locked_closure_charge outcome=failed exception_type=%s', type(error).__name__
+            )
+        )
+        # The shared fallback telemetry (backend/AGENTS.md): the pass loads with the origin bound. No uid or tag.
+        record_fallback(
+            component='conversations_v3',
+            from_mode='locked_closure_allowance',
+            to_mode='origin_bound',
+            reason='unavailable',
+            outcome='degraded',
+            log=logger,
+        )
+        return False
+    if not charged:
+        metrics.safe_metric(lambda: logger.info('event=v3_locked_closure_charge outcome=refused'))
+    return charged
+
+
+def _locked_allowance(uid, *, key='builder'):
+    """(rows, bytes) the closure may add for locked claimants; (0, 0) off the allowlist, when switched off, or for
+    any pass but a builder pass. Builder passes only, so the batch cap and the daily cap apply wherever the
+    allowance does: derive and re-derive keep their own partition bounds, and a heavy derive is planned as its own
+    run. load() also needs the attempt charged (_charge_locked_attempt) before it uses these sizes."""
+    if key != 'builder':
+        return 0, 0
+    if not (LOCKED_DERIVED_ALLOWANCE and LOCKED_DERIVED_BYTES and LOCKED_MAX_BATCHES and LOCKED_DAILY_PASSES):
+        return 0, 0
+    if not locked_closure_owner(uid):
+        return 0, 0
+    return LOCKED_DERIVED_ALLOWANCE, LOCKED_DERIVED_BYTES
+
+
+def _committable_rows(sources):
+    """The most planned rows LOCKED_MAX_BATCHES batches can commit with this many loaded sources.
+
+    partition_rows gives each batch BATCH_MAX_WRITES - fixed_writes rows, and fixed_writes is at least one write per
+    loaded source plus the lease. A loaded row takes a batch slot whether or not its write is skipped.
+    This is an upper bound only. The rest of fixed_writes (removals, absorption redirects of up to 16 writes, retire,
+    retired, settle) and the byte and pointer splits on prepared rows are not known at load time, so such a closure
+    can still need more batches. commit_projection's LockedBatchCap stays the backstop and parks it before any
+    transaction.
+    """
+    return LOCKED_MAX_BATCHES * max(1, BATCH_MAX_WRITES - sources - 1)
+
+
+def _preload_batch_pointers(uid, batch_prepared):
+    """Load a locked-closure batch's transcript pointers before its transaction (lake reads only: no Firestore read,
+    no upload), so the privacy filter inside never replays the body to load one. A batch holds at most
+    MAX_PRELOAD_DOCUMENTS pointers, which the memo holds; it starts fresh so none is evicted. A failed load releases
+    the plaintext it already decoded before the error propagates."""
+    transcript_pointer.clear_memo()
+    try:
+        for row in batch_prepared:
+            if isinstance(row.get('transcript_segments'), dict):
+                transcript_pointer.preload_pointer(uid, row['transcript_segments'])
+    except BaseException:
+        transcript_pointer.clear_memo()
+        raise
+
+
+def _past_origin_bound(uid, existing, *, key='builder'):
+    """The closure used the locked-claimant allowance: a listed owner past DERIVED_LIMIT or DERIVED_BYTES."""
+    if _locked_allowance(uid, key=key) == (0, 0):
+        return False
+    if len(existing) > DERIVED_LIMIT:
+        return True
+    return sum(_encoded_bytes(row.get('transcript_segments') or []) for row in existing.values()) > DERIVED_BYTES
+
+
+def locked_claimant(row):
+    """A row whose boundaries this pass cannot move: preserve_finished_windows's base predicate.
+
+    Under custom timing (protect_provisional) the planner also protects provisional v3_unlocked rows that several
+    overlap one planned window. That set depends on the planned windows, which do not exist at load time, so load
+    counts those rows as rewritable. The effect is only under-admission (they stay inside DERIVED_LIMIT), never
+    over-admission."""
+    return bool(
+        row.get('status') != 'in_progress'
+        and not row.get('v3_unlocked')
+        and row.get('started_at')
+        and row.get('finished_at')
+        and not (row.get('v3_refined') and row.get('v3_claims_transferred_to'))
+    )
+
+
+def _select_unlocked(state, existing, limit, page):
+    ids = sorted(set(state.get('unlocked_ids') or ()) - existing.keys())
+    if page is None:
+        if len(ids) > DERIVED_LIMIT:
+            raise Conflict('v3_derived_budget')
+        return ids
+    # Rotate even when a visited preview stays unlocked, so it cannot hide later obligations.
+    offset = bisect_right(ids, state.get('v3_unlocked_cursor') or '')
+    ordered = ids[offset:] + ids[:offset]
+    return ordered[: min(limit, DERIVED_LIMIT)]
+
+
+def load(
+    uid,
+    *,
+    conversation_id=None,
+    pending_limit=32,
+    unlocked_page: UnlockedPage | None = None,
+    unlocked_limit=None,
+    lease_token=None,
+    firestore_client=None,
+):
+    client = firestore_client or get_firestore_client()
+    if account_deletion_blocks_user_work(uid):
+        raise Conflict('account_deletion')
+    # A listed owner's builder load is an allowance attempt: charged to the caller's own held lease (lease_token)
+    # before it reads, or it gets today's bound.
+    allowed = _locked_allowance(uid, key='builder')
+    if allowed != (0, 0) and not _charge_locked_attempt(client, uid, lease_token):
+        allowed = (0, 0)
+    coll = user_conversations(client, uid)
     silence_gap = timedelta(seconds=boundary_seconds(cohesion=stretch_cohesion_enabled())[0])
     margin = max(timedelta(minutes=20), silence_gap)
     opened = decode_row(uid, coll.document(conversation_id).get()) if conversation_id else None
+    skip_terminal = not conversation_id and bounded_pending_enabled()
+    state = leases.lease_ref(client, uid, 'builder').get().to_dict() or {}
+    quarantined = (
+        _held_ids(state, datetime.now(timezone.utc))
+        if unlocked_page is not None and not conversation_id and size_quarantine_filters()
+        else frozenset()
+    )
     if conversation_id:
         ids = (opened or {}).get('v3_recording_ids') or []
+        if allowed != (0, 0):
+            # An allowance load reads at most SOURCE_LIMIT on-open seeds, each once (panel F1 on #26490): the planner
+            # appends a window's recording ids uncapped, and the closure's source bound would otherwise apply only
+            # after every seed was read. Park as that bound would, before reading any. Unlisted owners keep main's read.
+            ids = list(dict.fromkeys(ids))
+            if len(ids) > SOURCE_LIMIT:
+                metrics.safe_metric(lambda: logger.info('event=v3_locked_closure_seeds outcome=capped'))
+                raise Conflict('v3_source_closure_budget')
         pending = [coll.document(rid).get() for rid in ids]
     else:
-        pending = list(
-            coll.where(filter=FieldFilter('v3_pending', '==', True)).order_by('v3_pending_since').limit(33).stream()
-        )
-    pending = pending[:32] if not conversation_id else pending
+        # A zero limit seeds only unlocked windows (the bounded retry's one-lane fallback).
+        # Over-fetch by the set-aside ids so a quarantined head never hides the backlog behind it.
+        pending = list(_oldest_pending(coll, pending_limit + len(quarantined)).stream()) if pending_limit else []
+        pending = [doc for doc in pending if doc.id not in quarantined][:pending_limit]
     recordings, unreadable = {}, {}
     for doc in pending:
-        row = recording_input(uid, doc)
+        row = recording_input(uid, doc, skip_terminal=skip_terminal)
         if row and row.get('_v3_unreadable'):
             unreadable[doc.id] = row
         elif row:
@@ -309,9 +802,11 @@ def load(uid, *, conversation_id=None, firestore_client=None):
                 for doc in coll.where(filter=FieldFilter('v3_pending', '==', True))
                 .where(filter=FieldFilter('started_at', '>=', latest['started_at']))
                 .order_by('started_at')
-                .limit(33)
-                .stream()
+                # Widened by the set-aside ids, so they cannot fill the window and hide a healthy successor.
+                .limit(33 + len(quarantined)).stream()
                 if doc.id not in recordings
+                and doc.id not in quarantined
+                and not (skip_terminal and terminal_recording(doc.to_dict() or {}))
             ),
             None,
         )
@@ -319,8 +814,14 @@ def load(uid, *, conversation_id=None, firestore_client=None):
             next_start = (following.to_dict() or {}).get('started_at')
             if next_start and next_start - latest['finished_at'] < silence_gap:
                 latest['_v3_page_continues'] = True
-    state = leases.lease_ref(client, uid, 'builder').get().to_dict() or {}
     cache = json.loads(decrypt(state['outline_cache'], uid)) if state.get('outline_cache') else []
+    if unlocked_page is not None:
+        unlocked_page.remaining, unlocked_page.cursor = frozenset(), None
+        unlocked_page.independent, unlocked_page.neighbours = frozenset(), {}
+        seeded = tuple(doc.id for doc in pending if doc.id in recordings or doc.id in unreadable)
+        unlocked_page.seeds, unlocked_page.pending_ids = (len(seeded), 0), seeded
+        unlocked_page.quarantined = quarantined
+    ordered_unlocked = []
     if not recordings and not state.get('open_id') and not state.get('unlocked_ids') and not opened:
         return unreadable, {}, cache
     existing = {}
@@ -330,28 +831,71 @@ def load(uid, *, conversation_id=None, firestore_client=None):
         opened = decode_row(uid, coll.document(state['open_id']).get())
         if opened:
             existing[opened['id']] = opened
+            if unlocked_page is not None:
+                unlocked_page.independent = _direct_documents(opened)
     queried = set()
     by_claims = closure_by_claims()
-    loaded_bytes = sum(_encoded_bytes(row.get('transcript_segments') or []) for row in existing.values())
+    # load() is the builder pass's loader (it reads the builder lease); derive uses load_derive.
+    extra_rows, extra_bytes = allowed
+    # Never admit more rows than the batch cap can commit, even with no sources (F4): a bigger closure would load,
+    # plan and then park on LockedBatchCap. The origin bound itself is never lowered.
+    row_limit = DERIVED_LIMIT + min(extra_rows, max(0, _committable_rows(0) - DERIVED_LIMIT))
+    # One budget of fetched derived documents for the whole allowance load, repeats included: a row that spans
+    # several interval queries, or that a claim read and a time query both return, is counted each time. Claim and
+    # unlocked reads are refused before reading; an interval query asks for one document past what is left, so the
+    # load reads at most fetch_budget + 1 derived documents (that sentinel detects the overflow and ends the load).
+    fetch_budget = LOCKED_FETCH_FACTOR * row_limit if allowed != (0, 0) else None
+    fetched = 0
+
+    def fetch(count):
+        nonlocal fetched
+        fetched += count
+        if fetch_budget is not None and fetched > fetch_budget:
+            raise Conflict('v3_derived_budget')
+
+    def committable():
+        # Past the origin bound, the closure must still fit the batch cap with the sources loaded so far.
+        if extra_rows and len(existing) > max(DERIVED_LIMIT, _committable_rows(len(recordings) + len(unreadable))):
+            raise Conflict('v3_derived_budget')
+
+    sizes = {cid: _encoded_bytes(row.get('transcript_segments') or []) for cid, row in existing.items()}
+    locked = {cid for cid, row in existing.items() if locked_claimant(row)}
+    loaded_bytes = sum(sizes.values())
+    locked_bytes = sum(sizes[cid] for cid in locked)
 
     def add(row):
         # Checked per document, so an overflowing closure stops reading and decoding at the bound.
-        nonlocal loaded_bytes
-        previous = existing.get(row['id'])
-        loaded_bytes += _encoded_bytes(row.get('transcript_segments') or [])
-        if previous is not None:
-            loaded_bytes -= _encoded_bytes(previous.get('transcript_segments') or [])
-        existing[row['id']] = row
-        if len(existing) > DERIVED_LIMIT or loaded_bytes > DERIVED_BYTES:
+        nonlocal loaded_bytes, locked_bytes
+        cid = row['id']
+        if cid in sizes:
+            loaded_bytes -= sizes[cid]
+            if cid in locked:
+                locked_bytes -= sizes[cid]
+                locked.discard(cid)
+        sizes[cid] = _encoded_bytes(row.get('transcript_segments') or [])
+        loaded_bytes += sizes[cid]
+        if locked_claimant(row):
+            locked.add(cid)
+            locked_bytes += sizes[cid]
+        existing[cid] = row
+        # Rewritable rows keep the original bound. Locked claimants may also use the allowance.
+        if (
+            len(existing) - len(locked) > DERIVED_LIMIT
+            or loaded_bytes - locked_bytes > DERIVED_BYTES
+            or len(existing) > row_limit
+            or loaded_bytes > DERIVED_BYTES + extra_bytes
+        ):
             raise Conflict('v3_derived_budget')
+        committable()
 
     if not conversation_id:
-        unlocked_ids = set(state.get('unlocked_ids') or ()) - existing.keys()
-        if len(unlocked_ids) > DERIVED_LIMIT:
-            raise Conflict('v3_derived_budget')
-        ordered_unlocked = sorted(unlocked_ids)
+        limit = min(8, pending_limit) if unlocked_limit is None else unlocked_limit
+        ordered_unlocked = _select_unlocked(state, existing, limit, unlocked_page)
+        if unlocked_page is not None:
+            unlocked_page.seeds = (unlocked_page.seeds[0], len(ordered_unlocked))
         for start in range(0, len(ordered_unlocked), CLAIM_READ_CHUNK):
             ids = ordered_unlocked[start : start + CLAIM_READ_CHUNK]
+            fetch(len(ids))
             for snapshot in client.get_all([coll.document(cid) for cid in ids]):
                 raw = snapshot.to_dict() or {} if snapshot.exists else {}
                 if not raw.get('v3_unlocked') or raw.get('deleted'):
@@ -363,10 +907,13 @@ def load(uid, *, conversation_id=None, firestore_client=None):
                     raise Conflict('recording_decode_unavailable') from error
                 if row:
                     add(row)
+                    if unlocked_page is not None:
+                        # Loaded on its own, not through a pending seed: never charged to the seed.
+                        unlocked_page.independent = unlocked_page.independent | _direct_documents(row)
 
     missing = set()
     # Follow linked recordings until the closure converges. Each round adds at least one recording and
-    # derived rows stay bounded by DERIVED_LIMIT; a fixed hop depth failed the same owner on every retry.
+    # derived rows stay bounded by the pass row_limit; a fixed hop depth failed the same owner on every retry.
     for _round in range(LIMIT + 1):
         ids = {rid for row in existing.values() for rid in row.get('v3_recording_ids') or []}
         ids.update(
@@ -379,8 +926,8 @@ def load(uid, *, conversation_id=None, firestore_client=None):
         # Every source read counts, missing ones included, and the bound is checked before reading.
         if len(recordings) + len(unreadable) + len(missing) + len(unseen) > SOURCE_LIMIT:
             raise Conflict('v3_source_closure_budget')
-        for rid in unseen:
-            row = recording_input(uid, coll.document(rid).get())
+        for rid in sorted(unseen):
+            row = recording_input(uid, coll.document(rid).get(), skip_terminal=skip_terminal)
             if not row:
                 missing.add(rid)
             elif row.get('_v3_unreadable'):
@@ -398,11 +945,12 @@ def load(uid, *, conversation_id=None, firestore_client=None):
                 if isinstance(cid, str) and cid not in existing:
                     claimed.add(cid)
         # Refuse before reading when the ids alone overflow, and read in chunks so a byte overflow stops early.
-        if len(existing) + len(claimed) > DERIVED_LIMIT:
+        if len(existing) + len(claimed) > row_limit:
             raise Conflict('v3_derived_budget')
         ordered = sorted(claimed)
         for start in range(0, len(ordered), CLAIM_READ_CHUNK):
             chunk = ordered[start : start + CLAIM_READ_CHUNK]
+            fetch(len(chunk))
             for snapshot in client.get_all([coll.document(cid) for cid in chunk]):
                 raw = snapshot.to_dict() or {} if snapshot.exists else {}
                 if raw.get('v3_derived'):
@@ -429,26 +977,31 @@ def load(uid, *, conversation_id=None, firestore_client=None):
             left = row['started_at'] - margin
             right = min(speech_end(row), datetime.now(timezone.utc) + timedelta(minutes=5)) + margin
             if intervals and left <= intervals[-1][1]:
-                intervals[-1] = (intervals[-1][0], max(intervals[-1][1], right))
+                intervals[-1][2].append((row['id'], left, right))
+                intervals[-1] = (intervals[-1][0], max(intervals[-1][1], right), intervals[-1][2])
             else:
-                intervals.append((left, right))
-        for left, right in intervals:
+                intervals.append((left, right, [(row['id'], left, right)]))
+        for left, right, asked in intervals:
             snapshots = (
                 coll.where(filter=FieldFilter('v3_derived', '==', True))
                 .where(filter=FieldFilter('finished_at', '>=', left))
                 .where(filter=FieldFilter('started_at', '<=', right))
-                .limit(DERIVED_LIMIT + 1)
+                .limit(min(row_limit, fetch_budget - fetched if fetch_budget is not None else row_limit) + 1)
                 .stream()
             )
             for count, doc in enumerate(snapshots, 1):
-                if count > DERIVED_LIMIT:
+                if count > row_limit:
                     raise Conflict('v3_derived_budget')
+                fetch(1)
                 row = decode_row(uid, doc)
                 if row:
                     add(row)
+                    if unlocked_page is not None:
+                        _record_neighbour(unlocked_page.neighbours, asked, row)
         queried.update(row['id'] for row in fresh)
     else:
         raise Conflict('v3_source_closure_budget')
+    committable()
     preview_sources = {
         rid
         for row in existing.values()
@@ -458,10 +1011,18 @@ def load(uid, *, conversation_id=None, firestore_client=None):
     for rid in preview_sources & unreadable.keys():
         # Fail closed when an otherwise eligible source temporarily cannot be
         # decoded. Replanning without it could clear the preview's index and wake.
+        if skip_terminal and terminal_recording(unreadable[rid]):
+            continue
         if policy.builder_eligible({**unreadable[rid], '_v3_unreadable': False}):
             raise Conflict('recording_decode_unavailable')
     _mark_successor_pending(coll, recordings)
     attach_finish_predecessors(coll, recordings, existing)
+    if unlocked_page is not None:
+        unlocked_page.remaining = frozenset(
+            set(state.get('unlocked_ids') or ()) - existing.keys() - set(ordered_unlocked)
+        )
+        cursor = ordered_unlocked[-1] if ordered_unlocked else state.get('v3_unlocked_cursor')
+        unlocked_page.cursor = cursor if unlocked_page.remaining else None
     return {**recordings, **unreadable}, existing, cache
 
 
@@ -471,7 +1032,15 @@ def _mark_successor_pending(coll, recordings):
     Batch recordings get no transcript until they seal. Only a recording that listen rotation
     sealed carries the cap stamp; every other stretch keeps the plain five-minute rule.
     """
-    spoken = [r for r in recordings.values() if r.get('transcript_segments') and r.get('started_at')]
+    # Only decoded speech counts: a terminal row loaded undecoded may still hold an offloaded transcript pointer.
+    spoken = [
+        r
+        for r in recordings.values()
+        if isinstance(r.get('transcript_segments'), list)
+        and r['transcript_segments']
+        and r.get('started_at')
+        and not terminal_recording(r)
+    ]
     if not spoken:
         return
     latest = max(spoken, key=speech_end)
@@ -494,6 +1063,7 @@ def _mark_successor_pending(coll, recordings):
             doc.id != latest['id']
             and raw.get('recording') is True
             and not raw.get('deleted')
+            and not (bounded_pending_enabled() and raw.get('discarded'))
             and not raw.get('sync_merged_into')
             and raw.get('data_protection_level') != 'private'
             and policy.awaiting_transcript(raw, now, cap)
@@ -509,6 +1079,7 @@ SUCCESSOR_FIELDS = [
     'status',
     'recording',
     'deleted',
+    'discarded',
     'sync_merged_into',
     'data_protection_level',
 ]
@@ -555,34 +1126,6 @@ def fixed_write_bytes(recordings, rows, encrypted_cache):
         if recording.get('_v3_derive'):
             total += _encoded_bytes(backfill_conversion(recording))
     return total
-
-
-def _encoded_bytes(value):
-    return len(json.dumps(value, default=str).encode())
-
-
-def log_largest_write(staged, *, batch, batches):
-    """Name the largest document the failed transaction staged: kind and estimated bytes, never ids or content."""
-    sizes: list[tuple[str, int, int | None]] = [
-        ('derived_row', _encoded_bytes(row), None) for row in staged.get('rows') or []
-    ]
-    for current, update in (staged.get('recordings') or {}).values():
-        merged = {**current, **update}
-        sizes.append(('recording', _encoded_bytes(merged), len(merged.get('claims') or [])))
-    if staged.get('lease') is not None:
-        sizes.append(('builder_lease', _encoded_bytes({**staged['lease'][0], **staged['lease'][1]}), None))
-    if not sizes:
-        return
-    kind, size, claims = max(sizes, key=lambda item: item[1])
-    logger.warning(
-        'v3 projection write too large kind=%s bytes=%d claims=%s batch=%d batches=%d staged_total_bytes=%d',
-        kind,
-        size,
-        claims if claims is not None else '-',
-        batch,
-        batches,
-        sum(item[1] for item in sizes),
-    )
 
 
 def mark_pending(uid, cid, *, manual_end=False, firestore_client=None):
@@ -647,6 +1190,7 @@ def promote_manual_end(uid, cid, *, firestore_client=None):
         if (
             not row.get('recording')
             or not row.get('v3_manual_end_requested')
+            or row.get(policy.NATIVE_MANUAL_STOP)
             # The cut is materialised from finished_at; without it the marker would be inert.
             or not row.get('finished_at')
             or row.get('v3_manual_end')
@@ -681,6 +1225,23 @@ def _projection_snapshots(client, coll, tx, ids, *, batch_reads):
             yield cid, snapshots[cid]
 
 
+def _unlocked_lease_update(lease, batch_rows, planned, page, key, clear_pending, final):
+    indexed = set(lease.get('unlocked_ids') or ())
+    unlocked = {row['id'] for row in batch_rows if row.get('v3_unlocked') and not row.get('deleted')}
+    update = {}
+    if key == 'builder' and clear_pending and final:
+        # A partial pass can retire visited obligations only. Intermediate batches may already
+        # have updated the index for newly written previews, which are also in the full plan.
+        remaining = indexed & page.remaining if page is not None else set()
+        if indexed or planned:
+            update['unlocked_ids'] = sorted(planned | remaining)
+        if page is not None and lease.get('v3_unlocked_cursor') != page.cursor:
+            update['v3_unlocked_cursor'] = page.cursor
+    elif indexed or unlocked:
+        update['unlocked_ids'] = sorted((indexed - {row['id'] for row in batch_rows}) | unlocked)
+    return update
+
+
 def commit_projection(
     uid,
     token,
@@ -693,7 +1254,10 @@ def commit_projection(
     remove=(),
     removed_ids: set[str] | None = None,
     retire=None,
+    settle=None,
     key='builder',
+    bounded_pending_limit=None,
+    unlocked_page=None,
     firestore_client=None,
 ):
     """Commit derived rows and source claims; returns the ids of source recordings that kept moving.
@@ -709,6 +1273,17 @@ def commit_projection(
     """
     client = firestore_client or get_firestore_client()
     retire = dict(retire or {})
+    settle = dict(settle or {})
+    if any(
+        existing.get(cid, {}).get(field)
+        for cid in remove
+        for field in (policy.NATIVE_MANUAL_BINDING, policy.NATIVE_MANUAL_NOTES_VISIBILITY, policy.NATIVE_MANUAL_SETTLED)
+    ):
+        raise Conflict('backfill_native_finish_unsupported')
+    if settle and (
+        key != 'builder' or remove or retire or not settle.keys() <= existing.keys() - {r['id'] for r in rows}
+    ):
+        raise Conflict('source_changed')
     moved = set()
     coll = user_conversations(client, uid)
     held = leases.lease_ref(client, uid, key)
@@ -732,12 +1307,21 @@ def commit_projection(
         ):
             collisions.report(collisions.RACED, collisions.CONVERSATION, None, writer='plan', lane=key, phase='plan')
             raise Conflict('source_changed')
+    # Replacing claims on the same recording must be atomic with removing their old windows.
+    replacing_claimants = set()
+    if remove:
+        planned_sources = {rid for row in rows if not row.get('deleted') for rid in row.get('v3_recording_ids', ())}
+        replacing_claimants = set(remove) & {
+            claim['conversation_id']
+            for rid in planned_sources & recordings.keys()
+            for claim in recordings[rid].get('claims') or []
+        }
     retired = {cid for cid, patch in retire.items() if patch.get('sync_merged_into')}
     failure_transitions = {
         r['id']: r.get('v3_process_failed') and not (existing.get(r['id']) or {}).get('v3_process_failed') for r in rows
     }
-    prepared = []
-    for row in rows:
+
+    def prepare(row):
         clean = {k: v for k, v in row.items() if not k.startswith('_v3_') and k != 'updated_at'}
         # A prior row carries its stored open-loop extractions as the protected blob (the read
         # path never decodes them); the codec accepts only the decoded object.
@@ -759,7 +1343,8 @@ def commit_projection(
                         {OPEN_LOOP_EXTRACTIONS_FIELD: retained}, uid, level
                     )
                 )
-        prepared.append(home_visibility_index.stamp(encoded))
+        return home_visibility_index.stamp(encoded)
+
     encrypted_cache = encrypt(json.dumps(cache, default=str), uid)
     batch_reads = os.getenv('CONVERSATIONS_V3_BATCH_COMMIT_READS', 'on').strip().lower() != 'off'
     settle_enabled = terminal_settled.serving(uid)
@@ -772,6 +1357,15 @@ def commit_projection(
 
     @firestore.transactional
     def commit(tx, batch_rows, batch_prepared, final):
+        if guarded:
+            # A locked-closure batch runs its body at most LOCKED_BATCH_EXECUTIONS times, whatever restarts it
+            # (contention, or a cold transcript pointer that run_preloaded_operation loads and replays). Each run
+            # rereads the whole closure, so this is what holds the per-attempt read ceiling. A further run parks
+            # before it reads anything; batches already committed stay as a committed prefix, pending stays owed.
+            executions[0] += 1
+            if executions[0] > LOCKED_BATCH_EXECUTIONS:
+                metrics.safe_metric(lambda: logger.info('event=v3_locked_closure_executions outcome=capped'))
+                raise Conflict('v3_derived_budget')
         watch.begin()  # Counts the try: the retry runs this body again after a lock abort.
         observed = {}
         batch_moved = set()
@@ -786,7 +1380,7 @@ def commit_projection(
         watch.phase('deletion_marker')
         deletion = account_deletion_document(uid, firestore_client=client).get(transaction=tx)
         if account_deletion_marker_blocks_access(
-            marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('status')
+            marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('wipe_status')
         ):
             raise Conflict('account_deletion')
         if lease.get('token') != token or not lease.get('until') or lease['until'] <= now:
@@ -809,7 +1403,7 @@ def commit_projection(
         absorbed = {cid: row['id'] for row in batch_rows for cid in row.get('_v3_absorbed', ())}
         touched = {*(row['id'] for row in batch_rows), *absorbed}
         if final:
-            touched.update((*retire, *remove))
+            touched.update((*retire, *remove, *settle))
         if any(has_retained_custody(observed.get(cid)) for cid in touched):
             collisions.report(
                 collisions.RACED, collisions.CONVERSATION, None, writer='retained_custody', lane=key, phase='guards'
@@ -823,7 +1417,11 @@ def commit_projection(
         if retired and merge_donors_have_tasks(uid, retired, firestore_client=client, transaction=tx):
             raise Conflict('rederive_live_donor_tasks')
         tombstones = client.collection('users').document(uid).collection('deleted_conversations')
-        tombstone_ids = list(dict.fromkeys([*(row['id'] for row in batch_rows), *absorbed, *(retire if final else ())]))
+        tombstone_ids = list(
+            dict.fromkeys(
+                [*(row['id'] for row in batch_rows), *absorbed, *((retire.keys() | settle.keys()) if final else ())]
+            )
+        )
         if any(
             snapshot.exists
             for _, snapshot in _projection_snapshots(client, tombstones, tx, tombstone_ids, batch_reads=batch_reads)
@@ -852,6 +1450,8 @@ def commit_projection(
                 deleting = without_tasks - memories.linked_conversation_ids(
                     uid, without_tasks, firestore_client=client, transaction=tx
                 )
+            if replacing_claimants - deleting:
+                raise Conflict('backfill_rederive_linked_claims')
         watch.phase('privacy')
         # Filtering can mutate the encoded payload; every attempt needs its original input.
         batch_prepared = [dict(row) for row in batch_prepared]
@@ -906,6 +1506,8 @@ def commit_projection(
             tx.set(removal_ref(user, cid), {'absorbed_by_refinement': True})
             written.add(cid)
         if final:
+            for cid, patch in settle.items():
+                tx.update(coll.document(cid), home_visibility_index.stamp(patch, observed[cid]))
             for cid in sorted(deleting):
                 tx.set(removal_ref(user, cid), {'removed_by_backfill_rederive': True})
                 tx.delete(coll.document(cid))
@@ -916,11 +1518,19 @@ def commit_projection(
                     update_if_changed(coll.document(cid), observed.get(cid, {}), patch)
                 if cid in retired:
                     tx.set(removal_ref(user, cid), {'retired_by_repair': True})
-        replaced = {r['id'] for r in batch_rows} | set(absorbed) | deleting | (retired if final else set())
+        replaced = (
+            {r['id'] for r in batch_rows} | set(absorbed) | deleting | (retired | settle.keys() if final else set())
+        )
         for rid, recording in recordings.items():
-            if recording.get('deleted') or recording.get('sync_merged_into'):
-                update_if_changed(coll.document(rid), observed[rid], {'v3_pending': False, 'v3_pending_since': None})
+            if (
+                recording.get('deleted')
+                or recording.get('sync_merged_into')
+                or (key == 'builder' and clear_pending and bounded_pending_enabled() and recording.get('discarded'))
+            ):
+                update_if_changed(coll.document(rid), observed[rid], TERMINAL_PENDING_CLEAR)
                 continue
+            if recording.get('discarded'):
+                continue  # Existing custody is retained even when terminal cleanup is disabled.
             if rid in batch_moved or rid in moved:
                 # Merge onto the re-read document; never write the stale snapshot's view of a live source.
                 claims = [c for c in observed[rid].get('claims') or [] if c['conversation_id'] not in replaced]
@@ -994,15 +1604,13 @@ def commit_projection(
                 open_ids[0] if open_ids else (lease.get('open_id') if lease.get('open_id') not in existing else None)
             ),
         }
-        unlocked = {r['id'] for r in batch_rows if r.get('v3_unlocked') and not r.get('deleted')}
-        if unlocked or lease.get('unlocked_ids'):
-            previous_unlocked = set(lease.get('unlocked_ids') or ()) - {r['id'] for r in batch_rows}
-            if key == 'builder' and clear_pending and final:
-                # A full pass plans every eligible indexed preview. Missing,
-                # settled or ineligible sources no longer owe a timer.
-                lease_update['unlocked_ids'] = sorted(planned_unlocked)
-            else:
-                lease_update['unlocked_ids'] = sorted(previous_unlocked | unlocked)
+        if final and bounded_pending_limit is not None:
+            remembered_limit = bounded_pending_limit if bounded_pending_limit < 32 else None
+            if lease.get('v3_bounded_pending_limit') != remembered_limit:
+                lease_update['v3_bounded_pending_limit'] = remembered_limit
+        lease_update.update(
+            _unlocked_lease_update(lease, batch_rows, planned_unlocked, unlocked_page, key, clear_pending, final)
+        )
         if skip_unchanged and write_equality.or_write(
             write_equality.same_outline_cache, uid, lease.get('outline_cache'), encrypted_cache
         ):
@@ -1012,33 +1620,68 @@ def commit_projection(
         return observed, batch_moved, batch_prepared, skipped_ids, written, skipped_ids | skipped_patches, deleting
 
     fixed = fixed_write_bytes(recordings, rows, encrypted_cache)
-    # Reserve space for all donor writes, including the task-link fences in the survivor's batch.
-    fixed_writes = len(recordings) + 2 * len(remove) + absorption_writes + len(retire) + len(retired) + 1
-    if (retired or remove) and fixed_writes + bool(rows) > BATCH_MAX_WRITES:
-        raise Conflict('backfill_partition_budget')
-    max_rows = max(1, BATCH_MAX_WRITES - fixed_writes)
-    batches, current, size, pointers = [], [], 0, 0
-    for raw, encoded in zip(rows, prepared):
-        amount = len(json.dumps(encoded, default=str).encode())
-        # Privacy filtering resolves each prepared pointer before the first write.
-        pointer = isinstance(encoded.get('transcript_segments'), dict)
-        if current and (
-            size + amount > BATCH_ROW_BYTES
-            or fixed + size + amount > BATCH_WRITE_BYTES
-            or len(current) >= max_rows
-            or (pointer and pointers >= MAX_PRELOAD_DOCUMENTS)
-        ):
-            batches.append(current)
-            current, size, pointers = [], 0, 0
-        current.append((raw, encoded))
-        size += amount
-        pointers += pointer
-    if current or not batches:
-        batches.append(current)
+    fixed += _encoded_bytes(settle) if settle else 0
+    fixed_writes = len(recordings) + 2 * len(remove) + absorption_writes + len(retire) + len(retired) + len(settle) + 1
+
+    def partition(prepared_rows):
+        return partition_rows(
+            rows,
+            prepared_rows,
+            fixed=fixed,
+            fixed_writes=fixed_writes,
+            max_writes=BATCH_MAX_WRITES,
+            max_bytes=BATCH_WRITE_BYTES,
+            row_bytes=BATCH_ROW_BYTES,
+            max_pointers=MAX_PRELOAD_DOCUMENTS,
+            removals=bool(retired or remove),
+            settle=bool(settle),
+            replacing_claimants=replacing_claimants,
+        )
+
+    heavy = _past_origin_bound(uid, existing, key=key)
+    executions = [0]
+    if heavy:
+        # Each batch rereads the whole closure: a locked-closure commit may not buy an unbounded one. Decide the cap,
+        # and the partition's own refusals (settle, replacing claimants), before anything is uploaded: a rejected
+        # attempt must leave no lake copy of user content that no row references (custody). Preparation runs once,
+        # with uploads deferred: offload_or_inline applies its exact admission and inline-threshold test, and a row
+        # it would offload carries a stand-in pointer at least as large as the real one, so the partition below has
+        # exactly the real pointer count and never fewer batches. Park on the derived budget before any upload or
+        # transaction, so nothing is written and pending stays owed.
+        with transcript_pointer.deferred_offloads() as deferred:
+            prepared = [prepare(row) for row in rows]
+        estimated = len(partition(prepared))
+        if estimated > LOCKED_MAX_BATCHES:
+            metrics.safe_metric(lambda: logger.info('event=v3_locked_closure_batches batches=%d', estimated))
+            raise LockedBatchCap('v3_derived_budget')
+        transcript_pointer.upload_deferred(deferred, prepared)
+    else:
+        prepared = [prepare(row) for row in rows]
+    # Every charged attempt's pointer batches are preloaded and run at most LOCKED_BATCH_EXECUTIONS times, inside the
+    # origin bound too (panel F2 on #26490): a listed owner's load is charged whether or not it passes the bound.
+    # Inline-only commits, and unlisted owners, keep main's path unchanged.
+    guarded = heavy or (
+        _locked_allowance(uid, key=key) != (0, 0)
+        and any(isinstance(row.get('transcript_segments'), dict) for row in prepared)
+    )
+    batches = partition(prepared)
+    if heavy and len(batches) > LOCKED_MAX_BATCHES:
+        # Backstop, unreachable while the stand-ins bound the real pointers (a real pointer is never larger). If it
+        # ever fires, this attempt's uploads already exist and stay for the lake's orphan janitor (SCA-4941).
+        metrics.safe_metric(lambda: logger.info('event=v3_locked_closure_batches backstop batches=%d', len(batches)))
+        raise LockedBatchCap('v3_derived_budget')
     for index, batch in enumerate(batches):
         batch_rows, batch_prepared, final = [r for r, _ in batch], [r for _, r in batch], index == len(batches) - 1
         try:
+            if index and commit_lease_renewal_enabled():
+                # The caller renewed the pass's lease (builder, or backfill-builder for a derive pass) once
+                # before the commit. Each later batch renews it again, so a multi-batch commit cannot outlive
+                # the lease after writing a prefix. CONVERSATIONS_V3_COMMIT_LEASE_RENEWAL=off restores one renewal.
+                leases.renew(uid, key, token, firestore_client=client)
             watch.reset()
+            if guarded:
+                executions[0] = 0
+                _preload_batch_pointers(uid, batch_prepared)
 
             def execute():
                 # Main's retry: up to three fresh transactions with a jittered wait (SCA-2918).
@@ -1235,11 +1878,16 @@ def release_claims(uid, row, *, firestore_client=None):
                                 remaining.append((protected_end, end))
                     intervals = remaining
                 spans.extend({'conversation_id': row['id'], 'start': start, 'end': end} for start, end in intervals)
+            deleted_copies = list(recording.get('v3_backfill_deleted_copies') or [])
+            if recording.get('v3_backfill_run') and row['id'] not in deleted_copies:
+                # Undo must see this deletion even when surviving claims cover the interval (no span).
+                deleted_copies.append(row['id'])
             tx.update(
                 coll.document(rid),
                 {
                     'claims': claims,
                     'deleted_spans': spans,
+                    **({'v3_backfill_deleted_copies': deleted_copies} if deleted_copies else {}),
                     # A backfill donor is a legacy conversation hidden only for the spot check: deleting
                     # a backfilled copy never erases the donor's audio or tombstones it; undo restores it.
                     'v3_audio_purge_pending': not claims
@@ -1264,11 +1912,14 @@ BACKFILL_TRACKED = (
     'v3_audio_purge_attempts',
     'backfill_superseded',
     'deleted_spans',
+    'v3_backfill_deleted_copies',
 )
 BACKFILL_SOURCES = frozenset({'omi', 'phone'})
 # Metadata page for planning an owner's window; a larger window is refused, never truncated.
 BACKFILL_WINDOW_MAX = 10000
-BACKFILL_UNDO_PAGE = 100
+# Documents one undo transaction reads: the lease and run, each donor, and per copy the row, its
+# tombstone and its notes lease. Kept within Firestore's 500 per-transaction bound.
+UNDO_GROUP_MAX = 500
 
 
 def backfill_legacy_source(raw):
@@ -1330,6 +1981,11 @@ def _rederive_prior(row):
         'v3_process_failed': False,
         'v3_process_failure_reason': None,
         'v3_notes_written': False,
+        # The rebuilt window decides its own notes obligation; a stale marker never rides along.
+        'v3_process_pending': False,
+        'v3_backfill_process_pending': False,
+        # A fresh notes retry budget for the rebuilt window.
+        'v3_backfill_attempts': 0,
     }
 
 
@@ -1341,7 +1997,9 @@ def load_derive(uid, *, since, until, run_id, rederive=False, firestore_client=N
     stay ordinary visible conversations.
     """
     client = firestore_client or get_firestore_client()
-    if account_deletion_blocks_user_work(uid, firestore_client=client):
+    # The marker lives on the data plane; the default resolver pins it (never the conversations client).
+    # Fresh: this load gates sending the owner's transcript to the outline model.
+    if account_deletion_blocks_user_work(uid, fresh=True):
         raise Conflict('account_deletion')
     snapshots = list(
         user_conversations(client, uid)
@@ -1481,6 +2139,7 @@ def backfill_run_documents(uid, run_id, *, firestore_client=None):
                 'deleted_spans',
                 'v3_backfill_prior',
                 'v3_recording_ids',
+                'v3_backfill_deleted_copies',
             ]
         )
     )
@@ -1490,72 +2149,119 @@ def backfill_run_documents(uid, run_id, *, firestore_client=None):
 def deleted_after_backfill(donor):
     """The owner deleted a backfilled copy of this donor: restoring it would resurrect what they deleted.
 
-    A delete releases the copy's claim and records its interval in deleted_spans. A converted donor
-    always has a claim, so no claim left also means every copy that covered it was deleted.
+    A delete records the copy's interval in the donor's deleted_spans (keyed by the copy id); spans the
+    donor already had before the run are not the owner's post-backfill deletion. A donor with no claim
+    but no new span (its copy never committed, or a re-derive retired it) is not a deletion.
     """
+    if donor.get('v3_backfill_deleted_copies'):
+        return True
     prior = donor.get('v3_backfill_prior') or {}
     before = {s.get('conversation_id') for s in prior.get('deleted_spans') or []}
-    spans = donor.get('deleted_spans') or []
-    return any(s.get('conversation_id') not in before for s in spans) or not donor.get('claims')
+    return any(s.get('conversation_id') not in before for s in donor.get('deleted_spans') or [])
 
 
-def restore_backfill_donors(uid, token, ids, *, firestore_client=None):
-    """Undo one page of donors exactly: every tracked field returns to its pre-backfill value.
+def deleted_copy_ids(uid, ids, *, firestore_client=None):
+    """Copy ids that now have a deletion tombstone (ids and existence only)."""
+    client = firestore_client or get_firestore_client()
+    tombstones = client.collection('users').document(uid).collection('deleted_conversations')
+    return [cid for cid in ids if tombstones.document(cid).get().exists]
 
-    A donor whose backfilled copy the owner deleted stays converted (hidden), so the deletion holds;
-    returns (restored, kept ids).
+
+def undo_backfill_group(uid, token, donor_ids, row_ids, *, run_id, firestore_client=None):
+    """Undo one connected group of a run in one transaction: restore its donors exactly, remove its copies.
+
+    A group is every donor and copy linked by claims, so it either goes back to legacy whole or stays
+    v3 whole. It stays when the owner deleted any copy in it (a tombstone for a copy id, or a donor
+    deleted span added after the run); its copies' owed backfill notes move to the live marker so
+    they are still written. The tombstones are read inside the transaction, so a deletion racing undo
+    either lands first (the group stays) or retries after the copies are gone. A group whose copy
+    also holds a recording outside the group or is stamped with another run stays too: 'kept_live'. Returns
+    (outcome, donors restored or kept, rows removed). The run ledger's undo progress
+    (totals and removed copy ids) is written in the same transaction, so a crash never loses it.
     """
+    if 2 + len(donor_ids) + 3 * len(row_ids) > UNDO_GROUP_MAX:
+        # Partitions cap loaded documents (LIMIT), so a group stays far below the transaction write
+        # limit; anything larger is refused whole rather than undone across transactions.
+        raise Conflict('undo_group_too_large')
     client = firestore_client or get_firestore_client()
     coll = user_conversations(client, uid)
+    tombstones = client.collection('users').document(uid).collection('deleted_conversations')
     held = leases.lease_ref(client, uid, BACKFILL_LEASE)
+    from database import conversations_v3_backfill_runs as runs
+
+    ledger = runs.run_ref(client, uid, run_id)
 
     @firestore.transactional
-    def restore(tx):
+    def undo(tx):
         lease = held.get(transaction=tx).to_dict() or {}
-        snapshots = [(coll.document(cid), coll.document(cid).get(transaction=tx)) for cid in ids]
-        if lease.get('token') != token or not lease.get('until') or lease['until'] <= datetime.now(timezone.utc):
+        run = ledger.get(transaction=tx)
+        donors = [(cid, coll.document(cid).get(transaction=tx)) for cid in donor_ids]
+        rows = [(cid, coll.document(cid).get(transaction=tx)) for cid in row_ids]
+        deleted = [tombstones.document(cid).get(transaction=tx).exists for cid in row_ids]
+        notes = [leases.lease_ref(client, uid, 'summary-' + cid).get(transaction=tx).to_dict() or {} for cid in row_ids]
+        now = datetime.now(timezone.utc)
+        if lease.get('token') != token or not lease.get('until') or lease['until'] <= now:
             raise Conflict('lease_lost')
-        restored, kept = 0, []
-        for cid, (ref, snapshot) in zip(ids, snapshots):
-            row = snapshot.to_dict() or {}
-            if not snapshot.exists or row.get('v3_derived') or not row.get('v3_backfill_run'):
-                continue
+        if any(n.get('token') and n.get('until') and n['until'] > now for n in notes):
+            # A notes write started on a copy after undo's first check: never delete under it.
+            raise Conflict('notes_in_flight')
+        donor_rows = [(cid, snapshot.to_dict() or {}) for cid, snapshot in donors if snapshot.exists]
+        converted = [
+            (cid, row) for cid, row in donor_rows if not row.get('v3_derived') and row.get('v3_backfill_run') == run_id
+        ]
+        copies = [(cid, snapshot.to_dict() or {}) for cid, snapshot in rows]
+        foreign = any(row.get('v3_backfill_run') not in (None, run_id) for _, row in donor_rows + copies)
+        group = set(donor_ids)
+        # A live pass after the run carries the run tag onto a window that also holds live recordings
+        # (service.reconcile): deleting that copy would delete live capture, so the group stays v3.
+        # Any recording outside the group counts, a donor of another run included. A group that is
+        # also an owner deletion is reported as 'kept' (the deletion reason wins).
+        live = any(
+            rid not in group
+            for _, snapshot in rows
+            if snapshot.exists
+            for rid in (snapshot.to_dict() or {}).get('v3_recording_ids') or []
+        )
+        owner_deleted = any(deleted) or any(deleted_after_backfill(row) for _, row in converted)
+        if live or foreign or owner_deleted:
+            for (cid, row), gone in zip(copies, deleted):
+                if row.get('v3_backfill_run') != run_id:
+                    continue
+                if row.get('v3_backfill_process_pending'):
+                    # A copy the owner deleted never goes to the notes model; the others still get notes.
+                    patch = {'v3_backfill_process_pending': False, 'v3_process_pending': not gone}
+                    tx.update(coll.document(cid), patch)
+                elif gone and row.get('v3_process_pending'):
+                    tx.update(coll.document(cid), {'v3_process_pending': False})
+            return ('kept' if owner_deleted else 'kept_live'), len(converted), 0
+        for cid, row in converted:
             prior = row.get('v3_backfill_prior')
             if not isinstance(prior, dict):
                 raise Conflict('backfill_prior_missing')
-            if deleted_after_backfill(row):
-                kept.append(cid)
-                continue
             patch = {k: prior[k] if k in prior else firestore.DELETE_FIELD for k in BACKFILL_TRACKED}
             patch.update(v3_backfill_run=firestore.DELETE_FIELD, v3_backfill_prior=firestore.DELETE_FIELD)
-            tx.update(ref, home_visibility_index.stamp(patch, row))
-            restored += 1
-        return restored, kept
+            tx.update(coll.document(cid), home_visibility_index.stamp(patch, row))
+        removed = []
+        for cid, row in copies:
+            # Only this backfill's copies; never a live row and no tombstone (they were never the owner's).
+            if row.get('v3_derived') and row.get('backfilled') and row.get('v3_backfill_run') == run_id:
+                tx.delete(coll.document(cid))
+                removed.append(cid)
+        if run.exists:
+            progress = (run.to_dict() or {}).get('undo_progress') or {}
+            tx.update(
+                ledger,
+                {
+                    'undo_progress': {
+                        'donors_restored': int(progress.get('donors_restored') or 0) + len(converted),
+                        'rows_removed': int(progress.get('rows_removed') or 0) + len(removed),
+                        'removed_ids': list(progress.get('removed_ids') or []) + removed,
+                    }
+                },
+            )
+        return 'undone', len(converted), len(removed)
 
-    return restore(client.transaction())
-
-
-def delete_backfill_rows(uid, token, ids, *, firestore_client=None):
-    """Remove one page of backfill-derived rows. No tombstone: they were never the user's conversations."""
-    client = firestore_client or get_firestore_client()
-    coll = user_conversations(client, uid)
-    held = leases.lease_ref(client, uid, BACKFILL_LEASE)
-
-    @firestore.transactional
-    def remove(tx):
-        lease = held.get(transaction=tx).to_dict() or {}
-        snapshots = [(coll.document(cid), coll.document(cid).get(transaction=tx)) for cid in ids]
-        if lease.get('token') != token or not lease.get('until') or lease['until'] <= datetime.now(timezone.utc):
-            raise Conflict('lease_lost')
-        removed = 0
-        for ref, snapshot in snapshots:
-            row = snapshot.to_dict() or {}
-            if snapshot.exists and row.get('v3_derived') and row.get('backfilled') and row.get('v3_backfill_run'):
-                tx.delete(ref)
-                removed += 1
-        return removed
-
-    return remove(client.transaction())
+    return undo(client.transaction())
 
 
 # Record-WAL duplicate custody a user erasure invalidates. The merge plan is
@@ -1741,7 +2447,9 @@ def transfer_claims(uid, sources, target, *, firestore_client=None):
     transfer(client.transaction())
 
 
-def outline_attempt(uid, token, fingerprint, *, key='builder', firestore_client=None):
+def outline_attempt(uid, token, fingerprint, *, key='builder', preemptible=False, firestore_client=None):
+    if preemptible and key != 'builder':
+        raise ValueError('only the live builder outline can be promoted on open')
     client = firestore_client or get_firestore_client()
     ref = leases.lease_ref(client, uid, key)
 
@@ -1752,12 +2460,16 @@ def outline_attempt(uid, token, fingerprint, *, key='builder', firestore_client=
             timezone.utc
         ):
             raise Conflict('lease_lost')
-        attempts = dict(row.get('outline_attempts') or {})
+        field = 'outline_flex_attempts' if preemptible else 'outline_attempts'
+        attempts = dict(row.get(field) or {})
         count = attempts.get(fingerprint, 0)
-        if count >= 2:
+        if count >= (1 if preemptible else 2):
             return False
         attempts[fingerprint] = count + 1
-        tx.update(ref, {'outline_attempts': dict(list(attempts.items())[-128:])})
+        update: dict[str, Any] = {field: dict(list(attempts.items())[-128:])}
+        if preemptible:
+            update['llm_preemptible'] = True
+        tx.update(ref, update)
         return True
 
     return run_preloaded_transaction_with_contention_retry(client, begin)
@@ -1777,7 +2489,7 @@ def write_live_title_preview(uid, token, cid, revision, *, title=None, firestore
             return False
         deletion = deletion_ref.get(transaction=tx)
         if account_deletion_marker_blocks_access(
-            marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('status')
+            marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('wipe_status')
         ):
             return False
         row = ref.get(transaction=tx).to_dict() or {}

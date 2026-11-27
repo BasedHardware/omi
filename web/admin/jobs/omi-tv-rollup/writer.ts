@@ -14,6 +14,7 @@ import {
   ROLLUP_VERSION,
 } from "../../lib/wall-rollup-extract";
 import { isoDay, shiftDay, utcDay } from "../../lib/qualified-activity";
+import { PRODUCT_SAMPLING_FIRST_DAY } from "../../lib/posthog-sampling";
 
 export async function queryPage(query: string) {
   const host = process.env.POSTHOG_HOST || "https://us.posthog.com";
@@ -64,12 +65,18 @@ export async function queryPage(query: string) {
   throw new Error("PostHog retry budget exceeded");
 }
 
+function assertCoverageDay(day: string, today?: Date) {
+  closedDay(day, today);
+  if (day >= PRODUCT_SAMPLING_FIRST_DAY)
+    throw new Error("Omi TV daily-1 coverage excludes sampled days");
+}
+
 export async function writeDay(
   bq: BigQuery,
   day: string,
   extract = extractDay
 ) {
-  closedDay(day);
+  assertCoverageDay(day);
   const key = process.env.CRON_SECRET || "";
   keyId(key); // validate before any source request
   const data = await extract(day, key, queryPage);
@@ -139,22 +146,19 @@ export function datesForRun(
   explicit?: string
 ): string[] {
   if (explicit) {
-    closedDay(explicit, today);
+    assertCoverageDay(explicit, today);
     return [explicit];
   }
-  const frontier = isoDay(shiftDay(utcDay(today), -1));
-  const missing = Array.from({ length: 13 }, (_, i) =>
-    isoDay(shiftDay(utcDay(today), i - 14))
-  )
-    .filter((d) => !present.has(d))
+  const upper = utcDay(today);
+  const dayAt = (offset: number) => isoDay(shiftDay(upper, offset));
+  const missing = Array.from({ length: 13 }, (_, i) => dayAt(i - 14))
+    .filter((d) => d < PRODUCT_SAMPLING_FIRST_DAY && !present.has(d))
     .slice(0, 2);
   // Re-extract yesterday plus the previous two arrival days for late ingestion /
   // person merges, and at most two missing days (one day per call, serial).
   return Array.from(
     new Set([
-      frontier,
-      isoDay(shiftDay(utcDay(today), -2)),
-      isoDay(shiftDay(utcDay(today), -3)),
+      ...[-1, -2, -3].map(dayAt).filter((d) => d < PRODUCT_SAMPLING_FIRST_DAY),
       ...missing,
     ])
   );
