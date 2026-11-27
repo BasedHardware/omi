@@ -300,9 +300,16 @@ def test_scoped_stats_preserve_missing_telemetry_instead_of_fabricating_zero():
         assert panel['fieldConfig']['defaults']['noValue'] == 'not measured', panel['title']
         for target in panel['targets']:
             assert 'or vector(0)' not in target['expr'], panel['title']
+    # SCA-3881 wraps short-range stats as `(<expr>) and on() (vector(${__range_s}) >= 300)`
+    # so the 135 s bridge scrape cannot paint a sub-5-minute range; the guard sits outside.
+    range_guard = ') and on() (vector(${__range_s}) >= 300)'
     for panel_id in (2, 3, 4, 20, 36, 51, 52, 53, 54, 55, 56, 59):
+        expr = panels[panel_id]['targets'][0]['expr']
+        if expr.endswith(range_guard):
+            assert expr.startswith('('), panels[panel_id]['title']
+            expr = expr[1 : -len(range_guard)]
         # A present but idle denominator must also leave the stat empty.
-        assert panels[panel_id]['targets'][0]['expr'].endswith(' > 0)'), panels[panel_id]['title']
+        assert expr.endswith(' > 0)'), panels[panel_id]['title']
     for panel_id in (12, 13, 14, 15):
         expr = panels[panel_id]['targets'][0]['expr']
         assert '0 * sum(increase(omi_subscription_events_total{job="cloud-run-application-metrics"}[$__range]))' in expr
