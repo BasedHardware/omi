@@ -96,6 +96,17 @@ class AnalyticsManager {
   static ValueListenable<int> get identityChanges => _identityChanges;
   static bool get identityKnown => _identityKnown;
   static bool get trackingEnabled => _trackingEnabled;
+  static bool get canResolveBooleanFeatureFlags {
+    final adapter = _adapter;
+    return _trackingEnabled &&
+        _settledDistinctId != null &&
+        adapter != null &&
+        adapter.isInitialized &&
+        adapter is AnalyticsBooleanFlagAdapter &&
+        adapter is AnalyticsFeatureFlagAdapter &&
+        adapter is AnalyticsResolvedFlagAdapter;
+  }
+
   static final ValueNotifier<bool> _trackingConsent = ValueNotifier(true);
   static ValueListenable<bool> get trackingConsent => _trackingConsent;
   static final ValueNotifier<String?> _settledIdentity = ValueNotifier(null);
@@ -601,7 +612,12 @@ class AnalyticsManager {
   Future<bool?> resolvedBooleanFeatureFlag(String key, {required bool refresh}) => _readFlag<bool?>((adapter) async {
         if (adapter is! AnalyticsBooleanFlagAdapter) return null;
         final boolean = adapter as AnalyticsBooleanFlagAdapter;
-        if (refresh && await adapter.reloadFeatureFlags()) return boolean.isBooleanFeatureEnabledCached(key);
+        if (refresh && await adapter.reloadFeatureFlags()) {
+          if (adapter is AnalyticsResolvedFlagAdapter) {
+            return (adapter as AnalyticsResolvedFlagAdapter).resolvedFeatureEnabled(key);
+          }
+          return boolean.isBooleanFeatureEnabledCached(key);
+        }
         if (adapter is AnalyticsResolvedFlagAdapter &&
             await (adapter as AnalyticsResolvedFlagAdapter).resolvedFeatureEnabled(key) != null) {
           return boolean.isBooleanFeatureEnabledCached(key);

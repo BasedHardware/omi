@@ -3,7 +3,12 @@ import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 class RefactorFlagAdapter
-    implements AnalyticsAdapter, AnalyticsIdentityAdapter, AnalyticsFeatureFlagAdapter, AnalyticsBooleanFlagAdapter {
+    implements
+        AnalyticsAdapter,
+        AnalyticsIdentityAdapter,
+        AnalyticsFeatureFlagAdapter,
+        AnalyticsBooleanFlagAdapter,
+        AnalyticsResolvedFlagAdapter {
   RefactorFlagAdapter(this.flags);
   final Map<String, bool> flags;
   bool initialized = false;
@@ -25,6 +30,8 @@ class RefactorFlagAdapter
 
   @override
   Future<bool> isBooleanFeatureEnabled(String key) async => flags[key] == true;
+  @override
+  Future<bool?> resolvedFeatureEnabled(String key) async => flags[key];
   @override
   Future<bool> isFeatureEnabled(String key) async => flags[key] == true;
   @override

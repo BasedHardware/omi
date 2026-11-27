@@ -92,7 +92,7 @@ void main() {
 
   test('Android Limitless watchdog keeps the admitted owner through metadata and unchanged settings refreshes',
       () async {
-    await setRefactorFlags({});
+    await setRefactorFlags({'android-custom-live-audio-recovery-kill': false});
     addTearDown(AnalyticsManager.resetForTesting);
     world.controller.updateRecordingDevice(null);
     await world.settle();
@@ -153,6 +153,70 @@ void main() {
     expect(replacement?.call(), isFalse);
     await world.controller.onTranscriptionSettingsChanged();
     expect(connection.captureIsCurrent, isNull);
+  });
+
+  test('an identity settling during Custom Live capture refreshes the retained watch', () async {
+    AnalyticsManager.resetForTesting();
+    addTearDown(AnalyticsManager.resetForTesting);
+    world.controller.updateRecordingDevice(null);
+    await world.settle();
+    SharedPreferencesUtil().uid = 'capture-test-owner';
+    await SharedPreferencesUtil().saveCustomSttConfig(
+      const CustomSttConfig(provider: SttProvider.customLive, url: 'wss://local-stt.example.test'),
+    );
+    final device = BtDevice(id: 'limitless-identity', name: 'Limitless', type: DeviceType.limitless, rssi: -40);
+    final connection = _WatchedLimitlessConnection();
+    world.deviceConnection = connection;
+    await world.controller.streamDeviceRecording(device: device);
+    await world.settle();
+    expect(connection.watchStarts, 1);
+
+    await setRefactorFlags({'android-custom-live-audio-recovery-kill': false});
+    await world.settle();
+    expect(connection.watchStarts, 2);
+    expect(connection.captureIsCurrent?.call(), isTrue);
+  });
+
+  test('resolved kill switch prevents a Custom Live watch from being installed', () async {
+    await setRefactorFlags({'android-custom-live-audio-recovery-kill': true});
+    addTearDown(AnalyticsManager.resetForTesting);
+    world.controller.updateRecordingDevice(null);
+    await world.settle();
+    SharedPreferencesUtil().uid = 'capture-test-owner';
+    await SharedPreferencesUtil().saveCustomSttConfig(
+      const CustomSttConfig(provider: SttProvider.customLive, url: 'wss://local-stt.example.test'),
+    );
+    final device = BtDevice(id: 'limitless-killed', name: 'Limitless', type: DeviceType.limitless, rssi: -40);
+    final connection = _WatchedLimitlessConnection();
+    world.deviceConnection = connection;
+    await world.controller.streamDeviceRecording(device: device);
+    await world.settle();
+
+    expect(connection.captureIsCurrent, isNull);
+    expect(connection.watchStarts, 0);
+    expect(connection.stopCalls, greaterThan(0));
+  });
+
+  test('Limitless reactivation is gated while the transcription socket is disconnected', () async {
+    await setRefactorFlags({'android-custom-live-audio-recovery-kill': false});
+    addTearDown(AnalyticsManager.resetForTesting);
+    world.controller.updateRecordingDevice(null);
+    await world.settle();
+    SharedPreferencesUtil().uid = 'capture-test-owner';
+    await SharedPreferencesUtil().saveCustomSttConfig(
+      const CustomSttConfig(provider: SttProvider.customLive, url: 'wss://local-stt.example.test'),
+    );
+    final device = BtDevice(id: 'limitless-socket', name: 'Limitless', type: DeviceType.limitless, rssi: -40);
+    final connection = _WatchedLimitlessConnection();
+    world.deviceConnection = connection;
+    await world.controller.streamDeviceRecording(device: device);
+    await world.settle();
+
+    expect(connection.reactivationIsCurrent?.call(), isTrue);
+    world.setConnected(false);
+    world.socket!.emitClose();
+    await world.settle();
+    expect(connection.reactivationIsCurrent?.call(), isFalse);
   });
 
   test('queued silence event cannot change ownership or run pause effects', () {
@@ -352,6 +416,7 @@ void main() {
 
 class _WatchedLimitlessConnection extends ScriptedDeviceConnection implements LimitlessDeviceConnection {
   bool Function()? captureIsCurrent;
+  bool Function()? reactivationIsCurrent;
   int watchStarts = 0;
   int stopCalls = 0;
 
@@ -370,6 +435,7 @@ class _WatchedLimitlessConnection extends ScriptedDeviceConnection implements Li
   }) {
     if (this.captureIsCurrent?.call() ?? false) return;
     this.captureIsCurrent = captureIsCurrent;
+    this.reactivationIsCurrent = reactivationIsCurrent;
     watchStarts++;
     onEnabled();
   }
@@ -378,5 +444,6 @@ class _WatchedLimitlessConnection extends ScriptedDeviceConnection implements Li
   void stopCustomLiveAudioWatch() {
     stopCalls++;
     captureIsCurrent = null;
+    reactivationIsCurrent = null;
   }
 }

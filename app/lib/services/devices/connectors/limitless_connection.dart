@@ -1459,6 +1459,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
   /// Disable batch mode and switch back to real-time streaming
   Future<void> disableBatchMode() async {
     if (!_isInitialized) return;
+    final epoch = connectionEpoch;
 
     try {
       final pendingPages = _completedFlashPages.length;
@@ -1483,7 +1484,23 @@ class LimitlessDeviceConnection extends DeviceConnection {
         'pendingFragmentsCleared': pendingFragments,
       });
     } catch (e) {
-      _isBatchMode = false;
+      if (!_isCurrentSession(epoch)) return;
+      try {
+        final reconcileCommand = _realtimeSuppressed
+            ? _encodeEnableDataStream(enable: false)
+            : _encodeDownloadFlashPages(batchMode: false, realTime: true);
+        await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, reconcileCommand);
+        if (!_isCurrentSession(epoch)) return;
+        _isBatchMode = false;
+        if (!_realtimeSuppressed) _armStreamHealthWatch(reason: 'batch_mode_disable_reconciled');
+      } catch (reconcileError) {
+        _isBatchMode = true;
+        DebugLogManager.logError(
+          reconcileError,
+          null,
+          'Limitless failed to reconcile realtime mode after batch mode disable',
+        );
+      }
       DebugLogManager.logError(e, null, 'Limitless failed to disable batch mode');
     }
   }

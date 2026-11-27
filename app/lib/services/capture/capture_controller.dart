@@ -284,6 +284,10 @@ class CaptureController extends ChangeNotifier
   Timer? _continuityTimer;
 
   final _captureEvidenceIdentity = CaptureEvidenceIdentity();
+  bool? _customLiveAudioRecoveryKillSwitchEnabled;
+  int _customLiveAudioRecoveryFlagIdentityEpoch = -1;
+  int _customLiveAudioRecoveryFlagGeneration = 0;
+  bool _customLiveAudioRecoveryFlagRefreshInFlight = false;
 
   String get _captureEvidenceRoot {
     final sync = _wal.getSyncs().phone;
@@ -565,6 +569,9 @@ class CaptureController extends ChangeNotifier
     _syncCaptureHealthTimer(null);
     _installIngressByteObserver();
     _installLiveRecovery();
+    lifetime.listenTo(AnalyticsManager.identityChanges, _onCustomLiveAudioFlagContextChanged);
+    lifetime.listenTo(AnalyticsManager.settledIdentity, _onCustomLiveAudioFlagContextChanged);
+    lifetime.listenTo(AnalyticsManager.trackingConsent, _onCustomLiveAudioFlagContextChanged);
     final omiCall = _omiCallState;
     if (omiCall != null) {
       omiCall.addListener(_onOmiCallStateChanged);
@@ -2852,6 +2859,11 @@ class CaptureController extends ChangeNotifier
       return;
     }
     _recordingTelemetry.observeCustomLiveAudioEligibility();
+    if (AnalyticsManager.canResolveBooleanFeatureFlags && _customLiveAudioRecoveryKillSwitchEnabled == null) {
+      connection.stopCustomLiveAudioWatch();
+      _refreshCustomLiveAudioKillSwitch();
+      return;
+    }
     if (_customLiveAudioRecoveryKilled) {
       connection.stopCustomLiveAudioWatch();
       _recordingTelemetry.observeCustomLiveAudioDetection(enabled: false);
@@ -2869,16 +2881,42 @@ class CaptureController extends ChangeNotifier
     );
   }
 
-  // DeviceService's saved-reconnect policy already refreshes the shared flag cache.
+  void _onCustomLiveAudioFlagContextChanged() {
+    _customLiveAudioRecoveryFlagGeneration++;
+    _customLiveAudioRecoveryFlagIdentityEpoch = -1;
+    _customLiveAudioRecoveryFlagRefreshInFlight = false;
+    _customLiveAudioRecoveryKillSwitchEnabled = null;
+    _refreshLimitlessCustomLiveWatch();
+  }
+
+  void _refreshCustomLiveAudioKillSwitch() {
+    if (!AnalyticsManager.canResolveBooleanFeatureFlags || _customLiveAudioRecoveryFlagRefreshInFlight) return;
+    final identityEpoch = AnalyticsManager.identityEpoch;
+    if (_customLiveAudioRecoveryFlagIdentityEpoch == identityEpoch) return;
+    _customLiveAudioRecoveryFlagIdentityEpoch = identityEpoch;
+    _customLiveAudioRecoveryFlagRefreshInFlight = true;
+    final generation = _customLiveAudioRecoveryFlagGeneration;
+    unawaited(() async {
+      final enabled = await AnalyticsManager().resolvedBooleanFeatureFlag(
+        'android-custom-live-audio-recovery-kill',
+        refresh: true,
+      );
+      if (_captureControllerDisposed ||
+          generation != _customLiveAudioRecoveryFlagGeneration ||
+          identityEpoch != AnalyticsManager.identityEpoch) {
+        return;
+      }
+      _customLiveAudioRecoveryFlagRefreshInFlight = false;
+      _customLiveAudioRecoveryKillSwitchEnabled = enabled;
+      _refreshLimitlessCustomLiveWatch();
+    }());
+  }
+
   bool get _customLiveAudioRecoveryKilled {
-    final analytics = AnalyticsManager();
     return shouldDisableCustomLiveAudioRecovery(
       buildEnabled: customLiveCaptureFixEnabled,
-      analyticsTrackingEnabled: AnalyticsManager.trackingEnabled,
-      identitySettled: analytics.settledDistinctId != null,
-      cachedKillSwitchEnabled: analytics.isBooleanFeatureEnabledCached(
-        'android-custom-live-audio-recovery-kill',
-      ),
+      flagReadContextAvailable: AnalyticsManager.canResolveBooleanFeatureFlags,
+      cachedKillSwitchEnabled: _customLiveAudioRecoveryKillSwitchEnabled,
     );
   }
 

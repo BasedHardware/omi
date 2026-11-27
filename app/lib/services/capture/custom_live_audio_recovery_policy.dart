@@ -1,8 +1,7 @@
-/// Fails closed when the cached release kill switch cannot be read.
+/// Applies the release kill switch when an analytics flag context is usable.
 bool shouldDisableCustomLiveAudioRecovery({
   required bool buildEnabled,
-  required bool analyticsTrackingEnabled,
-  required bool identitySettled,
-  required bool cachedKillSwitchEnabled,
+  required bool flagReadContextAvailable,
+  required bool? cachedKillSwitchEnabled,
 }) =>
-    !buildEnabled || !analyticsTrackingEnabled || !identitySettled || cachedKillSwitchEnabled;
+    !buildEnabled || cachedKillSwitchEnabled == true || (flagReadContextAvailable && cachedKillSwitchEnabled == null);

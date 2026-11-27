@@ -1042,6 +1042,48 @@ void main() {
     expect(transport.writes.map((data) => decodeWrapperCommand(data)['messageNumber']), [6, 8, 21, 8]);
   });
 
+  test('decoded realtime frames suppress recovery across multiple health windows', () async {
+    final transport = FakeDeviceTransport();
+    const window = Duration(milliseconds: 200);
+    final connection = LimitlessDeviceConnection(
+      BtDevice(name: 'Limitless Pendant', id: 'fake-limitless', type: DeviceType.limitless, rssi: -50),
+      transport,
+      streamHealthWindow: window,
+      setupSettleDelay: Duration.zero,
+    );
+    addTearDown(connection.disconnect);
+    var decodedFrames = 0;
+    Completer<void>? nextFrame;
+    final subscription = await connection.performGetBleAudioBytesListener(
+      onAudioBytesReceived: (_) {
+        decodedFrames++;
+        if (nextFrame != null && !nextFrame!.isCompleted) nextFrame!.complete();
+      },
+    );
+    addTearDown(() => subscription?.cancel());
+    await connection.connect();
+    final activated = Completer<void>();
+    connection.watchCustomLiveAudio(
+      captureIsCurrent: () => true,
+      onEnabled: () => activated.complete(),
+      report: (_) {},
+    );
+    await activated.future;
+
+    for (var i = 0; i < 20; i++) {
+      nextFrame = Completer<void>();
+      transport.emit(
+        limitlessRxCharUuid,
+        bleWrapper(10, 0, 1, realtimeAudioBytes([opusFrame(0xb8, i, 40)])),
+      );
+      await nextFrame!.future.timeout(const Duration(seconds: 2));
+      await Future<void>.delayed(const Duration(milliseconds: 25));
+    }
+
+    expect(decodedFrames, 20);
+    expect(transport.writes.map((data) => decodeWrapperCommand(data)['messageNumber']), [6, 8]);
+  });
+
   test('stored flash-page frames do not satisfy realtime health and retries probe status first', () async {
     final transport = FakeDeviceTransport();
     final connection = LimitlessDeviceConnection(
@@ -1157,6 +1199,39 @@ void main() {
       transport.writes.where((data) => decodeWrapperCommand(data)['messageNumber'] == 21),
       hasLength(2),
     );
+  });
+
+  test('failed batch-mode disable reconciles realtime and restores the Custom Live watch', () async {
+    final transport = FakeDeviceTransport();
+    final connection = LimitlessDeviceConnection(
+      BtDevice(name: 'Limitless Pendant', id: 'fake-limitless', type: DeviceType.limitless, rssi: -50),
+      transport,
+      streamHealthWindow: const Duration(milliseconds: 80),
+      setupSettleDelay: Duration.zero,
+    );
+    addTearDown(connection.disconnect);
+    await connection.connect();
+    var activations = 0;
+    connection.watchCustomLiveAudio(
+      captureIsCurrent: () => true,
+      onEnabled: () => activations++,
+      report: (_) {},
+    );
+    await connection.enableBatchMode();
+    expect(activations, 1);
+
+    var failOnce = true;
+    transport.onWrite = (_) {
+      if (failOnce) {
+        failOnce = false;
+        throw StateError('mode write failed');
+      }
+    };
+    await connection.disableBatchMode();
+
+    expect(connection.isBatchMode, isFalse);
+    expect(activations, 2, reason: 'successful reconciliation rearms the retained watch');
+    expect(transport.writes, hasLength(5), reason: 'one failed mode write is followed by one reconciliation write');
   });
 
   test('Transcribe Later immediately censors a pending Custom Live retry', () async {

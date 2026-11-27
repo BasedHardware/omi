@@ -73,7 +73,7 @@ void main() {
     });
   });
 
-  test('a skipped enable does not consume the one-shot recovery budget', () {
+  test('a skipped enable gets one bounded retry before the episode expires', () {
     fakeAsync((time) {
       var current = true;
       var attempts = 0;
@@ -100,6 +100,35 @@ void main() {
       time.elapse(window * 2);
       expect(outcomes, [LimitlessRealtimeHealthOutcome.exhausted]);
       current = false;
+      monitor.close();
+    });
+  });
+
+  test('throwing enable writes retry once and finish with an exhausted outcome', () {
+    fakeAsync((time) {
+      var attempts = 0;
+      final outcomes = <LimitlessRealtimeHealthOutcome>[];
+      final monitor = LimitlessRealtimeHealth(
+        window: window,
+        elapsed: () => time.elapsed,
+        isCurrent: () => true,
+        reactivate: () async {
+          attempts++;
+          throw StateError('BLE write failed');
+        },
+        report: outcomes.add,
+      );
+
+      time.elapse(window);
+      time.flushMicrotasks();
+      expect(attempts, 1);
+      time.elapse(window);
+      time.flushMicrotasks();
+      expect(attempts, 2);
+      time.elapse(window);
+      expect(outcomes, [LimitlessRealtimeHealthOutcome.exhausted]);
+      time.elapse(window * 5);
+      expect(attempts, 2, reason: 'a failed episode is bounded instead of retrying forever');
       monitor.close();
     });
   });

@@ -7,6 +7,8 @@ enum LimitlessRealtimeHealthOutcome { restored, exhausted, censored }
 
 /// Watches decoded frames while an admitted Custom Live capture owns the link.
 class LimitlessRealtimeHealth {
+  static const int _maxReactivationAttemptsPerEpisode = 2;
+
   LimitlessRealtimeHealth({
     required this.window,
     required this.isCurrent,
@@ -29,6 +31,7 @@ class LimitlessRealtimeHealth {
   Duration? _firstRecoveryFrame;
   Duration? _recoveryDeadline;
   bool _attempted = false;
+  int _reactivationAttempts = 0;
   bool _reactivationInFlight = false;
   bool _closed = false;
 
@@ -52,6 +55,7 @@ class LimitlessRealtimeHealth {
         }
         _firstRecoveryFrame = null;
         _attempted = false;
+        _reactivationAttempts = 0;
         _recoveryDeadline = null;
         if (deadline != null) report(LimitlessRealtimeHealthOutcome.restored);
       }
@@ -86,12 +90,10 @@ class LimitlessRealtimeHealth {
       _firstRecoveryFrame = null;
       if (!_attempted) {
         _attempted = true;
+        _reactivationAttempts = 0;
         _recoveryDeadline = now + window * 2;
-        if (!_reactivationInFlight) {
-          _reactivationInFlight = true;
-          unawaited(_reactivate());
-        }
       }
+      _attemptReactivation();
       final recoveryDeadline = _recoveryDeadline;
       if (recoveryDeadline != null) _timer = Timer(recoveryDeadline - now, _check);
       return;
@@ -103,6 +105,19 @@ class LimitlessRealtimeHealth {
     _timer = Timer(next - now, _check);
   }
 
+  void _attemptReactivation() {
+    if (_closed ||
+        !_attempted ||
+        _reactivationInFlight ||
+        _reactivationAttempts >= _maxReactivationAttemptsPerEpisode ||
+        _recoveryDeadline == null) {
+      return;
+    }
+    _reactivationAttempts++;
+    _reactivationInFlight = true;
+    unawaited(_reactivate());
+  }
+
   Future<void> _reactivate() async {
     var wroteEnable = false;
     try {
@@ -112,19 +127,22 @@ class LimitlessRealtimeHealth {
       }
       wroteEnable = await reactivate();
     } catch (_) {
-      // A failed or skipped write does not consume the one-shot recovery budget.
+      // Failed or skipped writes share the episode's bounded retry budget.
     } finally {
       _reactivationInFlight = false;
     }
     if (_closed) return;
-    if (!wroteEnable) {
-      _attempted = false;
-      _recoveryDeadline = null;
-      _firstRecoveryFrame = null;
-      _timer?.cancel();
-      _timer = isCurrent() ? Timer(window, _check) : null;
-      if (_timer == null) close();
-      return;
+    if (!wroteEnable && _reactivationAttempts < _maxReactivationAttemptsPerEpisode) {
+      final deadline = _recoveryDeadline;
+      if (deadline != null) {
+        _timer?.cancel();
+        final remaining = deadline - _elapsed();
+        if (remaining <= Duration.zero) {
+          _check();
+        } else {
+          _timer = Timer(remaining < window ? remaining : window, _check);
+        }
+      }
     }
     if (!isCurrent()) close();
   }
