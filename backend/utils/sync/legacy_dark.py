@@ -404,7 +404,11 @@ def fence_response(decision: FenceDecision, *, total_files: int, lane: str) -> O
         return sync_content_in_progress_response(decision.job_id)
     if decision.action is FenceAction.RETRY:
         record_dark_ack(decision.reason or LegacyDarkReason.UNKNOWN)
-        retry_after = decision.retry_after_seconds or DARK_RETRY_AFTER_SECONDS
+        # Clamp to the short fence hint: released clients turn a job-less
+        # ``sync_content_in_progress`` into an account-wide edge cooldown for the
+        # whole Retry-After, so a 24 h repeat-failure pause on one recording would
+        # stall every other upload. The fence re-reads the pause on each attempt.
+        retry_after = min(decision.retry_after_seconds or DARK_RETRY_AFTER_SECONDS, DARK_RETRY_AFTER_SECONDS)
         return JSONResponse(
             status_code=409,
             headers={'Retry-After': str(retry_after)},

@@ -144,6 +144,10 @@ def test_stranded_and_capped_never_503(mode):
         assert body['poll_after_ms'] == int(response.headers['retry-after']) * 1000
     capped = fence_decision(LEGACY_ROWS[3], mode, now=NOW)
     assert capped.retry_after_seconds == 3601
+    # A job-less in-progress 409 is an account-wide client cooldown: never the
+    # recording's long repeat-failure pause.
+    response = fence_response(capped, total_files=1, lane='backfill')
+    assert int(response.headers['retry-after']) == legacy_dark.DARK_RETRY_AFTER_SECONDS
 
 
 @pytest.mark.parametrize('mode', [DRAINING, DARK])

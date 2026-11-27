@@ -140,7 +140,7 @@ _ENTRIES: list[dict[str, Any]] = [
     {
         'id': 'sync_reprocess_785_omi',
         'label': (
-            'utils/sync/legacy_segment_core.py:785 _reprocess_conversation_after_update '
+            'utils/sync/legacy_segment_core.py _reprocess_conversation_after_update '
             '(coordinator-with-exact-args; trigger=SYNC_UPDATE; '
             'source carried from the stored conversation, default omi — §1.2 non-desktop)'
         ),
@@ -153,7 +153,7 @@ _ENTRIES: list[dict[str, Any]] = [
     {
         'id': 'sync_reprocess_785_desktop',
         'label': (
-            'utils/sync/legacy_segment_core.py:785 _reprocess_conversation_after_update '
+            'utils/sync/legacy_segment_core.py _reprocess_conversation_after_update '
             '(coordinator-with-exact-args; trigger=SYNC_UPDATE; '
             'source carried from the stored conversation — desktop at cap → budget waiting)'
         ),
@@ -166,7 +166,7 @@ _ENTRIES: list[dict[str, Any]] = [
     {
         'id': 'sync_create_1179_omi',
         'label': (
-            'utils/sync/legacy_segment_core.py:1179 process_segment create '
+            'utils/sync/legacy_segment_core.py process_segment create '
             '(coordinator-with-exact-args; source= parameter :1051 default omi — §1.2 non-desktop)'
         ),
         'kind': 'create',
@@ -178,7 +178,7 @@ _ENTRIES: list[dict[str, Any]] = [
     {
         'id': 'sync_create_1179_desktop',
         'label': (
-            'utils/sync/legacy_segment_core.py:1179 process_segment create '
+            'utils/sync/legacy_segment_core.py process_segment create '
             '(coordinator-with-exact-args; source= parameter :1051 carried onto CreateConversation :1172; '
             'desktop sync at cap → budget waiting)'
         ),

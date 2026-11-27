@@ -285,7 +285,7 @@ def test_code_keys_scope_lane_stages_and_fold_in_dirty_edits():
     transcribe, ingest, tree = code.stage_key(['transcribe']), code.stage_key(['ingest']), code.tree_key()
     code.blobs['backend/utils/llm/goals.py'] = 'edited'  # chain-only product code
     assert code.stage_key(['transcribe']) == transcribe and code.stage_key(['ingest']) == ingest
-    code.blobs['backend/utils/sync/pipeline.py'] = 'edited'  # what the sync lane runs
+    code.blobs['backend/utils/sync/legacy_segment_core.py'] = 'edited'  # what the sync lane runs
     assert code.stage_key(['transcribe']) != transcribe and code.stage_key(['ingest']) == ingest
     code.blobs['backend/testing/pipeline_lab/timeline/build.py'] = 'edited'
     assert code.stage_key(['ingest']) != ingest
