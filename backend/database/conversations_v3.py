@@ -107,19 +107,22 @@ def _env_allowance(name, default):
 # for every owner. Every commit batch rereads the whole loaded closure to fence revisions, so a pass costs
 # about (batches x closure) reads: 6.5k to 15k measured. The cost is bounded by the commit itself. A listed
 # owner's closure past the origin bound may need at most LOCKED_MAX_BATCHES batches; otherwise it parks before
-# any transaction, so the pass ceiling is about 30k reads. The bytes allowance stays small (8 MiB) because
-# stored speech is what splits batches (BATCH_ROW_BYTES).
-# An empty list, or either size set to 0, is the kill switch: the origin bound applies to every row.
+# any transaction. load() never admits more rows than those batches can hold (_committable_rows), and it reads
+# at most LOCKED_FETCH_FACTOR x its row bound of derived documents, repeats included. The bytes allowance stays
+# small (8 MiB) because stored speech is what splits batches (BATCH_ROW_BYTES).
+# An empty list, or a size, the batch cap or the daily passes set to 0, is the kill switch: the origin bound
+# applies to every row.
 LOCKED_DERIVED_ALLOWANCE = _env_allowance('CONVERSATIONS_V3_LOCKED_DERIVED_ALLOWANCE', 2048)
 LOCKED_DERIVED_BYTES = _env_allowance('CONVERSATIONS_V3_LOCKED_DERIVED_BYTES', 8 * 1024 * 1024)
-LOCKED_MAX_BATCHES = _env_int('CONVERSATIONS_V3_LOCKED_MAX_BATCHES', 6)
+LOCKED_MAX_BATCHES = _env_allowance('CONVERSATIONS_V3_LOCKED_MAX_BATCHES', 6)
+LOCKED_FETCH_FACTOR = 2
 # The per-owner daily budget, in allowance ATTEMPTS: every builder load of a listed owner is charged one on the
 # builder lease before it reads anything, whether it then commits, hits the batch cap and retries smaller, fits
 # the origin bound, is interrupted after a committed prefix, or parks. A spent day, or a charge that cannot be
 # written, loads with the origin bound. The ceiling is attempts x the most one attempt can read: the charge, a load
-# of up to about 5.3k reads, and a commit of up to about 24k reads whose batches each run at most three
-# transactions (main's contention retry), so about 78k; 20 x 78k is about 1.6M reads per listed owner per day.
-# 0 turns the allowance off.
+# of at most 2 x 2,694 derived documents plus 400 sources and the seeds (about 5.9k), and a commit of up to about
+# 24k reads whose batches each run at most three transactions (main's contention retry), so about 78k; 20 x 78k
+# is about 1.6M reads per listed owner per day. 0 turns the allowance off.
 LOCKED_DAILY_PASSES = _env_allowance('CONVERSATIONS_V3_LOCKED_DAILY_PASSES', 20)
 LOCKED_DAY_FIELD, LOCKED_PASSES_FIELD = 'v3_locked_day', 'v3_locked_passes'
 CLAIM_READ_CHUNK = 100
@@ -653,11 +656,20 @@ def _locked_allowance(uid, *, key='builder'):
     run. load() also needs the attempt charged (_charge_locked_attempt) before it uses these sizes."""
     if key != 'builder':
         return 0, 0
-    if not LOCKED_DERIVED_ALLOWANCE or not LOCKED_DERIVED_BYTES or not LOCKED_DAILY_PASSES:
+    if not (LOCKED_DERIVED_ALLOWANCE and LOCKED_DERIVED_BYTES and LOCKED_MAX_BATCHES and LOCKED_DAILY_PASSES):
         return 0, 0
     if not locked_closure_owner(uid):
         return 0, 0
     return LOCKED_DERIVED_ALLOWANCE, LOCKED_DERIVED_BYTES
+
+
+def _committable_rows(sources):
+    """The most planned rows LOCKED_MAX_BATCHES batches can commit with this many loaded sources.
+
+    partition_rows gives each batch BATCH_MAX_WRITES - fixed_writes rows, and fixed_writes is at least one write per
+    loaded source plus the lease. A loaded row takes a batch slot whether or not its write is skipped.
+    """
+    return LOCKED_MAX_BATCHES * max(1, BATCH_MAX_WRITES - sources - 1)
 
 
 def _past_origin_bound(uid, existing, *, key='builder'):
@@ -778,7 +790,25 @@ def load(
     by_claims = closure_by_claims()
     # load() is the builder pass's loader (it reads the builder lease); derive uses load_derive.
     extra_rows, extra_bytes = allowed
-    row_limit = DERIVED_LIMIT + extra_rows
+    # Never admit more rows than the batch cap can commit, even with no sources (F4): a bigger closure would load,
+    # plan and then park on LockedBatchCap. The origin bound itself is never lowered.
+    row_limit = DERIVED_LIMIT + min(extra_rows, max(0, _committable_rows(0) - DERIVED_LIMIT))
+    # One budget of fetched derived documents for the whole allowance load, repeats included: a row that spans
+    # several interval queries, or that a claim read and a time query both return, is counted each time.
+    fetch_budget = LOCKED_FETCH_FACTOR * row_limit if allowed != (0, 0) else None
+    fetched = 0
+
+    def fetch(count):
+        nonlocal fetched
+        fetched += count
+        if fetch_budget is not None and fetched > fetch_budget:
+            raise Conflict('v3_derived_budget')
+
+    def committable():
+        # Past the origin bound, the closure must still fit the batch cap with the sources loaded so far.
+        if extra_rows and len(existing) > max(DERIVED_LIMIT, _committable_rows(len(recordings) + len(unreadable))):
+            raise Conflict('v3_derived_budget')
+
     sizes = {cid: _encoded_bytes(row.get('transcript_segments') or []) for cid, row in existing.items()}
     locked = {cid for cid, row in existing.items() if locked_claimant(row)}
     loaded_bytes = sum(sizes.values())
@@ -807,6 +837,7 @@ def load(
             or loaded_bytes > DERIVED_BYTES + extra_bytes
         ):
             raise Conflict('v3_derived_budget')
+        committable()
 
     if not conversation_id:
         limit = min(8, pending_limit) if unlocked_limit is None else unlocked_limit
@@ -815,6 +846,7 @@ def load(
             unlocked_page.seeds = (unlocked_page.seeds[0], len(ordered_unlocked))
         for start in range(0, len(ordered_unlocked), CLAIM_READ_CHUNK):
             ids = ordered_unlocked[start : start + CLAIM_READ_CHUNK]
+            fetch(len(ids))
             for snapshot in client.get_all([coll.document(cid) for cid in ids]):
                 raw = snapshot.to_dict() or {} if snapshot.exists else {}
                 if not raw.get('v3_unlocked') or raw.get('deleted'):
@@ -869,6 +901,7 @@ def load(
         ordered = sorted(claimed)
         for start in range(0, len(ordered), CLAIM_READ_CHUNK):
             chunk = ordered[start : start + CLAIM_READ_CHUNK]
+            fetch(len(chunk))
             for snapshot in client.get_all([coll.document(cid) for cid in chunk]):
                 raw = snapshot.to_dict() or {} if snapshot.exists else {}
                 if raw.get('v3_derived'):
@@ -904,12 +937,13 @@ def load(
                 coll.where(filter=FieldFilter('v3_derived', '==', True))
                 .where(filter=FieldFilter('finished_at', '>=', left))
                 .where(filter=FieldFilter('started_at', '<=', right))
-                .limit(row_limit + 1)
+                .limit(min(row_limit, fetch_budget - fetched if fetch_budget is not None else row_limit) + 1)
                 .stream()
             )
             for count, doc in enumerate(snapshots, 1):
                 if count > row_limit:
                     raise Conflict('v3_derived_budget')
+                fetch(1)
                 row = decode_row(uid, doc)
                 if row:
                     add(row)
@@ -918,6 +952,7 @@ def load(
         queried.update(row['id'] for row in fresh)
     else:
         raise Conflict('v3_source_closure_budget')
+    committable()
     preview_sources = {
         rid
         for row in existing.values()

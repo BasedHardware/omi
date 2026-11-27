@@ -1032,13 +1032,132 @@ def test_allowance_env_parsing(monkeypatch, raw, expected):
     assert store._env_allowance('X_ALLOWANCE', 2048) == expected
 
 
-@pytest.mark.parametrize('switch', ['LOCKED_DERIVED_ALLOWANCE', 'LOCKED_DERIVED_BYTES'])
+@pytest.mark.parametrize(
+    'switch', ['LOCKED_DERIVED_ALLOWANCE', 'LOCKED_DERIVED_BYTES', 'LOCKED_MAX_BATCHES', 'LOCKED_DAILY_PASSES']
+)
 def test_kill_switch_restores_the_origin_bound(monkeypatch, switch):
-    allowance(monkeypatch, 20)
+    attempts = allowance(monkeypatch, 20)
     monkeypatch.setattr(store, switch, 0)
     with pytest.raises(Conflict, match='v3_derived_budget'):
         store.load('u', firestore_client=MemoryQuery(fragmented(11)))
     store.load('u', firestore_client=MemoryQuery(fragmented(10)))
+    assert attempts == []  # a switched-off allowance is never an attempt
+
+
+@pytest.mark.parametrize(
+    'name',
+    [
+        'CONVERSATIONS_V3_LOCKED_DERIVED_ALLOWANCE',
+        'CONVERSATIONS_V3_LOCKED_DERIVED_BYTES',
+        'CONVERSATIONS_V3_LOCKED_MAX_BATCHES',
+        'CONVERSATIONS_V3_LOCKED_DAILY_PASSES',
+    ],
+)
+def test_every_documented_numeric_kill_switch_turns_the_allowance_off_at_zero(name):
+    # Parsed at import, so read in a fresh interpreter: 0 must switch off, never fall back to the default.
+    import os
+    import subprocess
+    import sys
+
+    env = {**os.environ, 'CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS': '*', name: '0'}
+    probe = 'from database import conversations_v3 as s; print(s._locked_allowance("u"))'
+    out = subprocess.run([sys.executable, '-c', probe], env=env, capture_output=True, text=True, check=True)
+    assert out.stdout.strip().splitlines()[-1] == '(0, 0)'
+    del env[name]
+    out = subprocess.run([sys.executable, '-c', probe], env=env, capture_output=True, text=True, check=True)
+    assert out.stdout.strip().splitlines()[-1] == '(2048, 8388608)'
+
+
+def spanning(n, sources):
+    """n locked rows that each span every source's interval query, and sources far enough apart (two hours)
+    that their intervals stay separate: every interval query returns all n rows again."""
+    rows = {C + f'w{i}': derived(f'w{i}', AT - timedelta(hours=1), 3600 * (2 * sources + 1), ['r0']) for i in range(n)}
+    for k in range(sources):
+        start = AT + timedelta(hours=2 * k)
+        rows[C + f'r{k}'] = source(
+            f'r{k}', started_at=start, finished_at=start + timedelta(seconds=10), v3_pending_since=start
+        )
+    return rows
+
+
+def counted_streams(monkeypatch):
+    """Count every document the time queries hand load(), repeats included."""
+    streamed = []
+    real = MemoryQuery.stream
+
+    def stream(self):
+        timed = any(field == 'finished_at' for field, _, _ in self.filters)
+        for doc in real(self):
+            if timed:
+                streamed.append(doc.id)
+            yield doc
+
+    monkeypatch.setattr(MemoryQuery, 'stream', stream)
+    return streamed
+
+
+def test_one_fetched_document_budget_spans_every_interval_query_and_counts_repeats(monkeypatch):
+    # Row bound 10 + 20 = 30, so the budget is 2 x 30 = 60 fetched derived documents for the whole load.
+    allowance(monkeypatch, 20)
+    streamed = counted_streams(monkeypatch)
+    _, existing, _ = store.load('u', firestore_client=MemoryQuery(spanning(25, 2)))  # 2 x 25 = 50 fetched
+    assert len(existing) == 25 and len(streamed) == 50
+    streamed.clear()
+    # Three intervals each return the same 25 rows: 25 distinct rows, inside every per-query cap of 31 and the
+    # row bound of 30, but 75 fetches. The budget stops the third query at its 61st document.
+    with pytest.raises(Conflict, match='v3_derived_budget'):
+        store.load('u', firestore_client=MemoryQuery(spanning(25, 3)))
+    assert len(streamed) == 61
+    assert len(set(streamed)) == 25
+
+
+def test_each_interval_query_asks_only_for_the_budget_left(monkeypatch):
+    allowance(monkeypatch, 20)
+    client = MemoryQuery(spanning(25, 2))
+    store.load('u', firestore_client=client)
+    caps = [cap for filters, cap, _ in client.calls if any(f == 'finished_at' for f, _, _ in filters)]
+    assert caps == [31, 31]  # min(row bound 30, budget left 60 then 35) + 1
+    client = MemoryQuery(spanning(25, 3))
+    with pytest.raises(Conflict, match='v3_derived_budget'):
+        store.load('u', firestore_client=client)
+    caps = [cap for filters, cap, _ in client.calls if any(f == 'finished_at' for f, _, _ in filters)]
+    assert caps == [31, 31, 11]  # 60 - 50 = 10 left, + 1 to see the overflow
+
+
+def test_the_origin_bound_keeps_its_per_query_caps(monkeypatch):
+    # Unlisted owners keep today's load: no shared budget, so three intervals of the same 8 rows still load.
+    monkeypatch.setattr(store, 'DERIVED_LIMIT', 10)
+    streamed = counted_streams(monkeypatch)
+    _, existing, _ = store.load('u', firestore_client=MemoryQuery(spanning(8, 3)))
+    assert len(existing) == 8 and len(streamed) == 24
+
+
+def test_the_allowance_never_admits_more_rows_than_the_batch_cap_can_commit(monkeypatch):
+    # Two batches of 12 writes: at most 2 x (12 - 1) = 22 rows with no sources, 2 x (12 - 1 - 1) = 20 with one.
+    allowance(monkeypatch, 20)
+    monkeypatch.setattr(store, 'BATCH_MAX_WRITES', 12)
+    monkeypatch.setattr(store, 'LOCKED_MAX_BATCHES', 2)
+    assert len(store.load('u', firestore_client=MemoryQuery(fragmented(20)))[1]) == 20
+    with pytest.raises(Conflict, match='v3_derived_budget'):  # 21 rows and one source: past what 2 batches hold
+        store.load('u', firestore_client=MemoryQuery(fragmented(21)))
+    reads = []
+    real = MemoryQuery.get_all
+    monkeypatch.setattr(MemoryQuery, 'get_all', lambda self, refs, **kw: reads.append(len(refs)) or real(self, refs))
+    with pytest.raises(Conflict, match='v3_derived_budget'):  # 25 rows, inside the allowance's 30 but over 22
+        store.load('u', firestore_client=MemoryQuery(fragmented(25)))
+    assert reads == []  # the extra rows are never read
+    monkeypatch.setattr(store, 'LOCKED_MAX_BATCHES', 6)  # the same closures load once the cap can commit them
+    assert len(store.load('u', firestore_client=MemoryQuery(fragmented(25)))[1]) == 25
+
+
+def test_the_commit_clamp_never_lowers_the_origin_bound(monkeypatch):
+    # One batch of 12 writes holds fewer rows than DERIVED_LIMIT: the closure keeps today's bound, not a smaller one.
+    allowance(monkeypatch, 20)
+    monkeypatch.setattr(store, 'BATCH_MAX_WRITES', 12)
+    monkeypatch.setattr(store, 'LOCKED_MAX_BATCHES', 1)
+    assert len(store.load('u', firestore_client=MemoryQuery(fragmented(10)))[1]) == 10
+    with pytest.raises(Conflict, match='v3_derived_budget'):
+        store.load('u', firestore_client=MemoryQuery(fragmented(11)))
 
 
 @pytest.mark.asyncio

@@ -165,6 +165,10 @@ may go past the origin bound:
   (default 2048);
 - past `CONVERSATIONS_V3_DERIVED_BYTES` (16 MiB) by `CONVERSATIONS_V3_LOCKED_DERIVED_BYTES` (default 8 MiB).
 
+The row room never exceeds what the batch cap can commit: at most `LOCKED_MAX_BATCHES` x (449 - loaded
+sources) rows in all, so 2,694 at the defaults, and fewer as sources load. The load also reads at most twice
+its row bound of derived documents, counting a row each time a claim read or an interval query returns it.
+
 Rewritable rows keep the original bound. Such a closure may commit in at most
 `CONVERSATIONS_V3_LOCKED_MAX_BATCHES` (default 6) projection batches. Otherwise the commit raises
 `LockedBatchCap` (`v3_derived_budget`) before any transaction, and the builder retries down the load
@@ -174,10 +178,13 @@ re-enters at most three times and parks only at one seed.
 `CONVERSATIONS_V3_LOCKED_DAILY_PASSES` (default 20) is the owner's daily budget of allowance attempts.
 Every builder load of a listed owner charges one in `v3_locked_day` and `v3_locked_passes` on the builder
 lease, under the held lease and before it reads, whatever the pass does next. A spent day, or a charge
-that cannot be written, loads with the origin bound. Ceiling: 20 attempts x about 78k reads (load, plus a
-commit whose batches each run at most three transactions), about 1.6M reads per listed owner per day.
+that cannot be written, loads with the origin bound. Ceiling: 20 attempts x about 78k reads (a load of at most
+5,388 fetched derived documents plus 400 sources and the seeds, plus a commit whose batches each run at most
+three transactions), about 1.6M reads per listed owner per day.
 
-An empty list, or a size, the cap or the daily passes set to `0`, restores the origin bound.
+An empty list, or `CONVERSATIONS_V3_LOCKED_DERIVED_ALLOWANCE`, `CONVERSATIONS_V3_LOCKED_DERIVED_BYTES`,
+`CONVERSATIONS_V3_LOCKED_MAX_BATCHES` or `CONVERSATIONS_V3_LOCKED_DAILY_PASSES` set to `0`, restores the origin
+bound. A negative or unparseable value keeps the default.
 
 `CONVERSATIONS_V3_COMMIT_LEASE_RENEWAL` defaults to on. A multi-batch projection commit renews the
 pass's lease (`builder`, or `backfill-builder` for a derive pass) before each batch after the first.

@@ -505,22 +505,34 @@ async def test_a_commit_with_more_batches_than_measured_outlives_its_lease_by_re
 
 
 @pytest.mark.asyncio
-async def test_a_closure_past_the_batch_cap_parks_without_writing(owner, monkeypatch):
+@pytest.mark.parametrize('past', ['rows', 'bytes'])
+async def test_a_closure_past_the_batch_cap_parks_without_writing(owner, monkeypatch, past):
     client, user = owner
-    monkeypatch.setattr(store, 'LOCKED_MAX_BATCHES', 5)
+    if past == 'rows':
+        # 5 batches hold at most 5 x (449 - 17) = 2,160 rows: the 2,276-row closure stops at load, before it reads
+        # the claimed rows, plans or calls the outline (F4).
+        monkeypatch.setattr(store, 'LOCKED_MAX_BATCHES', 5)
+    else:
+        # Prepared rows split on bytes, which the load cannot see (compressed, encrypted speech): the commit's own
+        # cap still refuses before any transaction, after a full load and the outline step.
+        monkeypatch.setattr(store, 'BATCH_ROW_BYTES', 64 * 1024)
     rows, sources = seed(user, tail=3, eligible=False, **SIX_BATCHES)
     result = await one_pass(client, user, outline_every=0)
     _report(
         'rows_2276_sources_17',
         'serving_timing',
-        'batch_cap_5',
+        'batch_cap_5' if past == 'rows' else 'batch_cap_bytes',
         {'closure_rows': rows, 'closure_sources': sources, **result},
     )
     assert result['result'] == 'blocked' and result['writes_conversations'] == 0 and result['transactions_commit'] == 0
-    # It parked at the commit's batch cap, after a full load within the allowance and the outline step, not at
-    # load time (a load overflow would shrink to 8, then 1, seeds and never plan or reach the commit).
-    assert result['reads_load'] > 3000 and result['outline_calls'] >= 1 and result['reads_commit'] == 0
-    assert result['commit_calls'] == 1
+    assert result['reads_commit'] == 0
     lease = user.collection('conversation_v3_leases').document('builder').get().to_dict()
+    if past == 'rows':
+        # It stops at the first row past what 5 batches can commit; the load ladder's smaller pages stop the same way.
+        assert result['commit_calls'] == 0 and result['outline_calls'] == 0
+    else:
+        assert result['reads_load'] > 3000 and result['outline_calls'] >= 1 and result['commit_calls'] == 1
+    # Every load was a charged attempt, and none read more than the per-attempt load ceiling (about 5.9k).
+    assert lease['v3_locked_passes'] >= 1 and result['reads_load'] <= lease['v3_locked_passes'] * 5_900
     assert lease['v3_blocked_reason'] == 'v3_derived_budget'
     assert user.collection('conversations').document('heavy').get().to_dict()['v3_pending'] is True

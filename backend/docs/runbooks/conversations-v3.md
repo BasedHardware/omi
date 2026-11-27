@@ -427,16 +427,25 @@ the owner parks as before.
 
 The ceiling is attempts x the most one attempt can read:
 - the charge: 1 read and 1 write, at most three tries;
-- the load: up to about 5.3k reads (3,072 rows at the measured 1.6 reads per row, plus up to 400 sources);
+- the load: at most about 5.9k reads. It admits at most 6 x (449 - sources) rows (2,694 with no sources), what
+  six batches can commit, and fetches at most twice that many derived documents (5,388), repeats included:
+  a row that a claim read and a time query both return, or that spans several interval queries, counts each
+  time. Add up to 400 sources and the seeds;
 - the commit: up to about 24k reads, and each batch runs at most three transactions under main's contention
   retry, so up to about 72k;
 - renewals: a few reads.
 
 That is about 78k reads per attempt, and 20 x 78k, about **1.6M reads per listed owner per day**, as a
-ceiling. Measured attempts read 6.5k to 22k, so a typical day is well under it. Parked retries after the
+ceiling. Measured attempts read 6.5k to 22k, so a typical day is well under it. A listed owner can spend its 20
+attempts early in the UTC day and then runs at the origin bound, parking as before, until 00:00Z resets the
+day: in the readback, a `v3_locked_passes` of 20 with pending still owed is that case, not a regression. Parked retries after the
 budget is spent run at the origin bound, as for any parked owner today. Admit owners one at a time first. A
 step expected to exceed 10M reads a day (more than about six listed owners) needs the Firestore cost owner
 (SCA-2173).
+
+Kill switches: an empty list, or `CONVERSATIONS_V3_LOCKED_DERIVED_ALLOWANCE`, `_DERIVED_BYTES`, `_MAX_BATCHES` or
+`_DAILY_PASSES` (each `CONVERSATIONS_V3_LOCKED_*`) set to `0`, restores the origin bound for every owner; a
+negative or unparseable value keeps the default.
 
 An owner that still parks needs the fragment repair (SCA-2918). To undo, add a secret version without the tag (or `none`) and roll the four loaders.
 `CONVERSATIONS_V3_COMMIT_LEASE_RENEWAL=off` stops the lease renewal before each later projection batch.

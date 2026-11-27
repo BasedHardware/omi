@@ -23,7 +23,12 @@ and commit. It measured:
 Steady writes are under 40 per pass. A first contact that restamps every fragment writes at most about twice
 the closure. The commit is capped at `CONVERSATIONS_V3_LOCKED_MAX_BATCHES` (6) batches, so the ceiling is about
 24k commit reads plus about 1.6 reads per row at load: about 30k reads per pass. A closure past the cap parks
-before any transaction, after its load (about 3.6k reads in the fixture) and the outline call. The 8 MiB byte
+before any transaction, after its load (about 3.6k reads in the fixture) and the outline call. A closure with
+more rows than six batches could ever commit (6 x (449 - sources)) stops at load instead, at the first row past
+that bound (or by id, before reading, when one round's claims name them all). It never plans, calls the outline or
+reaches the commit. In the fixture, at a cap of 5, the 2,276-row closure parked after 4 charged loads of about 2.6k
+reads each; a closure split into more batches by prepared bytes, which the load cannot see, still parks at the
+commit's cap before any transaction. The 8 MiB byte
 allowance keeps the batch count from being driven by stored speech.
 
 **Per-owner ceiling.** While pending remains, a pending-seeded request runs up to 3 inline passes, and the owner is
@@ -38,13 +43,21 @@ own.
 
 The ceiling is derived from that counter as attempts x the most one attempt can read:
 - the charge: 1 read and 1 write, at most three tries;
-- the load: up to about 5.3k reads;
+- the load: at most about 5.9k reads. It admits at most 6 x (449 - sources) rows, what six batches can commit
+  (2,694 with no sources), and fetches at most twice that many derived documents (5,388) across the unlocked
+  page, the claim reads and every interval query, counting repeats; plus up to 400 sources and the seeds;
 - the commit: up to about 24k reads; each batch runs at most three transactions under main's contention retry, so
   up to about 72k;
 - renewals: a few reads.
 
 That is about 78k per attempt, and 20 x 78k, **about 1.6M reads per listed owner per day**. The measured attempts read
 6.5k to 22k. Parked retries after the budget is spent run at the origin bound, at today's cost for any parked owner.
+
+An owner can spend its 20 attempts early in the UTC day; it then runs at the origin bound, parking as before, until
+00:00Z. The readback watches for that (`v3_locked_passes` at 20 with pending still owed).
+
+**Kill switches.** An empty list, or `CONVERSATIONS_V3_LOCKED_DERIVED_ALLOWANCE`, `_DERIVED_BYTES`, `_MAX_BATCHES` or
+`_DAILY_PASSES` set to `0`, restores the origin bound; a negative or unparseable value keeps the default.
 
 **Lease.** The caller renews the pass's lease (`builder`, or `backfill-builder` for a derive pass) once before the
 commit. The commit now renews it before every later batch, so a 6-batch commit cannot outlive the 240 s lease after
