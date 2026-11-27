@@ -1624,7 +1624,8 @@ async def drain_processing(uid):
 
 
 def _load_processing_row(uid, cid):
-    snapshot = store.user_conversations(store.get_firestore_client(), uid).document(cid).get()
+    client = store.get_firestore_client()
+    snapshot = store.user_conversations(client, uid).document(cid).get()
     return store.decode_row(uid, snapshot, firestore_client=client) if snapshot.exists else None
 
 

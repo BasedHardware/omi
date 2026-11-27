@@ -269,6 +269,7 @@ def test_agent_and_selfheal_read_committed_payload(row, monkeypatch):
     from services import conversation_selfheal
     from utils.agent_capabilities import reads
     from utils.conversations.recovery import raw_transcript_bytes
+    from utils.conversations.v3 import Conflict, service
 
     client, uid, ref = row
     overview = 'Synthetic enriched notes'
@@ -280,6 +281,7 @@ def test_agent_and_selfheal_read_committed_payload(row, monkeypatch):
     parent = ref.get().to_dict()
     assert 'transcript_segments' not in parent and 'structured' not in parent
     monkeypatch.setattr(conversations, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(store, 'get_firestore_client', lambda: client)
     monkeypatch.setattr(conversation_selfheal, 'account_deletion_blocks_user_work', lambda *_: False)
     agent_ref = 'conversations/' + ref.id
     full = reads.read_record(uid, agent_ref)
@@ -291,6 +293,10 @@ def test_agent_and_selfheal_read_committed_payload(row, monkeypatch):
     assert preview['structured']['overview'] == overview
     assert 'transcript_segments' not in preview
     assert reads.read_record('different-owner', agent_ref) is None
+    processing = service._load_processing_row(uid, ref.id)
+    if [segment['text'] for segment in processing['transcript_segments']] != [segment['text'] for segment in expected]:
+        pytest.fail('processing readback changed the stored transcript')
+    assert processing['structured']['overview'] == overview
 
     def verify():
         return conversation_selfheal.run_selfheal_tick(
@@ -315,6 +321,8 @@ def test_agent_and_selfheal_read_committed_payload(row, monkeypatch):
     for reader in (reads.read_record, reads.preview_record):
         with pytest.raises(reads.AgentTranscriptReadError, match='payload unavailable'):
             reader(uid, agent_ref)
+    with pytest.raises(Conflict, match='recording_decode_unavailable'):
+        service._load_processing_row(uid, ref.id)
     result = verify()
     assert result['verified'] == 0 and result['errors'] == 1 and result['refused'] == 0
     ref.update({'is_locked': True})
