@@ -82,7 +82,7 @@ class Harness:
         # The real _read_sync_job_status runs; only its stores are scripted.
         monkeypatch.setattr(sync, 'get_durable_job_status', lambda job_id, uid, **_: None)
         monkeypatch.setattr(sync, 'get_sync_job', lambda job_id: self.jobs.get(job_id))
-        monkeypatch.setattr(sync, 'sync_job_poll_response', lambda status, uid, surface_open: status)
+        monkeypatch.setattr(sync, 'with_custody_hold_poll_hint', lambda status: status)
         monkeypatch.setattr(sync, 'acknowledge_retired_handle', lambda job_id, uid: None)
         real_reconcile = completed_status.get_completed_legacy_status
 

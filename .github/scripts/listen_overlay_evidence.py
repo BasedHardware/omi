@@ -714,6 +714,23 @@ def bindings(root, reader):
     }
 
 
+def verify_evidence_workflow(request, reader, environ, root):
+    workflow_head = environ.get('GITHUB_WORKFLOW_SHA', '')
+    if workflow_head == request['control_sha']:
+        return
+    require('image_only' in request and SHA.fullmatch(workflow_head), 'workflow_binding')
+    git = ['git', '-C', str(root)]
+    reader.run([*git, 'merge-base', '--is-ancestor', request['control_sha'], workflow_head])
+    # The runtime executes before this check. Release must independently
+    # verify the same controls before approving the protected evidence job.
+    reader.run([*git, 'diff', '--quiet', '--no-ext-diff', request['control_sha'], workflow_head, '--',
+                '.github/workflows/gcp_backend_listen_helm.yml',
+                '.github/scripts/listen_overlay_evidence.py', '.github/scripts/listen_runtime.py',
+                '.github/scripts/listen_runtime_manifest.json', '.github/scripts/listen_helm_env_overrides.py',
+                '.github/actions/deploy-backend-stack/action.yml'])
+
+
+
 def produce(request, reader, environ, root, private_file, overrides, now):
     validate_request(request, now)
     require(request['state'] == 'requested', 'request_already_bound')
@@ -730,8 +747,8 @@ def produce(request, reader, environ, root, private_file, overrides, now):
     require(environ.get('GITHUB_REPOSITORY') == 'BasedHardware/omi'
             and environ.get('GITHUB_EVENT_NAME') == 'workflow_dispatch'
             and environ.get('GITHUB_REF') == 'refs/heads/main'
-            and environ.get('GITHUB_WORKFLOW_SHA') == request['control_sha']
             and environ.get('GITHUB_RUN_ATTEMPT') == '1', 'workflow_binding')
+    verify_evidence_workflow(request, reader, environ, root)
     require(reader.run(['git', '-C', str(root), 'rev-parse', 'HEAD']).decode().strip() == request['candidate_sha'],
             'candidate_binding')
     actual_bindings = bindings(root, reader)
