@@ -166,7 +166,8 @@ def test_job_side_sweep_reaches_ancient_open_missing_and_closed_wakes(emulator):
     assert outbox.claim_key(live, active.wake_token, 1800, now=now) is Outcome.BUSY
 
 
-def test_held_sweep_rewakes_only_overdue_holds_whose_wake_was_lost(emulator, monkeypatch):
+def test_held_sweep_rewakes_only_overdue_holds_whose_wake_was_lost(emulator):
+    from config.batch_pipeline_retention import LIFECYCLE_SECONDS
     from database.outbox_provider_stt import REWAKE_AFTER_SECONDS
 
     client, collection = emulator
@@ -175,30 +176,31 @@ def test_held_sweep_rewakes_only_overdue_holds_whose_wake_was_lost(emulator, mon
     wakes: list = []
     outbox = _outbox(client, collection, wakes)
     jobs = client.collection(f"{collection.removesuffix('_provider_stt_outbox')}_jobs")
-    now = 1_000_000.0
-    labels = ('lost', 'missing', 'future', 'fresh_wake', 'pending')
+    now = LIFECYCLE_SECONDS + 1_000_000.0
+    overdue = now - 10 * REWAKE_AFTER_SECONDS
+    labels = ('lost', 'missing', 'closed', 'future', 'fresh_wake', 'ancient', 'pending')
     segments = {label: _segment(label) for label in labels}
     for label, segment in segments.items():
-        redrive_at = now + 300 if label == 'future' else now - 10 * REWAKE_AFTER_SECONDS
+        redrive_at = now + 300 if label == 'future' else overdue
         jobs.document(segment).set(
             {
                 'state': 'provider_pending' if label == 'pending' else 'vendor_held',
-                'enqueued_at': 100.0,
+                'enqueued_at': now - LIFECYCLE_SECONDS - 1 if label == 'ancient' else now - 86400,
                 'owner_id': owner,
                 'vendor_hold': {'reason': 'rate_limited', 'redrive_at': redrive_at},
             }
         )
         if label != 'missing':
-            outbox.enqueue(segment, owner, {'segment_id': segment}, redrive_at, now=100.0)
-    woken = 'fresh_wake'
-    outbox._mutate(segments[woken], lambda old: ({**old, 'woken_at': now - 1}, None))
+            queued = outbox.enqueue(segment, owner, {'segment_id': segment}, redrive_at, now=now - 86400)
+            if label == 'closed':
+                claim = outbox.claim_key(segment, queued.wake_token, 1800, now=overdue)
+                assert isinstance(claim, Claim) and outbox.ack(claim, 'processed', now=overdue)
+    outbox._mutate(segments['fresh_wake'], lambda old: ({**old, 'woken_at': now - 1}, None))
     wakes.clear()
 
-    monkeypatch.setenv('BATCH_VENDOR_HELD_REDRIVE_ENABLED', 'false')
-    assert outbox.sweep_held(now=now) == (0, 0) and not wakes
-    monkeypatch.delenv('BATCH_VENDOR_HELD_REDRIVE_ENABLED')
-
-    # Two-row pages reach every held job; only the overdue ones whose wake is not fresh are re-armed.
-    assert sum(outbox.sweep_held(now=now, limit=2)[0] for _ in range(3)) == 2
-    assert {segment for segment, _, _ in wakes} == {segments['lost'], segments['missing']}
-    assert all(outbox.sweep_held(now=now, limit=2) == (0, 0) for _ in range(3))
+    # Two-row pages reach every held job; only overdue holds inside the audio lifecycle whose wake is
+    # not fresh are re-armed. An open row keeps its due time; a missing or closed row is recreated due now.
+    assert sum(outbox.sweep_held(now=now, limit=2)[0] for _ in range(4)) == 3
+    due = {segment: at for segment, _, at in wakes}
+    assert due == {segments['lost']: overdue, segments['missing']: now, segments['closed']: now}
+    assert all(outbox.sweep_held(now=now, limit=2) == (0, 0) for _ in range(4))

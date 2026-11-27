@@ -33,6 +33,8 @@ OPEN, CLOSED = 'open', 'closed'
 TASK_PREFIX = 'pst'
 OUTBOX_SUFFIX = '_provider_stt_outbox'
 RUNNING_RECOVERY_PAGE_SIZE = 25
+# Held jobs are cheap to page (one field read each); 100 per two-minute pass rotates ~3,000 holds an hour.
+HELD_RECOVERY_PAGE_SIZE = 100
 # A wake younger than this may still be queued (Cloud Tasks backoff); the sweep leaves it alone.
 REWAKE_AFTER_SECONDS = 600.0
 
@@ -84,6 +86,15 @@ def _held_overdue(job: Mapping[str, Any], now: float) -> bool:
     if isinstance(redrive_at, bool) or not isinstance(redrive_at, (int, float)) or not math.isfinite(redrive_at):
         return True  # A malformed hold cannot prove a live wake; the consumer redrives it now.
     return now - redrive_at >= REWAKE_AFTER_SECONDS
+
+
+def _held_recoverable(job: Mapping[str, Any], now: float) -> bool:
+    """Overdue and still inside the audio lifecycle; past it the open-row sweep's age gate applies too."""
+    enqueued_at = job.get('enqueued_at')
+    if isinstance(enqueued_at, (int, float)) and not isinstance(enqueued_at, bool) and math.isfinite(enqueued_at):
+        if now - enqueued_at > sweep_age.max_age_seconds('provider-stt'):
+            return False
+    return _held_overdue(job, now)
 
 
 def _rearm_wake(row: Row, now: float) -> Row:
@@ -405,20 +416,17 @@ class FirestoreProviderSttOutbox:
                 errors += 1
         return rewoken, errors
 
-    def sweep_held(self, *, now: float, limit: int = RUNNING_RECOVERY_PAGE_SIZE) -> tuple[int, int]:
+    def sweep_held(self, *, now: float, limit: int = HELD_RECOVERY_PAGE_SIZE) -> tuple[int, int]:
         """Re-wake ``vendor_held`` jobs whose redrive is overdue, which the open-outbox sweep may never reach.
 
         A held unit's redrive rides its outbox row's deferred wake; when that wake is lost, only the
         open-row sweep could re-arm it, and that pages a few hundred thousand open rows 100 at a time.
-        This pages the held jobs themselves (the ``(state, enqueued_at)`` index) instead.
+        This pages the held jobs themselves (the ``(state, enqueued_at)`` index) instead. The caller owns
+        the held-redrive kill switch; this layer reads no environment (contract (c) invariant 3).
         """
-        from config.batch_pipeline_vendor_failover import held_redrive_enabled
-
-        if not held_redrive_enabled():
-            return 0, 0  # Parked on purpose: the guards measure stale holds as wedges.
         client = self._client()
         namespace = (self._collection or collection_name()).removesuffix(OUTBOX_SUFFIX)
-        page_size = max(1, min(limit, RUNNING_RECOVERY_PAGE_SIZE))
+        page_size = max(1, min(limit, HELD_RECOVERY_PAGE_SIZE))
         query = (
             client.collection(f'{namespace}_jobs')
             .where(filter=FieldFilter('state', '==', 'vendor_held'))
@@ -435,7 +443,7 @@ class FirestoreProviderSttOutbox:
             try:
                 if not _held_overdue(snapshot.to_dict() or {}, now):
                     continue
-                fresh = self._rearm_job(snapshot.reference, lambda job: _held_overdue(job, now), now)
+                fresh = self._rearm_job(snapshot.reference, lambda job: _held_recoverable(job, now), now)
                 if fresh is not None:
                     self._wake(fresh)
                     rewoken += 1

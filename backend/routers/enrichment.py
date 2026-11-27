@@ -23,6 +23,7 @@ from utils.enrichment import outbox as reprocess
 from fastapi.responses import JSONResponse
 
 from config import enrichment as enrichment_config
+from config.batch_pipeline_vendor_failover import held_redrive_enabled
 from database import outbox_firestore
 from database.firestore_transaction_retry import transaction_retry_deadline_scope
 from database.outbox_firestore import provider_stt_outbox
@@ -264,8 +265,10 @@ def maintain(now: float) -> dict[str, int]:
         logger.error('event=provider_stt_running_sweep outcome=error exception_type=%s', type(error).__name__)
         counts['provider_stt_running_errors'] = 1
     try:
-        rewoken, errors = provider_stt_outbox().sweep_held(now=now)
-        counts.update(provider_stt_held_rewoken=rewoken, provider_stt_held_errors=errors)
+        # Kill switch off parks holds on purpose: the guards then measure stale holds as wedges.
+        if held_redrive_enabled():
+            rewoken, errors = provider_stt_outbox().sweep_held(now=now)
+            counts.update(provider_stt_held_rewoken=rewoken, provider_stt_held_errors=errors)
     except Exception as error:
         logger.error('event=provider_stt_held_sweep outcome=error exception_type=%s', type(error).__name__)
         counts['provider_stt_held_errors'] = 1

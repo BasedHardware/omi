@@ -1367,6 +1367,30 @@ def test_maintenance_isolates_a_provider_stt_sweep_failure(rows, monkeypatch):
     assert counts['summary_debt_admitted'] == 1
 
 
+def test_maintenance_isolates_a_held_sweep_failure_and_honours_its_kill_switch(rows, monkeypatch):
+    """The held sweep's failure is counted without blocking the rest; its kill switch skips it."""
+    from services import summary_debt_repair
+    from database.outbox import SweepCounts
+
+    monkeypatch.setattr(ENRICHMENT_OUTBOX, 'sweep', lambda *, now, limit=100: SweepCounts(0, 0, 0, 0))
+    held = Mock(side_effect=RuntimeError('synthetic'))
+    _provider_sweep(monkeypatch, lambda *, now, limit=100: SweepCounts(0, 0, 0, 0), sweep_held=held)
+    monkeypatch.setattr(
+        summary_debt_repair,
+        'tick',
+        lambda *, now: {'scanned': 1, 'admitted': 1, 'near_expiry_admitted': 0, 'errors': 0, 'expired_seen': 0},
+    )
+    counts = route.maintain(1000.0)
+    assert counts['provider_stt_held_errors'] == 1 and counts['provider_stt_held_rewoken'] == 0
+    assert counts['provider_stt_running_rewoken'] == 3 and counts['summary_debt_admitted'] == 1
+
+    held.reset_mock()
+    monkeypatch.setenv('BATCH_VENDOR_HELD_REDRIVE_ENABLED', 'false')
+    counts = route.maintain(1000.0)
+    held.assert_not_called()
+    assert counts['provider_stt_held_errors'] == 0 and counts['summary_debt_admitted'] == 1
+
+
 def _oversized_write_rejection():
     from google.api_core.exceptions import InvalidArgument
 

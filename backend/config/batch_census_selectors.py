@@ -399,10 +399,10 @@ EXCEPTIONS: dict[str, SelectorException] = {
     ),
     'database.outbox_provider_stt.FirestoreProviderSttOutbox.sweep_held': _legacy(
         'A held job whose deferred wake was lost has a stale redrive_at; page held jobs by indexed enqueue age',
-        25,
+        100,
         'every two minutes on the provider wake backstop',
         'Index vendor_hold.redrive_at and bound the page by the overdue redrive',
-        'b9b4f88133178206ec001c917a614c3ea2c3d137526c9a91a5e16482692e36c9',
+        'f031de76cba29d91b43250c5d7e178dc22021e640dfeb445cf4370e7e5353c1a',
     ),
     'database.record_seal_worker.pending_page': _legacy(
         'Legacy seal readiness depends on capture barrier checks after page',
