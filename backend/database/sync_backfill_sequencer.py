@@ -1,3 +1,8 @@
+# LIFECYCLE: one-time
+# DELETE-AFTER: https://github.com/BasedHardware/omi/issues/25578
+# RETIRING: legacy sync is dark in production (rollout_cohorts/_ramp legacy_sync=dark);
+# the batch pipeline serves every sync upload. Do not add behaviour or route work here.
+# Deletion is tracked in SCA-2965; tests/unit/test_sync_legacy_import_ratchet.py freezes it.
 """Durable per-UID dispatch ownership for accepted backfill sync jobs.
 
 Pending jobs are separate documents so a large account never grows a single
