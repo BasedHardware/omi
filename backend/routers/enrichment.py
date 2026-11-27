@@ -23,7 +23,9 @@ from utils.enrichment import outbox as reprocess
 from fastapi.responses import JSONResponse
 
 from config import enrichment as enrichment_config
+from database import outbox_firestore
 from database.firestore_transaction_retry import transaction_retry_deadline_scope
+from database.outbox_firestore import provider_stt_outbox
 from utils.enrichment import fresh_demotion
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.observability.reasons import RetryReason
@@ -105,17 +107,17 @@ def consume(key: str, token: str, accepted: float | None = None, abandoned: thre
     row under a fresh wake instead of stranding it.
     """
     from database.outbox import Outcome
-    from database.outbox_firestore import ENRICHMENT_OUTBOX
     from utils.enrichment.consumer import EnrichmentConsumer
 
     started = time.monotonic()
     accepted = started if accepted is None else accepted
     outcome, reason = 'error', 'unexpected'
     try:
-        result = run_push(EnrichmentConsumer(ENRICHMENT_OUTBOX), ENRICHMENT_OUTBOX, key, token, now=time.time())
+        outbox = outbox_firestore.ENRICHMENT_OUTBOX
+        result = run_push(EnrichmentConsumer(outbox), outbox, key, token, now=time.time())
         outcome, reason = result.outcome.value, result.reason.value
         if abandoned is not None and abandoned.is_set() and result.outcome is Outcome.RETRY:
-            ENRICHMENT_OUTBOX.rearm_released(key, token, now=time.time())
+            outbox.rearm_released(key, token, now=time.time())
         return result
     finally:
         finished = time.monotonic()
@@ -207,7 +209,6 @@ def maintain(now: float) -> dict[str, int]:
     Both halves are safe beside the legacy sequencer sweep: the outbox sweep is per-row CAS and the
     summary-debt tick holds its own cursor lease, so a second owner never double-admits.
     """
-    from database.outbox_firestore import ENRICHMENT_OUTBOX
     from services import summary_debt_repair
 
     from utils.conversations import final_pass_retry
@@ -225,7 +226,7 @@ def maintain(now: float) -> dict[str, int]:
         logger.warning(
             'event=owner_identity_availability outcome=refresh_unavailable exception_type=%s', type(error).__name__
         )
-    swept = ENRICHMENT_OUTBOX.sweep(now=now)
+    swept = outbox_firestore.ENRICHMENT_OUTBOX.sweep(now=now)
     counts = {
         'rewoken': swept.rewoken,
         'discarded': swept.discarded,
@@ -233,6 +234,8 @@ def maintain(now: float) -> dict[str, int]:
         'provider_stt_rewoken': 0,
         'provider_stt_discarded': 0,
         'provider_stt_sweep_errors': 0,
+        'provider_stt_running_rewoken': 0,
+        'provider_stt_running_errors': 0,
         'summary_debt_scanned': 0,
         'summary_debt_admitted': 0,
         'summary_debt_near_expiry_admitted': 0,
@@ -243,9 +246,7 @@ def maintain(now: float) -> dict[str, int]:
     # invariant 4); it shares the enrichment maintenance schedule (M3 review). Its own failure
     # never blocks the enrichment half.
     try:
-        from database.outbox import OutboxKind, outbox_for
-
-        provider = outbox_for(OutboxKind.PROVIDER_STT).sweep(now=now)
+        provider = provider_stt_outbox().sweep(now=now)
         counts.update(
             provider_stt_rewoken=provider.rewoken,
             provider_stt_discarded=provider.discarded,
@@ -254,6 +255,12 @@ def maintain(now: float) -> dict[str, int]:
     except Exception as error:
         logger.error('event=provider_stt_sweep outcome=error exception_type=%s', type(error).__name__)
         counts['provider_stt_sweep_errors'] = 1
+    try:
+        rewoken, errors = provider_stt_outbox().sweep_running(now=now)
+        counts.update(provider_stt_running_rewoken=rewoken, provider_stt_running_errors=errors)
+    except Exception as error:
+        logger.error('event=provider_stt_running_sweep outcome=error exception_type=%s', type(error).__name__)
+        counts['provider_stt_running_errors'] = 1
     try:
         summary = summary_debt_repair.tick(now=now)
     except Exception as error:
