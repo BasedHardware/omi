@@ -325,6 +325,13 @@ sync_executor = MonitoredThreadPoolExecutor(name="sync", max_workers=16, thread_
 auth_deadline_executor = MonitoredThreadPoolExecutor(
     name="auth_deadline", max_workers=16, max_queue_size=64, thread_name_prefix="auth-deadline"
 )
+# Sampled declared-language audit (utils/stt/declared_language_audit.py): fire-and-forget, a full pool skips.
+declared_language_audit_executor = MonitoredThreadPoolExecutor(
+    name="declared_language_audit",
+    max_workers=2,
+    max_queue_size=4,
+    thread_name_prefix="declared-language-audit",
+)
 # Optional per-window LID must not hold the shared sync coordination pool.
 # Bound outstanding calls; run_blocking awaits capacity without blocking a loop.
 record_language_executor = MonitoredThreadPoolExecutor(
@@ -401,6 +408,7 @@ _ALL_EXECUTORS = [
     sync_executor,
     auth_deadline_executor,
     record_language_executor,
+    declared_language_audit_executor,
     postprocess_executor,
     cleanup_executor,
     erasure_executor,

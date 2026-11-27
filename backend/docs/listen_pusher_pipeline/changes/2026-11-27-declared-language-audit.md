@@ -9,19 +9,32 @@ much pinned audio from everyone else is Mandarin, Hindi or another language Para
 Latin phonetics. That includes users who never use live transcription, so they have no profile.
 
 **Change.** `batch_language.resolve_language`, on the batch surface with a declared supported
-language, hands the unit's audio to `declared_language_audit.maybe_audit`. A stable 2% hash
-sample has its first 30 s sent to the self-hosted language gate on a 2-worker background pool.
-At most 4 probes wait at once, and a full pool skips the sample. The verdict is counted in
-`omi_batch_pipeline_declared_language_audit_total{declared, heard, heard_class, confident}`.
+language and serving intake's guard, hands the unit to `declared_language_audit.maybe_audit`.
+A stable 2% sample:
+- runs on the bounded `declared_language_audit` executor;
+- re-runs serving's own privacy, consent and funding authorization on a fresh guard;
+- skips probes that are mostly silence;
+- is classified on its first 30 s by the self-hosted gate when configured, else by the Modulate
+  language-ID probe (at most 60 per process per hour);
+- is counted in `omi_batch_pipeline_declared_language_audit_total`.
+
 The returned decision is unchanged: always `declared`.
 
-**Privacy and cost.** The probe goes only to our Parakeet service, which receives the same unit
-for ASR. No vendor, no stored audio, no user identifier, no transcript. GPU cost is one `/v2/language`
-call per sampled unit, about 0.14 calls/s at today's volume.
+**Production today.** The self-hosted gate is not configured on the batch hosts
+(`STT_GPU_FLEET_OFF=true`, `HOSTED_LID_API_URL` empty), so the vendor probe classifies.
+
+**Cost and reads.**
+- Vendor: 30 s per sample at $0.01 per sample-hour, capped at 60 per process per hour, so at most
+  $0.005/h per process. At today's volume, about 12k samples/day is about $1/day.
+- Firestore: the fresh authorization costs a few reads per sample, under 60k reads/day.
+
+**Privacy.** Modulate already serves live STT and language-ID for Omi audio. Each sample passes
+serving's own privacy, consent and funding check first. No audio is stored, and no user identifier
+or transcript is recorded.
 
 **Rollback.** `BATCH_DECLARED_LANGUAGE_AUDIT_ENABLED=false`.
 
-**Readback.** The leak share by declared language is unsupported-and-confident over classified
-rows, read from GMP 24 h after serving and posted on the issue.
+**Readback.** The leak share by declared language, all rows and confident-only, read from GMP 24 h
+after serving and posted on SCA-4940.
 
 Evidence: `tests/unit/test_declared_language_audit.py`.

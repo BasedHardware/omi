@@ -353,7 +353,8 @@ def resolve_language(
     code = normalized_stt_language(language.strip() if isinstance(language, str) else None)
     if not language_guard_enabled() or language_class(language) != 'unknown':
         if surface == 'batch' and language_class(language) == 'supported':
-            declared_language_audit.maybe_audit(code, audio, cut=probe_wav)  # sampled, off the intake path
+            # Sampled, off the intake path, on serving's own fresh authorization; the decision is unchanged.
+            declared_language_audit.maybe_audit(code, audio, cut=probe_wav, guard=before_probe, vendor=detect)
         return LanguageDecision(code, 1.0, 'declared')
     enforced, verdict = (
         _self_gate(audio, surface, cohort_key, audio_options)

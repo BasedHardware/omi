@@ -1,22 +1,38 @@
-"""Declared-supported batch units are sampled for a self-gate language audit; routing never changes."""
+"""Declared-supported serving batch units are sampled for a language audit; routing never changes."""
 
 from io import BytesIO
-import threading
+import math
+import os
+from types import SimpleNamespace
 import wave
 
 import pytest
 from prometheus_client import REGISTRY
 
+from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from utils.batch_pipeline.language_probe_authorization import ServingLanguageProbeGuard
+from utils.executors import ExecutorSaturatedError
 from utils.stt import batch_language, declared_language_audit as audit
+from utils.stt.batch_language import LanguageDecision
 from utils.stt.language_gate import SelfVerdict
 
 
-def wav_bytes(seconds=40, sample_rate=16000):
+def wav_bytes(seconds=40, *, voiced=True, sample_rate=16000):
     output = BytesIO()
     with wave.open(output, 'wb') as writer:
         writer.setparams((1, 2, sample_rate, 0, 'NONE', 'not compressed'))
-        writer.writeframes(b'\x01\x00' * int(seconds * sample_rate))
+        if voiced:
+            frames = b''.join(
+                int(3000 * math.sin(2 * math.pi * 220 * i / sample_rate)).to_bytes(2, 'little', signed=True)
+                for i in range(sample_rate)
+            )
+            writer.writeframes(frames * int(seconds))
+        else:
+            writer.writeframes(b'\x01\x00' * int(seconds * sample_rate))
     return output.getvalue()
+
+
+VOICED = wav_bytes()
 
 
 class Inline:
@@ -24,12 +40,14 @@ class Inline:
         fn(*args)
 
 
-def count(declared, heard, heard_class, confident):
-    value = REGISTRY.get_sample_value(
-        'omi_batch_pipeline_declared_language_audit_total',
-        {'declared': declared, 'heard': heard, 'heard_class': heard_class, 'confident': confident},
-    )
-    return value or 0.0
+class Full:
+    def submit(self, fn, *args):
+        raise ExecutorSaturatedError('full')
+
+
+def audited(**labels):
+    base = {'declared': 'en', 'heard': 'zh', 'heard_class': 'unsupported', 'confident': 'true', 'classifier': 'self'}
+    return REGISTRY.get_sample_value('omi_batch_pipeline_declared_language_audit_total', {**base, **labels}) or 0.0
 
 
 def skipped(reason):
@@ -38,136 +56,233 @@ def skipped(reason):
     )
 
 
+def serving_guard(authorize=None):
+    item = SimpleNamespace(owner_id='owner-test', duration_seconds=40.0)
+    return ServingLanguageProbeGuard(object(), item, authorize=authorize or (lambda store, item, snapshots=None: None))
+
+
 @pytest.fixture
-def gate(monkeypatch):
-    calls = []
-    verdict = {'value': SelfVerdict('zh', 0.97, 0.02, 30.0)}
+def lab(monkeypatch):
+    state = SimpleNamespace(self_calls=[], vendor_calls=[], verdict=SelfVerdict('zh', 0.97, 0.02, 30.0))
 
     def self_detect(probe, *, surface):
-        calls.append((len(probe), surface))
-        if isinstance(verdict['value'], Exception):
-            raise verdict['value']
-        return verdict['value']
+        state.self_calls.append((len(probe), surface))
+        return state.verdict
+
+    def vendor(probe):
+        state.vendor_calls.append(len(probe))
+        return LanguageDecision('hi', 0.93, 'audio_lid', 30.0)
 
     monkeypatch.delenv('BATCH_DECLARED_LANGUAGE_AUDIT_ENABLED', raising=False)
+    monkeypatch.setenv('HOSTED_LID_API_URL', 'http://lid.test')
     monkeypatch.setattr(audit.language_gate, 'self_detect', self_detect)
-    monkeypatch.setattr(audit, '_POOL', Inline())
-    monkeypatch.setattr(audit, '_PENDING', threading.BoundedSemaphore(audit.MAX_PENDING))
+    monkeypatch.setattr(batch_language, 'detect', vendor)
+    monkeypatch.setattr(audit, 'declared_language_audit_executor', Inline())
     monkeypatch.setattr(audit, 'sampled', lambda audio: True)
-    return calls, verdict
+    monkeypatch.setattr('utils.funded_processing.consent_allows', lambda uid: True)
+    monkeypatch.setattr('utils.stt_cap_dispatch.sync_allowed', lambda *args, **kwargs: True)
+    monkeypatch.setattr(audit, '_vendor_window', [0.0, 0])
+    return state
 
 
-def test_a_declared_english_unit_is_audited_and_still_routed_as_declared(gate):
-    calls, _ = gate
-    before = count('en', 'zh', 'unsupported', 'true')
+def resolve(audio=VOICED, guard=None, language='en', surface='batch'):
+    guard = serving_guard() if guard is None else guard
+    return (
+        batch_language.resolve_language(language, audio, surface=surface, before_probe=guard, before_self_probe=guard),
+        guard,
+    )
 
-    decision = batch_language.resolve_language('en', wav_bytes(), surface='batch')
+
+def test_a_declared_english_unit_is_audited_and_still_routed_as_declared(lab):
+    before = audited()
+
+    decision, guard = resolve()
 
     assert (decision.language, decision.evidence) == ('en', 'declared')
-    assert count('en', 'zh', 'unsupported', 'true') == before + 1
-    # Only the first 30 s of the 40 s unit reaches the gate.
-    assert calls[0][1] == 'batch_audit'
-    assert calls[0][0] <= 30 * 16000 * 2 + 100
+    assert guard.decision is None  # the serving guard is never called by the audit
+    assert audited() == before + 1
+    assert lab.self_calls[0][1] == 'batch_audit'
+    assert lab.self_calls[0][0] <= 30 * 16000 * 2 + 100  # only the first 30 s of the 40 s unit
 
 
-def test_a_low_confidence_verdict_is_labelled_not_confident(gate):
-    _, verdict = gate
-    verdict['value'] = SelfVerdict('hi', 0.55, 0.3, 30.0)
-    before = count('en', 'hi', 'unsupported', 'false')
+def test_without_a_self_gate_the_vendor_probe_classifies(lab, monkeypatch):
+    monkeypatch.setenv('HOSTED_LID_API_URL', '')
+    monkeypatch.setenv('STT_GPU_FLEET_OFF', 'true')
+    before = audited(heard='hi', classifier='vendor')
 
-    batch_language.resolve_language('en', wav_bytes(), surface='batch')
+    resolve()
 
-    assert count('en', 'hi', 'unsupported', 'false') == before + 1
-
-
-def test_an_unavailable_gate_is_counted_as_unavailable(gate):
-    _, verdict = gate
-    verdict['value'] = None
-    before = count('en', 'unavailable', 'unavailable', 'false')
-
-    batch_language.resolve_language('en', wav_bytes(), surface='batch')
-
-    assert count('en', 'unavailable', 'unavailable', 'false') == before + 1
+    assert lab.self_calls == []
+    assert len(lab.vendor_calls) == 1
+    assert audited(heard='hi', classifier='vendor') == before + 1
 
 
-def test_a_gate_error_is_skipped_and_releases_its_slot(gate, monkeypatch):
-    _, verdict = gate
-    verdict['value'] = RuntimeError('boom')
-    monkeypatch.setattr(audit, '_PENDING', threading.BoundedSemaphore(1))
-    before = skipped('error')
+def test_vendor_probes_are_capped_per_process_per_hour(lab, monkeypatch):
+    monkeypatch.setenv('HOSTED_LID_API_URL', '')
+    monkeypatch.setenv('STT_GPU_FLEET_OFF', 'true')
+    monkeypatch.setattr(audit, 'MAX_VENDOR_PER_HOUR', 1)
+    before = skipped('vendor_cap')
 
-    batch_language.resolve_language('en', wav_bytes(), surface='batch')
-    batch_language.resolve_language('en', wav_bytes(), surface='batch')
+    resolve()
+    resolve()
 
-    assert skipped('error') == before + 2
+    assert len(lab.vendor_calls) == 1
+    assert skipped('vendor_cap') == before + 1
 
 
-def test_a_full_pool_skips_without_blocking(gate, monkeypatch):
-    calls, _ = gate
-    monkeypatch.setattr(audit, '_PENDING', threading.BoundedSemaphore(1))
-    audit._PENDING.acquire()
-    before = skipped('busy')
-    try:
-        decision = batch_language.resolve_language('en', wav_bytes(), surface='batch')
-    finally:
-        audit._PENDING.release()
+def test_an_unusable_vendor_answer_is_skipped(lab, monkeypatch):
+    monkeypatch.setenv('HOSTED_LID_API_URL', '')
+    monkeypatch.setenv('STT_GPU_FLEET_OFF', 'true')
+    monkeypatch.setattr(batch_language, 'detect', lambda probe: LanguageDecision('und', 0.0, 'unavailable', 30.0))
+    before = skipped('vendor_unavailable')
+
+    resolve()
+
+    assert skipped('vendor_unavailable') == before + 1
+
+
+def test_a_privacy_refusal_skips_the_sample_and_never_touches_serving(lab):
+    def blocked(store, item, snapshots=None):
+        raise BatchPrivacyBlocked('blocked')
+
+    guard = serving_guard(blocked)
+    before = skipped('not_authorized')
+
+    decision, guard = resolve(guard=guard)
 
     assert decision.evidence == 'declared'
-    assert calls == []
+    assert guard.decision is None and guard.privacy_error is None
+    guard.raise_if_denied()  # serving custody is unaffected
+    assert lab.self_calls == []
+    assert skipped('not_authorized') == before + 1
+
+
+def test_a_consent_reset_skips_the_sample(lab, monkeypatch):
+    monkeypatch.setattr('utils.funded_processing.consent_allows', lambda uid: False)
+    before = skipped('not_authorized')
+
+    resolve()
+
+    assert lab.self_calls == []
+    assert skipped('not_authorized') == before + 1
+
+
+def test_leading_silence_is_not_a_language_sample(lab):
+    before = skipped('no_speech')
+
+    resolve(audio=wav_bytes(voiced=False))
+
+    assert lab.self_calls == []
+    assert skipped('no_speech') == before + 1
+
+
+def test_a_low_confidence_verdict_is_labelled_not_confident(lab):
+    lab.verdict = SelfVerdict('hi', 0.55, 0.3, 30.0)
+    before = audited(heard='hi', confident='false')
+
+    resolve()
+
+    assert audited(heard='hi', confident='false') == before + 1
+
+
+def test_an_unavailable_self_gate_is_skipped_not_counted(lab):
+    lab.verdict = None
+    before = skipped('self_unavailable')
+
+    resolve()
+
+    assert skipped('self_unavailable') == before + 1
+
+
+def test_a_reply_that_does_not_describe_the_probe_is_skipped(lab):
+    lab.verdict = SelfVerdict('zh', 0.97, 0.02, 12.0)
+    before = skipped('duration_mismatch')
+
+    resolve()
+
+    assert skipped('duration_mismatch') == before + 1
+
+
+def test_a_full_pool_skips_without_blocking(lab, monkeypatch):
+    monkeypatch.setattr(audit, 'declared_language_audit_executor', Full())
+    before = skipped('busy')
+
+    decision, _ = resolve()
+
+    assert decision.evidence == 'declared'
+    assert lab.self_calls == []
     assert skipped('busy') == before + 1
 
 
-def test_undecodable_audio_is_skipped(gate):
-    calls, _ = gate
-    before = skipped('decode_or_submit')
+def test_undecodable_audio_is_skipped(lab):
+    before = skipped('decode')
 
-    decision = batch_language.resolve_language('en', b'not a wav', surface='batch')
+    decision, _ = resolve(audio=b'not a wav')
 
     assert decision.evidence == 'declared'
-    assert calls == []
-    assert skipped('decode_or_submit') == before + 1
+    assert skipped('decode') == before + 1
+
+
+def test_a_classifier_bug_is_counted_and_never_raises(lab, monkeypatch):
+    def broken(probe, *, surface):
+        raise RuntimeError('boom')
+
+    monkeypatch.setattr(audit.language_gate, 'self_detect', broken)
+    before = skipped('error')
+
+    decision, _ = resolve()
+
+    assert decision.evidence == 'declared'
+    assert skipped('error') == before + 1
+
+
+def test_shadow_intake_and_unguarded_callers_are_not_audited(lab):
+    class ShadowGuard:
+        def __call__(self):
+            return True
+
+    resolve(guard=ShadowGuard())
+    batch_language.resolve_language('en', VOICED, surface='batch')
+
+    assert lab.self_calls == [] and lab.vendor_calls == []
 
 
 @pytest.mark.parametrize('surface', ['prerecorded', 'batch_shadow'])
-def test_other_surfaces_are_not_audited(gate, surface):
-    calls, _ = gate
+def test_other_surfaces_are_not_audited(lab, surface):
+    resolve(surface=surface)
 
-    batch_language.resolve_language('en', wav_bytes(), surface=surface)
-
-    assert calls == []
+    assert lab.self_calls == []
 
 
-def test_a_declared_unsupported_language_is_not_audited(gate):
-    calls, _ = gate
+def test_a_declared_unsupported_language_is_not_audited(lab):
+    resolve(language='ja')
 
-    batch_language.resolve_language('ja', wav_bytes(), surface='batch')
-
-    assert calls == []
+    assert lab.self_calls == []
 
 
-def test_kill_switch_stops_sampling(gate, monkeypatch):
-    calls, _ = gate
+def test_kill_switch_stops_sampling(lab, monkeypatch):
     monkeypatch.setenv('BATCH_DECLARED_LANGUAGE_AUDIT_ENABLED', 'false')
 
-    batch_language.resolve_language('en', wav_bytes(), surface='batch')
+    resolve()
 
-    assert calls == []
+    assert lab.self_calls == []
 
 
-def test_unsampled_audio_is_not_audited(gate, monkeypatch):
-    calls, _ = gate
+def test_unsampled_audio_is_not_audited(lab, monkeypatch):
     monkeypatch.setattr(audit, 'sampled', lambda audio: False)
 
-    batch_language.resolve_language('en', wav_bytes(), surface='batch')
+    resolve()
 
-    assert calls == []
+    assert lab.self_calls == []
 
 
 def test_sampling_is_stable_and_near_the_configured_share():
-    import os
-
     picks = [audit.sampled(os.urandom(64)) for _ in range(20000)]
     share = sum(picks) / len(picks)
     assert abs(share - audit.SAMPLE_PERCENT / 100) < 0.006
-    audio = b'same unit bytes'
-    assert audit.sampled(audio) == audit.sampled(audio)
+    assert audit.sampled(b'same unit bytes') == audit.sampled(b'same unit bytes')
+
+
+def test_voiced_seconds_measures_voiced_audio():
+    assert audit.voiced_seconds(wav_bytes(5)) == pytest.approx(5.0, abs=0.05)
+    assert audit.voiced_seconds(wav_bytes(5, voiced=False)) == 0.0

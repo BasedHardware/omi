@@ -1,44 +1,56 @@
 """How much declared-supported batch audio is really in a language Parakeet cannot transcribe (routing unchanged).
 
-Batch intake trusts a named supported language (a conversation pin, or a single-language preference) and sends the
-unit to Parakeet without listening to it (``batch_language.resolve_language`` returns ``declared``). A pin is often the
-app language, so some of that audio is Mandarin, Hindi or another language Parakeet renders as Latin phonetics. Nothing
+Serving batch intake trusts a named supported language (a conversation pin, or a single-language preference) and sends
+the unit on without listening to it (``batch_language.resolve_language`` returns ``declared``). A pin is often the app
+language, so some of that audio is Mandarin, Hindi or another language Parakeet renders as Latin phonetics. Nothing
 measured how much.
 
-This audit samples ``SAMPLE_PERCENT`` of those units by a stable hash of their audio and asks the self-hosted language
-gate (Parakeet's own ``/v2/language``, the same GPU service that transcribes the unit) about the first 30 s. It records
-``omi_batch_pipeline_declared_language_audit_total{declared, heard, heard_class, confident}`` and never changes a
-route. It runs on a small background pool off the intake path; a full pool skips the sample.
+This audit samples ``SAMPLE_PERCENT`` of those units by a stable hash of their audio. In the background it:
 
-The audio goes only to our own Parakeet service, which receives the same unit for ASR moments later; no vendor is
-called, nothing is stored, and no user identifier or transcript is recorded.
+1. re-runs serving's own privacy, consent and funding authorization for that unit on a *fresh* guard (the serving
+   guard is never touched, so a denial only skips the sample and never refuses or changes the upload);
+2. cuts the first 30 s, and skips it when it holds under ``MIN_SPEECH_SECONDS`` of voiced audio (leading silence);
+3. classifies it with the self-hosted language gate when one is configured, otherwise with the existing Modulate
+   language-ID probe (the vendor that already serves live STT), at most ``MAX_VENDOR_PER_HOUR`` per process;
+4. counts ``omi_batch_pipeline_declared_language_audit_total{declared, heard, heard_class, confident, classifier}``.
+
+It never changes a route, stores nothing, and records no user identifier or transcript. Shadow intake (its own guard
+class) is not audited. Provider-routed (BYOK) units with a supported language are included; they are a small share.
 
 ``BATCH_DECLARED_LANGUAGE_AUDIT_ENABLED=false`` stops sampling.
 """
 
+import contextvars
 import hashlib
 import logging
 import os
 import threading
-from concurrent.futures import ThreadPoolExecutor
+import time
 from typing import Callable
 
+import numpy as np
 from prometheus_client import Counter
 
+from config.live_stt_gpu_fleet import gpu_fleet_off
 from config.prerecorded_language import language_class
 from config.refactor_switches import default_on
+from utils.batch_pipeline.language_probe_authorization import ServingLanguageProbeGuard
+from utils.executors import ExecutorSaturatedError, declared_language_audit_executor
 from utils.stt import language_gate
+from utils.stt.prerecorded_deadline import verification_deadline
 
 logger = logging.getLogger(__name__)
 
 SAMPLE_PERCENT = 2.0
-MAX_PENDING = 4  # probes (at most 30 s of audio each) waiting for the gate at once
-CONFIDENT = 0.8  # top-1 probability for heard=<language> to count as confident
+CONFIDENT = 0.8  # top-1 probability for a verdict to count as confident
+MIN_SPEECH_SECONDS = 3.0  # voiced audio needed in the 30 s probe; less is leading silence, not a language sample
+_VOICED_RMS = 300  # int16 RMS of a voiced 20 ms frame
+MAX_VENDOR_PER_HOUR = 60  # vendor probes per process per hour (30 s each: at most $0.005/h/process at $0.01/h)
 
 AUDIT = Counter(
     'omi_batch_pipeline_declared_language_audit_total',
-    'Sampled declared-supported batch units classified by the self-hosted language gate (routing unchanged)',
-    ['declared', 'heard', 'heard_class', 'confident'],
+    'Sampled declared-supported batch units classified by audio language ID (routing unchanged)',
+    ['declared', 'heard', 'heard_class', 'confident', 'classifier'],
 )
 SKIPPED = Counter(
     'omi_batch_pipeline_declared_language_audit_skipped_total',
@@ -46,8 +58,8 @@ SKIPPED = Counter(
     ['reason'],
 )
 
-_POOL = ThreadPoolExecutor(max_workers=2, thread_name_prefix='declared-language-audit')
-_PENDING = threading.BoundedSemaphore(MAX_PENDING)
+_vendor_lock = threading.Lock()
+_vendor_window = [0.0, 0]  # [hour start, probes in it]
 
 
 def audit_enabled() -> bool:
@@ -63,39 +75,106 @@ def sampled(audio: bytes) -> bool:
     return int.from_bytes(digest[:4], 'big') % 10000 < SAMPLE_PERCENT * 100
 
 
-def maybe_audit(declared: str, audio: bytes, *, cut: Callable[[bytes], tuple[bytes, float]]) -> None:
-    """Queue one sampled audit of a declared-supported unit. Never raises, never blocks.
+def maybe_audit(
+    declared: str,
+    audio: bytes,
+    *,
+    cut: Callable[[bytes], tuple[bytes, float]],
+    guard,
+    vendor: Callable[[bytes], object],
+) -> None:
+    """Queue one sampled audit of a declared-supported serving unit. Never raises, never blocks.
 
-    ``cut`` is ``batch_language.probe_wav`` (passed in: that module imports this one)."""
+    ``cut`` is ``batch_language.probe_wav`` and ``vendor`` its ``detect`` (passed in: that module imports this one).
+    ``guard`` is serving intake's ``ServingLanguageProbeGuard``; any other caller (shadow intake) is not audited.
+    """
     try:
         if not audio or not audit_enabled() or not sampled(audio):
             return
-        if not _PENDING.acquire(blocking=False):
-            SKIPPED.labels('busy').inc()
+        if not isinstance(guard, ServingLanguageProbeGuard):
             return
         try:
-            probe, _seconds = cut(audio)  # only the first 30 s is kept, never the whole unit
-            _POOL.submit(_classify, declared, probe)
+            probe, seconds = cut(audio)  # only the first 30 s is kept, never the whole unit
         except Exception:
-            _PENDING.release()
-            SKIPPED.labels('decode_or_submit').inc()
-    except Exception:
-        pass
-
-
-def _classify(declared: str, probe: bytes) -> None:
-    try:
-        verdict = language_gate.self_detect(probe, surface='batch_audit')
-        if verdict is None:
-            AUDIT.labels(language_gate.language_bucket(declared), 'unavailable', 'unavailable', 'false').inc()
+            SKIPPED.labels('decode').inc()
             return
+        fresh = ServingLanguageProbeGuard(guard.store, guard.item, authorize=guard.authorize)
+        context = contextvars.copy_context()
+        # A fire-and-forget probe must not inherit the caller's request deadline.
+        context.run(verification_deadline.set, None)
+        try:
+            declared_language_audit_executor.submit(context.run, _classify, declared, probe, seconds, fresh, vendor)
+        except ExecutorSaturatedError:
+            SKIPPED.labels('busy').inc()
+        except Exception as error:
+            SKIPPED.labels('submit').inc()
+            logger.warning('event=declared_language_audit outcome=submit_failed error=%s', type(error).__name__)
+    except Exception as error:
+        logger.warning('event=declared_language_audit outcome=error error=%s', type(error).__name__)
+
+
+def voiced_seconds(probe: bytes) -> float:
+    """Seconds of 20 ms frames above a voicing RMS in a 16-bit PCM WAV probe."""
+    body = probe[44:]
+    pcm = np.frombuffer(body[: len(body) // 2 * 2], dtype='<i2').astype(np.float64)
+    frames = len(pcm) // 320
+    if frames == 0:
+        return 0.0
+    rms = np.sqrt((pcm[: frames * 320].reshape(frames, 320) ** 2).mean(axis=1))
+    return float((rms >= _VOICED_RMS).sum()) * 0.02
+
+
+def _self_gate_configured() -> bool:
+    return bool(os.getenv('HOSTED_LID_API_URL', '').strip()) or (
+        not gpu_fleet_off() and bool(os.getenv('HOSTED_PARAKEET_API_URL', '').strip())
+    )
+
+
+def _vendor_allowed() -> bool:
+    with _vendor_lock:
+        now = time.monotonic()
+        if now - _vendor_window[0] >= 3600:
+            _vendor_window[0], _vendor_window[1] = now, 0
+        if _vendor_window[1] >= MAX_VENDOR_PER_HOUR:
+            return False
+        _vendor_window[1] += 1
+        return True
+
+
+def _classify(declared: str, probe: bytes, seconds: float, guard, vendor) -> None:
+    try:
+        if not guard():
+            SKIPPED.labels('not_authorized').inc()
+            return
+        if voiced_seconds(probe) < MIN_SPEECH_SECONDS:
+            SKIPPED.labels('no_speech').inc()
+            return
+        bucket = language_gate.language_bucket(declared)
+        if _self_gate_configured():
+            verdict = language_gate.self_detect(probe, surface='batch_audit')
+            if verdict is None:
+                SKIPPED.labels('self_unavailable').inc()
+                return
+            if abs(verdict.audio_seconds - seconds) > 0.1:
+                SKIPPED.labels('duration_mismatch').inc()  # the reply must describe the bytes we sent
+                return
+            heard, probability, classifier = verdict.language, verdict.language_probability, 'self'
+        else:
+            if not _vendor_allowed():
+                SKIPPED.labels('vendor_cap').inc()
+                return
+            decision = vendor(probe)
+            if getattr(decision, 'evidence', None) != 'audio_lid':
+                SKIPPED.labels('vendor_unavailable').inc()
+                return
+            heard, probability, classifier = decision.language, decision.confidence, 'vendor'
         AUDIT.labels(
-            language_gate.language_bucket(declared),
-            language_gate.language_bucket(verdict.language),
-            language_class(verdict.language),
-            'true' if verdict.language_probability >= CONFIDENT else 'false',
+            bucket,
+            language_gate.language_bucket(heard),
+            language_class(heard),
+            'true' if probability >= CONFIDENT else 'false',
+            classifier,
         ).inc()
-    except Exception:
+    except Exception as error:
         SKIPPED.labels('error').inc()
-    finally:
-        _PENDING.release()
+        logger.warning('event=declared_language_audit outcome=classify_failed error=%s', type(error).__name__)
