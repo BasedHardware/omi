@@ -1,10 +1,13 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/l10n/app_localizations.dart';
@@ -48,7 +51,7 @@ class _Fetch {
   }
 }
 
-Future<void> _pumpPage(WidgetTester tester, DateTime date, DayConversationsFetcher fetch) {
+Future<void> _pumpPage(WidgetTester tester, DateTime date, DayConversationsFetcher? fetch, {ConversationApi? api}) {
   return tester.pumpWidget(MultiProvider(
     providers: [
       ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
@@ -64,7 +67,7 @@ Future<void> _pumpPage(WidgetTester tester, DateTime date, DayConversationsFetch
     child: MaterialApp(
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
-      home: DayConversationsPage(date: date, fetchConversations: fetch),
+      home: DayConversationsPage(date: date, fetchConversations: fetch, api: api),
     ),
   ));
 }
@@ -261,6 +264,45 @@ void main() {
         reason: 're-fetched ids are deduplicated');
     expect(provider.conversations, hasLength(101));
     expect(find.byKey(const ValueKey('day_load_more')), findsNothing, reason: 'a short page ends paging');
+  });
+
+  testWidgets('date pages use only a server-authorized cursor and retain the storage offset', (tester) async {
+    final requests = <Uri>[];
+    final api = ConversationApi(
+      baseUrl: 'https://example.invalid/',
+      send: (request) async {
+        final uri = Uri.parse(request.url);
+        requests.add(uri);
+        expect(request.headers['X-Omi-Day-Cursor'], '1');
+        final first = requests.length == 1;
+        final row = {
+          'id': first ? 'first' : 'second',
+          'created_at': day.toUtc().toIso8601String(),
+          'started_at': day.toUtc().toIso8601String(),
+          'finished_at': day.add(const Duration(minutes: 10)).toUtc().toIso8601String(),
+          'status': 'completed',
+          'structured': {'title': first ? 'First row' : 'Second row', 'overview': '', 'emoji': '', 'category': 'work'},
+          'transcript_segments': [],
+        };
+        return http.Response(jsonEncode([row]), 200, headers: {
+          'x-omi-day-cursor': '1',
+          'x-omi-conversation-page-size': first ? '7' : '1',
+          'x-omi-has-more': first ? 'true' : 'false',
+          if (first) 'x-omi-next-cursor': 'cursor-page-two',
+        });
+      },
+    );
+    await _pumpPage(tester, day, null, api: api);
+    await tester.pumpAndSettle();
+    expect(requests.single.queryParameters['cursor'], isNull);
+    expect(find.text('First row'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('day_load_more')));
+    await tester.pumpAndSettle();
+
+    expect(requests.last.queryParameters['cursor'], 'cursor-page-two');
+    expect(requests.last.queryParameters['offset'], '7');
+    expect(requests.last.queryParameters['start_date'], requests.first.queryParameters['start_date']);
+    expect(find.text('Second row'), findsOneWidget);
   });
 
   testWidgets('a full page followed by an empty page ends normally, not partial', (tester) async {

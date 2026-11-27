@@ -40,6 +40,7 @@ from database.conversations_v3_undo_removals import removal_ref
 from database import conversations_v3_write_equality as write_equality
 from database.recurring_voice_privacy import filter_processing_write
 from database.home_feed_fields import COMMIT_STAMPED_FIELDS
+from database.firestore_read_origin import current_read_origin
 from database.account_deletion_marker import account_deletion_blocks_user_work, account_deletion_document
 from database.account_deletion_policy import account_deletion_marker_blocks_access
 from models.finalization_owner import ENGINE_FIELD, EPOCH_FIELD, python_owns_finalization
@@ -61,6 +62,7 @@ from config.conversations_v3 import (
     skip_unchanged_writes_enabled,
     stretch_cohesion_enabled,
 )
+from config.firestore_read_levers import lever_enabled
 from utils.conversations import terminal_settled
 from utils.conversations.v3 import Conflict, UnlockedPage, metrics, policy, preview_wakes, request_log_trace_id
 from utils.observability.fallback import record_fallback
@@ -136,6 +138,12 @@ LOCKED_DAY_FIELD, LOCKED_PASSES_FIELD = 'v3_locked_day', 'v3_locked_passes'
 # preloads pointers so none replays.
 LOCKED_BATCH_EXECUTIONS = 3
 CLAIM_READ_CHUNK = 100
+
+
+def _reuse_reconcile_snapshots(uid):
+    return current_read_origin() == 'http:/v1/conversations-v3/reconcile' and lever_enabled(
+        'conversation_reconcile_snapshot_reuse', uid
+    )
 
 
 def closure_by_claims():
@@ -770,6 +778,8 @@ def load(
         if unlocked_page is not None and not conversation_id and size_quarantine_filters()
         else frozenset()
     )
+    reuse_reads = not conversation_id and _reuse_reconcile_snapshots(uid)
+    reconcile_lookahead = None
     if conversation_id:
         ids = (opened or {}).get('v3_recording_ids') or []
         if allowed != (0, 0):
@@ -784,8 +794,13 @@ def load(
     else:
         # A zero limit seeds only unlocked windows (the bounded retry's one-lane fallback).
         # Over-fetch by the set-aside ids so a quarantined head never hides the backlog behind it.
-        pending = list(_oldest_pending(coll, pending_limit + len(quarantined)).stream()) if pending_limit else []
-        pending = [doc for doc in pending if doc.id not in quarantined][:pending_limit]
+        candidates = list(_oldest_pending(coll, pending_limit + len(quarantined) + 1).stream()) if pending_limit else []
+        eligible = [doc for doc in candidates if doc.id not in quarantined]
+        pending = eligible[:pending_limit]
+        if len(eligible) > pending_limit:
+            candidate = eligible[pending_limit]
+            if not (skip_terminal and terminal_recording(candidate.to_dict() or {})):
+                reconcile_lookahead = candidate
     recordings, unreadable = {}, {}
     for doc in pending:
         row = recording_input(uid, doc, skip_terminal=skip_terminal)
@@ -927,7 +942,11 @@ def load(
         if len(recordings) + len(unreadable) + len(missing) + len(unseen) > SOURCE_LIMIT:
             raise Conflict('v3_source_closure_budget')
         for rid in sorted(unseen):
-            row = recording_input(uid, coll.document(rid).get(), skip_terminal=skip_terminal)
+            row = None
+            if reuse_reads and reconcile_lookahead is not None and reconcile_lookahead.id == rid:
+                row = recording_input(uid, reconcile_lookahead, skip_terminal=skip_terminal)
+            if not row or row.get('_v3_unreadable'):
+                row = recording_input(uid, coll.document(rid).get(), skip_terminal=skip_terminal)
             if not row:
                 missing.add(rid)
             elif row.get('_v3_unreadable'):

@@ -1584,6 +1584,12 @@ MEMORY_HISTORICAL_SUPPRESSION_TOTAL = Counter(
     ['reason'],
 )
 
+OMI_CONVERSATION_LIST_PAGES_TOTAL = Counter(
+    'omi_conversation_list_pages_total',
+    'Completed conversation list requests by bounded paging shape and discard filter',
+    ['paging', 'include_discarded'],
+)
+
 LIST_READ_REQUEST_TOTAL = Counter(
     'list_read_requests_total',
     'Bounded list GET read outcomes by route',

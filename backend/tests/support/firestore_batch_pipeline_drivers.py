@@ -273,9 +273,9 @@ def entries():
         CoveredByEntry(
             'database.batch_pipeline_store.FirestoreStore.run',
             covered_by=('database.batch_pipeline_store.service_frontier',),
-            reason='optional pre-begin pacing adds no query; queries only through reseed_hinted_activation after commit',
+            reason='Pre-begin pacing and the transaction-local point-read scope add no queries. The post-commit frontier query is unchanged.',
             expect_observed=False,
-            body_digest='20a0e3fdea5dd2194d7c806216e36c644fccbeca46bd5a6489e132ae902d8e32',
+            body_digest='0b6af6725e36a3af4351f943bce45060bde738bdfb74c6bf18f2e7dc02aedec2',
         ),
         CoveredByEntry(
             'database.batch_pipeline_store.FirestoreTransaction.service_frontier',

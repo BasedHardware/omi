@@ -4,6 +4,7 @@ Writes are buffered until the body returns so all Firestore reads precede writes
 The transaction callback must be pure; it may be retried by Firestore.
 """
 
+from contextlib import nullcontext
 from copy import deepcopy
 import hashlib
 import logging
@@ -16,7 +17,7 @@ from typing import Any, Callable, Protocol, TypeVar
 from google.cloud import firestore
 from google.api_core.exceptions import AlreadyExists, FailedPrecondition, Aborted
 
-from config.firestore_read_levers import lever_enabled
+from config.firestore_read_levers import lever_enabled, lever_percent
 from config import batch_pipeline_packing as batch_packing
 from config.batch_pipeline_protected_share import (
     DEADLINE_SECONDS,
@@ -36,12 +37,12 @@ from database.batch_pipeline_projection_finish_backfill import backfill_complete
 from database.batch_pipeline_projection_followup_clock import DUE_FIELD as FOLLOWUP_DUE_FIELD
 from database.batch_pipeline_projection_followup_backfill import backfill_complete as followup_backfill_complete
 from database import batch_pipeline_projection_outbox as outbox
-from database.firestore_read_origin import read_origin
+from database.firestore_read_origin import current_read_origin, read_origin
 from database._client import get_data_plane_firestore_client
 from database import record_recovery_gate
 from database.batch_pipeline_privacy import assert_batch_write_allowed
+from database.batch_privacy_attempt import batch_transaction_reads, transaction_snapshot
 from database.batch_pipeline_transaction_attempt import note_direct_reads as _note_direct_reads, prepare_transaction
-from config.firestore_read_levers import lever_enabled
 from database.batch_pipeline_recovery import defer_privacy_blocked_record, quarantine_fenced
 from database.firestore_transaction_retry import (
     FirestoreContentionExhausted,
@@ -64,6 +65,10 @@ PROJECTION_ASSIGNMENT_STATES = ('pending',)
 
 T = TypeVar('T')
 logger = logging.getLogger(__name__)
+_SYNC_READ_LEVERS = {
+    'http:/v2/sync-local-files': 'sync_upload_transaction_reads',
+    'http:/v2/sync-local-files/{job_id}': 'sync_status_transaction_reads',
+}
 
 
 class Transaction(Protocol):
@@ -176,7 +181,10 @@ class FirestoreTransaction:
             if self.read_budget is not None:
                 deadline = getattr(self.read_budget, 'point', self.read_budget.timeout)
                 options = dict(timeout=deadline(10), retry=None)
-            snapshot = self._ref(table, key).get(transaction=self.transaction, **options)
+            ref = self._ref(table, key)
+            snapshot = transaction_snapshot(
+                ref, self.transaction, lambda: ref.get(transaction=self.transaction, **options)
+            )
             self.exists[address] = snapshot.exists
             self.cache[address] = (snapshot.to_dict() or {}) if snapshot.exists else {}
         return deepcopy({**self.writes.get(address, self.cache[address]), **self.patches.get(address, {})})
@@ -366,15 +374,20 @@ class FirestoreStore:
     def run(self, body, *, before_attempt=None):
         client = self.client
         last_view: list[FirestoreTransaction] = []
+        lever = _SYNC_READ_LEVERS.get(current_read_origin())
+        # The shadow comparison measures independent authority reads.
+        reuse_reads = bool(lever and lever_enabled(lever) and lever_percent('privacy_checks_shadow') == 0)
 
         @firestore.transactional
         def commit(transaction):
             view = FirestoreTransaction(client, self.namespace, transaction)
             _note_direct_reads(view)
             last_view[:] = [view]
-            result = body(view)
-            view.flush()
-            return result
+            scope = batch_transaction_reads(client, transaction) if reuse_reads else nullcontext()
+            with scope:
+                result = body(view)
+                view.flush()
+                return result
 
         if before_attempt is None:
             result = self._run_committed(client, commit, last_view)

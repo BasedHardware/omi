@@ -6,11 +6,12 @@
 /// has more behind it, so a short page is not the end. [nextCursor] resumes after the last row read;
 /// it is present only where the server's cursor is enabled. Both are null from an older server.
 class ConversationPageHeaders {
-  const ConversationPageHeaders({this.hasMore, this.nextCursor, this.homeMode});
+  const ConversationPageHeaders({this.hasMore, this.nextCursor, this.homeMode, this.dayCursorEnabled = false});
 
   final bool? hasMore;
   final String? nextCursor;
   final String? homeMode;
+  final bool dayCursorEnabled;
 
   static const homeModeHeader = 'X-Omi-Home-Page-Mode';
 
@@ -22,6 +23,7 @@ class ConversationPageHeaders {
       homeMode: mode == 'indexed' || mode == 'legacy' ? mode : null,
       hasMore: more == 'true' ? true : (more == 'false' ? false : null),
       nextCursor: cursor == null || cursor.isEmpty ? null : cursor,
+      dayCursorEnabled: headers['x-omi-day-cursor'] == '1',
     );
   }
 

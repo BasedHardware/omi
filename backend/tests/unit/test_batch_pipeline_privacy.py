@@ -252,3 +252,70 @@ def test_account_operation_ttl_targets_only_replay_receipts():
     assert ttl_resources('demo-synthetic', policy_path=policy) == [
         'projects/demo-synthetic/databases/(default)/collectionGroups/account_operations/fields/expires_at'
     ]
+
+
+@pytest.mark.parametrize(
+    'target,lever',
+    [
+        ('/v2/sync-local-files', 'sync_upload_transaction_reads'),
+        ('/v2/sync-local-files/{job_id}', 'sync_status_transaction_reads'),
+    ],
+)
+def test_sync_store_reuses_only_the_current_transaction_snapshots(monkeypatch, target, lever):
+    import json
+    from collections import Counter
+    from database import batch_pipeline_store as store
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+    from database.firestore_read_origin import bind_read_scope, reset_read_scope
+
+    class CountingRef:
+        def __init__(self, client, path):
+            self._client, self.path = client, path
+
+        def collection(self, key):
+            return CountingRef(self._client, f'{self.path}/{key}')
+
+        document = collection
+
+        def get(self, *, transaction):
+            reads[self.path] += 1
+            doc = data.get(self.path)
+            return SimpleNamespace(exists=doc is not None, to_dict=lambda: dict(doc or {}))
+
+    uid, cid = 'u', 'c'
+    conversation = f'users/{uid}/conversations/{cid}'
+    tombstone = f'users/{uid}/deleted_conversations/{cid}'
+    data = {f'users/{uid}': {'data_protection_level': 'enhanced'}, conversation: {'deleted': False}}
+    reads = Counter()
+    raw_transaction = object()
+    client = SimpleNamespace(transaction=lambda: raw_transaction)
+    client.collection = lambda key: CountingRef(client, key)
+    monkeypatch.setattr(store.firestore, 'transactional', lambda function: function)
+    monkeypatch.setattr(store, 'contention_retry_enabled', lambda: False)
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    batch_store = store.FirestoreStore('batch_pipeline_prod', firestore_client=client)
+
+    def body(tx):
+        assert tx.get('conversations', f'{uid}/{cid}') == {'deleted': False}
+        assert tx.check_privacy(uid, [cid], expected_generation=0) == 0
+        return tx.check_privacy(uid, [cid], expected_generation=0)
+
+    scope = bind_read_scope({'type': 'http', 'route': SimpleNamespace(path=target)})
+    try:
+        monkeypatch.delenv('FIRESTORE_READ_LEVERS', raising=False)
+        assert batch_store.run(body) == 0
+        assert reads[conversation] == 3 and reads[tombstone] == 2
+
+        reads.clear()
+        monkeypatch.setenv('FIRESTORE_READ_LEVERS', json.dumps({lever: 100}))
+        assert batch_store.run(body) == 0
+        assert reads[conversation] == reads[tombstone] == 1
+
+        # Even if the SDK reuses its Transaction object for a callback retry,
+        # the old negative snapshot cannot authorize the next attempt.
+        data[tombstone] = {'deleted': True}
+        with pytest.raises(BatchPrivacyBlocked, match='conversation_deleted'):
+            batch_store.run(body)
+        assert reads[tombstone] == 2
+    finally:
+        reset_read_scope(scope)

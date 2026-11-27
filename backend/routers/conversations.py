@@ -43,6 +43,7 @@ from database.legal_holds import (
 from utils.other.account_gate_http import account_gate_busy_http_exception
 from database.firestore_read_metrics import FirestoreReadSite
 from config import historical_tier
+from config.firestore_read_levers import lever_enabled
 from config import reliability_experiments
 from config import play_billing as play_billing_config
 from utils.conversations import historical_projection, home_step, transcribing_hold
@@ -131,7 +132,7 @@ from utils.conversations.meeting_receipt import record_finalized_meeting_receipt
 from utils.integration_telemetry import emit_posthog_event
 from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
 from utils.memory.memory_service import MemoryService
-from utils.metrics import record_lazy_desktop_deferral
+from utils.metrics import OMI_CONVERSATION_LIST_PAGES_TOTAL, record_lazy_desktop_deferral
 from utils.memory.retraction_scope import retraction_can_be_skipped
 from utils.memory.canonical_memory_adapter import ConversationReplacementConflictError
 from utils import byok
@@ -1323,6 +1324,10 @@ def get_conversations(
     # query and the page stream runs under the derived per-RPC timeout, so a
     # deep page cannot consume the whole HTTP_GET_TIMEOUT (#11831).
     budget = list_read_budget_for_request(request, route='conversations')
+    day_cursor_opt_in = request is not None and request.headers.get('X-Omi-Day-Cursor') == '1'
+    day_cursor_enabled = day_cursor_opt_in and lever_enabled('conversation_day_list_cursor', uid)
+    if day_cursor_opt_in and not day_cursor_enabled:
+        cursor = None
     page: Dict[str, Any] = {}
     reveal = include_discarded or sources or folder_id or starred is not None or statuses != 'processing,completed'
     default_home = not (reveal or start_date or end_date)
@@ -1382,6 +1387,8 @@ def get_conversations(
     )
     if response is not None:
         list_page_headers.apply(response, page)
+        if day_cursor_enabled:
+            response.headers['X-Omi-Day-Cursor'] = '1'
     _heal_locked_conversations_if_eligible(uid, conversations)
     admissions = transcribing_hold.read_admissions(uid, conversations, budget=budget)
     conversations = [
@@ -1398,6 +1405,8 @@ def get_conversations(
     if budget.truncated and response is not None:
         response.headers[OMI_LIST_TRUNCATED_HEADER] = OMI_LIST_TRUNCATED_VALUE
     budget.observe('truncated' if budget.truncated else 'complete')
+    paging = 'cursor_requested' if cursor is not None else 'offset' if offset else 'first'
+    OMI_CONVERSATION_LIST_PAGES_TOTAL.labels(paging, str(include_discarded).lower()).inc()
     # Read meter: what one list page cost. Counts and timings only, never the owner or the query.
     logger.info(
         'conversation_list_read home=%s indexed_home=%s paged=%s limit=%d docs=%s storage_rows=%s hidden=%s rows=%d '

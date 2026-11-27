@@ -126,6 +126,13 @@ FIRESTORE_NOOP_WRITES_BY_CALLER = Counter(
 )
 
 
+CONVERSATION_ROWS_CHANGED = Counter(
+    'omi_conversation_rows_changed_total',
+    'Distinct conversation documents with a changed update time in acknowledged Firestore Commit responses',
+    ['source'],
+)
+
+
 FIRESTORE_WRITE_CALLER_LABEL_OVERFLOW = Counter(
     'omi_firestore_write_caller_label_overflow_total',
     'Firestore write caller labels dropped because the bounded write caller set is full.',
@@ -322,8 +329,8 @@ def _timestamp(value: Any) -> tuple[int, int]:
     return value.seconds, value.nanos
 
 
-def _record_noops(writes: list, response: Any, caller: str) -> None:
-    """Count Commit writes whose result update_time predates commit_time. Never raises."""
+def _record_commit_changes(writes: list, response: Any, caller: str) -> None:
+    """Use Firestore's result revision to count no-ops and changed conversation rows."""
     try:
         pb = type(response).pb(response)
         results = list(pb.write_results)
@@ -331,12 +338,21 @@ def _record_noops(writes: list, response: Any, caller: str) -> None:
             return
         committed = _timestamp(pb.commit_time)
         tally: dict[str, int] = {}
+        changed = set()
         for write, result in zip(writes, results):
-            if not result.HasField('update_time') or _timestamp(result.update_time) >= committed:
-                continue  # Deletes carry no update_time; a changed document carries commit_time.
-            _, _, parts = write_op(write)
+            if not result.HasField('update_time'):
+                continue  # Hard deletes do not reveal whether a row previously existed.
+            revision = _timestamp(result.update_time)
+            _, database, parts = write_op(write)
+            if revision >= committed:
+                if revision == committed and len(parts) == 4 and parts[0] == 'users' and parts[2] == 'conversations':
+                    changed.add((database, *parts))
+                continue
             collection = collection_pattern(parts) if parts else _UNKNOWN
             tally[collection] = tally.get(collection, 0) + 1
+        if changed:
+            source = 'reconcile' if current_read_origin() == 'http:/v1/conversations-v3/reconcile' else 'other'
+            CONVERSATION_ROWS_CHANGED.labels(source).inc(len(changed))
         for collection, amount in tally.items():
             FIRESTORE_NOOP_WRITES_BY_CALLER.labels(collection=collection, caller=caller).inc(amount)
     except Exception:
@@ -402,7 +418,7 @@ def _after(writes: list, response: Any, partial: bool) -> None:
     caller = write_caller() if bulk_write_attribution.get() is None else _OTHER
     _record(writes, caller)
     if not partial:
-        _record_noops(writes, response, caller)
+        _record_commit_changes(writes, response, caller)
 
 
 def _record_ambiguous(writes: list, error: BaseException) -> None:

@@ -216,8 +216,8 @@ BODY_DIGEST = {
     'database.batch_pipeline_store.FirestoreStore.projection_successor': '96adabf372104327c5a8065ef2ff06621648ee242b3415d04b047d50ded9e6b1',
     'database.batch_pipeline_store.FirestoreTransaction.service_frontier': '56b1e013fd6925c981be2186d76458211b724187b771ddc5ebb0eaa47820c44b',
     'database.batch_pipeline_store.reseed_hinted_activation': 'b962f088769367e4902876ef9dd91de299238b945f13610829e5f1f1acd8d449',
-    # Re-reviewed 2026-11-17: optional pre-begin pacing only; reseed query ownership is unchanged.
-    'database.batch_pipeline_store.FirestoreStore.run': '20a0e3fdea5dd2194d7c806216e36c644fccbeca46bd5a6489e132ae902d8e32',
+    # Re-reviewed 2026-11-27: transaction snapshot reuse is limited to opted-in sync origins with shadow checks off.
+    'database.batch_pipeline_store.FirestoreStore.run': '0b6af6725e36a3af4351f943bce45060bde738bdfb74c6bf18f2e7dc02aedec2',
     'database.batch_pipeline_store.FirestoreStore.control_candidates': 'c1ce9e8170a7fde0e6a82c44a2db0c0c18909cba723e9cefd402cfe1f7993df9',
     'database.batch_pipeline_store.FirestoreStore.control_candidate': 'd82ee8b1c03be61b104e25304d6a0a732a9b59453fd302f4e7794a75622d65ad',
     'database.batch_pipeline_store.FirestoreStore.oldest_retry': '8d77904364b37100b5816f0252831ef6cf8807930dba8671cdc56bf603340315',
@@ -3747,7 +3747,9 @@ for entry in (
         'batch cap is decided before any lake upload (no Firestore read); no new query. Re-reviewed 2026-11-27 (Codex r4715443730): a locked-closure batch preloads its transcript '
         'pointers from the lake before its transaction and runs its body at most three times; no new Firestore query. '
         'The locked-closure cap is now decided on one preparation pass with uploads deferred '
-        '(transcript_pointer.deferred_offloads); no new Firestore query.',
+        '(transcript_pointer.deferred_offloads); no new Firestore query. '
+        'Reconcile may reuse the full pending lookahead snapshot for a linked source and validate its revision at commit; '
+        'no extra point read.',
         expect_observed=False,
         body_digest=BODY_DIGEST['database.conversations_v3.commit_projection'],
     ),

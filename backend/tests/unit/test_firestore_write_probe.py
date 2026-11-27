@@ -596,3 +596,26 @@ def test_batch_privacy_fence_preserves_writer_attribution(client, transport, mon
 )
 def test_privacy_authority_labels_drop_document_identifiers(parts, expected):
     assert probe.collection_pattern(parts) == expected
+
+
+def test_acknowledged_conversation_changes_exclude_noops_deletes_and_duplicate_rows(client, transport):
+    count = probe.CONVERSATION_ROWS_CHANGED.labels('other')._value
+    before = count.get()
+    committed = datetime.datetime(2026, 11, 1, 12, tzinfo=datetime.timezone.utc)
+    transport.response = CommitResponse(
+        commit_time=committed,
+        write_results=[
+            WriteResult(update_time=committed),
+            WriteResult(update_time=committed),
+            WriteResult(update_time=committed - datetime.timedelta(hours=1)),
+            WriteResult(),
+        ],
+    )
+    conversations = client.collection('users').document('u1').collection('conversations')
+    batch = client.batch()
+    batch.set(conversations.document('changed'), {'x': 1})
+    batch.update(conversations.document('changed'), {'x': 2})
+    batch.set(conversations.document('unchanged'), {'x': 1})
+    batch.delete(conversations.document('gone'))
+    batch.commit()
+    assert count.get() == before + 1
