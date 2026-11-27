@@ -420,7 +420,7 @@ about 130 s, on a busier host; the five before those: 35 s); `.github/ci-budget.
 | `finish_single_recording_fast`, `audio_single_recording_finish` | Finish while capturing, fast finish, scripted and audio words | SCA-4386 |
 | `finish_after_reconnect_late_transcript`, `finish_after_long_reconnect_gap`, `finish_transcript_never_lands` | Finish after a reconnect; a predecessor transcript late or never | SCA-4385, #26304 |
 | `finish_next_opens_before_close` | a pendant pause: the next recording opens before the current one closes, then Finish | SCA-4385 class |
-| `finish_after_second_close` | A closes, B closes two minutes later, then Finish must finish B (`expected_failure`) | #26288 |
+| `finish_after_second_close` | A closes, B closes two minutes later, then Finish must finish B, not A's still-live window | #26288, SCA-4434 |
 | `finish_on_visible_conversation` | Finish on a closed conversation already on Home: a 404, and Home keeps its title and notes | #26241, #26242 |
 | `finish_double_tap` | two Finish taps: one conversation, one fast-finish STT call | #26208 |
 | `finish_no_closed_recording` | Finish with nothing to finish does not cut the next recording | #26288 |
@@ -447,6 +447,9 @@ are not modelled (see the module's table).
   label's conversation fields (`{"user", "conversations", "default_conversation"}`).
 - `OMI_PIPELINE_LAB_STT_ROUTE_CASSETTES`: JSON mapping a route (`parakeet`, `multilingual`) to the cassette pin
   that stands in for it, e.g. `parakeet_local` for production's GPU Parakeet.
+- Legacy uploads keep each fixed piece's selected provider, model, and language. A route mapping supplies the
+  stand-in provider/model; unless it explicitly pins a cassette language, that piece's detected language selects
+  the cassette. When pieces differ, the lab splices the matching cassette words into their own time ranges.
 - A routed engine with no provider/model pin (from the mapping or the route itself) is a miss, never a
   wildcard match.
 - LID answers are recorded once per 30 s probe under `<lab root>/lid/` on a `--stt record-vendor` run with

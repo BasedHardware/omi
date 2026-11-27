@@ -5,6 +5,10 @@ from typing import Any, Mapping, Optional, Sequence
 
 from config.conversations_v3 import SPEECH_LANDED_FIELD
 
+# FINISH_STAMP_FIELD is re-exported for the writers and readers that import the Finish fields from here.
+from utils.conversations.v3.finish_stamp import FINISH_STAMP_FIELD as FINISH_STAMP_FIELD
+from utils.conversations.v3.finish_stamp import FINISH_STAMP_MAX_AGE, FINISH_STAMP_PATHS
+
 # The v3 window cap: an open conversation idle for longer is not in progress.
 MAX_IDLE = timedelta(hours=2)
 FINISH_WINDOW_FIELD = 'v3_finish_no_pointer_window_id'
@@ -59,6 +63,20 @@ def _aware(value: Any) -> Optional[datetime]:
     if not isinstance(value, datetime):
         return None
     return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+
+def finish_stamp(at: datetime, path: str) -> dict:
+    return {'at': at, 'path': path}
+
+
+def finish_stamp_sample(stamp: Any, now: datetime) -> Optional[tuple]:
+    """``(path, seconds)`` from a Finish stamp, or None when it is malformed or older than ``FINISH_STAMP_MAX_AGE``."""
+    if not isinstance(stamp, Mapping) or stamp.get('path') not in FINISH_STAMP_PATHS:
+        return None
+    at = _aware(stamp.get('at'))
+    if at is None or now - at > FINISH_STAMP_MAX_AGE:
+        return None
+    return stamp['path'], max(0.0, (now - at).total_seconds())
 
 
 def active(rows: Sequence[Mapping[str, Any]], now: Optional[datetime] = None) -> Optional[Mapping[str, Any]]:

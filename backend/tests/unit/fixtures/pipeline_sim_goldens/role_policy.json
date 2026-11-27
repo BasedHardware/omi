@@ -87,6 +87,7 @@
      "worker_reason": "unknown"
     },
     "quarantine_reason": "worker_failed",
+    "record_origin": false,
     "recovery": {
      "epoch": 1,
      "privacy_generation": 0,
@@ -244,6 +245,7 @@
      "worker_reason": "unknown"
     },
     "quarantine_reason": "worker_failed",
+    "record_origin": false,
     "recovery": {
      "epoch": 1,
      "privacy_generation": 0,
@@ -401,6 +403,7 @@
      "worker_reason": "unknown"
     },
     "quarantine_reason": "worker_failed",
+    "record_origin": false,
     "recovery": {
      "epoch": 1,
      "privacy_generation": 0,
@@ -568,6 +571,7 @@
      "worker_reason": "unknown"
     },
     "quarantine_reason": "worker_failed",
+    "record_origin": false,
     "recovery": {
      "epoch": 1,
      "privacy_generation": 0,

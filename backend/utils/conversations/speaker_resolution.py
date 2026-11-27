@@ -65,6 +65,7 @@ from utils.conversations.speaker_resolution_inputs import (
     manifest_span_load as _manifest_span_load,
 )
 from utils.manual_speaker_assignments import apply_manual_assignments, manual_rejected_speakers
+from utils.conversations.final_pass_split import derived_piece_ids
 from utils.metrics import (
     OMI_AUDIO_PLACEMENT_TOTAL,
     OMI_CONVERSATION_SPEAKER_RESOLUTION_REASONS_TOTAL,
@@ -1017,6 +1018,10 @@ def completed_identity_retry_skip_reason(raw: Optional[Mapping[str, Any]]) -> Op
         return 'private_cloud_disabled'
     if raw.get('updated_at') is None:
         return 'missing_revision'
+    if derived_piece_ids(raw.get('transcript_segments') or []):
+        # The batch final pass split segments by its per-word voices. This repair regroups by the units' original
+        # labels, which every piece still carries, and would merge the pieces back into one voice.
+        return 'split_by_final_pass'
     resolution = raw.get('speaker_resolution') or {}
     membership_current = not any(
         (s.get('speaker_id_scope') or '').startswith('final:batch:') for s in raw.get('transcript_segments') or []

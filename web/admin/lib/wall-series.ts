@@ -6,6 +6,7 @@ import {
   RollupStatus,
 } from "./wall-rollup";
 import { RollupRequest } from "./wall-rollup-sql";
+import { PRODUCT_SAMPLING_FIRST_DAY } from "./posthog-sampling";
 /** Omi TV v3 chart series. Same definitions as the v2 snapshot (`wall-metrics`):
  * the snapshot's own complete periods are reused verbatim and win on every date
  * they cover, so each chart's latest point is the stat above it. Only older
@@ -602,14 +603,19 @@ export function growthFrames(
     const churned = Number(
       rows.find((r) => Number(r[0]) === p && r[1] === CHURNED_ROW)?.[2] ?? 0
     );
-    lcurve[p] = {};
-    for (const r of rows)
-      if (Number(r[0]) === p && String(r[1]).startsWith(DAYS_ROW_PREFIX))
-        lcurve[p][String(r[1]).slice(DAYS_ROW_PREFIX.length)] = Number(r[2]);
+    const unsampled =
+      isoDay(shiftDay(end, -7 * p)) <= PRODUCT_SAMPLING_FIRST_DAY;
+    if (unsampled) {
+      lcurve[p] = {};
+      for (const r of rows)
+        if (Number(r[0]) === p && String(r[1]).startsWith(DAYS_ROW_PREFIX))
+          lcurve[p][String(r[1]).slice(DAYS_ROW_PREFIX.length)] = Number(r[2]);
+    }
     // Growth accounting compares against the prior period. When that period
     // starts before full telemetry, its users are undercounted: "lost" shrinks
     // and "back after a break" swells (the 2026-05-14 quick ratio read 3.9).
     const accounted =
+      unsampled &&
       isoDay(shiftDay(end, -7 * (p + 2))) >= QUALIFIED_TELEMETRY_START;
     points.set(isoDay(shiftDay(end, -7 * p - 1)), {
       total,
@@ -623,7 +629,8 @@ export function growthFrames(
       churned: accounted ? -churned : null,
       quickRatio:
         accounted && churned ? round((fresh + resurrected) / churned) : null,
-      stickiness: total ? round((100 * sum(3)) / (7 * total), 1) : null,
+      stickiness:
+        unsampled && total ? round((100 * sum(3)) / (7 * total), 1) : null,
     });
   }
   const wau = metric(snapshot, "growth.wau");

@@ -94,7 +94,7 @@ def persistence_hook(record, settlements=None, *, historical=False, v3_backfille
     # Execute the production nested hook without importing LLM/DB providers.
     tree = ast.parse((Path(__file__).parents[2] / 'utils/conversations/process_conversation.py').read_text())
     process = next(
-        node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == 'process_conversation'
+        node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == '_process_conversation_steps'
     )
     hook = next(
         node for node in process.body if isinstance(node, ast.FunctionDef) and node.name == 'report_persistence'

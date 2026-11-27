@@ -44,6 +44,9 @@ def test_pusher_auto_deploy_tracks_its_shared_lifecycle_and_observability_import
         'backend/scripts/firebase_release_probe_token.py',
         'backend/testing/release_fixtures/transcription-release-probe.json',
         'backend/testing/release_fixtures/transcription-release-probe.wav',
+        # Bound by source admission; a change requires a fresh qualification.
+        '.github/scripts/pusher_canary_inverse.py',
+        '.github/scripts/pusher_image_rehearsal.py',
         '.github/workflows/gcp_backend_pusher_auto_deploy.yml',
         '.github/workflows/gcp_backend_pusher.yml',
     }

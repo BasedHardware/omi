@@ -75,6 +75,15 @@ on:
           - canary
           - promote
           - rollback
+      pusher_image_only_evidence:
+        description: 'Protected production Pusher image-only evidence: non-secret JSON of run and record ids (schema 2)'
+        required: false
+        default: ''
+      pusher_canary_only:
+        description: 'Production Pusher only: stop after the isolated canary qualifies (no shared-config apply, no Helm)'
+        required: false
+        default: false
+        type: boolean
 
 # The LLM Gateway path reapplies shared backend-secrets; standalone pusher only
 # mutates its own GKE release and therefore keeps a separate environment lock.
@@ -98,6 +107,11 @@ jobs:
   deploy:
     if: inputs.pusher_image_only == '' || inputs.pusher_image_only == 'disabled'
     environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
+    env:
+      # A canary_only run stops after the isolated canary and its inverse receipt.
+      # Every promote step below is gated on this, so no shared-config apply and no
+      # Helm happen; a green conclusion means "canary qualified".
+      CANARY_ONLY: ${{ inputs.pusher_canary_only }}
     permissions:
       actions: 'read'
       contents: 'read'
@@ -110,7 +124,23 @@ jobs:
         # through env, never inline ${{ }} interpolation (script injection).
         env:
           PUSHER_ROLE_IMAGE_DIGEST_INPUT: ${{ github.event.inputs.pusher_role_image_digest }}
+          CANARY_ONLY_INPUT: ${{ github.event.inputs.pusher_canary_only }}
+          CANARY_ONLY_ENV: ${{ github.event.inputs.environment }}
+          CANARY_ONLY_SERVICE: ${{ env.SERVICE }}
+          CANARY_ONLY_DIGEST: ${{ github.event.inputs.pusher_image_digest }}
+          CANARY_ONLY_QUALIFICATION: ${{ github.event.inputs.pusher_dev_qualification_run_id }}
+          CANARY_ONLY_SKIP_CAPACITY: ${{ github.event.inputs.skip_live_capacity_gate }}
+          CANARY_ONLY_SKIP_LOCK: ${{ github.event.inputs.break_glass_lock }}
         run: |
+          if [[ "${CANARY_ONLY_INPUT:-false}" == "true" ]]; then
+            if [[ "$CANARY_ONLY_ENV" != "prod" || "$CANARY_ONLY_SERVICE" != "pusher" ||
+                  ! "$CANARY_ONLY_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ||
+                  ! "$CANARY_ONLY_QUALIFICATION" =~ ^[1-9][0-9]*$ ||
+                  "$CANARY_ONLY_SKIP_CAPACITY" == "true" || "$CANARY_ONLY_SKIP_LOCK" == "true" ]]; then
+              echo "canary_only requires a prod Pusher dispatch with the qualified digest and qualification run, and no break-glass options." >&2
+              exit 1
+            fi
+          fi
           if [[ "${{ github.event.inputs.environment }}" != "development" && "${{ github.event.inputs.environment }}" != "prod" ]]; then
             echo "Invalid environment: ${{ github.event.inputs.environment }}. Must be 'development' or 'prod'."
             exit 1
@@ -618,6 +648,47 @@ jobs:
           } >> "$GITHUB_ENV"
           CONFIG_MAP_NAME_OVERRIDE="$PUSHER_CANARY_CONFIG" backend/scripts/deploy-backend-config.sh
 
+      # The inverse receipt names GITHUB_WORKFLOW_SHA as its producer, so the helper
+      # and its first-party import run from that immutable revision, not from the
+      # runtime source checkout; the runtime copies must also be byte-identical
+      # (source admission binds the same paths) or the step refuses.
+      - name: Stage the canary inverse helper from workflow controls
+        if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod' && inputs.pusher_canary_only
+        run: |
+          set -euo pipefail
+          helper_paths=(.github/scripts/pusher_canary_inverse.py .github/scripts/pusher_image_rehearsal.py)
+          controls="$RUNNER_TEMP/pusher-canary-inverse-controls"
+          rm -rf "$controls"
+          mkdir -p "$controls"
+          git archive "$GITHUB_WORKFLOW_SHA" -- "${helper_paths[@]}" | tar -x -C "$controls"
+          if ! git diff --quiet "$GITHUB_WORKFLOW_SHA" -- "${helper_paths[@]}"; then
+            echo "The runtime checkout's canary inverse helper differs from the workflow-control revision." >&2
+            exit 1
+          fi
+          echo "PUSHER_CANARY_INVERSE=$controls/.github/scripts/pusher_canary_inverse.py" >> "$GITHUB_ENV"
+
+      # Round-1 delta-2: the dependency evidence starts before the canary's first pod
+      # loads its environment. Metadata only (UID and resourceVersion) of every
+      # Secret and ConfigMap the canary will reference, its isolated runtime
+      # ConfigMap included; the canary Deployment must not exist yet.
+      - name: Snapshot canary dependency versions before the canary starts
+        if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod' && inputs.pusher_canary_only
+        run: |
+          set -euo pipefail
+          test -f "$PUSHER_CANARY_INVERSE"
+          test -n "$PUSHER_CANARY" -a -n "$PUSHER_CANARY_CONFIG"
+          python3 "$PUSHER_CANARY_INVERSE" --snapshot \
+            --namespace prod-omi-backend \
+            --name "$PUSHER_CANARY" \
+            --candidate-image "$PUSHER_IMAGE_REPOSITORY@$PUSHER_IMAGE_DIGEST" \
+            --baseline-deployment prod-omi-pusher \
+            --canary-config-map "$PUSHER_CANARY_CONFIG" \
+            --live-config-map prod-omi-backend-config \
+            --run-id "$GITHUB_RUN_ID" \
+            --source-sha "$CHECKED_OUT_SHA" \
+            --workflow-sha "$GITHUB_WORKFLOW_SHA" \
+            --output pusher-prod-canary-dependencies-prestart.json
+
       - name: Create isolated production Pusher and listener canary
         if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod'
         run: |
@@ -662,6 +733,31 @@ jobs:
             --name "$LISTENER_CANARY" \
             --pusher-url "http://$PUSHER_CANARY.prod-omi-backend.svc.cluster.local:8080" \
             --output pusher-prod-canary-listener-receipt.json
+
+      # Condition 2 of the Pipeline lead's SCA-4763 ruling: prove the inverse at
+      # the smallest blast radius. The canary is a separate one-replica object,
+      # so the candidate→baseline server dry-run runs here, immediately after the
+      # canary move and before any Pusher promote. It is read-only. It runs only
+      # on the canary_only producer: a regular deploy may redeploy the serving
+      # image, where a candidate→baseline inverse does not apply.
+      - name: Prove the canary inverse admission at one replica
+        if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod' && inputs.pusher_canary_only
+        run: |
+          set -euo pipefail
+          test -n "$PUSHER_CANARY" -a -n "$PUSHER_CANARY_CONFIG" -a -n "$PUSHER_IMAGE_REPOSITORY" -a -n "$PUSHER_IMAGE_DIGEST"
+          test -f "$PUSHER_CANARY_INVERSE"
+          python3 "$PUSHER_CANARY_INVERSE" \
+            --namespace prod-omi-backend \
+            --name "$PUSHER_CANARY" \
+            --candidate-image "$PUSHER_IMAGE_REPOSITORY@$PUSHER_IMAGE_DIGEST" \
+            --baseline-deployment prod-omi-pusher \
+            --canary-config-map "$PUSHER_CANARY_CONFIG" \
+            --live-config-map prod-omi-backend-config \
+            --run-id "$GITHUB_RUN_ID" \
+            --source-sha "$CHECKED_OUT_SHA" \
+            --workflow-sha "$GITHUB_WORKFLOW_SHA" \
+            --prestart pusher-prod-canary-dependencies-prestart.json \
+            --output pusher-prod-canary-inverse-receipt.json
 
       - name: Exercise isolated production Pusher finalization semantics
         if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod'
@@ -735,6 +831,25 @@ jobs:
             --expected-canary-source-sha "$CHECKED_OUT_SHA" \
             --expected-canary-workflow-sha "$GITHUB_SHA"
 
+      # Condition 3 of the round-1 delta review: the Secret and ConfigMap identities
+      # recorded before the canary started must still hold after the semantic probe.
+      # Metadata only (UID and resourceVersion); no value is read.
+      - name: Recheck canary dependency versions after the probe
+        if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod' && inputs.pusher_canary_only
+        run: |
+          set -euo pipefail
+          test -f "$PUSHER_CANARY_INVERSE"
+          python3 "$PUSHER_CANARY_INVERSE" --recheck \
+            --namespace prod-omi-backend \
+            --name "$PUSHER_CANARY" \
+            --candidate-image "$PUSHER_IMAGE_REPOSITORY@$PUSHER_IMAGE_DIGEST" \
+            --baseline-deployment prod-omi-pusher \
+            --canary-config-map "$PUSHER_CANARY_CONFIG" \
+            --run-id "$GITHUB_RUN_ID" \
+            --source-sha "$CHECKED_OUT_SHA" \
+            --workflow-sha "$GITHUB_WORKFLOW_SHA" \
+            --output pusher-prod-canary-inverse-receipt.json
+
       - name: Upload protected production Pusher canary evidence
         if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod'
         uses: actions/upload-artifact@v7
@@ -745,6 +860,17 @@ jobs:
             pusher-prod-canary-deployment-receipt.json
             pusher-prod-canary-listener-receipt.json
             pusher-prod-canary-semantic-probe.json
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Upload the canary inverse receipt
+        if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod' && inputs.pusher_canary_only
+        uses: actions/upload-artifact@v7
+        with:
+          name: pusher-prod-canary-inverse-receipt
+          path: |
+            pusher-prod-canary-inverse-receipt.json
+            pusher-prod-canary-dependencies-prestart.json
           if-no-files-found: error
           retention-days: 90
 
@@ -761,12 +887,24 @@ jobs:
           fi
           kubectl -n prod-omi-backend delete service "$LISTENER_CANARY" --ignore-not-found=true --wait=true || cleanup_failed=1
           kubectl -n prod-omi-backend delete deployment "$LISTENER_CANARY" --ignore-not-found=true --wait=true || cleanup_failed=1
-          helm -n prod-omi-backend uninstall "$PUSHER_CANARY" --wait || cleanup_failed=1
+          # A run that refuses before the canary install has no release to remove (run 46027266977).
+          # Only Helm's own "release: not found" means absent; any other status failure fails cleanup.
+          helm_status_out="$(helm -n prod-omi-backend status "$PUSHER_CANARY" 2>&1)"
+          helm_status_rc=$?
+          if [ "$helm_status_rc" -eq 0 ]; then
+            helm -n prod-omi-backend uninstall "$PUSHER_CANARY" --wait || cleanup_failed=1
+          elif printf '%s\n' "$helm_status_out" | grep -qx 'Error: release: not found'; then
+            echo "No Helm release $PUSHER_CANARY to remove."
+          else
+            echo "helm status for $PUSHER_CANARY failed (exit $helm_status_rc); cannot prove the release is gone." >&2
+            printf '%s\n' "$helm_status_out" >&2
+            cleanup_failed=1
+          fi
           kubectl -n prod-omi-backend delete configmap "$PUSHER_CANARY_CONFIG" --ignore-not-found=true --wait=true || cleanup_failed=1
           exit "$cleanup_failed"
 
       - name: Apply non-secret pusher runtime config
-        if: env.SERVICE == 'pusher'
+        if: env.SERVICE == 'pusher' && env.CANARY_ONLY != 'true'
         env:
           LADDER_V1_PLUS_MONTH_PRICE_ID: ${{ vars.LADDER_V1_PLUS_MONTH_PRICE_ID }}
           LADDER_V1_PLUS_YEAR_PRICE_ID: ${{ vars.LADDER_V1_PLUS_YEAR_PRICE_ID }}
@@ -803,14 +941,14 @@ jobs:
         run: backend/scripts/deploy-backend-config.sh
 
       - name: Verify reconciled pusher ConfigMap and Secret references
-        if: env.SERVICE == 'pusher'
+        if: env.SERVICE == 'pusher' && env.CANARY_ONLY != 'true'
         run: |
           python3 -m pip install -q pyyaml
           python3 backend/scripts/verify_pusher_config_references.py \
             --environment ${{ vars.ENV }} --namespace ${{ vars.ENV }}-omi-backend
 
       - name: Verify live Pusher surge capacity and digest render
-        if: env.SERVICE == 'pusher' && github.event.inputs.skip_live_capacity_gate != 'true'
+        if: env.SERVICE == 'pusher' && github.event.inputs.skip_live_capacity_gate != 'true' && env.CANARY_ONLY != 'true'
         run: |
           python3 backend/scripts/verify_pusher_live_deployment_gate.py \
             --environment ${{ vars.ENV }} \
@@ -818,6 +956,7 @@ jobs:
             --image "$PUSHER_IMAGE_REFERENCE"
 
       - name: Deploy Pusher to GKE cluster using Helm
+        if: env.CANARY_ONLY != 'true'
         env:
           LLM_GATEWAY_GSA: ${{ vars.LLM_GATEWAY_GSA }}
           ENVIRONMENT: ${{ vars.ENV }}
@@ -862,7 +1001,7 @@ jobs:
           fi
 
       - name: Record exact live production Pusher deployment receipt
-        if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod'
+        if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod' && env.CANARY_ONLY != 'true'
         run: |
           python3 backend/scripts/pusher_release_receipt.py record-live \
             --environment "${{ vars.ENV }}" \
@@ -874,7 +1013,7 @@ jobs:
             --output pusher-prod-deployment-receipt.json
 
       - name: Reverify live finalization alert route after production rollout
-        if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod'
+        if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod' && env.CANARY_ONLY != 'true'
         env:
           MONITOR_GRAFANA_TOKEN: ${{ secrets.MONITOR_GRAFANA_TOKEN }}
         run: |
@@ -892,7 +1031,7 @@ jobs:
             --attempts 12
 
       - name: Verify final production Pusher matches the canary-qualified candidate
-        if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod'
+        if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod' && env.CANARY_ONLY != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -918,7 +1057,7 @@ jobs:
             --expected-canary-workflow-sha "$GITHUB_SHA"
 
       - name: Upload exact live production Pusher deployment receipt
-        if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod'
+        if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod' && env.CANARY_ONLY != 'true'
         uses: actions/upload-artifact@v7
         with:
           name: pusher-prod-deployment-receipt
@@ -1009,6 +1148,7 @@ jobs:
 
       # If required, use the Cloud Run url output in later steps
       - name: Show Output
+        if: env.CANARY_ONLY != 'true'
         run: echo "${{ env.SERVICE }} deployed to ${{ github.event.inputs.environment }}"
 
       - name: Record live-capacity-gate break-glass use
@@ -1033,7 +1173,7 @@ jobs:
               "The gate being unusable is the defect. Fix the gate, then close this.")" || true
 
       - name: Generate deployment summary
-        if: always() && github.event.inputs.environment == 'prod'
+        if: always() && github.event.inputs.environment == 'prod' && env.CANARY_ONLY != 'true'
         uses: ./.github/actions/deployment-summary
         with:
           deployment_tag: ${{ env.IMAGE_TAG }}
@@ -1042,8 +1182,18 @@ jobs:
           status: ${{ job.status }}
           service: ${{ env.SERVICE }}
 
+      - name: Summarize canary-only qualification
+        if: always() && inputs.pusher_canary_only
+        run: |
+          # A green canary_only run means the isolated canary qualified; nothing was promoted.
+          {
+            echo "### Pusher canary-only qualification"
+            echo ""
+            echo "The isolated canary ran the qualified digest, the canary inverse receipt was recorded, and the canary was removed. No shared-config apply or Helm promote ran. This run is the canary evidence for the protected image-only promote."
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Notify deployment status on Telegram
-        if: always() && github.event.inputs.environment == 'prod'
+        if: always() && github.event.inputs.environment == 'prod' && env.CANARY_ONLY != 'true'
         uses: ./.github/actions/deployment-notifier
         with:
           deployment_tag: ${{ env.IMAGE_TAG }}
@@ -1061,7 +1211,13 @@ jobs:
       contents: read
       id-token: write
     runs-on: ubuntu-latest
-    timeout-minutes: 210
+    # Every path has at most one 160-minute rollout wait: the post-move inverse is
+    # decided before the forward wait, and a failed forward wait holds instead of
+    # reversing. 220 = 160 rollout + 10 for the two 5-minute status reports +
+    # about 20 for checkout, auth, evidence and dry-run checks + about 30 so the
+    # receipt upload, summary and page land before the ceiling. A shorter ceiling
+    # also bounds how long the run holds prod-train.
+    timeout-minutes: 220
     steps:
       - name: Validate protected image-only dispatch
         env:
@@ -1076,6 +1232,7 @@ jobs:
           SKIP_LOCK: ${{ inputs.break_glass_lock }}
           BREAK_GLASS_CONFIRM: ${{ inputs.break_glass_confirm }}
           BREAK_GLASS_REASON: ${{ inputs.break_glass_reason }}
+          EVIDENCE: ${{ inputs.pusher_image_only_evidence }}
         run: |
           set -euo pipefail
           case "$MODE" in preview|canary|promote|rollback) ;; *) exit 1 ;; esac
@@ -1089,6 +1246,13 @@ jobs:
             echo "Image-only operations require a first-attempt main dispatch to prod Pusher, exact source and digest, and no break-glass options." >&2
             exit 1
           fi
+          # The evidence packet is a non-secret dispatch input. It is parsed here only
+          # for shape and size; pusher_image_only.py re-fetches every run it names.
+          if [[ -z "$EVIDENCE" || ${#EVIDENCE} -gt 16384 ]]; then
+            echo "Image-only operations require a bounded non-secret evidence packet." >&2
+            exit 1
+          fi
+          python3 -c 'import json,os,sys; value=json.loads(os.environ["EVIDENCE"]); sys.exit(0 if isinstance(value,dict) else 1)'
 
       - name: Check out immutable workflow controls
         uses: actions/checkout@v7
@@ -1149,12 +1313,15 @@ jobs:
           SOURCE_SHA: ${{ inputs.branch }}
           REQUESTED_DIGEST: ${{ inputs.pusher_image_digest }}
           QUALIFICATION_RUN_ID: ${{ inputs.pusher_dev_qualification_run_id }}
-          PUSHER_IMAGE_ONLY_PACKET: ${{ secrets.PUSHER_IMAGE_ONLY_PACKET }}
-          PUSHER_IMAGE_ONLY_ISOLATED_KUBECONFIG: ${{ secrets.PUSHER_IMAGE_ONLY_ISOLATED_KUBECONFIG }}
+          PUSHER_IMAGE_ONLY_EVIDENCE: ${{ inputs.pusher_image_only_evidence }}
         run: |
           set -euo pipefail
           umask 077
-          mkdir "$RUNNER_TEMP/pusher-image-only"
+          mkdir -p "$RUNNER_TEMP/pusher-image-only"
+          # Made durable before every live patch; read by the detector even if this
+          # process dies before printing its receipt.
+          export PUSHER_IMAGE_ONLY_WRITE_MARKER="$RUNNER_TEMP/pusher-image-only/write-attempted"
+          rm -f "$PUSHER_IMAGE_ONLY_WRITE_MARKER"
           export LIVE_CONTEXT
           LIVE_CONTEXT="$(kubectl config current-context)"
           python3 .github/scripts/pusher_image_only.py | tee "$RUNNER_TEMP/pusher-image-only/receipt.json"
@@ -1164,6 +1331,52 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: pusher-image-only-receipt
-          path: ${{ runner.temp }}/pusher-image-only/receipt.json
+          path: |
+            ${{ runner.temp }}/pusher-image-only/receipt.json
+            ${{ runner.temp }}/pusher-image-only/write-attempted
           if-no-files-found: ignore
           retention-days: 90
+
+      - name: Detect a held or reversed image-only write
+        id: hold
+        if: always()
+        run: |
+          set -euo pipefail
+          # A write marker with a missing, empty or invalid receipt is a HOLD that pages.
+          python3 .github/scripts/pusher_image_only_detect.py output \
+            "$RUNNER_TEMP/pusher-image-only/receipt.json" \
+            "$RUNNER_TEMP/pusher-image-only/write-attempted" >> "$GITHUB_OUTPUT"
+
+      # The escalation uses only existing credentials: the job summary and the
+      # deploy-channel notifier. No issue is opened (the job token has no
+      # issues: write). The receipt holds categorical values and object ids only.
+      - name: Summarize the held or reversed image-only write
+        if: always() && (steps.hold.outputs.status == 'HOLD' || steps.hold.outputs.status == 'REVERSED')
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/pusher_image_only_detect.py summary \
+            "$RUNNER_TEMP/pusher-image-only/receipt.json" \
+            "$RUNNER_TEMP/pusher-image-only/write-attempted" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Notify Release of the held image-only write
+        if: always() && steps.hold.outputs.status == 'HOLD'
+        uses: ./.github/actions/deployment-notifier
+        with:
+          deployment_tag: ${{ inputs.pusher_image_digest }}
+          environment: prod
+          # Built from a closed character set by the detect step.
+          release_version: ${{ steps.hold.outputs.page }}
+          status: failure
+          telegram_bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          telegram_chat_id: ${{ secrets.TELEGRAM_CHAT_ID }}
+
+      - name: Notify Release of the reversed image-only write
+        if: always() && steps.hold.outputs.status == 'REVERSED'
+        uses: ./.github/actions/deployment-notifier
+        with:
+          deployment_tag: ${{ inputs.pusher_image_digest }}
+          environment: prod
+          release_version: ${{ steps.hold.outputs.page }}
+          status: failure
+          telegram_bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          telegram_chat_id: ${{ secrets.TELEGRAM_CHAT_ID }}

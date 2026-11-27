@@ -45,6 +45,7 @@ class RecordingTransferDrainResult {
     required this.failed,
     required this.needsReconciliation,
     this.contended = false,
+    this.heldOnly = false,
   });
 
   /// Nothing eligible to drain (empty backlog). Not a retry signal.
@@ -52,19 +53,22 @@ class RecordingTransferDrainResult {
       : attempted = false,
         failed = false,
         needsReconciliation = false,
-        contended = false;
+        contended = false,
+        heldOnly = false;
 
   /// Drain could not run because another sync owned the seam. Retry later.
   const RecordingTransferDrainResult.contended()
       : attempted = false,
         failed = false,
         needsReconciliation = false,
-        contended = true;
+        contended = true,
+        heldOnly = false;
 
   final bool attempted;
   final bool failed;
   final bool needsReconciliation;
   final bool contended;
+  final bool heldOnly;
 }
 
 typedef RecordingTransferPass = Future<void> Function();
@@ -679,7 +683,7 @@ class RecordingTransferCoordinator {
         _scheduleRetry('reconcile pass failed');
         return;
       }
-      _failureStreak = 0;
+      if (!result.heldOnly) _failureStreak = 0;
     } catch (error, stackTrace) {
       Logger.debug('RecordingTransferCoordinator: $trigger pass failed: $error\n$stackTrace');
       if (expired()) return;

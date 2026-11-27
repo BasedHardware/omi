@@ -31,6 +31,7 @@ from typing import Any
 from prometheus_client import Counter
 from pydantic import BaseModel, ValidationError
 from models.structured import Structured
+from utils.conversations.processing_steps import blocking_step, run_inline
 from utils.summary_quality import clean_structured, capture_availability
 
 from utils.conversations.summary_delivery import present as summary_present
@@ -250,11 +251,15 @@ def _scaled_notes_identity(prefix: Any) -> dict[str, Any] | None:
 
 
 def notes(uid: str, conversation: Any, prefix: Any, generate, hashes: dict[str, str] | None, **kwargs):
+    return run_inline(notes_steps(uid, conversation, prefix, blocking_step(generate), hashes, **kwargs))
+
+
+def notes_steps(uid: str, conversation: Any, prefix: Any, generate, hashes: dict[str, str] | None, **kwargs):
     open_loop_out = kwargs.pop('open_loop_out', None)
     if kwargs.get('task_intelligence_capture') and reminder_policy.enabled():
         kwargs['reminder_source'] = reminder_policy.source_input(conversation)
     if not dedupe_enabled() or hashes is None:
-        return generate(prefix, uid=uid, open_loop_out=open_loop_out, **kwargs)
+        return (yield from generate(prefix, uid=uid, open_loop_out=open_loop_out, **kwargs))
     inputs = {
         'prefix': prefix,
         **({}),
@@ -306,7 +311,7 @@ def notes(uid: str, conversation: Any, prefix: Any, generate, hashes: dict[str, 
             CHECKPOINT_ERRORS.labels(feature='notes').inc()
         MISSES.labels(feature='notes').inc()
         record_feature(uid, conversation, 'notes', 'invoked')
-        output = generate(prefix, uid=uid, open_loop_out=open_loop_out, **kwargs)
+        output = yield from generate(prefix, uid=uid, open_loop_out=open_loop_out, **kwargs)
     if saved is not None and not summary_present(output):
         hashes[QUALITY_FILTER_HASH] = repair_key
     hashes[NOTES_HASH] = digest

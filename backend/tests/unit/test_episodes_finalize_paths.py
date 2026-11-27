@@ -18,6 +18,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
+from google.api_core.exceptions import Aborted
 
 os.environ.setdefault(
     'ENCRYPTION_SECRET',
@@ -25,6 +26,8 @@ os.environ.setdefault(
 )
 os.environ.setdefault('OPENAI_API_KEY', 'test-openai-key-not-real')
 
+from database.account_deletion_marker import account_deletion_document
+from database.sync_ledger import sync_content_ledger_ref
 from config import episodes as config
 from config.record_audio import record_identity
 from models.conversation import Conversation
@@ -32,8 +35,8 @@ from models.conversation_enums import ConversationSource, ConversationStatus
 from models.structured import Structured
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
 from utils.batch_pipeline.live_projection import replace_record
-from utils.conversations.v3 import finish as v3_finish, live as v3_live
-from utils.conversations.v3.live import FINISH_FIELDS, FINISH_RECORDING_FIELD, FINISH_WINDOW_FIELD
+from utils.conversations.v3 import finish as v3_finish, live as v3_live, metrics as v3_metrics, triggers
+from utils.conversations.v3.live import FINISH_FIELDS, FINISH_RECORDING_FIELD, FINISH_STAMP_FIELD, FINISH_WINDOW_FIELD
 from tests.unit.test_batch_pipeline_projection import native_finish_completion
 from utils.conversations import finalizer
 from utils.conversations.processing_trigger import ProcessingTrigger
@@ -751,8 +754,10 @@ def test_finish_rearms_resolved_marker_for_pending_batch(v3_finish_route, monkey
 
     result = client.post('/v1/conversations', json={})
     assert result.status_code == 200 and result.json()['conversation']['tile_state'] == 'transcribing'
+    stamp = latest[FINISH_STAMP_FIELD]
+    assert stamp['path'] == 'tail' and isinstance(stamp['at'], datetime)
     assert db.transactions[-1].updates == [
-        (paths['latest'], {'v3_manual_end_requested': True, FINISH_WINDOW_FIELD: 'window'})
+        (paths['latest'], {'v3_manual_end_requested': True, FINISH_WINDOW_FIELD: 'window', FINISH_STAMP_FIELD: stamp})
     ]
     counter.labels.assert_called_once_with('requested')
     assert not enqueued
@@ -1057,8 +1062,6 @@ def test_finish_before_first_window_refuses_unproven_recording(pre_window_finish
         for i in range(8):
             db.rows['users', _UID, 'conversations', f'window-{i}'] = {'finished_at': latest['finished_at']}
     elif case == 'deleting':
-        from database.account_deletion_marker import account_deletion_document
-
         db.rows[account_deletion_document(_UID, firestore_client=db).path] = {'wipe_status': 'pending'}
     else:
         request.update(live_conversation_id='missing', unknown_future_client_field=True)
@@ -1265,8 +1268,6 @@ def test_named_finish_refuses_unproven_capture(sealed_named_route, monkeypatch, 
         monkeypatch.setattr(v3_finish.conversations_v3_live, 'live_window', lambda *a, **kw: None)
         expected = 'no_live_window'
     else:
-        from database.account_deletion_marker import account_deletion_document
-
         db.rows[account_deletion_document(_UID, firestore_client=db).path] = {'wipe_status': 'pending'}
         expected = 'recording_ineligible'
 
@@ -1511,3 +1512,900 @@ def test_named_finish_retry_on_later_capture_cuts_once(sealed_named_route, case)
     assert sum(len(tx.updates) for tx in db.transactions) == writes
     assert len(enqueued) == 1 and 'v3_manual_end' not in a
     counter.labels.assert_called_once_with('already_cut')
+
+
+_B = ('users', _UID, 'conversations', 'capture-b')
+
+
+@pytest.fixture
+def newer_capture_route(v3_finish_route, monkeypatch):
+    """A's window is still live, idle two minutes; capture B sealed after it and no window holds B yet."""
+    client, db, paths, enqueued = v3_finish_route
+    window = db.rows[paths['window']]
+    sealed_b = window['finished_at'] - timedelta(seconds=5)
+    end_a = sealed_b - timedelta(minutes=2)
+    window.update(created_at=end_a - timedelta(minutes=1), started_at=end_a - timedelta(minutes=1), finished_at=end_a)
+    db.rows[paths['older']]['finished_at'] = end_a - timedelta(seconds=30)
+    db.rows[paths['latest']]['finished_at'] = end_a
+    db.rows[_B] = {
+        'created_at': sealed_b - timedelta(seconds=80),
+        'started_at': sealed_b - timedelta(seconds=80),
+        'finished_at': sealed_b,
+        'status': 'completed',
+        'recording': True,
+        'source': 'omi',
+        'external_data': {'recording_session_id': 'pendant-session-b'},
+        'v3_pending': True,
+        'has_content': True,
+        'v3_speech_landed_at': sealed_b,
+    }
+    counter = Mock()
+    monkeypatch.setattr(v3_finish.metrics, 'FINISH_NO_POINTER', counter)
+    monkeypatch.delenv('CONVERSATIONS_V3_FINISH_NEWER_CAPTURE', raising=False)
+    return client, db, paths, enqueued, counter
+
+
+def _batch_pending(row):
+    """B is a server-batch capture whose whole-record transcript is still pending (no ledger yet)."""
+    row.pop('v3_speech_landed_at')
+    row.update(
+        record_lane_owner='batch_live_v1', server_batch_only=True, server_batch_audio_start=1, server_batch_audio_end=2
+    )
+
+
+def _batch_speech_landed(row):
+    """B is a server-batch capture whose projection already landed speech; its whole record is still pending."""
+    _batch_pending(row)
+    row['record_projection_revision'] = 1
+
+
+def _batch_tail(db, paths):
+    """A, the window tail, is a server-batch capture too; its ledger read must also precede every write."""
+    db.rows[paths['latest']].update(
+        record_lane_owner='batch_live_v1', server_batch_only=True, server_batch_audio_start=1, server_batch_audio_end=2
+    )
+
+
+def _writes(db):
+    return sum(len(tx.updates) for tx in db.transactions)
+
+
+def _newer_capture_fallback(reason='other'):
+    """The one shared fallback a live-window Finish records when its newer-capture targeting degrades."""
+    return dict(
+        component='conversation_finalization',
+        from_mode='newer_capture',
+        to_mode='window_tail',
+        reason=reason,
+        outcome='degraded',
+    )
+
+
+@pytest.mark.parametrize('lane', ['live', 'batch'])
+@pytest.mark.parametrize('body', [{}, {'live_conversation_id': 'window'}])
+def test_live_window_finish_moves_to_a_newer_capture_whose_speech_landed(newer_capture_route, lane, body):
+    client, db, paths, enqueued, counter = newer_capture_route
+    b = db.rows[_B]
+    if lane == 'batch':
+        _batch_speech_landed(b)
+
+    response = client.post('/v1/conversations', json=body)
+
+    assert response.status_code == 200
+    conversation = response.json()['conversation']
+    assert conversation['id'] == 'capture-b'
+    assert conversation['tile_state'] == ('transcribing' if lane == 'batch' else 'writing')
+    assert b[FINISH_RECORDING_FIELD] is True and FINISH_WINDOW_FIELD not in b
+    if lane == 'batch':
+        assert b['v3_manual_end_requested'] is True and 'v3_manual_end' not in b and not enqueued
+        counter.labels.assert_called_once_with('newer_recording_requested')
+    else:
+        assert b['v3_manual_end'] is True and enqueued == [(_UID, {'manual_end_id': 'capture-b'})]
+        counter.labels.assert_called_once_with('newer_recording_cut')
+    for name in ('older', 'latest'):
+        assert 'v3_manual_end' not in db.rows[paths[name]] and 'v3_manual_end_requested' not in db.rows[paths[name]]
+    assert db.rows[paths['window']]['status'] == 'in_progress'
+
+
+@pytest.mark.parametrize('created_stamp', [False, True])
+@pytest.mark.parametrize('tail_lane', ['live', 'batch'])
+@pytest.mark.parametrize('body', [{}, {'live_conversation_id': 'window'}])
+def test_live_window_finish_cuts_the_tail_and_requests_a_pending_batch_capture(
+    newer_capture_route, tail_lane, body, created_stamp
+):
+    """A silent or still-untranscribed B looks the same at Finish: A is cut now and B's request rides along."""
+    client, db, paths, enqueued, counter = newer_capture_route
+    b, a = db.rows[_B], db.rows[paths['latest']]
+    _batch_pending(b)
+    if created_stamp:
+        # Production's mark_new stamps the landing field when the recording is created, before any speech.
+        b['v3_speech_landed_at'] = b['created_at']
+    if tail_lane == 'batch':
+        _batch_tail(db, paths)
+
+    response = client.post('/v1/conversations', json=body)
+
+    assert response.status_code == 200
+    conversation = response.json()['conversation']
+    # The cut landed on A's window, so the answer names it.
+    assert conversation['id'] == 'window' and conversation['status'] == 'processing'
+    assert b['v3_manual_end_requested'] is True and b[FINISH_RECORDING_FIELD] is True and 'v3_manual_end' not in b
+    assert a[FINISH_WINDOW_FIELD] == 'window'
+    if tail_lane == 'batch':
+        assert a['v3_manual_end_requested'] is True and 'v3_manual_end' not in a and not enqueued
+        assert conversation['tile_state'] == 'transcribing'
+        counter.labels.assert_called_once_with('newer_dual_requested')
+    else:
+        assert a['v3_manual_end'] is True and enqueued == [(_UID, {'manual_end_id': 'latest'})]
+        assert conversation['tile_state'] == 'writing'
+        counter.labels.assert_called_once_with('newer_dual_cut')
+    # One transaction stored both, every read before either write (StrictFirestore enforces the order).
+    assert len(db.transactions) == 1 and len(db.transactions[0].updates) == 2
+    assert 'v3_manual_end' not in db.rows[paths['older']]
+
+
+@pytest.mark.parametrize('between', ['nothing', 'b_resolved_silent', 'b_promoted', 'claimed_by_hidden_window'])
+def test_live_window_finish_retry_after_tail_and_request_never_cuts_again(newer_capture_route, between):
+    client, db, paths, enqueued, counter = newer_capture_route
+    b, a = db.rows[_B], db.rows[paths['latest']]
+    _batch_pending(b)
+    assert client.post('/v1/conversations', json={}).json()['conversation']['id'] == 'window'
+    if between == 'b_resolved_silent':
+        # Whole-record completion found B silent and cleared its request (_v3_finish_update).
+        b.update(v3_manual_end_requested=False, has_content=False)
+    elif between == 'b_promoted':
+        # B had speech: its request became the cut, so B shows as its own card.
+        b.update(v3_manual_end=True, v3_pending=True, record_projection_revision=1)
+    elif between == 'claimed_by_hidden_window':
+        b['claims'] = [{'conversation_id': 'window-b', 'start': b['started_at'], 'end': b['finished_at']}]
+        db.rows['users', _UID, 'conversations', 'window-b'] = {
+            **db.rows[paths['window']],
+            'id': 'window-b',
+            'started_at': b['started_at'],
+            'finished_at': b['finished_at'],
+            'home_hidden': True,
+            'v3_recording_ids': ['capture-b'],
+        }
+    counter.reset_mock()
+    writes = _writes(db)
+
+    second = client.post('/v1/conversations', json={})
+
+    assert second.status_code == 200 and second.json()['conversation']['id'] == 'window'
+    assert _writes(db) == writes and enqueued == [(_UID, {'manual_end_id': 'latest'})]
+    assert a['v3_manual_end'] is True
+    counter.labels.assert_called_once_with('already_cut')
+
+
+@pytest.mark.parametrize(
+    'case', ['none', 'older_than_window', 'in_progress', 'silent', 'private', 'discarded', 'full_scan']
+)
+def test_live_window_finish_cuts_the_tail_without_a_newer_finishable_capture(newer_capture_route, case, monkeypatch):
+    client, db, paths, enqueued, counter = newer_capture_route
+    fallback = Mock()
+    monkeypatch.setattr(v3_finish.conversations_v3_live, 'record_fallback', fallback)
+    b = db.rows[_B]
+    if case == 'full_scan':
+        # The bounded scan fills with newer rows, so another newer capture may lie past it.
+        for n in range(8):
+            db.rows['users', _UID, 'conversations', f'rotated-{n}'] = {
+                **b,
+                'status': 'in_progress',
+                'external_data': {'recording_session_id': f'rotated-{n}'},
+            }
+    elif case == 'none':
+        del db.rows[_B]
+    elif case == 'older_than_window':
+        # An older overlapping source never moves the cut.
+        b['finished_at'] = db.rows[paths['window']]['finished_at'] - timedelta(seconds=1)
+    elif case == 'in_progress':
+        b.update(status='in_progress')
+    elif case == 'silent':
+        b.update(has_content=False)
+    elif case == 'private':
+        b['data_protection_level'] = 'private'
+    else:
+        b['discarded'] = True
+
+    response = client.post('/v1/conversations', json={})
+
+    assert response.status_code == 200 and response.json()['conversation']['id'] == 'window'
+    assert db.rows[paths['latest']]['v3_manual_end'] is True
+    assert db.rows[paths['latest']][FINISH_WINDOW_FIELD] == 'window'
+    # b is the retained object even when the case removed it from the store: Finish wrote neither field to it.
+    assert 'v3_manual_end' not in b and 'v3_manual_end_requested' not in b
+    assert case != 'none' or _B not in db.rows  # nor recreated B's document
+    assert enqueued == [(_UID, {'manual_end_id': 'latest'})]
+    counter.labels.assert_called_once_with('cut')
+    if case == 'full_scan':
+        fallback.assert_called_once_with(
+            component='conversation_finalization',
+            from_mode='newer_capture',
+            to_mode='window_tail',
+            reason='other',
+            outcome='degraded',
+        )
+    else:
+        fallback.assert_not_called()
+
+
+@pytest.mark.parametrize('owner', ['window', 'window-b'])
+def test_live_window_finish_leaves_a_claimed_newer_capture_to_its_window(newer_capture_route, owner):
+    client, db, paths, enqueued, counter = newer_capture_route
+    b = db.rows[_B]
+    b['claims'] = [{'conversation_id': owner, 'start': b['started_at'], 'end': b['finished_at']}]
+
+    response = client.post('/v1/conversations', json={})
+
+    assert response.status_code == 200 and response.json()['conversation']['id'] == 'window'
+    assert db.rows[paths['latest']]['v3_manual_end'] is True and 'v3_manual_end' not in b
+    counter.labels.assert_called_once_with('cut')
+
+
+@pytest.mark.parametrize('tie', [False, True])
+def test_live_window_finish_cuts_the_newest_of_two_newer_captures(newer_capture_route, tie, monkeypatch):
+    client, db, paths, enqueued, counter = newer_capture_route
+    fallback = Mock()
+    monkeypatch.setattr(v3_finish.conversations_v3_live, 'record_fallback', fallback)
+    b = db.rows[_B]
+    c = db.rows['users', _UID, 'conversations', 'capture-c'] = {
+        **b,
+        'finished_at': b['finished_at'] - timedelta(seconds=0 if tie else 10),
+        'external_data': {'recording_session_id': 'phone-session-c'},
+    }
+
+    response = client.post('/v1/conversations', json={})
+
+    # A 404 would read as "already closed" to the app and cut nothing; an exact tie cuts the tail instead.
+    assert response.status_code == 200
+    assert response.json()['conversation']['id'] == ('window' if tie else 'capture-b')
+    assert 'v3_manual_end' not in c
+    if tie:
+        assert db.rows[paths['latest']]['v3_manual_end'] is True and 'v3_manual_end' not in b
+        counter.labels.assert_called_once_with('cut')
+        fallback.assert_called_once_with(
+            component='conversation_finalization',
+            from_mode='newer_capture',
+            to_mode='window_tail',
+            reason='other',
+            outcome='degraded',
+        )
+    else:
+        assert b['v3_manual_end'] is True and 'v3_manual_end' not in db.rows[paths['latest']]
+        counter.labels.assert_called_once_with('newer_recording_cut')
+        fallback.assert_not_called()
+
+
+@pytest.mark.parametrize('case', ['tie', 'full_scan', 'finished_capture_locked', 'declined'])
+def test_live_window_finish_records_degraded_targeting_once_across_transaction_retries(
+    newer_capture_route, case, monkeypatch
+):
+    """The transaction body re-runs on contention; only the attempt that commits publishes the fallback."""
+    client, db, paths, enqueued, counter = newer_capture_route
+    store = v3_finish.conversations_v3_live
+    fallback = Mock()
+    monkeypatch.setattr(store, 'record_fallback', fallback)
+    declined = Mock()
+    monkeypatch.setattr(store.v3_metrics, 'FINISH_NEWER_DECLINED', declined)
+    b = db.rows[_B]
+    if case == 'tie':
+        db.rows['users', _UID, 'conversations', 'capture-c'] = {
+            **b,
+            'external_data': {'recording_session_id': 'phone-session-c'},
+        }
+    elif case == 'full_scan':
+        for n in range(8):
+            db.rows['users', _UID, 'conversations', f'rotated-{n}'] = {
+                **b,
+                'status': 'in_progress',
+                'external_data': {'recording_session_id': f'rotated-{n}'},
+            }
+    elif case == 'finished_capture_locked':
+        # An earlier tap cut B; B was locked before this retry, so the retry cuts the tail instead.
+        assert client.post('/v1/conversations', json={}).json()['conversation']['id'] == 'capture-b'
+        fallback.assert_not_called()
+        b['is_locked'] = True
+        counter.reset_mock()
+    else:
+        # B is selected, but its ledger has no segment binding, so it declines the cut (batch_unavailable).
+        _batch_speech_landed(b)
+        _ledger(db, 'capture-b', status='completed')
+    writes = _writes(db)
+    # The first attempt loses on contention after the scan and before any write, as Firestore's commit would.
+    cut_tail, attempts = store._finish_window_tail, []
+
+    def contended_tail(*args, **kwargs):
+        attempts.append(len(attempts) + 1)
+        if len(attempts) == 1:
+            raise Aborted('contention')
+        return cut_tail(*args, **kwargs)
+
+    def retrying(body):
+        def run(tx):
+            try:
+                return body(tx)
+            except Aborted:
+                return body(tx)
+
+        return run
+
+    monkeypatch.setattr(store, '_finish_window_tail', contended_tail)
+    monkeypatch.setattr(store.firestore, 'transactional', retrying)
+
+    response = client.post('/v1/conversations', json={})
+
+    assert response.status_code == 200 and response.json()['conversation']['id'] == 'window'
+    assert attempts == [1, 2] and _writes(db) == writes + 1
+    assert db.rows[paths['latest']]['v3_manual_end'] is True
+    assert case == 'finished_capture_locked' or 'v3_manual_end' not in b
+    counter.labels.assert_called_once_with('cut')
+    fallback.assert_called_once_with(**_newer_capture_fallback('unavailable' if case == 'declined' else 'other'))
+    if case == 'declined':
+        declined.labels.assert_called_once_with('batch_unavailable')
+        declined.labels.return_value.inc.assert_called_once_with()
+    else:
+        declined.labels.assert_not_called()
+
+
+def _ledger(db, cid, **fields):
+    content, _ = record_identity(_UID, cid)
+    db.rows[sync_content_ledger_ref(db, _UID, content).path] = {
+        'dispatch_protocol': 'batch_v1',
+        'job_id': 'bp_' + content,
+        **fields,
+    }
+
+
+@pytest.mark.parametrize('case', ['pending_without_content', 'landed_empty', 'ledger_empty'])
+def test_live_window_finish_cuts_the_tail_when_the_newer_batch_capture_has_no_speech(newer_capture_route, case):
+    client, db, paths, enqueued, counter = newer_capture_route
+    b = db.rows[_B]
+    _batch_pending(b)
+    if case == 'pending_without_content':
+        b.pop('has_content')  # no committed audio samples yet
+    elif case == 'landed_empty':
+        b.update(has_content=False, record_projection_revision=1)  # the projection found no speech
+    else:
+        # Whole record completed as silence before the projection cleared has_content: already_empty.
+        _ledger(
+            db,
+            'capture-b',
+            status='completed',
+            batch_pipeline={'segment_ids': ['unit']},
+            result={'outcome': 'expected_silence'},
+        )
+
+    response = client.post('/v1/conversations', json={})
+
+    assert response.status_code == 200 and response.json()['conversation']['id'] == 'window'
+    assert db.rows[paths['latest']]['v3_manual_end'] is True
+    assert not any(key in b for key in ('v3_manual_end', 'v3_manual_end_requested', FINISH_RECORDING_FIELD))
+    assert enqueued == [(_UID, {'manual_end_id': 'latest'})]
+    counter.labels.assert_called_once_with('cut')
+
+
+@pytest.mark.parametrize('lane', ['live', 'batch'])
+@pytest.mark.parametrize('between', ['nothing', 'claimed_by_hidden_window', 'joined_live_window'])
+def test_live_window_finish_retry_never_cuts_the_tail_as_well(newer_capture_route, lane, between):
+    client, db, paths, enqueued, counter = newer_capture_route
+    b = db.rows[_B]
+    batch = lane == 'batch'
+    if batch:
+        _batch_speech_landed(b)
+    assert client.post('/v1/conversations', json={}).json()['conversation']['id'] == 'capture-b'
+    window = db.rows[paths['window']]
+    claim = [{'conversation_id': 'window', 'start': b['started_at'], 'end': b['finished_at']}]
+    if between == 'claimed_by_hidden_window':
+        claim[0]['conversation_id'] = 'window-b'
+        db.rows['users', _UID, 'conversations', 'window-b'] = {
+            **window,
+            'id': 'window-b',
+            'started_at': b['started_at'],
+            'finished_at': b['finished_at'],
+            'home_hidden': True,
+            'v3_recording_ids': ['capture-b'],
+        }
+        b['claims'] = claim
+    elif between == 'joined_live_window':
+        # B's transcript landed and the planner appended it to A's window.
+        window.update(finished_at=b['finished_at'], v3_recording_ids=[*window['v3_recording_ids'], 'capture-b'])
+        b['claims'] = claim
+    counter.reset_mock()
+    writes = _writes(db)
+
+    second = client.post('/v1/conversations', json={})
+
+    assert second.status_code == 200 and second.json()['conversation']['id'] in {'capture-b', 'window'}
+    for name in ('older', 'latest'):
+        assert 'v3_manual_end' not in db.rows[paths[name]] and 'v3_manual_end_requested' not in db.rows[paths[name]]
+    assert len(enqueued) == (0 if batch else 1)
+    if between == 'joined_live_window':
+        # B is now the window tail, so the tail path answers; for a pending batch B it re-stamps the same
+        # request on B itself. It never cuts A.
+        counter.labels.assert_called_once_with('requested' if batch else 'already_cut')
+        assert batch or _writes(db) == writes
+    else:
+        assert _writes(db) == writes
+        counter.labels.assert_called_once_with('newer_already_requested' if batch else 'newer_already_cut')
+
+
+@pytest.mark.parametrize(
+    'change', ['locked', 'private', 'audio_partial', 'upload_failed', 'deleted', 'ledger_unavailable']
+)
+def test_live_window_finish_retry_cuts_the_tail_when_the_finished_capture_cannot_answer(
+    newer_capture_route, change, monkeypatch
+):
+    """A 404 reads as "already closed" to the app (settleManualFinish), so the window tail is cut instead."""
+    client, db, paths, enqueued, counter = newer_capture_route
+    fallback = Mock()
+    monkeypatch.setattr(v3_finish.conversations_v3_live, 'record_fallback', fallback)
+    b = db.rows[_B]
+    if change == 'ledger_unavailable':
+        _batch_speech_landed(b)
+    assert client.post('/v1/conversations', json={}).json()['conversation']['id'] == 'capture-b'
+    fallback.assert_not_called()  # the first tap's redirect is the ordinary path
+    if change == 'private':
+        b['data_protection_level'] = 'private'
+    elif change == 'ledger_unavailable':
+        _ledger(db, 'capture-b', status='completed')  # no segment binding: the batch is unavailable
+    else:
+        b[
+            {
+                'locked': 'is_locked',
+                'audio_partial': 'record_audio_partial',
+                'upload_failed': 'record_upload_failed',
+            }.get(change, change)
+        ] = True
+    counter.reset_mock()
+    b_before = dict(b)
+
+    response = client.post('/v1/conversations', json={})
+
+    assert response.status_code == 200 and response.json()['conversation']['id'] == 'window'
+    assert db.rows[paths['latest']]['v3_manual_end'] is True
+    assert db.rows[_B] == b_before
+    counter.labels.assert_called_once_with('cut')
+    # A blocked capture is skipped (degraded, reason other); an unavailable ledger declines the selected capture.
+    fallback.assert_called_once_with(
+        **_newer_capture_fallback('unavailable' if change == 'ledger_unavailable' else 'other')
+    )
+
+
+def test_live_window_finish_retry_cuts_the_tail_once_the_finished_capture_resolved_empty(
+    newer_capture_route, monkeypatch
+):
+    client, db, paths, enqueued, counter = newer_capture_route
+    fallback = Mock()
+    monkeypatch.setattr(v3_finish.conversations_v3_live, 'record_fallback', fallback)
+    b = db.rows[_B]
+    _batch_speech_landed(b)
+    assert client.post('/v1/conversations', json={}).json()['conversation']['id'] == 'capture-b'
+    # Whole-record completion found B silent and cleared the request (_v3_finish_update).
+    b.update(v3_manual_end_requested=False, has_content=False)
+    counter.reset_mock()
+
+    response = client.post('/v1/conversations', json={})
+
+    assert response.status_code == 200 and response.json()['conversation']['id'] == 'window'
+    assert db.rows[paths['latest']]['v3_manual_end'] is True and 'v3_manual_end' not in b
+    counter.labels.assert_called_once_with('cut')
+    # B held only silence, so the window's speech is the last speech again: the ordinary path, no fallback.
+    fallback.assert_not_called()
+
+
+def test_live_window_finish_ignores_an_unmarked_capture_older_than_an_active_finish(newer_capture_route):
+    client, db, paths, enqueued, counter = newer_capture_route
+    b = db.rows[_B]
+    assert client.post('/v1/conversations', json={}).json()['conversation']['id'] == 'capture-b'
+    # C sealed after A but before B: the person already finished after C's speech.
+    c = db.rows['users', _UID, 'conversations', 'capture-c'] = {
+        **{k: v for k, v in b.items() if k not in {FINISH_RECORDING_FIELD, 'v3_manual_end', 'v3_pending_since'}},
+        'finished_at': b['finished_at'] - timedelta(seconds=10),
+        'external_data': {'recording_session_id': 'phone-session-c'},
+    }
+    counter.reset_mock()
+    writes = _writes(db)
+
+    response = client.post('/v1/conversations', json={})
+
+    assert response.status_code == 200 and response.json()['conversation']['id'] == 'capture-b'
+    assert _writes(db) == writes and 'v3_manual_end' not in c
+    assert 'v3_manual_end' not in db.rows[paths['latest']]
+    counter.labels.assert_called_once_with('newer_already_cut')
+
+
+def test_live_window_finish_newer_capture_refuses_an_account_being_deleted(newer_capture_route):
+    client, db, paths, enqueued, counter = newer_capture_route
+    db.rows[account_deletion_document(_UID, firestore_client=db).path] = {'wipe_status': 'pending'}
+
+    assert client.post('/v1/conversations', json={}).status_code == 404
+
+    assert _writes(db) == 0 and not enqueued
+    assert all('v3_manual_end' not in row for row in db.rows.values())
+    counter.labels.assert_called_once_with('newer_recording_ineligible')
+
+
+def test_live_window_finish_newer_capture_kill_switch_restores_the_tail_cut(newer_capture_route, monkeypatch):
+    client, db, paths, enqueued, counter = newer_capture_route
+    monkeypatch.setenv('CONVERSATIONS_V3_FINISH_NEWER_CAPTURE', 'off')
+    monkeypatch.setattr(
+        v3_finish.conversations_v3_live,
+        '_recent_finish_sources',
+        lambda *a, **kw: pytest.fail('kill switch off still read recent captures'),
+    )
+
+    response = client.post('/v1/conversations', json={})
+
+    assert response.status_code == 200 and response.json()['conversation']['id'] == 'window'
+    assert db.rows[paths['latest']]['v3_manual_end'] is True and 'v3_manual_end' not in db.rows[_B]
+    assert enqueued == [(_UID, {'manual_end_id': 'latest'})]
+    counter.labels.assert_called_once_with('cut')
+
+
+def _spy_request_finish(monkeypatch):
+    calls = []
+    real = v3_finish.conversations_v3_live.request_finish
+
+    def spy(*args, **kwargs):
+        calls.append(kwargs.get('newer_capture'))
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(v3_finish.conversations_v3_live, 'request_finish', spy)
+    return calls
+
+
+def test_named_only_finish_never_redirects_to_a_newer_capture(newer_capture_route, monkeypatch):
+    # The holdout Finish (named_only) answers for the named window alone, even with the newer-capture flag on.
+    client, db, paths, enqueued, counter = newer_capture_route
+    calls = _spy_request_finish(monkeypatch)
+
+    response = v3_finish.finish_live_window(_UID, 'window', named_only=True)
+
+    assert calls == [False]
+    assert response.conversation.id == 'window'
+    assert db.rows[paths['latest']]['v3_manual_end'] is True
+    assert all(field not in db.rows[_B] for field in ('v3_manual_end', FINISH_RECORDING_FIELD, FINISH_WINDOW_FIELD))
+    assert enqueued == [(_UID, {'manual_end_id': 'latest'})]
+    counter.labels.assert_called_once_with('cut')
+
+
+@pytest.mark.parametrize('window_id', [None, 'window'])
+def test_finish_outside_named_only_still_offers_the_newer_capture(newer_capture_route, monkeypatch, window_id):
+    client, db, paths, enqueued, counter = newer_capture_route
+    calls = _spy_request_finish(monkeypatch)
+
+    response = v3_finish.finish_live_window(_UID, window_id)
+
+    assert calls == [True]
+    assert response.conversation.id == 'capture-b'
+    counter.labels.assert_called_once_with('newer_recording_cut')
+
+
+@pytest.mark.parametrize('b_lands', ['speech', 'silence'])
+def test_one_finish_cuts_a_at_once_and_consumes_b_once_across_resolution_and_retry(
+    newer_capture_route, monkeypatch, b_lands
+):
+    """End to end under StrictFirestore: Finish -> both stored -> B's whole record completes -> the same Finish again.
+
+    One Finish may end two cards: A's window is cut at once; if B lands with speech, B's request becomes its own
+    manual end. The response names A's window, and a retry answers the same target without writing.
+    """
+    client, db, paths, enqueued, counter = newer_capture_route
+    a_path, body = paths['latest'], {'live_conversation_id': 'window'}
+    # B as production creates it: Listen's in-progress create runs mark_new, which stamps v3_speech_landed_at
+    # before any speech, then audio custody marks content and the capture seals. No projection yet.
+    sealed = db.rows[_B]['finished_at']
+    b = {
+        'created_at': sealed - timedelta(seconds=80),
+        'started_at': sealed - timedelta(seconds=80),
+        'finished_at': sealed,
+        'status': 'in_progress',
+        'source': 'omi',
+        'data_protection_level': 'enhanced',
+        'external_data': {'recording_session_id': 'pendant-session-b', 'server_batch_only': True},
+        'record_lane_owner': 'batch_live_v1',
+    }
+    monkeypatch.setattr(triggers, 'conversations_v3_enabled', lambda uid: True)
+    triggers.mark_new(_UID, b)
+    assert b['v3_speech_landed_at'] and b['recording'] is True
+    b.update(status='completed', has_content=True, server_batch_audio_start=1, server_batch_audio_end=2)
+    db.rows[_B] = b
+
+    projection_txs = []  # the landing stand-in rewrites the whole row; it is not a Finish or completion write
+
+    def writes_to(target, field):
+        return [
+            p
+            for tx in db.transactions
+            if tx not in projection_txs
+            for path, p in tx.updates
+            if path == target and p.get(field)
+        ]
+
+    def a_cuts():
+        return writes_to(a_path, 'v3_manual_end')
+
+    def b_requests():
+        return writes_to(_B, 'v3_manual_end_requested')
+
+    # 1-2. Finish: one transaction cuts A's tail and stores B's request; the answer names A's window.
+    first = client.post('/v1/conversations', json=body)
+    assert first.status_code == 200 and first.json()['conversation']['id'] == 'window'
+    assert db.rows[a_path]['v3_manual_end'] is True and len(a_cuts()) == 1
+    assert b['v3_manual_end_requested'] is True and b[FINISH_RECORDING_FIELD] is True and 'v3_manual_end' not in b
+    assert enqueued == [(_UID, {'manual_end_id': 'latest'})]
+    counter.labels.assert_called_once_with('newer_dual_cut')
+    counter.reset_mock()
+
+    # 3. B's batch projection lands, then the real whole-record completion consumes B's request (twice: once).
+    complete, _, _ = native_finish_completion(
+        monkeypatch, db, _UID, 'capture-b', 1, empty_outcome=None if b_lands == 'speech' else 'silence'
+    )
+    segments = [{'id': 'speech', 'start': 0, 'end': 1, 'text': 'Synthetic speech'}] if b_lands == 'speech' else []
+    span = {'start': b['started_at'].timestamp(), 'end': b['finished_at'].timestamp()}
+    span.update(whole_native_record=True) if segments else span.update(terminal_empty_outcome='silence')
+    projected, _ = replace_record(b, {'started_at': b['started_at'], 'transcript_segments': segments}, span)
+    projection_txs.append(db.transaction())
+    projection_txs[0].update(
+        db.collection('users').document(_UID).collection('conversations').document(_B[-1]), projected
+    )
+    assert 'v3_manual_end' not in b  # a recording-scoped request waits for the whole record
+    for _ in range(2):
+        complete(datetime.now(timezone.utc).timestamp())
+    if b_lands == 'speech':
+        assert b['v3_manual_end'] is True and b['v3_pending'] is True
+        counter.labels.assert_called_once_with('whole_record_consumed')
+    else:
+        assert b['v3_manual_end_requested'] is False and 'v3_manual_end' not in b
+        counter.labels.assert_called_once_with('whole_record_resolved_empty')
+    assert len(b_requests()) == 1
+    # Consuming B's request wakes B's own reconcile once; A's stays the single one from the Finish.
+    assert enqueued == [(_UID, {'manual_end_id': 'latest'})] + (
+        [(_UID, {'manual_end_id': 'capture-b'})] if b_lands == 'speech' else []
+    )
+    woken = list(enqueued)
+    counter.reset_mock()
+    writes = _writes(db)
+
+    # 4. The same Finish again: the same target, nothing written, an "already" answer.
+    retry = client.post('/v1/conversations', json=body)
+
+    assert retry.status_code == 200 and retry.json()['conversation']['id'] == first.json()['conversation']['id']
+    assert _writes(db) == writes
+    counter.labels.assert_called_once_with('already_cut')
+    assert len(a_cuts()) == 1 and len(b_requests()) == 1
+    assert enqueued == woken
+    assert db.rows[a_path]['v3_manual_end'] is True
+    assert b.get('v3_manual_end') is (True if b_lands == 'speech' else None)
+
+
+def _tx_reads(monkeypatch):
+    """Paths of every transactional document read, in order. The recent-source scan is one query and not listed."""
+    reads, get = [], StrictFirestoreDocument.get
+
+    def recording(ref, *args, **kwargs):
+        if kwargs.get('transaction') is not None:
+            reads.append(ref.path)
+        return get(ref, *args, **kwargs)
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', recording)
+    return reads
+
+
+def _ledger_path(db, cid):
+    return sync_content_ledger_ref(db, _UID, record_identity(_UID, cid)[0]).path
+
+
+@pytest.mark.parametrize('path', ['tail', 'newer', 'newer_dual'])
+def test_live_window_finish_stamps_only_its_response_target(newer_capture_route, path):
+    """One Finish-to-visible sample per Finish: the stamp lands on the source of the card the answer names."""
+    client, db, paths, enqueued, counter = newer_capture_route
+    b, a = db.rows[_B], db.rows[paths['latest']]
+    if path == 'tail':
+        del db.rows[_B]
+    elif path == 'newer_dual':
+        _batch_pending(b)
+    before = datetime.now(timezone.utc)
+
+    response = client.post('/v1/conversations', json={})
+
+    assert response.status_code == 200
+    assert response.json()['conversation']['id'] == ('capture-b' if path == 'newer' else 'window')
+    target, other = (b, a) if path == 'newer' else (a, b)
+    assert target[FINISH_STAMP_FIELD]['path'] == path
+    assert before <= target[FINISH_STAMP_FIELD]['at'] <= datetime.now(timezone.utc)
+    assert FINISH_STAMP_FIELD not in other and FINISH_STAMP_FIELD not in db.rows[paths['older']]
+    if path == 'newer_dual':
+        # B's request rides along unstamped, so B's own card never contributes a sample.
+        assert b['v3_manual_end_requested'] is True and b[FINISH_RECORDING_FIELD] is True
+
+
+@pytest.mark.parametrize('path', ['tail', 'newer', 'newer_dual'])
+def test_retried_live_window_finish_keeps_the_first_stamp(newer_capture_route, path):
+    client, db, paths, enqueued, counter = newer_capture_route
+    b, a = db.rows[_B], db.rows[paths['latest']]
+    if path == 'tail':
+        del db.rows[_B]
+    elif path == 'newer_dual':
+        _batch_pending(b)
+    first = client.post('/v1/conversations', json={}).json()['conversation']['id']
+    target = b if path == 'newer' else a
+    stamp, writes = dict(target[FINISH_STAMP_FIELD]), _writes(db)
+
+    assert client.post('/v1/conversations', json={}).json()['conversation']['id'] == first
+
+    assert _writes(db) == writes and target[FINISH_STAMP_FIELD] == stamp
+    assert FINISH_STAMP_FIELD not in (a if path == 'newer' else b)
+
+
+@pytest.mark.parametrize('target', ['tail', 'newer'])
+def test_consuming_cut_keeps_the_stamp_of_the_finish_that_stored_the_request(newer_capture_route, target):
+    """A batch request then its consuming cut: the second write never re-stamps, so the sample stays the first's."""
+    client, db, paths, enqueued, counter = newer_capture_route
+    b, a = db.rows[_B], db.rows[paths['latest']]
+    if target == 'tail':
+        del db.rows[_B]
+        _batch_tail(db, paths)
+        row, cid, outcomes = a, 'latest', ('requested', 'consumed')
+    else:
+        _batch_speech_landed(b)
+        row, cid, outcomes = b, 'capture-b', ('newer_recording_requested', 'newer_consumed')
+    client.post('/v1/conversations', json={})
+    counter.labels.assert_called_once_with(outcomes[0])
+    stamp = dict(row[FINISH_STAMP_FIELD])
+    # The whole record completed with speech before the person tapped again.
+    _ledger(
+        db,
+        cid,
+        status='completed',
+        batch_pipeline={'segment_ids': ['unit']},
+        result={'outcome': 'success', 'new_memories': [cid]},
+    )
+    row.update(has_content=True, record_projection_revision=1)
+    counter.reset_mock()
+
+    client.post('/v1/conversations', json={})
+
+    counter.labels.assert_called_once_with(outcomes[1])
+    assert row['v3_manual_end'] is True and row[FINISH_STAMP_FIELD] == stamp
+
+
+@pytest.mark.parametrize('reason', ['already_empty', 'batch_unavailable', 'batch_disabled', 'recording_ineligible'])
+def test_live_window_finish_counts_a_declined_newer_capture_and_still_cuts_the_tail(
+    newer_capture_route, monkeypatch, reason
+):
+    client, db, paths, enqueued, counter = newer_capture_route
+    declined = Mock()
+    monkeypatch.setattr(v3_finish.conversations_v3_live.v3_metrics, 'FINISH_NEWER_DECLINED', declined)
+    fallback = Mock()
+    monkeypatch.setattr(v3_finish.conversations_v3_live, 'record_fallback', fallback)
+    b = db.rows[_B]
+    if reason == 'already_empty':
+        # The whole record completed as silence before the projection cleared has_content.
+        _batch_pending(b)
+        _ledger(
+            db,
+            'capture-b',
+            status='completed',
+            batch_pipeline={'segment_ids': ['unit']},
+            result={'outcome': 'expected_silence'},
+        )
+    elif reason == 'batch_unavailable':
+        _batch_speech_landed(b)
+        _ledger(db, 'capture-b', status='completed')  # no segment binding
+    elif reason == 'batch_disabled':
+        _batch_speech_landed(b)
+        monkeypatch.setenv('CONVERSATIONS_V3_BATCH_MANUAL_END', 'off')
+    else:
+        b['v3_pending'] = False  # a live-lane capture with nothing pending to cut
+    b_before = dict(b)
+
+    response = client.post('/v1/conversations', json={})
+
+    # The window-tail fallback and its answer are unchanged; the answer is counted as the tail's outcome.
+    assert response.status_code == 200 and response.json()['conversation']['id'] == 'window'
+    assert db.rows[paths['latest']]['v3_manual_end'] is True
+    assert db.rows[paths['latest']][FINISH_STAMP_FIELD]['path'] == 'tail'
+    assert db.rows[_B] == b_before
+    counter.labels.assert_called_once_with('cut')
+    declined.labels.assert_called_once_with(reason)
+    declined.labels.return_value.inc.assert_called_once_with()
+    # One shared fallback per declined cut, by its decline; a capture that held only silence is no degradation.
+    fallback_reason = {
+        'batch_unavailable': 'unavailable',
+        'batch_disabled': 'dispatch_disabled',
+        'recording_ineligible': 'policy',
+    }.get(reason)
+    if fallback_reason is None:
+        fallback.assert_not_called()
+    else:
+        fallback.assert_called_once_with(**_newer_capture_fallback(fallback_reason))
+
+
+@pytest.mark.parametrize('case', ['none', 'older_than_window', 'silent'])
+def test_live_window_finish_without_a_newer_candidate_counts_no_decline(newer_capture_route, monkeypatch, case):
+    client, db, paths, enqueued, counter = newer_capture_route
+    declined = Mock()
+    monkeypatch.setattr(v3_finish.conversations_v3_live.v3_metrics, 'FINISH_NEWER_DECLINED', declined)
+    fallback = Mock()
+    monkeypatch.setattr(v3_finish.conversations_v3_live, 'record_fallback', fallback)
+    b = db.rows[_B]
+    if case == 'none':
+        del db.rows[_B]
+    elif case == 'older_than_window':
+        b['finished_at'] = db.rows[paths['window']]['finished_at'] - timedelta(seconds=1)
+    else:
+        b['has_content'] = False
+
+    response = client.post('/v1/conversations', json={})
+
+    assert response.status_code == 200 and response.json()['conversation']['id'] == 'window'
+    assert db.rows[paths['latest']]['v3_manual_end'] is True
+    counter.labels.assert_called_once_with('cut')
+    declined.labels.assert_not_called()
+    fallback.assert_not_called()
+
+
+def test_newer_capture_finish_labels_are_reachable_or_absent():
+    """Every pre-initialised newer_* outcome is one request_finish can return; declines are counted apart."""
+    labels = {s.labels['outcome'] for f in v3_metrics.FINISH_NO_POINTER.collect() for s in f.samples}
+    assert not labels & {'newer_already_empty', 'newer_batch_unavailable', 'newer_batch_disabled'}
+    declined = {s.labels['reason'] for f in v3_metrics.FINISH_NEWER_DECLINED.collect() for s in f.samples}
+    assert declined == set(v3_metrics.FINISH_NEWER_DECLINED_REASONS)
+    paths = {s.labels['path'] for f in v3_metrics.FINISH_TO_VISIBLE.collect() for s in f.samples}
+    assert paths == {'tail', 'newer', 'newer_dual'}
+
+
+def test_server_batch_redirect_reads_the_capture_ledger_once(newer_capture_route, monkeypatch):
+    """F2: speech landed, so the redirect is not the stored-both case and _finish_capture reads B's ledger itself."""
+    client, db, paths, enqueued, counter = newer_capture_route
+    _batch_speech_landed(db.rows[_B])
+    reads = _tx_reads(monkeypatch)
+
+    assert client.post('/v1/conversations', json={}).json()['conversation']['id'] == 'capture-b'
+
+    counter.labels.assert_called_once_with('newer_recording_requested')
+    # Window, tail, the deletion marker, then B's native ledger: one read each. A's ledger is never read.
+    assert reads == [
+        paths['window'],
+        paths['latest'],
+        account_deletion_document(_UID, firestore_client=db).path,
+        _ledger_path(db, 'capture-b'),
+    ]
+
+
+def test_marked_pending_retry_reads_the_capture_ledger_once(newer_capture_route, monkeypatch):
+    """F4: a retry on a marked, still-requested batch capture answers from B's ledger, read once by _finish_capture."""
+    client, db, paths, enqueued, counter = newer_capture_route
+    _batch_speech_landed(db.rows[_B])
+    assert client.post('/v1/conversations', json={}).json()['conversation']['id'] == 'capture-b'
+    counter.reset_mock()
+    reads = _tx_reads(monkeypatch)
+
+    assert client.post('/v1/conversations', json={}).json()['conversation']['id'] == 'capture-b'
+
+    counter.labels.assert_called_once_with('newer_already_requested')
+    assert reads == [
+        paths['window'],
+        paths['latest'],
+        account_deletion_document(_UID, firestore_client=db).path,
+        _ledger_path(db, 'capture-b'),
+    ]
+
+
+def test_stored_both_reads_each_ledger_once_before_any_write(newer_capture_route, monkeypatch):
+    client, db, paths, enqueued, counter = newer_capture_route
+    _batch_pending(db.rows[_B])
+    _batch_tail(db, paths)
+    reads = _tx_reads(monkeypatch)
+
+    assert client.post('/v1/conversations', json={}).json()['conversation']['id'] == 'window'
+
+    counter.labels.assert_called_once_with('newer_dual_requested')
+    assert reads == [
+        paths['window'],
+        paths['latest'],
+        account_deletion_document(_UID, firestore_client=db).path,
+        _ledger_path(db, 'capture-b'),
+        _ledger_path(db, 'latest'),
+    ]

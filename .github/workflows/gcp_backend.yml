@@ -17,11 +17,14 @@
 #   repair-traffic-only  Restore Cloud Run traffic to the serving revisions.
 #   recover-pump-cap    SCA-3318 one-time service-level cap correction on the dark pump.
 #   recover-split       Restore the admitted inverse from a failed bound promotion receipt.
+#   probe-app-icon      Check app-icon containment on the admitted Backend revision.
 
 name: Deploy Backend to Cloud RUN
 
 run-name: >-
   ${{ inputs.mode == 'recover-split' && format('Recover split from run {0}/1 by {1}', inputs.split_recovery_run_id, inputs.requested_by) ||
+    inputs.mode == 'probe-app-icon' && format('Probe Backend app icon revision={0} sha={1} by {2}',
+    inputs.app_icon_candidate_revision, inputs.release_sha, inputs.requested_by) ||
     inputs.selected_split_binding && format('Holdback {0}/{1} sha={2} by {3} plan={4}',
     inputs.environment, inputs.cloud_run_service, inputs.release_sha, inputs.requested_by, inputs.selected_split_binding) ||
     inputs.selected_rollback_revision && format('Select {0}/{1}/{2} sha={3} lock={4} img={5} elig={6} by {7} inverse={8}',
@@ -82,6 +85,7 @@ on:
           - operator-qualify-publish
           - recover-pump-cap
           - recover-split
+          - probe-app-icon
       deploy_targets:
         description: 'Deploy all backend surfaces or Cloud Run only'
         required: true
@@ -107,6 +111,11 @@ on:
         type: string
       selected_split_binding:
         description: 'SHA-256 of selected_split_plan.'
+        required: false
+        default: ''
+        type: string
+      app_icon_candidate_revision:
+        description: 'Probe-app-icon only. Exact admitted, tagged, zero-traffic Backend revision for release_sha.'
         required: false
         default: ''
         type: string
@@ -1638,6 +1647,52 @@ jobs:
         env:
           APPROVED_ETAG: ${{ inputs.pump_recovery_etag }}
         run: python3 backend/scripts/recover_projection_pump_cap.py --etag="$APPROVED_ETAG"
+
+  probe-app-icon:
+    name: Probe candidate app-icon containment before promotion
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      inputs.mode == 'probe-app-icon' &&
+      inputs.environment == 'prod' &&
+      !inputs.break_glass_lock &&
+      !inputs.skip_eligibility_proof
+    environment: prod
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require the original attempt
+        run: test "$GITHUB_RUN_ATTEMPT" = 1
+      - name: Checkout immutable workflow controls
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - name: Authenticate existing production workflow identity
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com
+      - name: Set up existing gcloud client
+        uses: google-github-actions/setup-gcloud@v3
+      - name: Verify candidate identity and require containment from one synthetic icon request
+        shell: bash
+        env:
+          CANDIDATE_REVISION: ${{ inputs.app_icon_candidate_revision }}
+          CANDIDATE_SOURCE: ${{ inputs.release_sha }}
+        run: |
+          set +x
+          set -euo pipefail
+          umask 077
+          probe_dir="$(mktemp -d "$RUNNER_TEMP/app-icon-probe.XXXXXXXX")"
+          trap 'rm -rf "$probe_dir"' EXIT
+          receipt="$(python3 -I .github/scripts/app_icon_containment_probe.py \
+            "$probe_dir/token" "$CANDIDATE_REVISION" "$CANDIDATE_SOURCE")"
+          printf '%s\n' "$receipt" | tee -a "$GITHUB_STEP_SUMMARY"
+          test "$receipt" = "http_status=424 outcome=icon_generation_disabled"
 
   # SOURCE-ONLY PROPOSAL: contract remains closed until approved ingress IDs
   # and existing repository authorization evidence are reviewed and committed.

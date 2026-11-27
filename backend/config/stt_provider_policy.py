@@ -124,11 +124,11 @@ PROVIDER_SERVING_SURFACES: Final[Mapping[str, frozenset[STTServingSurface]]] = {
         }
     ),
     # Async is admitted for fenced held recovery and, on the prerecorded surface,
-    # only as failover capacity: no prerecorded model token maps to Soniox
+    # only through the batch route table: no prerecorded model token maps to Soniox
     # (config.prerecorded_stt.provider_for_model_token) and it is absent from
     # DEFAULT_MODELS_BY_SURFACE, so general prerecorded/PTT selection keeps its
-    # existing providers. Ordinary Modulate credit/breaker refusals and the batch
-    # route table both constrain Soniox to one replacement submission.
+    # existing providers. The table may start a unit on Soniox (a primary) or keep it
+    # failover-only, per table; the paid-once bound caps every unit's billable attempts.
     SONIOX_PROVIDER: frozenset(
         {STTServingSurface.STREAMING, STTServingSurface.HELD_RECOVERY, STTServingSurface.PRERECORDED}
     ),

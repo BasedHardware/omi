@@ -4,6 +4,7 @@ from collections.abc import Callable
 from contextlib import nullcontext
 
 from config.refactor_modes import default_on
+from database.speaker_evidence_verification import record_checked_sweep
 from database.action_item_fence import fenced_action_item_commit
 from database.home_feed_writer import suppress_during_account_erasure
 import logging
@@ -162,5 +163,6 @@ def _sweep_speaker_evidence(uid: str, data_plane: Any, delete_collection: Callab
         metrics.SWEEP_CHECKED.inc()
         if found_survivor:
             raise RuntimeError('speaker evidence survived account erasure')
+        record_checked_sweep(uid)
     else:
         metrics.SWEEP_DISABLED.inc()

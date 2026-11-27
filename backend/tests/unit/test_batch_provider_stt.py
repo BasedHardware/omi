@@ -495,6 +495,28 @@ def test_abandoned_running_intent_settles_failed_held_without_spend(world, monke
     inspect.assert_not_called()
 
 
+@pytest.mark.parametrize('expired', [False, True])
+def test_abandoned_provider_attempt_only_fails_over_with_retained_input(world, monkeypatch, expired):
+    from config.batch_pipeline_retention import LIFECYCLE_SECONDS
+
+    _, store = world
+    monkeypatch.setenv('BATCH_VENDOR_FAILOVER_ENABLED', 'true')
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
+    artifacts, vendor = Artifacts(), Vendor()
+    artifacts.fail_persist = True
+    stage(store, artifacts, vendor).run('p1')
+    now = 100.0 + LIFECYCLE_SECONDS if expired else 201.0 + ABANDON_SECONDS
+    replay = stage(store, artifacts, vendor, now=now)
+    replay.armed = lambda: True
+    replay.failover_routes = lambda _: ('soniox',)
+
+    outcome = replay.run('p1')
+
+    assert outcome.outcome == ('done' if expired else 'deferred')
+    assert job(store, 'p1')['state'] == ('quarantined' if expired else PENDING)
+    assert vendor.calls == 1 and artifacts.fetches == 1
+
+
 def test_vad_is_durable_before_vendor_call_and_losing_start_keeps_it(world, monkeypatch):
     _, store = world
     admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
@@ -992,7 +1014,9 @@ def dark_intake(world, monkeypatch):
     contexts = []
     monkeypatch.setattr(intake, 'with_context', lambda wav, context: contexts.append(context) or wav)
     monkeypatch.setattr(
-        intake, 'artifacts_for', lambda _store: SimpleNamespace(stage_audio=lambda i, w: 'gs://synthetic/a')
+        intake,
+        'artifacts_for',
+        lambda _store: SimpleNamespace(stage_audio=lambda i, w, *, record_origin: 'gs://synthetic/a'),
     )
     monkeypatch.setattr(
         intake,

@@ -84,9 +84,9 @@ def read(client, owner: str, ids, expected_generation: int | None, *, shadow: bo
         OUTCOMES.labels('uncovered').inc()
         return None
     try:
-        redis = _redis()
+        connection = _redis()
         OUTCOMES.labels('shadow_get_attempt' if shadow else 'certified_get_attempt').inc()
-        raw = redis.get(key)
+        raw = connection.get(key)
         if raw is None:
             OUTCOMES.labels('miss').inc()
             return None

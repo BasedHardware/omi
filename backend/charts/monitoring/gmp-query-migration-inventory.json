@@ -145,6 +145,19 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
+      "expression": "(sum(increase(omi_batch_pipeline_vendor_attempt_audio_seconds_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill|backend-integration\",provider=\"soniox\"}[24h])) / 3600) or vector(0)",
+      "file": "alerts/backend-sync.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_vendor_attempt_audio_seconds_total"
+      ],
+      "owner_title": "Batch Soniox - over 1,500 audio-h/day",
+      "owner_uid": "omi-batch-soniox-daily-hours",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "sum(increase(omi_capture_retry_cap_total{outcome=\"quarantine\"}[30m])) or vector(0)",
       "file": "alerts/backlog-state-machine.json",
       "issues": [],
@@ -4022,6 +4035,70 @@
       "scope": "explicit-bridge"
     },
     {
+      "expression": "(sum(increase(omi_sync_upload_total{namespace=\"backend-sync\",job=\"omi-cloud-run-application-metrics\",outcome=\"failed\"}[1h])) or 0 * sum(increase(omi_sync_upload_total{namespace=\"backend-sync\",job=\"omi-cloud-run-application-metrics\",outcome=\"started\"}[1h]))) / (sum(increase(omi_sync_upload_total{namespace=\"backend-sync\",job=\"omi-cloud-run-application-metrics\",outcome=\"started\"}[1h])) > 0)",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [],
+      "metrics": [
+        "omi_sync_upload_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 101,
+        "title": "Upload refusal rate (attempt-weighted)"
+      },
+      "pointer": "/panels/46/targets/0/promQLQuery/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "1 - sum(increase(omi_sync_seal_to_accept_seconds_bucket{namespace=\"backend-sync\",job=\"omi-cloud-run-application-metrics\",le=~\"3600([.]0+)?\"}[1h])) / (sum(increase(omi_sync_seal_to_accept_seconds_bucket{namespace=\"backend-sync\",job=\"omi-cloud-run-application-metrics\",le=\"+Inf\"}[1h])) > 0)",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [],
+      "metrics": [
+        "omi_sync_seal_to_accept_seconds_bucket"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 102,
+        "title": "Oldest audio at upload (attempt-weighted)"
+      },
+      "pointer": "/panels/47/targets/0/promQLQuery/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "1 - sum(increase(omi_sync_seal_to_accept_seconds_bucket{namespace=\"backend-sync\",job=\"omi-cloud-run-application-metrics\",le=~\"21600([.]0+)?\"}[1h])) / (sum(increase(omi_sync_seal_to_accept_seconds_bucket{namespace=\"backend-sync\",job=\"omi-cloud-run-application-metrics\",le=\"+Inf\"}[1h]) and ignoring(le) increase(omi_sync_seal_to_accept_seconds_bucket{namespace=\"backend-sync\",job=\"omi-cloud-run-application-metrics\",le=~\"21600([.]0+)?\"}[1h])) > 0)",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [],
+      "metrics": [
+        "omi_sync_seal_to_accept_seconds_bucket"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 102,
+        "title": "Oldest audio at upload (attempt-weighted)"
+      },
+      "pointer": "/panels/47/targets/1/promQLQuery/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(sum by (platform, build_band) (increase(omi_sync_upload_trace_age_total{namespace=\"backend-sync\",job=\"omi-cloud-run-application-metrics\",age=\"gt_6h\"}[1h])) or 0 * sum by (platform, build_band) (increase(omi_sync_upload_trace_age_total{namespace=\"backend-sync\",job=\"omi-cloud-run-application-metrics\"}[1h]))) / (sum by (platform, build_band) (increase(omi_sync_upload_trace_age_total{namespace=\"backend-sync\",job=\"omi-cloud-run-application-metrics\"}[1h])) > 0)",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [],
+      "metrics": [
+        "omi_sync_upload_trace_age_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 103,
+        "title": "Upload age over 6 h by build (attempt-weighted)"
+      },
+      "pointer": "/panels/48/targets/0/promQLQuery/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "100 * sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"transcribed\"}[$__rate_interval])) / clamp_min(sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[$__rate_interval])), 1)",
       "file": "dashboards/gke/backend-listen.json",
       "issues": [
@@ -4832,7 +4909,7 @@
   ],
   "counts": {
     "explicit_bridge": 42,
-    "query_consumers": 326
+    "query_consumers": 331
   },
   "schema_version": 1,
   "source": "repository, not live Grafana export"
