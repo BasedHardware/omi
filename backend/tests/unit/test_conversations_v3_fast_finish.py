@@ -939,3 +939,78 @@ def test_cloud_run_sync_scrapes_fast_finish_skips():
         assert samples and all(re.fullmatch(rule['regex'], s.name) for s in samples)
     reasons = {s.labels['reason'] for f in fast_finish.SKIPPED.collect() for s in f.samples}
     assert reasons == set(fast_finish.SKIP_REASONS)
+
+
+def _timeline(monkeypatch):
+    from unittest.mock import Mock
+
+    finish, ended = Mock(), Mock()
+    monkeypatch.setattr(v3_metrics, 'FINISH_STAGE', finish)
+    monkeypatch.setattr(v3_metrics, 'MANUAL_END_STAGE', ended)
+    return finish, ended
+
+
+def _stages(histogram):
+    return [call.args[0] for call in histogram.labels.call_args_list]
+
+
+@pytest.mark.parametrize(
+    'fast,stages', [('written', ['admitted', 'transcript_fast']), ('provider_error', ['admitted'])]
+)
+def test_admission_times_the_finish_from_its_stamp_and_its_recording_end(monkeypatch, fast, stages):
+    from datetime import timedelta
+
+    from utils.conversations.v3.finish_stamp import FINISH_STAMP_FIELD
+
+    now = datetime.now(timezone.utc)
+    current = row(
+        finished_at=now - timedelta(seconds=12),
+        **{FINISH_STAMP_FIELD: {'at': now - timedelta(seconds=9), 'path': 'tail'}},
+    )
+    finish, ended = _timeline(monkeypatch)
+
+    _admit(monkeypatch, current, [UNIT], fast=fast)
+
+    assert _stages(finish) == stages and _stages(ended) == stages
+    assert {call.args[1] for call in finish.labels.call_args_list} == {'tail'}
+    (seconds,), _ = finish.labels.return_value.observe.call_args_list[0]
+    assert 9 <= seconds < 60
+    (seconds,), _ = ended.labels.return_value.observe.call_args_list[0]
+    assert 12 <= seconds < 60
+
+
+def test_admission_of_an_unstamped_finish_times_only_the_recording_end(monkeypatch):
+    finish, ended = _timeline(monkeypatch)
+
+    _admit(monkeypatch, row(finished_at=datetime.now(timezone.utc)), [UNIT])
+
+    finish.labels.assert_not_called()
+    assert _stages(ended) == ['admitted', 'transcript_fast']
+
+
+def test_admission_without_a_manual_end_request_times_nothing(monkeypatch):
+    finish, ended = _timeline(monkeypatch)
+
+    asyncio.run(
+        live._manual_finish_admitted(
+            _Store(row(v3_manual_end_requested=False)),
+            UID,
+            'cid',
+            row(v3_manual_end_requested=False, finished_at=datetime.now(timezone.utc)),
+            [UNIT],
+            object(),
+            b'k',
+        )
+    )
+
+    finish.labels.assert_not_called()
+    ended.labels.assert_not_called()
+
+
+def test_a_later_admission_of_an_already_cut_recording_is_not_timed_again(monkeypatch):
+    finish, ended = _timeline(monkeypatch)
+
+    _admit(monkeypatch, row(finished_at=datetime.now(timezone.utc), v3_manual_end=True), [UNIT], fast='provider_error')
+
+    finish.labels.assert_not_called()
+    ended.labels.assert_not_called()

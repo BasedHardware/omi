@@ -68,6 +68,8 @@ from utils.conversations.v3 import (
     context,
 )
 from utils.conversations.v3 import manual_cuts, refinement, preview_wakes, rederive_plan, summary_wake
+from utils.conversations.v3 import finish_timeline
+from utils.conversations.fragment_visibility import is_relevance_discarded
 from utils.conversations.v3 import live_tail
 from utils.conversations.v3 import capture_device
 from utils.conversations.v3.word_floor import MIN_TASK_WORDS, has_unspaced_script, text_word_count
@@ -684,6 +686,15 @@ async def _reconcile_outlines(
     return outlines, cache
 
 
+def _home_visible(row):
+    # The Home feed's row filters for a derived row (database/home_feed._visible), as the settle applies them.
+    return (
+        not row.get('sync_merged_into')
+        and not is_relevance_discarded(row)
+        and conversations_db.is_visible_conversation(row, hide_home=True, presentation=True)
+    )
+
+
 async def _after_projection(
     uid,
     key,
@@ -731,6 +742,9 @@ async def _after_projection(
             metrics.safe_metric(
                 lambda: metrics.VISIBLE_LATENCY.observe(max(0, (now - row['started_at']).total_seconds()))
             )
+        if not derive:
+            # Finish timeline: this pass (begun at ``now``) is the first to commit the card as manually ended.
+            finish_timeline.observe_card_finished(row, prior, pass_started=now, visible=_home_visible)
     if not derive and not on_open and live_title_enabled():
         for row in rows:
             if policy.live_title_candidate(row) and not row.get(policy.LIVE_TITLE_STATE):
@@ -1684,6 +1698,8 @@ def _process(uid, row, token):
     below_minimum = words < MIN_TASK_WORDS
     passive = row.get('kind') in {'media', 'background'}
     manual = policy.manual_intent(row)
+    if finish_timeline.first_notes_attempt(row):
+        finish_timeline.observe('notes_started', row)
     notes = False
     tail_words = None
     if passive or (not manual and below_minimum):

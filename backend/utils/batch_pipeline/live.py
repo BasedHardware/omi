@@ -451,6 +451,7 @@ async def _manual_finish_admitted(
     from config.server_batch import manual_end_marker_enabled
     from database import conversations as conversations_db, conversations_v3
     from utils.conversations.v3 import fast_finish, metrics as v3_metrics, triggers as v3_triggers
+    from utils.conversations.v3 import finish_timeline
     from utils.conversations.v3.policy import NATIVE_MANUAL_STOP
 
     # One end-to-end budget for the pass, from here: slot wait and every provider request count.
@@ -473,6 +474,10 @@ async def _manual_finish_admitted(
                 db_executor, conversations_v3.promote_manual_end, uid, conversation_id, firestore_client=store.client
             )
             v3_metrics.BATCH_MANUAL_END.labels('promoted' if promoted else 'not_promoted').inc()
+        # Finish timeline: admission took this Finish's audio. ``current`` carries the Finish stamp and finished_at;
+        # a later admission of the same recording (its cut already stored) is not this Finish's admission.
+        if not current.get('v3_manual_end'):
+            finish_timeline.observe('admitted', current)
         # ``current`` is a raw row: its stored transcript is opaque here, so this only screens on
         # clear fields. The pass decides on a decoded row.
         if fast_finish.mode() == 'off':
@@ -581,6 +586,7 @@ async def _manual_finish_admitted(
                     slots.release()
             if outcome == 'written':
                 v3_metrics.BATCH_MANUAL_END.labels('fast_finish').inc()
+                finish_timeline.observe('transcript_fast', current)
             elif not single:
                 v3_metrics.BATCH_MANUAL_END.labels('multi_unit_deferred').inc()
 

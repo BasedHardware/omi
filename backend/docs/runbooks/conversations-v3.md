@@ -37,6 +37,11 @@ worktree. Leave `CONVERSATIONS_V3_FIRST_APP_BUILD` unset in source. At rollout,
 lead2 sets it through the shared runtime source from the first TestFlight build
 containing this PR; unset/invalid yields unknown and cannot qualify deletion evidence.
 
+## Finish latency
+
+The Prometheus readout of manual Finish to the summarized card on Home, and its per-stage split, is in
+[conversations-v3-finish-timeline.md](conversations-v3-finish-timeline.md).
+
 ## Per-owner holdout
 
 An owner in the `conversations-v3-holdout` rollout cohort keeps legacy intake for NEW captures at

@@ -3,7 +3,7 @@
 from database import conversations_v3_leases as leases
 from database.conversations_v3_fence import permits_native_source, wake_repairs
 from utils.conversations.v3.live import FINISH_STAMP_FIELD, FINISH_WINDOW_FIELD, finish_stamp_sample
-from utils.conversations.v3 import metrics
+from utils.conversations.v3 import finish_timeline, metrics
 
 import hashlib
 import json
@@ -328,12 +328,15 @@ def settle_processing(
     held = leases.lease_ref(client, uid, 'summary-' + cid)
     # The committed attempt's Finish-to-visible sample; each attempt of the transaction body resets it.
     finish_latency: list = []
+    # The committed attempt's row when it first shows as a visible manual-end card (Finish timeline).
+    shown_ended: list = []
 
     repairs = []
 
     @firestore.transactional
     def settle(tx):
         finish_latency.clear()
+        shown_ended.clear()
         repairs.clear()
         snapshot = ref.get(transaction=tx)
         row = snapshot.to_dict() or {}
@@ -395,6 +398,8 @@ def settle_processing(
             sample = finish_stamp_sample(row.get(FINISH_STAMP_FIELD), datetime.now(timezone.utc)) if visible else None
             if sample is not None:
                 finish_latency.append(sample)
+            if visible:
+                shown_ended.append(row)
         tx.update(
             ref,
             {
@@ -450,6 +455,8 @@ def settle_processing(
         metrics.safe_metric(lambda: metrics.FINISH_NO_POINTER.labels('settled').inc())
     for path, seconds in finish_latency:
         metrics.safe_metric(lambda: metrics.FINISH_TO_VISIBLE.labels(path).observe(seconds))
+    for row in shown_ended:
+        finish_timeline.observe('summary_visible', row)
     if settled and word_floor_outcomes is not None:
         metrics.safe_metric(lambda: metrics.observe_word_floor(*word_floor_outcomes))
     return armed

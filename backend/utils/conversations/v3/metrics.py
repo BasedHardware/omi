@@ -128,16 +128,44 @@ FINISH_NEWER_DECLINED = Counter(
 for reason in FINISH_NEWER_DECLINED_REASONS:
     FINISH_NEWER_DECLINED.labels(reason)
 
+# Fine around the Finish objective (p50 <= 20 s, p90 < 60 s) so histogram_quantile interpolates inside 5 to 10 s
+# bins there; shared by the Finish-to-visible SLI and the per-stage timeline below so their quantiles compare.
+FINISH_STAGE_BUCKETS = (1, 2, 5, 10, 15, 20, 25, 30, 40, 50, 60, 90, 120, 300, 600, 1800, 3600, 7200)
 # One sample per live-window Finish: its stamp (v3 finish_stamp.FINISH_STAMP_FIELD) on the response target, observed at
 # that target's first manual-end settlement as a visible Home card. Stamps older than FINISH_STAMP_MAX_AGE are dropped.
 FINISH_TO_VISIBLE = Histogram(
     'omi_conversations_v3_finish_to_visible_seconds',
     'Live-window Finish request to its response target first settling as a visible Home card, by Finish path',
     ['path'],
-    buckets=(5, 10, 20, 30, 60, 120, 300, 600, 1800, 3600, 7200),
+    buckets=FINISH_STAGE_BUCKETS,
 )
 for path in FINISH_STAMP_PATHS:
     FINISH_TO_VISIBLE.labels(path)
+
+# The manual Finish timeline (utils.conversations.v3.finish_timeline), one sample per stage per Finish. Static
+# labels only: stage and the stamp's path, never a uid or conversation id. Series are created on first observation,
+# not pre-initialized: only backend-sync and backend-integration observe them, and every other process importing
+# this module would otherwise export 18 buckets x 24 series of zeros.
+FINISH_TIMELINE_STAGES = (
+    'admitted',
+    'transcript_fast',
+    'builder_started',
+    'card_finished',
+    'notes_started',
+    'summary_visible',
+)
+FINISH_STAGE = Histogram(
+    'omi_conversations_v3_finish_stage_seconds',
+    'Stamped Finish request to each stage of its manually ended card, by stage and Finish path',
+    ['stage', 'path'],
+    buckets=FINISH_STAGE_BUCKETS,
+)
+MANUAL_END_STAGE = Histogram(
+    'omi_conversations_v3_manual_end_stage_seconds',
+    'A manually ended recording or card\'s end (finished_at) to each stage of the card, by stage',
+    ['stage'],
+    buckets=FINISH_STAGE_BUCKETS,
+)
 
 BATCH_MANUAL_END = Counter(
     'omi_conversations_v3_batch_manual_end_total',
