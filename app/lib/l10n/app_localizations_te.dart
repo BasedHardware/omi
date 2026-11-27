@@ -4963,10 +4963,10 @@ class AppLocalizationsTe extends AppLocalizations {
   String get omiAppName => 'Omi';
 
   @override
-  String get showMore => 'మరిన్ని చూపించు ↓';
+  String get loadMoreConversations => 'మరిన్ని లోడ్ చేయండి';
 
   @override
-  String get loadMoreConversations => 'Load More';
+  String get showMore => 'మరిన్ని చూపించు ↓';
 
   @override
   String get showLess => 'తక్కువ చూపించు ↑';

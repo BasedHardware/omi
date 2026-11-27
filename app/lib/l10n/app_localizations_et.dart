@@ -4931,10 +4931,10 @@ class AppLocalizationsEt extends AppLocalizations {
   String get omiAppName => 'Omi';
 
   @override
-  String get showMore => 'näita rohkem ↓';
+  String get loadMoreConversations => 'Laadi veel';
 
   @override
-  String get loadMoreConversations => 'Load More';
+  String get showMore => 'näita rohkem ↓';
 
   @override
   String get showLess => 'näita vähem ↑';

@@ -4937,10 +4937,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String get omiAppName => 'Omi';
 
   @override
-  String get showMore => 'visa mer ↓';
+  String get loadMoreConversations => 'Läs in fler';
 
   @override
-  String get loadMoreConversations => 'Load More';
+  String get showMore => 'visa mer ↓';
 
   @override
   String get showLess => 'visa mindre ↑';

@@ -4943,10 +4943,10 @@ class AppLocalizationsSl extends AppLocalizations {
   String get omiAppName => 'Omi';
 
   @override
-  String get showMore => 'prikaži več ↓';
+  String get loadMoreConversations => 'Naloži več';
 
   @override
-  String get loadMoreConversations => 'Load More';
+  String get showMore => 'prikaži več ↓';
 
   @override
   String get showLess => 'prikaži manj ↑';

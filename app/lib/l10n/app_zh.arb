@@ -1517,6 +1517,7 @@
     "clearChatAction": "清除聊天",
     "enableApps": "启用应用",
     "omiAppName": "Omi",
+    "loadMoreConversations": "加载更多",
     "showMore": "显示更多 ↓",
     "showLess": "收起 ↑",
     "loadingYourRecording": "正在加载您的录音…",

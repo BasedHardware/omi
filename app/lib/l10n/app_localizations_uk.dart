@@ -4941,10 +4941,10 @@ class AppLocalizationsUk extends AppLocalizations {
   String get omiAppName => 'Omi';
 
   @override
-  String get showMore => 'показати більше ↓';
+  String get loadMoreConversations => 'Завантажити ще';
 
   @override
-  String get loadMoreConversations => 'Load More';
+  String get showMore => 'показати більше ↓';
 
   @override
   String get showLess => 'показати менше ↑';

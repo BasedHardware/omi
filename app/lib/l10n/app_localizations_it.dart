@@ -4963,10 +4963,10 @@ class AppLocalizationsIt extends AppLocalizations {
   String get omiAppName => 'Omi';
 
   @override
-  String get showMore => 'mostra di più ↓';
+  String get loadMoreConversations => 'Carica altro';
 
   @override
-  String get loadMoreConversations => 'Load More';
+  String get showMore => 'mostra di più ↓';
 
   @override
   String get showLess => 'mostra meno ↑';

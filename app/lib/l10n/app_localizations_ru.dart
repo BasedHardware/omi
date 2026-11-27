@@ -4946,10 +4946,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String get omiAppName => 'Omi';
 
   @override
-  String get showMore => 'показать больше ↓';
+  String get loadMoreConversations => 'Загрузить ещё';
 
   @override
-  String get loadMoreConversations => 'Load More';
+  String get showMore => 'показать больше ↓';
 
   @override
   String get showLess => 'показать меньше ↑';

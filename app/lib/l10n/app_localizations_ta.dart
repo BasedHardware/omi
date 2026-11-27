@@ -4975,10 +4975,10 @@ class AppLocalizationsTa extends AppLocalizations {
   String get omiAppName => 'Omi';
 
   @override
-  String get showMore => 'மேலும் காட்டவும் ↓';
+  String get loadMoreConversations => 'மேலும் ஏற்று';
 
   @override
-  String get loadMoreConversations => 'Load More';
+  String get showMore => 'மேலும் காட்டவும் ↓';
 
   @override
   String get showLess => 'குறைவாக காட்டவும் ↑';

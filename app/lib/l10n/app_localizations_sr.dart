@@ -4936,10 +4936,10 @@ class AppLocalizationsSr extends AppLocalizations {
   String get omiAppName => 'Omi';
 
   @override
-  String get showMore => 'прикажи више ↓';
+  String get loadMoreConversations => 'Учитај још';
 
   @override
-  String get loadMoreConversations => 'Load More';
+  String get showMore => 'прикажи више ↓';
 
   @override
   String get showLess => 'прикажи мање ↑';

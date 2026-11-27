@@ -4961,10 +4961,10 @@ class AppLocalizationsHu extends AppLocalizations {
   String get omiAppName => 'Omi';
 
   @override
-  String get showMore => 'mutass többet ↓';
+  String get loadMoreConversations => 'Továbbiak betöltése';
 
   @override
-  String get loadMoreConversations => 'Load More';
+  String get showMore => 'mutass többet ↓';
 
   @override
   String get showLess => 'mutass kevesebbet ↑';

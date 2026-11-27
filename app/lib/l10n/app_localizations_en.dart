@@ -4933,10 +4933,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get omiAppName => 'Omi';
 
   @override
-  String get showMore => 'show more ↓';
+  String get loadMoreConversations => 'Load More';
 
   @override
-  String get loadMoreConversations => 'Load More';
+  String get showMore => 'show more ↓';
 
   @override
   String get showLess => 'show less ↑';

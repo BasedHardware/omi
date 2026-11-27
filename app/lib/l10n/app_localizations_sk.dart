@@ -4930,10 +4930,10 @@ class AppLocalizationsSk extends AppLocalizations {
   String get omiAppName => 'Omi';
 
   @override
-  String get showMore => 'zobraziť viac ↓';
+  String get loadMoreConversations => 'Načítať ďalšie';
 
   @override
-  String get loadMoreConversations => 'Load More';
+  String get showMore => 'zobraziť viac ↓';
 
   @override
   String get showLess => 'zobraziť menej ↑';

@@ -9369,17 +9369,17 @@ abstract class AppLocalizations {
   /// **'Omi'**
   String get omiAppName;
 
-  /// Text shown to expand collapsed content, with down arrow
-  ///
-  /// In en, this message translates to:
-  /// **'show more ↓'**
-  String get showMore;
-
   /// Button to load the next page of older conversations.
   ///
   /// In en, this message translates to:
   /// **'Load More'**
   String get loadMoreConversations;
+
+  /// Text shown to expand collapsed content, with down arrow
+  ///
+  /// In en, this message translates to:
+  /// **'show more ↓'**
+  String get showMore;
 
   /// Text shown to collapse expanded content, with up arrow
   ///

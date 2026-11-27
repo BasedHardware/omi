@@ -4951,10 +4951,10 @@ class AppLocalizationsBg extends AppLocalizations {
   String get omiAppName => 'Omi';
 
   @override
-  String get showMore => 'покажи повече ↓';
+  String get loadMoreConversations => 'Зареди още';
 
   @override
-  String get loadMoreConversations => 'Load More';
+  String get showMore => 'покажи повече ↓';
 
   @override
   String get showLess => 'покажи по-малко ↑';

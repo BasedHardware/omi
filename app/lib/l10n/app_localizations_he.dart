@@ -4895,10 +4895,10 @@ class AppLocalizationsHe extends AppLocalizations {
   String get omiAppName => 'Omi';
 
   @override
-  String get showMore => 'הצג עוד ↓';
+  String get loadMoreConversations => 'טעינת עוד שיחות';
 
   @override
-  String get loadMoreConversations => 'Load More';
+  String get showMore => 'הצג עוד ↓';
 
   @override
   String get showLess => 'הצג פחות ↑';

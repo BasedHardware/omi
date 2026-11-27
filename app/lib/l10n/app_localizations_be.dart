@@ -4945,10 +4945,10 @@ class AppLocalizationsBe extends AppLocalizations {
   String get omiAppName => 'Omi';
 
   @override
-  String get showMore => 'Паказаць больш ↓';
+  String get loadMoreConversations => 'Загрузіць яшчэ';
 
   @override
-  String get loadMoreConversations => 'Load More';
+  String get showMore => 'Паказаць больш ↓';
 
   @override
   String get showLess => 'Паказаць менш ↑';

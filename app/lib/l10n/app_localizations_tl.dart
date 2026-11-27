@@ -4976,10 +4976,10 @@ class AppLocalizationsTl extends AppLocalizations {
   String get omiAppName => 'Omi';
 
   @override
-  String get showMore => 'magpakita ng higit pa ↓';
+  String get loadMoreConversations => 'Mag-load pa';
 
   @override
-  String get loadMoreConversations => 'Load More';
+  String get showMore => 'magpakita ng higit pa ↓';
 
   @override
   String get showLess => 'magpakita ng mas kaunti ↑';

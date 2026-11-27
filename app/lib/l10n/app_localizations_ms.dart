@@ -4949,10 +4949,10 @@ class AppLocalizationsMs extends AppLocalizations {
   String get omiAppName => 'Omi';
 
   @override
-  String get showMore => 'tunjukkan lagi ↓';
+  String get loadMoreConversations => 'Muatkan lagi';
 
   @override
-  String get loadMoreConversations => 'Load More';
+  String get showMore => 'tunjukkan lagi ↓';
 
   @override
   String get showLess => 'tunjukkan kurang ↑';

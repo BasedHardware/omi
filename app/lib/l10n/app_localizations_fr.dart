@@ -4984,10 +4984,10 @@ class AppLocalizationsFr extends AppLocalizations {
   String get omiAppName => 'Omi';
 
   @override
-  String get showMore => 'afficher plus ↓';
+  String get loadMoreConversations => 'Charger plus';
 
   @override
-  String get loadMoreConversations => 'Load More';
+  String get showMore => 'afficher plus ↓';
 
   @override
   String get showLess => 'afficher moins ↑';

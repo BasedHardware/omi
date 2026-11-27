@@ -4850,10 +4850,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get omiAppName => 'Omi';
 
   @override
-  String get showMore => '显示更多 ↓';
+  String get loadMoreConversations => '加载更多';
 
   @override
-  String get loadMoreConversations => 'Load More';
+  String get showMore => '显示更多 ↓';
 
   @override
   String get showLess => '收起 ↑';

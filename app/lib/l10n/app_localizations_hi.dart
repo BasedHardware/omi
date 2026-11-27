@@ -4911,10 +4911,10 @@ class AppLocalizationsHi extends AppLocalizations {
   String get omiAppName => 'Omi';
 
   @override
-  String get showMore => 'और दिखाएं ↓';
+  String get loadMoreConversations => 'और लोड करें';
 
   @override
-  String get loadMoreConversations => 'Load More';
+  String get showMore => 'और दिखाएं ↓';
 
   @override
   String get showLess => 'कम दिखाएं ↑';

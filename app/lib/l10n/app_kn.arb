@@ -5804,6 +5804,7 @@
     "@omiAppName": {
         "description": "The Omi app/assistant name shown in chat app selection"
     },
+    "loadMoreConversations": "ಇನ್ನಷ್ಟು ಲೋಡ್ ಮಾಡಿ",
     "showMore": "ಹೆಚ್ಚಾಗಿ ತೋರಿಸಿ ↓",
     "@showMore": {
         "description": "Text shown to expand collapsed content, with down arrow"

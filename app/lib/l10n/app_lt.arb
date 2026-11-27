@@ -1798,6 +1798,7 @@
     "showMeetingsInMenuBar": "Rodyti susitikimus meniu juostoje",
     "showMeetingsMenuBar": "Rodyti būsimus susitikimus meniu juostoje",
     "showMeetingsMenuBarDesc": "Rodyti kitą susitikimą ir laiką iki jo pradžios macOS meniu juostoje",
+    "loadMoreConversations": "Įkelti daugiau",
     "showMore": "rodyti daugiau ↓",
     "showShortConversations": "Rodyti trumpus pokalbius",
     "showShortConversationsDesc": "Rodyti pokalbius, trumpesnius už ribą",

@@ -4926,10 +4926,10 @@ class AppLocalizationsCs extends AppLocalizations {
   String get omiAppName => 'Omi';
 
   @override
-  String get showMore => 'zobrazit více ↓';
+  String get loadMoreConversations => 'Načíst další';
 
   @override
-  String get loadMoreConversations => 'Load More';
+  String get showMore => 'zobrazit více ↓';
 
   @override
   String get showLess => 'zobrazit méně ↑';

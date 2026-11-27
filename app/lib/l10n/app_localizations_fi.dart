@@ -4935,10 +4935,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String get omiAppName => 'Omi';
 
   @override
-  String get showMore => 'näytä lisää ↓';
+  String get loadMoreConversations => 'Lataa lisää';
 
   @override
-  String get loadMoreConversations => 'Load More';
+  String get showMore => 'näytä lisää ↓';
 
   @override
   String get showLess => 'näytä vähemmän ↑';

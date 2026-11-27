@@ -4896,10 +4896,10 @@ class AppLocalizationsAr extends AppLocalizations {
   String get omiAppName => 'Omi';
 
   @override
-  String get showMore => 'عرض المزيد ↓';
+  String get loadMoreConversations => 'تحميل المزيد';
 
   @override
-  String get loadMoreConversations => 'Load More';
+  String get showMore => 'عرض المزيد ↓';
 
   @override
   String get showLess => 'عرض أقل ↑';

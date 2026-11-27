@@ -4922,10 +4922,10 @@ class AppLocalizationsDa extends AppLocalizations {
   String get omiAppName => 'Omi';
 
   @override
-  String get showMore => 'vis mere ↓';
+  String get loadMoreConversations => 'Indlæs flere';
 
   @override
-  String get loadMoreConversations => 'Load More';
+  String get showMore => 'vis mere ↓';
 
   @override
   String get showLess => 'vis mindre ↑';

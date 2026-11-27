@@ -4957,10 +4957,10 @@ class AppLocalizationsMk extends AppLocalizations {
   String get omiAppName => 'Omi';
 
   @override
-  String get showMore => 'покажи повеќе ↓';
+  String get loadMoreConversations => 'Вчитај повеќе';
 
   @override
-  String get loadMoreConversations => 'Load More';
+  String get showMore => 'покажи повеќе ↓';
 
   @override
   String get showLess => 'покажи помалку ↑';

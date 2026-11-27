@@ -4934,10 +4934,10 @@ class AppLocalizationsFa extends AppLocalizations {
   String get omiAppName => 'Omi';
 
   @override
-  String get showMore => 'نمایش بیشتر ↓';
+  String get loadMoreConversations => 'بارگیری بیشتر';
 
   @override
-  String get loadMoreConversations => 'Load More';
+  String get showMore => 'نمایش بیشتر ↓';
 
   @override
   String get showLess => 'نمایش کمتر ↑';

@@ -5901,11 +5901,11 @@
     "@omiAppName": {
         "description": "The Omi app/assistant name shown in chat app selection"
     },
-    "showMore": "show more ↓",
     "loadMoreConversations": "Load More",
     "@loadMoreConversations": {
         "description": "Button to load the next page of older conversations."
     },
+    "showMore": "show more ↓",
     "@showMore": {
         "description": "Text shown to expand collapsed content, with down arrow"
     },
