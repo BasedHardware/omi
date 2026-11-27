@@ -289,10 +289,11 @@ LIVE_ARCHIVE_COMMIT_WAIT_SECONDS = 3.0
 LIVE_ARCHIVE_COMMIT_POLL_SECONDS = 0.5
 
 
-async def _await_live_archive_commit(uid: str, conversation_id: str, conversation_data: dict) -> dict | None:
+async def _await_live_archive_commit(uid: str, conversation_id: str, conversation_data: dict) -> dict:
     """Wait for the live session to commit the audio of a recording finished inside its first archive window.
 
-    Returns the newest row, or None if the conversation disappeared.
+    Returns the newest row. A row deleted mid-wait returns the last one seen; the deferred replay's
+    admission read then applies the missing-row handling.
     """
     deadline = asyncio.get_running_loop().time() + LIVE_ARCHIVE_COMMIT_WAIT_SECONDS
     while server_batch_live_audio_uncommitted(conversation_data) and asyncio.get_running_loop().time() < deadline:
@@ -305,7 +306,7 @@ async def _await_live_archive_commit(uid: str, conversation_id: str, conversatio
             read_site=FirestoreReadSite.FINALIZER_JOB_REPLAY,
         )
         if not latest:
-            return None
+            break
         conversation_data = latest
     return conversation_data
 
@@ -348,10 +349,7 @@ async def finalize_persisted_conversation(
             and server_batch_live_audio_uncommitted(conversation_data)
         )
         if wait_for_archive:
-            latest = await _await_live_archive_commit(uid, conversation_id, conversation_data)
-            if latest is None:
-                return ConversationFinalizationDisposition.fenced
-            conversation_data = latest
+            conversation_data = await _await_live_archive_commit(uid, conversation_id, conversation_data)
         if conversation_data.get('discarded'):
             if not await run_blocking(
                 db_executor,
@@ -366,18 +364,26 @@ async def finalize_persisted_conversation(
             logger.info('event=server_batch_finalization outcome=discarded')
             return ConversationFinalizationDisposition.discarded
         if wait_for_archive and server_batch_live_audio_uncommitted(conversation_data):
-            yielded = await run_blocking(
-                db_executor,
-                finalization_jobs_db.mark_finalization_retryable,
-                finalization_job_id,
-                dispatch_generation,
-                lease_epoch,
-                finalization_jobs_db.LIVE_ARCHIVE_UNCOMMITTED,
-                count_attempt=False,
-            )
-            return (
-                ConversationFinalizationDisposition.deferred if yielded else ConversationFinalizationDisposition.fenced
-            )
+            # Yield the lease without spending an attempt; the job and the held audio stay untouched.
+            try:
+                yielded = await run_blocking(
+                    db_executor,
+                    finalization_jobs_db.mark_finalization_retryable,
+                    finalization_job_id,
+                    dispatch_generation,
+                    lease_epoch,
+                    finalization_jobs_db.LIVE_ARCHIVE_UNCOMMITTED,
+                    count_attempt=False,
+                )
+            except finalization_jobs_db.LiveArchiveWaitExpired:
+                # Bounded: fall through to the counted not-closed retry below.
+                logger.warning('event=live_archive_wait outcome=expired')
+            else:
+                return (
+                    ConversationFinalizationDisposition.deferred
+                    if yielded
+                    else ConversationFinalizationDisposition.fenced
+                )
         if not server_batch_has_audio(conversation_data):
             if not conversation_data.get('server_batch_audio_closed'):
                 raise ServerBatchArchiveNotClosed('server batch archive is not closed')

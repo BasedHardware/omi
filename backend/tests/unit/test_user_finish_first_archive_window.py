@@ -191,14 +191,17 @@ async def test_worker_waits_for_the_live_commit_then_hands_the_recording_to_batc
     assert calls == ['read', 'read', ('register', committed), ('complete', committed)]
 
 
-@pytest.mark.asyncio
-async def test_worker_defers_an_uncommitted_finish_and_replays_without_spending_an_attempt(monkeypatch):
+def _route(monkeypatch, attempt_count=4):
+    """Admit an early finish on a strict store and drive the real worker route and job transactions."""
     intent, db = _admit(_live(), ProcessingTrigger.CLIENT_FINALIZE)
     job_id = intent['job_id']
     job_path = (jobs.FINALIZATION_JOBS_COLLECTION, job_id)
-    db.rows[job_path].update(dispatch_requested_at=NOW, attempt_count=4, worker_claim_count=4)
+    db.rows[job_path].update(dispatch_requested_at=NOW, attempt_count=attempt_count, worker_claim_count=attempt_count)
+    deltas = []
+    clock = [NOW]
     monkeypatch.setattr(jobs, '_client', lambda firestore_client=None: firestore_client or db)
-    monkeypatch.setattr(jobs, '_now', lambda: NOW)
+    monkeypatch.setattr(jobs, '_now', lambda: clock[0])
+    monkeypatch.setattr(jobs, '_record_projection_delta', lambda _txn, _collection, _job, **delta: deltas.append(delta))
 
     async def inline(_executor, function, *args, **kwargs):
         return function(*args, **kwargs)
@@ -211,32 +214,99 @@ async def test_worker_defers_an_uncommitted_finish_and_replays_without_spending_
     monkeypatch.setattr(demand_processing, 'admit', lambda *args, **kwargs: True)
     assert finalizer.LIVE_ARCHIVE_COMMIT_WAIT_SECONDS <= 5
     monkeypatch.setattr(finalizer, 'LIVE_ARCHIVE_COMMIT_WAIT_SECONDS', 0)
+
+    async def deliver(generation):
+        async def payload():
+            return {'job_id': job_id, 'dispatch_generation': generation}
+
+        return await worker_router.run_listen_finalization_job(SimpleNamespace(json=payload), task_retry_count=0)
+
+    return db, job_path, clock, deltas, deliver
+
+
+@pytest.mark.asyncio
+async def test_worker_defers_an_uncommitted_finish_and_replays_without_spending_an_attempt(monkeypatch):
+    db, job_path, clock, deltas, deliver = _route(monkeypatch)
+    job_id = job_path[1]
+    row_before = dict(db.rows[ROW])
     calls = _worker(monkeypatch, db.rows[ROW], [])
 
-    async def payload():
-        return {'job_id': job_id, 'dispatch_generation': 1}
-
-    response = await worker_router.run_listen_finalization_job(SimpleNamespace(json=payload), task_retry_count=0)
+    response = await deliver(1)
 
     assert response.status_code == 200
     assert json.loads(response.body) == {'status': 'deferred'}
+    # Custody: the delivery only yielded its lease. The _worker double raises on any other
+    # writer, so the held audio was not registered, completed, or deleted as empty.
     assert calls == ['defer']
+    assert db.rows[ROW] == row_before
+    assert deltas == [{'queued': -1, 'leased': 1}, {'leased': -1, 'queued': 1}]
     job = db.rows[job_path]
     assert job['status'] == 'queued'
     assert job['attempt_count'] == job['worker_claim_count'] == 4
     assert job['last_failure_code'] == 'live_archive_uncommitted'
+    assert job['live_archive_wait_started_at'] == NOW
+    # Deleted (the strict fixture keeps the delete sentinel), so only the due time gates replay.
+    assert not isinstance(job.get('dispatch_requested_at'), datetime)
     due = NOW + timedelta(seconds=10)
     assert job['reconcile_after_at'] == due
 
     stale_after = timedelta(minutes=5)
-    monkeypatch.setattr(jobs, '_now', lambda: due - timedelta(seconds=1))
+    clock[0] = due - timedelta(seconds=1)
     assert not jobs.claim_finalization_replay(job_id, stale_after=stale_after)['created']
-    monkeypatch.setattr(jobs, '_now', lambda: due)
+    clock[0] = due
     replay = jobs.claim_finalization_replay(job_id, stale_after=stale_after, max_attempts=5)
     assert replay['created']
     assert replay['dispatch_generation'] == 2
     assert db.rows[job_path]['attempt_count'] == db.rows[job_path]['worker_claim_count'] == 4
     assert not jobs.claim_finalization_replay(job_id, stale_after=stale_after)['created']
+
+    # Redelivered after the session commits the held audio: the recording goes to batch.
+    committed = {**db.rows[ROW], 'has_content': True, 'server_batch_audio_start': 1.0, 'server_batch_audio_end': 38.0}
+    db.rows[ROW] = committed
+    calls = _worker(monkeypatch, committed, [])
+    monkeypatch.setattr(jobs, 'mark_finalization_completed', lambda *args, **kwargs: True)
+
+    response = await deliver(2)
+
+    assert (response.status_code, json.loads(response.body)) == (200, {'status': 'done'})
+    assert calls == [('register', committed), ('complete', committed)]
+    assert db.rows[job_path]['live_archive_wait_started_at'] == NOW
+
+
+@pytest.mark.asyncio
+async def test_each_redelivery_inside_the_bound_defers_again(monkeypatch):
+    db, job_path, clock, _deltas, deliver = _route(monkeypatch)
+    db.rows[job_path]['live_archive_wait_started_at'] = NOW - jobs.LIVE_ARCHIVE_MAX_WAIT + timedelta(seconds=1)
+    _worker(monkeypatch, db.rows[ROW], [])
+
+    response = await deliver(1)
+
+    assert json.loads(response.body) == {'status': 'deferred'}
+    job = db.rows[job_path]
+    # The first deferral's start is kept, so the bound counts from the first uncommitted delivery.
+    assert job['live_archive_wait_started_at'] == NOW - jobs.LIVE_ARCHIVE_MAX_WAIT + timedelta(seconds=1)
+    assert job['attempt_count'] == 4
+
+
+@pytest.mark.asyncio
+async def test_deferral_is_bounded_then_takes_the_counted_not_closed_retry(monkeypatch):
+    db, job_path, clock, deltas, deliver = _route(monkeypatch, attempt_count=1)
+    started = NOW - jobs.LIVE_ARCHIVE_MAX_WAIT
+    db.rows[job_path]['live_archive_wait_started_at'] = started
+    row_before = dict(db.rows[ROW])
+    calls = _worker(monkeypatch, db.rows[ROW], [])
+
+    response = await deliver(1)
+
+    # The pre-existing safe path: a counted retry that leaves the conversation and its audio alone.
+    assert (response.status_code, json.loads(response.body)) == (500, {'status': 'retry'})
+    assert calls == ['defer']
+    assert db.rows[ROW] == row_before
+    job = db.rows[job_path]
+    assert job['status'] == 'queued'
+    assert job['attempt_count'] == 2
+    assert job['last_failure_code'] != 'live_archive_uncommitted'
+    assert job['live_archive_wait_started_at'] == started
 
 
 @pytest.mark.asyncio
@@ -250,8 +320,13 @@ async def test_a_natural_end_does_not_wait(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_a_deleted_row_ends_the_wait(monkeypatch):
+async def test_a_deleted_row_ends_the_wait_and_defers_to_the_replay_admission(monkeypatch):
+    deferred = []
+    monkeypatch.setattr(
+        jobs, 'mark_finalization_retryable', lambda *args, **kwargs: deferred.append((args, kwargs)) or True
+    )
     calls = _worker(monkeypatch, _live(status='processing'), [None])
 
-    assert await _finalize(ProcessingTrigger.CLIENT_FINALIZE) is finalizer.ConversationFinalizationDisposition.fenced
-    assert calls == ['read']
+    assert await _finalize(ProcessingTrigger.CLIENT_FINALIZE) is finalizer.ConversationFinalizationDisposition.deferred
+    assert calls == ['read', 'defer']
+    assert deferred == [(('job', 1, 1, 'live_archive_uncommitted'), {'count_attempt': False})]
