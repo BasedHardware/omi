@@ -68,12 +68,19 @@ def version(obj):
 
 
 def partial_metadata_version(response, name, namespace):
+    # The request names only the PartialObjectMetadata media type, with no fallback, so an API
+    # server that cannot honour it answers 406 rather than a full Secret. GKE (through
+    # `kubectl proxy`) labels the metadata-only body plain `application/json`, dropping the
+    # `as=` parameters (run 46027266977), so the header admits JSON and the body check below
+    # decides: anything but a bare PartialObjectMetadata object is refused without echoing it.
     content_type = response.headers.get("Content-Type", "").lower().replace(" ", "")
+    media_type, _, params = content_type.partition(";")
     require(
-        "application/json" in content_type
-        and "as=partialobjectmetadata" in content_type
-        and "g=meta.k8s.io" in content_type
-        and "v=v1" in content_type,
+        media_type == "application/json"
+        and (
+            not params
+            or ("as=partialobjectmetadata" in params and "g=meta.k8s.io" in params and "v=v1" in params)
+        ),
         "secret_metadata_only_response_unavailable",
     )
     try:

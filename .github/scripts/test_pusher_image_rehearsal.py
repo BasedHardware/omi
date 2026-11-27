@@ -370,14 +370,44 @@ class RehearsalTest(unittest.TestCase):
         response = Response(json.dumps(payload).encode())
         self.assertEqual(helper.partial_metadata_version(response, "secret", helper.NAMESPACE), ["secret-uid", "9"])
 
-        class FullSecretResponse:
+        # GKE through `kubectl proxy` labels the metadata-only body plain application/json.
+        class PlainJsonResponse(io.BytesIO):
             headers = {"Content-Type": "application/json"}
 
+        plain = PlainJsonResponse(json.dumps(payload).encode())
+        self.assertEqual(helper.partial_metadata_version(plain, "secret", helper.NAMESPACE), ["secret-uid", "9"])
+
+        # A full Secret under plain JSON is refused, and the reason never carries its data.
+        full_secret = {
+            "apiVersion": "v1",
+            "kind": "Secret",
+            "metadata": payload["metadata"],
+            "data": {"token": "c2VjcmV0LXZhbHVl"},
+        }
+        with self.assertRaises(helper.Refused) as refused:
+            helper.partial_metadata_version(
+                PlainJsonResponse(json.dumps(full_secret).encode()), "secret", helper.NAMESPACE
+            )
+        self.assertEqual(str(refused.exception), "secret_metadata_only_response_invalid")
+        self.assertNotIn("c2VjcmV0", str(refused.exception))
+
+        class OtherMediaResponse:
+            headers = {"Content-Type": "application/vnd.kubernetes.protobuf"}
+
             def read(self, *_args):
-                raise AssertionError("a full Secret response must not be read")
+                raise AssertionError("a non-JSON response must not be read")
 
         with self.assertRaisesRegex(helper.Refused, "secret_metadata_only_response_unavailable"):
-            helper.partial_metadata_version(FullSecretResponse(), "secret", helper.NAMESPACE)
+            helper.partial_metadata_version(OtherMediaResponse(), "secret", helper.NAMESPACE)
+
+        class TableResponse:
+            headers = {"Content-Type": "application/json;as=Table;g=meta.k8s.io;v=v1"}
+
+            def read(self, *_args):
+                raise AssertionError("a Table response must not be read")
+
+        with self.assertRaisesRegex(helper.Refused, "secret_metadata_only_response_unavailable"):
+            helper.partial_metadata_version(TableResponse(), "secret", helper.NAMESPACE)
 
     def test_secret_version_uses_partial_metadata_request_and_closes_proxy(self):
         class Listener:
