@@ -3,11 +3,24 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices/connectors/limitless_connection.dart';
 import 'package:omi/services/devices/connectors/limitless_realtime_health.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/devices/transports/device_transport.dart';
+import 'package:omi/utils/debug_log_manager.dart';
+
+class _TestDocuments extends PathProviderPlatform {
+  _TestDocuments(this.path);
+
+  final String path;
+
+  @override
+  Future<String> getApplicationDocumentsPath() async => path;
+}
 
 class FakeDeviceTransport extends DeviceTransport {
   final Map<String, StreamController<List<int>>> _rxControllers = {};
@@ -1211,6 +1224,18 @@ void main() {
   });
 
   test('unindexed stored frames are withheld when batch-mode re-entry is unconfirmed', () async {
+    final logDirectory = await Directory.systemTemp.createTemp('limitless-stored-frame-log-');
+    final previousDocuments = PathProviderPlatform.instance;
+    PathProviderPlatform.instance = _TestDocuments(logDirectory.path);
+    SharedPreferences.setMockInitialValues({'devLogsToFileEnabled': true});
+    await SharedPreferencesUtil.init();
+    await DebugLogManager.setEnabled(true);
+    addTearDown(() async {
+      await DebugLogManager.setEnabled(false);
+      PathProviderPlatform.instance = previousDocuments;
+      await logDirectory.delete(recursive: true);
+    });
+
     final transport = FakeDeviceTransport();
     final connection = LimitlessDeviceConnection(
       BtDevice(name: 'Limitless Pendant', id: 'fake-limitless', type: DeviceType.limitless, rssi: -50),
@@ -1238,6 +1263,7 @@ void main() {
       onAudioBytesReceived: decoded.add,
     );
     addTearDown(() => subscription?.cancel());
+    await DebugLogManager.clear();
     final malformedStorageBuffer = [
       ...intField(2, 7),
       0x1b, // Invalid wire type before the page index makes strict extraction fail.
@@ -1251,6 +1277,16 @@ void main() {
     transport.emit(limitlessRxCharUuid, bleWrapper(11, 0, 1, pendantMessage(malformedStorageBuffer)));
     await pumpEventQueue();
     expect(decoded, isEmpty, reason: 'the unindexed stored page must not be duplicated into live audio');
+    await DebugLogManager.logInfo('test write barrier');
+    final logContents = await (await DebugLogManager.getLogFile())!.readAsString();
+    final events = const LineSplitter()
+        .convert(logContents)
+        .map((line) => jsonDecode(line) as Map<String, dynamic>)
+        .where((line) => line['type'] == 'limitless_stored_frames_dropped')
+        .toList();
+    expect(events, hasLength(1));
+    expect(events.single['pageIndex'], isNull);
+    expect(events.single['frames'], 1);
   });
 
   test('unavailable withheld pages release the ACK barrier and capped reads stay capped', () async {

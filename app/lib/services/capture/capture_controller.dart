@@ -293,6 +293,7 @@ class CaptureController extends ChangeNotifier
   bool _customLiveAudioRecoveryFlagUnresolvedRetriesExhausted = false;
   String? _customLiveAudioRecoveryFlagRecordingId;
   Timer? _customLiveAudioRecoveryFlagRetryTimer;
+  bool _limitlessCustomLiveWatchRestartPending = false;
 
   String get _captureEvidenceRoot {
     final sync = _wal.getSyncs().phone;
@@ -2815,6 +2816,7 @@ class CaptureController extends ChangeNotifier
     _limitlessAudioConnection?.stopCustomLiveAudioWatch();
     _limitlessAudioConnection = null;
     _limitlessCustomLiveSocketUnavailable = false;
+    _limitlessCustomLiveWatchRestartPending = false;
   }
 
   void _cancelCustomLiveAudioFlagRetry() {
@@ -2827,11 +2829,13 @@ class CaptureController extends ChangeNotifier
     _customLiveAudioRecoveryFlagRetryTimer = null;
     _customLiveAudioRecoveryKillSwitchEnabled = null;
     _customLiveAudioRecoveryFlagRecordingId = null;
+    _limitlessCustomLiveWatchRestartPending = false;
   }
 
   void _refreshLimitlessCustomLiveWatch({bool refreshKillSwitch = true, bool restartWatch = false}) {
     final connection = _limitlessAudioConnection;
     if (connection == null) return;
+    if (restartWatch) _limitlessCustomLiveWatchRestartPending = true;
     final device = _recordingDevice;
     final session = _capture.stagedReadModel.state.active;
     final recordingId = session?.recordingId;
@@ -2877,11 +2881,13 @@ class CaptureController extends ChangeNotifier
     }
 
     if (!isCurrent()) {
+      _limitlessCustomLiveWatchRestartPending = false;
       connection.stopCustomLiveAudioWatch();
       return;
     }
     if (_customLiveAudioRecoveryFlagRecordingId != recordingId) {
       _customLiveAudioRecoveryFlagRecordingId = recordingId;
+      _limitlessCustomLiveWatchRestartPending = false;
       _resetCustomLiveAudioFlagResolution();
     }
     if (refreshKillSwitch) _refreshCustomLiveAudioKillSwitch();
@@ -2905,8 +2911,9 @@ class CaptureController extends ChangeNotifier
           _recordingTelemetry.observeCustomLiveAudioStall(outcome);
         }
       },
-      restart: restartWatch,
+      restart: _limitlessCustomLiveWatchRestartPending,
     );
+    _limitlessCustomLiveWatchRestartPending = false;
     if (_socket?.state != SocketServiceState.connected) {
       _limitlessCustomLiveSocketUnavailable = true;
     }
@@ -2955,9 +2962,11 @@ class CaptureController extends ChangeNotifier
         );
         return;
       }
-      if (refreshFailed && enabled != true) {
+      if (refreshFailed) {
         // Keep the last successful result across refresh failures. A new
-        // capture or flag-context change clears it before its scoped read.
+        // capture or flag-context change clears it before its scoped read. A
+        // cached kill still needs the bounded retry so a remote disable is
+        // observed promptly; the retry never clears that confirmed kill.
         if (_customLiveAudioRecoveryFlagFetchRetriesForEpoch == 0) {
           _customLiveAudioRecoveryFlagFetchRetriesForEpoch = 1;
           _scheduleCustomLiveAudioFlagRetry(generation, identityEpoch, delay: const Duration(seconds: 1));

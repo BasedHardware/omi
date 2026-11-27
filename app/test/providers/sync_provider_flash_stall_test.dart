@@ -13,10 +13,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 class _FakeSyncs {
   FlashSyncStallReason flashStallReason = FlashSyncStallReason.none;
   SyncLocalFilesResponse? syncAllResult;
+  Object? syncAllError;
 
   Future<List<Wal>> getAllWals() async => [];
 
-  Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress}) async => syncAllResult;
+  Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress}) async {
+    final error = syncAllError;
+    if (error != null) throw error;
+    return syncAllResult;
+  }
 }
 
 class _FakeWalService implements IWalService {
@@ -112,6 +117,23 @@ void main() {
   test('an unknown flash stall surfaces an error instead of silent success', () async {
     final walService = _FakeWalService();
     walService.syncs.flashStallReason = FlashSyncStallReason.unknown;
+
+    final provider = SyncProvider(walService: walService, uploadGate: _hermeticGate(), startBackgroundSync: false);
+    await provider.initialized;
+
+    await provider.syncWals();
+
+    expect(provider.syncState.hasError, isTrue);
+    expect(provider.syncError,
+        "Your Pendant's stored audio could not be confirmed. Keep your Pendant connected and try syncing again.");
+    provider.dispose();
+  });
+
+  test('an incomplete per-recording flash transfer surfaces the localized stall reason', () async {
+    final walService = _FakeWalService();
+    walService.syncs
+      ..flashStallReason = FlashSyncStallReason.unknown
+      ..syncAllError = StateError('Device transfer incomplete; recording kept on device');
 
     final provider = SyncProvider(walService: walService, uploadGate: _hermeticGate(), startBackgroundSync: false);
     await provider.initialized;

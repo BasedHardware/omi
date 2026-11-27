@@ -1119,7 +1119,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
         if (rethrowOnError) rethrow;
         return null;
       }
-      final errorMessage = _formatSyncError(e, failedWal);
+      final stallMessage = checkFlashStall ? _pendantFlashStallMessage(_walService.getSyncs().flashStallReason) : null;
+      final errorMessage = stallMessage ?? _formatSyncError(e, failedWal);
       Logger.debug('SyncProvider: Error in $context: $errorMessage');
       DebugLogManager.logError(e, null, 'SyncProvider: $context failed: $errorMessage', {
         if (failedWal != null) 'walId': failedWal.id,
@@ -1175,6 +1176,13 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   String _pendantAudioUnconfirmedMessage() =>
       globalNavigatorKey.currentContext?.l10n.pendantAudioUnconfirmedSyncBlocked ??
       "Your Pendant's stored audio could not be confirmed. Keep your Pendant connected and try syncing again.";
+
+  String? _pendantFlashStallMessage(FlashSyncStallReason reason) => switch (reason) {
+        FlashSyncStallReason.recordingSuspected => _pendantRecordingMessage(),
+        FlashSyncStallReason.deviceFull => _pendantFullMessage(),
+        FlashSyncStallReason.unknown => _pendantAudioUnconfirmedMessage(),
+        FlashSyncStallReason.none => null,
+      };
 
   String _formatSyncError(dynamic error, Wal? wal) {
     var baseMessage = error.toString().replaceAll('Exception: ', '');

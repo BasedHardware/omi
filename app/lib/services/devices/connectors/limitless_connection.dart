@@ -632,6 +632,11 @@ class LimitlessDeviceConnection extends DeviceConnection {
                   // retrieve it instead of duplicating it into live audio.
                   if (withheldByUnconfirmedMode) {
                     withheldStoredFrames = true;
+                    DebugLogManager.logEvent('limitless_stored_frames_dropped', {
+                      'frames': pageFrames.length,
+                      'pageIndex': null,
+                      'drainActive': _batchDrainActive,
+                    });
                   } else {
                     audioBatches.add((pageFrames, !(_batchDrainActive && !_isBatchMode)));
                   }

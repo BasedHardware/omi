@@ -193,17 +193,18 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
             w.device == deviceId &&
             w.storage == WalStorage.flashPage &&
             w.status == WalStatus.miss &&
-            w.storageOffset <= _newestPage &&
+            w.storageOffset <= _newestPage + 1 &&
             w.storageTotalBytes >= _oldestPage)
         .fold<Wal?>(null, (best, wal) => best == null || wal.storageOffset > best.storageOffset ? wal : best);
     final startPage = listed != null && listed.storageOffset > _oldestPage ? listed.storageOffset : _oldestPage;
+    final awaitingDurableAck = listed != null && listed.storageOffset == _newestPage + 1;
 
     // Each flash page contains ~1.4 seconds of audio
     pageCount = _newestPage - startPage + 1;
-    if (pageCount <= 0) return [];
-    int estimatedSeconds = (pageCount * secondsPerFlashPage).round();
+    if (pageCount <= 0 && !awaitingDurableAck) return [];
+    int estimatedSeconds = awaitingDurableAck ? listed.seconds : (pageCount * secondsPerFlashPage).round();
 
-    if (pageCount > 30) {
+    if (pageCount > 30 || awaitingDurableAck) {
       // Wal.id is device_timerStart. Reuse the previous recording identity when
       // the refreshed device range overlaps its locally pending page range.
       int timerStart = listed?.timerStart ?? DateTime.now().millisecondsSinceEpoch ~/ 1000 - estimatedSeconds;
@@ -242,6 +243,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
   @override
   Future start() async {
     _wals = await _getMissingWals();
+    if (_wals.isEmpty) _lastStallReason = FlashSyncStallReason.none;
     listener.onWalUpdated();
   }
 
@@ -255,12 +257,14 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
     // in flight so we never swap the list out from under an active sync.
     if (_isSyncing) return;
     _wals = await _getMissingWals();
+    if (_wals.isEmpty) _lastStallReason = FlashSyncStallReason.none;
     listener.onWalUpdated();
   }
 
   @override
   Future stop() async {
     _wals = [];
+    _lastStallReason = FlashSyncStallReason.none;
     await _pageStream?.cancel();
   }
 
@@ -427,6 +431,20 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
           lastAcknowledgedIndex = acknowledged;
         }
         return acknowledged;
+      }
+
+      // A prior pass may have persisted every page but received only a capped
+      // ACK. Retry the ACK from the saved cursor without requesting or saving
+      // the same audio again.
+      if (wal.storageOffset == endPage + 1) {
+        final acknowledgedIndex = await acknowledgePage(endPage);
+        await limitlessConnection.enableRealTimeMode();
+        _isSyncing = false;
+        listener.onWalUpdated();
+        if (acknowledgedIndex != null && acknowledgedIndex >= endPage) return true;
+        final statusAfterStall = await _getStorageStatus(deviceId);
+        _lastStallReason = classifyStall(endPageAtEnumeration: endPage, statusAfterStall: statusAfterStall);
+        return false;
       }
 
       final DateTime syncStartTime = DateTime.now();
@@ -821,6 +839,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
 
   @override
   void setDevice(BtDevice? device) async {
+    _lastStallReason = FlashSyncStallReason.none;
     _device = device;
     if (device != null && device.type == DeviceType.limitless) {
       final wals = await _getMissingWals();

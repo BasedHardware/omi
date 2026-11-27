@@ -1031,6 +1031,78 @@ void main() {
         reason: 'a completed retry must not report the first pass\'s transient unknown stall');
   });
 
+  test('FlashPage: an all-durable held-ACK retry keeps the cursor without saving audio twice', () async {
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final card = _FakeLimitless(
+      pages: [
+        for (var index = 100; index <= 131; index++)
+          {
+            'opus_frames': [
+              [index & 0xff, 2, 3]
+            ],
+            'timestamp_ms': nowMs,
+            'max_index': index,
+          },
+      ],
+    )
+      ..flashStatus = {
+        'oldest_flash_page': 100,
+        'newest_flash_page': 131,
+        'current_storage_session': 1,
+      }
+      ..ackLimit = 1;
+    final local = _FakeLocalSync();
+    final sync = FlashPageWalSyncImpl(_Listener())
+      ..testDevice = BtDevice(id: 'limitless-1', name: 'Limitless', type: DeviceType.limitless, rssi: -40)
+      ..testConnection = card
+      ..testPollInterval = Duration.zero
+      ..testMaxEmptyExtractions = 1;
+    sync.setLocalSync(local);
+    addTearDown(sync.stop);
+
+    await sync.refreshWalsFromDevice();
+    await sync.syncAll();
+
+    expect(local.added, hasLength(1), reason: 'the initial pass durably stores the flash pages once');
+    expect(sync.testWals, hasLength(1), reason: 'the capped ACK must leave an ACK-only pending WAL');
+    expect(sync.testWals.single.storageOffset, 132);
+
+    await sync.refreshWalsFromDevice();
+    await sync.syncAll();
+
+    expect(local.added, hasLength(1), reason: 'retrying the held ACK must not persist the pages again');
+    expect(sync.testWals.single.storageOffset, 132);
+  });
+
+  test('FlashPage: disconnect clears a prior unknown stall reason', () async {
+    final card = _FakeLimitless(pages: [null]);
+    final wal = Wal(
+      timerStart: 1700000000,
+      codec: BleAudioCodec.opus,
+      seconds: 5,
+      status: WalStatus.miss,
+      storage: WalStorage.flashPage,
+      device: 'limitless-1',
+      fileNum: 0,
+      storageOffset: 0,
+      storageTotalBytes: 0,
+    );
+    final sync = FlashPageWalSyncImpl(_Listener())
+      ..testDevice = BtDevice(id: 'limitless-1', name: 'Limitless', type: DeviceType.limitless, rssi: -40)
+      ..testConnection = card
+      ..testWals = [wal]
+      ..testMaxEmptyExtractions = 1
+      ..testPollInterval = Duration.zero;
+    addTearDown(sync.stop);
+
+    await expectLater(sync.syncWal(wal: wal), throwsException);
+    expect(sync.lastStallReason, FlashSyncStallReason.unknown);
+
+    sync.setDevice(null);
+
+    expect(sync.lastStallReason, FlashSyncStallReason.none);
+  });
+
   test('Limitless: a failed durable save fails the transfer — no ACK, wal stays miss', () async {
     const ts1 = 1700000000000;
     final card = _FakeLimitless(

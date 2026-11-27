@@ -547,6 +547,39 @@ void main() {
     expect(connection.watchStarts, 1);
   });
 
+  test('a cached kill retries a failed periodic refresh before the next five-minute cadence', () async {
+    const flag = 'android-custom-live-audio-recovery-kill';
+    final adapter = await setRefactorFlags({flag: true});
+    addTearDown(AnalyticsManager.resetForTesting);
+    world.controller.updateRecordingDevice(null);
+    await world.settle();
+    SharedPreferencesUtil().uid = 'capture-test-owner';
+    await SharedPreferencesUtil().saveCustomSttConfig(
+      const CustomSttConfig(provider: SttProvider.customLive, url: 'wss://local-stt.example.test'),
+    );
+    final device =
+        BtDevice(id: 'limitless-cached-kill-retry', name: 'Limitless', type: DeviceType.limitless, rssi: -40);
+    final connection = _WatchedLimitlessConnection();
+    world.deviceConnection = connection;
+    await world.controller.streamDeviceRecording(device: device);
+    await world.settle();
+    expect(connection.watchStarts, 0);
+
+    adapter.flags[flag] = false;
+    adapter.cachedFlags[flag] = true;
+    adapter.reloadFailuresRemaining = 1;
+    await world.elapse(const Duration(minutes: 5));
+    await world.settle();
+    expect(connection.watchStarts, 0, reason: 'a failed refresh keeps the confirmed kill active');
+
+    await world.elapse(const Duration(seconds: 1));
+    await world.settle();
+
+    expect(connection.captureIsCurrent?.call(), isTrue,
+        reason: 'the bounded retry sees the remote disable without waiting another five minutes');
+    expect(connection.watchStarts, 1);
+  });
+
   test('a new capture restores recovery after two bounded flag-read failures', () async {
     await setRefactorFlags({}, reloadFailures: 2);
     addTearDown(AnalyticsManager.resetForTesting);
@@ -640,6 +673,41 @@ void main() {
     expect(connection.watchRestarts, contains(true));
     expect(connection.watchStarts, 2, reason: 'the restart replaces the existing recovery binding');
     expect(connection.reactivationIsCurrent, isNot(same(disconnectedReactivationCheck)));
+    expect(connection.reactivationIsCurrent?.call(), isTrue);
+  });
+
+  test('socket reconnect restart survives a pending kill-switch refresh', () async {
+    const flag = 'android-custom-live-audio-recovery-kill';
+    await setRefactorFlags({flag: false});
+    addTearDown(AnalyticsManager.resetForTesting);
+    world.controller.updateRecordingDevice(null);
+    await world.settle();
+    SharedPreferencesUtil().uid = 'capture-test-owner';
+    await SharedPreferencesUtil().saveCustomSttConfig(
+      const CustomSttConfig(provider: SttProvider.customLive, url: 'wss://local-stt.example.test'),
+    );
+    final device = BtDevice(id: 'limitless-pending-restart', name: 'Limitless', type: DeviceType.limitless, rssi: -40);
+    final connection = _WatchedLimitlessConnection();
+    world.deviceConnection = connection;
+    await world.controller.streamDeviceRecording(device: device);
+    await world.settle();
+    expect(connection.watchStarts, 1);
+
+    world.setConnected(false);
+    world.socket!.emitClose();
+    await world.settle();
+    await setRefactorFlags({}, reloadFailures: 2);
+    await world.settle();
+    expect(connection.captureIsCurrent, isNull, reason: 'the flag-context read leaves the gate pending');
+
+    world.setConnected(true);
+    await world.controller.reconnectActiveCaptureForTesting();
+    await world.settle();
+    await world.elapse(const Duration(seconds: 1));
+    await world.settle();
+
+    expect(connection.watchRestarts, contains(true));
+    expect(connection.watchStarts, 2, reason: 'the latched reconnect restart replaces the spent monitor');
     expect(connection.reactivationIsCurrent?.call(), isTrue);
   });
 
