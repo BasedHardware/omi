@@ -991,7 +991,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
             ? InkWell(
                 borderRadius: OmiRadius.pillAll,
                 onTap: _askOmi,
-                child: FooterGlassSurface(height: 56, child: Text(label, style: OmiType.headline)),
+                child: FooterGlassSurface(height: 56, onTap: _askOmi, child: Text(label, style: OmiType.headline)),
               )
             : Ink(
                 height: 56,
@@ -1028,6 +1028,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
                 ? FooterGlassSurface(
                     height: 56,
                     circle: true,
+                    onTap: _askOmi,
                     child: FaIcon(kAskOmiGlyph, size: 20, color: OmiColors.textPrimary),
                   )
                 : SizedBox.square(

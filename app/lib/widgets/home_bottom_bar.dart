@@ -110,7 +110,7 @@ class HomeAskAnythingButton extends StatelessWidget {
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
         child: FooterGlass.enabled
-            ? FooterGlassSurface(height: kHomeChatBarHeight, child: text)
+            ? FooterGlassSurface(height: kHomeChatBarHeight, onTap: onTap, child: text)
             : Container(
                 height: kHomeChatBarHeight,
                 alignment: Alignment.center,

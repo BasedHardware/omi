@@ -5,6 +5,8 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart' show GlassButton;
+import 'package:omi/widgets/footer_glass.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
@@ -1594,6 +1596,32 @@ void main() {
       await tester.pump();
       await tester.pump();
       expect(find.descendant(of: title, matching: find.text('Launch checklist')), findsOneWidget);
+      await _dispose(tester, home);
+    });
+  });
+
+  testWidgets('glass footer (iPhone): End is a glass button that fits a 320pt bar and ends the capture',
+      (tester) async {
+    FooterGlass.debugOverride = true;
+    addTearDown(() => FooterGlass.debugOverride = null);
+    await withClock(Clock.fixed(_now), () async {
+      final home = await _pumpHome(tester, v3: true, size: const Size(320, 640));
+      home.publishManualEnds();
+      await tester.tap(find.text('Launch checklist'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(tester.takeException(), isNull, reason: 'no overflow in the bar');
+      final end = find.byKey(const Key('live_conversation_end'));
+      expect(find.descendant(of: end, matching: find.byType(GlassButton)), findsOneWidget);
+      expect(find.descendant(of: end, matching: find.text('End Conversation')), findsOneWidget);
+      expect(tester.getSize(end).width, lessThanOrEqualTo(320 * 0.45 + 2));
+      expect(tester.getSize(end).height, 56);
+      // Filtered Home cannot show Processing, so a successful End stays on detail.
+      home.conversations.showStarredOnly = true;
+      await tester.tap(end);
+      expect(home.capture.endCalls, 1);
+      await tester.pump(const Duration(milliseconds: 500));
       await _dispose(tester, home);
     });
   });

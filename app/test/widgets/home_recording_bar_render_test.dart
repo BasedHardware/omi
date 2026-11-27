@@ -13,6 +13,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart' show GlassContainer;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nested/nested.dart';
 import 'package:provider/provider.dart';
@@ -267,6 +268,10 @@ void main() {
       expect(find.byKey(const ValueKey('home_recording_bar_undo')), findsOneWidget);
       expect(find.text('Recording with your phone'), findsOneWidget);
       await capture(tester, '${_n(base + 1)}-mobile-ios-recording-bar-undo-$mode.png');
+
+      // This test runs as iOS, so the bar is the glass one: a static glass surface holding its own buttons.
+      expect(find.descendant(of: find.byType(HomeRecordingBar), matching: find.byType(GlassContainer)), findsOneWidget);
+      expect(tester.getSize(find.byType(HomeRecordingBar)).width, 393 - 32);
 
       // Four minutes in: Wrap Up.
       phone.startPhone(const Duration(minutes: 4, seconds: 12), lines: [

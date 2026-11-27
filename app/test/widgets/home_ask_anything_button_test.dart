@@ -93,7 +93,7 @@ void main() {
         );
         await tester.pump(const Duration(milliseconds: 300));
 
-        expect(find.byType(GlassContainer), findsOneWidget);
+        expect(find.byType(GlassButton), findsOneWidget, reason: 'a glass button, so it answers a press');
         expect(find.text('Ask anything'), findsOneWidget);
         expect(find.byType(FaIcon), findsNothing);
         expect(tester.getSize(find.byKey(const ValueKey('home_ask_omi_bar'))), const Size(300, kHomeChatBarHeight));

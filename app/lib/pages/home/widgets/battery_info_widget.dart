@@ -458,7 +458,7 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
             // "Record with this phone": a neutral circle with a white dot, a stop square while the
             // phone records. The ⌄ badge opens the other ways to record.
             child: FooterGlass.enabled
-                ? FooterGlassSurface(height: 62, circle: true, child: glyph)
+                ? FooterGlassSurface(height: 62, circle: true, onTap: () => _startRecording(context), child: glyph)
                 : Container(
                     width: 62,
                     height: 62,

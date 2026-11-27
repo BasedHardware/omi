@@ -132,6 +132,48 @@ class _LiveConversationEndButtonState extends State<LiveConversationEndButton> {
       child: Text(label,
           maxLines: 1, overflow: TextOverflow.ellipsis, style: OmiType.headline.copyWith(color: OmiColors.danger)),
     );
+    Future<void> end() async {
+      final capture = context.read<CaptureProvider>();
+      // Checked again at the tap: the capture may have moved on since the last build.
+      final v3 = context.read<ConversationsV3Provider?>();
+      if (_ended ||
+          !LiveConversationEndButton.phoneCaptures(conversation, capture,
+              currentLiveId: v3?.live?.id, liveCaptureDeviceId: v3?.live?.v3?.captureDeviceId)) {
+        return;
+      }
+      _ended = true;
+      HapticFeedback.mediumImpact();
+      final setEndSuppressed = widget.onEndSuppressionChanged;
+      setEndSuppressed?.call(true);
+      final previousFinish = v3?.finishRow;
+      final failuresAtTap = v3?.finishFailures;
+      var started = false;
+      var closed = false;
+      try {
+        final finish =
+            capture.forceProcessingCurrentConversation(manualFinish: true, liveConversationId: conversation.id);
+        started = v3?.finishRow != null && !identical(v3!.finishRow, previousFinish);
+        await finish;
+        closed = true;
+      } catch (_) {
+        // The close kept the capture. End stays on detail so the user can retry it.
+        return;
+      } finally {
+        // A closed window with a published finish stays latched; only a failed close restores End.
+        if (!(closed && started)) {
+          _ended = false;
+          setEndSuppressed?.call(false);
+        } else {
+          _latchedFailures = failuresAtTap;
+        }
+      }
+      if (!context.mounted || !started || ModalRoute.of(context)?.isCurrent != true) return;
+      // A filtered Home cannot show the Processing row; the result lands on this detail instead.
+      if (context.read<ConversationProvider?>()?.showsDefaultHome != true) return;
+      context.read<HomeProvider?>()?.showNewestOnHome();
+      HomeNavigation.returnHome(context);
+    }
+
     return Padding(
       padding: EdgeInsetsDirectional.only(start: widget.leadingGap),
       child: Semantics(
@@ -152,53 +194,14 @@ class _LiveConversationEndButtonState extends State<LiveConversationEndButton> {
                   ),
             child: InkWell(
               borderRadius: OmiRadius.pillAll,
-              onTap: () async {
-                final capture = context.read<CaptureProvider>();
-                // Checked again at the tap: the capture may have moved on since the last build.
-                final v3 = context.read<ConversationsV3Provider?>();
-                if (_ended ||
-                    !LiveConversationEndButton.phoneCaptures(conversation, capture,
-                        currentLiveId: v3?.live?.id, liveCaptureDeviceId: v3?.live?.v3?.captureDeviceId)) {
-                  return;
-                }
-                _ended = true;
-                HapticFeedback.mediumImpact();
-                final setEndSuppressed = widget.onEndSuppressionChanged;
-                setEndSuppressed?.call(true);
-                final previousFinish = v3?.finishRow;
-                final failuresAtTap = v3?.finishFailures;
-                var started = false;
-                var closed = false;
-                try {
-                  final finish = capture.forceProcessingCurrentConversation(
-                      manualFinish: true, liveConversationId: conversation.id);
-                  started = v3?.finishRow != null && !identical(v3!.finishRow, previousFinish);
-                  await finish;
-                  closed = true;
-                } catch (_) {
-                  // The close kept the capture. End stays on detail so the user can retry it.
-                  return;
-                } finally {
-                  // A closed window with a published finish stays latched; only a failed close restores End.
-                  if (!(closed && started)) {
-                    _ended = false;
-                    setEndSuppressed?.call(false);
-                  } else {
-                    _latchedFailures = failuresAtTap;
-                  }
-                }
-                if (!context.mounted || !started || ModalRoute.of(context)?.isCurrent != true) return;
-                // A filtered Home cannot show the Processing row; the result lands on this detail instead.
-                if (context.read<ConversationProvider?>()?.showsDefaultHome != true) return;
-                context.read<HomeProvider?>()?.showNewestOnHome();
-                HomeNavigation.returnHome(context);
-              },
+              onTap: end,
               // At most half the bar, so Ask Omi keeps its room; a long translation scales down on one
               // line, then ellipsizes, rather than overflowing a 320pt screen.
               child: ConstrainedBox(
                 constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.45),
                 child: FooterGlass.enabled
-                    ? FooterGlassSurface(height: 56, padding: const EdgeInsets.symmetric(horizontal: 16), child: text)
+                    ? FooterGlassSurface(
+                        height: 56, padding: const EdgeInsets.symmetric(horizontal: 16), onTap: end, child: text)
                     : Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: Center(child: text)),
               ),
             ),

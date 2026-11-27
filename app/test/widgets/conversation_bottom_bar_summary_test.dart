@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart' show FaIcon;
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart' show GlassContainer;
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart' show GlassButton, GlassContainer;
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/conversation.dart';
@@ -136,7 +136,8 @@ void main() {
     await _pumpBar(tester, provider, selectedTab: ConversationTab.transcript, onAskOmi: () => asked++);
     final player = find.byKey(const ValueKey('detail_audio_player'));
     final ask = find.byKey(const ValueKey('detail_ask_omi_round'));
-    expect(find.byType(GlassContainer), findsNWidgets(2), reason: 'the player and the round Ask button');
+    expect(find.byType(GlassContainer), findsOneWidget, reason: 'the player is a static surface');
+    expect(find.byType(GlassButton), findsOneWidget, reason: 'the round Ask button answers a press');
     expect(find.bySemanticsLabel('Play'), findsOneWidget);
     expect(tester.getSize(player).height, 56);
     expect(tester.getSize(ask), const Size(56, 56));
@@ -145,7 +146,7 @@ void main() {
 
     await _pumpBar(tester, provider, onAskOmi: () => asked++);
     final bar = find.byKey(const ValueKey('detail_ask_omi'));
-    expect(find.byType(GlassContainer), findsOneWidget);
+    expect(find.byType(GlassButton), findsOneWidget);
     expect(find.text('Ask Omi'), findsOneWidget);
     expect(tester.getSize(bar).height, 56);
     await tester.tap(bar);

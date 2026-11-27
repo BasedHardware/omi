@@ -32,7 +32,7 @@ import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/widgets/footer_glass.dart';
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart' show GlassContainer;
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart' show GlassButton;
 
 enum _Live { idle, idleDeviceConnected, pendant, pendantPaused, pendantBatch, phone, phoneAfterPendant }
 
@@ -745,7 +745,7 @@ void main() {
       FooterGlass.debugOverride = true;
       addTearDown(() => FooterGlass.debugOverride = null);
       await pump(tester, const HomeRecordButton(), capture: _Capture(_Live.idle));
-      expect(find.byType(GlassContainer), findsOneWidget);
+      expect(find.byType(GlassButton), findsOneWidget);
       expect(tester.getSize(find.byType(HomeRecordButton)), const Size(62, 62));
       expect(find.bySemanticsLabel(en.startRecording), findsOneWidget);
       await pump(tester, const HomeRecordButton(), capture: _Capture(_Live.phone));
