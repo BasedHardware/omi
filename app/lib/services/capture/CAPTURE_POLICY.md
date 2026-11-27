@@ -38,8 +38,10 @@ an older authorization cannot resume sending or writing after mute/unmute.
 On supported pendants, Device Diagnostics records the requested mute bit, the
 GATT readback when valid, and the phone timestamp of that readback. Compare
 the event's connection epoch and time with nearby ring samples and their
-decoded device capture timestamps. The bounded current-process log records
-observations only. A missing event does not establish the pendant's state.
+decoded device capture timestamps. The export keeps the latest confirmed and
+unconfirmed readback per device for the current app process, even after ring
+activity fills the recent event log. A missing observation does not establish
+the pendant's state.
 
 The transition is conservative: absent canonical policy reads the OR of the two
 old mute preferences. Dart initialization persists that value before deleting
