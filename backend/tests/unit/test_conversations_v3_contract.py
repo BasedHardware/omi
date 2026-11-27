@@ -472,8 +472,10 @@ def test_unbound_resolver_reports_unknown_holdout_membership(monkeypatch):
     monkeypatch.setattr(policy, '_membership_resolver', None)
     with pytest.raises(policy.RolloutCohortUnavailable):
         policy.in_rollout_cohort('synthetic', policy.V3_HOLDOUT_COHORT)
-    # Other unbound cohorts keep reading as a plain miss.
-    assert policy.in_rollout_cohort('synthetic', 'conversations-v3') is False
+    # Every other unbound cohort keeps reading as a plain miss.
+    raising = {'dream-agent', 'go-finalization', policy.V3_HOLDOUT_COHORT}
+    for name in sorted(set(policy.COHORT_ENVS) - raising):
+        assert policy.in_rollout_cohort('synthetic', name) is False, name
 
 
 def test_unbound_resolver_admits_holdout_with_fallback(monkeypatch):
@@ -485,7 +487,16 @@ def test_unbound_resolver_admits_holdout_with_fallback(monkeypatch):
     monkeypatch.setattr(switch, 'in_rollout_cohort', policy.in_rollout_cohort)
     monkeypatch.setattr(switch, 'record_fallback', lambda **kw: fallbacks.append(kw))
     assert switch.v3_intake_held_out('synthetic') is False
-    assert [(f['from_mode'], f['reason']) for f in fallbacks] == [('v3_holdout', 'unavailable')]
+    assert fallbacks == [
+        {
+            'component': 'feature_flags',
+            'from_mode': 'v3_holdout',
+            'to_mode': 'admitted',
+            'reason': 'unavailable',
+            'outcome': 'degraded',
+            'log': switch.logger,
+        }
+    ]
 
 
 def test_rollout_cohort_script_accepts_holdout_cohort(tmp_path, capsys):
