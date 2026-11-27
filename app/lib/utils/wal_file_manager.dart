@@ -30,6 +30,18 @@ class WalFileManager {
   // Covers worker seeding/writes, legacy writes, and load-time quarantine/repair.
   // Both writers use the same main/backup temporary paths.
   static final _saveLock = Pool(1);
+  static Timer? _liveWalReceiptRetirementTimer;
+  static bool _liveWalReceiptRetirementRunning = false;
+  static bool _liveWalReceiptRetirementRequested = false;
+
+  @visibleForTesting
+  static Duration liveWalReceiptMaintenanceDelay = const Duration(seconds: 30);
+
+  static void _cancelLiveWalReceiptMaintenance() {
+    _liveWalReceiptRetirementTimer?.cancel();
+    _liveWalReceiptRetirementTimer = null;
+    _liveWalReceiptRetirementRequested = false;
+  }
 
   // Revokes per-read custody snapshots before any index mutation, including
   // worker writes and recovery. A stale row must never hide a corruption or
@@ -38,6 +50,7 @@ class WalFileManager {
   static int get indexRevision => _indexRevision;
 
   static Future<void> init() async {
+    _cancelLiveWalReceiptMaintenance();
     _indexRevision++;
     final directory = await getApplicationDocumentsDirectory();
     _walFile = File('${directory.path}/$_walFileName');
@@ -50,15 +63,74 @@ class WalFileManager {
   /// commit. This reader deliberately excludes journal discovery/repair.
   static Future<List<Wal>> loadIndexedWals() => _saveLock.withResource(_loadIndexedWals);
 
-  /// Only a startup read can retire receipts that both restart indexes
-  /// already cover. Use the index lock so neither file can change mid-proof.
-  static Future<void> retireCommittedLiveWalReceipts() => _saveLock.withResource(() async {
-        final primary = _walFile;
-        final backup = _walBackupFile;
-        if (primary != null && backup != null) {
-          await LiveWalReceipt.retireCommitted(primary, backup);
-        }
-      });
+  /// Runs one immediate page during startup. Further pages are scheduled in
+  /// the background, and normal index writes also request maintenance.
+  static Future<void> retireCommittedLiveWalReceipts() async {
+    final hasMore = await _saveLock.withResource(_retireCommittedLiveWalReceiptsLocked);
+    if (hasMore) _continueLiveWalReceiptRetirement();
+  }
+
+  static Future<bool> _retireCommittedLiveWalReceiptsLocked() async {
+    final primary = _walFile;
+    final backup = _walBackupFile;
+    if (primary == null || backup == null) return false;
+    return LiveWalReceipt.retireCommitted(primary, backup);
+  }
+
+  static void _scheduleLiveWalReceiptRetirement() {
+    if (_liveWalReceiptRetirementRunning || _liveWalReceiptRetirementTimer != null) {
+      _liveWalReceiptRetirementRequested = true;
+      return;
+    }
+    _armLiveWalReceiptRetirement();
+  }
+
+  static void _continueLiveWalReceiptRetirement() {
+    if (_liveWalReceiptRetirementRunning || _liveWalReceiptRetirementTimer != null) return;
+    _armLiveWalReceiptRetirement();
+  }
+
+  static void _armLiveWalReceiptRetirement() {
+    _liveWalReceiptRetirementTimer = Timer(liveWalReceiptMaintenanceDelay, () {
+      _liveWalReceiptRetirementTimer = null;
+      unawaited(_runScheduledLiveWalReceiptRetirement());
+    });
+  }
+
+  static Future<void> _runScheduledLiveWalReceiptRetirement() async {
+    if (_liveWalReceiptRetirementRunning) {
+      _liveWalReceiptRetirementRequested = true;
+      return;
+    }
+    _liveWalReceiptRetirementRunning = true;
+    var hasMore = false;
+    try {
+      hasMore = await _saveLock.withResource(_retireCommittedLiveWalReceiptsLocked);
+    } catch (_) {
+      // A maintenance pass never changes the result of an index write.
+    } finally {
+      _liveWalReceiptRetirementRunning = false;
+      if (hasMore) {
+        _continueLiveWalReceiptRetirement();
+      } else if (_liveWalReceiptRetirementRequested) {
+        _liveWalReceiptRetirementRequested = false;
+        _continueLiveWalReceiptRetirement();
+      }
+    }
+  }
+
+  @visibleForTesting
+  static bool get liveWalReceiptMaintenanceScheduledForTesting => _liveWalReceiptRetirementTimer != null;
+
+  @visibleForTesting
+  static Future<void> runLiveWalReceiptMaintenanceForTesting() async {
+    _liveWalReceiptRetirementTimer?.cancel();
+    _liveWalReceiptRetirementTimer = null;
+    await _runScheduledLiveWalReceiptRetirement();
+  }
+
+  @visibleForTesting
+  static void cancelLiveWalReceiptMaintenanceForTesting() => _cancelLiveWalReceiptMaintenance();
 
   static Future<int> purgeUnindexedLiveWalReceipts({
     required Set<String> owners,
@@ -132,11 +204,13 @@ class WalFileManager {
         return WalIndexWorker.start(_walFile!.path,
             seedFromDisk: seedFromDisk,
             seedPath: seedPath,
-            beforeWriteForTesting: beforeWriteForTesting,
-            serialize: (write) => _saveLock.withResource(() async {
-                  _indexRevision++;
-                  await write();
-                }));
+            beforeWriteForTesting: beforeWriteForTesting, serialize: (write) async {
+          await _saveLock.withResource(() async {
+            _indexRevision++;
+            await write();
+          });
+          _scheduleLiveWalReceiptRetirement();
+        });
       });
 
   static ({List<Wal> wals, bool invalid}) _decodeIndex(String content, String path) {
@@ -252,6 +326,7 @@ class WalFileManager {
     await _recordWrite(_walFile!);
 
     Logger.debug('Successfully saved ${wals.length} WALs to file');
+    _scheduleLiveWalReceiptRetirement();
     return true;
   }
 

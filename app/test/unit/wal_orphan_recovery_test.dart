@@ -73,12 +73,34 @@ void main() {
   Future<void> json(String name, Object value) => File('${dir.path}/$name').writeAsString(jsonEncode(value));
   Future<File> audio(String name, {List<int>? bytes}) => File('${dir.path}/$name')
       .writeAsBytes(bytes ?? List.generate(50, (_) => [1, 0, 0, 0, 7]).expand((v) => v).toList());
+  Future<Wal> committedReceipt(int seconds) async {
+    final id = LiveWalReceipt.newId();
+    final fileName = LiveWalReceipt.uniqueName(name(now - seconds), id);
+    final bytes = [seconds & 0xff, 1, 2, 3];
+    final wal = Wal(
+      codec: BleAudioCodec.opusFS320,
+      timerStart: now - seconds,
+      seconds: 1,
+      totalFrames: 1,
+      status: WalStatus.synced,
+      storage: WalStorage.disk,
+      filePath: fileName,
+      ownerUid: 'owner-a',
+      liveFileWriteId: id,
+      capturedOnDeviceOnly: false,
+    );
+    wal.fileSha256 = await LiveWalReceipt.prepare(File('${dir.path}/$fileName'), wal, id, bytes);
+    await File('${dir.path}/$fileName').writeAsBytes(bytes, flush: true);
+    return wal;
+  }
+
   Future<RecordingOrphanCensus> census() => captureRecordingCensus(
       documents: dir.path, memoryBuckets: {'active': []}, phoneSeconds: now, currentOwner: 'owner-a');
   setUp(() async {
     SharedPreferences.setMockInitialValues({'uid': 'owner-a'});
     await SharedPreferencesUtil.init();
     SyncRateLimiter.instance.clear();
+    WalFileManager.liveWalReceiptMaintenanceDelay = const Duration(days: 1);
     dir = await Directory.systemTemp.createTemp('orphan-recovery-');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(const MethodChannel('plugins.flutter.io/path_provider'), (_) async => dir.path);
@@ -88,6 +110,7 @@ void main() {
     });
   });
   tearDown(() async {
+    WalFileManager.cancelLiveWalReceiptMaintenanceForTesting();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(const MethodChannel('plugins.flutter.io/path_provider'), null);
     await dir.delete(recursive: true);
@@ -761,6 +784,87 @@ void main() {
     expect(await receiptFor(filename).exists(), isFalse);
     expect(await file.readAsBytes(), orderedEquals(bytes));
   }, skip: LiveWalReceipt.writeEnabled ? 'Run with --dart-define=OMI_LIVE_WAL_RECEIPT_OFF=true' : false);
+
+  test('committed receipt retirement advances a bounded durable cursor across launches', () async {
+    final wals = <Wal>[];
+    for (var i = 0; i < 130; i++) {
+      wals.add(await committedReceipt(i + 1));
+    }
+    final index = {
+      'version': 1,
+      'timestamp': now,
+      'wals': [for (final wal in wals) wal.toJson()]
+    };
+    await json('wals.json', index);
+    await json('wals_backup.json', index);
+    final receipts = LiveWalReceipt.directory(dir);
+
+    expect(await LiveWalReceipt.retireCommitted(File('${dir.path}/wals.json'), File('${dir.path}/wals_backup.json')),
+        isTrue);
+    expect(
+        await receipts.list(followLinks: false).where((entry) => entry is File && entry.path.endsWith('.json')).length,
+        2);
+
+    await WalFileManager.init(); // A new process resumes from the persisted cursor.
+    expect(await LiveWalReceipt.retireCommitted(File('${dir.path}/wals.json'), File('${dir.path}/wals_backup.json')),
+        isFalse);
+    expect(
+        await receipts.list(followLinks: false).where((entry) => entry is File && entry.path.endsWith('.json')).length,
+        0);
+    expect(await File('${receipts.path}/.retire-cursor').exists(), isFalse);
+    for (final wal in wals) {
+      expect(await File('${dir.path}/${wal.filePath}').exists(), isTrue);
+    }
+  });
+
+  test('receipt retirement ends a sweep after the final page when records are ineligible', () async {
+    final wals = <Wal>[];
+    for (var i = 0; i < 129; i++) {
+      wals.add(await committedReceipt(i + 1));
+    }
+    await json('wals.json', {
+      'version': 1,
+      'timestamp': now,
+      'wals': [wals.first.toJson()]
+    });
+    await json('wals_backup.json', {
+      'version': 1,
+      'timestamp': now,
+      'wals': [wals.last.toJson()]
+    });
+    final receipts = LiveWalReceipt.directory(dir);
+
+    expect(await LiveWalReceipt.retireCommitted(File('${dir.path}/wals.json'), File('${dir.path}/wals_backup.json')),
+        isTrue);
+    expect(await LiveWalReceipt.retireCommitted(File('${dir.path}/wals.json'), File('${dir.path}/wals_backup.json')),
+        isFalse);
+    expect(await File('${receipts.path}/.retire-cursor').exists(), isFalse);
+    expect(
+        await receipts.list(followLinks: false).where((entry) => entry is File && entry.path.endsWith('.json')).length,
+        129);
+  });
+
+  test('normal WAL index worker writes schedule receipt retirement', () async {
+    final wal = await committedReceipt(1);
+    final index = {
+      'version': 1,
+      'timestamp': now,
+      'wals': [wal.toJson()]
+    };
+    await json('wals.json', index);
+    await json('wals_backup.json', index);
+    final worker = await WalFileManager.createIndexWorker(seedFromDisk: true);
+    try {
+      await worker.apply({0: wal.toJson()}, []);
+    } finally {
+      worker.close();
+    }
+
+    expect(WalFileManager.liveWalReceiptMaintenanceScheduledForTesting, isTrue);
+    await WalFileManager.runLiveWalReceiptMaintenanceForTesting();
+    expect(await receiptFor(wal.filePath!).exists(), isFalse);
+    expect(await File('${dir.path}/${wal.filePath}').exists(), isTrue);
+  });
 
   for (final delta in [false, true]) {
     test('retire only after both restart indexes cover the transaction (delta $delta)', () async {

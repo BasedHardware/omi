@@ -27,6 +27,7 @@ class LiveWalReceipt {
   static const _pending = '.json';
   static const _stagingDirectory = 'staging';
   static const _retiredDirectory = 'retired';
+  static const _retirementCursorName = '.retire-cursor';
   static const _maxEntries = 128;
   static const _maxReceiptBytes = 16 * 1024;
   static const _maxReplayBytes = 32 * 1024 * 1024;
@@ -386,23 +387,69 @@ class LiveWalReceipt {
     }
   }
 
-  /// Run only after both restart index generations have durably committed the
-  /// matching record. Best effort: a later startup can try again.
-  static Future<void> retireCommitted(File primaryFile, File backupFile) async {
+  static Future<String?> _readRetirementCursor(Directory pending) async {
+    try {
+      final cursor = (await File(path.join(pending.path, _retirementCursorName)).readAsString()).trim();
+      return _safeName(cursor) && isManagedBasename(cursor) ? cursor : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<bool> _writeRetirementCursor(Directory pending, String? cursor) async {
+    final file = File(path.join(pending.path, _retirementCursorName));
+    try {
+      if (cursor == null) {
+        if (await file.exists()) await file.delete();
+        return true;
+      }
+      if (!_safeName(cursor) || !isManagedBasename(cursor)) return false;
+      final temporary = File('${file.path}.tmp');
+      await temporary.writeAsString(cursor, flush: true);
+      await temporary.rename(file.path);
+      return true;
+    } catch (_) {
+      // Losing the cursor only repeats a safe page; it cannot retire audio.
+      return false;
+    }
+  }
+
+  /// Run after both restart index generations have durably committed the
+  /// matching record. One bounded page is processed per call. The cursor is
+  /// durable so repeated calls and app launches eventually visit the full set.
+  static Future<bool> retireCommitted(File primaryFile, File backupFile) async {
     try {
       final pending = directory(backupFile.parent);
-      if (!await pending.exists() || !await primaryFile.exists() || !await backupFile.exists()) return;
+      if (await FileSystemEntity.type(pending.path, followLinks: false) != FileSystemEntityType.directory ||
+          !await primaryFile.exists() ||
+          !await backupFile.exists()) {
+        return false;
+      }
       final main = await _readIndexBindings(primaryFile);
       final backup = await _readIndexBindings(backupFile);
-      if (main.isEmpty || backup.isEmpty) return;
-      var visited = 0;
-      var backupFlushed = false;
+      if (main.isEmpty || backup.isEmpty) return false;
+
+      final after = await _readRetirementCursor(pending);
+      final candidates = SplayTreeMap<String, ({File file, String name})>();
       await for (final entry in pending.list(followLinks: false)) {
         final name = _receiptBasename(entry.path);
-        if (entry is! File || name == null) continue;
+        if (entry is! File || name == null || (after != null && name.compareTo(after) <= 0)) continue;
+        candidates[name] = (file: entry, name: name);
+        if (candidates.length > _maxEntries + 1) candidates.remove(candidates.lastKey());
+      }
+
+      final hasMore = candidates.length > _maxEntries;
+      final page = candidates.entries.take(_maxEntries).toList();
+      if (page.isEmpty) {
+        await _writeRetirementCursor(pending, null);
+        return false;
+      }
+      var backupFlushed = false;
+      for (final candidate in page) {
+        final entry = candidate.value.file;
+        final name = candidate.value.name;
         final primary = main[name], previous = backup[name];
         if (primary == null || previous == null || primary.binding != previous.binding) continue;
-        if (++visited > _maxEntries) break;
         try {
           decodeWalIndexRow(primary.row);
           decodeWalIndexRow(previous.row);
@@ -416,7 +463,10 @@ class LiveWalReceipt {
           await entry.delete();
         } catch (_) {/* Keep uncertain receipts for a later retry. */}
       }
+      final cursorSaved = await _writeRetirementCursor(pending, hasMore ? page.last.key : null);
+      return hasMore && cursorSaved;
     } catch (_) {/* Receipt maintenance never invalidates an index commit. */}
+    return false;
   }
 
   /// A shared file remains on disk after a row is deleted. First retire the
