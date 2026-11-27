@@ -760,7 +760,10 @@ async def test_recovery_request_awaits_paid_intent_before_response_and_projectio
     assert result == {'status': 'recovered'}
     assert events == ['recognition', ('owner_reconcile', True)]
     service.reconcile_async.assert_awaited_once_with(
-        owner_id=store.rows['jobs', 'synthetic']['owner_id'], recovered='synthetic', owner_only=True
+        owner_id=store.rows['jobs', 'synthetic']['owner_id'],
+        recovered='synthetic',
+        owner_only=True,
+        run_held_expiry=False,
     )
     assert service.recovery.recover_async.await_args.args == ('synthetic', store.rows['jobs', 'synthetic']['owner_id'])
     service.recovery.recover.assert_not_called()
@@ -769,6 +772,33 @@ async def test_recovery_request_awaits_paid_intent_before_response_and_projectio
     assert stages[0].startswith('event=batch_recovery_stage stage=recognition duration_seconds=')
     assert stages[1].startswith('event=batch_recovery_stage stage=post_recovery duration_seconds=')
     assert all('synthetic' not in line and store.rows['jobs', 'synthetic']['owner_id'] not in line for line in stages)
+
+
+@pytest.mark.asyncio
+async def test_recovery_request_disables_held_expiry_when_owner_only_falls_back_to_global_maintenance(api, monkeypatch):
+    from database.batch_pipeline_recovery_discovery import RecoveryCaller
+    from routers import batch_pipeline as routes
+    from utils.batch_pipeline import serving
+
+    _, store = api
+    service = routes.serving_for_stage('dev')
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_MODE', 'on')
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_OWNER_ONLY_ENABLED', 'false')
+    service.recovery = Mock()
+    service.recovery.recover_async = AsyncMock(return_value='recovered')
+    service._maintain = Mock()
+    monkeypatch.setattr(serving, 'run_blocking', _inline_serving_call)
+
+    result = await routes.recover_quarantine(
+        routes.RedriveRequest(stage='dev', segment_id='synthetic'), SimpleNamespace(headers={})
+    )
+
+    assert result == {'status': 'recovered'}
+    service._maintain.assert_called_once_with(
+        recover_quarantine=False,
+        recovery_caller=RecoveryCaller.RECONCILE,
+        run_held_expiry=False,
+    )
 
 
 def test_recovery_task_rejects_foreign_stage_and_missing_oidc(api, monkeypatch):

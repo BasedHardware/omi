@@ -179,7 +179,12 @@ async def recover_quarantine(body: RedriveRequest, request: Request):
     if outcome in {'recovered', 'reconciled'}:
         started = time.monotonic()
         try:
-            await service.reconcile_async(owner_id=job['owner_id'], recovered=body.segment_id, owner_only=True)
+            await service.reconcile_async(
+                owner_id=job['owner_id'],
+                recovered=body.segment_id,
+                owner_only=True,
+                run_held_expiry=False,
+            )
         finally:
             logger.info(
                 'event=batch_recovery_stage stage=post_recovery duration_seconds=%.3f', time.monotonic() - started
