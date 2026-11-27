@@ -1381,7 +1381,22 @@ class OmiDeviceConnection extends DeviceConnection {
     if ((features & OmiFeatures.captureMute) == 0) return;
     await transport.writeCharacteristic(settingsServiceUuid, settingsMuteCharacteristicUuid, [muted ? 1 : 0]);
     final confirmed = await transport.readCharacteristic(settingsServiceUuid, settingsMuteCharacteristicUuid);
-    if (confirmed.length != 1 || confirmed.single != (muted ? 1 : 0)) {
+    final observedMuted = confirmed.length != 1
+        ? null
+        : switch (confirmed.single) {
+            0 => false,
+            1 => true,
+            _ => null,
+          };
+    RingCustodyDiagnostics.shared.event(
+      device.id,
+      RingDiagnosticEvent.captureMuteReadback,
+      epoch: _custodyEpoch,
+      requestedMuted: muted,
+      observedMuted: observedMuted,
+      reason: observedMuted == muted ? RingDiagnosticReason.none : RingDiagnosticReason.commandFailed,
+    );
+    if (observedMuted != muted) {
       throw StateError('Device did not confirm capture mute');
     }
   }
