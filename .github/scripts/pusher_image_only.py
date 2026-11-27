@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import subprocess
@@ -42,6 +43,17 @@ REQUIRED_FIXES = (
 )
 ROLLOUT_TIMEOUT = 9600
 RECEIPT_ARTIFACT = "pusher-image-only-receipt"
+# Same gate and arguments as the ordinary Pusher deploy success path (.github/AGENTS.md).
+STATUS_REPORT = (
+    sys.executable,
+    "backend/scripts/deploy_status_report.py",
+    "--env",
+    "prod",
+    "--include-gke",
+    "--gke-service",
+    "pusher",
+)
+STATUS_REPORT_TIMEOUT = 300
 
 
 class ProtectedCluster(Cluster):
@@ -116,28 +128,74 @@ def owned_by(obj, kind, uids):
     )
 
 
+def pod_template(obj):
+    template = copy.deepcopy(obj["spec"]["template"])
+    template.get("metadata", {}).get("labels", {}).pop("pod-template-hash", None)
+    return template
+
+
 def verify_ready(cluster, deployment, image, *, name=TARGET):
-    replicasets = cluster.get("replicasets.apps", namespace=NAMESPACE)["items"]
+    """Judge readiness on the ReplicaSet the Deployment controller treats as new.
+
+    Pods of earlier ReplicaSets that are already terminating are ordinary draining
+    after `kubectl rollout status` succeeds; they are not counted. Active pods of an
+    earlier ReplicaSet, or any new pod that is not Running, still refuse.
+    """
     deployment_uid = version(deployment)[0]
-    replicasets = {version(rs)[0] for rs in replicasets if owned_by(rs, "Deployment", {deployment_uid})}
-    pods = [
-        pod for pod in cluster.get("pods", namespace=NAMESPACE)["items"] if owned_by(pod, "ReplicaSet", replicasets)
+    owned = [
+        rs
+        for rs in cluster.get("replicasets.apps", namespace=NAMESPACE)["items"]
+        if owned_by(rs, "Deployment", {deployment_uid})
+    ]
+    # Same selection as the Deployment controller: template equality ignoring the hash label.
+    template = pod_template(deployment)
+    current = [rs for rs in owned if pod_template(rs) == template]
+    require(len(current) == 1, "pusher_new_replicaset_unresolved")
+    new_uid = version(current[0])[0]
+    old_uids = {version(rs)[0] for rs in owned} - {new_uid}
+    pods = cluster.get("pods", namespace=NAMESPACE)["items"]
+    new_pods = [pod for pod in pods if owned_by(pod, "ReplicaSet", {new_uid})]
+    old_active = [
+        pod for pod in pods if owned_by(pod, "ReplicaSet", old_uids) and not pod["metadata"].get("deletionTimestamp")
     ]
     replicas = deployment["spec"]["replicas"]
     require(
-        deployment["status"]["updatedReplicas"] == replicas == len(pods)
-        and all(not pod["metadata"].get("deletionTimestamp") and pod["status"]["phase"] == "Running" for pod in pods),
+        deployment["status"]["updatedReplicas"] == replicas == len(new_pods)
+        and not old_active
+        and all(
+            not pod["metadata"].get("deletionTimestamp") and pod["status"]["phase"] == "Running" for pod in new_pods
+        ),
         "pusher_replica_replacement_incomplete",
     )
     repository, digest = image.split("@")
     return validate_live_identity(
         deployment,
-        {"items": pods},
+        {"items": new_pods},
         namespace=NAMESPACE,
         repository=repository,
         digest=digest,
         expected_deployment_name=name,
     )
+
+
+def deploy_status_report(*, strict):
+    """Run the shared deploy-status report; strict on success paths, diagnostic after a failure."""
+    try:
+        completed = subprocess.run(
+            STATUS_REPORT,
+            cwd=ROOT,
+            stdin=subprocess.DEVNULL,
+            # The receipt is the only stdout payload; the report goes to the job log.
+            stdout=sys.stderr,
+            stderr=sys.stderr,
+            check=False,
+            timeout=STATUS_REPORT_TIMEOUT,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        if strict:
+            raise
+        return
+    require(not strict or completed.returncode == 0, "deploy_status_report_failed")
 
 
 def canary_target(run_id):
@@ -295,11 +353,15 @@ def execute(mode, packet, rehearsal, result):
         result["live_inverse_server_dry_run"] = "PASS"
 
     result["stage"] = "verify_serving"
-    run(
-        [*live.command, "rollout", "status", f"deployment/{TARGET}", "-n", NAMESPACE, f"--timeout={ROLLOUT_TIMEOUT}s"],
-        "rollout_unconfirmed",
-        timeout=ROLLOUT_TIMEOUT + 30,
-    )
+    try:
+        run(
+            [*live.command, "rollout", "status", f"deployment/{TARGET}", "-n", NAMESPACE, f"--timeout={ROLLOUT_TIMEOUT}s"],
+            "rollout_unconfirmed",
+            timeout=ROLLOUT_TIMEOUT + 30,
+        )
+    except (Refused, subprocess.TimeoutExpired):
+        deploy_status_report(strict=False)
+        raise
     deployed, restored, observed_policies = rehearsal.observe(new, BASELINE, post_move=True)
     rehearsal.check_rehearsed_state(receipt, restored, observed_policies)
     require(
@@ -308,6 +370,9 @@ def execute(mode, packet, rehearsal, result):
     )
     identity = verify_ready(live, deployed, new)
     rehearsal.recheck(deployed, restored, observed_policies, post_move=True)
+    result["stage"] = "deploy_status_report"
+    deploy_status_report(strict=True)
+    result["deploy_status_report"] = "PASS"
     result.update(
         serving_image=new,
         serving_deployment_uid=identity["deployment_uid"],
