@@ -15584,4 +15584,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get firmwareSyncRecordingsFirstMessage => '部分录音仍存储在您的设备上。请等待它们同步到手机完成后，再开始更新。';
+
+  @override
+  String get batteryRestartToRefresh => '重启 Omi 以刷新';
 }

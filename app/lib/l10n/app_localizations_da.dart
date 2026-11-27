@@ -15833,4 +15833,7 @@ class AppLocalizationsDa extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Nogle optagelser er stadig på din enhed. Lad dem blive færdige med at synkronisere til din telefon, og start derefter opdateringen.';
+
+  @override
+  String get batteryRestartToRefresh => 'Genstart Omi for at opdatere værdien';
 }

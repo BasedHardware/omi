@@ -222,6 +222,12 @@ class HeavyConnectedDevice extends ChangeNotifier implements DeviceProvider {
   bool isCharging = false;
   @override
   int batteryLevel = 80;
+
+  @override
+  int get displayBatteryLevel => batteryLevel;
+
+  @override
+  bool get batteryReadingStuck => false;
   @override
   int get settingsBatteryLevel => batteryLevel;
   @override

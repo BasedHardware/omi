@@ -15895,4 +15895,7 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Некоторые записи всё ещё находятся на устройстве. Дождитесь завершения их синхронизации с телефоном, а затем начните обновление.';
+
+  @override
+  String get batteryRestartToRefresh => 'Перезапустите Omi, чтобы обновить данные';
 }

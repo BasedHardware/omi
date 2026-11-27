@@ -15852,4 +15852,7 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Bazı kayıtlar hâlâ cihazınızda. Telefonunuza senkronize edilmelerini bekleyin, ardından güncellemeyi başlatın.';
+
+  @override
+  String get batteryRestartToRefresh => 'Yenilemek için Omi\'yi yeniden başlatın';
 }
