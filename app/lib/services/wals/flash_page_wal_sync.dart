@@ -32,6 +32,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
 
   bool _isSyncing = false;
   bool _cancelRequested = false;
+  bool _storageStatusUnavailable = false;
 
   FlashSyncStallReason _lastStallReason = FlashSyncStallReason.none;
 
@@ -162,6 +163,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
   }
 
   Future<List<Wal>> _getMissingWals() async {
+    _storageStatusUnavailable = false;
     // Capture snapshot — setDevice(null) can be called concurrently during awaits
     final device = _device;
     if (device == null) return [];
@@ -176,7 +178,14 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
     List<Wal> wals = [];
 
     var storageStatus = await _getStorageStatus(deviceId);
-    if (storageStatus == null || storageStatus.isEmpty) return [];
+    if (storageStatus == null || storageStatus.isEmpty) {
+      _storageStatusUnavailable = true;
+      _lastStallReason = FlashSyncStallReason.unknown;
+      return _wals
+          .where((wal) => wal.device == deviceId && wal.storage == WalStorage.flashPage && wal.status == WalStatus.miss)
+          .toList();
+    }
+    _lastStallReason = FlashSyncStallReason.none;
 
     _oldestPage = storageStatus['oldest_flash_page'] ?? 0;
     _newestPage = storageStatus['newest_flash_page'] ?? 0;
@@ -246,7 +255,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
   @override
   Future start() async {
     _wals = await _getMissingWals();
-    if (_wals.isEmpty) _lastStallReason = FlashSyncStallReason.none;
+    if (_wals.isEmpty && !_storageStatusUnavailable) _lastStallReason = FlashSyncStallReason.none;
     listener.onWalUpdated();
   }
 
@@ -260,7 +269,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
     // in flight so we never swap the list out from under an active sync.
     if (_isSyncing) return;
     _wals = await _getMissingWals();
-    if (_wals.isEmpty) _lastStallReason = FlashSyncStallReason.none;
+    if (_wals.isEmpty && !_storageStatusUnavailable) _lastStallReason = FlashSyncStallReason.none;
     listener.onWalUpdated();
   }
 
@@ -268,13 +277,13 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
   Future stop() async {
     _wals = [];
     _lastStallReason = FlashSyncStallReason.none;
+    _storageStatusUnavailable = false;
     await _pageStream?.cancel();
   }
 
   @override
   Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress}) async {
     _cancelRequested = false;
-    _lastStallReason = FlashSyncStallReason.none;
 
     int? globalStartPage;
     int globalEndPage = 0;
@@ -284,8 +293,10 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
       final wals = _wals.where((w) => w.status == WalStatus.miss && w.storage == WalStorage.flashPage).toList();
       if (wals.isEmpty) {
         Logger.debug("FlashPageSync: All downloaded!");
-        drained = globalStartPage != null;
-        _lastStallReason = FlashSyncStallReason.none;
+        if (!_storageStatusUnavailable) {
+          drained = globalStartPage != null;
+          _lastStallReason = FlashSyncStallReason.none;
+        }
         break;
       }
 
@@ -328,8 +339,10 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
       await refreshWalsFromDevice();
       final resumeWals = _wals.where((w) => w.status == WalStatus.miss && w.storage == WalStorage.flashPage).toList();
       if (resumeWals.isEmpty) {
-        drained = true;
-        _lastStallReason = FlashSyncStallReason.none;
+        if (!_storageStatusUnavailable) {
+          drained = true;
+          _lastStallReason = FlashSyncStallReason.none;
+        }
         break;
       }
 
@@ -843,6 +856,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
   @override
   void setDevice(BtDevice? device) async {
     _lastStallReason = FlashSyncStallReason.none;
+    _storageStatusUnavailable = false;
     _device = device;
     if (device != null && device.type == DeviceType.limitless) {
       final wals = await _getMissingWals();

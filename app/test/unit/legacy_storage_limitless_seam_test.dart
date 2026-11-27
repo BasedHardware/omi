@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/models/sync_state.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/connectors/limitless_connection.dart';
 import 'package:omi/services/wals/flash_page_wal_sync.dart';
@@ -23,6 +24,21 @@ class _Listener implements IWalSyncListener {
 
   @override
   void onWalSynced(Wal wal, {ServerConversation? conversation}) {}
+}
+
+class _Progress implements IWalSyncProgressListener {
+  final values = <double>[];
+
+  @override
+  void onWalSyncedProgress(double percentage,
+      {double? speedKBps,
+      SyncPhase? phase,
+      int? currentFile,
+      int? totalFiles,
+      int? uploadedBytes,
+      int? totalBytesToUpload}) {
+    values.add(percentage);
+  }
 }
 
 class _ManualTimer implements Timer {
@@ -1104,6 +1120,86 @@ void main() {
     expect(sync.testWals.single.id, pending.id);
     expect(sync.testWals.single.storageOffset, 15);
     expect(sync.testWals.single.storageTotalBytes, 20);
+  });
+
+  test('FlashPage: an unavailable status preserves the pending flash cursor', () async {
+    final card = _FakeLimitless(pages: const [])
+      ..flashStatus = {
+        'oldest_flash_page': 10,
+        'newest_flash_page': 20,
+        'current_storage_session': 1,
+      }
+      ..nullStorageStatusCall = 1;
+    final pending = Wal(
+      timerStart: 1700000000,
+      codec: BleAudioCodec.opus,
+      seconds: 8,
+      status: WalStatus.miss,
+      storage: WalStorage.flashPage,
+      device: 'limitless-1',
+      fileNum: 1,
+      storageOffset: 15,
+      storageTotalBytes: 20,
+    );
+    final sync = FlashPageWalSyncImpl(_Listener())
+      ..testDevice = BtDevice(id: 'limitless-1', name: 'Limitless', type: DeviceType.limitless, rssi: -40)
+      ..testConnection = card
+      ..testWals = [pending];
+    addTearDown(sync.stop);
+
+    await sync.refreshWalsFromDevice();
+
+    expect(sync.testWals, [pending]);
+    expect(sync.testWals.single.storageOffset, 15);
+    expect(sync.lastStallReason, FlashSyncStallReason.unknown);
+  });
+
+  test('FlashPage: unavailable post-drain status cannot report sync complete', () async {
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final card = _FakeLimitless(
+      pages: [
+        {
+          'opus_frames': [
+            [1, 2, 3]
+          ],
+          'timestamp_ms': nowMs,
+          'max_index': 10,
+        },
+      ],
+    )
+      ..flashStatus = {
+        'oldest_flash_page': 10,
+        'newest_flash_page': 10,
+        'current_storage_session': 1,
+      }
+      ..nullStorageStatusCall = 1;
+    final wal = Wal(
+      timerStart: 1700000000,
+      codec: BleAudioCodec.opus,
+      seconds: 2,
+      status: WalStatus.miss,
+      storage: WalStorage.flashPage,
+      device: 'limitless-1',
+      fileNum: 1,
+      storageOffset: 10,
+      storageTotalBytes: 10,
+    );
+    final progress = _Progress();
+    final sync = FlashPageWalSyncImpl(_Listener())
+      ..testDevice = BtDevice(id: 'limitless-1', name: 'Limitless', type: DeviceType.limitless, rssi: -40)
+      ..testConnection = card
+      ..testPollInterval = Duration.zero
+      ..testMaxEmptyExtractions = 1
+      ..testWals = [wal];
+    sync.setLocalSync(_FakeLocalSync());
+    addTearDown(sync.stop);
+
+    await sync.syncAll(progress: progress);
+
+    expect(wal.status, WalStatus.synced, reason: 'the enumerated page itself transferred and was acknowledged');
+    expect(sync.lastStallReason, FlashSyncStallReason.unknown,
+        reason: 'a missing follow-up status cannot confirm there are no additional pages');
+    expect(progress.values, isNot(contains(1.0)), reason: 'unknown storage status must not report full completion');
   });
 
   test('FlashPage: disconnect clears a prior unknown stall reason', () async {

@@ -896,6 +896,14 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   Future<void> deleteAllClearableWals() async {
     final generation = _sessionGeneration;
     final syncs = _walService.getSyncs();
+    final terminalDeviceWals = [...corruptedWals, ...refusedWals].where((wal) {
+      final deviceBacked = wal.storage == WalStorage.sdcard || wal.storage == WalStorage.flashPage;
+      if (!deviceBacked) return false;
+      return wal.status == WalStatus.outsideRecoveryWindow ||
+          wal.status == WalStatus.unsupportedAudio ||
+          wal.status == WalStatus.uploadRejected ||
+          (wal.storage == WalStorage.sdcard && wal.fileNum == -1 && wal.status == WalStatus.corrupted);
+    }).toList();
     try {
       Object? firstError;
       StackTrace? firstStackTrace;
@@ -912,6 +920,12 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       await attempt(syncs.deleteAllSyncedWals);
       await attempt(syncs.deleteAllPendingWals);
       await attempt(syncs.deleteAllCorruptedWals);
+      // Bulk device sweeps handle synced, missed and corrupted rows. Terminal
+      // refusals live in separate display buckets, so route those through the
+      // same per-row delete path used by the explicit row action.
+      for (final wal in terminalDeviceWals) {
+        await attempt(() async => syncs.deleteWal(wal));
+      }
 
       if (firstError != null) Error.throwWithStackTrace(firstError!, firstStackTrace!);
     } finally {

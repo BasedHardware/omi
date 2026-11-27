@@ -24,13 +24,23 @@ class _Listener implements IWalSyncListener {
 }
 
 class _LocalSyncs {
-  _LocalSyncs(this.phone, {this.failSyncedDelete = false});
+  _LocalSyncs(this.phone, {this.failSyncedDelete = false, this.deviceWal});
 
   final LocalWalSyncImpl phone;
   final bool failSyncedDelete;
+  Wal? deviceWal;
   final List<String> deleteCalls = [];
+  final List<String> individualDeleteCalls = [];
 
-  Future<List<Wal>> getAllWals() => phone.getAllWals();
+  Future<List<Wal>> getAllWals() async => [
+        ...await phone.getAllWals(),
+        if (deviceWal != null) deviceWal!,
+      ];
+
+  Future<void> deleteWal(Wal wal) async {
+    individualDeleteCalls.add(wal.id);
+    if (deviceWal?.id == wal.id) deviceWal = null;
+  }
 
   Future<void> deleteAllSyncedWals() {
     deleteCalls.add('synced');
@@ -236,5 +246,30 @@ void main() {
     await expectLater(syncProvider.deleteAllClearableWals(), throwsStateError);
 
     expect(syncs.deleteCalls, ['synced', 'pending', 'corrupted']);
+  });
+
+  test('Clear All individually attempts a terminal device recording', () async {
+    final deviceWal = Wal(
+      timerStart: 3000,
+      codec: BleAudioCodec.opus,
+      seconds: 60,
+      status: WalStatus.outsideRecoveryWindow,
+      storage: WalStorage.sdcard,
+      device: 'ring-device',
+      fileNum: 4,
+    );
+    final syncs = _LocalSyncs(localSync, deviceWal: deviceWal);
+    final syncProvider = SyncProvider(
+      walService: _WalService(syncs),
+      uploadGate: _offlineGate(),
+      startBackgroundSync: false,
+    );
+    provider = syncProvider;
+    await syncProvider.initialized;
+
+    await syncProvider.deleteAllClearableWals();
+
+    expect(syncs.individualDeleteCalls, [deviceWal.id]);
+    expect(syncProvider.allWals, isEmpty);
   });
 }
