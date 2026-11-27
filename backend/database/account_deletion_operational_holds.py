@@ -8,7 +8,7 @@ deletion marker. Legal holds, retention, and unknown metadata remain protected.
 from datetime import datetime, timezone
 import hashlib
 import json
-from typing import Any, TypeGuard
+from typing import Any, Callable, TypeGuard
 
 from google.api_core.exceptions import Forbidden, GoogleAPICallError, NotFound, PreconditionFailed
 
@@ -71,13 +71,29 @@ def delete_owner_bucket_prefix(
     real_gcs: bool,
     account_deletion_uid: str | None = None,
     tolerate_object_races: bool = True,
+    object_name_allowed: Callable[[str], bool] | None = None,
 ) -> int:
-    """Purge and verify owner generations, honoring approved operational holds."""
+    """Purge and verify owner generations, honoring approved operational holds.
+
+    ``object_name_allowed`` scopes both deletion and verification when a raw
+    storage prefix can contain complete generated names owned by another UID.
+    Every retained candidate still passes the same hold and generation gates.
+    """
     listing_kwargs = {'versions': True} if real_gcs else {}
     if account_deletion_uid is None and tolerate_object_races:
-        return _delete_conversation_bucket_prefix(bucket, prefix, real_gcs=real_gcs, listing_kwargs=listing_kwargs)
+        return _delete_conversation_bucket_prefix(
+            bucket,
+            prefix,
+            real_gcs=real_gcs,
+            listing_kwargs=listing_kwargs,
+            object_name_allowed=object_name_allowed,
+        )
 
-    blobs = list(bucket.list_blobs(prefix=prefix, **listing_kwargs))
+    blobs = [
+        blob
+        for blob in bucket.list_blobs(prefix=prefix, **listing_kwargs)
+        if object_name_allowed is None or object_name_allowed(blob.name)
+    ]
     for blob in blobs:
         if account_deletion_uid is not None:
             assert_no_protected_object_hold(blob)
@@ -87,7 +103,10 @@ def delete_owner_bucket_prefix(
             blob.delete(if_generation_match=blob.generation, if_metageneration_match=blob.metageneration)
         else:
             blob.delete()
-    if list(bucket.list_blobs(prefix=prefix, **listing_kwargs)):
+    if any(
+        object_name_allowed is None or object_name_allowed(blob.name)
+        for blob in bucket.list_blobs(prefix=prefix, **listing_kwargs)
+    ):
         raise RuntimeError('owner storage purge left objects under the owner prefix')
     return len(blobs)
 
@@ -97,11 +116,20 @@ def _storage_error_reason(error: GoogleAPICallError) -> str:
 
 
 def _delete_conversation_bucket_prefix(
-    bucket: Any, prefix: str, *, real_gcs: bool, listing_kwargs: dict[str, bool]
+    bucket: Any,
+    prefix: str,
+    *,
+    real_gcs: bool,
+    listing_kwargs: dict[str, bool],
+    object_name_allowed: Callable[[str], bool] | None = None,
 ) -> int:
     def list_versions() -> list[Any]:
         try:
-            return list(bucket.list_blobs(prefix=prefix, **listing_kwargs))
+            return [
+                blob
+                for blob in bucket.list_blobs(prefix=prefix, **listing_kwargs)
+                if object_name_allowed is None or object_name_allowed(blob.name)
+            ]
         except GoogleAPICallError as error:
             raise StoragePrefixPurgeError(
                 f'owner storage list failed in {bucket.name}: {_storage_error_reason(error)}'

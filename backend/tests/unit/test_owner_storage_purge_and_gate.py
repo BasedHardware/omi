@@ -4,7 +4,7 @@ import struct
 from unittest.mock import MagicMock
 
 import pytest
-from google.api_core.exceptions import Forbidden
+from google.api_core.exceptions import Forbidden, PreconditionFailed
 
 from utils.other import storage as storage_mod
 from database import account_deletion_operational_holds
@@ -49,6 +49,20 @@ class _Bucket:
         return [_Blob(self, name) for name in sorted(self.names) if name.startswith(prefix)]
 
 
+class _LateDirectVoiceBucket(_Bucket):
+    def __init__(self, names, late_name):
+        super().__init__(names)
+        self.late_name = late_name
+        self.late_pending = True
+
+    def list_blobs(self, *, prefix, **kwargs):
+        result = super().list_blobs(prefix=prefix, **kwargs)
+        if self.late_pending and prefix == '/tmp/user_':
+            self.late_pending = False
+            self.names.add(self.late_name)
+        return result
+
+
 class _Client:
     def __init__(self, buckets):
         self.buckets = buckets
@@ -71,7 +85,14 @@ def test_owner_prefix_purge_removes_private_and_non_private_uid_objects(monkeypa
                 'chunks/other/keep.opus',
             }
         ),
-        'sync': _Bucket({f'syncing/{uid}/job/input.bin', 'syncing/other/job/input.bin'}),
+        'sync': _Bucket(
+            {
+                f'syncing/{uid}/job/input.bin',
+                'syncing/other/job/input.bin',
+                f'/tmp/{uid}_request.wav',
+                '/tmp/other_request.wav',
+            }
+        ),
         'chat': _Bucket({f'{uid}/chat.txt', 'other/chat.txt'}),
     }
     monkeypatch.setattr(storage_mod, 'speech_profiles_bucket', 'speech')
@@ -82,10 +103,10 @@ def test_owner_prefix_purge_removes_private_and_non_private_uid_objects(monkeypa
 
     deleted = storage_mod.delete_all_user_storage_objects(uid)
 
-    assert deleted == 8
+    assert deleted == 9
     assert buckets['speech'].names == {'other/speech.wav'}
     assert buckets['private'].names == {'chunks/other/keep.opus'}
-    assert buckets['sync'].names == {'syncing/other/job/input.bin'}
+    assert buckets['sync'].names == {'syncing/other/job/input.bin', '/tmp/other_request.wav'}
     assert buckets['chat'].names == {'other/chat.txt'}
 
 
@@ -221,6 +242,144 @@ def test_uid_scoped_temporary_sync_upload_is_fenced(monkeypatch):
     with pytest.raises(RuntimeError, match='owns gate'):
         storage_mod.upload_syncing_temporal_file('syncing/uid1/job/input.bin')
     upload.assert_not_called()
+
+
+def test_account_purge_covers_chat_voice_layouts_in_both_temporary_buckets(monkeypatch):
+    uid = 'user'
+    owned = {f'syncing/{uid}/job/input.wav', f'/tmp/{uid}_request.wav'}
+    other = {'syncing/user_admin/job/input.wav', '/tmp/user_admin_request.wav', '/tmp/other_request.wav'}
+    buckets = {'sync': _Bucket(owned | other), 'derived': _Bucket(owned | other)}
+    monkeypatch.setattr(storage_mod, 'speech_profiles_bucket', None)
+    monkeypatch.setattr(storage_mod, 'private_cloud_sync_bucket', None)
+    monkeypatch.setattr(storage_mod, 'syncing_local_bucket', 'sync')
+    monkeypatch.setattr(storage_mod, 'chat_files_bucket', None)
+    monkeypatch.setenv('BUCKET_AUDIO_DERIVED', 'derived')
+    monkeypatch.delenv('BUCKET_CANONICAL_AUDIO', raising=False)
+    monkeypatch.setattr(storage_mod, '_get_storage_client', lambda: _Client(buckets))
+
+    assert storage_mod.delete_all_user_storage_objects(uid) == 4
+    assert buckets['sync'].names == other
+    assert buckets['derived'].names == other
+
+
+def test_direct_voice_purge_never_reexpands_an_owned_name_as_a_prefix():
+    bucket = _Bucket(
+        {
+            '/tmp/user_abc.wav',
+            '/tmp/user_abc.wav_def.wav',
+        }
+    )
+
+    assert storage_mod._delete_direct_chat_voice_objects(bucket, 'user') == 1
+    assert bucket.names == {'/tmp/user_abc.wav_def.wav'}
+
+
+def test_direct_voice_purge_preserves_generation_bound_hold_checks(monkeypatch):
+    owned = SimpleNamespace(
+        name='/tmp/user_abc.wav',
+        temporary_hold=True,
+        generation=123,
+        metageneration=2,
+        metadata={},
+        delete=MagicMock(),
+    )
+    other = SimpleNamespace(
+        name='/tmp/user_abc.wav_def.wav',
+        temporary_hold=False,
+        generation=456,
+        metageneration=1,
+        metadata={},
+        delete=MagicMock(),
+    )
+    bucket = SimpleNamespace(name='sync')
+    bucket.list_blobs = MagicMock(side_effect=[[owned, other], [other]])
+    releases = []
+
+    def release(uid, blob):
+        releases.append((uid, blob))
+        blob.temporary_hold = False
+        blob.metageneration = 3
+
+    monkeypatch.setattr(storage_mod, '_uses_real_gcs_bucket', lambda value: True)
+    monkeypatch.setattr(account_deletion_operational_holds, 'release_operational_hold_for_account_deletion', release)
+
+    assert storage_mod._delete_direct_chat_voice_objects(bucket, 'user') == 1
+    assert releases == [('user', owned)]
+    owned.delete.assert_called_once_with(if_generation_match=123, if_metageneration_match=3)
+    other.delete.assert_not_called()
+
+
+def test_direct_voice_purge_retries_a_late_upload_without_touching_uid_prefix_collision():
+    bucket = _LateDirectVoiceBucket(
+        {'/tmp/user_first.wav', '/tmp/user_admin_request.wav'},
+        '/tmp/user_second.wav',
+    )
+
+    with pytest.raises(RuntimeError, match='left objects under the owner prefix'):
+        storage_mod._delete_direct_chat_voice_objects(bucket, 'user')
+
+    assert bucket.names == {'/tmp/user_second.wav', '/tmp/user_admin_request.wav'}
+    assert storage_mod._delete_direct_chat_voice_objects(bucket, 'user') == 1
+    assert bucket.names == {'/tmp/user_admin_request.wav'}
+
+
+def test_direct_multipart_voice_upload_is_fenced_for_its_owner(monkeypatch):
+    bucket = _Bucket(set())
+    blob = bucket.blob('/tmp/user_admin_request.wav')
+    upload = MagicMock()
+    monkeypatch.setattr(blob, 'upload_from_filename', upload, raising=False)
+    monkeypatch.setattr(bucket, 'blob', lambda name: blob)
+    monkeypatch.setattr(storage_mod, '_get_storage_client', lambda: _Client({'sync': bucket}))
+    monkeypatch.setattr(storage_mod, 'syncing_local_bucket', 'sync')
+    monkeypatch.setattr(storage_mod, '_uses_real_gcs_bucket', lambda value: True)
+
+    @contextmanager
+    def blocked_gate(uid, *, firestore_client=None):
+        assert uid == 'user_admin'
+        raise RuntimeError('account deletion owns gate')
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(storage_mod, 'external_write_fence', blocked_gate)
+
+    with pytest.raises(RuntimeError, match='owns gate'):
+        storage_mod.get_syncing_file_temporal_signed_url_with_receipt('/tmp/user_admin_request.wav', 'user_admin')
+    upload.assert_not_called()
+
+
+def test_signed_url_receipt_binds_uploaded_generation_and_cleans_sign_failure(monkeypatch):
+    bucket = MagicMock()
+    bucket.blob.return_value.generation = 321
+    client = MagicMock()
+    client.bucket.return_value = bucket
+    monkeypatch.setattr(storage_mod, '_get_storage_client', lambda: client)
+    monkeypatch.setattr(storage_mod, 'syncing_local_bucket', 'sync')
+    monkeypatch.setattr(storage_mod.audio_archive, 'regional_bucket', lambda uid, legacy: legacy)
+    monkeypatch.setattr(storage_mod, '_get_signed_url', MagicMock(side_effect=RuntimeError('signing unavailable')))
+    schedule = MagicMock()
+    monkeypatch.setattr(storage_mod, 'schedule_syncing_temporal_file_deletion', schedule)
+
+    with pytest.raises(RuntimeError, match='signing unavailable'):
+        storage_mod.get_syncing_file_temporal_signed_url_with_receipt('syncing/uid1/job/input.wav', 'uid1')
+
+    schedule.assert_called_once_with(
+        storage_mod.SyncingTemporalFileReceipt('syncing/uid1/job/input.wav', 'uid1', 'sync', 321)
+    )
+
+
+def test_receipt_cleanup_pins_generation_and_ignores_a_replacement(monkeypatch):
+    bucket = MagicMock()
+    client = MagicMock()
+    client.bucket.return_value = bucket
+    monkeypatch.setattr(storage_mod, '_get_storage_client', lambda: client)
+    receipt = storage_mod.SyncingTemporalFileReceipt('syncing/uid1/job/input.wav', 'uid1', 'sync', 321)
+
+    storage_mod.delete_syncing_temporal_file(receipt)
+    bucket.blob.return_value.delete.assert_called_once_with(if_generation_match=321)
+
+    bucket.blob.return_value.delete.reset_mock()
+    bucket.blob.return_value.delete.side_effect = PreconditionFailed('replacement generation')
+    storage_mod.delete_syncing_temporal_file(receipt)
+    bucket.blob.return_value.delete.assert_called_once_with(if_generation_match=321)
 
 
 def test_account_wipe_removes_packs_intents_and_receipts_with_flag_off(monkeypatch):

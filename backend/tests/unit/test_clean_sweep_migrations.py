@@ -296,7 +296,7 @@ class TestWrappedExecutorMigration:
 
 
 class TestChatUtilsExecutorMigration:
-    """Verify utils/chat.py uses storage_executor for file cleanup."""
+    """Verify utils/chat.py keeps deferred cleanup off executor-sleeping threads."""
 
     def test_no_threading_thread(self):
         src = _read_source('utils/chat.py')

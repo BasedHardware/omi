@@ -33,6 +33,42 @@ archive (including consent-off paths and historical receipts) do not acquire
 routine source-deletion authority. Zero-VAD early completions currently retain
 staging too. No long timer or bucket lifecycle is introduced as a substitute.
 
+## Chat voice staging
+
+Chat voice audio is single-request STT transport scratch, not a durable chat
+attachment, recovery copy or playback source. Uploading and signing no longer
+starts its 480-second deletion clock. The synchronous consumer that owns
+VAD, backend signed-URL download and bounded provider retries schedules cleanup
+only when that work reaches success, expected silence or a terminal failure.
+Cancelling an async SSE caller does not cancel its executor worker, so cleanup
+remains pending until the worker actually exits. The unchanged signed URL
+expires after 15 minutes; exceeding it is a terminal consumption failure, not
+a reason to renew the URL or retain the object for another consumer.
+
+Each URL preparation returns the admitted bucket and uploaded GCS generation.
+Ordinary cleanup deletes only that generation, so a stale attempt cannot remove
+a replacement staged at the same path. Signing failure schedules the admitted
+generation immediately; an upload exception without generation proof has no
+routine deletion authority. Local/offline providers without GCS generations
+retain their existing path-delete behavior.
+
+Account erasure stays authoritative and immediate across the `syncing/{uid}/…`
+and `/tmp/{uid}_…` chat layouts in each configured temporary/derived bucket.
+Those uploads are owner-fenced against account deletion. The multipart wipe
+parses the generated UUID separator to distinguish UIDs containing underscores,
+then verifies no exact-owner objects remain without treating another owner's
+shared text prefix as a deletion target or a failed verification. That owner
+predicate covers the erase listing and the verification listing; every selected
+generation still uses the account-erasure hold checks and generation
+preconditions, never a second unfiltered prefix expansion. Derived transcript
+messages keep their existing chat-retention semantics.
+
+The janitor remains process-local and best-effort; this change does not claim a
+crash-durable hard retention bound or mutate bucket policy. The live lifecycle,
+soft-delete/versioning and serving-metric readbacks below remain release
+prerequisites. No historical sweep, consent change or retroactive deletion is
+part of chat voice cleanup.
+
 ## Capture-window hold
 
 `AUDIO_CLEANUP_HOLD_ENABLED` defaults to `true`; only the explicit value `false`
