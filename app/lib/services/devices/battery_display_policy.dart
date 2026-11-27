@@ -1,5 +1,8 @@
 import 'package:flutter/foundation.dart';
 
+// Owns which Omi battery percentage the UI may show. It never changes the raw reading the
+// pendant sent; it only withholds numbers the shipping firmware is known to get wrong.
+
 /// Why a pendant battery percentage is being withheld from the UI.
 enum BatteryHideReason {
   /// The pendant is charging and reports a low number. Firmware 3.0.24 repeats the
