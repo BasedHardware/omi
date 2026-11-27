@@ -19,7 +19,8 @@ import pytest
 from database import llm_usage
 from database.cap_recovery_pacing import Decision
 from database import processing_backlog as backlog_store
-from database.batch_pipeline_projection import ProjectionStore, usage_stamp
+from database.batch_pipeline_projection import ProjectionStore
+from database.batch_pipeline_projection_usage import usage_stamp
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils import processing_backlog_worker as worker
 from utils.batch_pipeline import cap_hold_admission as adapter

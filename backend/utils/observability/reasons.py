@@ -499,6 +499,24 @@ class ContainedDonorShadowOutcome(StrEnum):
     ERROR = 'error'
 
 
+class SyncBridgeTerminalOutcome(StrEnum):
+    """`omi_sync_bridge_terminal_total{outcome}`: a lineage entry the bridge settled as terminal.
+
+    Owner: `utils/sync/bridge.py::_record_bridge_source_terminal`. Every member is
+    a donor that can never redirect at its survivor: the bridge leaves both rows
+    untouched and stops replaying it instead of raising. `missing` and
+    `not_tombstone` are the raw row defects; the rest come from
+    `_bridge_source_defect` when chain repair is on.
+    """
+
+    UNKNOWN = 'unknown'
+    MISSING = 'missing'
+    NOT_TOMBSTONE = 'not_tombstone'
+    REDIRECT_ELSEWHERE = 'redirect_elsewhere'
+    CHAIN = 'chain'
+    CHAIN_BROKEN = 'chain_broken'
+
+
 class BatchIntakeOutcome(StrEnum):
     """`omi_batch_intake_outcome_total{outcome}`: where one v2 sync upload's batch routing landed.
 
@@ -594,6 +612,17 @@ class CaptureCoverageOutcome(StrEnum):
     UNCOVERED = 'uncovered'
     SKIPPED = 'skipped'
     WOULD_SKIP = 'would_skip'
+
+
+class MonthlyUsageShadowOutcome(StrEnum):
+    """Closed outcomes for the monthly usage snapshot comparison."""
+
+    UNKNOWN = 'unknown'
+    MATCH = 'match'
+    MISMATCH = 'mismatch'
+    RACE = 'race'
+    SKIPPED = 'skipped'
+    ERROR = 'error'
 
 
 class ShadowParityOutcome(StrEnum):
@@ -857,8 +886,17 @@ class RecoveryFailureReason(StrEnum):
     ABANDONED_RUNNING = 'abandoned_running'
 
 
+class FlexFirstOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    ATTEMPT = 'attempt'
+    FLEX = 'flex'
+    UNCONFIRMED_TIER = 'unconfirmed_tier'
+    STOPPED_AFTER_ERROR = 'stopped_after_error'
+    FALLBACK_STANDARD = 'fallback_standard'
+
+
 class ConvStructureFlexFallbackReason(StrEnum):
-    """Why a conversation structure request fell back from Flex to Standard."""
+    """Why a request fell back from Flex to Standard."""
 
     UNKNOWN = 'unknown'
     TIMEOUT = 'timeout'
@@ -948,6 +986,8 @@ class FallbackReason(StrEnum):
     PREAMBLE_TIMEOUT = 'preamble_timeout'
     STORE_CREDENTIALS_UNAVAILABLE = 'store_credentials_unavailable'
     STORE_API_ERROR = 'store_api_error'
+    # A bounded lookup stopped at its read cap before it could prove absence (v3 holdout /live).
+    LOOKUP_CAP = 'lookup_cap'
 
 
 class NotesAgentForceReason(StrEnum):

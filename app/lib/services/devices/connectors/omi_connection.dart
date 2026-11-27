@@ -15,6 +15,7 @@ import 'package:omi/services/devices/ring_protocol.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/wals/pendant_ring_custody.dart';
 import 'package:omi/services/wals/ring_custody_diagnostics.dart';
+import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -204,6 +205,7 @@ class OmiDeviceConnection extends DeviceConnection {
             if (mark != null) {
               final before = _custody.diagnosticMarkStateByDevice[device.id];
               _custody.observeLiveMark(device.id, epoch, mark);
+              RecordingTransferCoordinator.instance.wakeRingFromBle(device.id);
               final after = _custody.diagnosticMarkStateByDevice[device.id];
               final reason = !_livePersistEnabled
                   ? RingDiagnosticReason.notEnabled
@@ -236,6 +238,7 @@ class OmiDeviceConnection extends DeviceConnection {
               _lastRingInfo = info;
               _noteInfoDropped(info);
               _custody.noteInfo(device.id, epoch, info);
+              if (info.unreadPackets > 0) RecordingTransferCoordinator.instance.wakeRingFromBle(device.id);
             }
           }
         },
@@ -1378,7 +1381,22 @@ class OmiDeviceConnection extends DeviceConnection {
     if ((features & OmiFeatures.captureMute) == 0) return;
     await transport.writeCharacteristic(settingsServiceUuid, settingsMuteCharacteristicUuid, [muted ? 1 : 0]);
     final confirmed = await transport.readCharacteristic(settingsServiceUuid, settingsMuteCharacteristicUuid);
-    if (confirmed.length != 1 || confirmed.single != (muted ? 1 : 0)) {
+    final observedMuted = confirmed.length != 1
+        ? null
+        : switch (confirmed.single) {
+            0 => false,
+            1 => true,
+            _ => null,
+          };
+    RingCustodyDiagnostics.shared.event(
+      device.id,
+      RingDiagnosticEvent.captureMuteReadback,
+      epoch: _custodyEpoch,
+      requestedMuted: muted,
+      observedMuted: observedMuted,
+      reason: observedMuted == muted ? RingDiagnosticReason.none : RingDiagnosticReason.commandFailed,
+    );
+    if (observedMuted != muted) {
       throw StateError('Device did not confirm capture mute');
     }
   }

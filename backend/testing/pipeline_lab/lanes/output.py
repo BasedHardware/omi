@@ -76,6 +76,7 @@ def write_results(run_id: str, results: list[IngestResult], root=None) -> Path:
             'id': r.id,
             'lane': r.lane,
             'outcome': r.outcome,
+            'error': r.error,
             'segments': len(r.segments),
             'driver': r.driver.get('name'),
             'stt_mode': r.stt.get('mode'),

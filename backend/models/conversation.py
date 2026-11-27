@@ -10,7 +10,15 @@ from pydantic.json_schema import SkipJsonSchema
 import config.speaker_match_scores as match_scores
 import config.owner_recognition_diagnostics as owner_diagnostics
 
-from pydantic import BaseModel, Field, PrivateAttr, field_validator, model_serializer, model_validator
+from pydantic import (
+    BaseModel,
+    Field,
+    ModelWrapValidatorHandler,
+    PrivateAttr,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
 from models.recorded_span import RecordedClock
 from models.audio_file import AudioFile
@@ -525,6 +533,10 @@ class Conversation(BaseModel):
     title_locked: Optional[bool] = None
     recording_pieces: Optional[List[RecordingPiece]] = None
     manual_end: Optional[bool] = None
+    # Reliability experiment end_open_conversation: the End instant that closed this conversation (the
+    # time the app sent with that End). The app matches its "just ended" Home row to the conversation
+    # by it when the End was answered before the conversation existed. Stored only with the experiment on.
+    v3_manual_cut_at: SkipJsonSchema[Optional[datetime]] = None
     summary_covers_through: Optional[datetime] = None
     live_summary: Optional[LiveSummaryPreview] = None
     v3_pending: SkipJsonSchema[Optional[bool]] = Field(default=None, exclude=True)
@@ -978,10 +990,43 @@ class CreateConversation(BaseModel):
 
 
 class ProcessConversationRequest(BaseModel):
+    _has_body_fields: bool = PrivateAttr(default=False)
+    _names_only_live_conversation: bool = PrivateAttr(default=False)
+
+    @model_validator(mode='wrap')
+    @classmethod
+    def capture_body_field_presence(
+        cls, value: Any, handler: ModelWrapValidatorHandler['ProcessConversationRequest']
+    ) -> 'ProcessConversationRequest':
+        request = handler(value)
+        if isinstance(value, dict):
+            # Validation ignores unknown keys for wire compatibility. They still make the body nonempty.
+            request._has_body_fields = bool(value)
+            # live_tail travels with a Finish (reliability experiment live_words_cascade) and is not a
+            # request to process a recording, so a body that adds only it is still the app's Finish body.
+            request._names_only_live_conversation = set(value) <= {'live_conversation_id', 'live_tail'}
+        return request
+
+    @property
+    def empty_body(self) -> bool:
+        return not (self._has_body_fields or self.model_fields_set)
+
+    @property
+    def finish_only_body(self) -> bool:
+        """The app's Finish body: empty, or only the live window it was showing."""
+        return self.empty_body or (
+            self._names_only_live_conversation and self.model_fields_set <= {'live_conversation_id', 'live_tail'}
+        )
+
     calendar_meeting_context: Optional[CalendarMeetingContext] = None
     live_conversation_id: Optional[str] = Field(
         default=None, description='Optional live v3 window to Finish when no active recording is found.'
     )
+    # Reliability experiment live_words_cascade: the live words the phone was showing for the conversation
+    # being ended. Unvalidated on purpose, like client_processing: a malformed one must not 422 an End. It
+    # is checked and bounded in utils/conversations/v3/live_tail.py, kept with the stored End only, and
+    # read by that conversation's summary prompt and nothing else. Off, it is dropped unread.
+    live_tail: SkipJsonSchema[Optional[Any]] = None
 
     @field_validator('calendar_meeting_context', mode='before')
     @classmethod
@@ -1183,6 +1228,8 @@ class LiveConversation(BaseModel):
 
     is_locked: SkipJsonSchema[Optional[bool]] = None
     v3_recording_ids: SkipJsonSchema[Optional[List[str]]] = None
+    # Reliability experiment end_button_by_device; absent when it is off.
+    v3_capture_device_id: SkipJsonSchema[Optional[str]] = None
 
 
 class ConversationsLiveResponse(BaseModel):

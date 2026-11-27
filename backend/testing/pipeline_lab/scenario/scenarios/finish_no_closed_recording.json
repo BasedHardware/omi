@@ -1,0 +1,63 @@
+{
+  "name": "finish_no_closed_recording",
+  "description": "Finish tapped at 5 s, before any recording exists. The tap finds nothing; the recording that starts at 10 s must not be cut by it and still reaches Home.",
+  "origins": [
+    {
+      "id": "O",
+      "source": "omi"
+    }
+  ],
+  "recordings": [
+    {
+      "id": "B",
+      "origin": "O",
+      "session": "S1",
+      "audio": [
+        10,
+        70
+      ],
+      "transcript_at": 130,
+      "speech": [
+        {
+          "fill": [
+            10.5,
+            70
+          ],
+          "every": 4,
+          "words": 10,
+          "speakers": [
+            "SPEAKER_00",
+            "SPEAKER_01"
+          ]
+        }
+      ]
+    }
+  ],
+  "finish": {
+    "at": 5,
+    "fast_finish": true
+  },
+  "expect": [
+    {
+      "label": "nothing_to_finish",
+      "finish_response": 1,
+      "outcome": "not_found"
+    },
+    {
+      "label": "b_not_cut",
+      "conversation_of": "B",
+      "manual_end": false,
+      "holders": 1
+    },
+    {
+      "label": "b_on_home",
+      "conversation_of": "B",
+      "visible": true,
+      "on_home": true
+    }
+  ],
+  "budget": {
+    "reads": 190, "writes": 55, "deletes": 1, "noop_writes": 4, "vendor_calls": {"stt": 0, "llm": 7},
+    "note": "Measured 2026-11-26 at the merged head (172 reads, 48 writes, 1 delete(s), 4 no-op, 0 STT, 7 LLM; caps about +10%). noop_writes=4 is the current count, not a target: every one is database/conversations_v3_leases.py:72 renew (service.reconcile run_blocking renew) rewriting the lease until at the instant it was claimed. The lab clock does not move inside one event; production's does, so this is a lab-clock repeat, reported in the PR."
+  }
+}

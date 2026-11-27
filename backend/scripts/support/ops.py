@@ -13,11 +13,13 @@ cloud credentials, for holds, retention checks, DSAR exports and account operati
     python scripts/support/ops.py --ticket T --actor A --reason R dsar export UID --approval NOTE_ID --apply
     python scripts/support/ops.py --ticket T --actor A --reason R account summary UID
 
-Every command, read or write, first writes ``support_actions/{id}`` (ticket,
+Hold, retention, export and summary commands first write ``support_actions/{id}`` (ticket,
 actor, agent, reason, command, argument digest) and finishes it with the outcome;
 if that audit write fails the command does not run. Writes are dry runs unless
 ``--apply`` is passed. ``--agent`` (or ``SUPPORT_AGENT_ID``) names the operator
 identity that ran the command; ``--actor`` is the human who asked for it.
+Plan correction records its dry run in the private packet and creates a
+per-owner audit document atomically with each plan write.
 
 Runs with the operator's ADC (``prod-operator`` tier for production today; the
 support operator service account once provisioned). Runbook:
@@ -29,11 +31,12 @@ from __future__ import annotations
 import argparse
 import getpass
 import json
+import logging
 import os
 import socket
 import sys
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, NoReturn
 
 import google.auth
 
@@ -41,7 +44,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from database import support_actions  # noqa: E402
-from utils.support import account, dsar_export, holds, retention  # noqa: E402
+from utils.support import account, dsar_export, holds, plan_correction, retention  # noqa: E402
 
 Handler = Callable[[argparse.Namespace, support_actions.ActionContext, support_actions.ActionRecord], dict[str, Any]]
 MODULES = (holds, retention, dsar_export, account)
@@ -64,9 +67,15 @@ def _default_agent() -> str:
     return os.environ.get("SUPPORT_AGENT_ID") or f"{getpass.getuser()}@{socket.gethostname()}"
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="omi-support-ops", description=__doc__.split("\n\n")[0])
-    parser.add_argument("--ticket", required=True, help="Intercom conversation id the action serves")
+class _PrivateArgumentsParser(argparse.ArgumentParser):
+    def error(self, message: str) -> NoReturn:
+        super().error("invalid plan correction arguments (see account correct-plan --help)")
+
+
+def build_parser(*, private_arguments: bool = False) -> argparse.ArgumentParser:
+    parser_type = _PrivateArgumentsParser if private_arguments else argparse.ArgumentParser
+    parser = parser_type(prog="omi-support-ops", description=(__doc__ or "").split("\n\n")[0])
+    parser.add_argument("--ticket", required=True, help="Intercom conversation ID or issue reference")
     parser.add_argument("--actor", required=True, help="the human who asked for this action")
     parser.add_argument("--reason", required=True, help="why, in one line (no customer content)")
     parser.add_argument("--agent", default=None, help="operator identity that runs it (default SUPPORT_AGENT_ID)")
@@ -90,15 +99,16 @@ def _hoist_apply(argv: list[str]) -> list[str]:
 
 
 def main(argv: list[str] | None = None, *, firestore_client: Any | None = None) -> int:
-    args = build_parser().parse_args(_hoist_apply(list(sys.argv[1:] if argv is None else argv)))
-    ctx = support_actions.ActionContext(
-        ticket=args.ticket,
-        actor=args.actor,
-        reason=args.reason,
-        agent=args.agent or _default_agent(),
-        apply=args.apply,
-        principal=_adc_principal(),
-    )
+    tokens = _hoist_apply(list(sys.argv[1:] if argv is None else argv))
+    args = build_parser(private_arguments='correct-plan' in tokens).parse_args(tokens)
+    if getattr(args, 'plan_correction', False):
+        previous_log_level = logging.root.manager.disable
+        logging.disable(logging.CRITICAL)
+        try:
+            return _run_plan_correction(args, firestore_client=firestore_client)
+        finally:
+            logging.disable(previous_log_level)
+    ctx = _context(args)
     command_args = _command_args(args)
     command = f"{args.group} {getattr(args, 'action', '')}".strip()
     handler: Handler = args.handler
@@ -108,6 +118,28 @@ def main(argv: list[str] | None = None, *, firestore_client: Any | None = None) 
         json.dumps({"action_id": record.action_id, "apply": ctx.apply, **result}, indent=1, sort_keys=True, default=str)
     )
     return 0
+
+
+def _context(args: argparse.Namespace) -> support_actions.ActionContext:
+    return support_actions.ActionContext(
+        ticket=args.ticket,
+        actor=args.actor,
+        reason=args.reason,
+        agent=args.agent or _default_agent(),
+        apply=args.apply,
+        principal=_adc_principal(),
+    )
+
+
+def _run_plan_correction(args: argparse.Namespace, *, firestore_client: Any | None) -> int:
+    try:
+        ctx = _context(args)
+    except support_actions.SupportActionError:
+        print(json.dumps({'document_reads': 0, 'counts': {}, 'error': 'invalid_action_context'}))
+        return 1
+    counts, status = plan_correction.run(args, ctx, firestore_client=firestore_client)
+    print(json.dumps(counts, sort_keys=True))
+    return status
 
 
 if __name__ == "__main__":

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -18,6 +19,7 @@ import logging
 from itertools import chain
 import sys
 import threading
+from time import monotonic
 from typing import Any, Callable, List, Mapping
 import zlib
 
@@ -25,6 +27,7 @@ from cachetools import TTLCache
 
 from config import object_lake as config
 from database import _client
+from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from utils import encryption
 from utils.other import object_lake, space_keys
 
@@ -66,6 +69,7 @@ class TranscriptMemoBudgetExceeded(TranscriptPointerFetchError):
     """Retryable operation memory limit; never evict a required read silently."""
 
 
+MAX_PRELOAD_DOCUMENTS = 32
 MAX_MEMO_DECODED_BYTES = 64 * 1024 * 1024
 
 
@@ -101,7 +105,7 @@ class _DecodedMemo(TTLCache):
 
     def __setitem__(self, key, value):
         self.check_budget(key, value)
-        if key not in self and len(self) >= 32:
+        if key not in self and len(self) >= MAX_PRELOAD_DOCUMENTS:
             self.popitem()
         super().__setitem__(key, value)
 
@@ -133,6 +137,58 @@ def _memo() -> _Memo:
         memo = _Memo()
         _MEMO.set(memo)
     return memo
+
+
+# Deferred offload (SCA-2918): a caller that must size its writes before it may upload anything (the v3 locked-closure
+# batch cap) prepares under deferred_offloads(). offload_or_inline then runs its exact admission and inline-threshold
+# test, but a transcript it would upload gets a stand-in pointer instead, and the upload is recorded for
+# upload_deferred. The stand-in is structurally valid (object_lake._parse_ref limits) and its encoding is at least as
+# large as any real pointer for that conversation, so sizing on it never under-counts; it must never be written.
+_DEFERRED: ContextVar[list | None] = ContextVar('transcript_pointer_deferred', default=None)
+# object_lake's limits are read at use (test stubs replace the module in sys.modules): bytes up to the data-class
+# limit plus 64 KiB, and the largest dek_version, as _parse_ref allows.
+_STAND_IN_DEK_VERSION = 0xFFFFFFFF
+
+
+@contextmanager
+def deferred_offloads():
+    """Yield the list of uploads that preparation inside this block deferred (see upload_deferred)."""
+    pending: list = []
+    token = _DEFERRED.set(pending)
+    try:
+        yield pending
+    finally:
+        _DEFERRED.reset(token)
+
+
+def _stand_in_pointer(uid, conversation_id, index) -> dict:
+    digest = f'{index:064x}'
+    return object_lake.LakeObjectRef(
+        config.bucket(),
+        f'{config.release()}/spaces/{uid}/transcript/{conversation_id}/{digest}',
+        digest,
+        object_lake.MAX_PLAINTEXT_BYTES['transcript'] + 65536,
+        'transcript',
+        _STAND_IN_DEK_VERSION,
+    ).to_pointer_dict()
+
+
+def upload_deferred(pending: list, rows: list) -> None:
+    """Upload what deferred_offloads recorded for ``rows`` and put each real pointer where its stand-in is.
+
+    Only stand-ins still present in ``rows`` are uploaded, exactly as offload_or_inline would have (memo first)."""
+    stand_ins = {_stand_in_pointer(uid, cid, index)['key']: index for index, (uid, cid, _, _) in enumerate(pending)}
+    for row in rows:
+        value = row.get('transcript_segments')
+        index = stand_ins.get(value.get('key')) if isinstance(value, dict) else None
+        if index is None:
+            continue
+        uid, conversation_id, plaintext, source_digest = pending[index]
+        try:
+            ref = _memo().uploaded[(uid, conversation_id, source_digest)]
+        except KeyError:
+            ref = _upload_candidate(uid, conversation_id, plaintext, source_digest, cache_decoded=True)
+        row['transcript_segments'] = ref.to_pointer_dict()
 
 
 def clear_memo() -> None:
@@ -194,7 +250,7 @@ def resolve_pointer(uid: str, pointer: Mapping) -> list:
             value = memo.decoded[key]
         except KeyError:
             raise TranscriptPointerFetchError('Transcript preload expired before use') from None
-    if _client.in_transaction_body() and len(memo.resolved) < 32:
+    if _client.in_transaction_body() and len(memo.resolved) < MAX_PRELOAD_DOCUMENTS:
         memo.resolved.add(key)
     if isinstance(value, Exception):
         # Cached failures must not accumulate caller tracebacks/plaintext frames.
@@ -304,6 +360,10 @@ def offload_or_inline(
     plaintext = json.dumps(segments).encode('utf-8')
     if len(zlib.compress(plaintext)) <= config.inline_max_bytes():
         return inline
+    deferred = _DEFERRED.get()
+    if deferred is not None:
+        deferred.append((uid, conversation_id, plaintext, source_digest))
+        return _stand_in_pointer(uid, conversation_id, len(deferred) - 1)
     memo = _memo()
     key = uid, conversation_id, source_digest
     try:
@@ -324,7 +384,7 @@ def _upload_candidate(uid, conversation_id, plaintext, source_digest, *, cache_d
     # Only direct pre-transaction encodes may warm reads. A transaction
     # candidate must not mask a cold read of an existing identical reference.
     # Cache actual upload bytes, never a later encryption of the same source.
-    if cache_decoded and key not in memo.decoded and len(memo.decoded) < 32:
+    if cache_decoded and key not in memo.decoded and len(memo.decoded) < MAX_PRELOAD_DOCUMENTS:
         memo.decoded[key] = _require_segment_list(json.loads(plaintext))
     memo.uploaded[(uid, conversation_id, source_digest)] = ref
     return ref
@@ -377,7 +437,7 @@ def run_preloaded_operation(operation, *args, **kwargs):
                     for key in superseded:
                         memo.decoded.pop(key, None)
                         preloaded.pop(key)
-                elif len(preloaded) >= 32:
+                elif len(preloaded) >= MAX_PRELOAD_DOCUMENTS:
                     raise TranscriptPointerFetchError('Transcript exceeds bounded preload document limit') from None
                 if content_changes + upload_changes > 3 or attempt == 67:
                     raise TranscriptPointerFetchError('Transcript changed during bounded preload retries') from None
@@ -393,6 +453,24 @@ def run_preloaded_operation(operation, *args, **kwargs):
 
 def run_preloaded_transactional(client, fn, *args, **kwargs):
     return run_preloaded_operation(_client.run_transactional, client, fn, *args, **kwargs)
+
+
+def run_preloaded_transaction_with_contention_retry(client, operation, *args):
+    """Load transcript blobs between attempts and start each contention retry with a new ID."""
+    # Use the shared duration reserve to avoid starting another long chain after
+    # a slow failure. The budget does not abort an in-flight transaction.
+    retry_deadline = monotonic() + 45.0
+
+    def run():
+        return run_with_transaction_contention_retry(
+            lambda: client.transaction(max_attempts=1),
+            lambda tx: operation(tx, *args),
+            operation_name=getattr(operation, 'to_wrap', operation).__name__,
+            max_attempts=3,
+            deadline=retry_deadline,
+        )
+
+    return run_preloaded_operation(run)
 
 
 def offload_inline_transcript(uid, conversation_id, *, firestore_client=None, expected_sha256=None) -> bool:

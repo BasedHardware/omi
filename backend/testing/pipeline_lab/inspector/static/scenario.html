@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="referrer" content="no-referrer">
+<title>Scenario run</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/static/scenario.css">
+</head>
+<body>
+<header class="topbar">
+  <span class="brand">Scenario run</span>
+  <span id="run-meta" class="run-meta"></span>
+  <span class="spacer"></span>
+  <span id="run-verdict" class="run-verdict"></span>
+  <button id="theme-toggle" class="icon-btn" type="button" title="Theme: auto, light, dark" aria-label="Theme">◐</button>
+</header>
+<div class="layout">
+  <nav id="rail" class="rail" aria-label="Scenarios in this run">
+    <p class="rail-head">Scenarios</p>
+    <ul id="rail-list" class="rail-list"></ul>
+    <div id="rail-notes" class="rail-notes"></div>
+  </nav>
+  <main id="main" class="main" tabindex="-1">
+    <p class="empty">Loading…</p>
+  </main>
+</div>
+<aside id="drawer" class="drawer" aria-labelledby="drawer-title" aria-hidden="true" tabindex="-1">
+  <div class="drawer-head">
+    <h2 id="drawer-title">Conversation</h2>
+    <button id="drawer-close" class="icon-btn" type="button" aria-label="Close details (Esc)" title="Close (Esc)">✕</button>
+  </div>
+  <div id="drawer-body" class="drawer-body"></div>
+</aside>
+<script src="/static/scenario.js"></script>
+</body>
+</html>

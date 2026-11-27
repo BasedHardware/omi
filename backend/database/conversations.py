@@ -11,7 +11,7 @@ backend/docs/storing-conversations.md).
 from utils.conversations import phase_shadow
 
 from database import conversation_visibility_counts, processing_backlog, speaker_auto_enroll, capture_group_notes
-from database import conversation_recorded_time, conversations_v3_backfill_runs
+from database import conversation_recorded_time, conversations_v3_backfill_runs, conversations_v3_fence
 from database import home_visibility_index, pipeline_ledger
 from utils.conversations import summary_delivery, lifecycle_clocks, terminal_settled
 from utils.observability.delivery import summary_terminal_outcome
@@ -34,7 +34,6 @@ from database.account_deletion_policy import account_deletion_marker_blocks_acce
 from google.api_core.exceptions import AlreadyExists, Conflict, FailedPrecondition, NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
-from google.cloud.firestore_v1.field_path import FieldPath
 from prometheus_client import Counter, REGISTRY
 from threading import Lock
 import utils.other.hume as hume
@@ -93,6 +92,7 @@ from database.transcript_pointer import (
     TranscriptSegmentsDecodeError,
     decode_stored_transcript as decode_transcript_segments_blob,
     run_preloaded_transactional,
+    run_preloaded_transaction_with_contention_retry,
 )
 
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
@@ -1672,6 +1672,8 @@ def persist_processing_result_with_lifecycle(
     existing row onto ``completed``. It must not raise; the persist outcome is
     independent of observers.
     """
+    from database.conversations_v3_fence import permits, wake_repairs
+    from database.conversation_processing_result import stamp_native_visibility, update_fields
     from database.recurring_voice_privacy import filter_processing_write
 
     conversation_data.pop('updated_at', None)
@@ -1693,10 +1695,12 @@ def persist_processing_result_with_lifecycle(
     ledger_stages: tuple[str, ...] = ()
     source_revision = 0
     family_enabled = terminal_settled.serving(uid)
+    repairs = []
 
     @firestore.transactional
-    def _persist(transaction) -> bool:
+    def _persist(transaction) -> Literal['stored', 'fenced'] | conversations_v3_fence.PersistenceDecline:
         nonlocal stale_sync_revision, first_completed, summary_receipt, summary_changed, notes_refresh_state_write, delivery_outcome, terminal_refusal, ledger_stages, source_revision
+        repairs.clear()
         terminal_refusal = None
         summary_changed = False
         summary_receipt = None
@@ -1709,33 +1713,35 @@ def persist_processing_result_with_lifecycle(
         evidence_refresh = write_data.pop('_notes_evidence_reprocess', False)
         # Capture-group membership has one writer (database.capture_groups).
         write_data.pop(CAPTURE_GROUP_FIELD, None)
-        from database.conversations_v3_fence import permits
-
-        if not permits(transaction, db, uid, conversation_data['id']):
-            return False
         existing_snapshot = conversation_ref.get(transaction=transaction)
         source_revision = pipeline_ledger.source_revision(existing_snapshot)
+
+        def declined(reason: str, *, transient: bool = False):
+            return conversations_v3_fence.PersistenceDecline(
+                reason, getattr(existing_snapshot, 'update_time', None), transient
+            )
+
         if not getattr(existing_snapshot, 'exists', False):
             # A processor is never an authority to recreate a conversation.
             # Deleting one is a decision its owner made, and a merge write to a
             # missing document would create it, so a late processor could bring
             # back what they removed and emit derived side effects from it.
-            return False
+            return declined('missing')
 
         existing = existing_snapshot.to_dict() or {}
         if not python_owns_finalization(existing):
-            return False
+            return declined('foreign_owner')
         if existing.get('arrival_at'):
             write_data['arrival_at'] = existing['arrival_at']
         if expected_capture_group is not None:
             expected_group_id, expected_group_revision = expected_capture_group
             current_group = existing.get(CAPTURE_GROUP_FIELD) or {}
             if current_group.get('id') != expected_group_id or current_group.get('revision') != expected_group_revision:
-                return False
+                return declined('capture_group_changed')
         if capture_group_notes_refresh is not None:
             group_id, reservation_id = capture_group_notes_refresh
             if expected_capture_group is None or expected_capture_group[0] != group_id:
-                return False
+                return declined('capture_group_reservation')
             notes_refresh_state_write = capture_group_notes.read_success_write(
                 transaction,
                 uid,
@@ -1744,7 +1750,7 @@ def persist_processing_result_with_lifecycle(
                 firestore_client=db,
             )
             if notes_refresh_state_write is None:
-                return False
+                return declined('capture_group_reservation')
         preserve_duplicate_hint(write_data, existing)
         if existing.get('record_lane_owner'):
             write_data['record_lane_owner'] = existing['record_lane_owner']
@@ -1752,13 +1758,18 @@ def persist_processing_result_with_lifecycle(
             write_data['record_audio_partial'] = existing['record_audio_partial']
         else:
             write_data.pop('record_audio_partial', None)
-        if (
-            existing.get('deleted')
-            or summary_delivery.repair_fenced(existing)
-            or summary_delivery.processing_fenced(existing)
-            or (evidence_refresh and effective_user_title(existing.get('user_title')))
-        ):
-            return False
+        if existing.get('deleted'):
+            return declined('deleted')
+        if summary_delivery.repair_fenced(existing):
+            repair = summary_delivery.REPAIR_CONTEXT.get() or {}
+            if existing.get('sync_content_revision') != repair.get('summary_expected_revision'):
+                return declined('repair_superseded')
+            # Repair eligibility can change as another writer settles the row.
+            return declined('repair_ineligible', transient=True)
+        if summary_delivery.processing_fenced(existing):
+            return declined('processing_owner_changed', transient=True)
+        if evidence_refresh and effective_user_title(existing.get('user_title')):
+            return declined('manual_title')
         if smart_merge_refresh is not None:
             expected_revision, expected_owner = smart_merge_refresh
             merge_state = existing.get('smart_merge') or {}
@@ -1770,18 +1781,20 @@ def persist_processing_result_with_lifecycle(
                 or not isinstance(until, datetime)
                 or until <= datetime.now(timezone.utc)
             ):
-                return False
+                return declined('smart_merge_refused', transient=True)
+        if not permits(transaction, db, uid, conversation_data['id'], existing, repairs=repairs):
+            return 'fenced'
         # A processor that read before another sync append cannot replace that
         # transcript or publish a summary derived from an obsolete revision.
         if existing.get('sync_content_revision') is not None and (
             write_data.get('sync_content_revision') != existing['sync_content_revision']
         ):
             stale_sync_revision = True
-            return False
+            return 'fenced'
 
         if not _batch_identity_membership_current(uid, write_data, existing):
             stale_sync_revision = True
-            return False
+            return declined('identity_membership_changed', transient=True)
 
         if write_data.get('discarded') is True and recovery_discard_payload(write_data):
             from utils.conversations.recovery import (
@@ -1934,7 +1947,11 @@ def persist_processing_result_with_lifecycle(
                     'completed_status_regression',
                 )
 
+        else:
+            _settle_discarded_finalization_projection(existing, write_data)
+
         _offload_processing_transcript(uid, write_data, existing)
+        stamp_native_visibility(existing, write_data)
         summary_receipt = summary_delivery.merge_result(existing, write_data, uid)
         ledger_stages = pipeline_ledger.summary_stages(summary_receipt)
         delivery_outcome = summary_terminal_outcome(existing, write_data)
@@ -1944,7 +1961,7 @@ def persist_processing_result_with_lifecycle(
         if any(flag in write_data for flag in home_visibility_index.FLAGS):
             home_visibility_index.stamp(write_data, existing)
         if family_enabled:
-            transaction.update(conversation_ref, _processing_result_update_fields(write_data))
+            transaction.update(conversation_ref, update_fields(write_data))
         else:
             transaction.set(conversation_ref, write_data, merge=True)
         if notes_refresh_state_write is not None:
@@ -1956,12 +1973,28 @@ def persist_processing_result_with_lifecycle(
             ConversationStatus.completed,
             ConversationStatus.completed.value,
         ) and write_status in (ConversationStatus.completed, ConversationStatus.completed.value)
-        return True
+        return 'stored'
 
+    v3_processing = conversations_v3_fence.current() is not None
     try:
-        persisted = run_preloaded_transactional(db, _persist)
+        if v3_processing:
+            outcome = run_preloaded_transaction_with_contention_retry(db, _persist)
+        else:
+            outcome = run_preloaded_transactional(db, _persist)
     except (transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
         return False
+    if repairs:
+        wake_repairs(uid, repairs)
+        return False
+    if v3_processing:
+        if outcome == 'fenced':
+            raise conversations_v3_fence.ProcessingPersistenceFenced('v3_processing_not_completed')
+        conversations_v3_fence.record_persistence_outcome(
+            uid,
+            conversation_data['id'],
+            outcome if isinstance(outcome, conversations_v3_fence.PersistenceDecline) else None,
+        )
+    persisted = outcome == 'stored'
     if persisted and ledger_stages:
         # After the real commit, in the ledger's own fenced transaction.
         pipeline_ledger.record_summary(
@@ -2941,6 +2974,8 @@ def update_conversation_summary(uid: str, conversation_id: str, app_id: Optional
         'app_result_not_found' if app_id given but no matching apps_results entry,
         'app_result_ambiguous' if multiple entries share that app_id.
     """
+    from database.conversation_processing_result import cleared_native_visibility
+
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
 
@@ -2958,6 +2993,7 @@ def update_conversation_summary(uid: str, conversation_id: str, app_id: Optional
                     'structured.overview': content,
                     'structured.sections': firestore.DELETE_FIELD,
                     'updated_at': updated_at,
+                    **cleared_native_visibility(doc_snapshot.to_dict() or {}, has_notes=bool(content.strip())),
                 },
             )
             return 'ok'
@@ -3493,6 +3529,22 @@ def _conversation_claim_matches(current, expected_status, expected_fields=None, 
     )
 
 
+def _settle_discarded_finalization_projection(current: Mapping[str, Any], updates: dict) -> None:
+    if (
+        updates.get('status') == ConversationStatus.completed
+        and updates.get('discarded', current.get('discarded')) is True
+        and current.get('finalization_status') in ('queued', 'leased')
+        and updates.get('finalization_status', current.get('finalization_status')) in ('queued', 'leased')
+        and (job_id := current.get('finalization_job_id'))
+        and updates.get('finalization_job_id', job_id) == job_id
+        and updates.get('finalization_revision', current.get('finalization_revision'))
+        == current.get('finalization_revision')
+    ):
+        # A confirmed discard settles the row's capture projection. A separate
+        # worker still owns the bound job and decides its immutable receipt.
+        updates['finalization_status'] = 'completed'
+
+
 def claim_conversation_status_in_txn(
     current: Mapping[str, Any],
     *,
@@ -3525,27 +3577,8 @@ def claim_conversation_status_in_txn(
                 raise ValueError('terminal family requires its claim timestamp')
             updates['terminal_family'] = terminal_family
             updates['terminal_family_at'] = terminal_family_at
+        _settle_discarded_finalization_projection(current, updates)
     return updates
-
-
-def _processing_result_update_fields(data: Mapping[str, Any]) -> dict:
-    """Preserve set(merge=True)'s recursive leaf mask in one update of an existing row.
-
-    Empty maps replace that map; arrays and scalars are leaves. FieldPath quotes
-    literal dotted/backtick keys rather than treating them as update paths.
-    """
-    fields = {}
-
-    def visit(value, path):
-        if isinstance(value, dict) and value:
-            for key, child in value.items():
-                visit(child, (*path, key))
-        else:
-            fields[FieldPath(*path).to_api_repr()] = value
-
-    for key, value in data.items():
-        visit(value, (key,))
-    return fields
 
 
 def claim_conversation_status(

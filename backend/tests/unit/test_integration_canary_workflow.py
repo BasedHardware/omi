@@ -290,13 +290,15 @@ def test_actual_restore_condition_recovers_cancelled_and_failed_steps(step_id, o
         'cancelled()', str(outcome == 'cancelled')
     )
 
-    def evaluate(snapshot_outcome):
+    def evaluate(snapshot_outcome, binding=''):
         states = {'cloud-run-traffic-snapshot': snapshot_outcome, step_id: outcome}
-        rendered = re.sub(r'steps\.([a-z0-9-]+)\.outcome', lambda m: repr(states.get(m[1], 'success')), expression)
+        rendered = expression.replace('inputs.selected_split_binding', repr(binding))
+        rendered = re.sub(r'steps\.([a-z0-9-]+)\.outcome', lambda m: repr(states.get(m[1], 'success')), rendered)
         return eval(rendered.replace('&&', ' and ').replace('||', ' or ').replace('\n', ' '), {'__builtins__': {}})
 
     assert evaluate('success')
     assert not evaluate('skipped')
+    assert not evaluate('success', binding='a' * 64)
 
 
 @pytest.mark.parametrize('failure', ['source', 'scope', 'duplicate', 'ingress', 'secret', 'quality-conflict'])
@@ -485,11 +487,11 @@ def test_actual_traffic_shell_routes_only_through_controller_for_ruled_source(ca
             CALLS=str(log),
             DEPLOY_CONTROL_SCRIPTS='/controls',
             RUNNER_TEMP=str(tmp_path),
-            PROMOTION_PROJECT='based-hardware',
-            PROMOTION_REGION='us-central1',
-            PROMOTION_CANDIDATE='backend-new',
-            PROMOTION_SOURCE='a' * 40,
-            PROMOTION_CONTROL='b' * 40,
+            PROJECT='based-hardware',
+            REGION='us-central1',
+            BACKEND='backend-new',
+            ADMITTED_SOURCE='a' * 40,
+            WORKFLOW_CONTROL='b' * 40,
             DEPLOY_STACK_STARTED='10000',
             DEPLOY_STACK_TIMEOUT_MINUTES='90',
             BACKEND_EXIT=str(backend_exit),
@@ -514,24 +516,44 @@ def test_actual_traffic_shell_routes_only_through_controller_for_ruled_source(ca
         assert 'update-traffic backend-integration' in calls[-1] and 'integration-new=100' in calls[-1]
 
 
-def test_selected_production_backend_shift_invokes_only_staged_promotion(tmp_path):
+@pytest.mark.parametrize('binding', ['', 'bound'])
+def test_selected_production_backend_shift_uses_only_the_admitted_controller(tmp_path, binding):
     script = step_script('Shift Cloud Run traffic to validated revisions', {'inputs.cloud_run_service': 'backend'})
+    log = tmp_path / 'calls'
+    output = tmp_path / 'github-output'
     python = tmp_path / 'python3'
-    python.write_text('#!/bin/sh\nprintf "%s\\n" "$*"\n')
+    python.write_text(
+        '#!/bin/sh\n'
+        'printf "%s\\n" "$*" >> "$CALLS"\n'
+        """case "$1" in */cloud_run_split_canary.py) printf '%s\\n' '{"backend-new": 90}';; esac\n"""
+    )
     python.chmod(0o700)
+    # No test command can reach the live traffic writer.
+    (tmp_path / 'gcloud').symlink_to(python)
+    jq = tmp_path / 'jq'
+    jq.write_text("""#!/bin/sh\nread -r result\n[ "$result" = '{"backend-new": 90}' ] && printf "90\\n"\n""")
+    jq.chmod(0o700)
     result = subprocess.run(
         ['bash', '-c', script],
         env=dict(
             os.environ,
             PATH=str(tmp_path) + ':' + os.environ['PATH'],
+            CALLS=str(log),
+            GITHUB_OUTPUT=str(output),
+            GITHUB_RUN_ID='17',
+            GITHUB_RUN_ATTEMPT='1',
+            RUNNER_TEMP=str(tmp_path),
             SELECTED_CLOUD_RUN_SERVICES='backend',
             DEPLOY_CONTROL_SCRIPTS='/controls',
-            PROMOTION_PROJECT='based-hardware',
-            PROMOTION_REGION='us-central1',
-            PROMOTION_CANDIDATE='backend-new',
+            SERVICE='backend',
+            PLAN='split-plan',
+            BINDING=binding,
+            PROJECT='based-hardware',
+            REGION='us-central1',
+            BACKEND='backend-new',
             PROMOTION_INVERSE='backend-old',
-            PROMOTION_SOURCE='a' * 40,
-            PROMOTION_CONTROL='b' * 40,
+            ADMITTED_SOURCE='a' * 40,
+            WORKFLOW_CONTROL='b' * 40,
             DEPLOY_STACK_STARTED='10000',
             DEPLOY_STACK_TIMEOUT_MINUTES='90',
         ),
@@ -540,8 +562,18 @@ def test_selected_production_backend_shift_invokes_only_staged_promotion(tmp_pat
         timeout=10,
     )
     assert result.returncode == 0, result.stderr
-    assert result.stdout.startswith('/controls/promote_selected_backend.py ')
-    assert len(result.stdout.splitlines()) == 1
+    calls = log.read_text().splitlines()
+    if binding:
+        assert len(calls) == 2
+        assert calls[0] == '-I - /controls'
+        assert calls[1].startswith(
+            '/controls/cloud_run_split_canary.py promote --service backend --plan split-plan --binding bound '
+            '--candidate backend-new '
+        )
+        assert output.read_text().splitlines() == ['promoted=true', 'serving_percent=90']
+    else:
+        assert len(calls) == 1
+        assert calls[0].startswith('/controls/promote_selected_backend.py --scope backend --inverse backend-old ')
 
 
 @pytest.mark.parametrize('shallow', ['true', 'false'])

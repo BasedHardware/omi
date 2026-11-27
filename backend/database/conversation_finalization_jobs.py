@@ -18,7 +18,7 @@ from typing import Any, Callable, Literal, Mapping, NotRequired, TypedDict
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
-from config import server_batch, listen_reconnect
+from config import listen_reconnect, server_batch
 from config.episodes import home_transcription_deadline_seconds
 from config.firestore_read_levers import lever_enabled
 from config.account_cutover import cutover_enforcement_enabled
@@ -60,6 +60,7 @@ from models.conversation_continuity import continuation_timeout
 from utils.conversations.backfill_stats import same_timestamp_revision
 from utils.account_cutover.fence import background_job_should_skip_account
 from utils.conversations.terminal_relevance import stamp_terminal_decision
+from database.server_batch_capture_handoff import capture_allowed, manual_stop_patch
 from utils.conversations import terminal_settled
 from utils.conversations.processing_trigger import (
     PROCESSING_MODES,
@@ -599,6 +600,15 @@ def _create_or_get_finalization_intent_txn(
         if not python_owns_finalization(loaded):
             intent = _no_finalization_intent(FINALIZATION_OWNER_REFUSAL)
             return intent
+        if account_deletion_ref is not None:
+            marker = account_deletion_ref.get(transaction=transaction)
+            deletion_status = normalize_account_deletion_status(
+                marker_exists=bool(marker.exists),
+                raw_status=(marker.to_dict() or {}).get('wipe_status'),
+            )
+            if account_deletion_blocks_access(deletion_status):
+                intent = _no_finalization_intent('refused_account_deleting')
+                return intent
         conversation = loaded
         if trigger is ProcessingTrigger.SILENT_BACKFILL:
             if extra_updates:
@@ -631,15 +641,6 @@ def _create_or_get_finalization_intent_txn(
             if (privacy.get('byok') or {}).get('active'):
                 return _no_finalization_intent('refused_byok')
         if is_recovery_trigger(trigger):
-            if trigger is ProcessingTrigger.SERVER_RECOVERY and account_deletion_ref is not None:
-                marker = account_deletion_ref.get(transaction=transaction)
-                deletion_status = normalize_account_deletion_status(
-                    marker_exists=bool(marker.exists),
-                    raw_status=(marker.to_dict() or {}).get('wipe_status'),
-                )
-                if account_deletion_blocks_access(deletion_status):
-                    intent = _no_finalization_intent('refused_account_deleting')
-                    return intent
             refusal = recovery_admission_refusal(uid, loaded, recovery_cutoff)
             if refusal is not None:
                 intent = _no_finalization_intent(f'refused_{refusal}')
@@ -875,11 +876,7 @@ def create_or_get_finalization_intent(
             expected_update_time=expected_update_time,
             backfill_run_id=backfill_run_id,
             expected_session_revision=expected_session_revision,
-            account_deletion_ref=(
-                client.collection('account_deletions').document(uid)
-                if trigger is ProcessingTrigger.SERVER_RECOVERY
-                else None
-            ),
+            account_deletion_ref=client.collection('account_deletions').document(uid),
             require_expired_recording_lease=require_expired_recording_lease,
         )
 
@@ -1141,11 +1138,8 @@ def _complete_server_batch_capture_txn(
     already reserved its durable batch obligation. All reads precede writes.
 
     A user finish (``client_finalize``) of a v3 recording also stores ``v3_manual_end_requested``.
-    This capture has no transcript yet, so it never reaches the transcript path that calls
-    ``changed(manual_end=True)``. The request is inert here: record admission promotes it to
-    ``v3_manual_end`` once the whole recording will land as one transcript (a single batch unit, or
-    the fast first transcript), because a cut applied to the first of several unit projections
-    would lock a partial window.
+    An explicit stop with native provenance waits for the sealed transcript projection.
+    Requests without that provenance can still use the existing admission and projection paths.
     """
     job_snapshot = job_ref.get(transaction=transaction)
     conversation_snapshot = conversation_ref.get(transaction=transaction)
@@ -1169,22 +1163,14 @@ def _complete_server_batch_capture_txn(
         and current.get('finalization_job_id') == job_ref.id
         and current.get('finalization_revision') == revision
     )
-    capture_allowed = (
-        server_batch.owned(capture)
-        and server_batch.owned(current)
-        and current.get('external_data') == capture.get('external_data')
-        and current.get(server_batch.MARKER) == capture.get(server_batch.MARKER)
-        and bool(current.get('private_cloud_sync_enabled'))
-        and current.get('data_protection_level', 'enhanced') in {'standard', 'enhanced'}
-        and not any(current.get(key) for key in ('deleted', 'discarded', 'is_locked', 'uses_custom_stt'))
-    )
+    allowed = capture_allowed(capture, current)
     # Only this primitive's committed terminal is an idempotent success. A
     # generic completed/fenced job must never authorize a raw-capture handoff.
     if job.get('status') == 'completed':
         return (
             'completed'
             if bound
-            and capture_allowed
+            and allowed
             and current.get('status') == 'completed'
             and job.get('finalization_outcome') == 'server_batch_capture'
             and job.get('terminal_outcome') == 'success'
@@ -1194,7 +1180,7 @@ def _complete_server_batch_capture_txn(
         )
     if not _is_current_lease(job, dispatch_generation, lease_epoch):
         return 'lease_conflict'
-    if not bound or not capture_allowed or current.get('status') != 'processing':
+    if not bound or not allowed or current.get('status') != 'processing':
         transaction.update(job_ref, _fenced_finalization_update(now))
         _record_projection_delta(transaction, projection_collection, job, leased=-1, completed=1, stale=1)
         return 'fenced'
@@ -1211,6 +1197,8 @@ def _complete_server_batch_capture_txn(
         conversation_ref,
         {
             'status': 'completed',
+            'finalization_status': 'completed',
+            **manual_stop_patch(current, job, job_ref.id, revision),
             'relevance_decision': terminal['relevance_decision'],
             'home_transcription_pending_at': now,
             'home_transcription_deadline_at': now + timedelta(seconds=home_transcription_deadline_seconds()),
@@ -2117,6 +2105,8 @@ def _record_meeting_receipt_txn(
     duration_s: float,
     dedup_speech_s: float,
     now: datetime,
+    *,
+    account_deletion_ref: Any | None = None,
 ) -> dict[str, Any]:
     """Create the finalization-job receipt once and project its verdict to the conversation."""
     conversation_snapshot = conversation_ref.get(transaction=transaction)
@@ -2125,6 +2115,14 @@ def _record_meeting_receipt_txn(
     conversation = conversation_snapshot.to_dict() or {}
     if not python_owns_finalization(conversation):
         return {'status': 'fenced'}
+    if account_deletion_ref is not None:
+        marker = account_deletion_ref.get(transaction=transaction)
+        deletion_status = normalize_account_deletion_status(
+            marker_exists=bool(marker.exists),
+            raw_status=(marker.to_dict() or {}).get('wipe_status'),
+        )
+        if account_deletion_blocks_access(deletion_status):
+            return {'status': 'fenced'}
     existing_job_id = conversation.get('finalization_job_id')
     job_id = (
         finalization_job_id
@@ -2244,6 +2242,7 @@ def record_meeting_receipt(
         duration_s,
         dedup_speech_s,
         _now(),
+        account_deletion_ref=client.collection('account_deletions').document(uid),
     )
     if result['status'] == 'recorded':
         stop_quiet_check_for_conversation(uid, conversation_id, firestore_client=client)

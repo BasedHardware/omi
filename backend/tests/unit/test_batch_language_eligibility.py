@@ -65,6 +65,7 @@ async def upload(
     paths=(),
     record_origin=False,
     batch_percent=0.0,
+    profile=None,
 ):
     """Run a new sync upload through intake; staging raises so admission stops at custody."""
     staged = []
@@ -87,6 +88,8 @@ async def upload(
                 'language': user_language,
                 'transcription_preferences': {'single_language_mode': single},
             }
+            if profile is not None:
+                snapshots['user']['live_stt_language_sessions'] = profile
             if conversation_id:
                 row = {'language': conversation_language}
                 if owner:

@@ -620,7 +620,8 @@ def _get_shaped_conversation_notes(
                 call_model = isolated_model
 
             async def model_turn(shape: Mount, messages: list[Any]) -> Turn:
-                response = await call_model.ainvoke(messages)
+                async with v3_models.summary_model_attempt():
+                    response = await call_model.ainvoke(messages)
                 content = getattr(response, 'content', response)
                 if isinstance(content, list):
                     content = ''.join(part.get('text', '') if isinstance(part, dict) else str(part) for part in content)
@@ -628,7 +629,7 @@ def _get_shaped_conversation_notes(
 
             return await run_loop(_bounded_notes_mount(mount), evidence, model_turn)
 
-    result = asyncio.run(invoke())
+    result = v3_models.dispatch_notes_model(lambda: asyncio.run(v3_models.within_notes_admission(invoke)))
     output_schema = _notes_output_schema(uid)
     validated_output = output_schema.model_validate(result.value)
     capture_into_sink(validated_output, open_loop_out)

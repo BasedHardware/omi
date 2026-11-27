@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-legacy-absorb-takes-v3-owned-row",
+  "family": "state-single-owner",
+  "violated_contract": "v3 owns the boundaries, merges and claims of v3_derived and recording rows; a legacy smart-merge absorb, whose redirect keeps v3_derived and transfers no claims, never takes a v3-owned row as its donor, so the v3 processing drain never sees ConversationAbsorbed.",
+  "canonical_prevention": "The pre-notes merge boundary (merge_before_processing.before_notes) returns before any merge read for a conversation whose v3_derived or recording marker is True, behind the default-on kill switch CONVERSATION_MERGE_BEFORE_PROCESSING_V3_EXCLUSION; a boundary test pins that the merge worker is never loaded for either marker and that the kill switch restores the absorb.",
+  "canonical_prevention_artifact": ["backend/tests/unit/test_occasion_merge_before_processing.py"],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/conversations/merge_before_processing.py",
+    "backend/utils/conversations/smart_merge.py",
+    "backend/utils/conversations/v3/service.py"
+  ],
+  "status": "open"
+}

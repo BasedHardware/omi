@@ -145,6 +145,36 @@ void main() {
     if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
   });
 
+  test('a timed-out file batch retains its WAL and the next recording uploads in the same drain', () async {
+    final started = Completer<void>();
+    final blocked = Completer<UploadFilesResult>();
+    uploadResponse = (files) async {
+      if (uploadAttempts.length == 1) {
+        started.complete();
+        return blocked.future;
+      }
+      return UploadFilesResult.queued('healthy-job');
+    };
+    final stamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    sync.testWals = [
+      for (var i = 0; i < 2; i++)
+        _makeWal(timerStart: stamp - 120 + i, filePath: 'audio_$i.bin')..conversationId = 'rec-$i'
+    ];
+    for (final w in sync.testWals) {
+      await File('${tempDir.path}/${w.filePath}').writeAsBytes([1]);
+    }
+    final pass = sync.syncAll();
+    await started.future;
+    expect(uploadAttempts.length, 1);
+    blocked.completeError(TimeoutException('stalled POST'));
+    await pass;
+    expect(uploadAttempts.length, 2);
+    final failed = sync.testWals.singleWhere((w) => w.filePath == uploadAttempts.first.single);
+    expect(failed.status, WalStatus.miss);
+    expect(await File('${tempDir.path}/${failed.filePath}').exists(), isTrue);
+    expect(sync.testWals.singleWhere((w) => w != failed).jobId, 'healthy-job');
+  });
+
   for (final liveOnly in [false, true]) {
     test('cancel during queued flush prevents the real ${liveOnly ? 'live' : 'fallback'} phone drain reaching its gate',
         () async {
@@ -983,8 +1013,9 @@ void main() {
     });
   });
 
-  test('after restart a shared conversation uploads one session while the other waits for custody', () async {
-    var now = DateTime.utc(2026, 11, 20);
+  test('after restart one session honors a 30-minute custody wait while the other uploads', () async {
+    final waitStartedAt = DateTime.utc(2026, 11, 20);
+    var now = waitStartedAt;
     const owner = 'record-wait-owner';
     await SharedPreferencesUtil().saveString('uid', owner);
     var canAccept = false;
@@ -1008,7 +1039,7 @@ void main() {
               uploadAttempts.add(files.map((file) => file.uri.pathSegments.last).toList());
               if (recordingSessionId == 'waiting-session' && !canAccept) {
                 throw const SyncUploadHttpException(503, 'Custody pending',
-                    reasonCode: 'record_capture_pending', recordingWaitSeconds: 30);
+                    reasonCode: 'record_capture_pending', recordingWaitSeconds: 1800);
               }
               return UploadFilesResult.queued('accepted-$recordingSessionId');
             },
@@ -1029,6 +1060,7 @@ void main() {
     await expectLater(first.syncWal(wal: waiting), throwsA(isA<SyncUploadHttpException>()));
     expect(waiting.status, WalStatus.miss);
 
+    now = waitStartedAt.add(const Duration(minutes: 6));
     final restarted = createLedger()..testWals = await WalFileManager.loadWals();
     final restored = restarted.testWals.singleWhere((wal) => wal.recordingSessionId == 'waiting-session');
     final retainedFile = File('${tempDir.path}/${restored.filePath}');
@@ -1048,7 +1080,11 @@ void main() {
     expect(await retainedFile.readAsBytes(), [1, 0, 0, 0, 42]);
 
     canAccept = true;
-    now = now.add(const Duration(seconds: 37));
+    now = waitStartedAt.add(const Duration(minutes: 29, seconds: 59));
+    await expectLater(restarted.syncWal(wal: restored), throwsA(isA<SyncRecordingWaitException>()));
+    expect(uploadAttempts, hasLength(2));
+
+    now = waitStartedAt.add(const Duration(minutes: 30));
     await restarted.syncAll();
 
     expect(uploadAttempts.last, ['waiting.bin']);

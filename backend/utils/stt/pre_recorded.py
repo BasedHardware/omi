@@ -42,6 +42,8 @@ from models.transcript_segment import TranscriptSegment
 from utils.log_sanitizer import sanitize_provider_error
 from utils.observability.fallback import record_fallback
 from utils.other.endpoints import timeit
+from utils.stt.prerecorded_deadline import budget_timeout, verification_stt_deadline as verification_stt_deadline
+from utils.stt.prerecorded_deadline import verification_deadline as _verification_deadline
 from utils.stt.outcomes import TranscriptionFailure
 from utils.stt.modulate_batch import MODULATE_TIMEOUT as _MODULATE_TIMEOUT
 from utils.stt.modulate_batch import modulate_budget_refusal as _modulate_budget_refusal
@@ -66,7 +68,6 @@ from utils.stt.vendor_guard import (
 )
 
 _DG_TIMEOUT = httpx.Timeout(connect=10.0, read=120.0, write=30.0, pool=10.0)
-_verification_deadline: ContextVar[Optional[float]] = ContextVar('verification_stt_deadline', default=None)
 
 _held_single_attempt: ContextVar[bool] = ContextVar('held_stt_single_attempt', default=False)
 _modulate_prior_failure: ContextVar[Optional[bool]] = ContextVar('modulate_prior_failure', default=None)
@@ -94,16 +95,6 @@ def held_single_attempt():
         _held_single_attempt.reset(token)
 
 
-@contextmanager
-def verification_stt_deadline(deadline: float):
-    """Limit the prompt verifier's one provider attempt to its caller's budget."""
-    token = _verification_deadline.set(deadline)
-    try:
-        yield
-    finally:
-        _verification_deadline.reset(token)
-
-
 def _verification_timeout(default: httpx.Timeout | float) -> httpx.Timeout | float:
     deadline = _verification_deadline.get()
     if deadline is None:
@@ -111,7 +102,7 @@ def _verification_timeout(default: httpx.Timeout | float) -> httpx.Timeout | flo
     remaining = deadline - time.monotonic()
     if remaining <= 0:
         raise TimeoutError('speaker tag verification deadline expired')
-    return httpx.Timeout(remaining)
+    return budget_timeout(remaining)
 
 
 _MAX_PRE_RECORDED_SEGMENT_DURATION_SECONDS = 30.0
@@ -1462,6 +1453,18 @@ def prerecorded(
     return result
 
 
+def prerecorded_bytes_route(audio_bytes, language, *, before_probe=None, before_self_probe=None, **audio: Any):
+    """The selected service and provider language for these bytes; ``before_*probe`` gate each language probe."""
+    from utils.stt.batch_language import resolve_language, select_decision
+
+    hooks = {'before_probe': before_probe, 'before_self_probe': before_self_probe}
+    decision = resolve_language(language, audio_bytes, **audio, **{k: v for k, v in hooks.items() if v is not None})
+    resolved = decision.language if decision.parakeet_safe else language
+    if not language_guard_enabled() or language_class(language) != 'unknown':
+        resolved = language
+    return select_decision(language, decision, get_prerecorded_service), resolved
+
+
 def prerecorded_from_bytes(
     audio_bytes: bytes,
     sample_rate: int = 16000,
@@ -1475,15 +1478,12 @@ def prerecorded_from_bytes(
     keywords: Optional[Sequence[str]] = None,
     *,
     return_provider: bool = False,
+    route: Optional[Tuple[Any, Optional[str]]] = None,
 ) -> Any:
-    """Route pre-recorded bytes transcription through STT_PRERECORDED_MODEL."""
-    from utils.stt.batch_language import resolve_language, select_decision
-
-    decision = resolve_language(language, audio_bytes, sample_rate=sample_rate, channels=channels, encoding=encoding)
-    resolved = decision.language if decision.parakeet_safe else language
-    if not language_guard_enabled() or language_class(language) != 'unknown':
-        resolved = language
-    selected = select_decision(language, decision, get_prerecorded_service)
+    """Route pre-recorded bytes transcription through STT_PRERECORDED_MODEL; ``route`` reuses a resolved one."""
+    selected, resolved = route or prerecorded_bytes_route(
+        audio_bytes, language, sample_rate=sample_rate, channels=channels, encoding=encoding
+    )
     provider = get_prerecorded_provider(resolved, selected_service=selected)
     result = provider.transcribe_bytes(
         audio_bytes,

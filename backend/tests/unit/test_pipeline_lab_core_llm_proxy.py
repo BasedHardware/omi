@@ -448,3 +448,40 @@ def test_relayed_header_values_lose_control_characters():
 
     assert _header_value('application/json\r\nSet-Cookie: x=1') == 'application/jsonSet-Cookie: x=1'
     assert _header_value('text/event-stream; charset=utf-8') == 'text/event-stream; charset=utf-8'
+
+
+def test_jev_decision_through_the_fake_upstream_is_cached_on_an_identical_rerun(lab):
+    """``jev_conversation_relevance`` (``/v1/systemone``): the body is the product's state + questions only,
+    so two identical runs key the same; the fake answers 2xx, so the second call is a cache hit."""
+    from testing.pipeline_lab.llm_proxy.fake_upstream import FakeUpstream as ScriptedUpstream
+    from utils.conversations.relevance_jev import QUESTIONS, relevance_state
+    from utils.llm.jev_client import _validated_answers
+
+    body = {
+        'model': 'omi:auto:jev-decisions',
+        'state': relevance_state('call the dentist at noon'),
+        'questions': QUESTIONS,
+    }
+    headers = {'X-Omi-LLM-Feature': 'jev_conversation_relevance'}
+    fake = ScriptedUpstream().start()
+    try:
+        with _proxy(lab, fake) as proxy:
+            first = _post(proxy.url + '/v1/systemone', body, headers)
+            second = _post(proxy.url + '/v1/systemone', body, headers)
+    finally:
+        fake.stop()
+    assert first[0] == 200 and first[1]['X-Pipeline-Lab-Cache'] == 'miss'
+    assert second[1]['X-Pipeline-Lab-Cache'] == 'hit' and second[2] == first[2]
+    answers = _validated_answers(json.loads(first[2]), QUESTIONS)
+    assert answers is not None and answers.noul('worth_keeping') == 1.0  # the fake keeps, like conv_discard
+
+
+def test_fake_upstream_systemone_without_a_jev_body_is_still_unsupported():
+    from testing.pipeline_lab.llm_proxy.fake_upstream import FakeUpstream as ScriptedUpstream
+
+    fake = ScriptedUpstream().start()
+    try:
+        status, _, _ = _post(fake.url + '/v1/systemone', {'step': 'prefilter', 'input': 'x'})
+    finally:
+        fake.stop()
+    assert status == 404

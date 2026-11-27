@@ -15936,4 +15936,15 @@ class AppLocalizationsEl extends AppLocalizations {
   String playStripePlanPaused(String plan) {
     return 'Το πρόγραμμά σας $plan είναι σε παύση.';
   }
+
+  @override
+  String get firmwareNewestSupportedForDevice =>
+      'Η συσκευή σας έχει ήδη την πιο πρόσφατη υποστηριζόμενη έκδοση υλικολογισμικού';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Συγχρονίστε πρώτα τις ηχογραφήσεις σας';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Μερικές ηχογραφήσεις βρίσκονται ακόμη στη συσκευή σας. Περιμένετε να ολοκληρωθεί ο συγχρονισμός τους στο τηλέφωνό σας και, στη συνέχεια, ξεκινήστε την ενημέρωση.';
 }

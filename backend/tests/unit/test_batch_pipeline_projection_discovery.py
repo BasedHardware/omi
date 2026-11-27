@@ -81,6 +81,23 @@ def test_failed_query_retries_cursor_without_losing_page(monkeypatch):
     ]
 
 
+def test_coverage_loss_rebases_cursor_before_the_next_legacy_page(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED', 'off')
+    store = Mock()
+    store.projection_page_with_outbox.return_value = (['covered'], (1.0, 'covered'), {'covered'})
+    store.projection_page.side_effect = lambda *, limit, after: (
+        (['covered'], (1.0, 'covered')) if after is None else (['later'], (2.0, 'later'))
+    )
+    coverage = iter([True, False])
+    scan = ProjectionDiscovery(store, outbox_coverage=lambda: next(coverage))
+
+    assert scan.next(limit=1) == []
+    assert scan.after == (1.0, 'covered')
+    assert scan.next(limit=1) == ['covered']
+    assert store.projection_page_with_outbox.call_args.kwargs['after'] is None
+    assert store.projection_page.call_args.kwargs['after'] is None
+
+
 def scanner(monkeypatch, rows, stripe):
     monkeypatch.delenv('BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED', raising=False)
     monkeypatch.delenv('BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED', raising=False)

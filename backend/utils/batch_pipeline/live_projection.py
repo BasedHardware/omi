@@ -8,10 +8,12 @@ import math
 
 from config.record_audio import restore_pending
 from config.server_batch import manual_end_marker_enabled
+from utils.conversations.v3.policy import NATIVE_MANUAL_STOP
 from utils.batch_pipeline import empty_transcription
 from utils.conversations.final_pass_remap import remap_final_record
 from utils.conversations.fragment_visibility import is_automatic_discard
 from utils.conversations.summary_delivery import stamp_projection_debt
+from utils.conversations.v3.live import FINISH_RECORDING_FIELD
 from utils.manual_speaker_assignments import (
     apply_manual_assignments,
     manual_assignment_decision,
@@ -140,12 +142,15 @@ def replace_record(
         sync_live_target=True,
     )
     # A no-pointer Finish can arrive after the admission worker read its snapshot.
-    # The single-unit transcript commit is the other safe place to honor that marker.
+    # The single-unit transcript commit can honor a window-targeted request.
+    # Recording-only requests wait for the native whole-record ledger commit.
     if (
         new
         and span.get('whole_native_record')
         and current.get('recording')
         and current.get('v3_manual_end_requested')
+        and not current.get(NATIVE_MANUAL_STOP)
+        and not current.get(FINISH_RECORDING_FIELD)
         and not current.get('v3_manual_end')
         and manual_end_marker_enabled()
     ):

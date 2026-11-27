@@ -18,12 +18,20 @@ import random
 import threading
 import time
 
+from utils.conversations.v3.live import FINISH_RECORDING_FIELD
 from utils.conversations import phase_shadow
 
 from config.policy import resolve_batch_policy
 from config.audio_archive import derived_audio_bucket
 from config.record_wal_duplicate import SOURCE_FIELD
-from config.record_audio import BARRIER_NOT_CLOSED, require_record_audio_barrier, record_identity
+from config.record_audio import (
+    BARRIER_BLOCKERS,
+    BARRIER_NOT_CLOSED,
+    TOKEN_KINDS,
+    barrier_cause_metrics_enabled,
+    record_identity,
+    require_record_audio_barrier,
+)
 from config.record_partial import UNIT_SECONDS, UNIT_REFERENCES, INVENTORY_POLL_SECONDS
 from config.record_latency import record_seal_wake_preserved_enabled
 from config.record_drain import (
@@ -52,7 +60,14 @@ from database.batch_pipeline_shadow_hook import shadow_from_env
 from utils.batch_pipeline.artifact_policy import create_artifact_store
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
 from utils.batch_pipeline.scheduler import owner_key
-from utils.batch_pipeline.source_audio import MAGIC, MAX_REFERENCES, read_reference, batch_timing_store
+from utils.batch_pipeline.artifact_reads import ArtifactReadBudget
+from utils.batch_pipeline.source_audio import (
+    MAGIC,
+    MAX_REFERENCES,
+    MAX_SOURCE_BYTES,
+    read_reference,
+    batch_timing_store,
+)
 from utils.batch_pipeline.record_barrier import validate_record_tail
 from utils.batch_pipeline.record_wal_source import attest
 from utils.batch_pipeline.record_language import prove_manifest
@@ -104,6 +119,18 @@ _RETRY_REASONS = frozenset(
         'work identity must match projection binding',
     }
 )
+
+
+def _observe_barrier_refusal(counter, error) -> None:
+    try:
+        blocker = getattr(error, 'barrier_blocker', None)
+        kind = getattr(error, 'barrier_token_kind', None)
+        counter.labels(
+            blocker if blocker in BARRIER_BLOCKERS else 'unknown',
+            kind if kind in TOKEN_KINDS else 'unknown',
+        ).inc()
+    except Exception:
+        pass  # Observability never changes a drain outcome.
 
 
 def _retry_reason(error: BaseException) -> str:
@@ -392,8 +419,18 @@ _FAST_FINISH_TASKS: set = set()
 # retried or re-run; one provider transcription per recording is enough.
 _FAST_FINISH_STARTED: dict[str, None] = {}
 _FAST_FINISH_STARTED_MAX = 4096
-# Each pass holds a recording's PCM in memory and a storage thread for a provider call.
+# Bound whole passes, not provider requests. Each pass holds a storage thread as its coordinator and
+# up to its window of five-minute chunk buffers (9.6 MB each); its chunk requests run on the shared
+# fast-finish chunk pool, which caps provider requests for the process. Short and serial passes share
+# two slots (4 buffers each); a long pass (over 20 minutes of audio) takes its own single slot (3
+# buffers), so long recordings never hold a short Finish's slot: 11 buffers, about 106 MB, per process,
+# plus at most one buffer per pool worker for a request a stopped pass left running. With
+# CONVERSATIONS_V3_FAST_FINISH_CHUNKED=off every pass is serial and holds a whole recording of up to
+# 20 minutes instead, as before.
 _FAST_FINISH_SLOTS = threading.BoundedSemaphore(2)
+_FAST_FINISH_LONG_SLOTS = threading.BoundedSemaphore(1)
+# A short Finish waits this long for a slot (inside its deadline) instead of answering busy at once.
+_FAST_FINISH_SHORT_SLOT_WAIT_SECONDS = 10.0
 
 
 def _admitted_these_units(admitted, job_id) -> bool:
@@ -414,15 +451,23 @@ async def _manual_finish_admitted(
     from config.server_batch import manual_end_marker_enabled
     from database import conversations as conversations_db, conversations_v3
     from utils.conversations.v3 import fast_finish, metrics as v3_metrics, triggers as v3_triggers
+    from utils.conversations.v3.policy import NATIVE_MANUAL_STOP
 
+    # One end-to-end budget for the pass, from here: slot wait and every provider request count.
+    deadline = time.monotonic() + fast_finish.PASS_DEADLINE_SECONDS
     try:
-        if not current.get('recording') or not current.get('v3_manual_end_requested'):
+        if (
+            not current.get('recording')
+            or not current.get('v3_manual_end_requested')
+            or current.get(NATIVE_MANUAL_STOP)
+        ):
             return
         if not manual_end_marker_enabled():
             return
         single = len(units) == 1
+        recording_finish = bool(current.get(FINISH_RECORDING_FIELD))
         promoted = False
-        if single:
+        if single and not recording_finish:
             # Stored before any detached work, so losing the process cannot lose a single-unit cut.
             promoted = await run_blocking(
                 db_executor, conversations_v3.promote_manual_end, uid, conversation_id, firestore_client=store.client
@@ -430,7 +475,14 @@ async def _manual_finish_admitted(
             v3_metrics.BATCH_MANUAL_END.labels('promoted' if promoted else 'not_promoted').inc()
         # ``current`` is a raw row: its stored transcript is opaque here, so this only screens on
         # clear fields. The pass decides on a decoded row.
-        if fast_finish.mode() == 'off' or not fast_finish.candidate(current) or conversation_id in _FAST_FINISH_STARTED:
+        if fast_finish.mode() == 'off':
+            skipped = 'mode_off'
+        else:
+            skipped = fast_finish.candidate_rejection(current)
+            if skipped is None and conversation_id in _FAST_FINISH_STARTED:
+                skipped = 'already_started'
+        if skipped is not None:
+            fast_finish.SKIPPED.labels(skipped).inc()
             if not single:
                 v3_metrics.BATCH_MANUAL_END.labels('multi_unit_deferred').inc()
             return
@@ -442,7 +494,13 @@ async def _manual_finish_admitted(
         copied = [(start, duration, [dict(ref) for ref in refs]) for start, duration, refs in units]
 
         def read(ref):
-            return read_reference(client, ref, uid, conversation_id, allowed, key, source_metadata=True)
+            # A chunked pass's reads end with its deadline: each reference's metadata and download
+            # timeouts are capped to what is left, and one that starts past it refuses at once. The
+            # serial kill-switch path keeps today's 30 s and 60 s timeouts.
+            budget = ArtifactReadBudget(deadline, MAX_SOURCE_BYTES, 1) if fast_finish.chunked_enabled() else None
+            return read_reference(
+                client, ref, uid, conversation_id, allowed, key, source_metadata=True, read_budget=budget
+            )
 
         def refresh():
             # Decoded: an empty stored transcript is not empty bytes. A transcript that cannot be
@@ -483,9 +541,20 @@ async def _manual_finish_admitted(
         def run():
             # The cohort read is synchronous on this thread. Owners outside the rollout stop here
             # and never take one of the pass slots.
-            if not fast_finish.enabled(uid):
+            shape = fast_finish.pass_class(copied) if fast_finish.enabled(uid) else None
+            # Length, the long canary and its daily cap need only the units: a Finish they refuse is
+            # counted as such and never holds a slot, so it can neither wait for one nor read as busy.
+            refused = fast_finish.screen(uid, copied) if shape is not None else None
+            slots = _FAST_FINISH_LONG_SLOTS if shape == 'long' else _FAST_FINISH_SLOTS
+            # A short Finish may wait briefly, inside its deadline; a long one and the serial kill-switch
+            # path never wait, as before.
+            patience = min(_FAST_FINISH_SHORT_SLOT_WAIT_SECONDS, deadline - time.monotonic()) if shape == 'short' else 0
+            if shape is None:
                 outcome = 'not_enabled'
-            elif not _FAST_FINISH_SLOTS.acquire(blocking=False):
+            elif refused is not None:
+                outcome = refused
+                fast_finish.OUTCOMES.labels(refused).inc()
+            elif not (slots.acquire(timeout=patience) if patience > 0 else slots.acquire(blocking=False)):
                 outcome = 'busy'
                 fast_finish.OUTCOMES.labels('busy').inc()
             else:
@@ -493,7 +562,8 @@ async def _manual_finish_admitted(
                     outcome = fast_finish.run(
                         uid,
                         conversation_id,
-                        refresh(),
+                        # No row: the pass reads the decoded row itself, bounded by the deadline.
+                        None,
                         copied,
                         read,
                         refresh=refresh,
@@ -501,12 +571,14 @@ async def _manual_finish_admitted(
                         # promoted single unit already holds its cut, but still gets its own
                         # manual-end wake after the write: the writer's plain wake shares the owner's
                         # per-minute task name and is skipped when a reconcile already ran that minute.
-                        cut=cut if not single or promoted else None,
+                        # Recording-scoped intent is consumed by the native completion transaction.
+                        cut=cut if not recording_finish and (not single or promoted) else None,
                         privacy=privacy,
                         fence=fence,
+                        deadline=deadline,
                     )
                 finally:
-                    _FAST_FINISH_SLOTS.release()
+                    slots.release()
             if outcome == 'written':
                 v3_metrics.BATCH_MANUAL_END.labels('fast_finish').inc()
             elif not single:
@@ -800,6 +872,7 @@ async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None)
         nonlocal partial_count, privacy_blocked, admitted
         partial_count += bool(pending.get('partial_coordinator'))
         failed = barrier_open = False
+        barrier_error = None
         try:
             if provider_outbox_factory is None:
                 await admit_recording(store, pending)
@@ -815,6 +888,7 @@ async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None)
         except Exception as error:
             failed = True
             barrier_open = isinstance(error, ValueError) and str(error) == BARRIER_NOT_CLOSED
+            barrier_error = error
             if pending.get('partial_coordinator'):
                 record_partial_failure(error, run=pending.get('partial_run'))
             logger.warning(
@@ -891,6 +965,10 @@ async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None)
             admitted += 1
         if expired and metrics is not None:
             metrics.record_dead_letter.inc()
+        if barrier_open and metrics is not None and barrier_cause_metrics_enabled():
+            _observe_barrier_refusal(metrics.record_barrier_refusals, barrier_error)
+            if expired:
+                _observe_barrier_refusal(metrics.record_barrier_aged, barrier_error)
 
     async def worker():
         # next() has no await: each selected row belongs to one local worker.

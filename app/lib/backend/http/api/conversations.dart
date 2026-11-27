@@ -1,5 +1,9 @@
+import 'dart:async';
+import 'package:omi/utils/reliability_experiments.dart';
 import 'package:omi/utils/analytics/lag_work_registry.dart';
 import 'sync_upload_refusal.dart';
+import 'wal_retry_manifest.dart';
+import 'package:omi/backend/preferences.dart';
 import 'conversation_page_headers.dart';
 export 'conversation_page_headers.dart';
 import 'dart:convert';
@@ -11,6 +15,7 @@ import 'package:http/http.dart' as http;
 import 'package:omi/backend/http/api_fallback.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/http/http_pool_manager.dart';
 import 'package:omi/backend/schema/gen/action_items_folders_wire.g.dart' as action_items_wire;
 import 'package:omi/backend/schema/gen/apps_wire.g.dart' as apps_wire;
 import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
@@ -28,6 +33,7 @@ import 'package:omi/utils/off_ui_isolate.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/wal_sync_upload.dart';
 import 'package:omi/services/wals/upload_trace.dart';
+import 'package:omi/services/experiments/mobile_batch_upload_hold_gate.dart';
 
 part 'sync_job_fetch.dart';
 part 'conversation_home_list.dart';
@@ -42,6 +48,16 @@ part 'conversation_search_decode.dart';
 /// client-initiated create ran. Nothing to recover; the conversation is
 /// already finalized. Reporting it floods crash reporting with noise.
 bool isBenignInProgressConversationCreateStatus(int statusCode) => statusCode == 404;
+
+/// Reliability experiment `end_open_conversation`: the server stored this End but no conversation has
+/// landed for it yet (`X-Omi-End-Accepted: pending`; the body is the listening session's own empty
+/// recording, still in progress). The conversation is ended and summarised as soon as its audio lands,
+/// so this is "result to come", the same outcome as the 404 for a recording the server already
+/// closed, and not "audio not received". Off, the header is not read and the answer is the baseline.
+const endAcceptedHeader = 'x-omi-end-accepted';
+
+bool endAcceptedWithNoConversationYet(http.Response response) =>
+    ReliabilityExperiments.enabled('end_open_conversation') && response.headers[endAcceptedHeader] == 'pending';
 
 /// True only for the backend's typed, recoverable processing failure.
 @visibleForTesting
@@ -64,17 +80,32 @@ Future<CreateConversationResponse?> processInProgressConversation() async {
   return (await processInProgressConversationOutcome()).response;
 }
 
+/// Reliability experiment `end_open_conversation`: the moment the person ended the conversation, as
+/// seconds since the epoch on this phone's clock (the clock that stamps its recordings).
+const endedAtHeader = 'X-Omi-Ended-At';
+
+Map<String, String> endedAtHeaders(DateTime? endedAt) =>
+    endedAt == null ? const {} : {endedAtHeader: (endedAt.toUtc().millisecondsSinceEpoch / 1000).toStringAsFixed(3)};
+
 Future<InProgressProcessOutcome> processInProgressConversationOutcome({
   String? liveConversationId,
+  DateTime? endedAt,
+  // Reliability experiment `live_words_cascade`: the live words the phone was showing for the
+  // conversation being ended (LiveTail.payload). The server keeps them with the stored End for that
+  // conversation's first summary only. Null (the experiment is off, or no words): the field is not sent.
+  Map<String, Object?>? liveTail,
   InProgressConversationRequestSender? sendRequest,
   @visibleForTesting Future<void> Function(Duration)? waitBeforeRetry,
   @visibleForTesting void Function(http.Response)? reportUnexpectedResponse,
 }) async {
   final request = ApiRequest(
     url: '${Env.apiBaseUrl}v1/conversations',
-    headers: const {},
+    headers: endedAtHeaders(endedAt),
     method: 'POST',
-    body: jsonEncode({if (liveConversationId != null) 'live_conversation_id': liveConversationId}),
+    body: jsonEncode({
+      if (liveConversationId != null) 'live_conversation_id': liveConversationId,
+      if (liveTail != null) 'live_tail': liveTail,
+    }),
   );
   Future<http.Response?> sendProductionRequest(ApiRequest request) => makeApiCall(
         url: request.url,
@@ -97,6 +128,10 @@ Future<InProgressProcessOutcome> processInProgressConversationOutcome({
   if (response == null) return const InProgressProcessOutcome(absence: ProcessAbsence.transport);
   Logger.debug('createConversationServer: ${response.body}');
   if (response.statusCode == 200) {
+    if (endAcceptedWithNoConversationYet(response)) {
+      Logger.debug('processInProgressConversation: End stored; its conversation has not landed yet');
+      return InProgressProcessOutcome(absence: ProcessAbsence.notFound, endStoredAt: endedAt);
+    }
     final parsed = CreateConversationResponse.fromGeneratedWireJson(jsonDecode(response.body) as Map<String, dynamic>);
     if (parsed.conversation == null) {
       return InProgressProcessOutcome(response: parsed, absence: ProcessAbsence.emptyBody);
@@ -557,6 +592,45 @@ Future<ConversationByIdResult> getConversationDetailReadResult(String conversati
   return (item: null, ok: false, inaccessible: response.statusCode == 401 || response.statusCode == 403);
 }
 
+/// Reliability experiment `fast_end_feedback`: a request that the server holds until the ended
+/// conversation reaches a step (`GET /v1/conversations/{id}/summary/wait`, at most about 20 s),
+/// answering with the conversation as a detail read does. With [untilOutline] it returns as soon as
+/// the conversation is committed with its outline (title, emoji, one-liner; summary still to come);
+/// without, when the summary is stored. `settled` is true only when the summary is stored (or failed);
+/// otherwise the body is the conversation as it stands. A server without the experiment answers 404:
+/// that falls back to the ordinary detail read, never to "this conversation is gone".
+Future<({ConversationByIdResult result, bool settled})> waitForConversationSummary(
+  String conversationId, {
+  bool untilOutline = false,
+  Future<http.Response?> Function(String url)? send,
+  Future<ConversationByIdResult> Function(String conversationId)? detailRead,
+}) async {
+  final url =
+      '${Env.apiBaseUrl}v1/conversations/$conversationId/summary/wait?until=${untilOutline ? 'outline' : 'summary'}';
+  final response = await (send ??
+      (url) => makeApiCall(
+            url: url,
+            headers: const {},
+            method: 'GET',
+            body: '',
+            timeout: const Duration(seconds: 30),
+            retries: 0,
+            retryServerErrors: false,
+          ))(url);
+  if (response != null && response.statusCode == 200) {
+    return (
+      result: (
+        // omi-perf-allow: history-json-on-ui -- one conversation, the same body the detail read decodes
+        item: ServerConversation.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
+        ok: true,
+        inaccessible: false,
+      ),
+      settled: response.headers['x-omi-summary-wait'] == 'ready',
+    );
+  }
+  return (result: await (detailRead ?? getConversationDetailReadResult)(conversationId), settled: false);
+}
+
 Future<({ServerConversation? item, bool ok})> getConversationByIdResult(String conversationId,
     {bool userInitiated = false}) async {
   final result = await getConversationDetailReadResult(conversationId, userInitiated: userInitiated);
@@ -1013,29 +1087,61 @@ enum SyncRateLimitKind { fairUse, backendCapacity, edgeThrottle }
 bool shouldRequestSyncCaptureManifest(String? conversationId, bool claimLiveCapture) =>
     conversationId != null && claimLiveCapture;
 
-Future<String?> _createSyncCaptureManifest(List<File> files, String conversationId) async {
+final _walRetryManifests = WalRetryManifests(DateTime.now);
+
+Future<({String? manifest, String key})> _createSyncCaptureManifest(
+  List<File> files,
+  String conversationId,
+  String uploadUrl,
+) async {
+  final owner = SharedPreferencesUtil().uid;
   final claims = <Map<String, String>>[];
   for (final file in files) {
     final digest = await sha256.bind(file.openRead()).first;
     claims.add({'name': file.uri.pathSegments.last, 'sha256': digest.toString()});
   }
+  final key = WalRetryManifests.key(owner, PlatformManager.instance.deviceIdHash, uploadUrl, claims);
+  final body = jsonEncode(wire.GeneratedSyncCaptureManifestRequest(
+    conversationId: conversationId,
+    files: [
+      for (final claim in claims) wire.GeneratedSyncCaptureManifestFile(name: claim['name']!, sha256: claim['sha256']!),
+    ],
+  ).toJson());
+  final handle = owner.isEmpty ? null : _walRetryManifests.take(key);
   final response = await makeApiCall(
     url: '${Env.apiBaseUrl}v2/sync-capture-manifest',
-    headers: const {},
-    body: jsonEncode(
-      wire.GeneratedSyncCaptureManifestRequest(
-        conversationId: conversationId,
-        files: [
-          for (final claim in claims)
-            wire.GeneratedSyncCaptureManifestFile(name: claim['name']!, sha256: claim['sha256']!),
-        ],
-      ).toJson(),
-    ),
+    headers: {if (handle != null) 'X-Omi-Wal-Retry': handle},
+    body: body,
     method: 'POST',
+    canSend: handle == null ? null : () => SharedPreferencesUtil().uid == owner,
   );
-  if (response?.statusCode != 200) return null;
-  final body = wire.GeneratedSyncCaptureManifestResponse.fromJson(jsonDecode(response!.body) as Map<String, dynamic>);
-  return body.manifest;
+  if (SharedPreferencesUtil().uid != owner) {
+    throw const SyncUploadHttpException(401, 'Upload account changed');
+  }
+  if (response?.statusCode != 200) return (manifest: null, key: key);
+  final result = wire.GeneratedSyncCaptureManifestResponse.fromJson(jsonDecode(response!.body) as Map<String, dynamic>);
+  if (handle != null && response.headers['x-omi-wal-retry'] == 'check') {
+    const deadline = Duration(seconds: 3);
+    final elapsed = Stopwatch()..start();
+    final probe = await makeApiCall(
+      url: '${Env.apiBaseUrl}v2/sync-local-files',
+      method: 'PUT',
+      headers: {'X-Omi-Wal-Retry': handle},
+      body: body,
+      timeout: const Duration(seconds: 2),
+      retries: 0,
+      retryServerErrors: false,
+      canSend: () => SharedPreferencesUtil().uid == owner && elapsed.elapsed < deadline,
+    ).timeout(deadline, onTimeout: () => null);
+    if (SharedPreferencesUtil().uid != owner || probe?.statusCode == 401 || probe?.statusCode == 403) {
+      throw SyncUploadHttpException(probe?.statusCode == 403 ? 403 : 401, 'Upload authentication failed');
+    }
+    if (_walRetryManifests.confirmsWait(handle, probe)) {
+      throw SyncUploadHttpException(503, 'Recording custody is pending',
+          reasonCode: recordCapturePending, recordingWaitSeconds: syncUploadServerWaitSeconds(probe!));
+    }
+  }
+  return (manifest: result.manifest, key: key);
 }
 
 /// Thrown when a sync upload is rate-limited (HTTP 429).
@@ -1217,12 +1323,6 @@ Future<UploadFilesResult> uploadLocalFilesV2(
   final work = lagWork.begin(LagWork.upload);
   try {
     assertWalSyncFilesAreFramedBins(files.map((file) => file.path));
-    // Measurement only; absent when nothing was parked for this upload.
-    final uploadTrace = files.isEmpty ? null : UploadTrace.instance.take(files.first.path);
-    String? captureManifest;
-    if (shouldRequestSyncCaptureManifest(conversationId, claimLiveCapture)) {
-      captureManifest = await _createSyncCaptureManifest(files, conversationId!);
-    }
     var url = '${Env.apiBaseUrl}v2/sync-local-files';
     final query = <String, String>{
       if (conversationId != null && conversationId.isNotEmpty) 'conversation_id': conversationId,
@@ -1233,17 +1333,28 @@ Future<UploadFilesResult> uploadLocalFilesV2(
     if (query.isNotEmpty) {
       url += '?${query.entries.map((entry) => '${entry.key}=${Uri.encodeQueryComponent(entry.value)}').join('&')}';
     }
+    final capture = shouldRequestSyncCaptureManifest(conversationId, claimLiveCapture)
+        ? await _createSyncCaptureManifest(files, conversationId!, url)
+        : null;
+    final captureManifest = capture?.manifest;
+    // Measurement only; absent when nothing was parked for this upload.
+    final uploadTrace = files.isEmpty ? null : UploadTrace.instance.take(files.first.path);
     var response = await makeMultipartApiCall(
       url: url,
       files: files,
       headers: {
         if (captureManifest != null) 'X-Omi-Sync-Capture-Manifest': captureManifest,
+        if (captureManifest != null) 'X-Omi-Wal-Retry': '1',
         if (captureEvidence != null) 'X-Omi-Capture-Evidence': captureEvidence,
         if (geolocation != null) 'X-Omi-Conversation-Geolocation': jsonEncode(geolocation.toJson()),
-        if (uploadTrace != null) 'X-Omi-Upload-Trace': uploadTrace,
+        if (uploadTrace != null) 'X-Omi-Upload-Trace': uploadTrace.trace,
       },
+      headersAtSend: () =>
+          UploadTrace.instance.holdHeadersAtSend(uploadTrace, holdEnabled: MobileBatchUploadHoldGate.enabled()),
       onUploadProgress: onUploadProgress,
     );
+
+    if (captureManifest != null) _walRetryManifests.remember(capture!.key, response);
 
     if (response.statusCode == 200) {
       // Fast-path: server processed synchronously and returned the result. A
@@ -1389,6 +1500,40 @@ Future<SyncJobFetch> fetchSyncJobStatus(String jobId) async {
   } finally {
     lagWork.end(work);
   }
+}
+
+class SyncReceiptBatch {
+  final Map<String, SyncJobFetch> receipts;
+  final Set<String> fallback;
+  const SyncReceiptBatch(this.receipts, this.fallback);
+}
+
+Future<SyncReceiptBatch> waitForSyncReceipts(List<String> jobs, Future<void> abort) async {
+  // The endpoint exists only with the experiment; off, nothing may reach it.
+  if (!ReliabilityExperiments.enabled('receipt_long_poll')) throw StateError('receipt_long_poll is off');
+  final url = '${Env.apiBaseUrl}v2/sync-local-files/receipts/wait';
+  final headers = await buildHeaders(requireAuthCheck: true, url: url, method: 'POST');
+  final request = http.AbortableRequest('POST', Uri.parse(url), abortTrigger: abort)
+    ..headers.addAll(headers)
+    ..headers['Content-Type'] = 'application/json'
+    // omi-perf-allow: history-json-on-ui -- the job ids being waited on, a handful per request
+    ..body = jsonEncode({'job_ids': jobs});
+  final stream = await HttpPoolManager.instance.sendStreaming(request, timeout: const Duration(seconds: 28));
+  final response = await http.Response.fromStream(stream).timeout(const Duration(seconds: 5));
+  if (response.statusCode == 429) {
+    throw SyncRateLimitedException(
+        kind: syncRateLimitKindForResponse(response), retryAfterSeconds: _parseRetryAfterSeconds(response));
+  }
+  if (response.statusCode != 200) throw HttpException('Receipt wait HTTP ${response.statusCode}');
+  // omi-perf-allow: history-json-on-ui -- receipts of at most the job ids asked for, independent of history size
+  final body = jsonDecode(response.body) as Map<String, dynamic>;
+  final receipts = <String, SyncJobFetch>{};
+  for (final item in body['receipts'] as List) {
+    final job = SyncJobStatusResponse.fromJson(item as Map<String, dynamic>);
+    if (!jobs.contains(job.jobId) || !job.isTerminal) throw const FormatException('Unexpected receipt');
+    receipts[job.jobId] = SyncJobFetch(SyncJobFetchOutcome.ok, job);
+  }
+  return SyncReceiptBatch(receipts, (body['fallback'] as List).cast<String>().where(jobs.contains).toSet());
 }
 
 /// Serialize a local calendar-day bound for conversation search.

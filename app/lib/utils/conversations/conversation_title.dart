@@ -7,6 +7,7 @@ import 'package:omi/ui/format/omi_date_format.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/utils/analytics/registry/typed_events.dart';
 import 'package:omi/utils/note_citations.dart';
+import 'package:omi/utils/reliability_experiments.dart';
 
 /// The server's deterministic title budget in code points (`TITLE_MAX_CHARS` in
 /// `backend/utils/conversations/deterministic_minimum.py`).
@@ -43,9 +44,13 @@ String? transcriptFallbackTitle(ServerConversation conversation) {
 /// A v3 conversation still in progress with no real title yet: its rows and its detail page read
 /// "Listening", the same title as Home's live placeholder, never a transcript snippet or a recording
 /// date, until the server names it.
+///
+/// Reliability experiment title_at_end: a conversation still in progress has no name at all. One the
+/// server already named reads "Listening" too, and its name shows when it ends.
 bool awaitsLiveTitle(ServerConversation conversation, {String? title}) =>
     conversation.v3?.tileState == ConversationTileState.live &&
-    presentableConversationTitle(conversation, title: title).isEmpty;
+    (ReliabilityExperiments.enabled('title_at_end') ||
+        presentableConversationTitle(conversation, title: title).isEmpty);
 
 /// The display title of a kept (not discarded) conversation: its title, else transcript text,
 /// else a localized recording date/time. The last case reports [ConversationUntitledRendered]

@@ -215,7 +215,9 @@ def protect_segments(segments: list[Any], uid: str) -> None:
         _protect_timing_markers(pending, uid)
 
 
-def reveal_segments(segments: list[Any], uid: str) -> None:
+def reveal_segments(segments: list[Any], uid: str, *, report_rejection: bool = True) -> bool:
+    """Reveal accepted sidecars and report whether every stored sidecar passed validation."""
+    accepted = True
     now = time.time()
     total = 0
     decoded_bytes = 0
@@ -269,7 +271,9 @@ def reveal_segments(segments: list[Any], uid: str) -> None:
                 {key: value for key, value in values.items() if key in GROUPING_INTERNAL_FIELDS and key != FIELD}
             )
         except Exception:
-            _unavailable('evidence_unavailable')
+            accepted = False
+            if report_rejection:
+                _unavailable('evidence_unavailable')
     members = {
         sid: {**label, 'scope': marker['scope'], 'timing_store': marker['timing_store']}
         for marker in timing_units.values()
@@ -278,3 +282,4 @@ def reveal_segments(segments: list[Any], uid: str) -> None:
     for segment in segments:
         if isinstance(segment, dict) and isinstance(segment.get('id'), str) and segment['id'] in members:
             segment['provider_speaker'] = dict(members[segment['id']])
+    return accepted

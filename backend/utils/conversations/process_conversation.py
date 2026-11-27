@@ -36,6 +36,7 @@ from utils.sync.repeat_work_metrics import conversation_scope, record_final, rec
 
 import database._client as db_client_module
 from database import redis_db
+from database.conversation_effect_fence import ConversationEffectFenced, ConversationEffectSource
 from database.firestore_read_metrics import FirestoreReadSite
 from database.auth import get_user_name
 from utils.conversations.transcript_for_llm import (
@@ -309,6 +310,8 @@ from utils.other.storage import (
     precache_conversation_audio,
 )
 
+from utils.conversations.v3 import Conflict as V3Conflict
+from utils.conversations.v3 import live_tail as v3_live_tail
 from utils.conversations.v3 import policy as v3_policy, service as v3_service
 from utils.conversations.v3.word_floor import MIN_HOME_WORDS, MIN_TASK_WORDS, text_word_count
 
@@ -726,7 +729,14 @@ def _get_structured(
             known_spellings=conversation_known_spellings(uid),
             uid=uid,
             conversation_id=prompt_conversation_id,
-            transcript=action_items_transcript,
+            # Reliability experiment live_words_cascade: while the v3 summary pass writes the notes of a
+            # conversation a user End closed, the words the phone was showing that no stored line covers
+            # yet follow the transcript in this prompt, marked as a draft (utils/conversations/v3/
+            # live_tail.py). The prompt is the only reader, so only what the notes say can reflect those
+            # words: the wake-word and discard checks above, memory extraction and the stored transcript
+            # use the transcript alone. Outside that pass, and with the experiment off, this returns the
+            # transcript unchanged.
+            transcript=v3_live_tail.in_prompt(action_items_transcript),
             started_at=conv_started_at,
             timezone_name=tz_str,
             language_code=language_code,
@@ -767,7 +777,14 @@ def _get_structured(
             )
         validate_structured_source_segment_ids(structured, transcript_segment_ids)
         return structured, False
-    except (ConversationAbsorbed, SyncConversationPersistenceFenced, member_notes.LiveMemberNotesDeferred):
+    except (
+        ConversationAbsorbed,
+        SyncConversationPersistenceFenced,
+        member_notes.LiveMemberNotesDeferred,
+        V3Conflict,
+        v3_service.models.BackfillNotesDeletionBlocked,
+        v3_service.models.BackfillNotesAdmissionTimeout,
+    ):
         raise
     except Exception as e:
         if funded_processing.enabled(uid, 'batch') and _is_funded_budget_denial(e):
@@ -1089,6 +1106,7 @@ def update_goal_progress(
     conversation: Conversation,
     *,
     idempotency_key_prefix: Optional[str] = None,
+    effect_source: ConversationEffectSource | None = None,
 ) -> bool:
     """Extract and update goal progress from conversation text."""
     if is_server_minimum(conversation):
@@ -1119,8 +1137,14 @@ def update_goal_progress(
                 text,
                 idempotency_key_prefix=idempotency_key_prefix,
                 account_generation=account_generation,
+                **({"effect_source": effect_source} if effect_source is not None else {}),
             )
         return True
+    except ConversationEffectFenced:
+        logger.info('event=goal_progress outcome=source_fenced uid=%s conversation=%s', uid, conversation.id)
+        if idempotency_key_prefix is None:
+            redis_db.release_conversation_goal_lock(uid, conversation.id)
+        return False
     except Exception as e:
         logger.error(f"[GOAL] Error updating progress: {e}")
         if idempotency_key_prefix is None:
@@ -1180,7 +1204,9 @@ def _sweep_owned_writer_mode(uid: str) -> Optional[str]:
 
 @spelling_context_run
 @conversation_scope
-def extract_memories(uid: str, conversation: Conversation) -> None:
+def extract_memories(
+    uid: str, conversation: Conversation, *, effect_source: ConversationEffectSource | None = None
+) -> None:
     """Extract one conversation's memories through the selected memory system.
 
     Finalization workers and legacy async callers share this admission boundary.
@@ -1191,7 +1217,7 @@ def extract_memories(uid: str, conversation: Conversation) -> None:
     # account's non-compatibility writer delegates formation to the sweep.
     # Otherwise a reused release-probe principal could skip the exact static
     # configuration contract that Pusher qualification is meant to exercise.
-    db_client = getattr(db_client_module, 'db', None)
+    db_client = _memory_extraction_client(effect_source)
     MemoryService(db_client=db_client).ensure_canonical_mutation_ready(uid)
     if serving_for('SPEAKER_EVIDENCE_MODE', uid) and conversation.source != ConversationSource.external_integration:
         owner_segments = confident_owner_segments(conversation.transcript_segments)
@@ -1235,10 +1261,12 @@ def extract_memories(uid: str, conversation: Conversation) -> None:
     )
     try:
         with track_usage(uid, Features.MEMORIES):
+            extraction_kwargs = {}
+            if effect_source is not None:
+                extraction_kwargs["effect_source"] = effect_source
             if parity_capture.enabled:
-                result = _extract_memories_inner(uid, conversation, parity_capture=parity_capture)
-            else:
-                result = _extract_memories_inner(uid, conversation)
+                extraction_kwargs["parity_capture"] = parity_capture
+            result = _extract_memories_inner(uid, conversation, **extraction_kwargs)
         parity_capture.observe(
             "inbound",
             {"type": "memory_extraction_result", "count": result.count, "path": result.path},
@@ -1251,8 +1279,10 @@ def extract_memories(uid: str, conversation: Conversation) -> None:
         )
 
 
-def _extract_memories(uid: str, conversation: Conversation) -> None:
-    extract_memories(uid, conversation)
+def _extract_memories(
+    uid: str, conversation: Conversation, *, effect_source: ConversationEffectSource | None = None
+) -> None:
+    extract_memories(uid, conversation, **({"effect_source": effect_source} if effect_source is not None else {}))
 
 
 def _normalized_l1_subject_label(value: Optional[str]) -> str:
@@ -1646,7 +1676,12 @@ def _rejected_memory_examples_for_l1(uid: str, *, db_client: Any) -> Tuple[str, 
 
 
 def _extract_memories_canonical(
-    uid: str, conversation: Conversation, *, db_client: Any, parity_capture: SurfaceParityCapture | None = None
+    uid: str,
+    conversation: Conversation,
+    *,
+    db_client: Any,
+    parity_capture: SurfaceParityCapture | None = None,
+    effect_source: ConversationEffectSource | None = None,
 ) -> ConversationMemoryExtractionResult:
     """Universal canonical extraction with one atomic source replacement."""
     from config.sync_reprocess import dedupe_enabled
@@ -1980,6 +2015,7 @@ def _extract_memories_canonical(
         uid,
         conversation.id,
         replacement_payloads,
+        **({"effect_source": effect_source} if effect_source is not None else {}),
     )
     # Decision work starts only after durable capture. Failure retains the source
     # and is observable; Dream's paid/allowlist cleanup ramp cannot gate intake.
@@ -1992,6 +2028,7 @@ def _extract_memories_canonical(
             db_client=db_client,
             now=datetime.now(timezone.utc),
             run_id=f'observation-intake:{conversation.id}',
+            **({'effect_source': effect_source} if effect_source is not None else {}),
         )
     if llm_input_dedupe.l1_succeeded(uid, conversation, l1_digest, db_client=db_client):
         record_feature(uid, conversation, 'l1', 'durable')
@@ -2074,13 +2111,29 @@ def _extract_memories_canonical(
     return ConversationMemoryExtractionResult(count=len(parsed_memories), source=source, path=PATH_CANONICAL)
 
 
+def _memory_extraction_client(effect_source: ConversationEffectSource | None) -> Any:
+    if effect_source is not None:
+        return db_client_module.get_data_plane_firestore_client()
+    return getattr(db_client_module, 'db', None)
+
+
 def _extract_memories_inner(
-    uid: str, conversation: Conversation, *, parity_capture: SurfaceParityCapture | None = None
+    uid: str,
+    conversation: Conversation,
+    *,
+    parity_capture: SurfaceParityCapture | None = None,
+    effect_source: ConversationEffectSource | None = None,
 ) -> ConversationMemoryExtractionResult:
-    db_client = getattr(db_client_module, 'db', None)
+    db_client = _memory_extraction_client(effect_source)
     memory_service = MemoryService(db_client=db_client)
     memory_service.ensure_canonical_mutation_ready(uid)
-    return _extract_memories_canonical(uid, conversation, db_client=db_client, parity_capture=parity_capture)
+    return _extract_memories_canonical(
+        uid,
+        conversation,
+        db_client=db_client,
+        parity_capture=parity_capture,
+        **({"effect_source": effect_source} if effect_source is not None else {}),
+    )
 
 
 def _transcript_artifact_ref(conversation: Conversation) -> Dict[str, Any]:
@@ -2737,11 +2790,8 @@ def process_conversation(
     # A v3 backfill window runs the live notes path (same trigger, relevance, speakers, meeting
     # context and floors) but is historical: like silent backfill it takes no derived effects.
     historical_tier = historical_minimum.historical_tier.is_historical(conversation)
-    historical = (
-        silent_backfill
-        or historical_tier
-        or (v3_policy.flag(conversation, 'v3_derived') and v3_policy.flag(conversation, 'backfilled'))
-    )
+    v3_backfilled = v3_policy.flag(conversation, 'v3_derived') and v3_policy.flag(conversation, 'backfilled')
+    historical = silent_backfill or historical_tier or v3_backfilled
     backlog_authorized = trigger is ProcessingTrigger.BACKLOG_CHOICE
     mode = PROCESSING_MODES[trigger]
     force_process, is_reprocess = mode.run_now, mode.reprocess
@@ -2803,7 +2853,8 @@ def process_conversation(
         for settle in final_pass_settlements:
             settle(current)
         final_pass_settlements.clear()
-        if current and completed is not None and not historical:
+        # Only v3 backfill copies skip this; silent-backfill recovery keeps its telemetry.
+        if current and completed is not None and not v3_backfilled:
             record_capture_loss(completed)
             _observe_owner_recognition_completion(completed)
         if persistence_observer is not None:
@@ -3161,6 +3212,11 @@ def process_conversation(
     # app failures propagate after the bundle; automatic selection is fail-open.
     explicit_selection_failures: list[ExplicitAppSelectionFailedError] = []
     user_reprocess = trigger is ProcessingTrigger.USER_REPROCESS
+    effect_kwargs = {}
+    if trigger in {ProcessingTrigger.SYNC_UPDATE, ProcessingTrigger.BACKLOG_CHOICE}:
+        effect_kwargs['effect_source'] = ConversationEffectSource(
+            conversation.id, conversation.sync_content_revision, conversation.finalization_owner_epoch
+        )
     # User reprocess preserves template results on failure.
 
     def _emit_derived_effects() -> None:
@@ -3277,7 +3333,10 @@ def process_conversation(
                 # Canonical source replacement is universal and intentionally
                 # fail-closed. Do not hide a retryable apply/store failure in an
                 # unobserved future while reporting finalization as successful.
-                _extract_memories(uid, conversation)
+                try:
+                    _extract_memories(uid, conversation, **effect_kwargs)
+                except ConversationEffectFenced as error:
+                    raise SyncConversationPersistenceFenced(str(error)) from error
                 memories_ran = True
             if lazy_effects:
                 pass  # Coalesced memory, vector and task work is durably owned above.
@@ -3297,9 +3356,9 @@ def process_conversation(
             else:
                 submit_with_context(postprocess_executor, _save_action_items, uid, conversation, people, trigger)
             if not (template_only or app_failed):
-                submit_with_context(postprocess_executor, update_goal_progress, uid, conversation)
+                submit_with_context(postprocess_executor, update_goal_progress, uid, conversation, **effect_kwargs)
             # Daily backend-owned AI profile refresh: no-op unless stale, bounded per process.
-            ai_profile_refresh.schedule_refresh(uid)
+            ai_profile_refresh.schedule_refresh(uid, **effect_kwargs)
         # Recovery preserves admitted audio ids instead of rebuilding old chunks.
         capture_audio = not is_recovery_trigger(trigger) and not v3_policy.flag(conversation, 'v3_derived')
         if not is_reprocess and conversation.private_cloud_sync_enabled and capture_audio:

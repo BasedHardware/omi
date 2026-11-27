@@ -42,7 +42,7 @@ def builder(monkeypatch):
         return fn(*args, **kwargs)
 
     monkeypatch.setattr(service, 'run_blocking', blocking)
-    monkeypatch.setattr(leases, 'acquire', lambda *a: 'token')
+    monkeypatch.setattr(leases, 'acquire', lambda *a, promote_llm=False: 'token')
     monkeypatch.setattr(leases, 'renew', lambda *a: None)
     monkeypatch.setattr(leases, 'release', lambda *a: None)
     monkeypatch.setattr(store, 'outline_attempt', lambda *a, **kw: True)
@@ -50,6 +50,7 @@ def builder(monkeypatch):
     monkeypatch.setattr(store, 'adoptable', lambda *a: {})
     monkeypatch.setattr(store, 'merge_donors_have_tasks', lambda *a, **kw: False)
     monkeypatch.setattr(store, 'backoff_state', lambda *a: (None, None))
+    monkeypatch.setattr(store, 'clear_terminal_pending', lambda *a: None)
     monkeypatch.setattr(service, '_commit', lambda *a, **kw: committed.append(a))
     monkeypatch.setattr(service, 'has_pending', lambda *a: False)
     monkeypatch.setattr(service, 'enqueue', lambda *a, **kw: None)
@@ -81,7 +82,7 @@ async def test_on_open_scopes_load_and_queues_processing(builder, monkeypatch):
 
     monkeypatch.setattr(store, 'load', load)
     await service.reconcile('u', on_open=True, conversation_id='c')
-    assert seen == [{'conversation_id': 'c'}]
+    assert seen == [{'conversation_id': 'c', 'lease_token': 'token'}]
     service.drain_processing.assert_not_awaited()
     assert committed
 
@@ -152,16 +153,29 @@ async def test_preceding_outline_context_is_title_and_line(builder, monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_malformed_outline_uses_cached_deterministic_fallback(builder, monkeypatch):
+async def test_malformed_outline_is_published_but_not_cached_and_open_retries(builder, monkeypatch):
+    monkeypatch.setenv('OMI_V3_SUMMARY_FIRST_OPEN_GATING', 'true')
+    from utils.conversations.v3 import summary
+
     committed, _ = builder
-    monkeypatch.setattr(store, 'load', lambda *a, **kw: ({'r': source()}, {}, []))
-    monkeypatch.setattr(service.models, 'outline', lambda *a: 'malformed JSON')
-    await service.reconcile('u')
-    cache = committed[0][5]
-    assert cache[0]['entries'][0]['first_line'] == 1
-    monkeypatch.setattr(store, 'load', lambda *a, **kw: ({'r': source()}, {}, cache))
-    monkeypatch.setattr(service.models, 'outline', lambda *a: pytest.fail('paid malformed retry'))
-    await service.reconcile('u')
+    recording = source()
+    monkeypatch.setattr(store, 'load', lambda *a, **kw: ({'r': recording}, {}, []))
+    monkeypatch.setattr(service.context, 'cache_key', lambda *a: 'fingerprint')
+    malformed = AsyncMock(return_value='malformed JSON')
+    with monkeypatch.context() as patch:
+        patch.setattr(service, 'leased_work', malformed)
+        await service.reconcile('u')
+    (row,) = committed[0][4]
+    assert not committed[0][5]
+    assert row['v3_process_failure_reason'] == 'outline'
+    assert summary.needs_open_reconcile(row)
+    old_cache = [{'fingerprint': 'fingerprint', 'entries': [{'first_line': 1, '_outline_failed': True}]}]
+    monkeypatch.setattr(store, 'load', lambda *a, **kw: ({'r': recording}, {row['id']: row}, old_cache))
+    await service.reconcile('u', on_open=True, promote_llm=True, conversation_id=row['id'])
+    (cache_entry,) = committed[1][5]
+    assert cache_entry['entries'][0]['title'] == 'A plan'
+    assert not cache_entry['entries'][0].get('_outline_failed')
+    assert committed[1][4][0]['v3_process_pending'] is True
 
 
 @pytest.mark.parametrize(
@@ -169,6 +183,7 @@ async def test_malformed_outline_uses_cached_deterministic_fallback(builder, mon
     [('v3_lease_lifetime_exhausted', 200), ('v3_lease_lifetime_exhausted unexpectedly', 500)],
 )
 def test_reconcile_route_falls_back_only_for_exact_lease_exhaustion(builder, monkeypatch, error, status):
+    monkeypatch.setenv('OMI_V3_SUMMARY_FIRST_OPEN_GATING', 'true')
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
     from routers import conversations_v3_tasks as routes
@@ -192,8 +207,7 @@ def test_reconcile_route_falls_back_only_for_exact_lease_exhaustion(builder, mon
         assert response.json() == {'outcome': 'committed'}
         (commit,) = committed
         assert commit[4]
-        assert commit[5][0]['entries'][0]['title'] == 'speech for a synthetic plan'
-        assert commit[5][0]['entries'][0]['_outline_failed'] is True
+        assert not commit[5]
         assert fallback._value.get() == before + 1
     else:
         assert not committed
@@ -599,6 +613,45 @@ def test_process_applies_word_floor_to_automatic_windows(
     assert called == ([('window', manual, text)] if expect_notes else [])
     assert completed == ([] if expect_notes else ['window'])
     assert settlements[0]['word_floor_outcomes'] == expected_floor
+
+
+def test_processing_metrics_failure_does_not_skip_settlement(monkeypatch):
+    from types import SimpleNamespace
+    from database import conversations_v3_processing as writers
+    from utils.conversations import process_conversation as process
+
+    row = {
+        'id': 'window',
+        'v3_derived': True,
+        'kind': 'conversation',
+        'created_at': AT,
+        'started_at': AT,
+        'finished_at': AT,
+        'structured': {},
+        'transcript_segments': [{'text': 'speech ' * 40, 'start': 0, 'end': 10, 'is_user': False}],
+    }
+    settlements = []
+    metric_failures = []
+    monkeypatch.setattr(writers, 'begin_processing', lambda *a, **kw: True)
+    monkeypatch.setattr(writers, 'settle_processing', lambda *a, **kw: settlements.append(kw))
+
+    def notes(_uid, _language, _conversation, **kwargs):
+        kwargs['persistence_observer'](True)
+        return SimpleNamespace(status='completed')
+
+    def fail_metric(*_args, **_kwargs):
+        metric_failures.append(True)
+        raise OSError('metrics unavailable')
+
+    monkeypatch.setattr(process, 'process_conversation', notes)
+    monkeypatch.setattr(service.metrics.SUMMARY_WRITES.labels('first'), 'inc', fail_metric)
+    monkeypatch.setattr(service.metrics.SUMMARY_LATENCY, 'observe', fail_metric)
+
+    service._process('u', row, 'token')
+
+    assert len(metric_failures) == 2
+    assert len(settlements) == 1
+    assert settlements[0]['notes'] is True
 
 
 @pytest.mark.asyncio
@@ -1016,7 +1069,7 @@ def test_builder_loads_indexed_provisional_card_without_pending_audio(monkeypatc
     }
     monkeypatch.setattr(store, 'account_deletion_blocks_user_work', lambda *a, **kw: False)
     monkeypatch.setattr(store, 'decode_row', lambda uid, snap: snap.to_dict() if snap.exists else None)
-    monkeypatch.setattr(store, 'recording_input', lambda uid, snap: snap.to_dict() if snap.exists else None)
+    monkeypatch.setattr(store, 'recording_input', lambda uid, snap, **kw: snap.to_dict() if snap.exists else None)
     recordings, existing, _ = store.load('synthetic', firestore_client=MemoryQuery(rows))
     assert set(existing) == {'older'} and set(recordings) == {'r'}
 
@@ -1168,7 +1221,7 @@ async def test_configured_builder_wakes_at_outline_then_lock(builder, monkeypatc
 def test_pending_page_continuation_uses_configured_silence(monkeypatch, gap, continues):
     monkeypatch.setenv('CONVERSATIONS_V3_SILENCE_GAP_SECONDS', '900')
     monkeypatch.setattr(store, 'account_deletion_blocks_user_work', lambda *a, **kw: False)
-    monkeypatch.setattr(store, 'recording_input', lambda uid, snap: snap.to_dict() if snap.exists else None)
+    monkeypatch.setattr(store, 'recording_input', lambda uid, snap, **kw: snap.to_dict() if snap.exists else None)
     prefix = '/users/synthetic/conversations/'
     rows = {}
     for index in range(32):

@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, Mock
 
 import google_crc32c
 from cryptography.exceptions import InvalidTag
+from fastapi import HTTPException
 from google.api_core.exceptions import PreconditionFailed, ServiceUnavailable
 from google.cloud.exceptions import NotFound
 import pytest
@@ -31,7 +32,7 @@ from utils.batch_pipeline.intake import durable_status
 from utils.other import storage
 from utils.other.local_storage import LocalStorageClient
 from utils.sync import record_token_lease
-from utils.sync.poll_limit import with_poll_hint
+from utils.sync.poll_limit import with_custody_hold_poll_hint
 
 UID, CID, NS = 'synthetic-wal-owner', 'synthetic-record', 'batch_pipeline_dev'
 ROW_PATH = ('users', UID, 'conversations', CID)
@@ -281,8 +282,7 @@ async def test_all_files_accepted_before_decode_and_completed_native_job_never_c
         SyncJobStatusResponse(**status)
         assert status['status'] == 'processing' and status.get('result') is None
         assert status['reason_code'] == database.PENDING_REASON
-        assert with_poll_hint(status)['poll_after_ms'] == 300000
-        assert with_poll_hint(status, surface_open=True)['poll_after_ms'] == 300000
+        assert with_custody_hold_poll_hint(status)['poll_after_ms'] == 300000
     assert len(world.bucket.rows) == len(world.rows('wal_files')) == len(world.rows('wal_obligations')) == 2
     assert len(world.rows('wal_outbox')) == 2
     assert world.client.rows[ROW_PATH]['record_upload_revision'] == 8
@@ -604,6 +604,18 @@ async def test_plain_status_lookup_is_receipt_capable_even_with_admission_unset(
         intake, 'shadow_from_env', Mock(side_effect=AssertionError('WAL status used ordinary jobstore'))
     )
     assert intake.get_durable_job_status(accepted['job_id'], UID)['status'] == 'processing'
+    original_check = database.assert_batch_write_allowed
+    denied = Mock(side_effect=BatchPrivacyBlocked('account_deleted'))
+    monkeypatch.setattr(database, 'assert_batch_write_allowed', denied)
+    assert intake.get_durable_job_status(accepted['job_id'], UID)['status'] == 'processing'
+    denied.assert_not_called()
+    with pytest.raises(HTTPException) as foreign_owner:
+        intake.get_durable_job_status(accepted['job_id'], 'other-owner')
+    assert foreign_owner.value.status_code == 404
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"bpp_status_skip":0}')
+    with pytest.raises(BatchPrivacyBlocked, match='account_deleted'):
+        intake.get_durable_job_status(accepted['job_id'], UID)
+    monkeypatch.setattr(database, 'assert_batch_write_allowed', original_check)
     assert (await world.upload()).status_code == 202
     assert world.bucket.attempts == 2
 

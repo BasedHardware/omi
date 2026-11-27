@@ -3,6 +3,7 @@
 
 import copy
 from datetime import datetime, timedelta, timezone
+import io
 import json
 from pathlib import Path
 import unittest
@@ -28,6 +29,10 @@ class Server(helper.Cluster):
         self.cluster = cluster
         self.actor = ACTOR
         self.requests = []
+        self.read_requests = []
+        self.secret_metadata_reads = []
+        self.full_secret_reads = 0
+        self.secret_versions = {}
         self.after_request = lambda: None
         self.admit = lambda old, new, dry: None
         self.resources = set(helper.ADMISSION) | {
@@ -108,6 +113,9 @@ class Server(helper.Cluster):
         return set(self.resources)
 
     def get(self, resource, name=None, *, namespace=None, optional=False):
+        self.read_requests.append((resource, name, namespace, optional))
+        if resource == "secret":
+            self.full_secret_reads += 1
         if resource == "deployment.apps":
             return copy.deepcopy(self.target)
         if resource == "namespace":
@@ -118,6 +126,10 @@ class Server(helper.Cluster):
             return None
         items = [self.webhook] if resource == "validatingwebhookconfigurations.admissionregistration.k8s.io" else []
         return {"metadata": {}, "items": copy.deepcopy(items)}
+
+    def secret_version(self, name, *, namespace, optional=False):
+        self.secret_metadata_reads.append((name, namespace, optional))
+        return self.secret_versions.get(name)
 
     def call(self, *args, reason, stdin):
         # Kubernetes applies each JSON Patch test to the stored object. Dry-run
@@ -316,6 +328,138 @@ class RehearsalTest(unittest.TestCase):
                 item["metadata"]["resourceVersion"] = "1"
                 self.assertTrue(all(dry for dry, _ in self.isolated.requests))
 
+    def test_secret_dependency_reads_only_metadata_identity(self):
+        self.rehearsal.rehearse(self.result("rehearse"))
+        self.assertGreater(self.live.secret_metadata_reads.count(("absent-secret", helper.NAMESPACE, True)), 0)
+        self.assertEqual(self.live.full_secret_reads, 0)
+
+    def test_refuses_unreferenced_dependency_before_reading_it(self):
+        self.proof["live_dependencies"].append({"resource": "secret", "name": "unused-secret", "version": None})
+        with self.assertRaisesRegex(helper.Refused, "dependency_inventory_mismatch"):
+            self.rehearsal.observe(PRIOR, PRIOR)
+        self.assertEqual(self.live.secret_metadata_reads, [])
+        self.assertEqual(self.live.full_secret_reads, 0)
+
+    def test_rejects_unsupported_dependency_and_admission_resources_before_reads(self):
+        self.proof["live_dependencies"][0]["resource"] = "pods"
+        with self.assertRaisesRegex(helper.Refused, "invalid_dependency_inventory"):
+            helper.Rehearsal(self.live, self.isolated, self.proof)
+        self.assertEqual(self.live.read_requests, [])
+
+        self.proof["live_dependencies"][0]["resource"] = helper.SHARED[0]
+        self.proof["extra_admission_resources"] = ["secrets"]
+        with self.assertRaisesRegex(helper.Refused, "invalid_admission_inventory"):
+            helper.Rehearsal(self.live, self.isolated, self.proof)
+        self.assertEqual(self.live.read_requests, [])
+
+    def test_partial_metadata_response_returns_identity_without_secret_data(self):
+        payload = {
+            "apiVersion": "meta.k8s.io/v1",
+            "kind": "PartialObjectMetadata",
+            "metadata": {
+                "name": "secret",
+                "namespace": helper.NAMESPACE,
+                "uid": "secret-uid",
+                "resourceVersion": "9",
+            },
+        }
+
+        class Response(io.BytesIO):
+            headers = {"Content-Type": "application/json;as=PartialObjectMetadata;g=meta.k8s.io;v=v1"}
+
+        response = Response(json.dumps(payload).encode())
+        self.assertEqual(helper.partial_metadata_version(response, "secret", helper.NAMESPACE), ["secret-uid", "9"])
+
+        class FullSecretResponse:
+            headers = {"Content-Type": "application/json"}
+
+            def read(self, *_args):
+                raise AssertionError("a full Secret response must not be read")
+
+        with self.assertRaisesRegex(helper.Refused, "secret_metadata_only_response_unavailable"):
+            helper.partial_metadata_version(FullSecretResponse(), "secret", helper.NAMESPACE)
+
+    def test_secret_version_uses_partial_metadata_request_and_closes_proxy(self):
+        class Listener:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def bind(self, _address):
+                pass
+
+            def getsockname(self):
+                return "127.0.0.1", 32123
+
+        class Connection:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+        class Proxy:
+            terminated = False
+
+            def poll(self):
+                return 0 if self.terminated else None
+
+            def terminate(self):
+                self.terminated = True
+
+            def wait(self, timeout=None):
+                return 0
+
+        class Response(io.BytesIO):
+            headers = {"Content-Type": "application/json;as=PartialObjectMetadata;g=meta.k8s.io;v=v1"}
+
+        response = Response(
+            json.dumps(
+                {
+                    "apiVersion": "meta.k8s.io/v1",
+                    "kind": "PartialObjectMetadata",
+                    "metadata": {
+                        "name": "private-token",
+                        "namespace": helper.NAMESPACE,
+                        "uid": "secret-uid",
+                        "resourceVersion": "9",
+                    },
+                }
+            ).encode()
+        )
+
+        class Opener:
+            def open(self, _request, timeout):
+                self.timeout = timeout
+                self.request = _request
+                return response
+
+        opener = Opener()
+        proxy = Proxy()
+        with (
+            patch.object(helper.socket, "socket", return_value=Listener()),
+            patch.object(helper.socket, "create_connection", return_value=Connection()),
+            patch.object(helper.subprocess, "Popen", return_value=proxy) as start_proxy,
+            patch.object(helper, "build_opener", return_value=opener),
+            patch.object(helper, "ProxyHandler") as proxy_handler,
+        ):
+            identity = helper.Cluster(Path("fixture-kubeconfig"), "prod").secret_version(
+                "private-token", namespace=helper.NAMESPACE
+            )
+
+        self.assertEqual(identity, ["secret-uid", "9"])
+        self.assertIn("proxy", start_proxy.call_args.args[0])
+        proxy_handler.assert_called_once_with({})
+        sent_request = opener.request
+        self.assertEqual(
+            sent_request.get_header("Accept"),
+            "application/json;as=PartialObjectMetadata;g=meta.k8s.io;v=v1",
+        )
+        self.assertTrue(sent_request.full_url.endswith(f"/api/v1/namespaces/{helper.NAMESPACE}/secrets/private-token"))
+        self.assertTrue(proxy.terminated)
+
     def test_rejects_conflict_and_production_write_at_api_boundary(self):
         snapshot = copy.deepcopy(self.isolated.target)
         self.isolated.target["metadata"]["resourceVersion"] = "88"
@@ -395,12 +539,16 @@ class RehearsalTest(unittest.TestCase):
                 return "backend/pusher\nbackend/charts/pusher\n"
             if reason == "qualification_workflow_unavailable":
                 return "18"
+            if reason == "qualification_artifact_unavailable":
+                path = Path(args[args.index("--dir") + 1])
+                path.mkdir()
+                (path / "pusher-dev-deployment-receipt.json").write_text('{"receipt": "qualified"}', encoding="utf-8")
             if reason == "registry_digest_unavailable":
                 return args[4].split("@")[1]
             return ""
 
         with patch.object(helper, "run", side_effect=command):
-            helper.check_provenance(self.proof)
+            self.assertEqual(helper.check_provenance(self.proof), {"receipt": "qualified"})
 
         commands = {reason: args for args, reason in seen}
         self.assertIn(f"head_sha={source}", commands["release_eligibility_unavailable"][2])

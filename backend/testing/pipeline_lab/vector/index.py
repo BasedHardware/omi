@@ -23,6 +23,7 @@ import os
 from pathlib import Path
 import threading
 from typing import Any, Iterator, Mapping
+from testing.pipeline_lab.store import private_subdir
 
 _OPERATORS = {'$eq', '$ne', '$in', '$nin', '$exists', '$gte', '$lte', '$gt', '$lt'}
 
@@ -128,7 +129,7 @@ class NumericVectorIndex:
             if index.dimension != dimension:
                 raise ValueError(f'stored index has dimension {index.dimension}, expected {dimension}')
             return index
-        Path(path).parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        private_subdir(Path(path).parent)
         return cls(dimension, metric=metric, path=path)
 
     # -- Pinecone surface ---------------------------------------------------
