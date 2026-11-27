@@ -3318,6 +3318,9 @@ environments:
           BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
           BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
           BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
+          FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
+            value: 'false'
+            category: ops_kill
           CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED: {value: 'off', category: rollout}
           STT_CAP_DISPATCH_ENFORCEMENT:
             secret:
@@ -3686,6 +3689,9 @@ environments:
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             category: ops_kill
             value: '100'
+          FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
+            value: 'false'
+            category: ops_kill
           CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED: {value: 'off', category: rollout}
           SYNC_TASKS_PROJECT:
             value: based-hardware
@@ -3931,6 +3937,9 @@ environments:
             source: environment
           SYNC_TASKS_INVOKER_SA:
             source: environment
+          FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
+            source: literal
+            value: 'false'
           CONVERSATIONS_V3:
             source: literal
             value: 'on'
@@ -4024,6 +4033,9 @@ environments:
         OMI_CUSTOMER_DATA_PROJECT:
           value: based-hardware
           category: service_discovery
+        FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
+          value: 'false'
+          category: ops_kill
         POSTHOG_HOST:
           value: https://us.posthog.com
           category: telemetry
@@ -7033,6 +7045,9 @@ environments:
             DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
+            FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
+              value: 'false'
+              category: ops_kill
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             CONVERSATIONS_V3:
@@ -7104,6 +7119,9 @@ environments:
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
+            FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
+              value: 'false'
+              category: ops_kill
             REDIS_DB_HOST:
               value: redis-13151.c1.us-central1-2.gce.redns.redis-cloud.com
             REDIS_DB_PORT:
@@ -7158,6 +7176,9 @@ environments:
               default: prod-omi-frame-requests-temporary
               provisional: false
               category: storage_retention
+            FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
+              value: 'false'
+              category: ops_kill
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             GOOGLE_CLOUD_PROJECT:
@@ -7219,6 +7240,9 @@ environments:
             DAY3_REENGAGEMENT_EMAIL_KILL_SWITCH:
               value: 'false'
               category: lifecycle_email
+            FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
+              value: 'false'
+              category: ops_kill
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             BASE_API_URL:

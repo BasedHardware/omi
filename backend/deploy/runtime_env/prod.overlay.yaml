@@ -48,6 +48,7 @@ overlay:
       values_file: backend/charts/parakeet/prod_omi_parakeet_lid_values.yaml
     backend-listen:
       env:
+        FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED: {value: 'false', category: ops_kill}
         CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED:
           value: 'off'
           category: rollout
@@ -336,6 +337,7 @@ overlay:
           category: rollout
     pusher:
       env:
+        FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED: {value: 'false', category: ops_kill}
         CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED:
           value: 'off'
           category: rollout
@@ -544,6 +546,9 @@ overlay:
         STT_PRERECORDED_MODEL:
           source: literal
           value: parakeet,modulate-velma-2
+        FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
+          source: literal
+          value: 'false'
         PRERECORDED_SONIOX_FAILOVER_ENABLED:
           source: literal
           value: 'true'
@@ -570,6 +575,7 @@ overlay:
       OMI_CUSTOMER_DATA_PROJECT:
         value: based-hardware
         category: service_discovery
+      FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED: {value: 'false', category: ops_kill}
       POSTHOG_HOST:
         value: https://us.posthog.com
         category: telemetry
@@ -2333,6 +2339,7 @@ overlay:
         flags:
           --service-account: backend-jobs-runtime@based-hardware.iam.gserviceaccount.com
         env:
+          FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED: {value: 'false', category: ops_kill}
           PINECONE_INDEX_NAME:
             value: memories-backend
           OMI_CUSTOMER_DATA_PROJECT:
@@ -2341,6 +2348,7 @@ overlay:
         flags:
           --service-account: backend-runtime@based-hardware.iam.gserviceaccount.com
         env:
+          FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED: {value: 'false', category: ops_kill}
           PINECONE_INDEX_NAME:
             value: memories-backend
           REDIS_DB_HOST:
@@ -2357,6 +2365,7 @@ overlay:
             secret: SERVICE_ACCOUNT_JSON
             version: latest
         env:
+          FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED: {value: 'false', category: ops_kill}
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           GOOGLE_CLOUD_PROJECT:
@@ -2365,6 +2374,7 @@ overlay:
         flags:
           --service-account: backend-jobs-runtime@based-hardware.iam.gserviceaccount.com
         env:
+          FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED: {value: 'false', category: ops_kill}
           DAY3_REENGAGEMENT_EMAIL_ENABLED:
             value: 'true'
           OMI_CUSTOMER_DATA_PROJECT:

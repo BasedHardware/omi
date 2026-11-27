@@ -17,9 +17,13 @@ first_week_outcome = null        # the close-out counting key
 `paid_since` is the commercial first-paid epoch stored at the user document's
 top level beside `subscription`, set once on a confirmed free-to-paid transition
 and never moved by a renewal. It comes from the provider's paid-period start,
-not webhook processing time. Trials and prepaid subscriptions do not set it;
-trial conversion uses the paid-period start. A row that predates `paid_since`
-has no epoch and is never covered. Production has no preactivation backfill, so
+not webhook processing time. Stripe trials and prepaid subscriptions do not set
+it; Stripe trial conversion uses the paid-period start. An active entitlement
+projection without provider payment evidence does not set it. Play trial
+eligibility remains a pre-activation gate until paid-period evidence is covered;
+keep the production flag off for every workload during that review. A row that
+predates `paid_since` has no epoch and is never covered. Production has no
+preactivation backfill, so
 the first-week conversation cohort begins when the runtime flag is enabled;
 existing paid users without `paid_since` remain outside it. `interval` is
 `monthly`/`yearly`/`unknown` from the paid period length. Referral promotions
@@ -60,6 +64,11 @@ and repair deadline. It changes age-gate and lane-demotion eligibility only;
 historical processing rows are excluded. A continuous capture therefore keeps
 its ordinary first-summary dispatch while its first-week obligation remains open.
 The close-out pass processes at most 25 rows and stops starting work after 15 s.
+Its budget is 410 reads/tick at the retry bound: up to 25 query-row reads,
+10 lease reads across claim/release, and 375 outcome-transaction reads (25 rows
+times three documents—conversation, outbox and aggregate count—times five
+transaction attempts). At 720 ticks/day that is 295,200 reads/day, plus at most
+9 reads for one bounded durable-count readback/day.
 
 Each outcome transaction also increments one of the bounded durable aggregate
 documents under `maintenance/first_week_summary_outcomes/counts`, keyed by
@@ -101,6 +110,9 @@ record the census-backed expected extra summaries/day and reads/day, including:
   that carry the stored stamp use no such read;
 - one `sync_reprocess_outbox` point read for each first-week window closed, to
   copy its durable attempt receipt into the closeout classification transaction;
+- closeout worst case is 410 reads/tick, or 295,209 reads/day including the
+  bounded post-cohort readback; the same per-row transaction reads the
+  conversation and durable aggregate count as well as the outbox row;
 - the commercial subscription read when an existing conversation stamp is
   absent: at most one Firestore user read per cache miss, with same-user reads
   shared for up to 60 seconds when the subscription cache is available (a cold

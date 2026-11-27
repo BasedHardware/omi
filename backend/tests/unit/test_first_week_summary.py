@@ -13,6 +13,7 @@ from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
+import yaml
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 if str(BACKEND_DIR) not in sys.path:
@@ -104,7 +105,13 @@ def test_interval_comes_from_the_period_length_not_a_catalog():
 
 def test_paid_since_is_set_once_on_a_free_to_paid_transition():
     stored = {'plan': 'basic', 'status': 'active'}
-    incoming = {'plan': 'unlimited', 'status': 'active', 'current_period_start': PAID}
+    incoming = {
+        'plan': 'unlimited',
+        'status': 'active',
+        'current_period_start': PAID,
+        '_first_week_payment_status': 'active',
+        '_first_week_paid_since': PAID,
+    }
     patch = users_db.paid_since_patch(stored, incoming, now=PAID)
     assert patch == {'paid_since': PAID}
     # The user-level epoch is authoritative and a renewal never moves it.
@@ -131,10 +138,16 @@ def test_paid_since_ignores_a_trial_that_was_never_charged():
     # A carried epoch from the caller is authoritative and never moved.
     assert users_db.paid_since_patch(
         stored,
-        {'plan': 'unlimited', 'status': 'active', 'paid_since': 5, 'current_period_start': PAID},
+        {
+            'plan': 'unlimited',
+            'status': 'active',
+            'paid_since': 5,
+            'current_period_start': PAID,
+            '_first_week_payment_status': 'active',
+        },
         now=PAID,
     ) == {'paid_since': 5}
-    trial = {'plan': 'unlimited', 'status': 'active', '_first_week_trialing': True}
+    trial = {'plan': 'unlimited', 'status': 'active'}
     converted = {
         'plan': 'unlimited',
         'status': 'active',
@@ -142,7 +155,17 @@ def test_paid_since_ignores_a_trial_that_was_never_charged():
         '_first_week_trial_conversion': True,
         '_first_week_paid_since': PAID + 24 * HOUR,
     }
-    assert users_db.paid_since_patch(trial, converted) == {'paid_since': PAID + 24 * HOUR}
+    assert users_db.paid_since_patch(trial, converted, stored_user_first_week_trialing=True) == {
+        'paid_since': PAID + 24 * HOUR
+    }
+    # An active entitlement projection alone is not provider evidence of payment.
+    assert (
+        users_db.paid_since_patch(
+            stored,
+            {'plan': 'unlimited', 'status': 'active', 'current_period_start': PAID},
+        )
+        == {}
+    )
 
 
 # --- the deadline readers --------------------------------------------------
@@ -214,13 +237,32 @@ def test_first_week_binding_uses_its_reserved_queue_and_falls_back(monkeypatch):
 
 
 def test_production_overlay_keeps_every_first_week_service_disabled_until_census():
-    overlay = BACKEND_DIR / 'deploy/runtime_env/prod.overlay.yaml'
-    settings = [
-        line.strip() for line in overlay.read_text().splitlines() if 'FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:' in line
-    ]
+    key = guarantee.FIRST_WEEK_ENABLED_ENV
+    overlay = yaml.safe_load((BACKEND_DIR / 'deploy/runtime_env/prod.overlay.yaml').read_text())['overlay']
+    prod = yaml.safe_load((BACKEND_DIR / 'deploy/runtime_env.yaml').read_text())['environments']['prod']
 
-    assert settings
-    assert all("{value: 'false', category: ops_kill}" in setting for setting in settings)
+    def value(env, name=key):
+        entry = env.get(name)
+        return entry.get('value') if isinstance(entry, dict) else entry
+
+    # Both GKE writers have direct overrides and the shared envFrom ConfigMap
+    # carries the same explicit off value for workload replicas without one.
+    for service in ('backend-listen', 'pusher'):
+        assert value(overlay['gke'][service]['env']) == 'false'
+        assert value(prod['gke'][service]['env']) == 'false'
+    assert overlay['gke']['config_map']['entries'][key] == {'source': 'literal', 'value': 'false'}
+    assert prod['gke']['config_map']['entries'][key] == {'source': 'literal', 'value': 'false'}
+    assert value(overlay['desktop_backend']['env']) == 'false'
+    assert value(prod['desktop_backend']['env']) == 'false'
+
+    cloud_run = prod['cloud_run']
+    services = ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration', 'backend-projection-pump')
+    for service in services:
+        assert value(cloud_run['services'][service]['env']) == 'false'
+    jobs = ('notifications-job', 'x-connector-sync-job', 'frame-request-retention-job', 'day3-reengagement-email-job')
+    for job in jobs:
+        assert value(cloud_run['jobs'][job]['env']) == 'false'
+
     assert 'enrichment-first-week:' in (BACKEND_DIR / 'deploy/ops/prod.yaml').read_text()
     assert "'first_week_summary_closeout'" in (BACKEND_DIR / 'database/firestore_index_registry.py').read_text()
 
@@ -326,12 +368,16 @@ def test_campaign_off_subscription_writer_round_trips_paid_since_at_user_level(m
             'status': 'active',
             'current_period_start': PAID,
             'current_period_end': PAID + 30 * 24 * HOUR,
+            '_first_week_payment_status': 'active',
+            '_first_week_paid_since': PAID,
         },
     )
 
     assert len(ref.writes) == 1
     assert 'paid_since' in ref.data and type(ref.data['paid_since']) is int
+    assert ref.data[users_db.FIRST_WEEK_TRIALING_FIELD] is False
     assert 'paid_since' not in ref.data['subscription']
+    assert '_first_week_trialing' not in ref.data['subscription']
 
     cache = {}
     reads = []
@@ -365,6 +411,51 @@ def test_campaign_off_subscription_writer_round_trips_paid_since_at_user_level(m
     users_db.update_user_subscription.__wrapped__('uid', {'plan': 'unlimited', 'status': 'active'})
     assert ref.reads == []
     assert ref.data['paid_since'] == paid_since
+
+
+def test_campaign_off_flag_off_writer_keeps_subscription_payload_unchanged(monkeypatch):
+    class UserRef:
+        def __init__(self):
+            self.data = {'subscription': {'plan': 'basic', 'status': 'active'}}
+            self.writes = []
+
+        def update(self, patch):
+            self.writes.append(dict(patch))
+            self.data.update(patch)
+
+    ref = UserRef()
+
+    class Collection:
+        def document(self, _uid):
+            return ref
+
+    class Client:
+        def collection(self, name):
+            assert name == 'users'
+            return Collection()
+
+    monkeypatch.setattr(users_db, 'db', Client())
+    monkeypatch.setattr(users_db, 'invalidate_subscription', lambda _uid: None)
+    monkeypatch.setattr('config.referral_campaign.campaign_enabled', lambda: False)
+    monkeypatch.setenv(guarantee.FIRST_WEEK_ENABLED_ENV, 'false')
+    incoming = {
+        'plan': 'unlimited',
+        'status': 'active',
+        'current_period_start': PAID,
+        'current_period_end': PAID + 30 * 24 * HOUR,
+        '_first_week_payment_status': 'active',
+        '_first_week_paid_since': PAID,
+        '_first_week_trial_conversion': True,
+        '_first_week_trialing': True,
+    }
+    expected = {key: value for key, value in incoming.items() if not key.startswith('_first_week_')}
+
+    users_db.update_user_subscription.__wrapped__('uid', incoming)
+
+    assert ref.writes == [{'subscription': expected}]
+    assert ref.data == {'subscription': expected}
+    assert 'paid_since' not in ref.data
+    assert users_db.FIRST_WEEK_TRIALING_FIELD not in ref.data
 
 
 def test_conversation_codec_uses_stored_creation_time_for_the_window(monkeypatch):
@@ -493,7 +584,7 @@ def test_outbox_mark_retries_when_required_metadata_is_unavailable(monkeypatch):
     fallback.assert_called_once()
 
 
-def test_subscription_stamp_read_errors_are_retryable_and_observable(monkeypatch):
+def test_subscription_stamp_read_errors_fail_open_and_are_observable(monkeypatch):
     _clear(monkeypatch)
     monkeypatch.setenv(guarantee.FIRST_WEEK_ENABLED_ENV, 'true')
     monkeypatch.setattr(
@@ -503,8 +594,7 @@ def test_subscription_stamp_read_errors_are_retryable_and_observable(monkeypatch
     )
     fallback = Mock()
     monkeypatch.setattr(users_db, 'record_fallback', fallback)
-    with pytest.raises(RuntimeError, match='eligibility read failed'):
-        users_db.first_week_stamp_for('uid', PAID)
+    assert users_db.first_week_stamp_for('uid', PAID) is None
     fallback.assert_called_once()
 
 

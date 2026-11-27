@@ -34,11 +34,11 @@
       "collection": "maintenance",
       "owner": "SCA-4790 first-week closeout",
       "unit": "one scheduled two-minute closeout tick",
-      "reads_per_unit_budget": 285,
-      "reads_per_day_budget": 205209,
+      "reads_per_unit_budget": 410,
+      "reads_per_day_budget": 295209,
       "basis": "planning-bound",
-      "source": "backend/services/first_week_summary_closeout.py and backend/deploy/scheduler/jobs.yaml: the enabled sync-backfill-uid-sequencer sweep runs every two minutes (720/day). A tick reads at most 25 query rows, one lease document in each of claim/release transactions (2 x 5 retry attempts), and at most 25 conversation/count pairs (25 x 2 x 5 retry attempts): 285 reads/tick, plus at most 9 reads for one bounded post-cohort durable-count readback/day. Rebudget if the schedule, page cap, retry bound or readback frequency increases. Production feature flag remains false until the census and owner activation decision.",
-      "reviewed": "2026-11-26"
+      "source": "backend/services/first_week_summary_closeout.py and backend/deploy/scheduler/jobs.yaml: the enabled sync-backfill-uid-sequencer sweep runs every two minutes (720/day). A tick reads at most 25 query rows, one lease document in each of claim/release transactions (2 x 5 retry attempts), and at most 25 outcome transactions; each transaction reads the conversation, outbox and count document (25 x 3 x 5 retry attempts): 410 reads/tick, or 295200/day, plus at most 9 reads for one bounded post-cohort durable-count readback/day. Rebudget if the schedule, page cap, retry bound or readback frequency increases. Production feature flag remains false until the census and owner activation decision.",
+      "reviewed": "2026-11-27"
     },
     {
       "collection": "pager_events",

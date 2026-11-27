@@ -16,7 +16,8 @@ from google.cloud import firestore
 from database._client import get_customer_firestore_client, get_data_plane_firestore_client, run_transactional
 from database.account_deletion_policy import account_deletion_marker_blocks_access
 from database.fsr_read_cache import writing
-from database.users import paid_since_patch
+from config.summary_guarantee import first_week_enabled
+from database.users import FIRST_WEEK_TRIALING_FIELD, paid_since_patch
 from utils.referral_campaign import (
     CampaignPolicy,
     GRANT_FIELD,
@@ -367,6 +368,7 @@ def write_commercial_subscription(
     client = _client(client)
     policy = policy or current_policy()
     now = now or datetime.now(timezone.utc)
+    feature_enabled = first_week_enabled()
     user_ref = client.collection('users').document(uid)
     state_ref = _ref(client, 'accounts', policy, uid)
 
@@ -376,14 +378,21 @@ def write_commercial_subscription(
         state = _data(state_ref, transaction)
         grant = user.get(GRANT_FIELD)
         requeued = requeue_grant_for_paid_period(grant, subscription, now=now)
-        # Commercial first-paid epoch: set once on the free->paid transition in
-        # the same write that installs the paid subscription (SCA-4790).
-        paid_patch = paid_since_patch(
-            user.get('subscription'),
-            paid_since_context or subscription,
-            stored_user_paid_since=user.get('paid_since'),
-            now=now.timestamp(),
-        )
+        paid_patch: dict[str, Any] = {}
+        if feature_enabled:
+            # Commercial first-paid epoch: set once on the free->paid transition
+            # in the same write that installs the paid subscription (SCA-4790).
+            context = paid_since_context or subscription
+            paid_patch = paid_since_patch(
+                user.get('subscription'),
+                context,
+                stored_user_paid_since=user.get('paid_since'),
+                stored_user_first_week_trialing=user.get(FIRST_WEEK_TRIALING_FIELD),
+                now=now.timestamp(),
+            )
+            payment_status = context.get('_first_week_payment_status')
+            if isinstance(payment_status, str):
+                paid_patch[FIRST_WEEK_TRIALING_FIELD] = payment_status == 'trialing'
         patch: dict[str, Any] = {'subscription': subscription}
         patch.update(paid_patch)
         if requeued is not None and requeued != grant:
