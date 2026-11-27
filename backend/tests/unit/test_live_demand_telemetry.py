@@ -770,9 +770,9 @@ def test_connected_seconds_split_at_a_transition_inside_one_flush(monkeypatch):
 def test_connected_seconds_split_exactly_past_the_transition_cap(monkeypatch):
     """A flapping client inside one flush must not be costed as ``unreported``.
 
-    More than the transition cap of changes land between the flush start and
-    its end, so the log trims; the bucket in force at the start still has to be
-    named, which the floor checkpoint is for.
+    More than ``MAX_VISIBILITY_TRANSITIONS`` changes land between the flush
+    start and its end, so the cap folds the oldest ones away; the flush still
+    has to count every second once, in the bucket that actually held it.
     """
     now = [100.0]
     monkeypatch.setattr(telemetry, 'monotonic', lambda: now[0])
@@ -786,36 +786,78 @@ def test_connected_seconds_split_exactly_past_the_transition_cap(monkeypatch):
             bucket: value(telemetry.SONIOX_CONNECTED, visibility=bucket, **labels)
             for bucket in telemetry.VISIBILITY_BUCKETS
         }
-        # 40 alternating reports over the first 4 s of a 5 s flush interval.
-        for step in range(40):
-            now[0] += 0.1
+        # One transition every 10 ms for 6 s: 600 alternating reports, more than
+        # the cap, all inside the same flush interval.
+        transitions = telemetry.MAX_VISIBILITY_TRANSITIONS + 88
+        for step in range(transitions):
+            now[0] += 0.01
             cohort.observe_visibility({'foreground': step % 2 == 1, 'transcript_visible': False})
-        now[0] += 1.0
+        assert cohort._visibility_carry is not None
+        assert len(cohort._visibility_log) <= telemetry.MAX_VISIBILITY_TRANSITIONS
         meter.flush(close=True)
         after = {
             bucket: value(telemetry.SONIOX_CONNECTED, visibility=bucket, **labels)
             for bucket in telemetry.VISIBILITY_BUCKETS
         }
+        # 100.00-100.01 foreground, then 599 ten-millisecond windows alternating
+        # from background: 3.00 s each, 6.00 s total, none unknown.
         assert after['unreported'] - before['unreported'] == pytest.approx(0)
         assert after['visible'] - before['visible'] == pytest.approx(0)
         assert after['foreground'] - before['foreground'] == pytest.approx(3.0)
-        assert after['background'] - before['background'] == pytest.approx(2.0)
-        assert len(cohort._visibility_log) <= telemetry.MAX_VISIBILITY_TRANSITIONS
+        assert after['background'] - before['background'] == pytest.approx(3.0)
     finally:
         telemetry.current_demand.reset(token)
 
 
-def test_visibility_floor_names_the_bucket_at_the_trimmed_edge(monkeypatch):
-    """Trimming the log must not cost the seconds before its first entry as unknown."""
+def test_folded_visibility_seconds_are_counted_once_across_flushes(monkeypatch):
+    """The span the cap folded belongs to one flush; the next one must not repeat it."""
     now = [100.0]
     monkeypatch.setattr(telemetry, 'monotonic', lambda: now[0])
-    monkeypatch.setattr(telemetry, 'VISIBILITY_LOG_SECONDS', 1.0)
+    cohort = telemetry.DemandTelemetry('ineligible')
+    token = telemetry.current_demand.set(cohort)
+    try:
+        cohort.observe_visibility({'foreground': True, 'transcript_visible': False})
+        first = telemetry.create_connected_meter()
+        labels = dict(provider='soniox', demand_cohort='ineligible', origin='initial', fallback_reason='none')
+        before = {
+            bucket: value(telemetry.SONIOX_CONNECTED, visibility=bucket, **labels)
+            for bucket in telemetry.VISIBILITY_BUCKETS
+        }
+        for step in range(telemetry.MAX_VISIBILITY_TRANSITIONS + 88):
+            now[0] += 0.002
+            cohort.observe_visibility({'foreground': step % 2 == 1, 'transcript_visible': False})
+        now[0] = 105.0
+        first.flush(close=True)
+        second = telemetry.create_connected_meter()
+        now[0] = 107.0
+        cohort.observe_visibility({'foreground': False, 'transcript_visible': False})
+        now[0] = 110.0
+        second.flush(close=True)
+        after = {
+            bucket: value(telemetry.SONIOX_CONNECTED, visibility=bucket, **labels)
+            for bucket in telemetry.VISIBILITY_BUCKETS
+        }
+        delta = {bucket: after[bucket] - before[bucket] for bucket in telemetry.VISIBILITY_BUCKETS}
+        assert delta['unreported'] == pytest.approx(0)
+        assert delta['visible'] == pytest.approx(0)
+        assert sum(delta.values()) == pytest.approx(10.0)
+        assert delta['foreground'] + delta['background'] == pytest.approx(10.0)
+    finally:
+        telemetry.current_demand.reset(token)
+
+
+def test_completed_flush_forgets_its_history_without_losing_the_next_bucket(monkeypatch):
+    """Spent transitions are dropped, but the next interval still starts known."""
+    now = [100.0]
+    monkeypatch.setattr(telemetry, 'monotonic', lambda: now[0])
     cohort = telemetry.DemandTelemetry('admitted')
     cohort.observe_visibility({'foreground': True, 'transcript_visible': False})
-    now[0] = 102.0
+    now[0] += 2
     cohort.observe_visibility({'foreground': False, 'transcript_visible': False})
-    assert cohort.visibility_seconds(100.0, 102.0) == [('foreground', 2.0)]
-    assert cohort.visibility_seconds(100.5, 103.0) == [('foreground', 1.5), ('background', 1.0)]
+    now[0] += 3
+    assert cohort.visibility_seconds(100.0, 105.0) == [('foreground', 2.0), ('background', 3.0)]
+    assert cohort._visibility_log == [(105.0, 'background')]
+    assert cohort.visibility_seconds(105.0, 108.0) == [('background', 3.0)]
 
 
 def test_connected_seconds_carry_the_custody_fallback_reason(monkeypatch):

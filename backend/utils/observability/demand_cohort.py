@@ -17,11 +17,9 @@ VISIBILITY_BUCKETS = ('visible', 'foreground', 'background', 'unreported')
 # Why a local-preview custody promotion fell back to a live transport. ``none`` is
 # every transport that was not opened by a fallback.
 FALLBACK_REASONS = ('none', 'policy', 'archive', 'claim')
-# A client flapping state is not a reason to grow memory, but a flush still has
-# to name the bucket in force when its interval started. Keep every transition
-# inside the window a flush can report and fold anything older into a floor
-# checkpoint; the count cap is only a hard stop against a pathological rate.
-VISIBILITY_LOG_SECONDS = 60.0
+# A client flapping state is not a reason to grow memory. Past this many
+# transitions the oldest are folded into elapsed seconds per bucket rather than
+# dropped, so the flush that owns that span still counts every second once.
 MAX_VISIBILITY_TRANSITIONS = 512
 
 
@@ -235,10 +233,13 @@ class DemandTelemetry:
         # Bounded transition log so a connected-seconds flush can split its
         # interval at the exact moment the client changed state.
         self._visibility_log: list[tuple[float, str]] = []
-        # The newest transition dropped from the log: it names the bucket in
-        # force at the log's start, so a flush that begins before the retained
-        # tail still splits exactly instead of falling back to ``unreported``.
+        # Bucket in force immediately before the retained tail, so a split
+        # that starts before the log's first entry still names its state.
         self._visibility_floor: tuple[float, str] | None = None
+        # Transitions the cap folded away before a flush reported them:
+        # ``(from, until, bucket_before, seconds_by_bucket)``. ``from`` is where
+        # the owning flush's interval begins, so those seconds are counted once.
+        self._visibility_carry: tuple[float, float, str, dict[str, float]] | None = None
         # Sticky for the session: a custody fallback that opened a live transport
         # keeps naming that reason on every later transport, reconnects included.
         self.fallback_reason = 'none'
@@ -281,28 +282,57 @@ class DemandTelemetry:
             self.fallback_reason = reason
 
     def _note_visibility(self, bucket: str) -> None:
-        changed_at = monotonic()
-        self._visibility_log.append((changed_at, bucket))
-        self._trim_visibility_log(changed_at)
+        self._visibility_log.append((monotonic(), bucket))
+        self._fold_visibility_history()
 
-    def _trim_visibility_log(self, now: float) -> None:
-        """Drop transitions no future flush can split, keeping the floor exact.
+    def _fold_visibility_history(self) -> None:
+        """Cap the log without losing seconds an active flush still owes.
 
-        The entry dropped last is the newest transition before the retained
-        window, so it is the bucket in force at every instant the window no
-        longer describes by itself. Keeping it as the floor is what stops a
-        flapping client from being costed as ``unreported``.
+        The oldest transitions are folded into ``(bucket, seconds)`` totals and a
+        carry span, so a flush that owns that span adds them exactly once instead
+        of costing the prefix as ``unreported``.
         """
         log = self._visibility_log
-        window_start = now - VISIBILITY_LOG_SECONDS
-        dropped = 0
-        while dropped < len(log) - 1 and log[dropped][0] < window_start:
-            dropped += 1
-        if len(log) - dropped > MAX_VISIBILITY_TRANSITIONS:
-            dropped = len(log) - MAX_VISIBILITY_TRANSITIONS
-        if dropped:
-            self._visibility_floor = log[dropped - 1]
-            del log[:dropped]
+        over = len(log) - MAX_VISIBILITY_TRANSITIONS
+        if over <= 0:
+            return
+        folded_from = log[0][0]
+        folded_until = log[over][0]
+        totals: dict[str, float] = {}
+        for bucket, seconds in self._split(folded_from, folded_until):
+            totals[bucket] = totals.get(bucket, 0.0) + seconds
+        before = self._visibility_floor[1] if self._visibility_floor else 'unreported'
+        carry = self._visibility_carry
+        if carry is not None and carry[1] == folded_from:
+            # Contiguous with the previous fold: extend that span instead of
+            # starting a second one, so the owning flush still sees one range.
+            for bucket, seconds in totals.items():
+                carry[3][bucket] = carry[3].get(bucket, 0.0) + seconds
+            self._visibility_carry = (carry[0], folded_until, carry[2], carry[3])
+        else:
+            self._visibility_carry = (folded_from, folded_until, before, totals)
+        self._visibility_floor = log[over - 1]
+        del log[:over]
+
+    def _rebase_visibility_log(self, at: float) -> None:
+        """Forget transitions a completed flush already accounted for.
+
+        The retained log is re-anchored at ``at`` with the bucket in force
+        there, so the next flush still starts from a known state after its
+        spent history is gone.
+        """
+        log = self._visibility_log
+        current = self._bucket_at(at)
+        keep = 0
+        while keep < len(log) and log[keep][0] < at:
+            keep += 1
+        if keep:
+            self._visibility_floor = log[keep - 1]
+            del log[:keep]
+        if log and log[0][0] == at:
+            log[0] = (at, current)
+        else:
+            log.insert(0, (at, current))
 
     def _bucket_at(self, at: float) -> str:
         current = 'unreported'
@@ -314,10 +344,7 @@ class DemandTelemetry:
             current = bucket
         return current
 
-    def visibility_seconds(self, start: float, end: float) -> list[tuple[str, float]]:
-        """Split ``[start, end]`` into ``(bucket, seconds)`` at recorded transitions."""
-        if end <= start:
-            return []
+    def _split(self, start: float, end: float) -> list[tuple[str, float]]:
         segments: list[tuple[str, float]] = []
         cursor = start
         current = self._bucket_at(start)
@@ -331,6 +358,29 @@ class DemandTelemetry:
             current = bucket
         if end > cursor:
             segments.append((current, end - cursor))
+        return segments
+
+    def visibility_seconds(self, start: float, end: float) -> list[tuple[str, float]]:
+        """Split ``[start, end]`` into ``(bucket, seconds)`` at recorded transitions."""
+        if end <= start:
+            return []
+        segments: list[tuple[str, float]] = []
+        cursor = start
+        carry = self._visibility_carry
+        if carry is not None:
+            carried_from, carried_until, carried_before, carried = carry
+            if start <= carried_from:
+                if start < carried_from:
+                    segments.append((carried_before, carried_from - start))
+                segments.extend((bucket, seconds) for bucket, seconds in carried.items() if seconds > 0)
+                cursor = carried_until
+            else:
+                # This flush starts after the folded span, so those seconds
+                # belong to no interval of its own: spend them here, once.
+                self._visibility_carry = None
+        segments.extend(self._split(cursor, end))
+        self._rebase_visibility_log(end)
+        self._fold_visibility_history()
         return segments
 
     def delivered(self) -> None:
