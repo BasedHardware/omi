@@ -19,14 +19,18 @@ void main() {
     expect(waits.isWaiting('stuck-conversation'), isFalse);
   });
 
-  test('a server wait is bounded so a bad value cannot strand a recording', () async {
+  test('recording and header hints are bounded independently', () async {
     var now = DateTime.utc(2026, 11, 7, 12);
     final waits = RecordingWaitDeferrals(() => now);
 
-    await waits.defer({'stuck-conversation'}, 999999);
-    now = now.add(const Duration(seconds: RecordingWaitDeferrals.maxWaitSeconds));
+    await waits.defer({'header'}, 999999);
+    await waits.defer({'recording'}, 30, recordingWaitSeconds: 999999);
+    now = now.add(const Duration(minutes: 5));
 
-    expect(waits.isWaiting('stuck-conversation'), isFalse);
+    expect(waits.isWaiting('header'), isFalse);
+    expect(waits.isWaiting('recording'), isTrue);
+    now = now.add(const Duration(minutes: 25));
+    expect(waits.isWaiting('recording'), isFalse);
   });
 
   test('a recognized wait without server pacing still holds for the default', () async {
@@ -68,8 +72,8 @@ void main() {
   test('only a record_capture_pending body carries recording pacing', () {
     expect(
       syncUploadServerWaitSeconds(
-          http.Response('{"code":"record_capture_pending","detail":"x","retry_after_seconds":30}', 503)),
-      30,
+          http.Response('{"code":"record_capture_pending","detail":"x","retry_after_seconds":1800}', 503)),
+      1800,
     );
     expect(syncUploadServerWaitSeconds(http.Response('{"code":"record_capture_pending"}', 503)), isNull);
     expect(

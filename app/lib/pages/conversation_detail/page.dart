@@ -1401,10 +1401,17 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
           current.id != conversation.id ||
           current.id != widget.conversation.id ||
           current.isLocked ||
-          current.isHiddenFromDefaultList ||
-          current.status != ConversationStatus.in_progress ||
-          !_isLiveV3(current)) {
+          current.isHiddenFromDefaultList) {
         return false;
+      }
+      if (current.status != ConversationStatus.in_progress || !_isLiveV3(current)) {
+        // Reliability experiment live_words_cascade: a conversation that has ended keeps the live words
+        // spoken inside its own time range until stored text replaces them (or they are five minutes
+        // old), exactly as an open one does. Which words those are is decided by time alone, below.
+        // Off: only the conversation in progress shows live words.
+        return LivePreviewController.cascadeEnabled() &&
+            current.v3 != null &&
+            (context.read<ConversationsV3Provider?>()?.v3 ?? false);
       }
       final recordingId = capture.verifiedLiveServerRecordingId;
       if (recordingId != null && (current.v3?.recordingIds.contains(recordingId) ?? false)) return true;
@@ -1428,15 +1435,34 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
       whenEmpty: whenEmpty,
       lines: () {
         if (!isVerified()) return const [];
-        final lines = [
-          for (final line in preview.lines)
-            if (line.startedAt case final lineStart?)
-              if (!lineStart.isBefore(startedAt)) line,
-        ];
+        final lines = LivePreviewController.cascadeEnabled()
+            // Reliability experiment live_words_cascade: the live words of this conversation's own time
+            // range, per word, whether it is open or has ended: from its start (never before the End that
+            // preceded it) to the End that closed it. The tail then drops each word once a stored line
+            // covers its moment, or after five minutes without one.
+            ? preview.wordsFor(startedAt: startedAt, until: _liveWordsUntil())
+            : [
+                for (final line in preview.lines)
+                  if (line.startedAt case final lineStart?)
+                    if (!lineStart.isBefore(startedAt)) line,
+              ];
         _recordLiveWordsHole(conversation, startedAt, lines);
         return lines;
       },
     );
+  }
+
+  /// Reliability experiment live_words_cascade: where this page's conversation stops owning live words.
+  /// The End that closed it when the server has stamped one; for a conversation that ended by itself, a
+  /// little after its last stored line; null while it is open (the live-words layer then stops it at an
+  /// End pressed on this phone that the page has not heard of yet).
+  DateTime? _liveWordsUntil() {
+    final current = _providerInitialized ? _detailProvider.conversationOrNull : widget.conversation;
+    if (current == null) return null;
+    final closedBy = current.v3?.manualCutAt;
+    if (closedBy != null) return closedBy;
+    if (current.status == ConversationStatus.in_progress) return null;
+    return current.finishedAt?.add(LivePreviewController.conversationLead);
   }
 
   // Reliability experiment vendor_recognizer_on_opened_app, step 4: a local record, numbers only, of

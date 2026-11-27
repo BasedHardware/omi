@@ -13,6 +13,7 @@ SYNC_OFF_CENTROIDS_ENV = 'BATCH_SYNC_OFF_CENTROIDS_ENABLED'
 VENDOR_SPEAKER_TURNS_ENV = 'BATCH_VENDOR_SPEAKER_TURNS_ENABLED'
 FINAL_PASS_V3_SOURCES_ENV = 'BATCH_FINAL_PASS_V3_SOURCES_ENABLED'
 FINAL_PASS_APPEND_CONFLICTS_ENV = 'BATCH_FINAL_PASS_APPEND_CONFLICTING_UNITS_ENABLED'
+FINAL_PASS_KEEP_RESOLVED_ENV = 'BATCH_FINAL_PASS_KEEP_RESOLVED_ON_PARTIAL_ENABLED'
 
 
 def _default_on(name: str) -> bool:
@@ -30,6 +31,12 @@ def append_conflicting_units_enabled() -> bool:
     """Kill switch: a unit whose capture clock contradicts placed audio is appended after the timeline. False
     restores the whole-pass refusal (conflicting capture clocks)."""
     return _default_on(FINAL_PASS_APPEND_CONFLICTS_ENV)
+
+
+def keep_resolved_on_partial_enabled() -> bool:
+    """Kill switch: a partial final pass reuses the resolver's voice ids (one-to-one majority mapping) and keeps a
+    resolved conversation resolved. False restores new ids for updated segments and ``unavailable``."""
+    return _default_on(FINAL_PASS_KEEP_RESOLVED_ENV)
 
 
 def sync_off_enabled() -> bool:

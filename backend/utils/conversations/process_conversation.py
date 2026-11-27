@@ -314,6 +314,7 @@ from utils.other.storage import (
 )
 
 from utils.conversations.v3 import Conflict as V3Conflict
+from utils.conversations.v3 import live_tail as v3_live_tail
 from utils.conversations.v3 import policy as v3_policy, service as v3_service
 from utils.conversations.v3.word_floor import MIN_HOME_WORDS, MIN_TASK_WORDS, text_word_count
 
@@ -731,7 +732,14 @@ def _get_structured(
             known_spellings=conversation_known_spellings(uid),
             uid=uid,
             conversation_id=prompt_conversation_id,
-            transcript=action_items_transcript,
+            # Reliability experiment live_words_cascade: while the v3 summary pass writes the notes of a
+            # conversation a user End closed, the words the phone was showing that no stored line covers
+            # yet follow the transcript in this prompt, marked as a draft (utils/conversations/v3/
+            # live_tail.py). The prompt is the only reader, so only what the notes say can reflect those
+            # words: the wake-word and discard checks above, memory extraction and the stored transcript
+            # use the transcript alone. Outside that pass, and with the experiment off, this returns the
+            # transcript unchanged.
+            transcript=v3_live_tail.in_prompt(action_items_transcript),
             started_at=conv_started_at,
             timezone_name=tz_str,
             language_code=language_code,

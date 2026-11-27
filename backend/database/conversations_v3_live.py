@@ -122,6 +122,19 @@ def live_window(
     firestore_client: Any = None,
 ) -> Optional[Mapping[str, Any]]:
     """The window ``pick`` chooses, reading the recent band first and widening only if needed."""
+    return live_window_lookup(uid, now=now, max_idle=max_idle, pick=pick, firestore_client=firestore_client)[0]
+
+
+def live_window_lookup(
+    uid: str,
+    *,
+    now: datetime,
+    max_idle: timedelta,
+    pick: Callable[[Sequence[Mapping[str, Any]], datetime], Optional[Mapping[str, Any]]],
+    firestore_client: Any = None,
+) -> Tuple[Optional[Mapping[str, Any]], bool]:
+    """``(window, complete)``. ``complete`` is False when READ_CAP ran out before ``pick`` found one,
+    so an absent window is unknown rather than proven."""
     left = READ_CAP
     recent = min(RECENT_BAND, max_idle)
     # The bands are disjoint, so the wider one never re-reads the recent one.
@@ -136,9 +149,11 @@ def live_window(
         )
         row = pick(rows, now)
         left -= read
-        if row is not None or left <= 0:
-            return row
-    return None
+        if row is not None:
+            return row, True
+        if left <= 0:
+            return None, False
+    return None, True
 
 
 def _valid_document_id(value: Any) -> TypeGuard[str]:
@@ -566,7 +581,7 @@ def _latest_capture(docs, cid, row):
 
 
 def request_named_finish(
-    uid: str, named_id: str, *, now: datetime, firestore_client: Any = None
+    uid: str, named_id: str, *, now: datetime, firestore_client: Any = None, strict: bool = False
 ) -> Tuple[str, Optional[Dict[str, Any]], str]:
     """Finish the just-sealed capture a Finish named after its window left the live set.
 
@@ -576,7 +591,8 @@ def request_named_finish(
     capture that sealed after it is what the person just finished, so it wins. Only a capture
     sealed within ``RECENT_FINISH_AGE`` that passes the recording-Finish checks is cut, only
     while no other window is live, and a completed window already on Home is left as it is.
-    Returns ``(outcome, response row, recording id)``.
+    ``strict`` refuses (``named_superseded``) instead of moving to a newer capture and its window: the
+    caller asked for exactly the named target. Returns ``(outcome, response row, recording id)``.
     """
     if not _valid_document_id(named_id):
         return 'named_not_finishable', None, ''
@@ -601,6 +617,8 @@ def request_named_finish(
         if isinstance(latest, str):
             return latest, None, ''
         refusal = 'named_not_finishable'
+        if latest[0] != cid and strict:
+            return 'named_superseded', None, ''
         if latest[0] != cid:
             cid, row = latest
             refusal = 'named_superseded'

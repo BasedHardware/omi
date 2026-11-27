@@ -92,6 +92,11 @@ LINE_MAX_CHARS = 600
 # One frame larger than any real one is a client fault, not audio.
 MAX_FRAME_BYTES = 64 * 1024
 
+# Reliability experiment live_words_cascade: the phone marks a user End with this text message.
+CASCADE_EXPERIMENT = reliability_experiments.LIVE_WORDS_CASCADE_FLAG_KEY
+MAX_TEXT_MESSAGE_CHARS = 256
+MAX_END_CUTS = 8
+
 CLOSE_REPLACED = 4009
 CLOSE_IDLE = 4008
 
@@ -122,6 +127,17 @@ class LineJoiner:
         self.dirty: dict[str, dict[str, Any]] = {}
         self.lines = 0
         self.words = 0
+        # Reliability experiment live_words_cascade: points of the audio (seconds from the connection's
+        # first frame) where the user ended a conversation. No line holds words from both sides of one.
+        self.cuts: list[float] = []
+
+    def cut(self, at: float) -> None:
+        """A user End at ``at`` seconds of this connection's audio. Words arrive later: remember it."""
+        self.cuts.append(at)
+        del self.cuts[:-MAX_END_CUTS]
+
+    def _crosses_cut(self, line_start: float, word_start: float) -> bool:
+        return any(line_start < cut <= word_start for cut in self.cuts)
 
     def add(self, segments: list[dict[str, Any]], base: float) -> None:
         for segment in segments:
@@ -137,6 +153,7 @@ class LineJoiner:
                 or line['speaker'] != speaker
                 or start - line['end'] >= LINE_GAP_SECONDS
                 or len(line['text']) + len(text) > LINE_MAX_CHARS
+                or (self.cuts and self._crosses_cut(line['start'], start))
             ):
                 line = self.line = {
                     'id': uuid.uuid4().hex,
@@ -194,6 +211,7 @@ class LiveWordsSession:
         self.frames = 0
         self.samples = 0
         self.undecodable = 0
+        self.ends = 0
         self.last_audio_at = time.monotonic()
         self.last_ack_at = 0.0
         self._send_lock = asyncio.Lock()
@@ -245,6 +263,9 @@ class LiveWordsSession:
             if message.get('type') == 'websocket.disconnect':
                 self.stop('client')
                 break
+            control = message.get('text')
+            if control:
+                self._control(control)
             data = message.get('bytes')
             if data:
                 if len(data) > MAX_FRAME_BYTES:
@@ -388,6 +409,25 @@ class LiveWordsSession:
                 self._provider_lost()
                 return False
         return True
+
+    # --- the End -------------------------------------------------------------------------------
+
+    def _control(self, text: str) -> None:
+        """A text message from the phone. Only ``{"type":"end"}`` means anything, and only under
+        reliability experiment live_words_cascade: the user ended the conversation at this point of the
+        audio (every frame received so far was captured before it), so the line in progress breaks here.
+        Anything else, and everything when the experiment is off, is ignored as before."""
+        if len(text) > MAX_TEXT_MESSAGE_CHARS or not reliability_experiments.enabled(CASCADE_EXPERIMENT, self.uid):
+            return
+        try:
+            payload = json.loads(text)
+        except ValueError:
+            return
+        if not isinstance(payload, dict) or payload.get('type') != 'end':
+            return
+        self.ends += 1
+        self.joiner.cut(self.samples / SAMPLE_RATE)
+        logger.info('event=live_words action=end_cut uid=%s audio_seconds=%.1f', self.uid, self.samples / SAMPLE_RATE)
 
     # --- audio ---------------------------------------------------------------------------------
 

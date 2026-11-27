@@ -162,12 +162,17 @@ def create_in_progress_conversation(
     idempotent: bool = False,
     server_batch_requested: bool = False,
     server_batch_continuation: bool = False,
+    v3_continuation: bool = False,
 ) -> bool:
-    """Create the one durable in-progress resource for a recording generation."""
+    """Create the one durable in-progress resource for a recording generation.
+
+    ``v3_continuation``: the successor a v3 rotation opens for a live recording; v3 intake treats it
+    as the same capture (a held-out owner's capture in flight does not split into a legacy row).
+    """
     _require_status(conversation_data, ConversationStatus.in_progress)
     from utils.conversations.v3.triggers import mark_new
 
-    mark_new(uid, conversation_data)
+    mark_new(uid, conversation_data, continuation=v3_continuation)
     if server_batch_requested:
         # The decorated reservation resolves a missing/None privacy level first.
         _reserve_batch_live_capture(
@@ -1588,6 +1593,7 @@ def commit_v3_projection(
     remove=(),
     removed_ids=None,
     retire=None,
+    settle=None,
     key='builder',
     bounded_pending_limit=None,
     unlocked_page=None,
@@ -1607,6 +1613,7 @@ def commit_v3_projection(
         removed_ids=removed_ids,
         retire=retire,
         key=key,
+        **({'settle': settle} if settle else {}),
         **({'bounded_pending_limit': bounded_pending_limit} if bounded_pending_limit is not None else {}),
         **({'unlocked_page': unlocked_page} if unlocked_page is not None else {}),
     )
