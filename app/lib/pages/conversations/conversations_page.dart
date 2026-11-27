@@ -413,14 +413,23 @@ class _ConversationsPageState extends State<ConversationsPage>
           _scheduleDeferred(conversationProvider.checkHasDailySummaries);
         }
       } catch (error, stack) {
-        // omi-ux-allow: silent-catch -- the provider's typed list state shows the failure (ConversationApiStatus with Try Again)
+        // A failed read is the list's own error state; a throw is unexpected, and still says so.
         Logger.error('Initial Home conversations failed: $error\n$stack');
+        if (mounted) {
+          OmiFeedback.error(
+            context,
+            context.l10n.couldNotRefreshConversations,
+            actionLabel: context.l10n.tryAgain,
+            onAction: () => unawaited(conversationProvider.getInitialConversations()),
+          );
+        }
       } finally {
-        if (mounted) setState(() => _isBootstrapping = false);
+        if (mounted) {
+          setState(() => _isBootstrapping = false);
+          // Keep filesystem scanning off the first navigation/scroll frame.
+          _scheduleDeferred(context.read<LocalRecordingsProvider>().refresh);
+        }
       }
-      if (!mounted) return;
-      // Keep filesystem scanning off the first navigation/scroll frame.
-      _scheduleDeferred(context.read<LocalRecordingsProvider>().refresh);
     });
   }
 
@@ -435,7 +444,6 @@ class _ConversationsPageState extends State<ConversationsPage>
       try {
         await operation();
       } catch (error, stackTrace) {
-        // omi-ux-allow: silent-catch -- background warm-up; each provider reports its own failure where it is shown
         Logger.error('Deferred conversations-page work failed: $error\n$stackTrace');
       }
     });
