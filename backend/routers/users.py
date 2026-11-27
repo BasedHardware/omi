@@ -338,13 +338,17 @@ class PendantStopFeedbackRequest(BaseModel):
         'not_useful_enough',
         'device_problem',
         'other',
+        'note_only',
     ]
     details: Annotated[str, Field(min_length=1, max_length=4000)]
     days_without_connection: Annotated[int, Field(strict=True, ge=3, le=100_000_000)]
 
 
 @router.post('/v1/users/pendant-stop-feedback', tags=['v1'], status_code=204)
-def submit_pendant_stop_feedback(data: PendantStopFeedbackRequest, uid: str = Depends(auth.get_current_user_uid)):
+def submit_pendant_stop_feedback(
+    data: PendantStopFeedbackRequest,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, 'memories:modify')),
+):
     """Store the optional note on the authenticated user's existing profile."""
     try:
         users_db.set_user_pendant_stop_feedback(uid, data.reason, data.details, data.days_without_connection)

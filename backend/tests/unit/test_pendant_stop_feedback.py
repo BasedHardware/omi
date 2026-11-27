@@ -1,8 +1,11 @@
+import json
 from datetime import timedelta
+from pathlib import Path
+from typing import get_args
 from unittest.mock import MagicMock
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from google.api_core.exceptions import NotFound
 
@@ -23,7 +26,8 @@ def app():
 def document(app, monkeypatch):
     app.dependency_overrides[users_router.auth.get_current_user_uid] = lambda: 'authenticated-user'
     firestore = MagicMock()
-    monkeypatch.setattr(users_router.users_db, 'db', firestore)
+    monkeypatch.setattr(users_router.users_db, 'get_firestore_client', lambda: firestore)
+    monkeypatch.setattr(users_router.auth, '_enforce_rate_limit', lambda *args, **kwargs: None)
     return firestore.collection.return_value.document.return_value, firestore
 
 
@@ -67,3 +71,23 @@ def test_does_not_recreate_missing_profile(app, document):
     user.update.side_effect = NotFound('missing')
     assert TestClient(app).post(PATH, json=PAYLOAD).status_code == 404
     user.set.assert_not_called()
+
+
+def test_reason_vocabulary_matches_analytics_registry():
+    registry = Path(__file__).resolve().parents[3] / 'contracts/analytics/events.json'
+    event = next(
+        event for event in json.loads(registry.read_text())['events'] if event['id'] == 'pendantStopQuestionAnswered'
+    )
+    accepted = get_args(users_router.PendantStopFeedbackRequest.model_fields['reason'].annotation)
+    assert accepted == tuple(event['properties']['reason']['values'])
+
+
+def test_throttled_feedback_does_not_write(app, document, monkeypatch):
+    def rate_limit(uid, policy, *, fail_closed):
+        assert (uid, policy, fail_closed) == ('authenticated-user', 'memories:modify', False)
+        raise HTTPException(status_code=429)
+
+    monkeypatch.setattr(users_router.auth, '_enforce_rate_limit', rate_limit)
+    user, _ = document
+    assert TestClient(app).post(PATH, json=PAYLOAD).status_code == 429
+    user.update.assert_not_called()

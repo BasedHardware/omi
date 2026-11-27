@@ -4,6 +4,8 @@ import 'package:posthog_flutter/posthog_flutter.dart' show PostHogMaskWidget;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/models/subscription.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/home/widgets/pendant_stop_question.dart';
 import 'package:omi/services/experiments/pendant_absence.dart';
@@ -16,7 +18,13 @@ void main() {
   late List<RegisteredEvent> events;
   late List<(String, PendantStopQuestionAnsweredReason, String, int)> notes;
   late PendantAbsence absence;
-  late bool eligible;
+  final pendant = BtDevice(id: 'paired', name: 'Omi', type: DeviceType.omi, rssi: 0);
+  late DateTime now;
+  late bool connected;
+  late bool foreground;
+  late bool onboarded;
+  late bool currentUser;
+  late PlanType? plan;
   late bool blocked;
   late PromptQueue queue;
 
@@ -25,8 +33,15 @@ void main() {
     await SharedPreferencesUtil.init();
     events = [];
     notes = [];
-    absence = PendantAbsence();
-    eligible = true;
+    now = DateTime(2026, 11, 1);
+    absence = PendantAbsence(now: () => now);
+    absence.observeAbsence(uid);
+    now = now.add(const Duration(days: 4));
+    connected = false;
+    foreground = true;
+    onboarded = true;
+    currentUser = true;
+    plan = PlanType.plus;
     blocked = false;
   });
 
@@ -46,9 +61,12 @@ void main() {
       queue: queue,
       absence: absence,
       uid: uid,
-      isCurrentUser: () => true,
-      eligibleDays: () => eligible ? 4 : null,
-      plan: () => PendantStopQuestionAnsweredPlan.paid,
+      isCurrentUser: () => currentUser,
+      isOnboarded: () => onboarded,
+      isForeground: () => foreground,
+      paired: () => pendant,
+      connected: () => connected,
+      readPlan: () => plan,
       disabled: () async => killed,
       emit: events.add,
       sendNote: (uid, reason, note, days) async {
@@ -92,7 +110,7 @@ void main() {
       await tester.pumpAndSettle();
 
       final reason =
-          chooseReason ? PendantStopQuestionAnsweredReason.deviceProblem : PendantStopQuestionAnsweredReason.other;
+          chooseReason ? PendantStopQuestionAnsweredReason.deviceProblem : PendantStopQuestionAnsweredReason.noteOnly;
       final answer = events.last as PendantStopQuestionAnswered;
       expect(answer.reason, reason);
       expect(answer.noteProvided, isTrue);
@@ -126,12 +144,54 @@ void main() {
     expect(absence.surfaceShownToday, isFalse);
   });
 
+  testWidgets('Home entry waits for the current onboarded foreground account and a disconnected pendant',
+      (tester) async {
+    await mount(tester);
+    foreground = false;
+    onboarded = false;
+    currentUser = false;
+    connected = true;
+    for (final allowNext in <void Function()>[
+      () => foreground = true,
+      () => onboarded = true,
+      () => currentUser = true,
+      () => connected = false,
+    ]) {
+      enqueue();
+      await tester.pumpAndSettle();
+      expect(find.text(title), findsNothing);
+      expect(absence.questionShown(uid), isFalse);
+      allowNext();
+    }
+    enqueue();
+    await tester.pumpAndSettle();
+    expect(find.text(title), findsOneWidget);
+  });
+
+  for (final (source, expected) in [
+    (PlanType.basic, PendantStopQuestionAnsweredPlan.free),
+    (null, PendantStopQuestionAnsweredPlan.unknown),
+    (PlanType.unknown('future-plan'), PendantStopQuestionAnsweredPlan.unknown),
+  ]) {
+    testWidgets('Home entry maps $source to $expected', (tester) async {
+      await mount(tester);
+      plan = source;
+      enqueue();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Other'));
+      await tester.pumpAndSettle();
+      final answer = events.last as PendantStopQuestionAnswered;
+      expect(answer.plan, expected);
+      expect(answer.reason, PendantStopQuestionAnsweredReason.other);
+    });
+  }
+
   testWidgets('a reconnect while waiting in the queue suppresses presentation', (tester) async {
     await mount(tester);
     blocked = true;
     enqueue();
     await tester.pumpAndSettle();
-    eligible = false;
+    connected = true;
     blocked = false;
     queue.pump();
     await tester.pumpAndSettle();

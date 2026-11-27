@@ -4235,7 +4235,7 @@ export interface PaywallStatusResponse {
 export interface PendantStopFeedbackRequest {
   days_without_connection: number;
   details: string;
-  reason: "uncomfortable_to_wear" | "forgot_or_no_habit" | "charging_is_a_hassle" | "not_useful_enough" | "device_problem" | "other";
+  reason: "uncomfortable_to_wear" | "forgot_or_no_habit" | "charging_is_a_hassle" | "not_useful_enough" | "device_problem" | "other" | "note_only";
 }
 
 export interface PendingSyncResponse {

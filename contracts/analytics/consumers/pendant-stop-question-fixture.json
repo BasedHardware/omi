@@ -1,0 +1,24 @@
+{
+  "parameters": {"release_ms": 3000000000, "app_namespace": "mobile"},
+  "events": [
+    ["Pendant Stop Question Answered", "young", "1", 3000000000, 408000000, "mobile", "paid", "other"],
+    ["Pendant Stop Question Answered", "young", "2", 3000000000, 408000000, "mobile", "paid", "device_problem"],
+    ["Pendant Stop Question Answered", "young", "3", 3000001000, 408000000, "mobile", "free", "charging_is_a_hassle"],
+    ["Pendant Stop Question Answered", "older", "4", 3000000001, 408000000, "mobile", "free", "note_only"],
+    ["Pendant Stop Question Answered", "missing", "5", 3000000000, null, "mobile", "unknown", "device_problem"],
+    ["Pendant Stop Question Answered", "future", "6", 3000000000, 3000001000, "mobile", "unknown", "device_problem"],
+    ["Pendant Stop Question Answered", "desktop", "7", 3000000000, null, "desktop", "paid", "other"],
+    ["Pendant Stop Question Answered", "before", "8", 2999999999, null, "mobile", "paid", "other"],
+    ["Pendant Stop Question Answered", "after", "9", 4209600000, null, "mobile", "paid", "other"],
+    ["Pendant Stop Question Shown", "older", "10", 3000000000, null, "mobile", null, null],
+    ["Pendant Stop Question Shown", "older", "11", 3000000010, null, "mobile", null, null],
+    ["Pendant Stop Question Dismissed", "dismissed", "12", 4209599999, null, "mobile", null, null]
+  ],
+  "expected": [
+    ["answered", "30_days_or_less", "paid", "other", 1],
+    ["answered", "over_30_days", "free", "note_only", 1],
+    ["answered", "unknown", "unknown", "device_problem", 2],
+    ["dismissed", "all", "all", "", 1],
+    ["shown", "all", "all", "", 1]
+  ]
+}

@@ -315,9 +315,12 @@ def set_user_private_cloud_sync_enabled(uid: str, value: bool, *, operation_id: 
     )
 
 
-def set_user_pendant_stop_feedback(uid: str, reason: str, details: str, days_without_connection: int) -> None:
+def set_user_pendant_stop_feedback(
+    uid: str, reason: str, details: str, days_without_connection: int, *, firestore_client=None
+) -> None:
     # Replace the single feedback record. Update cannot recreate a deleted profile.
-    db.collection('users').document(uid).update(
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    client.collection('users').document(uid).update(
         {
             'pendant_stop_feedback': {
                 'reason': reason,

@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
+import 'package:crypto/crypto.dart';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -17,6 +19,7 @@ import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/discovery/device_locator.dart';
 import 'package:omi/services/devices/transports/device_transport.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/services/experiments/pendant_absence.dart';
 import 'package:omi/utils/logger.dart';
 
 // A native link that is up while Dart shows "Disconnected" until the app is
@@ -35,6 +38,17 @@ class _TestConnectivityPlatform extends ConnectivityPlatform {
 
   @override
   Stream<List<ConnectivityResult>> get onConnectivityChanged => const Stream.empty();
+}
+
+class _NormalizedDeviceProvider extends DeviceProvider {
+  _NormalizedDeviceProvider(this.type);
+
+  final DeviceType type;
+
+  @override
+  Future<void> getDeviceInfo({bool forceRefresh = false}) async {
+    pairedDevice = connectedDevice?.copyWith(type: type);
+  }
 }
 
 void main() {
@@ -147,6 +161,48 @@ void main() {
       async.flushTimers();
     });
   });
+
+  for (final isGlass in [false, true]) {
+    test('only the normalized pendant link affects absence state (glass=$isGlass)', () async {
+      final store = await SharedPreferences.getInstance();
+      fakeAsync((async) {
+        final prefs = SharedPreferencesUtil();
+        final uid = 'survey-link-owner-$isGlass';
+        final digest = sha256.convert(utf8.encode('pendant-absence:$uid'));
+        final absenceKey = 'pendant_absence_started_at:$digest';
+        final lastConnectionKey = 'pendant_last_connected_at:$digest';
+        prefs.uid = uid;
+        addTearDown(() => prefs.uid = '');
+        final baseTime = DateTime.now();
+        final initialGapTime = baseTime.subtract(const Duration(days: 5));
+        final initialGap = PendantAbsence(now: () => initialGapTime);
+        initialGap.observeAbsence(uid);
+        pairPendant();
+        final provider = _NormalizedDeviceProvider(isGlass ? DeviceType.openglass : DeviceType.omi);
+        try {
+          provider.initiateConnection('HomePageWrapper', boundDeviceOnly: true);
+          async.elapse(const Duration(seconds: 61));
+          linkUp = true;
+          BleBridge.instance.onDeviceReady(_deviceId, _services);
+          async.elapse(const Duration(seconds: 5));
+
+          expect(provider.isConnected, isTrue);
+          expect(provider.pairedDevice?.type, isGlass ? DeviceType.openglass : DeviceType.omi);
+          final pendant = prefs.btDevice.copyWith(type: DeviceType.omi);
+          final readback = PendantAbsence(now: () => baseTime.add(const Duration(minutes: 5)));
+          expect(readback.eligibleDays(uid, paired: pendant, connected: false), isGlass ? 5 : null);
+
+          // Glass keeps the pre-existing absence and never stamps a connection.
+          final seed = initialGapTime.millisecondsSinceEpoch;
+          expect(store.getInt(absenceKey), isGlass ? seed : null);
+          expect(store.getInt(lastConnectionKey), isGlass ? isNull : greaterThan(seed));
+        } finally {
+          provider.dispose();
+          async.flushTimers();
+        }
+      });
+    });
+  }
 
   test('out of range launch retries the same owner and reconnects without relaunch', () {
     fakeAsync((async) {

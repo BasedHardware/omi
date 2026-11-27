@@ -3858,7 +3858,8 @@ enum PendantStopQuestionAnsweredReason {
   chargingIsAHassle("charging_is_a_hassle"),
   notUsefulEnough("not_useful_enough"),
   deviceProblem("device_problem"),
-  other("other");
+  other("other"),
+  noteOnly("note_only");
   const PendantStopQuestionAnsweredReason(this.wireName);
   final String wireName;
 }

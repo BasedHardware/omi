@@ -5865,7 +5865,8 @@
             "charging_is_a_hassle",
             "not_useful_enough",
             "device_problem",
-            "other"
+            "other",
+            "note_only"
           ]
         },
         "daysWithoutConnection": {

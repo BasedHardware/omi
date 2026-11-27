@@ -6,6 +6,7 @@ import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:http/http.dart' as http;
 
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/http/api_result.dart' show ApiExecutionSeams;
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/http/user_data_export.dart' as export_user_data;
 import 'package:omi/backend/schema/daily_summary.dart';
@@ -30,9 +31,10 @@ Future<void> submitPendantStopFeedback(
   String uid,
   PendantStopQuestionAnsweredReason reason,
   String details,
-  int daysWithoutConnection,
-) async {
-  final response = await makeApiCall(
+  int daysWithoutConnection, {
+  ApiExecutionSeams? execution,
+}) async {
+  final response = await sendUncaughtApiCall(
     url: '${Env.apiBaseUrl}v1/users/pendant-stop-feedback',
     headers: const {},
     method: 'POST',
@@ -43,10 +45,11 @@ Future<void> submitPendantStopFeedback(
     }),
     retries: 0,
     signOutOn401: false,
+    execution: execution,
     canSend: () => SharedPreferencesUtil().uid == uid,
   );
-  if (response?.statusCode != 204) {
-    Logger.debug('Pendant feedback note delivery incomplete: ${response?.statusCode}');
+  if (response.statusCode != 204) {
+    Logger.debug('Pendant feedback note delivery incomplete: ${response.statusCode}');
   }
 }
 

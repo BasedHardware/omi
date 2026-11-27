@@ -73,7 +73,6 @@ import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/utils/analytics/background_resource_telemetry.dart';
 import 'package:omi/utils/analytics/background_checkpoint_store.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
-import 'package:omi/utils/analytics/registry/events.g.dart' show PendantStopQuestionAnsweredPlan;
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -642,27 +641,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   void _checkPendantStopQuestion(DeviceProvider deviceProvider) {
     final prefs = SharedPreferencesUtil();
     final uid = prefs.uid;
-    if (!prefs.onboardingCompleted || uid.isEmpty) return;
-    final absence = PendantAbsence.instance;
-    bool connected() => deviceProvider.isConnected || deviceProvider.connectedDevice != null;
-    if (!connected() && PendantAbsence.isPendant(prefs.btDevice)) absence.observeAbsence(uid);
-
     PendantStopQuestion.enqueue(
       queue: PromptQueue.instance,
-      absence: absence,
+      absence: PendantAbsence.instance,
       uid: uid,
       isCurrentUser: () => mounted && prefs.uid == uid,
-      eligibleDays: () {
-        if (WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed || !prefs.onboardingCompleted) {
-          return null;
-        }
-        return absence.eligibleDays(uid, paired: prefs.btDevice, connected: connected());
-      },
-      plan: () {
-        final plan = context.read<UsageProvider>().subscription?.subscription.plan;
-        if (plan == null || plan.isUnknown) return PendantStopQuestionAnsweredPlan.unknown;
-        return plan.isPaid ? PendantStopQuestionAnsweredPlan.paid : PendantStopQuestionAnsweredPlan.free;
-      },
+      isOnboarded: () => prefs.onboardingCompleted,
+      isForeground: () => WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed,
+      paired: () => prefs.btDevice,
+      connected: () => deviceProvider.isConnected || deviceProvider.connectedDevice != null,
+      readPlan: () => context.read<UsageProvider>().subscription?.subscription.plan,
     );
   }
 
