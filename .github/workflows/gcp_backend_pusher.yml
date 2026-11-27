@@ -888,8 +888,17 @@ jobs:
           kubectl -n prod-omi-backend delete service "$LISTENER_CANARY" --ignore-not-found=true --wait=true || cleanup_failed=1
           kubectl -n prod-omi-backend delete deployment "$LISTENER_CANARY" --ignore-not-found=true --wait=true || cleanup_failed=1
           # A run that refuses before the canary install has no release to remove (run 46027266977).
-          if helm -n prod-omi-backend status "$PUSHER_CANARY" >/dev/null 2>&1; then
+          # Only Helm's own "release: not found" means absent; any other status failure fails cleanup.
+          helm_status_out="$(helm -n prod-omi-backend status "$PUSHER_CANARY" 2>&1)"
+          helm_status_rc=$?
+          if [ "$helm_status_rc" -eq 0 ]; then
             helm -n prod-omi-backend uninstall "$PUSHER_CANARY" --wait || cleanup_failed=1
+          elif printf '%s\n' "$helm_status_out" | grep -qx 'Error: release: not found'; then
+            echo "No Helm release $PUSHER_CANARY to remove."
+          else
+            echo "helm status for $PUSHER_CANARY failed (exit $helm_status_rc); cannot prove the release is gone." >&2
+            printf '%s\n' "$helm_status_out" >&2
+            cleanup_failed=1
           fi
           kubectl -n prod-omi-backend delete configmap "$PUSHER_CANARY_CONFIG" --ignore-not-found=true --wait=true || cleanup_failed=1
           exit "$cleanup_failed"
