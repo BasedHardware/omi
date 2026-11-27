@@ -16,6 +16,7 @@ import 'wal.dart';
 
 typedef LiveWalBinding = ({String id, String owner, String digest});
 typedef LiveWalIndexEntry = ({LiveWalBinding binding, Object row});
+typedef LiveWalReceiptPurgeResult = ({int removed, bool referenceScanIncomplete});
 
 class LiveWalPurgeSnapshot {
   LiveWalPurgeSnapshot(this.basenames, this.revision, this.documentsPath);
@@ -50,7 +51,7 @@ class LiveWalReceipt {
   // A known affected Documents directory contained about 164k leaked audio
   // files. Keep the enumeration finite while allowing that supported scale.
   static const _maxIndexDirectoryEntries = 262144;
-  static const _maxQuarantineIndexes = 64;
+  static const _maxQuarantineIndexes = 4096;
   static const _maxPurgeIndexBytes = 32 * 1024 * 1024;
   static final _idPattern = RegExp(r'^[a-f0-9]{32}$');
   static final _managedNamePattern =
@@ -141,8 +142,23 @@ class LiveWalReceipt {
     await temporary.rename(pending.path);
     // The rename crosses directories, so persist both the removed staging name
     // and the newly published pending name before audio bytes can be written.
-    await _syncDirectory(staging);
-    await _syncDirectory(pending.parent);
+    try {
+      await _syncDirectory(staging);
+      await _syncDirectory(pending.parent);
+    } catch (error, stackTrace) {
+      // Audio has not been written yet. Best-effort retirement prevents a
+      // failed durability barrier from leaving a receipt that blocks reuse.
+      try {
+        if (await pending.exists()) {
+          await pending.delete();
+          await _syncDirectory(pending.parent);
+        }
+      } catch (_) {
+        // Preserve the original barrier failure; any surviving sidecar remains
+        // fail-closed and cannot authorize audio recovery or deletion.
+      }
+      Error.throwWithStackTrace(error, stackTrace);
+    }
     return digest;
   }
 
@@ -318,19 +334,22 @@ class LiveWalReceipt {
 
   /// Delete only pending receipt audio that has no live or durable index
   /// reference. The caller holds the index writer lock during validation.
-  static Future<int> purgeUnindexed(
+  static Future<LiveWalReceiptPurgeResult> purgeUnindexed(
     File primary,
     File backup, {
     required Set<String> owners,
     required Set<String> reservedNames,
     required bool Function(String) mayDelete,
   }) async {
-    if (!purgeEnabled || owners.isEmpty) return 0;
+    if (!purgeEnabled || owners.isEmpty) return (removed: 0, referenceScanIncomplete: false);
     final documents = primary.parent;
     final pending = directory(documents);
     var removed = 0;
+    var scanComplete = true;
     try {
-      if (await FileSystemEntity.type(pending.path, followLinks: false) != FileSystemEntityType.directory) return 0;
+      if (await FileSystemEntity.type(pending.path, followLinks: false) != FileSystemEntityType.directory) {
+        return (removed: 0, referenceScanIncomplete: false);
+      }
       Set<String>? indexedNames;
       await for (final entry in pending.list(followLinks: false)) {
         final name = _receiptBasename(entry.path);
@@ -342,7 +361,12 @@ class LiveWalReceipt {
           continue;
         }
         if (record == null || !owners.contains(record.binding.owner) || !mayDelete(name)) continue;
-        indexedNames ??= await _indexedBasenames(primary, backup);
+        try {
+          indexedNames ??= await _indexedBasenames(primary, backup);
+        } catch (_) {
+          scanComplete = false;
+          break;
+        }
         if (indexedNames.contains(name.toLowerCase())) continue;
         try {
           final audio = File(path.join(documents.path, name));
@@ -352,8 +376,11 @@ class LiveWalReceipt {
           await retireAfterFileDeletion(audio, record.wal);
         } catch (_) {/* Keep uncertain files and leave failed cleanup for a later purge. */}
       }
-    } catch (_) {/* An unreadable index or receipt directory gives no deletion authority. */}
-    return removed;
+    } catch (_) {
+      scanComplete = false;
+      /* An unreadable index or receipt directory gives no deletion authority. */
+    }
+    return (removed: removed, referenceScanIncomplete: !scanComplete);
   }
 
   static Future<LiveWalReplay> recover(

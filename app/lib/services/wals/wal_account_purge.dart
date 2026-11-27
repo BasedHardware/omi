@@ -54,7 +54,8 @@ extension _WalAccountPurge on LocalWalSyncImpl {
     final current = _currentWalOwnerUid();
     bool owned(Wal wal) => wal.ownerUid == uid || (wal.ownerUid == null && uid == current);
     final doomed = [..._wals, ..._retiredWals, ..._foreignWals].where(owned).toList();
-    final unindexedRemoved = await _purgeUnindexedAccountWals({uid}, generation);
+    final unindexedPurge = await _purgeUnindexedAccountWals({uid}, generation);
+    final unindexedRemoved = unindexedPurge.removed;
     final needsPurgeSnapshot = doomed.any((wal) =>
         LiveWalReceipt.isManagedBasename(path.basename(wal.filePath ?? '')) &&
         !_confirmedDurableWalKeys.contains(_durableKey(wal)));
@@ -80,13 +81,16 @@ extension _WalAccountPurge on LocalWalSyncImpl {
       'owner_uid': uid,
       'count': removed,
       'unindexed_removed': unindexedRemoved,
+      'reference_scan_incomplete': unindexedPurge.referenceScanIncomplete,
       'requested': doomed.length,
     });
     return removed + unindexedRemoved;
   }
 
-  Future<int> _purgeUnindexedAccountWals(Set<String> owners, int generation) async {
-    if (!LiveWalReceipt.purgeEnabled || owners.isEmpty || !_isCurrent(generation)) return 0;
+  Future<LiveWalReceiptPurgeResult> _purgeUnindexedAccountWals(Set<String> owners, int generation) async {
+    if (!LiveWalReceipt.purgeEnabled || owners.isEmpty || !_isCurrent(generation)) {
+      return (removed: 0, referenceScanIncomplete: false);
+    }
     return WalFileManager.purgeUnindexedLiveWalReceipts(
       owners: owners,
       reservedNames: _liveWalReservedNames(),

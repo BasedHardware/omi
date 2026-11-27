@@ -60,7 +60,7 @@ class WalFileManager {
         }
       });
 
-  static Future<int> purgeUnindexedLiveWalReceipts({
+  static Future<LiveWalReceiptPurgeResult> purgeUnindexedLiveWalReceipts({
     required Set<String> owners,
     required Set<String> reservedNames,
     required bool Function(String) mayDelete,
@@ -68,7 +68,7 @@ class WalFileManager {
       _saveLock.withResource(() async {
         final primary = _walFile;
         final backup = _walBackupFile;
-        if (primary == null || backup == null) return 0;
+        if (primary == null || backup == null) return (removed: 0, referenceScanIncomplete: true);
         return LiveWalReceipt.purgeUnindexed(primary, backup,
             owners: owners, reservedNames: reservedNames, mayDelete: mayDelete);
       });

@@ -3803,6 +3803,27 @@ final class OrphanAudioReclaim extends RegisteredEvent {
   Map<String, Object> get properties => {"deleted_files": deletedFiles, "deleted_bytes": deletedBytes, "working": working, "unknown_capture_time": unknownCaptureTime, "capture_too_young": captureTooYoung, "mtime_too_young": mtimeTooYoung, "outside_documents": outsideDocuments, "pass_cap": passCap, "sources_changed": sourcesChanged, "referenced": referenced, "file_changed": fileChanged, "sidecar_type": sidecarType, "duration_ms": durationMs, "result": result.wireName, "census_complete": censusComplete};
 }
 
+enum OrphanAudioReceiptlessPhase {
+  recovery("recovery"),
+  reclaim("reclaim");
+  const OrphanAudioReceiptlessPhase(this.wireName);
+  final String wireName;
+}
+
+final class OrphanAudioReceiptless extends RegisteredEvent {
+  const OrphanAudioReceiptless({required this.phase, required this.receiptlessManagedCount, required this.receiptlessManagedBytes, required this.managedReceiptMissingSkipCount, required this.receiptScanTruncated, required this.censusComplete});
+  final OrphanAudioReceiptlessPhase phase;
+  final int receiptlessManagedCount;
+  final int receiptlessManagedBytes;
+  final int managedReceiptMissingSkipCount;
+  final bool receiptScanTruncated;
+  final bool censusComplete;
+  @override
+  String get wireName => "Orphan Audio Receiptless Custody";
+  @override
+  Map<String, Object> get properties => {"phase": phase.wireName, "receiptless_managed_count": receiptlessManagedCount, "receiptless_managed_bytes": receiptlessManagedBytes, "managed_receipt_missing_skip_count": managedReceiptMissingSkipCount, "receipt_scan_truncated": receiptScanTruncated, "census_complete": censusComplete};
+}
+
 final class WalCustodyAudit extends RegisteredEvent {
   const WalCustodyAudit({required this.agreeCovered, required this.agreePending, required this.disagree, required this.unknown, required this.released});
   final int agreeCovered;

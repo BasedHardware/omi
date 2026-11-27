@@ -215,6 +215,7 @@ Future<RecordingOrphanCensus> captureRecordingCensus(
   final directoryErrors = <int>[];
   final sourceDirectories = <String, FileStat>{};
   var statErrors = 0, linksSkipped = 0, receiptScanErrors = 0;
+  var receiptScanTruncated = false;
   for (var i = 0; i < roots.length; i++) {
     final files = <File>[];
     try {
@@ -272,7 +273,9 @@ Future<RecordingOrphanCensus> captureRecordingCensus(
         final name = path.basename(entry.path);
         if (entry is Directory && const {'staging', 'retired'}.contains(name)) continue;
         if (++entriesSeen > 128) {
-          receiptScanErrors++;
+          // Unscanned sidecars can only belong to managed basenames, which are
+          // classified receiptless and never adopted or reclaimed.
+          receiptScanTruncated = true;
           break;
         }
         if (entry is! File) {
@@ -482,6 +485,7 @@ Future<RecordingOrphanCensus> captureRecordingCensus(
       'audio_file_scope': 'audio_prefix_bin_part_torn_and_wav',
       'local_only_history': buckets.values.expand((rows) => rows).any((r) => r.onDeviceOnly || r.holdForUser),
       'legacy_preferences_complete': legacyPreferencesComplete,
+      'receipt_scan_truncated': receiptScanTruncated,
       'orphan_census_complete': legacyPreferencesComplete &&
           receiptScanErrors == 0 &&
           unreadable == 0 &&

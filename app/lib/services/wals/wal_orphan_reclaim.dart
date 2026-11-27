@@ -271,6 +271,17 @@ extension LocalOrphanReclaim on LocalWalSyncImpl {
               result: OrphanAudioReclaimResult.values
                   .firstWhere((v) => v.wireName == result, orElse: () => OrphanAudioReclaimResult.failed),
               censusComplete: census?.complete ?? false));
+          final classification = census?.summary['orphan_classification'] as Map?;
+          final classes = classification?['classes'] as Map?;
+          final receiptless = classes?['receiptless_managed'] as Map?;
+          const TypedEvents().emit(OrphanAudioReceiptless(
+            phase: OrphanAudioReceiptlessPhase.reclaim,
+            receiptlessManagedCount: receiptless?['count'] as int? ?? 0,
+            receiptlessManagedBytes: receiptless?['bytes'] as int? ?? 0,
+            managedReceiptMissingSkipCount: skips['managed_receipt_missing'] ?? 0,
+            receiptScanTruncated: census?.summary['receipt_scan_truncated'] == true,
+            censusComplete: census?.complete ?? false,
+          ));
         }
       } catch (_) {/* Aggregate diagnostics never grant or revoke deletion authority. */}
     }
