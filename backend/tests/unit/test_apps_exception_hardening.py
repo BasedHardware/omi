@@ -21,10 +21,13 @@ install_auto_mock_modules(
     ]
 )
 
+import httpx
 import pytest
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
+from fastapi.testclient import TestClient
 
+from routers import apps as apps_routes
 from routers.apps import (
     generate_app_endpoint,
     generate_app_icon_endpoint,
@@ -65,7 +68,8 @@ async def test_generate_app_endpoint_does_not_leak_exception():
 
 
 @pytest.mark.asyncio
-async def test_generate_app_icon_endpoint_does_not_leak_exception():
+async def test_generate_app_icon_endpoint_does_not_leak_exception(monkeypatch):
+    monkeypatch.setenv('APP_ICON_GENERATION_ENABLED', 'true')
     request = GenerateAppIconRequest(
         name="FitnessBot",
         description="Tracks workouts",
@@ -86,6 +90,96 @@ async def test_generate_app_icon_endpoint_does_not_leak_exception():
         assert exc_info.value.status_code == 500
         assert exc_info.value.detail == "Failed to generate icon"
         assert SENSITIVE_TRACE not in str(exc_info.value.detail)
+
+
+@pytest.fixture
+def icon_http_client(monkeypatch):
+    app = FastAPI()
+    app.include_router(apps_routes.router)
+    app.dependency_overrides[apps_routes.auth.get_current_user_uid] = lambda: 'test-user'
+    quota = MagicMock()
+    monkeypatch.setattr(apps_routes, 'generated_compute_configured', lambda: False)
+    monkeypatch.setattr(apps_routes, 'enforce_chat_quota', quota)
+    with TestClient(app) as client:
+        yield client, quota
+
+
+@pytest.mark.parametrize(
+    'gateway_status,error,retry_after,expected_status,expected_code',
+    [
+        (200, {}, None, 200, None),
+        (400, {}, None, 500, None),
+        (500, {}, None, 500, None),
+        (429, {}, '17', 429, 'icon_generation_rate_limited'),
+        (429, {}, None, 429, 'icon_generation_rate_limited'),
+        (502, {}, None, 503, 'icon_generation_unavailable'),
+        (503, {}, None, 503, 'icon_generation_unavailable'),
+        (503, {'code': 'invalid_config'}, None, 424, 'icon_generation_invalid_config'),
+        (503, {'message': 'provider request failed: invalid_config'}, None, 424, 'icon_generation_invalid_config'),
+        (None, {}, None, 503, 'icon_generation_unavailable'),
+    ],
+)
+def test_generate_app_icon_maps_gateway_response(
+    monkeypatch, icon_http_client, gateway_status, error, retry_after, expected_status, expected_code
+):
+    monkeypatch.setenv('APP_ICON_GENERATION_ENABLED', 'true')
+    monkeypatch.setenv('OMI_LLM_GATEWAY_SERVICE_TOKEN', 'synthetic-service-token')
+
+    def gateway_response(request):
+        assert request.url.path == '/v1/images/generations'
+        assert request.headers['Authorization'] == 'Bearer synthetic-service-token'
+        assert request.headers['X-Omi-Service-Caller'] == 'backend'
+        if gateway_status is None:
+            raise httpx.ReadTimeout(SENSITIVE_TRACE, request=request)
+        return httpx.Response(
+            gateway_status,
+            headers={'Retry-After': retry_after} if retry_after is not None else None,
+            json=(
+                {'data': [{'b64_json': 'aWNvbg=='}]}
+                if gateway_status == 200
+                else {'error': {'message': SENSITIVE_TRACE, **error}}
+            ),
+        )
+
+    gateway_client = httpx.Client(transport=httpx.MockTransport(gateway_response))
+    monkeypatch.setattr('utils.llm.gateway_client.httpx.Client', MagicMock(return_value=gateway_client))
+    client, _ = icon_http_client
+    response = client.post(
+        '/v1/app/generate-icon',
+        json={'name': 'Test App', 'description': 'Synthetic app description', 'category': 'other'},
+        headers={'X-App-Platform': 'ios'},
+    )
+
+    assert response.status_code == expected_status
+    assert response.headers.get('Retry-After') == retry_after
+    if expected_status == 200:
+        assert response.json() == {'status': 'ok', 'icon_base64': 'aWNvbg==', 'mime_type': 'image/png'}
+    elif expected_code is None:
+        assert response.json() == {'detail': 'Failed to generate icon'}
+    else:
+        assert response.json() == {'detail': {'code': expected_code, 'retryable': expected_status != 424}}
+
+
+@pytest.mark.parametrize('switch', [None, 'false'])
+def test_generate_app_icon_disabled_skips_provider(monkeypatch, icon_http_client, switch):
+    if switch is None:
+        monkeypatch.delenv('APP_ICON_GENERATION_ENABLED', raising=False)
+    else:
+        monkeypatch.setenv('APP_ICON_GENERATION_ENABLED', switch)
+
+    generate_icon = AsyncMock()
+    monkeypatch.setattr('utils.llm.app_generator.generate_app_icon', generate_icon)
+    client, quota = icon_http_client
+    response = client.post(
+        '/v1/app/generate-icon',
+        json={'name': 'Test App', 'description': 'Synthetic app description', 'category': 'other'},
+        headers={'X-App-Platform': 'ios'},
+    )
+
+    quota.assert_called_once_with('test-user', platform='ios')
+    generate_icon.assert_not_called()
+    assert response.status_code == 424
+    assert response.json() == {'detail': {'code': 'icon_generation_disabled', 'retryable': False}}
 
 
 @pytest.mark.asyncio
