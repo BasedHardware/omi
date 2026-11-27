@@ -168,17 +168,17 @@ const orphanAudioClasses = ['working', 'unparseable', 'recoverable', 'expired', 
   var receiptlessManagedCount = 0, receiptlessManagedBytes = 0;
   for (final file in candidates) {
     final name = path.basename(file.filePath);
-    final working = name.endsWith('.part') ||
-        name.endsWith('.torn') ||
-        name.startsWith('audio_omibatch') ||
-        name.startsWith('audio_omimobilebatch');
-    if (!working && LiveWalReceipt.isManagedBasename(name)) {
+    if (LiveWalReceipt.isManagedBasename(name)) {
       // These files can never be adopted or reclaimed. Keep aggregate
       // visibility without allocating a second per-file object for archives.
       receiptlessManagedCount++;
       receiptlessManagedBytes += file.bytes;
       continue;
     }
+    final working = name.endsWith('.part') ||
+        name.endsWith('.torn') ||
+        name.startsWith('audio_omibatch') ||
+        name.startsWith('audio_omimobilebatch');
     BatchRecordingInfo? info;
     String? clockRun;
     var frames = 0;

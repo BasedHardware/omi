@@ -1459,9 +1459,13 @@ void main() {
   test('receiptless managed audio is visible but cannot be recovered or reclaimed', () async {
     final basename = LiveWalReceipt.uniqueName(name(now - 2), LiveWalReceipt.newId());
     final candidate = await audio(basename);
+    final managedBatchName =
+        LiveWalReceipt.uniqueName('audio_omibatch_opus_fs320_16000_1_fs320_${now - 3}.bin', LiveWalReceipt.newId());
+    final managedBatch = await audio(managedBatchName);
     final result = await census();
     expect(result.orphans.any((file) => file.filePath == candidate.path), isFalse);
-    expect(receiptlessManagedCount(result), 1);
+    expect(result.orphans.any((file) => file.filePath == managedBatch.path), isFalse);
+    expect(receiptlessManagedCount(result), 2);
     expect(result.summary['orphan_census_complete'], isTrue);
     final classification = result.summary['orphan_classification'] as Map;
     final ageBuckets = classification['age_buckets'] as Map;
