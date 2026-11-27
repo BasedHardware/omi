@@ -7,7 +7,11 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/phone_call.dart';
+import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/gen/phone_mic_pigeon.g.dart';
+import 'package:omi/services/telemetry/client_telemetry_schema.dart';
+import 'package:omi/services/telemetry/finish_home_sli_telemetry.dart';
 import 'package:omi/utils/enums.dart';
 
 import '../../support/capture/capture_replay_world.dart';
@@ -156,6 +160,48 @@ void main() {
       expect(pendantStreamsAtProcess, 0, reason: 'the pendant must not open its next conversation first');
       expect(link.openAudioSubscriptions, 1);
       expect(world.controller.pendantPausedForPhone, isFalse);
+    });
+
+    test('the takeover\'s Process Now is not a Finish cut; the user\'s Finish after it is one', () async {
+      const owner = 'phone-takeover-owner';
+      final wasTestFlight = Env.isTestFlight;
+      Env.isTestFlight = true;
+      addTearDown(() => Env.isTestFlight = wasTestFlight);
+      final telemetry = FinishHomeSliTelemetry.instance;
+      final (enabled, ownerId, platform) = (telemetry.testFlightEnabled, telemetry.ownerId, telemetry.platform);
+      telemetry
+        ..testFlightEnabled = (() => true)
+        ..ownerId = (() => owner)
+        ..platform = (() => 'ios');
+      addTearDown(() => telemetry
+        ..testFlightEnabled = enabled
+        ..ownerId = ownerId
+        ..platform = platform);
+      List<ClientTelemetryObservation> cuts() =>
+          telemetry.outbox.pending(owner).where((observation) => observation.family == 'finish_cut').toList();
+
+      await connectPendant();
+      world.controller.segments = [
+        TranscriptSegment(
+          id: 'pendant-segment',
+          text: 'Words the pendant heard',
+          speaker: 'SPEAKER_00',
+          speakerId: 0,
+          isUser: false,
+          personId: null,
+          start: 0,
+          end: 1,
+          translations: const [],
+        ),
+      ];
+      await startPhone();
+      expect(world.processCalls, 1, reason: 'the takeover processes the pendant conversation');
+      expect(cuts(), isEmpty, reason: 'nobody asked to finish the pendant conversation');
+
+      await world.controller.finishCapture();
+      await world.settle();
+      expect(world.processCalls, 2);
+      expect(cuts(), hasLength(1));
     });
 
     test('a pendant that connects during a phone recording waits for it', () async {

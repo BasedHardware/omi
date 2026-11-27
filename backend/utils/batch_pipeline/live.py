@@ -456,13 +456,14 @@ async def _manual_finish_admitted(
     # One end-to-end budget for the pass, from here: slot wait and every provider request count.
     deadline = time.monotonic() + fast_finish.PASS_DEADLINE_SECONDS
     try:
-        if (
-            not current.get('recording')
-            or not current.get('v3_manual_end_requested')
-            or current.get(NATIVE_MANUAL_STOP)
-        ):
+        if not current.get('recording'):
             return
-        if not manual_end_marker_enabled():
+        if current.get(NATIVE_MANUAL_STOP):
+            # A native recording's explicit stop: its cut and notes wait for the native batch
+            # completion, so the confirmed admission only names this Finish's route, once.
+            finish_home_sli.observe_route(uid, conversation_id, 'batch')
+            return
+        if not current.get('v3_manual_end_requested') or not manual_end_marker_enabled():
             return
         finish_home_sli.observe_route(uid, conversation_id, 'batch')
         single = len(units) == 1

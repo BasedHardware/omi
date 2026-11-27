@@ -307,7 +307,8 @@ class _LiveCapture extends CaptureProvider {
   String? verifiedLiveServerRecordingId;
 
   @override
-  Future<void> forceProcessingCurrentConversation({bool manualFinish = false, String? liveConversationId}) async {
+  Future<void> forceProcessingCurrentConversation(
+      {bool manualFinish = false, bool deliberateFinish = false, String? liveConversationId}) async {
     endCalls++;
     endedLiveId = liveConversationId;
     final row = manualFinish ? onManualEnd?.call(liveConversationId) : null;

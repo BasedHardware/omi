@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timedelta, timezone
 import json
 from types import SimpleNamespace
@@ -5,9 +6,14 @@ from uuid import uuid4
 
 import pytest
 
+from database import conversations_v3
 from scripts import finish_home_readback as readback
+
+# Imported at module load: record admission is a heavy import.
+from utils.batch_pipeline import live
 from utils.conversations.v3 import finish_home_sli as sli, outline
 from utils.conversations.v3.finish import deliberate_finish
+from utils.conversations.v3.policy import NATIVE_MANUAL_STOP
 
 START = datetime(2026, 11, 26, tzinfo=timezone.utc)
 THROUGH = START + timedelta(days=1, minutes=1)
@@ -348,3 +354,87 @@ def test_fetch_validation_follows_the_card_that_won_eligibility():
     # The score never depends on what Home fetched: without the fetch it is the same.
     unfetched = readback.readback(events[:-1], START, THROUGH)
     assert unfetched['totals'] == result['totals']
+
+
+class _AdmissionStore:
+    client = object()
+
+
+def _admit_record(uid, recording_id, current):
+    asyncio.run(live._manual_finish_admitted(_AdmissionStore(), uid, recording_id, current, [UNIT], object(), b'k'))
+
+
+UNIT = (0.0, 1.0, [{'bucket': 'b', 'path': 'p', 'generation': 1}])
+NATIVE_STOP = {'job_id': 'bp_job', 'revision': 1, 'finished_at': START}
+
+
+def _sli_events(caplog):
+    return [
+        json.loads(record.getMessage().split(readback.MARKER)[1])
+        for record in caplog.records
+        if readback.MARKER in record.getMessage()
+    ]
+
+
+def test_native_batch_finish_reads_back_as_the_batch_route(monkeypatch, caplog):
+    # End to end through the real emitters: the Finish header's cut, its binding, the confirmed
+    # native batch admission, the window and the eligible card, exported and read back.
+    monkeypatch.setenv('CONVERSATIONS_V3_FINISH_HOME_SLI', 'on')
+    monkeypatch.setattr(sli, 'conversations_v3_enabled', lambda uid: True)
+    monkeypatch.setattr(sli, 'v3_intake_held_out', lambda uid: False)
+    now = datetime.now(timezone.utc)
+    request = SimpleNamespace(
+        headers={
+            sli.HEADER: f'app,{uuid4()},{int(now.timestamp() * 1000)}',
+            sli.APP_CHANNEL_HEADER: 'beta',
+        },
+    )
+    native = {'recording': True, 'v3_manual_end_requested': True, NATIVE_MANUAL_STOP: NATIVE_STOP}
+    with caplog.at_level('INFO'):
+        finish = sli.from_request('owner', request)
+        assert finish is not None
+        finish.bind('recording')
+        _admit_record('owner', 'recording', native)
+        sli.observe_window('owner', 'recording', 'card')
+        sli.observe_eligible('owner', 'card')
+    entries = [
+        {
+            'timestamp': datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
+            'textPayload': record.getMessage(),
+        }
+        for record in caplog.records
+    ]
+    start = now.replace(microsecond=0) - timedelta(minutes=1)
+    through = start + timedelta(days=1, minutes=1)
+
+    result = readback.readback(readback.observations(entries, through), start, through)
+
+    assert [(row['route'], row['source'], row['finishes']) for row in result['by_route_source']] == [
+        ('batch', 'app', 1)
+    ]
+    assert result['totals']['within_60s'] == 1
+
+
+def test_native_batch_admission_names_the_route_once_and_nothing_else(monkeypatch, caplog):
+    monkeypatch.setenv('CONVERSATIONS_V3_FINISH_HOME_SLI', 'on')
+    monkeypatch.setattr(conversations_v3, 'promote_manual_end', lambda *a, **k: pytest.fail('native cut promoted'))
+    # The app's Finish also asks for the legacy manual end; the native stop must not take that path too.
+    native = {'recording': True, 'v3_manual_end_requested': True, NATIVE_MANUAL_STOP: NATIVE_STOP}
+    with caplog.at_level('INFO'):
+        _admit_record('owner', 'recording', native)
+    # The native completion records its own manual-end proof; admission adds only the route.
+    assert _sli_events(caplog) == [
+        {'stage': 'route', 'recording': sli._key('recording', 'owner', 'recording'), 'route': 'batch'}
+    ]
+
+
+def test_legacy_manual_end_admission_names_the_batch_route_once(monkeypatch, caplog):
+    monkeypatch.setenv('CONVERSATIONS_V3_FINISH_HOME_SLI', 'on')
+    monkeypatch.setenv('CONVERSATIONS_V3_FAST_FINISH', 'off')
+    monkeypatch.setattr(conversations_v3, 'promote_manual_end', lambda *a, **k: False)
+    with caplog.at_level('INFO'):
+        _admit_record('owner', 'recording', {'recording': True, 'v3_manual_end_requested': True})
+        # Neither a natural end nor a non-recording capture names a route.
+        _admit_record('owner', 'natural', {'recording': True})
+        _admit_record('owner', 'capture', {'v3_manual_end_requested': True, NATIVE_MANUAL_STOP: NATIVE_STOP})
+    assert [(event['stage'], event.get('route')) for event in _sli_events(caplog)] == [('route', 'batch')]

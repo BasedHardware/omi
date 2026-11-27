@@ -4441,7 +4441,14 @@ class CaptureController extends ChangeNotifier
     }
   }
 
-  Future<void> forceProcessingCurrentConversation({bool manualFinish = false, String? liveConversationId}) async {
+  /// [manualFinish] is the pendant double tap: it shows the manual Finish row and records the SLI cut.
+  /// [deliberateFinish] is a user's Finish through the coordinator: it records the cut only, since
+  /// that path already owns its own Finish feedback.
+  Future<void> forceProcessingCurrentConversation({
+    bool manualFinish = false,
+    bool deliberateFinish = false,
+    String? liveConversationId,
+  }) async {
     // Reliability experiment end_open_conversation: the End happened now, not when the request leaves
     // (it waits for the disk below). Seal the speech file still being written so the audio up to this
     // moment is published, and send the moment with the request. Off: neither happens.
@@ -4456,7 +4463,8 @@ class CaptureController extends ChangeNotifier
     // the current recording. Capture the cut before awaiting the WAL snapshot.
     final finishSource = liveConversationId == null ? 'pendant' : 'app';
     final finishCutAt = DateTime.now();
-    final finishCutId = manualFinish && Env.isTestFlight && !Env.hasApiBaseUrlOverride ? const Uuid().v4() : null;
+    final finishCutId =
+        (manualFinish || deliberateFinish) && Env.isTestFlight && !Env.hasApiBaseUrlOverride ? const Uuid().v4() : null;
     final finishCut = finishCutId == null ? null : '$finishSource,$finishCutId,${finishCutAt.millisecondsSinceEpoch}';
     if (finishCutId != null) {
       await FinishHomeSliTelemetry.instance.recordCut(
@@ -5136,7 +5144,7 @@ class CaptureController extends ChangeNotifier
           FlushPhoneFramesStage() => Future.sync(_flushPhoneFrames),
           RecordingMarkStage() => Future.sync(() => updateRecordingState(stage.state)),
           DeviceStopTelemetryStage() => _deviceStopTelemetryBody(cleanDevice: stage.cleanDevice),
-          ProcessConversationStage() => _processConversationBody(stage.liveConversationId),
+          ProcessConversationStage() => _processConversationBody(stage),
           SocketClosedStage() => _socketClosedBody(stage.closeCode),
           SocketConnectedStage() => _socketConnectedBody(),
           SocketErrorStage() => _socketErrorBody(stage.error),
@@ -5154,8 +5162,11 @@ class CaptureController extends ChangeNotifier
           StartPhoneBatchStage() => _startPhoneMicBatchBody(auto: stage.auto),
         };
 
-  Future<void> _processConversationBody(String? liveConversationId) async {
-    await forceProcessingCurrentConversation(liveConversationId: liveConversationId);
+  Future<void> _processConversationBody(ProcessConversationStage stage) async {
+    await forceProcessingCurrentConversation(
+      liveConversationId: stage.liveConversationId,
+      deliberateFinish: stage.deliberateFinish,
+    );
     await _processInFlight;
   }
 }

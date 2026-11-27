@@ -1091,8 +1091,12 @@ class DeviceStopTelemetryStage extends CaptureStage {
 
 /// `forceProcessingCurrentConversation` plus the in-flight join.
 class ProcessConversationStage extends CaptureStage {
-  const ProcessConversationStage({this.liveConversationId});
+  const ProcessConversationStage({this.liveConversationId, this.deliberateFinish = false});
   final String? liveConversationId;
+
+  /// The user asked for this Finish (live page, Home Wrap Up, record stop, Live Activity), so it
+  /// records the Finish → Home SLI cut. Process Now the capture runs on its own does not.
+  final bool deliberateFinish;
 }
 
 class SocketClosedStage extends CaptureStage {
@@ -2254,7 +2258,7 @@ CaptureTransition _reducePhoneStop(CaptureCoordinatorState state, PhoneStopReque
 }
 
 CaptureTransition _reduceFinish(CaptureCoordinatorState state, String? liveConversationId) {
-  final process = RunStage(ProcessConversationStage(liveConversationId: liveConversationId));
+  final process = RunStage(ProcessConversationStage(liveConversationId: liveConversationId, deliberateFinish: true));
   if (!state.phoneOwns) {
     final debt = state.pendantSuspension;
     if (!state.awaitingPhoneResume || debt?.reason != SuspendReason.phone) {

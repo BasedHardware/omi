@@ -18,6 +18,8 @@ import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
+import 'package:omi/services/telemetry/client_telemetry_schema.dart';
+import 'package:omi/services/telemetry/finish_home_sli_telemetry.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/reliability_experiments.dart';
 
@@ -68,16 +70,21 @@ class _RecordingActions extends NoopCaptureExternalActions {
 }
 
 class _GatedPhoneSync {
-  _GatedPhoneSync(Completer<void> finalizeGate, {this.stampError, List<Completer<void>> laterFinalizeGates = const []})
+  _GatedPhoneSync(Completer<void> finalizeGate,
+      {this.stampError, this.onFinalize, List<Completer<void>> laterFinalizeGates = const []})
       : finalizeGates = [finalizeGate, ...laterFinalizeGates];
 
   /// One gate per drain, in call order; later drains reuse the last gate.
   final List<Completer<void>> finalizeGates;
   final Object? stampError;
+
+  /// Runs as each WAL drain begins.
+  final void Function()? onFinalize;
   var _finalizeCalls = 0;
   var stampCalls = 0;
 
   Future<void> finalizeCurrentSession() {
+    onFinalize?.call();
     final call = _finalizeCalls++;
     return finalizeGates[call < finalizeGates.length ? call : finalizeGates.length - 1].future;
   }
@@ -238,6 +245,48 @@ void main() {
       '{"live_conversation_id":"window-2"}',
     ]);
     expect(result.absence, ProcessAbsence.notFound);
+  });
+
+  test('a coordinator Finish records exactly one Finish cut before the WAL drain', () async {
+    const owner = 'coordinator-finish-owner';
+    final wasTestFlight = Env.isTestFlight;
+    Env.isTestFlight = true;
+    addTearDown(() => Env.isTestFlight = wasTestFlight);
+    final telemetry = FinishHomeSliTelemetry.instance;
+    final (enabled, ownerId, platform) = (telemetry.testFlightEnabled, telemetry.ownerId, telemetry.platform);
+    telemetry
+      ..testFlightEnabled = (() => true)
+      ..ownerId = (() => owner)
+      ..platform = (() => 'ios');
+    addTearDown(() => telemetry
+      ..testFlightEnabled = enabled
+      ..ownerId = ownerId
+      ..platform = platform);
+    List<ClientTelemetryObservation> cuts() =>
+        telemetry.outbox.pending(owner).where((observation) => observation.family == 'finish_cut').toList();
+
+    final finalize = Completer<void>();
+    final drainEntered = Completer<int>();
+    final provider = _provider(
+      actions: _RecordingActions(),
+      finalizeGate: finalize,
+      phone: _GatedPhoneSync(finalize, onFinalize: () {
+        if (!drainEntered.isCompleted) drainEntered.complete(cuts().length);
+      }),
+      process: () async => null,
+    );
+    addTearDown(provider.dispose);
+
+    // Home's Wrap Up and the live page's Finish reach Process Now only through the coordinator.
+    final finish = provider.finishCaptureWithOutcome(liveConversationId: 'window-1');
+    expect(await drainEntered.future.timeout(const Duration(seconds: 5)), 1,
+        reason: 'the cut is durable before the WAL drain starts');
+    finalize.complete();
+    await finish;
+    await _flushEventQueue();
+
+    expect(cuts(), hasLength(1));
+    expect(cuts().single.attributes['source'], 'app');
   });
 
   test('end_open_conversation: every End carries the moment it was asked for; off, no header is sent', () async {
