@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from database import conversations_v3 as store, conversations_v3_leases as leases, memories
+from database.account_deletion_marker import ACCOUNT_DELETION_COLLECTION
 from utils.conversations.v3 import Conflict, service, triggers
 from tests.unit.test_conversations_v3_claim_growth import T0, UID, path, strict  # noqa: F401
 from tests.unit.test_conversations_v3_lock_timing import _locked_pair
@@ -402,6 +403,25 @@ async def test_terminal_marker_clears_before_unlocked_index_overflow(strict, mon
         await service._load_live_batch(UID, token, None)
     assert strict.rows[path('r')] == {**raw, 'v3_pending': False, 'v3_pending_since': None}
     assert held.get().to_dict() == before
+
+
+@pytest.mark.parametrize('wipe_status', ['cancelled', 'billing_failed', 'pending'])
+def test_terminal_cleanup_checks_transactional_deletion_marker(strict, monkeypatch, wipe_status):
+    raw = source('r', discarded=True, v3_pending_since=AT)
+    strict.rows[path('r')] = raw.copy()
+    strict.rows[(ACCOUNT_DELETION_COLLECTION, UID)] = {'wipe_status': wipe_status}
+    token = leases.acquire(UID, 'builder', firestore_client=strict)
+    query = store._oldest_pending
+    coll = f'/users/{UID}/conversations'
+    monkeypatch.setattr(store, '_oldest_pending', lambda _, limit: query(MemoryQuery({coll + '/r': raw}, coll), limit))
+
+    if wipe_status == 'pending':
+        with pytest.raises(Conflict, match='account_deletion'):
+            store.clear_terminal_pending(UID, token, firestore_client=strict)
+        assert strict.rows[path('r')] == raw
+    else:
+        store.clear_terminal_pending(UID, token, firestore_client=strict)
+        assert strict.rows[path('r')] == {**raw, 'v3_pending': False, 'v3_pending_since': None}
 
 
 @pytest.mark.parametrize('moved', ['revision', 'status', 'lease'])
