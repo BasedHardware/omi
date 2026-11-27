@@ -2937,9 +2937,11 @@ class CaptureController extends ChangeNotifier
       }
       _customLiveAudioRecoveryFlagRefreshInFlight = false;
       if (refreshFailed && enabled != true) {
-        // A failed refresh may return a stale cached false. Keep recovery
-        // gated until a successful read confirms the current kill-switch value.
-        _customLiveAudioRecoveryKillSwitchEnabled = null;
+        // Keep the last successful result across refresh failures. A new
+        // capture clears this value before its identity-scoped read begins.
+        if (_customLiveAudioRecoveryKillSwitchEnabled != false) {
+          _customLiveAudioRecoveryKillSwitchEnabled = null;
+        }
         if (_customLiveAudioRecoveryFlagFetchRetriesForEpoch == 0) {
           _customLiveAudioRecoveryFlagFetchRetriesForEpoch = 1;
           _scheduleCustomLiveAudioFlagRetry(generation, identityEpoch, delay: const Duration(seconds: 1));

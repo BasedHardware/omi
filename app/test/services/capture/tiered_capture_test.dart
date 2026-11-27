@@ -286,7 +286,6 @@ void main() {
     adapter.flags['android-custom-live-audio-recovery-kill'] = false;
     await world.controller.onTranscriptionSettingsChanged();
     await world.settle();
-    expect(connection.watchStarts, 2);
     expect(connection.captureIsCurrent?.call(), isTrue);
   });
 
@@ -349,6 +348,41 @@ void main() {
 
     await world.elapse(const Duration(minutes: 5));
     expect(connection.captureIsCurrent, isNull, reason: 'the bounded five-minute retry observes the kill switch');
+  });
+
+  test('a confirmed-disabled kill keeps recovery active through a failed periodic read', () async {
+    const flag = 'android-custom-live-audio-recovery-kill';
+    final adapter = await setRefactorFlags({flag: false});
+    addTearDown(AnalyticsManager.resetForTesting);
+    world.controller.updateRecordingDevice(null);
+    await world.settle();
+    SharedPreferencesUtil().uid = 'capture-test-owner';
+    await SharedPreferencesUtil().saveCustomSttConfig(
+      const CustomSttConfig(provider: SttProvider.customLive, url: 'wss://local-stt.example.test'),
+    );
+    final device = BtDevice(
+      id: 'limitless-confirmed-disabled-periodic-flag',
+      name: 'Limitless',
+      type: DeviceType.limitless,
+      rssi: -40,
+    );
+    final connection = _WatchedLimitlessConnection();
+    world.deviceConnection = connection;
+    await world.controller.streamDeviceRecording(device: device);
+    await world.settle();
+    expect(connection.captureIsCurrent?.call(), isTrue);
+    expect(connection.watchStarts, 1);
+
+    adapter.reloadFailuresRemaining = 1;
+    await world.elapse(const Duration(minutes: 5, seconds: 1));
+    await world.settle();
+    expect(connection.captureIsCurrent?.call(), isTrue);
+    expect(connection.watchStarts, 1, reason: 'a failed refresh preserves the healthy watch');
+
+    adapter.flags[flag] = true;
+    await world.elapse(const Duration(seconds: 1));
+    await world.settle();
+    expect(connection.captureIsCurrent, isNull, reason: 'the successful bounded retry applies the later kill');
   });
 
   test('a new capture restores recovery after two bounded flag-read failures', () async {
@@ -435,12 +469,17 @@ void main() {
     expect(world.controller.recordingState, RecordingState.deviceRecord);
     expect(connection.reactivationIsCurrent?.call(), isFalse);
     expect(connection.watchRestarts, isNot(contains(true)));
+    final disconnectedReactivationCheck = connection.reactivationIsCurrent;
 
     world.setConnected(true);
     world.controller.onConnected();
     await world.settle();
 
     expect(connection.watchRestarts, contains(true));
+    expect(connection.watchStarts, 2, reason: 'the restart replaces the existing recovery binding');
+    expect(connection.reactivationIsCurrent, isNot(same(disconnectedReactivationCheck)));
+    expect(connection.reactivationIsCurrent?.call(), isFalse,
+        reason: 'the restart keeps reactivation gated until the socket transport is actually connected');
   });
 
   test('queued silence event cannot change ownership or run pause effects', () {
@@ -660,7 +699,7 @@ class _WatchedLimitlessConnection extends ScriptedDeviceConnection implements Li
     bool restart = false,
   }) {
     watchRestarts.add(restart);
-    if (this.captureIsCurrent?.call() ?? false) return;
+    if (!restart && (this.captureIsCurrent?.call() ?? false)) return;
     this.captureIsCurrent = captureIsCurrent;
     this.reactivationIsCurrent = reactivationIsCurrent;
     watchStarts++;

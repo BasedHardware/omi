@@ -1330,6 +1330,41 @@ void main() {
     expect(transport.writes.map((data) => decodeWrapperCommand(data)['messageNumber']), [6, 8, 21, 8]);
   });
 
+  test('socket reconnect rearms a Custom Live monitor after both skipped retries before expiry', () async {
+    final transport = FakeDeviceTransport();
+    const window = Duration(milliseconds: 80);
+    final connection = LimitlessDeviceConnection(
+      BtDevice(name: 'Limitless Pendant', id: 'fake-limitless', type: DeviceType.limitless, rssi: -50),
+      transport,
+      streamHealthWindow: window,
+      storageStatusTimeout: const Duration(milliseconds: 5),
+      setupSettleDelay: Duration.zero,
+    );
+    addTearDown(connection.disconnect);
+    await connection.connect();
+    var socketConnected = false;
+    var activations = 0;
+    void watch({bool restart = false}) => connection.watchCustomLiveAudio(
+          captureIsCurrent: () => true,
+          reactivationIsCurrent: () => socketConnected,
+          onEnabled: () => activations++,
+          report: (_) {},
+          restart: restart,
+        );
+
+    watch();
+    await Future<void>.delayed(window * 2 + const Duration(milliseconds: 20));
+    expect(transport.writes, hasLength(2), reason: 'both retry attempts are skipped while the socket is down');
+
+    socketConnected = true;
+    final recovery = waitForProbeThenEnable(transport);
+    watch(restart: true);
+    await recovery;
+
+    expect(activations, 2);
+    expect(transport.writes.map((data) => decodeWrapperCommand(data)['messageNumber']), [6, 8, 21, 8]);
+  });
+
   test('batch drain censors the current episode and restores the Custom Live watch', () async {
     final transport = FakeDeviceTransport();
     final connection = LimitlessDeviceConnection(

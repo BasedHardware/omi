@@ -189,7 +189,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
   }) {
     // The existing binding checks the recording, capture policy and STT config.
     // Keep its timer and spent retry budget while it still owns the link.
-    final restartSpentEpisode = restart && (_customLiveHealth?.isRecoveryExhausted ?? false);
+    final restartSpentEpisode = restart && (_customLiveHealth?.isRecoverySpent ?? false);
     if (!restartSpentEpisode && _customLiveHealth?.isClosed != true && (_customLiveWatch?.captureIsCurrent() ?? false))
       return;
     stopCustomLiveAudioWatch();
@@ -365,7 +365,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
       _cancelStreamHealthWatch();
     }
     final epoch = connectionEpoch;
-    if (!_isInitialized || _isBatchMode || !_isCurrentSession(epoch)) return;
+    if (!_isInitialized || _isBatchMode || _batchDrainActive || !_isCurrentSession(epoch)) return;
     try {
       final cmd = _encodeEnableDataStream(enable: !suppressed);
       await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, cmd);
@@ -675,6 +675,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
     final generation = _streamHealthGeneration;
     _streamHealthTimer?.cancel();
     _streamHealthTimer = null;
+    if (_batchDrainActive) return;
     if (_customLiveHealth != null || (_customLiveWatch?.start(connectionEpoch) ?? false)) return;
     _resetStreamActivationCounters();
     if (resetAttempts) _streamReactivationAttempts = 0;
@@ -686,7 +687,13 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
   Future<void> _checkStreamHealth({required int generation, required String reason}) async {
     if (generation != _streamHealthGeneration || _streamHealthCheckInFlight) return;
-    if (!_isInitialized || _isBatchMode || _realtimeSuppressed || _audioFramesSinceStreamActivation > 0) return;
+    if (!_isInitialized ||
+        _isBatchMode ||
+        _batchDrainActive ||
+        _realtimeSuppressed ||
+        _audioFramesSinceStreamActivation > 0) {
+      return;
+    }
 
     _streamHealthCheckInFlight = true;
     final rxPackets = _rxPacketsSinceStreamActivation;
@@ -706,7 +713,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
       // A status round-trip distinguishes a dead notify/control path from a
       // firmware that accepts commands but does not emit realtime audio.
       final status = await getStorageStatus();
-      if (generation != _streamHealthGeneration || _isBatchMode || _realtimeSuppressed) return;
+      if (generation != _streamHealthGeneration || _isBatchMode || _batchDrainActive || _realtimeSuppressed) return;
       DebugLogManager.logEvent('limitless_stream_health_probe', {
         'stage': stage,
         'statusReceived': status != null,

@@ -38,7 +38,8 @@ class LimitlessRealtimeHealth {
   bool _closed = false;
 
   bool get isClosed => _closed;
-  bool get isRecoveryExhausted => _attempted && _recoveryDeadline == null;
+  bool get isRecoverySpent =>
+      _attempted && (_recoveryDeadline == null || _reactivationAttempts >= _maxReactivationAttemptsPerEpisode);
 
   static Duration Function() _monotonicClock() {
     final clock = Stopwatch()..start();
