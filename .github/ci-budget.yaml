@@ -1268,7 +1268,7 @@
     },
     "gcp_backend.yml/probe-app-icon": {
       "budget_p50_minutes": 5,
-      "display_name": "Probe public app-icon containment before promotion",
+      "display_name": "Probe candidate app-icon containment before promotion",
       "expected_runs_class": "non-pr",
       "expected_runs_per_day": 0,
       "if": "github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.mode == 'probe-app-icon' && inputs.environment == 'prod' && !inputs.break_glass_lock && !inputs.skip_eligibility_proof",
@@ -5132,6 +5132,12 @@
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
+            "app_icon_candidate_revision": {
+              "default": "",
+              "description": "Probe-app-icon only. Exact admitted, tagged, zero-traffic Backend revision for release_sha.",
+              "required": "false",
+              "type": "string"
+            },
             "break_glass_confirm": {
               "default": "",
               "description": "Type deploy-without-proof when skip_eligibility_proof is set",
