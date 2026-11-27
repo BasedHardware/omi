@@ -32,7 +32,13 @@ from functools import cache, wraps
 
 from fastapi import HTTPException
 
-from utils.sync.repeat_work_metrics import conversation_scope, record_final, record_feature, bind_generation
+from utils.sync.repeat_work_metrics import (
+    bind_generation,
+    conversation_scope,
+    record_feature,
+    record_final,
+    scoped_conversation,
+)
 
 import database._client as db_client_module
 from database import redis_db
@@ -230,7 +236,8 @@ from utils.llm.conversation_processing import (
 )
 from utils.conversations.notes_task_context import fetch_dedup_candidates_for_query as _fetch_dedup_candidates_for_query
 from utils.llm.conversation_prompt_context import ConversationPromptPrefix, build_conversation_prompt_prefix
-from utils.llm.known_spellings import conversation_known_spellings, spelling_context_run
+from utils.llm.known_spellings import conversation_known_spellings, spelling_context, spelling_context_run
+from utils.conversations.processing_steps import Steps, blocking_step, inline_steps, run_inline
 from utils.llm.gateway_error_contract import conversation_processing_http_exception
 from utils.llm.conversation_folder import assign_conversation_to_folder
 from utils.analytics import record_usage
@@ -388,8 +395,7 @@ def _proposes_task_candidates(conversation: Any) -> bool:
     return getattr(conversation, 'source', None) == ConversationSource.desktop
 
 
-@spelling_context_run
-def _get_structured(
+def _get_structured_steps(
     uid: str,
     language_code: str,
     conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
@@ -408,7 +414,8 @@ def _get_structured(
     meeting_context_override: Optional[CalendarMeetingContext | str] = None,
     finalization_fence: tuple[str, int, int] | None = None,
     revision_checkpoint: Optional[Callable[[str], None]] = None,
-) -> Tuple[Structured, bool]:
+    async_notes: bool = False,
+) -> Steps[Tuple[Structured, bool]]:
     try:
         require_request_budget()
         full_v3_notes = v3_policy.full_notes(conversation, trigger)
@@ -442,6 +449,7 @@ def _get_structured(
         tz_str: str = tz or ''
         require_request_budget()
         user_language = resolve_output_language(uid, language_code, getattr(conversation, 'transcript_segments', None))
+        yield
         require_request_budget()
         if not live_recap:
             summary_app_selected = selected_summary_app(uid, summary_app_selected, redis_db.get_user_preferred_app)
@@ -670,6 +678,7 @@ def _get_structured(
             if jev_tier_applies(jev_transcript):
                 jev_discard = lambda: jev_discard_probability(jev_transcript, record_outcome=True)
 
+        yield
         require_request_budget()
         decision = decide_relevance(
             trigger=trigger,
@@ -703,6 +712,7 @@ def _get_structured(
         if decision.discard:
             return Structured(emoji=random.choice(['🧠', '🎉'])), True
 
+        yield
         require_request_budget()
         if revision_checkpoint is not None:
             # A newer sync revision owns this conversation; stop before the notes agent (the dominant LLM call).
@@ -734,6 +744,7 @@ def _get_structured(
                 if isinstance(meeting_context_override, str)
                 else v3_context.summary(uid, conversation, user_language, tz_str)
             ) + corrections_block
+        yield
         require_request_budget()
         prefix = build_conversation_prompt_prefix(
             known_spellings=conversation_known_spellings(uid),
@@ -762,14 +773,10 @@ def _get_structured(
         require_request_budget()
         if not live_recap:
             member_notes.before_model(uid, main_conv, trigger, finalization_fence=finalization_fence)
+        yield
         require_request_budget()
         with track_usage(uid, Features.CONVERSATION_STRUCTURE):
-            structured = llm_input_dedupe.notes(
-                uid,
-                main_conv,
-                prefix,
-                get_conversation_notes,
-                llm_hashes,
+            notes_inputs = dict(
                 started_at=conv_started_at,
                 language_code=language_code,
                 output_language_code=user_language,
@@ -787,6 +794,16 @@ def _get_structured(
                 open_loop_out=open_loop_out,
                 **notes_agent_inputs(main_conv, desktop_capture),
             )
+            if async_notes:
+                from utils.llm.conversation_processing import conversation_notes_steps
+
+                structured = yield from llm_input_dedupe.notes_steps(
+                    uid, main_conv, prefix, conversation_notes_steps, llm_hashes, **notes_inputs
+                )
+            else:
+                structured = llm_input_dedupe.notes(
+                    uid, main_conv, prefix, get_conversation_notes, llm_hashes, **notes_inputs
+                )
         validate_structured_source_segment_ids(structured, transcript_segment_ids)
         return structured, False
     except (
@@ -805,6 +822,7 @@ def _get_structured(
         raise conversation_processing_http_exception(e) from e
 
 
+_get_structured = spelling_context_run(inline_steps(_get_structured_steps))
 get_structured = _get_structured
 
 
@@ -2722,16 +2740,16 @@ def _is_funded_budget_denial(error):
     )
 
 
-def _preserve_capture_on_budget_denial(function):
+def _preserve_capture_steps(function):
     @wraps(function)
     def preserve_capture(uid, language_code, conversation, *args, **kwargs):
         if not funded_processing.enabled(uid, 'batch'):
-            return function(uid, language_code, conversation, *args, **kwargs)
+            return (yield from function(uid, language_code, conversation, *args, **kwargs))
         # A later model dispatch can observe a cap crossed by earlier usage.
         # Keep the ingress snapshot, even when a downstream step mutated it.
         captured = conversation.model_copy(deep=True)
         try:
-            return function(uid, language_code, conversation, *args, **kwargs)
+            return (yield from function(uid, language_code, conversation, *args, **kwargs))
         except HTTPException as error:
             if not _is_funded_budget_denial(error):
                 raise
@@ -2756,12 +2774,11 @@ def _preserve_capture_on_budget_denial(function):
     return preserve_capture
 
 
-@v3_service.recording_short_path
-@_preserve_capture_on_budget_denial
-@funded_processing.scoped
-@spelling_context_run
-@conversation_scope
-def process_conversation(
+def _preserve_capture_on_budget_denial(function):
+    return inline_steps(_preserve_capture_steps(blocking_step(function)))
+
+
+def _process_conversation_steps(
     uid: str,
     language_code: str,
     conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
@@ -2788,7 +2805,8 @@ def process_conversation(
     derived_effects_transcript_sha256: str | None = None,
     finalization_fence: tuple[str, int, int] | None = None,
     recovery_final_attempt: bool = True,
-) -> Conversation:
+    async_notes: bool = False,
+) -> Steps[Conversation]:
     """Process using trigger policy and stored user-kept authority.
 
     ``first_party_only`` requests Omi notes; the derived-effects digest identifies
@@ -2990,11 +3008,13 @@ def process_conversation(
         report_persistence(False)
         return cast(Conversation, conversation)
 
+    yield
     require_request_budget()
     meeting_context_override = None
     if not silent_backfill:
         meeting_context_override = _enrich_meeting_context(uid, conversation)
     # Everything below reads speaker_id as one voice; capture only guarantees that per piece.
+    yield
     require_request_budget()
     with identity_pass(None if already_observed else 'first'):
         speaker_receipt_applied = (
@@ -3005,6 +3025,7 @@ def process_conversation(
     if speaker_receipt_observer is not None:
         speaker_receipt_observer(speaker_receipt_applied)
 
+    yield
     require_request_budget()
     person_ids = conversation.get_person_ids()
     people: List[Person] = []
@@ -3022,12 +3043,10 @@ def process_conversation(
         nonlocal recovery_minimum_fallback
         recovery_minimum_fallback = True
 
+    yield
     require_request_budget()
     revision_checkpoint = early_abort.checkpoint_for(uid, conversation)
-    structured, discarded = _get_structured(
-        uid,
-        language_code,
-        conversation,
+    structure_inputs = dict(
         people=people,
         conversation_id=generated_conversation_id,
         trigger=trigger,
@@ -3042,6 +3061,13 @@ def process_conversation(
         finalization_fence=finalization_fence,
         revision_checkpoint=revision_checkpoint,
     )
+    if async_notes:
+        structured, discarded = yield from _get_structured_steps(
+            uid, language_code, conversation, async_notes=True, **structure_inputs
+        )
+    else:
+        structured, discarded = _get_structured(uid, language_code, conversation, **structure_inputs)
+    yield
     if revision_checkpoint is not None:
         # The notes agent ran for minutes; a sync write that landed meanwhile makes the persist fence refuse
         # this result anyway. Stop before the persist and the apps/memories LLM work it would trigger.
@@ -3174,6 +3200,7 @@ def process_conversation(
         # not answer the stale pending state back to the client.
         conversation.processing_state = None
     conversation.summary_retryable = None  # merge-cleared by the payload the same way
+    yield
     if is_initial_creation:
         persisted = lifecycle_service.create_completed_conversation(uid, payload, idempotent=True)
     else:
@@ -3205,6 +3232,7 @@ def process_conversation(
             complete_explicit(uid, conversation, trigger)
         return conversation
 
+    yield
     record_final(uid, conversation)
     if llm_hashes:
         record_feature(uid, conversation, 'notes', 'durable')
@@ -3238,7 +3266,7 @@ def process_conversation(
         )
     # User reprocess preserves template results on failure.
 
-    def _emit_derived_effects() -> None:
+    def derived_effects_steps() -> Steps[None]:
         assigned_folder_id = None
         if not discarded and not is_reprocess and not conversation.folder_id and not is_server_minimum(conversation):
             try:
@@ -3266,6 +3294,7 @@ def process_conversation(
             except Exception as e:
                 logger.error(f"Error during folder assignment for conversation {conversation.id}: {e}")
 
+        yield
         if not discarded:
             # Analytics tracking
             insights_gained = 0
@@ -3293,6 +3322,7 @@ def process_conversation(
             if insights_gained > 0:
                 record_usage(uid, insights_gained=insights_gained)
 
+            yield
             try:
                 trigger_conversation_apps(
                     uid,
@@ -3314,6 +3344,7 @@ def process_conversation(
                 # failure instead of success-with-notes (SCA-359).
                 logger.error('Explicit app selection failed: %s', error)
                 explicit_selection_failures.append(error)
+            yield
             # Persist app output after the canonical conversation write.
             app_updates = {
                 'apps_results': [result.dict() for result in conversation.apps_results],
@@ -3352,6 +3383,7 @@ def process_conversation(
                 # Canonical source replacement is universal and intentionally
                 # fail-closed. Do not hide a retryable apply/store failure in an
                 # unobserved future while reporting finalization as successful.
+                yield
                 try:
                     _extract_memories(uid, conversation, **effect_kwargs)
                 except ConversationEffectFenced as error:
@@ -3378,6 +3410,7 @@ def process_conversation(
                 submit_with_context(postprocess_executor, update_goal_progress, uid, conversation, **effect_kwargs)
             # Daily backend-owned AI profile refresh: no-op unless stale, bounded per process.
             ai_profile_refresh.schedule_refresh(uid, **effect_kwargs)
+        yield
         # Recovery preserves admitted audio ids instead of rebuilding old chunks.
         capture_audio = not is_recovery_trigger(trigger) and not v3_policy.flag(conversation, 'v3_derived')
         if not is_reprocess and conversation.private_cloud_sync_enabled and capture_audio:
@@ -3418,9 +3451,10 @@ def process_conversation(
 
     if defer_derived_effects:
         if derived_effects_observer is not None:
-            derived_effects_observer(_emit_derived_effects)
+            derived_effects_observer(inline_steps(derived_effects_steps))
         return conversation
-    _emit_derived_effects()
+    yield from derived_effects_steps()
+    yield
     if explicit_selection_failures:
         # Same contract the structured-summary boundary already enforces: a failed
         # processing step is a real error, never a 200 whose payload quietly
@@ -3430,6 +3464,32 @@ def process_conversation(
     complete_explicit(uid, conversation, trigger)
     logger.info(f'process_conversation completed conversation.id= {conversation.id}')
     return conversation
+
+
+@wraps(_process_conversation_steps)
+def _scoped_processing_steps(uid, language_code, conversation, *args, **kwargs):
+    with funded_processing.processing_usage_scope(uid), spelling_context(), scoped_conversation(uid, conversation):
+        return (yield from _process_conversation_steps(uid, language_code, conversation, *args, **kwargs))
+
+
+@v3_service.recording_short_path
+@_preserve_capture_on_budget_denial
+@wraps(_process_conversation_steps, assigned=('__module__', '__doc__', '__annotations__'))
+def process_conversation(*args, **kwargs):
+    return run_inline(_scoped_processing_steps(*args, **kwargs))
+
+
+@_preserve_capture_steps
+def _continued_conversation_steps(uid, language_code, conversation, **kwargs):
+    return (yield from _scoped_processing_steps(uid, language_code, conversation, async_notes=True, **kwargs))
+
+
+def continued_conversation_steps(uid, language_code, conversation, **kwargs) -> Steps[Conversation]:
+    # A from-segments claim is a legacy row. If an existing row has acquired
+    # v3 ownership, keep its existing recording/fenced transaction behavior.
+    if v3_policy.flag(conversation, 'recording') or v3_policy.flag(conversation, 'v3_derived'):
+        return process_conversation(uid, language_code, conversation, **kwargs)
+    return (yield from _continued_conversation_steps(uid, language_code, conversation, **kwargs))
 
 
 def _send_important_conversation_notification_if_needed(uid: str, conversation: Conversation) -> None:  # type: ignore[reportUnusedFunction]  # reserved for re-enablement

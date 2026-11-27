@@ -219,7 +219,7 @@ _ALLOWED_SCOPES: FrozenSet[tuple[str, str]] = frozenset(
         ('routers/developer_segments.py', 'assemble_continuation'),
         ('routers/developer_segments.py', 'stage_chunk'),
         ('utils/conversations/process_conversation.py', '<module>'),
-        ('utils/conversations/process_conversation.py', 'process_conversation'),
+        ('utils/conversations/process_conversation.py', '_process_conversation_steps'),
         ('utils/conversations/process_conversation.py', '_attach_client_projection'),
         ('utils/conversations/process_conversation.py', '_store_deferred_conversation'),
         # Model-free backlog persistence: display projection never enters canonical structure.
@@ -305,8 +305,8 @@ PINNED_REFERENCES: FrozenSet[Reference] = frozenset(
         Reference('routers/conversations.py', 'process_in_progress_conversation', 'client_processing'),
         Reference('routers/conversations.py', 'process_in_progress_conversation', 'client_projection'),
         Reference('utils/conversations/process_conversation.py', '<module>', 'ClientProcessing'),
-        Reference('utils/conversations/process_conversation.py', 'process_conversation', 'ClientProcessing'),
-        Reference('utils/conversations/process_conversation.py', 'process_conversation', 'client_projection'),
+        Reference('utils/conversations/process_conversation.py', '_process_conversation_steps', 'ClientProcessing'),
+        Reference('utils/conversations/process_conversation.py', '_process_conversation_steps', 'client_projection'),
         Reference('utils/conversations/process_conversation.py', '_store_budget_waiting', 'client_processing'),
         Reference('utils/conversations/process_conversation.py', '_attach_client_projection', 'ClientProcessing'),
         Reference('utils/conversations/process_conversation.py', '_attach_client_projection', 'client_processing'),
@@ -549,7 +549,7 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
         # CalendarMeetingContext only; derived member context is
         # persisted separately from Conversation.external_data.calendar_meeting_context.
         DumpSite('utils/conversations/process_conversation.py', '_enrich_meeting_context', 'model_dump'),
-        DumpSite('utils/conversations/process_conversation.py', '_emit_derived_effects', 'dict'),
+        DumpSite('utils/conversations/process_conversation.py', 'derived_effects_steps', 'dict'),
         DumpSite('utils/conversations/process_conversation.py', 'process_user_emotion', 'dict'),
         DumpSite(
             'utils/conversations/process_conversation.py',

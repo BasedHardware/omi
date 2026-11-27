@@ -715,7 +715,11 @@ def test_repair_keeps_only_new_commitments():
 # ---------------------------------------------------------------- synthetic replay through the writer
 
 
-def test_synthetic_replay_through_shaped_notes_writer(monkeypatch):
+@pytest.mark.parametrize('async_steps', [False, True])
+def test_synthetic_replay_through_shaped_notes_writer(monkeypatch, async_steps):
+    from utils.conversations.processing_steps import run_async
+    from utils.executors import postprocess_executor
+
     fixture = json.loads(FIXTURE.read_text())
     lines = [f'[{sid} {spk}] {text}' for sid, spk, text in fixture['segments']] * fixture['repeat']
     prefix = build_conversation_prompt_prefix(
@@ -765,8 +769,7 @@ def test_synthetic_replay_through_shaped_notes_writer(monkeypatch):
     monkeypatch.setattr(tools.screen_activity_db, 'get_screen_activity', lambda *a, **k: [])
     monkeypatch.setattr(tools, 'load_people_documents', lambda uid: [{'id': 'p1', 'name': 'Maya Okafor'}])
 
-    structured = notes._get_shaped_conversation_notes(
-        prefix,
+    options = dict(
         uid=OWNER,
         started_at=START,
         finished_at=START + timedelta(minutes=25),
@@ -778,6 +781,11 @@ def test_synthetic_replay_through_shaped_notes_writer(monkeypatch):
         roster=MeetingRoster((RosterEntry('Maya Okafor', None, None, 'human', 'screen_activity'),), None, False),
         rich_context_enabled=False,
     )
+    if async_steps:
+        monkeypatch.setenv('OMI_SHAPED_AGENT_MODE', 'on')
+        structured = asyncio.run(run_async(notes.conversation_notes_steps(prefix, **options), postprocess_executor))
+    else:
+        structured = notes._get_shaped_conversation_notes(prefix, **options)
     assert structured.title.startswith('Maya Okafor')
     assert [participant.name for participant in structured.participants] == ['Maya Okafor']
     assert structured.participants[0].evidence.startswith('Zoom tile')

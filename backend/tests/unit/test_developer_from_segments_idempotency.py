@@ -1,4 +1,6 @@
-from concurrent.futures import ThreadPoolExecutor
+import asyncio
+from time import monotonic
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from threading import Event
 from types import SimpleNamespace
@@ -6,6 +8,7 @@ from unittest.mock import ANY, MagicMock
 
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
+from httpx import ASGITransport, AsyncClient
 import pytest
 
 from config import refactor_modes
@@ -22,18 +25,29 @@ from utils.other.raise_site import raise_site_of
 from utils.other import request_deadline
 from utils.other.request_deadline import RequestDeadlineExceeded
 from utils.conversations.transcript_hash import transcript_sha256_for_binding
+from utils.conversations.processing_steps import AsyncStep
+from utils.conversations import process_conversation as conversation_pipeline
+from utils.llm import conversation_processing as notes
+from utils.llm.conversation_prompt_context import ConversationPromptPrefix
+from utils.llm.usage_tracker import Features, get_current_context
+from utils.executors import MonitoredThreadPoolExecutor
 
 NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
 
 @pytest.fixture
-def segment_api_client():
-    """Keep fresh router/auth setup outside the request's fast-unit CPU budget."""
+def segment_api_app():
     app = FastAPI()
     app.include_router(developer.router)
     app.dependency_overrides[developer.get_current_user_uid] = lambda: 'uid1'
     app.dependency_overrides[developer.get_uid_with_conversations_from_segments_write] = lambda: 'uid1'
-    with TestClient(app) as client:
+    return app
+
+
+@pytest.fixture
+def segment_api_client(segment_api_app):
+    """Keep fresh router/auth setup outside the request's fast-unit CPU budget."""
+    with TestClient(segment_api_app) as client:
         yield client
 
 
@@ -832,13 +846,13 @@ def test_budget_cut_keeps_claim_and_next_upload_resumes_same_row(monkeypatch, st
     event.assert_called_once_with('conversation_created', client_kind='ios', app_build='12574', uid='uid1')
 
 
-def test_ios_notes_continue_after_http_deadline_and_same_row_replays(monkeypatch, segment_api_client, caplog):
+async def test_ios_notes_continue_after_http_deadline_and_same_row_replays(monkeypatch, segment_api_app, caplog):
     row = {}
-    entered_notes = Event()
-    release_notes = Event()
+    entered_notes = asyncio.Event()
+    release_notes = asyncio.Event()
     delete = MagicMock()
     event = MagicMock()
-    futures = []
+    tasks = []
     monkeypatch.setenv(developer.FROM_SEGMENTS_CONTINUED_PROCESSING_MODE_ENV, 'serve')
     monkeypatch.setattr(request_deadline, 'FROM_SEGMENTS_REQUEST_BUDGET_SECONDS', 1.0)
 
@@ -852,8 +866,12 @@ def test_ios_notes_continue_after_http_deadline_and_same_row_replays(monkeypatch
         # more time than the HTTP deadline, even for a replay of this request.
         assert request_deadline.capped_deadline_seconds(180.0) == 180.0
         assert conversation.transcript_segments[0].text == _segment()['text']
-        entered_notes.set()
-        assert release_notes.wait(5)
+
+        async def provider():
+            entered_notes.set()
+            await asyncio.wait_for(release_notes.wait(), 5)
+
+        yield AsyncStep(provider)
         conversation.status = ConversationStatus.completed
         return conversation
 
@@ -868,46 +886,46 @@ def test_ios_notes_continue_after_http_deadline_and_same_row_replays(monkeypatch
     monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', claim)
     monkeypatch.setattr(developer.lifecycle_service, 'rollback_processing_admission', rollback)
     monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', persist)
-    monkeypatch.setattr(developer, 'process_conversation', processor)
+    monkeypatch.setattr(developer, 'continued_conversation_steps', processor)
     monkeypatch.setattr(developer, 'record_product_event', event)
     body = _request(source='phone', client_session_id='ondevice-test').model_dump(mode='json')
     path = '/v1/conversations/from-segments'
     headers = {'X-App-Platform': 'ios', 'X-App-Build': '12574'}
 
-    with ThreadPoolExecutor(max_workers=1) as worker:
-        submit = worker.submit
+    start_background_task = developer.start_background_task
 
-        def track_future(*args, **kwargs):
-            future = submit(*args, **kwargs)
-            futures.append(future)
-            return future
+    def track_task(*args, **kwargs):
+        task = start_background_task(*args, **kwargs)
+        tasks.append(task)
+        return task
 
-        monkeypatch.setattr(worker, 'submit', track_future)
-        monkeypatch.setattr(developer, 'from_segments_executor', worker)
+    monkeypatch.setattr(developer, 'start_background_task', track_task)
+    async with AsyncClient(transport=ASGITransport(app=segment_api_app), base_url='http://test') as client:
         try:
-            first = segment_api_client.post(path, headers=headers, json=body)
+            first = await client.post(path, headers=headers, json=body)
             assert first.status_code == 503
             assert first.headers['Retry-After'] == '2'
             assert entered_notes.is_set()
             assert row['status'] == ConversationStatus.processing
-            assert not futures[0].done()
+            assert len(tasks) == 1
+            assert not tasks[0].done()
 
-            active = segment_api_client.post(path, headers=headers, json=body)
+            active = await client.post(path, headers=headers, json=body)
             assert active.status_code == 503
             assert active.json() == first.json()
-            assert len(futures) == 1
+            assert len(tasks) == 1
         finally:
             release_notes.set()
+            (completed,) = await asyncio.gather(*tasks)
 
-        completed = futures[0].result(timeout=3)
-        retry = segment_api_client.post(path, headers=headers, json=body)
+        retry = await client.post(path, headers=headers, json=body)
 
     assert retry.status_code == 200
     assert retry.json() == completed.model_dump(mode='json')
     assert retry.json()['status'] == 'completed'
     assert retry.json()['id'] == row['id']
     assert row['status'] == ConversationStatus.completed
-    assert len(futures) == 1
+    assert len(tasks) == 1
     claim.assert_called_once()
     processor.assert_called_once()
     event.assert_called_once_with('conversation_created', client_kind='mobile_ios', app_build='12574', uid='uid1')
@@ -916,6 +934,123 @@ def test_ios_notes_continue_after_http_deadline_and_same_row_replays(monkeypatch
     assert [
         record.raise_site for record in caplog.records if getattr(record, 'event', None) == 'from_segments_503'
     ] == ['request_budget_exhausted', 'from_segments_processing_in_flight']
+
+
+async def test_eight_waiting_ios_continuations_do_not_starve_a_keyed_android_upload(monkeypatch, segment_api_app):
+    rows = {}
+    waiting = 0
+    all_waiting = asyncio.Event()
+    release_notes = asyncio.Event()
+    android_started = []
+    monkeypatch.setenv(developer.FROM_SEGMENTS_CONTINUED_PROCESSING_MODE_ENV, 'serve')
+    monkeypatch.setenv('OMI_SHAPED_AGENT_MODE', 'on')
+
+    def create(_uid, payload, *, idempotent):
+        assert idempotent and payload['id'] not in rows
+        rows[payload['id']] = dict(payload)
+        return True
+
+    def persist(_uid, payload):
+        rows[payload['id']].update(payload)
+        return True
+
+    def process_android(_uid, _language, conversation, **_kwargs):
+        assert request_deadline.request_deadline_remaining_seconds() <= 25.0
+        android_started.append(monotonic())
+        conversation.status = ConversationStatus.completed
+        return conversation
+
+    @asynccontextmanager
+    async def use_fake_model(model):
+        yield model
+
+    class SlowModel:
+        async def ainvoke(self, _messages):
+            nonlocal waiting
+            assert request_deadline.capped_deadline_seconds(180.0) == 180.0
+            assert get_current_context().feature == Features.CONVERSATION_STRUCTURE
+            waiting += 1
+            if waiting == 8:
+                all_waiting.set()
+            await release_notes.wait()
+            return SimpleNamespace(content='{"title": "Synthetic notes"}')
+
+    def structured_steps(uid, language, conversation, *, async_notes, **_kwargs):
+        assert async_notes
+        prefix = ConversationPromptPrefix(
+            conversation_id=conversation.id,
+            context='FULL TRANSCRIPT\nSynthetic conversation for an async model wait.',
+            has_usable_content=True,
+        )
+        with conversation_pipeline.track_usage(uid, Features.CONVERSATION_STRUCTURE):
+            structured = yield from notes.conversation_notes_steps(
+                prefix,
+                uid=uid,
+                started_at=conversation.started_at,
+                language_code=language,
+                tz='UTC',
+                task_intelligence_capture=False,
+            )
+        assert structured.title == 'Synthetic notes'
+        return structured, False
+
+    monkeypatch.setattr(notes, 'isolated_notes_model', use_fake_model)
+    monkeypatch.setattr(notes, 'get_llm', lambda *_args, **_kwargs: SlowModel())
+    monkeypatch.setattr(conversation_pipeline, '_get_structured_steps', structured_steps)
+    monkeypatch.setattr(conversation_pipeline.member_notes, 'before_notes', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(conversation_pipeline, '_enrich_meeting_context', lambda *_args: None)
+    monkeypatch.setattr(conversation_pipeline, 'resolve_speakers_for_processing', lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(conversation_pipeline.early_abort, 'checkpoint_for', lambda *_args: None)
+    monkeypatch.setattr(conversation_pipeline, 'exclude_from_derived', lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(conversation_pipeline, 'record_capture_loss', lambda *_args: None)
+    monkeypatch.setattr(conversation_pipeline, 'link_duplicate_captures', lambda *_args: None)
+    monkeypatch.setattr(conversation_pipeline, 'dispatch_primary_notes_refresh', lambda *_args: None)
+    monkeypatch.setattr(conversations_db, 'get_conversation', lambda _uid, cid, **_kwargs: rows.get(cid))
+    monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', create)
+    monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', persist)
+    monkeypatch.setattr(developer, 'process_conversation', process_android)
+    monkeypatch.setattr(developer, 'record_product_event', MagicMock())
+    assert request_deadline.FROM_SEGMENTS_REQUEST_BUDGET_SECONDS == 25.0
+
+    with MonitoredThreadPoolExecutor(name='test_from_segments', max_workers=8) as workers:
+        # Use a shared pool here so the test also catches a whole pipeline
+        # moved to another executor without releasing its slots.
+        monkeypatch.setattr(developer, 'from_segments_executor', workers)
+        monkeypatch.setattr(developer, 'postprocess_executor', workers)
+        async with AsyncClient(transport=ASGITransport(app=segment_api_app), base_url='http://test') as client:
+
+            async def upload(platform, session):
+                return await client.post(
+                    '/v1/conversations/from-segments',
+                    headers={'X-App-Platform': platform},
+                    json=_request(source='phone', client_session_id=session).model_dump(mode='json'),
+                )
+
+            slow_uploads = [asyncio.create_task(upload('ios', f'slow-notes-{index}')) for index in range(8)]
+            try:
+                await asyncio.wait_for(all_waiting.wait(), timeout=5)
+                assert len(rows) == 8
+                assert all(row['status'] == ConversationStatus.processing for row in rows.values())
+                assert workers.active_count == 0
+
+                sent = monotonic()
+                response = await upload('android', 'independent-android-upload')
+                elapsed = monotonic() - sent
+                assert response.status_code == 200
+                assert response.json()['status'] == 'completed'
+                assert len(android_started) == 1
+                assert sent <= android_started[0] < sent + 25.0
+                assert elapsed < 25.0
+                assert not any(upload.done() for upload in slow_uploads)
+                print(
+                    f'eight iOS continuations waiting; Android started in {android_started[0] - sent:.3f}s '
+                    f'and completed in {elapsed:.3f}s (25.0s budget)'
+                )
+            finally:
+                release_notes.set()
+                slow_responses = await asyncio.gather(*slow_uploads)
+
+    assert [response.status_code for response in slow_responses] == [200] * 8
 
 
 def test_ios_provider_timeout_retains_claim_and_fast_retry_returns_completed(monkeypatch, segment_api_client, caplog):
@@ -942,8 +1077,11 @@ def test_ios_provider_timeout_retains_claim_and_fast_retry_returns_completed(mon
         return True
 
     def process(_uid, _language, conversation, **kwargs):
-        if processor.call_count == 1:
-            raise TimeoutError('synthetic provider timeout')
+        async def provider():
+            if processor.call_count == 1:
+                raise TimeoutError('synthetic provider timeout')
+
+        yield AsyncStep(provider)
         assert conversation.transcript_segments[0].text == _segment()['text']
         conversation.status = ConversationStatus.completed
         return conversation
@@ -959,7 +1097,7 @@ def test_ios_provider_timeout_retains_claim_and_fast_retry_returns_completed(mon
     monkeypatch.setattr(
         developer.lifecycle_service, 'persist_processed_conversation', lambda _uid, row_data: row.update(row_data)
     )
-    monkeypatch.setattr(developer, 'process_conversation', processor)
+    monkeypatch.setattr(developer, 'continued_conversation_steps', processor)
 
     path = '/v1/conversations/from-segments'
     headers = {'X-App-Platform': 'ios'}

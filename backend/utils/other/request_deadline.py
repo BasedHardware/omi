@@ -6,8 +6,8 @@ run with its own budget after the HTTP waiter returns a retryable error.
 Other callers leave the deadline unset.
 
 The deadline is a contextvar, so it reaches the synchronous auth dependency and
-the handler through the threadpool context copy FastAPI makes for each, and the
-``asyncio.run`` the notes step opens copies it again. It is stored as one
+the handler through context copies. The inline notes loop and the async
+continuation both inherit the processing deadline. It is stored as one
 absolute monotonic instant, so every step derives its own relative timeout from
 the same deadline instead of restarting a fresh budget.
 """

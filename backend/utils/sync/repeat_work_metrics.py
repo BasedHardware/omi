@@ -6,6 +6,7 @@ import json
 import logging
 import time
 from contextvars import ContextVar
+from contextlib import contextmanager
 from functools import wraps
 from types import SimpleNamespace
 from typing import Any, Callable, ParamSpec, TypeVar
@@ -185,6 +186,15 @@ def record_survivor_refresh(uid: str, conversation_id: str, episode_id: str | No
     )
 
 
+@contextmanager
+def scoped_conversation(uid, conversation):
+    token = _scope.set((uid, conversation))
+    try:
+        yield
+    finally:
+        _scope.reset(token)
+
+
 def conversation_scope(function: Callable[P, R]) -> Callable[P, R]:
     signature = inspect.signature(function)
 
@@ -196,11 +206,8 @@ def conversation_scope(function: Callable[P, R]) -> Callable[P, R]:
             conversation = bound.arguments.get('moment')
         if conversation is None:
             conversation = SimpleNamespace(id=bound.arguments.get('conversation_id'))
-        token = _scope.set((bound.arguments['uid'], conversation))
-        try:
+        with scoped_conversation(bound.arguments['uid'], conversation):
             return function(*args, **kwargs)
-        finally:
-            _scope.reset(token)
 
     return wrapped
 

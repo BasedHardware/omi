@@ -16,6 +16,7 @@ from routers.developer_segments_models import (
     CaptureEvidenceLineage,
     CaptureEvidenceLineageUnit,
 )
+import asyncio
 import hashlib
 import json
 import uuid
@@ -123,7 +124,8 @@ from utils.mcp_server.handlers.conversations import conversation_cards_page_core
 from utils.mcp_server.errors import ToolExecutionError
 from utils.mcp_server.helpers import conversation_participants
 from utils.notifications import send_action_item_data_message, sync_action_item_reminder
-from utils.conversations.process_conversation import process_conversation
+from utils.conversations.process_conversation import continued_conversation_steps, process_conversation
+from utils.conversations.processing_steps import Steps, run_async, run_inline
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.projection_payload import (
     client_processing_mutation,
@@ -150,6 +152,7 @@ from utils.executors import (
     from_segments_executor,
     postprocess_executor,
     run_blocking,
+    start_background_task,
 )
 from utils.external_read_contract import ignore_unknown_query, pagination_headers, utc_window
 from utils.request_validation import HistoryDays
@@ -2042,14 +2045,14 @@ def _apply_late_from_segments_context(
     return updated
 
 
-PreparedFromSegments = ConversationResponse | Callable[[], ConversationResponse]
+PreparedFromSegments = ConversationResponse | Callable[[], Steps[ConversationResponse]]
 
 
 def _create_conversation_from_segments(
     uid: str, request: CreateConversationFromTranscriptRequest, **kwargs
 ) -> ConversationResponse:
     prepared = _prepare_conversation_from_segments(uid, request, **kwargs)
-    return prepared() if callable(prepared) else prepared
+    return run_inline(prepared()) if callable(prepared) else prepared
 
 
 def _prepare_conversation_from_segments(
@@ -2068,9 +2071,15 @@ def _prepare_conversation_from_segments(
         return ConversationResponse(id=conversation_id, status='processing', discarded=False)
     prepared = _ingest_conversation_from_segments(uid, assembled, **kwargs)
     finish = partial(developer_segments.finish_continuation, uid, conversation_id, request.chunk_count)
-    if callable(prepared):
-        return lambda: finish(prepared())
-    return finish(prepared)
+    if not callable(prepared):
+        return finish(prepared)
+
+    def finish_processing() -> Steps[ConversationResponse]:
+        result = yield from prepared()
+        yield
+        return finish(result)
+
+    return finish_processing
 
 
 def _ingest_conversation_from_segments(
@@ -2344,7 +2353,7 @@ def _process_validated_from_segments(
     client_kind: str | None,
     app_build: str | None,
     continue_processing: bool,
-) -> ConversationResponse:
+) -> Steps[ConversationResponse]:
     require_request_budget()
     if conversation_id:
         if create_payload is None:
@@ -2389,7 +2398,13 @@ def _process_validated_from_segments(
     try:
         if conversation_id:
             with lifecycle_service.processing_admission_guard(uid, conversation_id, rollback_on_failure=False):
-                conversation = process_conversation(uid, language_code, create_conversation_obj, **process_kwargs)
+                if continue_processing:
+                    yield
+                    conversation = yield from continued_conversation_steps(
+                        uid, language_code, create_conversation_obj, **process_kwargs
+                    )
+                else:
+                    conversation = process_conversation(uid, language_code, create_conversation_obj, **process_kwargs)
         else:
             conversation = process_conversation(uid, language_code, create_conversation_obj, **process_kwargs)
     except Exception as error:
@@ -2413,6 +2428,7 @@ def _process_validated_from_segments(
         if provider_error is not None:
             raise provider_error from error
         raise
+    yield
     # Non-idempotent ingest: the coordinator's generic persist stripped the
     # field (paid / flag-off deferred). Stamp it now. The session-id path
     # already wrote at create_processing and must not write again after a
@@ -2479,23 +2495,29 @@ def _process_validated_from_segments(
     )
 
 
-def _run_from_segments_processing(
-    process: Callable[[], ConversationResponse], continue_processing: bool
-) -> ConversationResponse:
+def _continued_from_segments_steps(
+    process: Callable[[], Steps[ConversationResponse]],
+) -> Steps[ConversationResponse]:
     require_request_budget()
-    if not continue_processing:
-        return process()
-
-    # The HTTP waiter may expire while this worker owns the persisted claim.
-    # Continue the same attempt with the model and enrichment budgets.
+    # Start the longer budget when the first worker is ready to admit the
+    # claim. The HTTP waiter keeps its own, shorter deadline.
     token = set_request_deadline(FROM_SEGMENTS_PROCESSING_BUDGET_SECONDS)
     try:
-        return process()
-    except Exception as error:
-        logger.warning('from_segments_processing_failed error_type=%s', type(error).__name__)
-        raise
+        return (yield from process())
     finally:
         reset_request_deadline(token)
+
+
+async def _run_continued_from_segments(
+    process: Callable[[], Steps[ConversationResponse]],
+) -> ConversationResponse | Exception:
+    try:
+        return await run_async(_continued_from_segments_steps(process), postprocess_executor)
+    except Exception as error:
+        # The request may already have returned. Keep detached failures
+        # visible without logging the provider error body or transcript.
+        logger.warning('from_segments_processing_failed error_type=%s', type(error).__name__)
+        return error
 
 
 @router.post("/v1/conversations/from-segments", response_model=ConversationResponse, tags=["conversations"])
@@ -2537,10 +2559,22 @@ async def create_conversation_from_segments_user(
         if not keyed:
             # After an unkeyed create commits, a retry has no stable identity
             # to reuse. Keep waiting for its response once processing starts.
-            return await run_in_threadpool(prepared)
-        return await await_within_request_deadline(
-            lambda: run_blocking(from_segments_executor, _run_from_segments_processing, prepared, continue_processing)
-        )
+            return await run_in_threadpool(lambda: run_inline(prepared()))
+        if not continue_processing:
+            return await await_within_request_deadline(
+                lambda: run_blocking(from_segments_executor, lambda: run_inline(prepared()))
+            )
+
+        require_request_budget()
+        task = start_background_task(_run_continued_from_segments(prepared), name='from_segments_processing')
+
+        async def wait_for_result() -> ConversationResponse:
+            result = await asyncio.shield(task)
+            if isinstance(result, Exception):
+                raise result
+            return result
+
+        return await await_within_request_deadline(wait_for_result)
     except RequestDeadlineExceeded as error:
         raise retryable_processing_response('request_budget_exhausted') from error
 
