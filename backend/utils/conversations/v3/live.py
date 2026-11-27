@@ -4,7 +4,10 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping, Optional, Sequence
 
 from config.conversations_v3 import SPEECH_LANDED_FIELD
-from utils.conversations.v3.finish_stamp import FINISH_STAMP_FIELD, FINISH_STAMP_MAX_AGE, FINISH_STAMP_PATHS
+
+# FINISH_STAMP_FIELD is re-exported for the writers and readers that import the Finish fields from here.
+from utils.conversations.v3.finish_stamp import FINISH_STAMP_FIELD as FINISH_STAMP_FIELD
+from utils.conversations.v3.finish_stamp import FINISH_STAMP_MAX_AGE, FINISH_STAMP_PATHS
 
 # The v3 window cap: an open conversation idle for longer is not in progress.
 MAX_IDLE = timedelta(hours=2)
