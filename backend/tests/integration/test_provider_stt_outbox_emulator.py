@@ -164,3 +164,41 @@ def test_job_side_sweep_reaches_ancient_open_missing_and_closed_wakes(emulator):
     assert outbox.claim_key(ancient, initial.wake_token, 1800, now=now) is Outcome.STALE
     assert all(outbox.sweep_running(now=now, limit=2) == (0, 0) for _ in range(3))
     assert outbox.claim_key(live, active.wake_token, 1800, now=now) is Outcome.BUSY
+
+
+def test_held_sweep_rewakes_only_overdue_holds_whose_wake_was_lost(emulator, monkeypatch):
+    from database.outbox_provider_stt import REWAKE_AFTER_SECONDS
+
+    client, collection = emulator
+    owner = f'provider-held-{uuid.uuid4().hex[:8]}'
+    ClientCustomerData(client).add_user(owner)
+    wakes: list = []
+    outbox = _outbox(client, collection, wakes)
+    jobs = client.collection(f"{collection.removesuffix('_provider_stt_outbox')}_jobs")
+    now = 1_000_000.0
+    labels = ('lost', 'missing', 'future', 'fresh_wake', 'pending')
+    segments = {label: _segment(label) for label in labels}
+    for label, segment in segments.items():
+        redrive_at = now + 300 if label == 'future' else now - 10 * REWAKE_AFTER_SECONDS
+        jobs.document(segment).set(
+            {
+                'state': 'provider_pending' if label == 'pending' else 'vendor_held',
+                'enqueued_at': 100.0,
+                'owner_id': owner,
+                'vendor_hold': {'reason': 'rate_limited', 'redrive_at': redrive_at},
+            }
+        )
+        if label != 'missing':
+            outbox.enqueue(segment, owner, {'segment_id': segment}, redrive_at, now=100.0)
+    woken = 'fresh_wake'
+    outbox._mutate(segments[woken], lambda old: ({**old, 'woken_at': now - 1}, None))
+    wakes.clear()
+
+    monkeypatch.setenv('BATCH_VENDOR_HELD_REDRIVE_ENABLED', 'false')
+    assert outbox.sweep_held(now=now) == (0, 0) and not wakes
+    monkeypatch.delenv('BATCH_VENDOR_HELD_REDRIVE_ENABLED')
+
+    # Two-row pages reach every held job; only the overdue ones whose wake is not fresh are re-armed.
+    assert sum(outbox.sweep_held(now=now, limit=2)[0] for _ in range(3)) == 2
+    assert {segment for segment, _, _ in wakes} == {segments['lost'], segments['missing']}
+    assert all(outbox.sweep_held(now=now, limit=2) == (0, 0) for _ in range(3))

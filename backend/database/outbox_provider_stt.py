@@ -75,6 +75,17 @@ def _ready_to_rewake(row: Row, now: float) -> bool:
     )
 
 
+def _held_overdue(job: Mapping[str, Any], now: float) -> bool:
+    """A held job whose redrive is past due by more than a queued wake's grace (its wake was lost)."""
+    if job.get('state') != 'vendor_held':
+        return False
+    hold = job.get('vendor_hold')
+    redrive_at = hold.get('redrive_at') if isinstance(hold, Mapping) else None
+    if isinstance(redrive_at, bool) or not isinstance(redrive_at, (int, float)) or not math.isfinite(redrive_at):
+        return True  # A malformed hold cannot prove a live wake; the consumer redrives it now.
+    return now - redrive_at >= REWAKE_AFTER_SECONDS
+
+
 def _rearm_wake(row: Row, now: float) -> Row:
     return {**row, 'task_token': uuid.uuid4().hex, 'woken_at': now, 'lease_token': None, 'lease_until': 0.0}
 
@@ -126,6 +137,7 @@ class FirestoreProviderSttOutbox:
         # The production factory caches this instance across maintenance ticks.
         self._sweep_cursor: Any = None
         self._running_cursor: Any = None
+        self._held_cursor: Any = None
 
     # --- plumbing -------------------------------------------------------------------------------
     def _client(self) -> Any:
@@ -393,7 +405,58 @@ class FirestoreProviderSttOutbox:
                 errors += 1
         return rewoken, errors
 
+    def sweep_held(self, *, now: float, limit: int = RUNNING_RECOVERY_PAGE_SIZE) -> tuple[int, int]:
+        """Re-wake ``vendor_held`` jobs whose redrive is overdue, which the open-outbox sweep may never reach.
+
+        A held unit's redrive rides its outbox row's deferred wake; when that wake is lost, only the
+        open-row sweep could re-arm it, and that pages a few hundred thousand open rows 100 at a time.
+        This pages the held jobs themselves (the ``(state, enqueued_at)`` index) instead.
+        """
+        from config.batch_pipeline_vendor_failover import held_redrive_enabled
+
+        if not held_redrive_enabled():
+            return 0, 0  # Parked on purpose: the guards measure stale holds as wedges.
+        client = self._client()
+        namespace = (self._collection or collection_name()).removesuffix(OUTBOX_SUFFIX)
+        page_size = max(1, min(limit, RUNNING_RECOVERY_PAGE_SIZE))
+        query = (
+            client.collection(f'{namespace}_jobs')
+            .where(filter=FieldFilter('state', '==', 'vendor_held'))
+            .order_by('enqueued_at')
+            .order_by('__name__')
+            .limit(page_size)
+        )
+        if self._held_cursor is not None:
+            query = query.start_after(self._held_cursor)
+        page = list(query.stream(timeout=10, retry=None))
+        self._held_cursor = page[-1] if len(page) == page_size else None
+        rewoken = errors = 0
+        for snapshot in page:
+            try:
+                if not _held_overdue(snapshot.to_dict() or {}, now):
+                    continue
+                fresh = self._rearm_job(snapshot.reference, lambda job: _held_overdue(job, now), now)
+                if fresh is not None:
+                    self._wake(fresh)
+                    rewoken += 1
+            except Exception:
+                errors += 1
+        return rewoken, errors
+
     def _rearm_running(self, job_ref, cutoff: float, now: float) -> Row | None:
+        def stranded(job: Mapping[str, Any]) -> bool:
+            enqueued_at = job.get('enqueued_at')
+            return (
+                job.get('state') == 'provider_running'
+                and not isinstance(enqueued_at, bool)
+                and isinstance(enqueued_at, (int, float))
+                and math.isfinite(enqueued_at)
+                and enqueued_at <= cutoff
+            )
+
+        return self._rearm_job(job_ref, stranded, now)
+
+    def _rearm_job(self, job_ref, stranded: Callable[[Mapping[str, Any]], bool], now: float) -> Row | None:
         row_id = job_ref.id
         if not _ROW_ID.fullmatch(row_id):
             raise ValueError('invalid provider-stt job id')
@@ -403,14 +466,7 @@ class FirestoreProviderSttOutbox:
         @firestore.transactional
         def commit(transaction):
             job = job_ref.get(transaction=transaction, timeout=5, retry=None).to_dict() or {}
-            enqueued_at = job.get('enqueued_at')
-            if (
-                job.get('state') != 'provider_running'
-                or isinstance(enqueued_at, bool)
-                or not isinstance(enqueued_at, (int, float))
-                or not math.isfinite(enqueued_at)
-                or enqueued_at > cutoff
-            ):
+            if not stranded(job):
                 return None
             row = outbox_ref.get(transaction=transaction, timeout=5, retry=None).to_dict()
             owner = job['owner_id']
