@@ -46,9 +46,8 @@ def _row(world, job):
 
 
 def _redrive(monkeypatch, old, world):
-    # This reconciler is unchanged from pre-PR main. Use its old jobs API and
-    # replace only Cloud Tasks transport/probing; the SDK due query and claim
-    # transaction actually run. Acknowledged tasks are no longer queued.
+    # Run ordinary dispatch with the pre-PR jobs API while delayed execution
+    # is closed. Only Cloud Tasks transport and probing are replaced.
     from utils.conversations import deletion_batch_purge as reconcile
 
     queued = []
@@ -61,6 +60,19 @@ def _redrive(monkeypatch, old, world):
         counts = reconcile.reconcile_conversation_batch_purges()
     assert counts.get('dispatched', 0) == len(queued)
     return queued
+
+
+def test_old_dispatcher_picks_ordinary_work_and_leaves_paused_delayed_job(monkeypatch, world, old):
+    monkeypatch.delenv('FIRESTORE_READ_LEVERS', raising=False)
+    cid = 'synthetic-delayed'
+    ordinary = world.arm(cid)
+    delayed, fields = jobs.post_window_job(world.client, world.uid, cid)
+    delayed.set(fields, merge=True)
+    scheduled = delayed.get().get('post_window_due_at')
+    assert delayed.id not in {doc.id for doc in old.jobs.due_jobs(now=scheduled, firestore_client=world.client)}
+    assert old.jobs.claim_dispatch(delayed.id, now=scheduled, firestore_client=world.client) is None
+    assert {job for job, _ in _redrive(monkeypatch, old, world)} == {ordinary}
+    assert delayed.get().exists
 
 
 def test_disabled_coalescing_allows_both_binaries_to_finish_redriven_tasks(monkeypatch, world, old):

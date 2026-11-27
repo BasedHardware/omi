@@ -6,23 +6,28 @@
 /// has more behind it, so a short page is not the end. [nextCursor] resumes after the last row read;
 /// it is present only where the server's cursor is enabled. Both are null from an older server.
 class ConversationPageHeaders {
-  const ConversationPageHeaders({this.hasMore, this.nextCursor});
+  const ConversationPageHeaders({this.hasMore, this.nextCursor, this.homeMode});
 
   final bool? hasMore;
   final String? nextCursor;
+  final String? homeMode;
+
+  static const homeModeHeader = 'X-Omi-Home-Page-Mode';
 
   static ConversationPageHeaders parse(Map<String, String> headers) {
     final more = headers['x-omi-has-more'];
     final cursor = headers['x-omi-next-cursor'];
+    final mode = headers[homeModeHeader.toLowerCase()];
     return ConversationPageHeaders(
+      homeMode: mode == 'indexed' || mode == 'legacy' ? mode : null,
       hasMore: more == 'true' ? true : (more == 'false' ? false : null),
       nextCursor: cursor == null || cursor.isEmpty ? null : cursor,
     );
   }
 
-  /// Whether to request another page: the server's answer when it sent one, else a full page that
-  /// was not cut short by the read budget. The server's answer covers a budget cut too: it says more
-  /// only when the cut page advanced, so the next request resumes past it rather than repeating it.
+  /// Whether another page is available: the server's answer when it sent one, else a full page that
+  /// was not cut short by the read budget. A truncated empty page may be retryable at the same
+  /// position; callers handle it as a failed page so automatic load-more does not repeat the offset.
   bool more({required int storageCount, required int pageSize, required bool truncated}) =>
       hasMore ?? (!truncated && storageCount >= pageSize);
 }

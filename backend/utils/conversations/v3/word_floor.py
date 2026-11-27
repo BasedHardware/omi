@@ -5,7 +5,7 @@ from unicodedata import normalize
 import regex
 
 MIN_TASK_WORDS = 20
-MIN_HOME_WORDS = 300
+MIN_HOME_WORDS = 150
 
 _SCRIPT_LETTER = regex.compile(r'(?V1)[\p{L}&&[\p{scx=Han}\p{scx=Hiragana}\p{scx=Katakana}\p{scx=Hangul}\p{scx=Thai}]]')
 

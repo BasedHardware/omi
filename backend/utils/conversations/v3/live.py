@@ -3,14 +3,80 @@
 from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping, Optional, Sequence
 
+from config.conversations_v3 import SPEECH_LANDED_FIELD
+
+# FINISH_STAMP_FIELD is re-exported for the writers and readers that import the Finish fields from here.
+from utils.conversations.v3.finish_stamp import FINISH_STAMP_FIELD as FINISH_STAMP_FIELD
+from utils.conversations.v3.finish_stamp import FINISH_STAMP_MAX_AGE, FINISH_STAMP_PATHS
+
 # The v3 window cap: an open conversation idle for longer is not in progress.
 MAX_IDLE = timedelta(hours=2)
+FINISH_WINDOW_FIELD = 'v3_finish_no_pointer_window_id'
+FINISH_RECORDING_FIELD = 'v3_finish_no_pointer_recording'
+FINISH_FIELDS = [
+    'started_at',
+    'finished_at',
+    'status',
+    'tile_state',
+    'v3_derived',
+    'recording',
+    'home_hidden',
+    'deleted',
+    'discarded',
+    'is_locked',
+    'v3_recording_ids',
+]
+
+
+FINISH_SOURCE_FIELDS = [
+    FINISH_WINDOW_FIELD,
+    FINISH_RECORDING_FIELD,
+    'v3_manual_end_requested',
+    'v3_manual_end',
+    'v3_pending_since',
+    'recording',
+    'status',
+    'finished_at',
+    'record_audio_partial',
+    'record_upload_failed',
+    'is_locked',
+    'deleted',
+    'discarded',
+    'sync_merged_into',
+    'data_protection_level',
+    'record_upload_revision',
+    'record_projection_revision',
+    'has_content',
+    SPEECH_LANDED_FIELD,
+]
+
+
+def has_finish_content(row: Mapping[str, Any], window: Mapping[str, Any], recording_id: str) -> bool:
+    # Raw audio custody can set has_content before any transcript lands.
+    source_has_speech = row.get('has_content') and (
+        row.get('record_projection_revision') or row.get(SPEECH_LANDED_FIELD)
+    )
+    return bool(source_has_speech or any(rid != recording_id for rid in window.get('v3_recording_ids') or ()))
 
 
 def _aware(value: Any) -> Optional[datetime]:
     if not isinstance(value, datetime):
         return None
     return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+
+def finish_stamp(at: datetime, path: str) -> dict:
+    return {'at': at, 'path': path}
+
+
+def finish_stamp_sample(stamp: Any, now: datetime) -> Optional[tuple]:
+    """``(path, seconds)`` from a Finish stamp, or None when it is malformed or older than ``FINISH_STAMP_MAX_AGE``."""
+    if not isinstance(stamp, Mapping) or stamp.get('path') not in FINISH_STAMP_PATHS:
+        return None
+    at = _aware(stamp.get('at'))
+    if at is None or now - at > FINISH_STAMP_MAX_AGE:
+        return None
+    return stamp['path'], max(0.0, (now - at).total_seconds())
 
 
 def active(rows: Sequence[Mapping[str, Any]], now: Optional[datetime] = None) -> Optional[Mapping[str, Any]]:

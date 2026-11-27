@@ -9,10 +9,12 @@ import sys
 from prometheus_client.parser import text_string_to_metric_families
 import pytest
 
+from database.rollout_cohorts import RAMP_NAMES
 from utils.sync.worker_privacy_metrics import WorkerPrivacyMetrics
 
 CHILD = """
 from database import privacy_check_metrics as metrics, privacy_ttl_cache as ttl_cache
+from database import batch_privacy_owner_cache as shared_cache
 from prometheus_client import Counter
 from types import SimpleNamespace
 import sys
@@ -33,6 +35,8 @@ metrics.owner_shadow_error('attempt', TimeoutError('synthetic-private-detail'))
 metrics.compare('batch', 'account_deleted', 'allow')
 metrics.memo_result('batch', 'hit')
 metrics.negative_lookup('conversations', 'shadow', 'mismatch')
+shared_cache.OUTCOMES.labels('covered').inc()
+shared_cache.SHADOW.labels('match').inc()
 Counter('unrelated_total', 'Not privacy').inc()
 print('ready', flush=True)
 sys.stdin.read()
@@ -114,7 +118,11 @@ async def test_child_counters_survive_reaping_without_double_count_or_file_growt
                 ]
                 == attempt
             )
+            assert before[('omi_batch_pipeline_privacy_owner_cache_total', (('outcome', 'covered'),))] == attempt
+            assert before[('omi_batch_pipeline_privacy_owner_shadow_total', (('outcome', 'match'),))] == attempt
             assert {name for name, _ in before} == {
+                'omi_batch_pipeline_privacy_owner_cache_total',
+                'omi_batch_pipeline_privacy_owner_shadow_total',
                 'privacy_checks_total',
                 'privacy_check_calls_total',
                 'privacy_check_reads_total',
@@ -243,7 +251,7 @@ sys.stdin.read()
         assert await asyncio.wait_for(process.stdout.readline(), 30) == b'ready\n'
         rows = [s for f in text_string_to_metric_families(metrics.render().decode()) for s in f.samples]
         values = {s.labels['name']: s.value for s in rows if s.name == 'omi_runtime_percent'}
-        assert len(values) == 6
+        assert set(values) == set(RAMP_NAMES)
         assert values['batch-pipeline'] == 23 and values['new-owner-cell1'] == 17
         assert [row.value for row in rows if row.name == 'privacy_ttl_cache_disabled'] == [0.0]
         assert not any(row.name == 'privacy_ttl_cache_switch_reads_total' for row in rows)

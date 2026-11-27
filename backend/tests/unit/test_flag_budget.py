@@ -68,6 +68,7 @@ HELPER_KILL_SWITCHES = {
     'RECORD_FOLLOWUP_WAKE_ENABLED',
     'RECORD_SEAL_WAKE_PRESERVED_ENABLED',
     'BATCH_PIPELINE_FRESH_GUARD_ENABLED',
+    'ENRICHMENT_AGE_GATE_UNPARK_ENABLED',
     'BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED',
     'BATCH_PIPELINE_DELIVERED_SHARE_ENABLED',
     'BATCH_PROJECTION_OUTBOX',
@@ -231,6 +232,7 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
         'CONVERSATION_TERMINAL_FAMILY_MODE',
         'BATCH_ALLOWANCE_INTAKE_PARK_ENABLED',
         'BATCH_HELD_DEAD_LETTER_ENABLED',
+        'BATCH_PARKED_JOB_SWEEPER_ENABLED',
         'SERVER_BATCH_UNSUPPORTED_LANGUAGES',
         rollout_name,
         'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP',
@@ -242,6 +244,7 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
         'BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED',
         'BATCH_PIPELINE_MERGE_TX_FRESH_GATE_ENABLED',
         'BATCH_PIPELINE_MERGE_STALE_HEAD_PROMOTE_ENABLED',
+        'BATCH_PIPELINE_MERGE_AGED_GPU_RELEASE_ENABLED',
         'BATCH_PIPELINE_READY_DISCOVERY_CURSOR_ENABLED',
         'BATCH_PIPELINE_BACKLOG_RELEASE_METER_ENABLED',
         'BATCH_SOURCE_REUSE_ENABLED',
@@ -297,7 +300,7 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
         assert entry['registry'] == 'config/feature-flags.yaml'
         if name == 'BATCH_PIPELINE_PROTECTED_SHARE_ENABLED':
             assert entry['owner'] == flag['owner'] == 'Pipeline / SCA-1894'
-            assert entry['review_by'] == '2026-11-23'
+            assert entry['review_by'] == '2026-11-30'
         elif name == 'BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED':
             assert entry['owner'] == flag['owner'] == 'batch-custody / lead2'
             assert entry['review_by'] == '2026-12-16'
@@ -342,6 +345,7 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
             'SUMMARY_PROJECTION_DEBT_ENABLED',
             'HOME_EMPTY_OUTPUT_NOISE',
             'EPISODE_COMPOSER_REUSE',
+            'ENRICHMENT_AGE_GATE_UNPARK_ENABLED',
         }:
             assert entry['owner'] == 'refactor-lead'
             assert entry['review_by'] == '2026-12-10'
@@ -354,7 +358,7 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
         }:
             assert entry['owner'] == flag['owner'] == 'quality-lead'
             assert entry['review_by'] == (
-                '2026-11-22' if name == 'EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED' else '2026-12-15'
+                '2026-11-30' if name == 'EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED' else '2026-12-15'
             )
         elif name == 'MCP_CONVERSATION_FETCH_DEFAULT_MAX_SEGMENTS':
             assert entry['owner'] == flag['owner'] == 'quality-lead / q12-mcp-paging'
@@ -365,14 +369,14 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
         else:
             striped = name == 'BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED'
             assert entry['owner'] == ('omi-pipeline' if striped else 'rollout-meetings / occasion architecture')
-            assert entry['review_by'] == ('2026-12-06' if striped else '2026-11-28')
+            assert entry['review_by'] == ('2026-12-06' if striped else '2026-12-05')
         assert flag['kind'] == 'env'
         assert 'backend' in flag['surfaces']
         if name == 'BATCH_PIPELINE_PROTECTED_SHARE_ENABLED':
             assert flag['lifecycle'] == 'rollout'
             assert flag['fail'] == 'closed'
             assert flag['summary'].startswith('Default off')
-            assert flag['review_by'] == entry['review_by']
+            assert flag['extension']['until'] == entry['review_by']
             assert 'separate lead' in flag['ramp']['expander']
             assert 'READY indexes' in flag['ramp']['cohorts'][1]
             assert 'FRESH' in flag['ramp']['clean_metric']
@@ -531,7 +535,8 @@ def test_reconnect_dark_rollout_has_a_dated_release_ramp():
     assert flag['lifecycle'] == 'rollout'
     assert flag['fail'] == 'closed'
     assert flag['review_by'] == '2026-11-20'
-    # The registry extends by an extension block, never by moving review_by; the budget follows it.
-    assert budget['names'][flag['key']]['review_by'] == flag['extension']['until'] == '2026-11-23'
+    assert flag['extension']['until'] == '2026-11-23'
+    # Release targets gate removal by November 30 following the November 27 decision.
+    assert budget['names'][flag['key']]['review_by'] == '2026-11-30'
     assert flag['ramp']['done_by'] == '2026-11-20'
     assert 'Release' in flag['ramp']['expander'] and 'Quality' in flag['ramp']['expander']

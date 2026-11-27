@@ -119,7 +119,7 @@ WITNESSES: dict[str, CallerWitness] = {
             _run_episode_home,
         ),
         CallerWitness(
-            'routers/sync.py:get_sync_job_status:utils.sync.completed_status.get_completed_legacy_status',
+            'routers/sync.py:_read_sync_job_status:utils.sync.completed_status.get_completed_legacy_status',
             'utils.sync.completed_status.get_completed_legacy_status',
             'utils.sync.completed_status.get_completed_legacy_status',
             ('expired-legacy-handle',),

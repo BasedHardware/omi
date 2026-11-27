@@ -18,6 +18,7 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from google.cloud.firestore import DELETE_FIELD
 
 from database import conversation_batch_purge_jobs as purge_jobs
 from database import conversation_tombstones, legal_holds
@@ -65,11 +66,17 @@ class _Ref:
     def set(self, payload, merge=False):
         with self.client.lock:
             current = dict(self.client.docs.get(self.path, {})) if merge else {}
-            self.client.docs[self.path] = {**current, **payload}
+            self.client.docs[self.path] = {
+                key: value for key, value in {**current, **payload}.items() if value is not DELETE_FIELD
+            }
 
     def update(self, payload):
         with self.client.lock:
-            self.client.docs[self.path] = {**self.client.docs[self.path], **payload}
+            self.client.docs[self.path] = {
+                key: value
+                for key, value in {**self.client.docs[self.path], **payload}.items()
+                if value is not DELETE_FIELD
+            }
 
     def delete(self):
         with self.client.lock:
@@ -352,6 +359,7 @@ def test_default_gate_keeps_fail_fast_contract(gate_client, fast_clock):
 
 def _route_app(monkeypatch, body):
     monkeypatch.setattr(conversations.conversation_tombstones, 'is_deleted', lambda *args: False)
+    monkeypatch.setattr(conversations.conversations_db, 'get_conversation_raw_snapshot', lambda *args, **kwargs: {})
     for name in (
         'delete_owner_prompt_embedding_cache',
         'delete_conversation_screen_frames',
@@ -378,7 +386,7 @@ def test_concurrent_same_account_cascade_deletes_all_return_204_serialized(monke
     inside, peak, deleted = [0], [0], []
     counter = threading.Lock()
 
-    def body(conversation_id, *args):
+    def body(conversation_id, *args, **kwargs):
         with counter:
             inside[0] += 1
             peak[0] = max(peak[0], inside[0])
@@ -451,7 +459,9 @@ def test_legal_hold_still_blocks_cascade_delete(monkeypatch, gate_client, fast_c
 def tombstone_db(monkeypatch):
     """One fake plane for tombstones, obligations and the gate; transactions run inline."""
     client = _Client()
+    client.docs[f'users/{UID}/conversations/c1'] = {'created_at': 'original'}
     monkeypatch.setattr(conversation_tombstones, 'db', client)
+    monkeypatch.setattr(conversation_tombstones, '_in_transaction', lambda _client, body: body(_Transaction(client)))
     monkeypatch.setattr(purge_jobs, 'get_firestore_client', lambda: client)
     monkeypatch.setattr(purge_jobs, '_in_transaction', lambda _client, body: body(_Transaction(client)))
     monkeypatch.setattr(

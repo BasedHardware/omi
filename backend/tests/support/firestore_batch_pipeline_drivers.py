@@ -273,9 +273,9 @@ def entries():
         CoveredByEntry(
             'database.batch_pipeline_store.FirestoreStore.run',
             covered_by=('database.batch_pipeline_store.service_frontier',),
-            reason='optional pre-begin pacing adds no query; queries only through reseed_hinted_activation after commit',
+            reason='post-commit audit adds bounded point reads; the only query is the existing frontier re-seed',
             expect_observed=False,
-            body_digest='20a0e3fdea5dd2194d7c806216e36c644fccbeca46bd5a6489e132ae902d8e32',
+            body_digest='d484f03ba80272761744eed17c240e6d9bfaf8681a125a162a6eb21593826f5e',
         ),
         CoveredByEntry(
             'database.batch_pipeline_store.FirestoreTransaction.service_frontier',
@@ -307,6 +307,10 @@ def entries():
                 'after_id': [None, 'held-09'],
             },
             neutrals={'limit': (10, 'bounded page size')},
+        ),
+        DriverEntry(
+            'utils.batch_pipeline.parked_sweep.parked_page',
+            domains={'namespace': namespaces, 'expired': [False, True], 'after': [None, 'held-09']},
         ),
         DriverEntry(
             'database.batch_pipeline_quarantine_recovery.dead_held_candidates',

@@ -124,6 +124,31 @@ def test_trace_header_is_parsed_with_a_closed_gate_and_never_raises():
     capture_end.observe_trace('nonsense', received_at=400)
 
 
+@pytest.mark.parametrize(
+    ('age', 'headers', 'labels'),
+    [
+        (
+            21600,
+            {'x-app-platform': ' IOS ', 'x-app-build': '1520', 'x-app-version': '1.0.562+1367'},
+            ('le_6h', 'ios', '1520'),
+        ),
+        (21600.1, {'x-app-platform': 'android', 'x-app-version': '1.0.577+1516'}, ('gt_6h', 'android', '1516')),
+        (10, {'x-app-platform': 'other', 'x-app-build': '123'}, ('le_6h', 'unknown', 'older')),
+        (10, {'x-app-platform': 'android', 'x-app-version': '1.0.577'}, ('le_6h', 'android', 'unknown')),
+    ],
+)
+def test_upload_trace_counts_one_attempt_in_a_bounded_build_and_age_band(age, headers, labels, monkeypatch):
+    monkeypatch.setenv('SYNC_UPLOAD_WATERMARK_ENABLED', 'true')
+    counter = capture_end._upload_trace_age()
+    child = counter.labels(*labels)
+    before = child._value.get()
+    capture_end.observe_trace('sealed=100;gate=none', received_at=100 + age, client_headers=headers)
+    capture_end.observe_trace('sealed=invalid', received_at=100 + age, client_headers=headers)
+    monkeypatch.setenv('SYNC_UPLOAD_WATERMARK_ENABLED', 'false')
+    capture_end.observe_trace('sealed=100;gate=none', received_at=100 + age, client_headers=headers)
+    assert child._value.get() == before + 1
+
+
 class _UpdatingTransaction(_FakeTransaction):
     def update(self, ref, patch):
         self.store[ref.path] = {**self.store[ref.path], **patch}

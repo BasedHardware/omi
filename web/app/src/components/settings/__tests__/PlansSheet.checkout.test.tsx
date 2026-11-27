@@ -1,5 +1,11 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const capture = vi.hoisted(() =>
+  vi.fn((_event: string, _properties?: Record<string, unknown>) => {
+    throw new Error('localStorage blocked');
+  }),
+);
 
 const createCheckoutSession = vi.fn(async (_priceId: string) => ({
   url: 'https://checkout.stripe.test/pay',
@@ -8,9 +14,7 @@ const createCheckoutSession = vi.fn(async (_priceId: string) => ({
 vi.mock('posthog-js', () => ({
   default: {
     init: vi.fn(),
-    capture: vi.fn(() => {
-      throw new Error('localStorage blocked');
-    }),
+    capture,
     identify: vi.fn(),
     reset: vi.fn(),
     setPersonProperties: vi.fn(),
@@ -26,13 +30,20 @@ vi.mock('@/lib/api', () => ({
   getUserSubscription: vi.fn(),
 }));
 
+import { CHECKOUT_POPUP_BLOCKED } from '@/lib/checkoutWindow';
 import { PlansSheet } from '@/components/settings/PlansSheet';
 
 describe('PlansSheet checkout', () => {
   beforeEach(() => {
     createCheckoutSession.mockClear();
-    vi.stubGlobal('open', vi.fn());
+    capture.mockClear();
+    vi.stubGlobal(
+      'open',
+      vi.fn(() => ({} as Window)),
+    );
   });
+
+  afterEach(() => vi.unstubAllGlobals());
 
   it('starts checkout when analytics capture throws', async () => {
     render(
@@ -64,6 +75,52 @@ describe('PlansSheet checkout', () => {
       '_blank',
     );
   });
+
+  it.each(['no URL', 'rejection'])(
+    'records the selected plan before checkout creation ends in %s',
+    async (failure) => {
+      const selections = () =>
+        capture.mock.calls.filter(([event]) => event === 'Upgrade Plan Selected');
+      let selectionsBeforeRequest: ReturnType<typeof selections> = [];
+      createCheckoutSession.mockImplementationOnce(async () => {
+        selectionsBeforeRequest = selections();
+        if (failure === 'rejection') throw new Error('checkout unavailable');
+        return { url: '' };
+      });
+      render(
+        <PlansSheet
+          open
+          onOpenChange={vi.fn()}
+          onSubscriptionUpdate={vi.fn()}
+          subscription={{ plan: 'basic', status: 'active', is_unlimited: false }}
+          cachedPlans={[
+            {
+              id: 'price_plus_month',
+              plan_id: 'plus',
+              title: 'Plus Monthly',
+              price_string: '$19',
+              interval: 'month',
+            },
+          ]}
+        />,
+      );
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Continue to Payment' }));
+      const message =
+        failure === 'rejection'
+          ? 'An error occurred. Please try again.'
+          : 'Failed to create checkout session';
+      expect(await screen.findByText(message)).toBeInTheDocument();
+      expect(window.open).not.toHaveBeenCalled();
+      expect(selectionsBeforeRequest).toEqual([
+        [
+          'Upgrade Plan Selected',
+          { plan: 'plus', billing_interval: 'month', source: 'web_plans' },
+        ],
+      ]);
+      expect(selections()).toHaveLength(1);
+    },
+  );
 
   it('renders a single-plan Omi Pro catalog as two intervals and checks out the selected one', async () => {
     // 2026-10-24 ruling: a new buyer's web catalog is unlimited_v2 only.
@@ -109,5 +166,72 @@ describe('PlansSheet checkout', () => {
       'https://checkout.stripe.test/pay',
       '_blank',
     );
+  });
+  it('keeps a blocked checkout retryable and only closes after a tab opens', async () => {
+    const onOpenChange = vi.fn();
+    const onSubscriptionUpdate = vi.fn();
+    const open = vi.fn().mockReturnValueOnce(null).mockReturnValue({});
+    vi.stubGlobal('open', open);
+    render(
+      <PlansSheet
+        open
+        onOpenChange={onOpenChange}
+        onSubscriptionUpdate={onSubscriptionUpdate}
+        subscription={{ plan: 'basic', status: 'active', is_unlimited: false }}
+        cachedPlans={[
+          {
+            id: 'price_omi_pro_month',
+            plan_id: 'unlimited_v2',
+            title: 'Omi Pro Monthly',
+            price_string: '$29.99/mo',
+            interval: 'month',
+          },
+        ]}
+      />,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue to Payment' }));
+    expect(await screen.findByText(CHECKOUT_POPUP_BLOCKED)).toBeTruthy();
+    expect(
+      capture.mock.calls.filter(([event]) => event === 'Upgrade Plan Selected'),
+    ).toEqual([
+      [
+        'Upgrade Plan Selected',
+        {
+          plan: 'unlimited_v2',
+          billing_interval: 'month',
+          source: 'web_plans',
+        },
+      ],
+    ]);
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+    fireEvent.focus(window);
+    expect(onSubscriptionUpdate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to Payment' }));
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+    expect(createCheckoutSession).toHaveBeenCalledTimes(2);
+    expect(createCheckoutSession).toHaveBeenLastCalledWith('price_omi_pro_month');
+    expect(screen.queryByText(CHECKOUT_POPUP_BLOCKED)).toBeNull();
+    fireEvent.focus(window);
+    expect(onSubscriptionUpdate).toHaveBeenCalledTimes(1);
+    expect(
+      capture.mock.calls.filter(([event]) => event === 'Upgrade Plan Selected'),
+    ).toEqual([
+      [
+        'Upgrade Plan Selected',
+        {
+          plan: 'unlimited_v2',
+          billing_interval: 'month',
+          source: 'web_plans',
+        },
+      ],
+      [
+        'Upgrade Plan Selected',
+        {
+          plan: 'unlimited_v2',
+          billing_interval: 'month',
+          source: 'web_plans',
+        },
+      ],
+    ]);
   });
 });

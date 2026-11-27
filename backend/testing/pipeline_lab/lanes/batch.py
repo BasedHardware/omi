@@ -14,9 +14,9 @@ What this driver runs, per conversation:
 | VAD | ``utils.stt.local_vad`` Silero (injectable) | product helper, but prod uses GPU pyannote VAD |
 | Windows, packing, validation, silence/empty handling | real ``PipelineWorker.process_batch`` | yes |
 | Words | cassette, served per window by offset (``SpanSource``) | simulated: vendor words, not Parakeet |
-| Diarization | turns implied by the cassette's vendor speaker labels | simulated: not pyannote |
+| Diarization | turns implied by the cassette's vendor speaker labels; with ``speakers`` (scenario speakers block) the hosted diarizer's community-1 turns for the unit, through the product's ``HttpDiarizer`` to the lab's speaker peer | simulated / product client + peer |
 | Result payload | captured from the worker's ``persist`` | yes (shape), no encryption/storage |
-| Projection | real ``projection_segments`` (word/turn assignment, grouping) | yes |
+| Projection | real ``projection_segments`` (word/turn assignment, grouping); with ``speakers`` the unit is its batch scope (``batch_segment_id``) as the production projector passes it | yes |
 | Scheduler, leases, admission, ordered merge, owner-log assignment, privacy fences | not run | see ``testing.lifecycle_sim`` on the local stack |
 | Speaker identity (centroids, owner) | not run | needs voiceprints + emulator |
 | Boundaries | taken from the baseline row | not replayed (made on device / live lifecycle) |
@@ -161,8 +161,14 @@ def replay_record_lane(
     vad: VadFn | None = None,
     stt: dict | None = None,
     capture_epoch: float = 0.0,
+    speakers=None,
 ) -> IngestResult:
-    """Run one conversation's audio through the record lane's worker and projection."""
+    """Run one conversation's audio through the record lane's worker and projection.
+
+    ``speakers`` (``speakers/scenario.ScenarioSpeakers``): diarize each unit through the hosted diarizer client
+    instead of the cassette's labels, project with the unit as batch scope, keep each projected segment's
+    product fields (``segment['product']``) and register each unit (result payload, WAV) for the staged-unit
+    stand-in."""
     from config.batch_pipeline_providers import provider_config
     from diarizer.batch_pipeline import PipelineWorker
     from diarizer.batch_pipeline_models import decode_pcm16_wav
@@ -208,10 +214,14 @@ def replay_record_lane(
         payloads[item.segment_id] = payload
         return f'lab-result://{item.segment_id}'
 
+    unit_pcm: dict[str, bytes] = {}
+
     def diarize(samples):
         # Called with the full unit (compaction pinned off). Units go through the worker one at a
         # time, so the unit in flight is the one being diarized; equal-length units stay distinct.
         unit = current['unit']
+        if speakers is not None and unit:
+            return speakers.diarize(unit_pcm[unit])  # the unit's exact PCM: the peer's cassette key
         return {'turns': turns_by_unit.get(unit, []) if unit else []}
 
     segments: list[dict] = []
@@ -243,7 +253,9 @@ def replay_record_lane(
                     conversation_id=conversation.conversation_id,
                 )
                 unit_source = _OffsetSource(source, u_start)
-                turns_by_unit[segment_id] = speaker_turns(unit_source.words(0.0, seconds(pcm)))
+                unit_pcm[segment_id] = pcm
+                if speakers is None:
+                    turns_by_unit[segment_id] = speaker_turns(unit_source.words(0.0, seconds(pcm)))
                 # Production decode of the staged WAV, once; the worker slices this
                 # buffer, so its windows are views the words provider can locate.
                 decoded[segment_id] = decode_pcm16_wav(pcm16_to_wav(pcm))
@@ -272,9 +284,16 @@ def replay_record_lane(
                             record_origin=True,
                             language=conversation.language,
                             data_protection_level='standard',
+                            private_cloud_sync_enabled=speakers is not None,
                         )
-                        for segment in projection_segments(item, binding, payload):
-                            segments.append(contract_segment(segment, offset=u_start))
+                        scoped = {'batch_segment_id': segment_id} if speakers is not None else {}
+                        for segment in projection_segments(item, binding, payload, **scoped):
+                            row = contract_segment(segment, offset=u_start)
+                            if speakers is not None:
+                                row['product'] = segment.model_dump(mode='json')
+                            segments.append(row)
+                        if speakers is not None:
+                            _register_unit(speakers, item, binding, payload, pcm, conversation.conversation_id)
                 else:
                     unit_report['outcome'] = 'not_projected'
                     result.error = f'worker_{type(outcome).__name__}'
@@ -294,6 +313,15 @@ def replay_record_lane(
         result.outcome = 'failed'
         result.error = result.error or 'worker_failure'
     return result
+
+
+def _register_unit(speakers, item, binding, payload, pcm: bytes, conversation_id: str) -> None:
+    from config.policy import ProjectionPolicy
+    from testing.pipeline_lab.speakers.scenario import LabUnit
+
+    speakers.register_unit(
+        LabUnit(item, binding, ProjectionPolicy(), payload, pcm16_to_wav(pcm), receipt_conversation_id=conversation_id)
+    )
 
 
 def _allow_all(required):

@@ -601,3 +601,30 @@ def test_endpoint_stale_acceptance_resuming_mid_write_keeps_both_stores_cancelle
     assert stored['cancel_at_period_end'] is True
     assert writes == []  # A never rewrote the record from its earlier snapshot
     assert len(fake.subs['sub_1']['discounts']) == 1
+
+
+def _once_prepaid_sub(**over):
+    # A "first month included" (once) prepaid plan after its first invoice: no discount left,
+    # cancel_at set at the term end, and the redeem marker on the subscription.
+    return _sub(
+        discounts=[],
+        cancel_at=1_900_000_000,
+        cancel_at_period_end=False,
+        metadata={'uid': 'u1', 'prepaid_code_redemption': '1'},
+        **over,
+    )
+
+
+def test_a_prepaid_subscription_is_never_offered_the_stay_discount():
+    offer = ro.evaluate(_once_prepaid_sub(), _customer())
+    assert not offer.eligible and offer.reason == 'prepaid'
+    # Only the exact marker counts; an ordinary subscription stays eligible.
+    assert ro.evaluate(_sub(metadata={'prepaid_code_redemption': '0'}), _customer()).eligible
+
+
+def test_accepting_the_stay_offer_on_a_prepaid_subscription_changes_nothing(monkeypatch):
+    fake = _FakeStripe(monkeypatch, [_once_prepaid_sub()])
+    with pytest.raises(ValueError, match='prepaid'):
+        ro.accept('sub_1')
+    assert fake.calls == []  # no claim, no discount, cancel_at untouched
+    assert fake.subs['sub_1']['cancel_at'] == 1_900_000_000

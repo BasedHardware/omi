@@ -18,6 +18,7 @@ from git_test_env import clean_git_env
 from check_feature_flag_registry import MAX_UNRAMPED_PER_OWNER, check, normalize_owner, owner_backlog, owner_tokens
 from feature_flag_registry import effective_due, ramp_due, load_registry, validate_registry
 from render_feature_flag_registry import render, _deploy_index, _parse_mapping
+from report_feature_flag_deadlines import TITLE, render_deadlines, sync_issue
 
 
 def flag(key: str = "EXAMPLE_ENABLED", **overrides: object) -> dict[str, object]:
@@ -901,6 +902,49 @@ class RegistryFixture(unittest.TestCase):
         self.assertEqual([], errors)
         self.assertIn("EXAMPLE_ENABLED: rollout row decided keep; relabel config_switch or ops_kill", warnings)
         self.assertIn("LEGACY_ENABLED: rollout row decided keep; relabel config_switch or ops_kill", warnings)
+
+    def test_due_soon_tracking_issue_creates_then_updates_same_issue(self) -> None:
+        self.write_flags([
+            flag(owner="Owner | rollout & release", review_by="2026-11-02"),
+            flag("LATER_ENABLED", owner="Another lane", review_by="2026-11-03"),
+        ])
+        registry_url = "https://github.com/BasedHardware/omi/blob/main/backend/docs/feature-flag-registry.md"
+        endpoint = "repos/BasedHardware/omi/issues"
+
+        def render_on(day: int) -> tuple[str, bool]:
+            output = StringIO()
+            with redirect_stdout(output):
+                errors, _ = check(self.root, check_render=False, as_of=date(2026, 11, day))
+            self.assertEqual([], errors)
+            return render_deadlines(output.getvalue(), registry_url)
+
+        body, has_deadlines = render_on(7)
+        self.assertTrue(has_deadlines)
+        self.assertIn("EXAMPLE_ENABLED", body)
+        self.assertIn("owner ` Owner | rollout & release `, due 2026-11-02, fails main 2026-11-10 UTC", body)
+        self.assertIn("ramp, retire, or add one extension", body)
+        self.assertIn(registry_url, body)
+        self.assertNotIn("LATER_ENABLED", body)
+
+        issue = {"number": 42, "title": "Renamed by a maintainer", "body": body, "state": "open"}
+        with mock.patch("report_feature_flag_deadlines.github_api") as api:
+            api.side_effect = ["[[]]", "{}", json.dumps([[], [issue]]), "{}"]
+            sync_issue("BasedHardware/omi", body, has_deadlines)
+            updated_body, has_deadlines = render_on(8)
+            self.assertIn("LATER_ENABLED", updated_body)
+            self.assertIn("owner ` Another lane `", updated_body)
+            sync_issue("BasedHardware/omi", updated_body, has_deadlines)
+        lookup = mock.call(
+            f"{endpoint}?state=all&creator=github-actions%5Bbot%5D&per_page=100",
+            "--paginate",
+            "--slurp",
+        )
+        self.assertEqual([
+            lookup,
+            mock.call(endpoint, "--method", "POST", payload={"title": TITLE, "body": body}),
+            lookup,
+            mock.call(f"{endpoint}/42", "--method", "PATCH", payload={"body": updated_body}),
+        ], api.call_args_list)
 
     def test_machine_reports_dates_counts_and_dark_age_boundaries(self) -> None:
         self.write_flags([

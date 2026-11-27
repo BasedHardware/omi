@@ -565,11 +565,11 @@ class AppLocalizationsFr extends AppLocalizations {
   String get hardwareSection => 'Matériel';
 
   @override
-  String get v2Undetected => 'V2 non détecté';
+  String get v2Undetected => 'Synchronisation hors ligne indisponible';
 
   @override
   String get v2UndetectedMessage =>
-      'Nous voyons que vous avez soit un appareil V1, soit votre appareil n\'est pas connecté. La fonctionnalité carte SD n\'est disponible que pour les appareils V2.';
+      'La synchronisation hors ligne nécessite un appareil Omi connecté avec stockage sur carte SD. Votre appareil actuel ne la prend pas en charge.';
 
   @override
   String get endConversation => 'Terminer la conversation';
@@ -7121,6 +7121,26 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get authUnexpectedError => 'Erreur inattendue lors de la connexion, veuillez réessayer';
+
+  @override
+  String get accountSignInMethods => 'Modes de connexion';
+
+  @override
+  String get accountAddSignInMethod => 'Ajouter un mode de connexion';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Ajoutez un mode de connexion à ce compte Omi. Votre forfait, vos enregistrements et vos intégrations restent associés à ce compte.';
+
+  @override
+  String get accountSignInConflictTitle => 'Ce mode de connexion est associé à un autre compte';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Vous êtes toujours connecté à ce compte. Chaque compte Omi conserve son forfait, ses enregistrements et ses intégrations.';
+
+  @override
+  String get accountSignInMethodAdded => 'Mode de connexion ajouté';
 
   @override
   String get authFailedToLinkGoogle => 'Échec de la liaison avec Google, veuillez réessayer.';
@@ -14476,6 +14496,9 @@ class AppLocalizationsFr extends AppLocalizations {
   String get processingProgress => 'Traitement de vos enregistrements en attente…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'En attente d’un quota de transcription disponible';
+
+  @override
   String get processingDeferred => 'En attente de traitement';
 
   @override
@@ -15440,9 +15463,6 @@ class AppLocalizationsFr extends AppLocalizations {
   String get stopThese => 'Ne plus recevoir ceci';
 
   @override
-  String get meetingActionItemsTitle => 'Actions à suivre';
-
-  @override
   String get addToTasks => 'Ajouter aux tâches';
 
   @override
@@ -15852,10 +15872,106 @@ class AppLocalizationsFr extends AppLocalizations {
   String get stillWorkingOnIt => 'Toujours en cours.';
 
   @override
+  String get deviceReadyToUse => 'Prêt à l\'emploi';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Le micrologiciel de votre appareil est trop ancien pour cette mise à jour. Contactez l\'assistance pour obtenir de l\'aide afin de mettre à jour votre appareil.';
 
   @override
   String get firmwareUpdateAppRequired =>
       'Cette mise à jour du micrologiciel nécessite une version plus récente de l\'application Omi. Mettez l\'application à jour depuis votre boutique d\'applications, puis vérifiez à nouveau.';
+
+  @override
+  String get quietPayerTitle => 'Aucun enregistrement depuis 5 jours';
+
+  @override
+  String get quietPayerMessage => 'Vérifiez votre Omi.';
+
+  @override
+  String get quietPayerCheck => 'Vérifier';
+
+  @override
+  String get playManageSubscription => 'Gérer l\'abonnement';
+
+  @override
+  String get playBilledByGoogle => 'Facturé par Google Play';
+
+  @override
+  String get playPurchasePending => 'Votre paiement est en attente. Omi Pro démarre dès que Google Play le confirme.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Cet achat Google Play appartient à un autre compte Omi.';
+
+  @override
+  String get playPurchaseNotConfirmed =>
+      'Nous n\'avons pas encore pu confirmer votre achat. Nous réessaierons automatiquement.';
+
+  @override
+  String get playRenewalTerms =>
+      'Se renouvelle automatiquement au prix indiqué jusqu\'à résiliation. Gérez ou résiliez à tout moment dans Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Non disponible sur Android';
+
+  @override
+  String get pageNotAvailableInApp => 'Cette page n\'est pas disponible dans l\'app.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Commande passée. Consultez vos e-mails pour la confirmation.';
+
+  @override
+  String get prepaidCodeEntry => 'Vous avez un code ?';
+
+  @override
+  String get prepaidCodeTitle => 'Utiliser un code';
+
+  @override
+  String get prepaidCodeFieldHint => 'Saisissez votre code';
+
+  @override
+  String get prepaidCodeRedeem => 'Utiliser';
+
+  @override
+  String get prepaidCodeRedeemed => 'Code utilisé';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Ce code n\'est pas valide. Vérifiez-le et réessayez.',
+        'used': 'Ce code a déjà été utilisé.',
+        'expired': 'Ce code a expiré.',
+        'hasPlan': 'Vous avez déjà un forfait. Votre code n\'a pas été utilisé. Utilisez-le à la fin de votre forfait.',
+        'notPrepaid': 'Ce code ne peut pas être utilisé ici. Utilisez-le lorsque vous choisissez un forfait.',
+        'notEligible': 'Ce code ne peut pas être utilisé sur ce compte.',
+        'rateLimited': 'Trop de tentatives. Réessayez plus tard.',
+        'other': 'Une erreur s\'est produite. Veuillez réessayer.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'Facturé via omi.me. Annulez ici à tout moment.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Facturé via omi.me.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'Votre forfait $plan est en pause.';
+  }
+
+  @override
+  String get firmwareNewestSupportedForDevice =>
+      'Votre appareil utilise déjà la dernière version de firmware prise en charge';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Synchronisez d\'abord vos enregistrements';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Certains enregistrements sont encore sur votre appareil. Laissez-les terminer leur synchronisation vers votre téléphone, puis lancez la mise à jour.';
 }

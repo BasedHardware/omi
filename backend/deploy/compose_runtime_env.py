@@ -158,7 +158,22 @@ def _resolve_derived_services(env_config: ConfigDict) -> None:
         if source_name in derived:
             raise ValueError(f'Cloud Run service {name} derives from derived service {source_name!r}')
         own = {key: value for key, value in config.items() if key != DERIVE_FROM_KEY}
-        services[name] = _deep_merge(source, own)
+        own_forbidden = list(dict.fromkeys(own.get('forbidden_env', [])))
+        own_env = _as_config_dict(own.get('env')) or {}
+        conflict = sorted(set(own_forbidden) & set(own_env))
+        if conflict:
+            raise ValueError(f'Cloud Run service {name} both declares and forbids env vars: {", ".join(conflict)}')
+
+        resolved = _deep_merge(source, own)
+        inherited_forbidden = list(source.get('forbidden_env', []))
+        resolved_forbidden = list(dict.fromkeys([*inherited_forbidden, *own_forbidden]))
+        if resolved_forbidden:
+            resolved['forbidden_env'] = resolved_forbidden
+        resolved_env = _as_config_dict(resolved.get('env'))
+        if resolved_env is not None:
+            for key in own_forbidden:
+                resolved_env.pop(key, None)
+        services[name] = resolved
 
 
 def _overlay_path(env: str, runtime_env_dir: Path = RUNTIME_ENV_DIR) -> Path:
@@ -279,9 +294,10 @@ def _apply_conversations_v3_stage(env_config: ConfigDict) -> None:
                 'category': 'reliability',
             }
         # desktop-backend sets its env inline in its deploy workflow and reads the code defaults
-        # (stage beta, no first build), which matches this source while it is beta. If this source
-        # leaves beta, desktop capability/episode responses diverge; desktop creates stay one-to-one.
-        # Moving to all needs that workflow to carry CONVERSATIONS_V3_STAGE too.
+        # (stage beta, no first build), so at stage all it still reads beta. That is inert today:
+        # desktop_backend.py mounts no conversations/episodes router (no capability response), and
+        # mark_new admits only omi/phone sources, so desktop creates stay one-to-one at any stage.
+        # A desktop route that reads the stage needs that workflow to carry CONVERSATIONS_V3_STAGE.
         gke = env_config.get('gke', {})
         config_map = gke.get('config_map')
         if isinstance(config_map, dict):

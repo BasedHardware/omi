@@ -73,11 +73,16 @@ from database.users import (
 )
 from utils import ai_profile_refresh, billing_recovery, screen_vector_entitlements
 from utils.observability.fallback import record_fallback
+from utils.observability.reasons import RetryReason
+from utils.workers.retry import retry_response
+from config import play_billing as play_billing_config
+from config import prepaid_code_redeem as prepaid_code_config
+import database.play_subscriptions as play_subscriptions_db
 from config.daily_summary_depth import DEFAULT_DAILY_SUMMARY_DEPTH, DailySummaryDepth
 from utils.sync.held_audio_summary import attach_subscription_held_audio
 from config.stt_cap_dispatch import any_execution_admission_enabled as funded_processing_enabled
 from utils.generated_compute import require_generated_compute, generated_compute_configured
-from models.users import ProcessingBacklog
+from models.users import PlayBillingConfig, ProcessingBacklog
 from config.stt_provider_policy import supports_live_multilingual_mode
 from models.users import AvailableLanguage, AvailableLanguagesResponse
 from utils.user_language import PRIMARY_LANGUAGE_OPTIONS, normalize_user_language
@@ -143,11 +148,17 @@ from database import user_usage as user_usage_db
 from utils import stripe as stripe_utils
 from utils.cloud_tasks import (
     AccountDeletionTaskAuthentication,
+    account_deletion_queue_path,
     get_account_deletion_tasks_max_attempts,
     verify_account_deletion_cloud_tasks_oidc,
     verify_conversation_batch_purge_cloud_tasks_oidc,
 )
-from database import batch_pipeline_conversation_purge_scans, conversation_batch_purge_jobs
+from database import (
+    batch_pipeline_conversation_purge_scans,
+    conversation_batch_purge_jobs,
+    speaker_evidence_verification as evidence_verification,
+)
+from database.speaker_evidence_verification import observe_sweep
 from utils.executors import db_executor, erasure_executor, llm_executor, run_blocking
 from utils.http_client import UnsafeWebhookURLError, safe_request_target
 from utils.log_sanitizer import sanitize
@@ -360,6 +371,22 @@ async def run_account_deletion_wipe(
             status_code=200, content={'status': 'dropped', 'reason': resolution_outcome or 'invalid_job'}
         )
 
+    receipt = None
+    if verification_token := payload.get(evidence_verification.TASK_FIELD):
+        defer, receipt = await run_blocking(
+            db_executor,
+            evidence_verification.admit_task,
+            uid,
+            wipe_job_id,
+            verification_token,
+            account_deletion_queue_path(),
+            request.headers.get('x-cloudtasks-queuename', ''),
+            request.headers.get('x-cloudtasks-taskname', ''),
+            task_authentication.retry_count,
+        )
+        if defer:
+            return retry_response(RetryReason.CALLBACK_PENDING)
+
     lock_key = f'account-deletion:{uid}'
     needs_erase = resolution.get('erase_armed') is True or go_queue_erase_required()
     lease = (ERASE_LEASE_SECONDS,) if needs_erase else ()
@@ -388,8 +415,13 @@ async def run_account_deletion_wipe(
         max_attempts = get_account_deletion_tasks_max_attempts()
         terminal = task_authentication.retry_count >= max_attempts - 1
         erase_args = (wipe_job_id,) if needs_erase else ()
-        ok = await run_deletion_wipe_with_lease(uid, task_authentication.retry_count, terminal, lock_token, *erase_args)
+        with observe_sweep(receipt):
+            ok = await run_deletion_wipe_with_lease(
+                uid, task_authentication.retry_count, terminal, lock_token, *erase_args
+            )
         if ok:
+            if receipt is not None:
+                await run_blocking(db_executor, evidence_verification.complete_task, receipt)
             return JSONResponse(status_code=200, content={'status': 'done'})
 
         if terminal:
@@ -1301,6 +1333,7 @@ def get_user_subscription_endpoint(
     uid: str = Depends(auth.get_current_user_uid_no_byok_validation),
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
     x_app_version: Optional[str] = Header(None, alias='X-App-Version'),
+    x_app_build: Optional[str] = Header(None, alias='X-App-Build'),
 ):
     """Gets the user's subscription plan and usage, plus the one transcription-allowance answer."""
     already_read: dict[str, Any] = {}
@@ -1371,7 +1404,21 @@ def get_user_subscription_endpoint(
         held = response.held_audio
         audio = {'count': held.count, 'seconds': held.seconds} if held else {'count': 0, 'seconds': 0}
         response.processing_backlog = processing_backlog.snapshot(uid, allowance=funded, audio=audio)
+    if uses_play := play_billing_config.client_uses_play(x_app_platform, x_app_build, uid):
+        response.play_billing = PlayBillingConfig.model_validate(play_billing_config.client_config_payload(uid))
+        try:
+            play_subscriptions_db.remember_account_once(response.play_billing.obfuscated_account_id, uid)
+        except Exception:  # noqa: BLE001 - the map only helps bind notification-only tokens
+            logger.warning('play_billing account map write failed')
+    _apply_prepaid_code_switch(response, uid, uses_play=uses_play)
     return response
+
+
+def _apply_prepaid_code_switch(response: UserSubscriptionResponse, uid: str, *, uses_play: bool = False) -> None:
+    """Only the ability to redeem follows the switch (a Play build always can). A stored prepaid plan keeps
+    its `prepaid` marker either way, so a redeemed reader never sees Resubscribe when the switch changes."""
+    if uses_play or prepaid_code_config.enabled_for(uid):
+        response.prepaid_code_redeem = True
 
 
 @router.post('/v1/users/processing-backlog/process', response_model=ProcessingBacklog, tags=['v1'])
@@ -1388,6 +1435,17 @@ def process_waiting_recordings(
     if snapshot is not None and snapshot.state == 'capped':
         raise HTTPException(status_code=402, detail={'error': 'usage_budget_exhausted', 'trigger': 'usage_budget'})
     return snapshot
+
+
+def _never_subscribed(uid: str) -> bool:
+    """No Stripe customer and no Play subscription ever: the only readers a trial may be promised to.
+
+    Fails closed: when a lookup is unavailable the client must not promise a trial checkout refuses.
+    """
+    try:
+        return not users_db.get_stripe_customer_id(uid) and not play_subscriptions_db.is_play_customer(uid)
+    except Exception:  # noqa: BLE001 - eligibility is a promotion hint, never worth a 500
+        return False
 
 
 def _user_subscription_response(
@@ -1620,14 +1678,8 @@ def _user_subscription_response(
             )
 
     show_subscription_ui = not should_hide_subscription_ui(uid, x_app_platform, x_app_version)
-    # Read from the true plan, before the client remap below. Fail closed: when the Stripe customer
-    # lookup is unavailable the client must not promise a trial the checkout may refuse.
-    trial_eligible = False
-    if subscription.plan == PlanType.basic:
-        try:
-            trial_eligible = not users_db.get_stripe_customer_id(uid)
-        except Exception:  # noqa: BLE001 - eligibility is a promotion hint, never worth a 500
-            trial_eligible = False
+    # Read from the true plan, before the client remap below.
+    trial_eligible = subscription.plan == PlanType.basic and _never_subscribed(uid)
 
     # Phone-call feature access + monthly free-tier usage snapshot.
     phone_call_quota = PhoneCallQuota(**get_phone_call_quota_snapshot(uid).to_client_dict())

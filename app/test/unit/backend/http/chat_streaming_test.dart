@@ -50,19 +50,25 @@ void main() {
   }
 
   test('live catch-up 404 never falls back to the final-summary endpoint', () async {
-    final paths = <String>[];
-    final transport = seams((request) async {
-      paths.add(request.url.path);
-      return sse(const [], status: 404);
-    });
+    final requests = <http.BaseRequest>[];
+    final transport = ApiStreamingSeams(
+      headers: (request) async => {...request.headers, 'Authorization': 'Bearer token'},
+      transport: (request) async {
+        requests.add(request);
+        return sse(const [], status: 404);
+      },
+    );
     expect(
       await streamConversationSummary('conversation', recap: recapProof, canDispatch: () => true, seams: transport)
           .toList(),
       [isA<SummaryFailed>()],
     );
-    expect(paths, ['/v1/conversations/conversation/summary/live-catchup/stream']);
+    expect(requests.map((request) => request.url.path), [
+      '/v1/conversations/conversation/summary/live-catchup/stream',
+    ]);
     await streamConversationSummary('conversation', seams: transport).toList();
-    expect(paths.last, '/v1/conversations/conversation/summary/stream');
+    expect(requests.last.url.path, '/v1/conversations/conversation/summary/stream');
+    expect(requests.last.headers['X-Omi-Recording-Detail'], '1');
   });
 
   test('live recap sends proof once per logical request and recognizes only typed denial', () async {

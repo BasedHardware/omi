@@ -12,6 +12,7 @@ import inspect
 from functools import wraps
 from database.batch_account_authority_schema import USER_POLICY_FIELDS
 from google.cloud.firestore_v1.types import Document, DocumentMask, Value, Write
+from models.finalization_owner import CUSTODY_FIELD
 
 _ERASING_ROOTS: ContextVar[frozenset[str]] = ContextVar("home_feed_erasing_roots", default=frozenset())
 
@@ -51,6 +52,7 @@ SAFE_FIELDS = frozenset(
         'share_email_in_flight',
         'external_data',
         'summary_due_at',
+        'v3_live_title_state',
     }
 )
 
@@ -90,6 +92,10 @@ def affects_home(write):
         return True
     fields = {p.split('.', 1)[0].strip('`') for p in write.update_mask.field_paths}
     fields.update(t.field_path.split('.', 1)[0] for t in write.update_transforms)
+    if parts[7] == 'conversations':
+        # Nested lease and receipt updates carry no Home content. Mixed
+        # output commits still follow the normal Home invalidation rules.
+        fields.discard(CUSTODY_FIELD)
     additive = write.update.fields.get('home_append_only')
     if (
         additive is not None

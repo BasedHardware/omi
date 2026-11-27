@@ -1,5 +1,7 @@
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
+const {readFileSync} = require('node:fs');
+const {join} = require('node:path');
 const {decision} = require('../ui-author-approval.cjs');
 const actor = {id:9387252};
 const nik = {id:43514161};
@@ -51,16 +53,229 @@ function fixture() {
   const comments = {1:[]};
   const statuses = [];
   const calls = [];
+  const refs = new Set();
   const github = {rest:{pulls:{get:async ({pull_number}) => ({data:prs.find(p => p.number === pull_number)}),list:'prs'},
     issues:{listComments:'comments',createComment:async ({issue_number,body}) => {
       comments[issue_number].push({id:10,user:{type:'Bot'},body});
-    }},repos:{createCommitStatus:async s => statuses.push(s),compareCommitsWithBasehead:async args => {
+    }},git:{
+      createRef:async ({ref}) => {
+        const key = ref.slice('refs/'.length);
+        if (refs.has(key)) throw Object.assign(new Error('Reference already exists'),{status:422});
+        refs.add(key);
+      },
+      getRef:async ({ref}) => {
+        if (!refs.has(ref)) throw Object.assign(new Error('Reference not found'),{status:404});
+      },
+      deleteRef:async ({ref}) => assert.ok(refs.delete(ref)),
+    },repos:{createCommitStatus:async s => statuses.push({...s,node_id:String(statuses.length + 1)}),compareCommitsWithBasehead:async args => {
       calls.push(args);return {data:{files:ui,commits:[{sha:'d'.repeat(40)}],total_commits:1}};
-    }}},paginate:async (method,args) => method === 'prs' ? prs.map(p => ({...p})) : comments[args.issue_number],
+    }}},paginate:async (method,args) => method === 'prs'
+      ? prs.filter(p => p.state === args.state).map(p => ({...p})) : comments[args.issue_number],
     graphql:async (query,args) => ({repository:{object:{oid:args.oid,authors:{totalCount:0,nodes:[]}}}})};
-  const context = {repo:{owner:'test',repo:'test'},payload:{pull_request:{number:1}}};
-  return {p,prs,comments,statuses,calls,github,context};
+  github.paginate.iterator = async function* (method,{ref}) {
+    yield {data:statuses.filter(s => s.sha === ref).reverse()};
+  };
+  const context = {repo:{owner:'test',repo:'test'},sha:p.base.sha,payload:{pull_request:{...p}}};
+  return {p,prs,comments,statuses,calls,github,context,refs};
 }
+test('over 100 same-head requests coalesce on main and keep the latest decision', async () => {
+  const workflow = readFileSync(join(__dirname,'../../workflows/ui-author-approval.yml'),'utf8');
+  const [requestJob, workerJob] = workflow.split('\n  guard:\n');
+  assert.doesNotMatch(requestJob,/^\s*concurrency:/m);
+  assert.match(workerJob,/if: github\.event_name == 'workflow_dispatch' && github\.ref == 'refs\/heads\/main'/);
+  assert.match(workerJob,/group: .*inputs\.head_sha/);
+  assert.match(workerJob,/cancel-in-progress: false/);
+  assert.doesNotMatch(workerJob,/^\s*queue:/m);
+
+  const f = fixture();
+  const {github, context} = f;
+  let pending;
+  let requests = 0;
+  github.rest.actions = {createWorkflowDispatch:async request => {
+    assert.equal(request.ref,'main');
+    assert.equal(request.workflow_id,'ui-author-approval.yml');
+    assert.deepEqual(request.inputs,{pull_number:'1',head_sha:f.p.head.sha});
+    // Model the platform's single waiting slot for the main worker.
+    pending = request.inputs;
+    requests++;
+  }};
+  const evaluate = inputs => run.evaluateDispatch({github,context:{...context,payload:{inputs}}});
+  const atDecision = Promise.withResolvers();
+  const finish = Promise.withResolvers();
+  const list = github.paginate;
+  github.paginate = Object.assign(async (method,args) => {
+    const result = await list(method,args);
+    if (method === 'comments' && requests === 1) {
+      atDecision.resolve();
+      const snapshot = [...result];
+      await finish.promise;
+      return snapshot;
+    }
+    return result;
+  },{iterator:list.iterator});
+  f.comments[1].push(approve);
+  await run.requestEvaluation(f);
+  const running = evaluate(pending);
+  pending = undefined;
+  await atDecision.promise;
+
+  const commentContext = {...context,payload:{issue:{number:1,pull_request:{}}}};
+  try {
+    for (let i = 0; i < 101; i++) await run.requestEvaluation({github,context:commentContext});
+    f.comments[1].push({id:2,user:nik,body:`/reject-ui ${f.p.head.sha}`});
+    await run.requestEvaluation({github,context:commentContext});
+    assert.equal(requests,103);
+    assert.ok(f.statuses.every(s => s.state === 'pending'));
+  } finally {
+    finish.resolve();
+    await running;
+  }
+  await evaluate(pending);
+  assert.deepEqual(f.statuses.filter(s => s.state !== 'pending').map(({state,sha}) => [state,sha]),[
+    ['failure',f.p.head.sha],
+  ]);
+});
+test('a dispatch rejection replaces a same-head approval and cannot be evaluated by an old dispatch', async () => {
+  const f = fixture();
+  const {github,context,statuses,refs} = f;
+  let inputs;
+  github.rest.actions = {createWorkflowDispatch:async request => {inputs = request.inputs;}};
+  f.comments[1].push(approve);
+  await run.requestEvaluation(f);
+  const evaluate = () => run.evaluateDispatch({github,context:{...context,payload:{inputs}}});
+  await evaluate();
+  assert.equal(statuses.at(-1).state,'success');
+  github.rest.actions.createWorkflowDispatch = async () => {
+    assert.equal(statuses.at(-1).state,'pending');
+    throw new Error('rate limited');
+  };
+  await assert.rejects(run.requestEvaluation(f),/Could not request UI approval evaluation.*rate limited/);
+  await evaluate();
+  assert.deepEqual(statuses.map(s => s.state),['pending','pending','success','pending','failure']);
+  assert.equal(refs.size,0);
+});
+test('a rejection invalidates prior success when the PR lookup fails', async () => {
+  const f = fixture();
+  const {github,context,statuses} = f;
+  let inputs;
+  github.rest.actions = {createWorkflowDispatch:async request => {inputs = request.inputs;}};
+  f.comments[1].push(approve);
+  await run.requestEvaluation(f);
+  const evaluate = () => run.evaluateDispatch({github,context:{...context,payload:{inputs}}});
+  await evaluate();
+  assert.equal(statuses.at(-1).state,'success');
+
+  const comment = {id:2,user:nik,body:`/reject-ui ${f.p.head.sha}`};
+  f.comments[1].push(comment);
+  const payload = {action:'created',issue:{number:1,pull_request:{}},comment};
+  github.rest.pulls.get = async () => {throw new Error('PR lookup unavailable');};
+  const getRef = github.rest.git.getRef;
+  github.rest.git.getRef = async args => args.ref === 'pull/1/head'
+    ? {data:{object:{sha:f.p.head.sha}}} : getRef(args);
+  github.rest.actions.createWorkflowDispatch = async () => assert.fail('unresolved PR was dispatched');
+  await assert.rejects(run.requestEvaluation({github,context:{...context,payload}}),/PR lookup unavailable/);
+  await evaluate();
+  assert.deepEqual(statuses.filter(s => s.state !== 'pending').map(s => [s.sha,s.state]),[
+    [f.p.head.sha,'success'],[f.p.head.sha,'failure'],
+  ]);
+});
+test('a request times out on a leaked lock and supersedes prior success', async t => {
+  const f = fixture();
+  const {github,context,statuses,refs} = f;
+  let inputs;
+  github.rest.actions = {createWorkflowDispatch:async request => {inputs = request.inputs;}};
+  f.comments[1].push(approve);
+  await run.requestEvaluation(f);
+  await run.evaluateDispatch({github,context:{...context,payload:{inputs}}});
+  assert.equal(statuses.at(-1).state,'success');
+
+  const ref = `tags/ui-author-approval-lock/${f.p.head.sha}`;
+  refs.add(ref);
+  let now = 0;
+  t.mock.method(Date,'now',() => (now += 45_000));
+  github.rest.actions.createWorkflowDispatch = async () => assert.fail('blocked request was dispatched');
+  await assert.rejects(run.requestEvaluation(f),/Could not acquire UI approval status lock/);
+  assert.equal(statuses.at(-1).state,'failure');
+  assert.equal(statuses.at(-1).sha,f.p.head.sha);
+  assert.deepEqual([...refs],[ref]);
+});
+test('request admission waits for a success write already in flight', async () => {
+  const f = fixture();
+  const {github,context,statuses} = f;
+  let inputs;
+  github.rest.actions = {createWorkflowDispatch:async request => {inputs = request.inputs;}};
+  f.comments[1].push(approve);
+  await run.requestEvaluation(f);
+  const writing = Promise.withResolvers();
+  const requested = Promise.withResolvers();
+  const finish = Promise.withResolvers();
+  const save = github.rest.repos.createCommitStatus;
+  github.rest.repos.createCommitStatus = async status => {
+    if (status.state === 'success') {
+      writing.resolve();
+      await finish.promise;
+    }
+    await save(status);
+  };
+  const getRef = github.rest.git.getRef;
+  github.rest.git.getRef = async args => {
+    await getRef(args);
+    requested.resolve();
+  };
+  const running = run.evaluateDispatch({github,context:{...context,payload:{inputs}}});
+  await writing.promise;
+  const request = run.requestEvaluation(f);
+  try {
+    await requested.promise;
+    assert.deepEqual(statuses.map(s => s.state),['pending','pending']);
+  } finally {
+    finish.resolve();
+    await Promise.all([running,request]);
+  }
+  assert.deepEqual(statuses.map(s => s.state),['pending','pending','success','pending','pending']);
+});
+test('the dispatched worker rejects invalid routing inputs before writing status', async () => {
+  const {github, context, statuses} = fixture();
+  const dispatch = inputs => run.evaluateDispatch({github,context:{repo:context.repo,payload:{inputs}}});
+  await assert.rejects(dispatch({pull_number:'1',head_sha:'main'}),/Invalid UI approval evaluation inputs/);
+  await assert.rejects(dispatch({pull_number:'0',head_sha:pr.head.sha}),/Invalid UI approval evaluation inputs/);
+  assert.deepEqual(statuses,[]);
+});
+test('synchronize still reconciles both active heads if one dispatch fails', async () => {
+  const f = fixture();
+  const before = f.p.head.sha;
+  const current = 'e'.repeat(40);
+  f.prs.push({...f.p,number:2});
+  f.comments[2] = [approve];
+  f.p.head = {sha:current};
+  f.context.payload = {action:'synchronize',before,pull_request:{...f.p}};
+  let inputs;
+  f.github.rest.actions = {createWorkflowDispatch:async request => {
+    if (request.inputs.head_sha === current) throw new Error('dispatch failed for current head');
+    inputs = request.inputs;
+  }};
+  await assert.rejects(run.requestEvaluation(f),/dispatch failed for current head/);
+  assert.equal(inputs.head_sha,before);
+  await run.evaluateDispatch({...f,context:{...f.context,payload:{inputs}}});
+  assert.deepEqual(f.statuses.filter(s => s.sha === before).map(s => s.state),['pending','pending','success']);
+  assert.deepEqual(f.statuses.filter(s => s.sha === current).map(s => s.state),['pending','failure']);
+});
+test('a closed event only dispatches if its head is still in use', async () => {
+  const f = fixture();
+  f.p.state = 'closed';
+  f.context.payload.action = 'closed';
+  f.context.payload.pull_request.state = 'closed';
+  const requests = [];
+  f.github.rest.actions = {createWorkflowDispatch:async request => requests.push(request)};
+  assert.equal(await run.requestEvaluation(f),0);
+  assert.deepEqual(requests,[]);
+  assert.deepEqual(f.statuses,[]);
+
+  f.prs.push({...f.p,number:2,state:'open'});
+  assert.equal(await run.requestEvaluation(f),1);
+  assert.equal(requests[0].inputs.head_sha,f.p.head.sha);
+  assert.deepEqual(f.statuses.map(s => s.state),['pending','pending']);
+});
 test('workflow blocks repeatedly, notifies once per head, approves and revokes', async () => {
   const f = fixture();
   await run(f); await run(f); await run(f);
@@ -87,6 +302,77 @@ test('another opener sharing SHA cannot clear the actor PR requirement', async (
   f.comments[1].push(approve);
   await run(f); assert.equal(f.statuses.at(-1).state,'success');
 });
+function stackFixture() {
+  const f = fixture();
+  f.p.base = {ref:'lane/firestore',sha:'b'.repeat(40)};
+  f.context.payload = {issue:{number:1,pull_request:{}}};
+  const main = 'c'.repeat(40);
+  f.github.rest.git = {getRef:async ({ref}) => {
+    assert.equal(ref,'heads/main');
+    return {data:{object:{sha:main}}};
+  }};
+  return {...f,main,headSha:f.p.head.sha};
+}
+test('stacked non-UI PR clears approval using the immutable diff against main', async () => {
+  const f = stackFixture();
+  f.github.rest.repos.compareCommitsWithBasehead = async args => {
+    f.calls.push(args);
+    return {data:{files:[{filename:'backend/router.py'}],commits:[],total_commits:0}};
+  };
+  await run(f);
+  assert.equal(f.statuses.at(-1).state,'success');
+  assert.equal(f.calls[0].basehead,`${f.main}...${f.headSha}`);
+  assert.equal(f.comments[1].length,0);
+});
+test('stacked UI inherited from the lane still requires approval at the exact head', async () => {
+  const f = stackFixture();
+  await run(f);
+  assert.equal(f.calls[0].basehead,`${f.main}...${f.headSha}`);
+  assert.equal(f.statuses.at(-1).state,'failure');
+  f.comments[1].push(approve);
+  await run(f);
+  assert.equal(f.statuses.at(-1).state,'success');
+});
+test('a main-target PR sharing the stack head takes precedence over stack approval', async () => {
+  const f = stackFixture();
+  f.prs.push({...f.p,number:2,base:{ref:'main',sha:f.main}});
+  f.comments[1].push(approve);
+  f.comments[2] = [];
+  f.github.rest.git.getRef = async () => assert.fail('stack fallback used despite a main PR');
+  await run(f);
+  assert.equal(f.statuses.at(-1).state,'failure');
+});
+test('same-head stacks require an approval on each affected PR', async () => {
+  const f = stackFixture();
+  f.prs.push({...f.p,number:2,base:{ref:'lane/batch',sha:'e'.repeat(40)}});
+  f.comments[1].push(approve);
+  f.comments[2] = [];
+  await run(f);
+  assert.equal(f.statuses.at(-1).state,'failure');
+  assert.equal(f.calls.length,1);
+  f.comments[2].push(approve);
+  await run(f);
+  assert.equal(f.statuses.at(-1).state,'success');
+});
+test('stack approval refuses if main or the lane moves during verification', async () => {
+  for (const moved of ['main','lane']) {
+    const f = stackFixture();
+    f.comments[1].push(approve);
+    const paginate = f.github.paginate;
+    f.github.paginate = (method,args) => {
+      if (method === 'comments') {
+        if (moved === 'main') {
+          f.github.rest.git.getRef = async () => ({data:{object:{sha:'d'.repeat(40)}}});
+        } else {
+          f.prs[0] = {...f.p,base:{...f.p.base,sha:'d'.repeat(40)}};
+        }
+      }
+      return paginate(method,args);
+    };
+    await assert.rejects(run(f),/moved during verification/);
+    assert.equal(f.statuses.at(-1).state,'failure');
+  }
+});
 test('all evidence is immutable across H -> B -> H movement', async () => {
   const f = fixture();
   f.github.rest.pulls.listFiles = () => {throw new Error('mutable files forbidden');};
@@ -109,10 +395,26 @@ test('actual desktop view locations are gated, services stay out', () => {
   }
 });
 
-test('resolved SHA mismatch cannot evaluate another concurrency group', async () => {
-  const f = fixture(); await run({...f,headSha:'e'.repeat(40)});
-  assert.ok(f.statuses.every(s => s.sha === 'e'.repeat(40)));
-  assert.equal(f.statuses.at(-1).state,'failure');
+test('an unused locked SHA leaves its status and the current head alone', async () => {
+  const f = stackFixture();
+  await run({...f,headSha:'e'.repeat(40)});
+  assert.equal(f.statuses.length,0);
+  assert.equal(f.calls.length,0);
+});
+test('a comment on a closed PR preserves its historical status', async () => {
+  const f = stackFixture();
+  f.p.state = 'closed';
+  await run(f);
+  assert.deepEqual(f.statuses,[]);
+  assert.deepEqual(f.calls,[]);
+
+  // A closed trigger can still share the head with an open stack.
+  f.prs.push({...f.p,number:2,state:'open'});
+  f.comments[2] = [approve];
+  await run(f);
+  assert.deepEqual(f.statuses.map(s => [s.sha,s.state]),[
+    [f.headSha,'pending'], [f.headSha,'success'],
+  ]);
 });
 test('arbitrarily named SwiftUI file is gated by immutable contents', async () => {
   const f = fixture();

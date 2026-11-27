@@ -3,18 +3,55 @@
 
 from __future__ import annotations
 
+import copy
+import hashlib
 import importlib.util
+from itertools import takewhile
+import json
+import os
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 import re
 import tempfile
+import textwrap
+import time
 import unittest
+from unittest.mock import MagicMock, patch
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT / ".github" / "scripts") not in sys.path:
     sys.path.insert(0, str(ROOT / ".github" / "scripts"))
 from workflow_composite_contract import backend_deploy_contract_text
+import app_icon_containment_probe as icon_probe
+
+ICON_SOURCE = "a" * 40
+ICON_REVISION = "backend-aaaaaaa-123-1"
+ICON_INCUMBENT = "backend-bbbbbbb-123-1"
+ICON_TAG = "icon-" + hashlib.sha256(ICON_REVISION.encode()).hexdigest()[:24]
+BACKEND_HOST = "backend-prod-uc.a.run.app"
+ICON_HOST = f"{ICON_TAG}---{BACKEND_HOST}"
+
+
+def icon_candidate_documents():
+    revision = {
+        "metadata": {"name": ICON_REVISION, "labels": {"serving.knative.dev/service": "backend"}},
+        "spec": {"containers": [{"env": [{"name": "OMI_BACKEND_RELEASE_SHA", "value": ICON_SOURCE}]}]},
+        "status": {"conditions": [{"type": "Ready", "status": "True"}]},
+    }
+    traffic = [
+        {"revisionName": ICON_INCUMBENT, "percent": 100},
+        {"revisionName": ICON_REVISION, "tag": ICON_TAG},
+    ]
+    service = {
+        "metadata": {"name": "backend", "generation": 5, "resourceVersion": "101"},
+        "spec": {"traffic": traffic},
+        "status": {"observedGeneration": 5, "url": f"https://{BACKEND_HOST}", "traffic": copy.deepcopy(traffic)},
+    }
+    service["status"]["traffic"][1]["url"] = f"https://{ICON_HOST}"
+    return revision, service
+
 
 UPDATES_SOURCE = (ROOT / "backend/routers/updates.py").read_text(encoding="utf-8")
 
@@ -26,6 +63,293 @@ SPEC.loader.exec_module(CHECKER)
 
 
 class GcpBackendProductionBoundaryTests(unittest.TestCase):
+    def test_app_icon_probe_sends_one_request_and_only_accepts_typed_424(self) -> None:
+        cases = (
+            (424, b'{"detail":{"code":"icon_generation_disabled"}}', "icon_generation_disabled"),
+            (424, b'{"detail":{"code":"untrusted detail"}}', "unexpected_response"),
+            (424, b'["unexpected JSON shape"]', "unexpected_response"),
+            (424, b"x" * 4097, "unexpected_response"),
+            (307, b"redirect", "unexpected_status"),
+            (200, b"image response", "unexpected_status"),
+            (500, b"upstream body", "unexpected_status"),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            token_file = Path(directory) / "token"
+            token_file.write_text("test-token", encoding="ascii")
+            for status, body, outcome in cases:
+                with self.subTest(status=status, outcome=outcome):
+                    with patch("app_icon_containment_probe.http.client.HTTPSConnection") as https:
+                        connection = https.return_value
+                        response = MagicMock(status=status)
+                        response.read.return_value = body
+                        connection.getresponse.return_value.__enter__.return_value = response
+
+                        self.assertEqual(icon_probe.probe(token_file, ICON_HOST), (status, outcome))
+                        https.assert_called_once_with(ICON_HOST, timeout=15)
+                        connection.request.assert_called_once()
+                        self.assertEqual(connection.request.call_args.args, ("POST", "/v1/app/generate-icon"))
+                        self.assertEqual(
+                            connection.request.call_args.kwargs["headers"]["Authorization"], "Bearer test-token"
+                        )
+                        connection.close.assert_called_once()
+                        if status != 424:
+                            response.read.assert_not_called()
+
+    def test_app_icon_probe_does_not_retry_transport_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            token_file = Path(directory) / "token"
+            token_file.write_text("test-token", encoding="ascii")
+            with patch("app_icon_containment_probe.http.client.HTTPSConnection") as https:
+                connection = https.return_value
+                connection.getresponse.side_effect = TimeoutError("untrusted transport detail")
+
+                self.assertEqual(icon_probe.probe(token_file, ICON_HOST), (None, "response_unavailable"))
+                connection.request.assert_called_once()
+                connection.getresponse.assert_called_once()
+                connection.close.assert_called_once()
+
+    def test_app_icon_probe_requires_admitted_revision_and_converged_tag_before_sending(self) -> None:
+        for case in ("source", "service", "missing_tag", "wrong_target", "shared_url", "foreign_url",
+                     "unknown_generation", "public_traffic", "desired_tag", "duplicate_tag", "latest_target"):
+            with self.subTest(case=case):
+                revision, service = icon_candidate_documents()
+                target = service["status"]["traffic"][1]
+                if case == "source":
+                    revision["spec"]["containers"][0]["env"][0]["value"] = "b" * 40
+                elif case == "service":
+                    revision["metadata"]["labels"]["serving.knative.dev/service"] = "backend-integration"
+                elif case == "missing_tag":
+                    service["status"]["traffic"].pop()
+                elif case == "wrong_target":
+                    target["revisionName"] = ICON_INCUMBENT
+                elif case == "shared_url":
+                    target["url"] = f"https://{BACKEND_HOST}"
+                elif case == "foreign_url":
+                    target["url"] = f"https://{ICON_HOST}@example.invalid"
+                elif case == "unknown_generation":
+                    service["status"].pop("observedGeneration")
+                elif case == "public_traffic":
+                    service["status"]["traffic"][0]["percent"] = 90
+                    target["percent"] = 10
+                elif case == "desired_tag":
+                    service["spec"]["traffic"][1]["revisionName"] = ICON_INCUMBENT
+                elif case == "duplicate_tag":
+                    service["status"]["traffic"].append(copy.deepcopy(target))
+                elif case == "latest_target":
+                    target["latestRevision"] = True
+
+                with (
+                    patch.object(icon_probe, "describe", side_effect=[revision, service]),
+                    patch.object(icon_probe.subprocess, "run") as mint,
+                    patch.object(icon_probe, "probe") as request,
+                ):
+                    self.assertEqual(
+                        icon_probe.run_probe(Path("token"), ICON_REVISION, ICON_SOURCE),
+                        (None, "candidate_identity_unverified"),
+                    )
+                    mint.assert_not_called()
+                    request.assert_not_called()
+
+    def test_app_icon_probe_credits_typed_424_only_with_unchanged_candidate_binding(self) -> None:
+        for case in ("stable", "missing", "retargeted", "resource_version_changed"):
+            with self.subTest(case=case):
+                revision, service = icon_candidate_documents()
+                operator_readback = copy.deepcopy(service)
+                if case == "missing":
+                    operator_readback["status"]["traffic"].pop()
+                elif case == "retargeted":
+                    operator_readback["status"]["traffic"][1]["revisionName"] = ICON_INCUMBENT
+                elif case == "resource_version_changed":
+                    operator_readback["metadata"]["resourceVersion"] = "102"
+
+                token = Path("token")
+                with (
+                    patch.object(icon_probe, "describe", side_effect=[revision, service, operator_readback]) as read,
+                    patch.object(icon_probe.subprocess, "run") as mint,
+                    patch.object(icon_probe, "probe", return_value=(424, "icon_generation_disabled")) as request,
+                ):
+                    outcome = "icon_generation_disabled" if case == "stable" else "candidate_identity_unverified"
+                    self.assertEqual(icon_probe.run_probe(token, ICON_REVISION, ICON_SOURCE), (424, outcome))
+                    self.assertEqual([call.args[:2] for call in read.call_args_list], [
+                        ("revisions", ICON_REVISION), ("services", "backend"), ("services", "backend"),
+                    ])
+                    mint.assert_called_once()
+                    self.assertEqual(mint.call_args.args[0][-6:], [
+                        "--secret-project", "based-hardware", "--firebase-project", "based-hardware",
+                        "--token-output", str(token),
+                    ])
+                    request.assert_called_once_with(token, ICON_HOST)
+
+    def test_app_icon_probe_refuses_unbound_dispatch(self) -> None:
+        with patch.object(icon_probe, "describe") as read:
+            self.assertEqual(
+                icon_probe.run_probe(Path("token"), "", ICON_SOURCE), (None, "candidate_input_invalid")
+            )
+            self.assertEqual(
+                icon_probe.run_probe(Path("token"), ICON_REVISION, ""), (None, "candidate_input_invalid")
+            )
+            read.assert_not_called()
+
+    def test_all_service_production_smoke_requires_completed_http_401(self) -> None:
+        composite = (ROOT / CHECKER.DEPLOY_BACKEND_STACK_ACTION).read_text(encoding="utf-8")
+        smoke = composite.split(f"- name: {CHECKER.PROD_SMOKE}\n", 1)[1].split("\n    - name: ", 1)[0]
+        script = textwrap.dedent(smoke.split("\n      run: |\n", 1)[1])
+        cases = {
+            "unauthorized": ("401", 0, 0, ["POST"]),
+            "timeout_after_headers": ("401", 28, 28, []),
+            "unexpected_response": ("403", 0, 1, []),
+        }
+        for scenario, (http_status, curl_exit, smoke_exit, expected_calls) in cases.items():
+            with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                curl = root / "curl"
+                curl.write_text(
+                    '#!/bin/sh\ncase " $* " in *" --connect-timeout 5 --max-time 10 "*) ;; *) exit 2 ;; esac\n'
+                    'printf "%s" "$FIXTURE_HTTP_STATUS"\nexit "$FIXTURE_CURL_EXIT"\n',
+                    encoding="utf-8",
+                )
+                curl.chmod(0o700)
+                (root / "firebase_release_probe_token.py").write_text(
+                    "import sys\nfrom pathlib import Path\nPath(sys.argv[-1]).touch()\n",
+                    encoding="utf-8",
+                )
+                (root / "transcription_capability_probe.py").write_text(
+                    textwrap.dedent("""\
+                        import os
+                        from pathlib import Path
+                        import sys
+
+                        root = Path(os.environ["RUNNER_TEMP"])
+                        token_file = root / "firebase-production-serving-token"
+                        assert token_file.exists()
+                        assert sys.argv[1:] == [
+                            "--candidate-api-url", "https://api.omi.me",
+                            "--bearer-token-file", str(token_file), "--json-only",
+                        ]
+                        with (root / "calls").open("a") as stream:
+                            stream.write("POST\\n")
+                        """),
+                    encoding="utf-8",
+                )
+                env = {
+                    **os.environ,
+                    "PATH": f"{root}:{os.environ['PATH']}",
+                    "RUNNER_TEMP": directory,
+                    "DEPLOY_CONTROL_SCRIPTS": directory,
+                    "PROBE_SECRET_PROJECT": "fixture",
+                    "FIREBASE_AUTH_PROJECT_ID": "fixture",
+                    "SMOKE_CLOUD_RUN_SERVICE": "all",
+                    "FIXTURE_HTTP_STATUS": http_status,
+                    "FIXTURE_CURL_EXIT": str(curl_exit),
+                }
+                result = subprocess.run(["bash", "-c", script], env=env, text=True, capture_output=True, timeout=10)
+                self.assertEqual(result.returncode, smoke_exit, result.stderr)
+                calls = root / "calls"
+                self.assertEqual(calls.read_text().splitlines() if calls.exists() else [], expected_calls)
+                self.assertFalse((root / "firebase-production-serving-token").exists())
+
+        rollback = composite.split("    - name: Restore Cloud Run traffic snapshot after failed promotion")[-1]
+        rollback_condition = rollback.split("\n      shell:", 1)[0]
+        self.assertIn("inputs.deploy_profile == 'manual' && (failure() || cancelled())", rollback_condition)
+        self.assertIn(CHECKER.ROLLBACK_CONDITION, rollback_condition)
+
+    def test_selected_production_smoke_retries_only_before_an_http_response(self) -> None:
+        composite = (ROOT / CHECKER.DEPLOY_BACKEND_STACK_ACTION).read_text(encoding="utf-8")
+        smoke = composite.split(f"- name: {CHECKER.PROD_SMOKE}\n", 1)[1].split("\n    - name: ", 1)[0]
+        run_block = smoke.split("\n      run: |\n", 1)[1]
+        # Stop at the end of the YAML block, before any step-level comments.
+        run_lines = takewhile(lambda line: not line.strip() or line.startswith("        "), run_block.splitlines(True))
+        script = textwrap.dedent("".join(run_lines))
+        cases = {
+            "pass": (0, 1),
+            "transport_then_pass": (0, 2),
+            "persistent_transport": (1, 2),
+            "hard_failure": (1, 1),
+            "body_timeout": (1, 1),
+            "reservation_rejected": (1, 0),
+            "deadline": (1, 0),
+            "cancel_during_delay": (143, 1),
+        }
+        for scenario, (exit_code, attempts) in cases.items():
+            with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                curl = root / "curl"
+                curl.write_text(
+                    '#!/bin/sh\ncase " $* " in *" --connect-timeout 5 --max-time 10 "*) ;; *) exit 2 ;; esac\n'
+                    'if [ "$SCENARIO" = reservation_rejected ]; then printf 403; else printf 401; fi\n',
+                    encoding="utf-8",
+                )
+                curl.chmod(0o700)
+                (root / "firebase_release_probe_token.py").write_text(
+                    "import sys\nfrom pathlib import Path\nPath(sys.argv[-1]).touch()\n",
+                    encoding="utf-8",
+                )
+                (root / "transcription_capability_probe.py").write_text(
+                    textwrap.dedent("""\
+                        import os
+                        import json
+                        from pathlib import Path
+                        import sys
+                        import time
+
+                        scenario = os.environ["SCENARIO"]
+                        assert sys.argv[-4:] == ["--timeout-seconds", "30", "--no-redirects", "--json-only"]
+                        calls = Path(os.environ["RUNNER_TEMP"]) / "calls"
+                        with calls.open("a") as stream:
+                            stream.write("POST\\n")
+                        attempts = len(calls.read_text().splitlines())
+                        if scenario == "deadline":
+                            time.sleep(20)
+                        passed = scenario == "pass" or (scenario == "transport_then_pass" and attempts == 2)
+                        details = {"error_kind": "network_error"}
+                        if scenario == "hard_failure":
+                            details = {"http_status": 200, "phrase_match": False}
+                        if scenario == "body_timeout":
+                            details["http_status"] = 200
+                        print(json.dumps({"status": "PASS" if passed else "FAIL", "checks": [{"details": details}]}))
+                        sys.exit(0 if passed else 1)
+                        """),
+                    encoding="utf-8",
+                )
+                env = {
+                    **os.environ,
+                    "PATH": f"{root}:{os.environ['PATH']}",
+                    "RUNNER_TEMP": directory,
+                    "DEPLOY_CONTROL_SCRIPTS": directory,
+                    "PROBE_SECRET_PROJECT": "fixture",
+                    "FIREBASE_AUTH_PROJECT_ID": "fixture",
+                    "SMOKE_CLOUD_RUN_SERVICE": "backend",
+                    "SCENARIO": scenario,
+                }
+                attempt_script = script
+                if scenario == "deadline":
+                    self.assertIn("deadline = time.monotonic() + 65", script)
+                    attempt_script = script.replace("deadline = time.monotonic() + 65", "deadline = time.monotonic() + 1")
+                command = ["bash", "-c", attempt_script]
+                if scenario == "cancel_during_delay":
+                    log = root / "smoke.log"
+                    with log.open("w") as stdout, subprocess.Popen(command, env=env, stdout=stdout) as process:
+                        wait_until = time.monotonic() + 4
+                        while "Retrying transcription smoke in 5 seconds" not in log.read_text():
+                            self.assertLess(time.monotonic(), wait_until, "retry delay never started")
+                            time.sleep(0.02)
+                        process.terminate()
+                        self.assertEqual(process.wait(timeout=2), exit_code)
+                    output = log.read_text()
+                else:
+                    result = subprocess.run(command, env=env, text=True, capture_output=True, timeout=10)
+                    self.assertEqual(result.returncode, exit_code, result.stderr)
+                    output = result.stdout
+                reports = [json.loads(line) for line in output.splitlines() if line.startswith("{")]
+                self.assertEqual([report["attempt"] for report in reports], list(range(1, attempts + 1)))
+                calls = root / "calls"
+                expected_calls = 1 if scenario == "deadline" else attempts
+                self.assertEqual(len(calls.read_text().splitlines()) if calls.exists() else 0, expected_calls)
+                self.assertFalse((root / "firebase-production-serving-token").exists())
+
+        rollback = composite.split("    - name: Restore Cloud Run traffic snapshot after failed promotion")[-1]
+        self.assertIn("steps.smoke-promoted-production-serving-api.outcome == 'cancelled'", rollback)
+
     def stage_contract(self, root: Path) -> None:
         workflow_path = root / CHECKER.WORKFLOW
         composite_path = root / CHECKER.DEPLOY_BACKEND_STACK_ACTION

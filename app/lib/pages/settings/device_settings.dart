@@ -9,11 +9,9 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
-import 'package:omi/pages/conversations/auto_sync_page.dart';
 import 'package:omi/pages/conversations/on_the_way_page.dart';
 import 'package:omi/pages/settings/device/device_catching_up_card.dart';
 import 'package:omi/services/pending_work/pending_work_store.dart';
-import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/pages/conversations/sync_pending_work.dart';
 import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/pages/home/omiglass_ota_update.dart';
@@ -34,6 +32,7 @@ import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/devices.dart';
+import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/connectors/rayban_meta_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/sync_health_watchdog.dart';
@@ -310,19 +309,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     routeToPage(context, FirmwareUpdate(device: provider.pairedDevice, isRollback: true));
   }
 
-  void _openOfflineSync(DeviceProvider provider) {
-    switch (offlineSyncEntry(
-        connected: provider.connectedDevice != null, storageSupported: provider.isDeviceStorageSupport)) {
-      case OfflineSyncEntry.connectFirst:
-        // Disconnected is not "unsupported": the app cannot ask the device until it is back (D4).
-        OmiFeedback.info(context, context.l10n.connectDeviceForOfflineSync);
-      case OfflineSyncEntry.unsupported:
-        showOmiAlert(context, title: context.l10n.v2Undetected, message: context.l10n.v2UndetectedMessage);
-      case OfflineSyncEntry.open:
-        routeToPage(context, provider.supportsMultiFileSync ? const AutoSyncPage() : const SyncPage());
-    }
-  }
-
   Future<void> _openChargingHelp(DeviceProvider provider) async {
     final deviceName = provider.pairedDevice?.name ?? 'DevKit1';
     if (PlatformService.isIntercomSupported) {
@@ -345,9 +331,14 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 
   // Forget and unpair. Neither can be undone, so both confirm every time (ux-contract §4).
 
-  Future<void> _clearStoredDevice() async {
-    await SharedPreferencesUtil().btDeviceSet(BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0));
-    SharedPreferencesUtil().deviceName = '';
+  /// Forgets the active device and [deviceId] (the connected one, should it differ), in the saved
+  /// list as well: the pairing screen builds its rows from that list.
+  Future<void> _clearStoredDevice(String? deviceId) async {
+    final preferences = SharedPreferencesUtil();
+    for (final id in {preferences.btDevice.id, deviceId ?? ''}) {
+      await preferences.btDeviceForget(id);
+    }
+    preferences.deviceName = '';
   }
 
   void _leavePage() {
@@ -368,7 +359,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     // Read the id before the stored device is cleared.
     final deviceId = provider.connectedDevice?.id ?? SharedPreferencesUtil().btDevice.id;
     if (deviceId.isNotEmpty) provider.markDisconnectIntentional(deviceId);
-    await _clearStoredDevice();
+    await _clearStoredDevice(deviceId);
     // Fully tear down the connection, transport and native service.
     if (deviceId.isNotEmpty) {
       await ServiceManager.instance().device.forgetDevice(deviceId);
@@ -396,8 +387,8 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     );
     if (!confirmed) return;
 
-    await _clearStoredDevice();
     final device = provider.connectedDevice;
+    await _clearStoredDevice(device?.id);
     if (device != null) {
       provider.markDisconnectIntentional(device.id);
       final connection = await ServiceManager.instance().device.ensureConnection(device.id);
@@ -538,7 +529,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
           title: l10n.offlineSync,
           trailing: pendingSeconds > 0 ? _PendingSyncChip(seconds: pendingSeconds) : null,
           showChevron: true,
-          onTap: () => _openOfflineSync(provider),
+          onTap: () => openDeviceOfflineSync(context, provider),
         ),
         // Language is chosen in one place; the device page links to it.
         OmiSettingsRow(
@@ -630,6 +621,9 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     );
     final paired = provider.pairedDevice;
     final connected = provider.connectedDevice;
+    final showUnknownBattery = provider.isConnected &&
+        connected != null &&
+        DeviceConnectionFactory.resolveDeviceType(paired?.id == connected.id ? paired! : connected) == DeviceType.omi;
     const gap = SizedBox(height: OmiSpacing.xxl);
 
     final deviceStreaming = capture != null && deviceSource != null && deviceSource != 'phone';
@@ -649,8 +643,13 @@ class _DeviceSettingsState extends State<DeviceSettings> {
           const SizedBox(height: OmiSpacing.xl),
           _liveSections(
             connected: connected != null,
-            batteryLevel: connected == null ? 0 : provider.batteryLevel,
+            batteryLevel: connected == null
+                ? -1
+                : showUnknownBattery
+                    ? provider.settingsBatteryLevel
+                    : provider.batteryLevel,
             isCharging: connected != null && provider.isCharging,
+            showUnknownBattery: showUnknownBattery,
           ),
           if (deviceStreaming && canPause) ...[
             DeviceControlsGroup(paused: devicePaused, onToggle: () => _togglePause(capture)),
@@ -691,7 +690,12 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 }
 
 extension _DeviceLiveSections on _DeviceSettingsState {
-  Widget _liveSections({required bool connected, required int batteryLevel, required bool isCharging}) {
+  Widget _liveSections({
+    required bool connected,
+    required int batteryLevel,
+    required bool isCharging,
+    required bool showUnknownBattery,
+  }) {
     const gap = SizedBox(height: OmiSpacing.xxl);
     return Builder(builder: (context) {
       // One WAL pass per sync notification, shared by the stat row's tiles.
@@ -732,8 +736,9 @@ extension _DeviceLiveSections on _DeviceSettingsState {
               return Column(children: [
                 Builder(
                     builder: (context) => DeviceStatsRow(
-                          batteryLevel: connected ? batteryLevel : 0,
+                          batteryLevel: batteryLevel,
                           isCharging: isCharging,
+                          showUnknownBattery: showUnknownBattery,
                           heardTodaySeconds: _heardTodaySeconds(context),
                           onDeviceSeconds: local.onDeviceSeconds,
                           phoneQueueSeconds: local.onPhoneSeconds,
@@ -900,13 +905,4 @@ class _PendingSyncChip extends StatelessWidget {
       ),
     );
   }
-}
-
-/// What tapping Offline Sync does. A disconnected device has not said whether it stores audio, so it
-/// is never reported as unsupported.
-enum OfflineSyncEntry { connectFirst, unsupported, open }
-
-OfflineSyncEntry offlineSyncEntry({required bool connected, required bool storageSupported}) {
-  if (!connected) return OfflineSyncEntry.connectFirst;
-  return storageSupported ? OfflineSyncEntry.open : OfflineSyncEntry.unsupported;
 }

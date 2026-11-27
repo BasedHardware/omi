@@ -39,6 +39,36 @@ class ExpiringRedis:
 
 @pytest.fixture
 def world(monkeypatch, tmp_path):
+    return _memo_world(
+        monkeypatch,
+        tmp_path,
+        user_row={'language': 'en', 'transcription_preferences': {'single_language_mode': True}},
+        mode=LegacySyncMode.DARK,
+    )
+
+
+@pytest.fixture
+def sampled_world(monkeypatch, tmp_path):
+    # An unknown-multilingual upload whose owner still has legacy sync is decided
+    # on its audio: intake decodes a private sample under phase `sample_decode`
+    # before anything is staged. The admission gates default on; clear them off
+    # the ambient environment so the sampled path is actually taken.
+    for name in (
+        'BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED',
+        'BATCH_ADMISSION_LANGUAGE_SAMPLE_ENABLED',
+        'BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED',
+        'STT_PRERECORDED_LANGUAGE_GUARD_ENABLED',
+    ):
+        monkeypatch.delenv(name, raising=False)
+    return _memo_world(
+        monkeypatch,
+        tmp_path,
+        user_row={'language': 'multi', 'transcription_preferences': {'single_language_mode': False}},
+        mode=LegacySyncMode.ON,
+    )
+
+
+def _memo_world(monkeypatch, tmp_path, *, user_row, mode):
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.delenv('SYNC_RECORD_DECODE_FAILURE_MEMO', raising=False)
     redis = ExpiringRedis()
@@ -46,24 +76,35 @@ def world(monkeypatch, tmp_path):
     store = MemoryStore()
     monkeypatch.setattr(intake, 'FirestoreStore', lambda *_: store)
     monkeypatch.setattr(intake, 'current_stage', lambda: 'dev')
-    monkeypatch.setattr(intake.legacy_dark, 'current_mode', lambda uid=None: LegacySyncMode.DARK)
-    monkeypatch.setattr(
-        intake,
-        'batch_artifact_authorize',
-        lambda _store, _seed, snapshots: _authorize(snapshots),
-    )
-    monkeypatch.setattr(intake, 'artifacts_for', lambda _store: SimpleNamespace(stage_audio=lambda *_: 'x'))
-    counts = {'decode': 0, 'stage': 0}
+    monkeypatch.setattr(intake.legacy_dark, 'current_mode', lambda uid=None: mode)
+
+    def authorize(_store, _seed, snapshots):
+        from utils.batch_pipeline.artifacts import ProtectionContext
+
+        snapshots['user'] = dict(user_row)
+        return ProtectionContext('standard', 0)
+
+    monkeypatch.setattr(intake, 'batch_artifact_authorize', authorize)
+    monkeypatch.setattr(intake, 'artifacts_for', lambda _store: SimpleNamespace(stage_audio=lambda *a, **kw: 'x'))
+    counts = {'decode': 0, 'stage': 0, 'sample': 0}
     failure = {'error': ValueError('truncated sync audio frame')}
 
     def decode(*_args, **_kwargs):
         # A generator like the real decoder: the fault surfaces on iteration,
-        # inside the decode phase, never at call time.
+        # inside a decode phase, never at call time.
         counts['decode'] += 1
         raise failure['error']
         yield  # pragma: no cover
 
     monkeypatch.setattr(intake, 'decode_units', decode)
+
+    real_sample_paths = intake._private_sample_paths
+
+    def sample_paths(paths):
+        counts['sample'] += 1
+        return real_sample_paths(paths)
+
+    monkeypatch.setattr(intake, '_private_sample_paths', sample_paths)
     path = tmp_path / '100.0_pcm16_16000_1.bin'
     path.write_bytes(b'\x00\x01' * 16000)
 
@@ -84,13 +125,6 @@ def world(monkeypatch, tmp_path):
         )
 
     return SimpleNamespace(redis=redis, store=store, counts=counts, failure=failure, upload=upload)
-
-
-def _authorize(snapshots):
-    from utils.batch_pipeline.artifacts import ProtectionContext
-
-    snapshots['user'] = {'language': 'en', 'transcription_preferences': {'single_language_mode': True}}
-    return ProtectionContext('standard', 0)
 
 
 DETERMINISTIC = [
@@ -221,3 +255,33 @@ async def test_a_content_receipt_answers_before_the_decode_memo(world):
     assert world.counts['decode'] == 0
     assert world.redis.reads == 0
     assert response is not None and response.status_code != 503
+
+
+async def test_sampled_upload_memoizes_a_deterministic_decode_failure(sampled_world):
+    # The decoder fault surfaces while the private sample is decoded, before any
+    # staging: the same closed vocabulary over the same bytes, so the same memo
+    # must apply as on the main decode path.
+    first = await sampled_world.upload()
+    assert first.status_code == 503
+    assert first.headers['retry-after'] == '30'
+    assert sampled_world.counts['sample'] == 1  # the sampled path itself ran
+    assert sampled_world.counts['decode'] == 1
+    assert sampled_world.redis.writes == 1
+    assert sampled_world.redis.expiries == [300]
+
+    repeat = await sampled_world.upload()
+    assert repeat.status_code == 503
+    assert repeat.body == first.body and dict(repeat.headers) == dict(first.headers)
+    # The proven failure answers the same retryable 503 with no decode at all:
+    # no sample directory is even linked for the retry.
+    assert sampled_world.counts['sample'] == 1
+    assert sampled_world.counts['decode'] == 1
+    assert sampled_world.redis.reads == 2
+
+
+async def test_sampled_upload_kill_switch_off_still_repeats_the_sample_decode(sampled_world, monkeypatch):
+    monkeypatch.setenv('SYNC_RECORD_DECODE_FAILURE_MEMO', 'false')
+    assert (await sampled_world.upload()).status_code == 503
+    assert (await sampled_world.upload()).status_code == 503
+    assert sampled_world.counts['sample'] == sampled_world.counts['decode'] == 2
+    assert sampled_world.redis.reads == sampled_world.redis.writes == 0

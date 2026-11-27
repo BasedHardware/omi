@@ -12,6 +12,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from utils.conversations.v3.word_floor import MIN_HOME_WORDS
+
 SYNTHETIC_SOURCE_UID = 'synthOwner0000000000000000a1'
 
 _TOPICS = [
@@ -152,7 +154,7 @@ def _recording(uid: str, rid: str, started: datetime, segments: list[dict[str, A
 
 def _derived(uid: str, cid: str, recordings: list[str], started: datetime, minutes: float, **extra: Any) -> dict:
     words = extra.pop('words', 40)
-    hidden = words < 300
+    hidden = words < MIN_HOME_WORDS
     row: dict[str, Any] = {
         'id': cid,
         'uid': uid,

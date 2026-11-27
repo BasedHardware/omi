@@ -140,8 +140,12 @@ func (vendor) Recover(context.Context, queue.Guarded, batchunit.Request) (batchu
 
 type anyone struct{}
 
-func (anyone) Admissible(context.Context, queue.Admitting, string) error { return nil }
-func (anyone) Runnable(context.Context, queue.Guarded, string) error     { return nil }
+func (anyone) Admissible(context.Context, queue.Admitting, string) (batchunit.AccountFunding, error) {
+	return batchunit.AccountFunding{}, nil
+}
+func (anyone) Runnable(context.Context, queue.Guarded, string) (batchunit.AccountFunding, error) {
+	return batchunit.AccountFunding{}, nil
+}
 
 type quiet struct{}
 
@@ -298,5 +302,94 @@ func TestAWriteThatOutlivesItsGuardIsRefusedByFirestoreAfterAnErase(t *testing.T
 	}
 	if _, err := service.Admit(t.Context(), "owner", unit); !errors.Is(err, queue.ErrErased) {
 		t.Fatalf("an erased owner was admitted again: %v", err)
+	}
+}
+
+type routeRecorder struct {
+	vendor
+	calls chan batchunit.Request
+}
+
+func (v routeRecorder) Transcribe(ctx context.Context, g queue.Guarded, req batchunit.Request) (batchunit.Transcript, error) {
+	v.calls <- req
+	return v.vendor.Transcribe(ctx, g, req)
+}
+
+// Capture order is observed at the result writer, after a later BYOK capture committed.
+func TestGrantAndPeriodReleasePreserveLateCaptures(t *testing.T) {
+	t.Parallel()
+	for _, event := range []string{"grant", "period-change"} {
+		t.Run(event, func(t *testing.T) {
+			t.Parallel()
+			ctx := t.Context()
+			b := docstoretest.Open(t)
+			results, _ := adapter(b)
+			h := queuetest.Open(t, queuetest.Policy(), batchunit.Declaration(batchdocs.Causes()...))
+			recorder := routeRecorder{calls: make(chan batchunit.Request, 8)}
+			service := &batchunit.Service{Queue: h.Store, Speech: recorder, Results: results, Accounts: anyone{}, Observer: quiet{}, Keys: func(owner, id string) string { return owner + "/" + id }}
+			if err := h.Store.HoldCondition(ctx, "owner", queue.Entitlement, 1); err != nil {
+				t.Fatal(err)
+			}
+			capture := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
+			admit := func(id string, route batchunit.Route, at time.Time, byok bool) queue.Job {
+				t.Helper()
+				j, err := service.Admit(ctx, "owner", batchunit.Unit{ID: id, Route: route, Source: batchunit.Source{Ref: "audio/" + id}, AudioDuration: time.Minute, CustodyDeadline: time.Now().Add(time.Hour), OrderAt: at, BYOK: byok})
+				if err != nil {
+					t.Fatal(err)
+				}
+				return j
+			}
+			provider := admit("ja", batchunit.Provider, capture, false)
+			gpu := admit("en", batchunit.Parakeet, capture.Add(time.Minute), false)
+			h.Start(map[string]queue.Handler{batchunit.Kind: service})
+			byok := admit("byok", batchunit.Provider, capture.Add(2*time.Minute), true)
+			if j := h.Settled(byok.Key); j.Outcome == nil || *j.Outcome != queue.TerminalSuccess {
+				t.Fatalf("BYOK: %+v", j)
+			}
+			for _, key := range []string{provider.Key, gpu.Key} {
+				j, err := h.Store.Get(ctx, key)
+				if err != nil || j.Attempts != 0 || j.Ordered {
+					t.Fatalf("held: %+v %v", j, err)
+				}
+			}
+			for range 2 {
+				if err := h.Store.Release(ctx, "owner", queue.Entitlement, 2); err != nil {
+					t.Fatal(err)
+				}
+			}
+			for i, j := range []queue.Job{provider, gpu} {
+				settled := h.Settled(j.Key)
+				if settled.Attempts != 1 || *settled.Outcome != queue.TerminalSuccess {
+					t.Fatalf("released: %+v", settled)
+				}
+				doc, err := b.Raw.Doc("users/owner/batch_unit_results/" + j.Subject).Get(ctx)
+				if err != nil {
+					t.Fatal(err)
+				}
+				at, ok := doc.Data()["capture_at"].(time.Time)
+				if !ok || !at.Equal(capture.Add(time.Duration(i)*time.Minute)) || doc.Data()["late_capture"] != true {
+					t.Fatalf("bad late capture at %v", at)
+				}
+			}
+			for _, want := range []struct {
+				id    string
+				route batchunit.Route
+				byok  bool
+			}{
+				{"byok", batchunit.Provider, true}, {"ja", batchunit.Provider, false}, {"en", batchunit.Parakeet, false},
+			} {
+				select {
+				case got := <-recorder.calls:
+					if got.UnitID != want.id || got.Route != want.route || got.BYOK != want.byok {
+						t.Fatalf("wrong speech dispatch: %+v", got)
+					}
+				default:
+					t.Fatalf("missing dispatch for %s", want.id)
+				}
+			}
+			if len(recorder.calls) != 0 {
+				t.Fatal("duplicate route dispatch")
+			}
+		})
 	}
 }

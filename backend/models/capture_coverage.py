@@ -50,10 +50,7 @@ class AdmitResult(BaseModel):
 
 
 class CaptureCommittedEvent(BaseModel):
-    """Listen socket event: the server durably holds this range in ``conversation_id``.
-
-    Clients release custody for exactly the named range (app CUSTODY.md, invariant 2).
-    """
+    """Listen transcript receipt with optional generation-pinned original audio evidence."""
 
     type: Literal['capture_committed'] = 'capture_committed'
     conversation_id: str
@@ -63,3 +60,10 @@ class CaptureCommittedEvent(BaseModel):
     recording_session_id: Optional[str] = None
     source_start: int
     source_end: int
+    audio_custody: Optional[dict] = Field(default=None, exclude=True)
+
+    def to_json(self):
+        wire = self.model_dump(mode='json')
+        if self.audio_custody is not None:
+            wire['audio_custody'] = self.audio_custody
+        return wire

@@ -8,6 +8,7 @@ positions are preserved. Install in every writer process before enabling readers
 import functools
 import hashlib
 import inspect
+import logging
 from typing import Any, cast
 from uuid import uuid4
 
@@ -37,11 +38,16 @@ from database.batch_account_authority_schema import (
     PRIVACY_COLLECTION,
     USER_POLICY_FIELDS,
 )
+from database.batch_privacy_write_cache import TOKENLESS, invalidate_tokenless
+from database.batch_privacy_late_intents import late_sweep_writes
+from database.privacy_check_metrics import ACCOUNT_AUTHORITY_WRITES
+from utils.executors import db_executor, run_blocking
 from database.home_feed_writer import augment_home_writes, affects_home, bulk_erasure_scope
 from database.batch_privacy_attempt import CONVERSATION_AUTHORITY_FIELDS, TOKEN_FIELD, SCHEMA_FIELD, TOKEN_SCHEMA
 
 # Protobuf builds this class dynamically; the installed module has no typed declaration.
 Status = cast(Any, status_pb2).Status
+logger = logging.getLogger(__name__)
 
 _ROOT_AUTHORITIES = frozenset({ACCOUNT_DELETION_COLLECTION, 'legal_holds', 'legal_hold_deletion_gates'})
 _CONVERSATION_FIELDS = CONVERSATION_AUTHORITY_FIELDS
@@ -215,12 +221,8 @@ def _observe_account_writes(request: Any) -> None:
     # Observation must not turn a successful Commit into a caller-visible
     # failure. No client, authority read or identifier enters the metric.
     try:
-        observations = account_write_observations(request)
-        if observations:
-            from database.privacy_check_metrics import ACCOUNT_AUTHORITY_WRITES
-
-            for family, group, certified in observations:
-                ACCOUNT_AUTHORITY_WRITES.labels(family, group, 'true' if certified else 'false').inc()
+        for family, group, certified in account_write_observations(request):
+            ACCOUNT_AUTHORITY_WRITES.labels(family, group, 'true' if certified else 'false').inc()
     except Exception:
         pass
 
@@ -235,11 +237,13 @@ def token_write(path: str) -> Write:
     )
 
 
-def augment_commit(request: Any) -> tuple[Any, int]:
+def augment_commit(request: Any, *, invalidations: set[str] | None = None) -> tuple[Any, int]:
     writes = (request.get('writes') if isinstance(request, dict) else request.writes) or ()
     count = len(writes)
     home_writes = augment_home_writes(writes)
     tokens = authority_tokens(writes)
+    if invalidations is not None:
+        invalidations.update(tokens)
     if not tokens and len(home_writes) == count:
         return request, count
     prepared = CommitRequest(request)
@@ -250,11 +254,21 @@ def augment_commit(request: Any) -> tuple[Any, int]:
     # The final token is unique after source wipe/recreation;
     # no generation, blocked or purging field is changed by this masked write.
     prepared.writes.extend(token_write(path) for path in sorted(tokens))
+    if tokens:
+        prepared.writes.extend(late_sweep_writes(writes))
     # Preserve expanded atomic batches. The installed list-projection writer
     # already emits >500 writes in a Commit (covered by emulator tests). The
     # server owns request-size/transaction limits; never split the request or
     # drop a token to fit, and propagate any rejection to the caller.
     return prepared, count
+
+
+def _invalidation_failed(error: Exception) -> None:
+    try:
+        TOKENLESS.labels('invalidation_error').inc()
+        logger.warning('batch privacy post-commit invalidation failed error_type=%s', type(error).__name__)
+    except Exception:
+        pass  # Telemetry also runs after the acknowledged Commit.
 
 
 def _wrap_commit(original: Any) -> Any:
@@ -266,8 +280,9 @@ def _wrap_commit(original: Any) -> Any:
         if request is not None and any(value is not None for value in fields.values()):
             raise ValueError('request and flattened commit fields cannot both be supplied')
         source = request if request is not None else fields
-        prepared, count = augment_commit(source)
-        return prepared, count, source
+        invalidations: set[str] = set()
+        prepared, count = augment_commit(source, invalidations=invalidations)
+        return prepared, count, source, invalidations
 
     def response(value, count):
         if len(value.write_results) == count:
@@ -280,8 +295,13 @@ def _wrap_commit(original: Any) -> Any:
 
         @functools.wraps(original)
         async def async_wrapped(client, request=None, **kwargs):
-            prepared, count, source = prepare(request, kwargs)
+            prepared, count, source, invalidations = prepare(request, kwargs)
             result = await original(client, request=prepared, **kwargs)
+            if invalidations and getattr(result, "commit_time", None):
+                try:
+                    await run_blocking(db_executor, invalidate_tokenless, invalidations, result.commit_time)
+                except Exception as error:
+                    _invalidation_failed(error)
             _observe_account_writes(source)
             return response(result, count)
 
@@ -291,8 +311,13 @@ def _wrap_commit(original: Any) -> Any:
 
         @functools.wraps(original)
         def sync_wrapped(client, request=None, **kwargs):
-            prepared, count, source = prepare(request, kwargs)
+            prepared, count, source, invalidations = prepare(request, kwargs)
             result = original(client, request=prepared, **kwargs)
+            if invalidations and getattr(result, "commit_time", None):
+                try:
+                    invalidate_tokenless(invalidations, result.commit_time)
+                except Exception as error:
+                    _invalidation_failed(error)
             _observe_account_writes(source)
             return response(result, count)
 

@@ -19,11 +19,9 @@ import 'package:omi/pages/conversation_detail/widgets/conversation_detail_chip.d
 import 'package:omi/pages/conversation_detail/widgets/conversation_entity_chips.dart';
 import 'package:omi/pages/conversations/conversation_action_analytics.dart';
 import 'package:omi/pages/conversations/widgets/move_to_folder_sheet.dart';
-import 'package:omi/pages/held_audio/held_audio_views.dart';
 import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/transcription_pending_conversations.dart';
-import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/utils/conversations/capture_groups.dart';
 import 'package:omi/utils/conversations/conversation_title.dart';
 import 'package:omi/utils/folders/folder_icon_mapper.dart';
@@ -113,19 +111,19 @@ class ConversationDetailHeader extends StatelessWidget {
   Widget _titleRow(BuildContext context, ConversationDetailProvider provider, ServerConversation conversation) {
     final titleStyle = OmiType.title1.copyWith(height: 1.15, letterSpacing: -0.4);
     if (conversation.discarded) return Text(context.l10n.discardedConversation, style: titleStyle);
-    // Once the server says the audio is still waiting for a transcript (or the free allowance holds
-    // it), its "Couldn't transcribe" stand-in title would contradict the Summary tab, so the page
-    // shows the untitled fallback.
+    // The title field falls back to the recording date when an older status placeholder would
+    // contradict the current admission shown in Summary.
     return ValueListenableBuilder<Map<String, DateTime>>(
       valueListenable: TranscriptionPendingConversations.ids,
       builder: (context, _, __) {
-        final waiting = TranscriptionPendingConversations.replacesTitle(conversation) ||
-            heldByFreeAllowance(conversation, context.watch<UsageProvider?>());
         return ConversationTitleField(
           focusNode: provider.titleFocusNode,
           controller: provider.titleController,
           style: titleStyle,
-          displayText: (stored) => waiting && stored.trim() == TranscriptionPendingConversations.serverHoldTitle
+          // An empty display shows the hint: "Listening" while the conversation awaits its name
+          // (always, with the reliability experiment title_at_end, until it ends).
+          displayText: (stored) => TranscriptionPendingConversations.replacesTitle(conversation, title: stored) ||
+                  awaitsLiveTitle(conversation, title: stored)
               ? ''
               : presentableConversationTitle(conversation, title: stored),
           // A hint shows only while the field is empty, so a live conversation's empty field reads

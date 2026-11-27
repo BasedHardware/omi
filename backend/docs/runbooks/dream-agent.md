@@ -125,8 +125,8 @@ metadata is informational and cannot exclude Store users.
 A sweep at :00 and :30 (the :30 tick has the kill switch
 `DREAM_HALF_HOUR_SWEEP_ENABLED`) drains a durable `dream_due` queue. Payoff ordering
 ranks the oldest 1,000 due rows by new material, last yield and heavy size, and owners
-more than 30 days overdue go first. Hunts back off after dry hunts when
-`DREAM_HUNT_BACKOFF_MODE` serves the owner. Product writes enqueue immediately. Independent
+more than 30 days overdue go first. Hunts follow the configured interval for the owner’s size bucket.
+Product writes enqueue immediately. Independent
 discovery scans 20 pages of 499 owners (9,980/hour), committing each page in
 100-owner transactions so a fully eligible page stays inside the 3 s RPC
 deadlines, without overwriting dirty work or waiting for model sessions. Each

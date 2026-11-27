@@ -267,8 +267,6 @@ def with_memory_env(payload: str) -> str:
         {"name": "BATCH_PIPELINE_SHARED_LIVE_ENABLED", "value": "false"},
         {"name": "PLAYBACK_ON_DEMAND_ENABLED", "value": "true"},
         {"name": "REPEAT_WORK_LLM_VERSION", "value": "2026-10-16-v1"},
-        {"name": "SYNC_POLL_BACKOFF_ENABLED", "value": "false"},
-        {"name": "SYNC_POLL_BACKOFF_PERCENT", "value": "0"},
         {"name": "SYNC_RECORD_COVERAGE_WAIT_MEMO", "value": "true"},
         {"name": "SYNC_RECORD_WAIT_MEMO_FIRST", "value": "true"},
         {"name": "SYNC_RECORD_DECODE_FAILURE_MEMO", "value": "true"},
@@ -400,12 +398,10 @@ def with_audio_timeline_span_env(payload: str) -> str:
         '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},\n'
         '        {"name": "LIVE_CAPTURE_WINDOW_RETENTION", "value": "false"},\n'
         '        {"name": "LIVE_CAPTURE_WINDOW_STRICT_PROJECTION", "value": "false"},\n'
-        '        {"name": "LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION", "value": "false"},\n'
         '        {"name": "LIVE_CAPTURE_WINDOW_MERGE_UNION", "value": "false"},\n'
         '        {"name": "LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS", "value": "false"},\n'
         '        {"name": "SONIOX_CAPTURE_AXIS_DIAGNOSTICS", "value": "false"},\n'
-        '        {"name": "SONIOX_WIRE_LEDGER", "value": "false"},\n'
-        '        {"name": "SONIOX_ORDERED_FINALIZE", "value": "false"},',
+        '        {"name": "SONIOX_WIRE_LEDGER", "value": "false"},',
     )
 
 
@@ -546,7 +542,7 @@ def with_conversations_v3_env(payload: str) -> str:
     for service in ('backend', 'backend-sync', 'backend-integration'):
         payload = re.sub(
             rf'("{service}":\s*\{{.*?"env":\s*\[)',
-            r'\1\n        {"name": "CONVERSATIONS_V3_STAGE", "value": "beta"},'
+            r'\1\n        {"name": "CONVERSATIONS_V3_STAGE", "value": "all"},'
             r'\n        {"name": "CONVERSATIONS_V3_FIRST_APP_BUILD", "value": ""},'
             r'\n        {"name": "CONVERSATIONS_V3_TASKS_QUEUE", "value": "conversations-v3"},'
             r'\n        {"name": "CONVERSATIONS_V3_BACKFILL_QUEUE", "value": "conversations-v3-backfill"},',
@@ -663,6 +659,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         r'\n        {"name": "PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED", "value": "true"},'
         r'\n        {"name": "HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED", "value": "true"},'
         r'\n        {"name": "BATCH_HELD_DEAD_LETTER_ENABLED", "value": "true"},'
+        r'\n        {"name": "BATCH_PARKED_JOB_SWEEPER_ENABLED", "value": "true"},'
         r'\n        {"name": "BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED", "value": "true"},'
         r'\n        {"name": "CONVERSATION_TERMINAL_FAMILY_MODE", "value": "on"},',
         payload,
@@ -1144,6 +1141,32 @@ def test_gke_config_map_contract_rejects_missing_config_map(tmp_path):
             'gke/backend-listen',
             "env FAKE_RUNTIME_CONFIG must come from ConfigMap 'test-omi-backend-config'",
         )
+    ]
+
+
+def test_selected_release_reads_the_admitted_listen_chart(tmp_path):
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    prod = manifest['environments']['prod']
+    bindings = prod['gke']['backend-listen']
+    values_relative = Path(bindings['values_file'])
+    current_values = validator._load_yaml(validator.ROOT / values_relative)
+    # An older admitted source still binds this key through envFrom. The
+    # control's newer chart has moved it to a direct secret reference.
+    env_name = 'FIREBASE_SERVICE_ACCOUNT_JSON'
+    values = copy.deepcopy(current_values)
+    values['env'] = [entry for entry in values.get('env', []) if entry.get('name') != env_name]
+    values.setdefault('envFrom', []).append({'configMapRef': {'name': 'legacy-config'}})
+    bindings['env'][env_name] = {'config_map': {'name': 'legacy-config'}}
+    config = {'gke': {'backend-listen': bindings}}
+    admitted_chart = tmp_path / values_relative
+    admitted_chart.parent.mkdir(parents=True)
+    write_yaml(admitted_chart, values)
+
+    control_errors = validator._validate_gke(config, strict_provisional=False)
+    assert any(env_name in error.message for error in control_errors)
+    assert validator._validate_gke(config, strict_provisional=False, chart_root=tmp_path) == [
+        error for error in control_errors if env_name not in error.message
     ]
 
 
@@ -2024,6 +2047,7 @@ _MISSING_GATEWAY_CLOUD_RUN_STATE = '''
         {"name": "TRANSLATION_NEGATIVE_CACHE_TTL", "value": "21600"},
         {"name": "VAD_CACHE_TTL_SECONDS", "value": "86400"},
         {"name": "REVIEW_SURFACE_MODE", "value": "on"},
+        {"name": "PREPAID_CODE_REDEEM", "value": "off"},
         {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
         {"name": "SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED", "value": "off"},
         {"name": "OMI_SHAPED_AGENT_MODE", "value": "on"},
@@ -2350,6 +2374,7 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
         {"name": "TRANSLATION_NEGATIVE_CACHE_TTL", "value": "21600"},
         {"name": "VAD_CACHE_TTL_SECONDS", "value": "86400"},
         {"name": "REVIEW_SURFACE_MODE", "value": "on"},
+        {"name": "PREPAID_CODE_REDEEM", "value": "off"},
         {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
         {"name": "SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED", "value": "off"},
         {"name": "OMI_SHAPED_AGENT_MODE", "value": "on"},
@@ -2435,6 +2460,7 @@ def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
         {"name": "TRANSLATION_NEGATIVE_CACHE_TTL", "value": "21600"},
         {"name": "VAD_CACHE_TTL_SECONDS", "value": "86400"},
         {"name": "REVIEW_SURFACE_MODE", "value": "on"},
+        {"name": "PREPAID_CODE_REDEEM", "value": "off"},
         {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
         {"name": "SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED", "value": "off"},
         {"name": "OMI_SHAPED_AGENT_MODE", "value": "on"},
@@ -3835,6 +3861,8 @@ def read_lever_sources():
 def test_generated_read_lever_manifest_is_current_and_records_unresolved_sources():
     generated = read_lever_manifest.build_manifest()
     assert json.loads(read_lever_manifest.OUTPUT.read_text()) == generated
+    assert read_lever_manifest.DEFAULT_PERCENTAGES['bpp_late_erasure_execute'] == 0
+    assert all(surface['effective']['bpp_late_erasure_execute'] == 0 for surface in generated['surfaces'].values())
     notes = '\n'.join(generated['notes'])
     assert 'RESOLVED: prod chart-vs-CR batch_timeliness_leader is 100' in notes
     assert 'UNRESOLVED: README-vs-base triple' in notes
@@ -4166,6 +4194,7 @@ def test_quality_push_switches_are_bound_on_every_owning_backend_host(environmen
         for key in (
             'RECORD_SEAL_REPAIR_FRESH_ENABLED',
             'BATCH_HELD_DEAD_LETTER_ENABLED',
+            'BATCH_PARKED_JOB_SWEEPER_ENABLED',
             'RECORD_INTAKE_AGE_PRIORITY_ENABLED',
         ):
             assert key in classification['kinds']['config']
@@ -4205,6 +4234,19 @@ def test_record_close_notify_bound_on_all_listener_hosts(environment):
             _assert_record_close_listener_bindings(missing)
 
 
+@pytest.fixture(scope='module')
+def listener_close_runtime_yaml():
+    validator = load_validator()
+    parsed = {validator.DEFAULT_MANIFEST: validator._load_yaml(validator.DEFAULT_MANIFEST)}
+
+    def load(path):
+        if path not in parsed:
+            parsed[path] = validator._load_yaml(path)
+        return copy.deepcopy(parsed[path])
+
+    return load
+
+
 @pytest.mark.parametrize(
     'key,value',
     [
@@ -4214,8 +4256,13 @@ def test_record_close_notify_bound_on_all_listener_hosts(environment):
         ('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S', ''),
     ],
 )
-def test_cloud_run_runtime_rejects_missing_listener_close_binding(tmp_path, key, value):
+def test_cloud_run_runtime_rejects_missing_listener_close_binding(
+    tmp_path, monkeypatch, listener_close_runtime_yaml, key, value
+):
     validator = load_validator()
+    # Each case mutates the rendered JSON. Reuse the parsed YAML inputs to
+    # exercise all missing bindings without repeatedly parsing the fleet manifest.
+    monkeypatch.setattr(manifest_validation, '_load_yaml', listener_close_runtime_yaml)
     payload = with_cloud_run_oauth_secrets(_MISSING_GATEWAY_CLOUD_RUN_STATE)
     payload = payload.replace(json.dumps({'name': key, 'value': value}) + ',', '')
     path = tmp_path / 'missing-close-switch.json'
@@ -4228,7 +4275,7 @@ def test_cloud_run_runtime_rejects_missing_listener_close_binding(tmp_path, key,
 
 
 @pytest.mark.parametrize(('environment', 'enabled'), [('dev', 'false'), ('prod', 'true')])
-def test_future_capture_clamp_respects_backend_preservation_pin(environment, enabled):
+def test_future_capture_clamp_respects_backend_and_backfill_preservation_pins(environment, enabled):
     config = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())['environments'][environment]
     hosts = {'backend-listen': config['gke']['backend-listen'], **config['cloud_run']['services']}
     # SCA-3120: prod adds the derived projection pump as a sixth reader.
@@ -4236,7 +4283,8 @@ def test_future_capture_clamp_respects_backend_preservation_pin(environment, ena
     renderer = runpy.run_path(str(RENDERER_SCRIPT), run_name='future_capture_staged_renderer')
     for name, host in hosts.items():
         # SCA-3555: backend keeps the live value until its SCA-3501 activation step.
-        host_value = 'false' if name == 'backend' else enabled
+        # SCA-3544: backfill preserves false during its catch-up.
+        host_value = 'false' if name in ('backend', 'backend-sync-backfill') else enabled
         assert host['env']['SYNC_FUTURE_CAPTURE_CLAMP_ENABLED'] == {'value': host_value, 'category': 'rollout'}
         # Render this host's own manifest entry (not the expected literal).
         entry = {'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED': host['env']['SYNC_FUTURE_CAPTURE_CLAMP_ENABLED']}

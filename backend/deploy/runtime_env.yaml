@@ -42,8 +42,6 @@ environments:
           UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
           UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-          SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
-          SYNC_POLL_BACKOFF_PERCENT: {value: '0', category: rollout}
           SYNC_RECORD_COVERAGE_WAIT_MEMO:
             value: 'true'
             category: ops_kill
@@ -70,6 +68,9 @@ environments:
           BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
           BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
           BATCH_HELD_DEAD_LETTER_ENABLED:
+            value: 'true'
+            category: ops_kill
+          BATCH_PARKED_JOB_SWEEPER_ENABLED:
             value: 'true'
             category: ops_kill
           BATCH_INPUT_EXPIRING_ENABLED:
@@ -136,7 +137,6 @@ environments:
           AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT: {category: rollout, value: '0'}
           BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
-          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_UNION: {category: rollout, value: 'false'}
           LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {category: rollout, value: 'false'}
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {category: rollout, value: 'false'}
@@ -351,7 +351,6 @@ environments:
           DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
           PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
-          SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
           BUCKET_OBJECT_LAKE:
             category: storage_retention
             value: omi-dev-object-lake-uc1
@@ -551,8 +550,6 @@ environments:
           BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-          SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
-          SYNC_POLL_BACKOFF_PERCENT: {value: '0', category: rollout}
           SYNC_RECORD_COVERAGE_WAIT_MEMO:
             value: 'true'
             category: ops_kill
@@ -584,7 +581,6 @@ environments:
           AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT: {category: rollout, value: '0'}
           BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
-          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_UNION: {category: rollout, value: 'false'}
           LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {category: rollout, value: 'false'}
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {category: rollout, value: 'false'}
@@ -613,7 +609,6 @@ environments:
           DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
           PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
-          SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
           BUCKET_OBJECT_LAKE:
             category: storage_retention
             value: omi-dev-object-lake-uc1
@@ -894,7 +889,7 @@ environments:
             source: environment
           CONVERSATIONS_V3_STAGE:
             source: literal
-            value: beta
+            value: all
           CONVERSATIONS_V3_FIRST_APP_BUILD:
             source: literal
             value: ''
@@ -1072,7 +1067,6 @@ environments:
               env_var: LADDER_V1_ARCHITECT_YEAR_PRICE_ID
               provisional: true
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-            SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             SYNC_RECORD_COVERAGE_WAIT_MEMO:
               value: 'true'
               category: ops_kill
@@ -1093,6 +1087,9 @@ environments:
             BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
             BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
             BATCH_HELD_DEAD_LETTER_ENABLED:
+              value: 'true'
+              category: ops_kill
+            BATCH_PARKED_JOB_SWEEPER_ENABLED:
               value: 'true'
               category: ops_kill
             BATCH_ALLOWANCE_INTAKE_PARK_ENABLED:
@@ -1187,7 +1184,6 @@ environments:
             OMI_VERTEX_RESERVATION_PROJECT:
               value: based-hardware-dev
               category: runtime_identity
-            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
@@ -1298,7 +1294,6 @@ environments:
             DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
-            SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
             REVIEW_SURFACE_MODE: {value: 'on', category: rollout}
             BUCKET_OBJECT_LAKE:
               category: storage_retention
@@ -1332,6 +1327,7 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            PREPAID_CODE_REDEEM: {value: 'off', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
@@ -1402,7 +1398,6 @@ environments:
             HOME_PROCESSING_MAX_AGE_SECONDS:
               value: '21600'
               category: config
-            SYNC_POLL_BACKOFF_PERCENT: {value: '0', category: rollout}
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
@@ -1428,7 +1423,7 @@ environments:
             HOSTED_PUSHER_API_URL:
               value: http://pusher.omiapi.com
               category: service_discovery
-            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_STAGE: {value: all, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
               category: config
@@ -1486,8 +1481,6 @@ environments:
             UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
             UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-            SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
-            SYNC_POLL_BACKOFF_PERCENT: {value: '0', category: rollout}
             SYNC_RECORD_COVERAGE_WAIT_MEMO:
               value: 'true'
               category: ops_kill
@@ -1506,6 +1499,9 @@ environments:
             BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
             BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
             BATCH_HELD_DEAD_LETTER_ENABLED:
+              value: 'true'
+              category: ops_kill
+            BATCH_PARKED_JOB_SWEEPER_ENABLED:
               value: 'true'
               category: ops_kill
             BATCH_ALLOWANCE_INTAKE_PARK_ENABLED:
@@ -1605,7 +1601,6 @@ environments:
               value: backend-sync
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
             TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
-            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
@@ -1723,7 +1718,6 @@ environments:
               category: telemetry
             PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
-            SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
             BUCKET_OBJECT_LAKE:
               category: storage_retention
               value: omi-dev-object-lake-uc1
@@ -1850,7 +1844,7 @@ environments:
             OMI_PARITY_PACK_EXPORT_INTERVAL_SECONDS:
               value: '3600'
               category: replay_capture
-            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_STAGE: {value: all, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
               category: config
@@ -1917,8 +1911,6 @@ environments:
               value: '8'
               category: reliability
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-            SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
-            SYNC_POLL_BACKOFF_PERCENT: {value: '0', category: rollout}
             SYNC_RECORD_COVERAGE_WAIT_MEMO:
               value: 'true'
               category: ops_kill
@@ -1937,6 +1929,9 @@ environments:
             BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
             BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
             BATCH_HELD_DEAD_LETTER_ENABLED:
+              value: 'true'
+              category: ops_kill
+            BATCH_PARKED_JOB_SWEEPER_ENABLED:
               value: 'true'
               category: ops_kill
             BATCH_ALLOWANCE_INTAKE_PARK_ENABLED:
@@ -2030,7 +2025,6 @@ environments:
               value: backend-sync-backfill
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
             TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
-            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
@@ -2147,7 +2141,6 @@ environments:
               category: telemetry
             PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
-            SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
             BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'false', category: rollout}
@@ -2256,7 +2249,7 @@ environments:
               category: replay_capture
             CONVERSATION_RELEVANCE_JEV_PERCENT:
               value: '0'
-            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_STAGE: {value: all, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
               category: config
@@ -2320,8 +2313,6 @@ environments:
             UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
             UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-            SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
-            SYNC_POLL_BACKOFF_PERCENT: {value: '0', category: rollout}
             SYNC_RECORD_COVERAGE_WAIT_MEMO:
               value: 'true'
               category: ops_kill
@@ -2339,6 +2330,9 @@ environments:
             BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
             BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
             BATCH_HELD_DEAD_LETTER_ENABLED:
+              value: 'true'
+              category: ops_kill
+            BATCH_PARKED_JOB_SWEEPER_ENABLED:
               value: 'true'
               category: ops_kill
             BATCH_ALLOWANCE_INTAKE_PARK_ENABLED:
@@ -2432,7 +2426,6 @@ environments:
               value: backend-integration
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
             TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
-            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
@@ -2518,7 +2511,6 @@ environments:
             DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
-            SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
             BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'false', category: rollout}
@@ -2636,7 +2628,7 @@ environments:
               category: replay_capture
             CONVERSATION_RELEVANCE_JEV_PERCENT:
               value: '0'
-            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_STAGE: {value: all, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
               category: config
@@ -2717,7 +2709,7 @@ environments:
               value: based-hardware
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
-            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_STAGE: {value: all, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
               category: config
@@ -2794,7 +2786,7 @@ environments:
               value: based-hardware
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
-            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_STAGE: {value: all, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
               category: config
@@ -2840,7 +2832,7 @@ environments:
               value: based-hardware
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
-            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_STAGE: {value: all, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
               category: config
@@ -2899,7 +2891,7 @@ environments:
               value: based-hardware
             BASE_API_URL:
               value: https://api.omiapi.com
-            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_STAGE: {value: all, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
               category: config
@@ -2984,8 +2976,6 @@ environments:
           UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
           UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-          SYNC_POLL_BACKOFF_ENABLED: {value: 'true', category: rollout}
-          SYNC_POLL_BACKOFF_PERCENT: {value: '5', category: rollout}
           SYNC_RECORD_COVERAGE_WAIT_MEMO:
             value: 'true'
             category: ops_kill
@@ -3012,6 +3002,9 @@ environments:
           BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
           BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
           BATCH_HELD_DEAD_LETTER_ENABLED:
+            value: 'true'
+            category: ops_kill
+          BATCH_PARKED_JOB_SWEEPER_ENABLED:
             value: 'true'
             category: ops_kill
           BATCH_INPUT_EXPIRING_ENABLED:
@@ -3078,7 +3071,6 @@ environments:
           AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT: {category: rollout, value: '0'}
           BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
-          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_UNION: {category: rollout, value: 'true'}
           LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {category: rollout, value: 'true'}
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {category: rollout, value: 'true'}
@@ -3293,7 +3285,6 @@ environments:
           DREAM_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
           PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
           PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
-          SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
           BUCKET_OBJECT_LAKE:
             category: storage_retention
             value: ''
@@ -3327,6 +3318,7 @@ environments:
           BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
           BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
           BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
+          CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED: {value: 'off', category: rollout}
           STT_CAP_DISPATCH_ENFORCEMENT:
             secret:
               name: prod-omi-backend-listen-private-env
@@ -3398,6 +3390,7 @@ environments:
             value: 'true'
             category: ops_kill
           QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
+          LISTEN_BATCH_RECONNECT_ENABLED: {value: 'true', category: rollout}
           HOME_TRANSCRIPTION_PRESENTATION_GATE:
             value: 'true'
             category: ops_kill
@@ -3618,8 +3611,6 @@ environments:
           BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-          SYNC_POLL_BACKOFF_ENABLED: {value: 'true', category: rollout}
-          SYNC_POLL_BACKOFF_PERCENT: {value: '5', category: rollout}
           SYNC_RECORD_COVERAGE_WAIT_MEMO:
             value: 'true'
             category: ops_kill
@@ -3651,7 +3642,6 @@ environments:
           AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT: {category: rollout, value: '0'}
           BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
-          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_UNION: {category: rollout, value: 'true'}
           LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {category: rollout, value: 'true'}
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {category: rollout, value: 'true'}
@@ -3680,7 +3670,6 @@ environments:
           DREAM_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
           PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
           PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
-          SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
           BUCKET_OBJECT_LAKE:
             category: storage_retention
             value: ''
@@ -3697,6 +3686,7 @@ environments:
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             category: ops_kill
             value: '100'
+          CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED: {value: 'off', category: rollout}
           SYNC_TASKS_PROJECT:
             value: based-hardware
             category: reliability
@@ -3946,7 +3936,7 @@ environments:
             value: 'on'
           CONVERSATIONS_V3_STAGE:
             source: literal
-            value: beta
+            value: all
           CONVERSATIONS_V3_FIRST_APP_BUILD:
             source: literal
             value: ''
@@ -4068,7 +4058,6 @@ environments:
           - BATCH_HELD_POLL_SKIP_ENABLED
           - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
           - DREAM_AGENT_PAID_PERCENT
-          - SYNC_POLL_BACKOFF_PERCENT
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
           - DEEPGRAM_API_KEY
@@ -4142,6 +4131,9 @@ environments:
             MCP_OAUTH_CLIENTS_JSON:
               secret: MCP_OAUTH_CLIENTS_JSON
               version: latest
+            PLAY_ACCOUNT_ID_HMAC_KEY:
+              secret: PLAY_ACCOUNT_ID_HMAC_KEY
+              version: latest
           env:
             CONVERSATION_TERMINAL_FAMILY_MODE:
               value: 'on'
@@ -4179,7 +4171,6 @@ environments:
               env_var: LADDER_V1_ARCHITECT_YEAR_PRICE_ID
               provisional: true
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-            SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             SYNC_RECORD_COVERAGE_WAIT_MEMO:
               value: 'true'
               category: ops_kill
@@ -4200,6 +4191,9 @@ environments:
             BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
             BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
             BATCH_HELD_DEAD_LETTER_ENABLED:
+              value: 'true'
+              category: ops_kill
+            BATCH_PARKED_JOB_SWEEPER_ENABLED:
               value: 'true'
               category: ops_kill
             BATCH_ALLOWANCE_INTAKE_PARK_ENABLED:
@@ -4294,7 +4288,6 @@ environments:
             OMI_VERTEX_RESERVATION_PROJECT:
               value: based-hardware
               category: runtime_identity
-            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
@@ -4405,7 +4398,6 @@ environments:
             DREAM_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
             PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
-            SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
             REVIEW_SURFACE_MODE: {value: 'on', category: rollout}
             BUCKET_OBJECT_LAKE:
               category: storage_retention
@@ -4439,6 +4431,43 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            CONVERSATIONS_V3_LOCKED_DERIVED_ALLOWANCE:
+              value: '2048'
+              category: config
+            CONVERSATIONS_V3_LOCKED_DERIVED_BYTES:
+              value: '8388608'
+              category: config
+            CONVERSATIONS_V3_LOCKED_MAX_BATCHES:
+              value: '6'
+              category: config
+            CONVERSATIONS_V3_LOCKED_DAILY_PASSES:
+              value: '20'
+              category: config
+            CONVERSATIONS_V3_LIVE_TITLE:
+              value: 'on'
+              category: ops_kill
+            CONVERSATIONS_V3_FAST_FINISH:
+              value: 'on'
+              category: ops_kill
+            CONVERSATIONS_V3_FAST_FINISH_CHUNKED:
+              value: 'on'
+              category: ops_kill
+            CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED: {value: 'off', category: rollout}
+            ANDROID_BILLING: {value: stripe, category: rollout}
+            PLAY_RTDN_OIDC_AUDIENCE:
+              value: https://api.omi.me/v2/internal/play-billing/rtdn
+              category: service_discovery
+            PLAY_RTDN_PUSH_SA:
+              value: play-billing-rtdn-push@based-hardware.iam.gserviceaccount.com
+              category: service_discovery
+            PLAY_RECONCILE_OIDC_AUDIENCE:
+              value: https://api.omi.me/v2/internal/play-billing/reconcile
+              category: service_discovery
+            PLAY_RECONCILE_INVOKER_SA:
+              value: play-billing-reconcile@based-hardware.iam.gserviceaccount.com
+              category: service_discovery
+            ANDROID_PLAY_BILLING_MIN_BUILD: {value: '1617', category: rollout}
+            ANDROID_PLAY_BILLING_COHORT: {value: '', category: rollout}
             BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED:
               value: 'false'
               category: ops_kill
@@ -4658,6 +4687,7 @@ environments:
               value: price_1TuIa81F8wnoWYvw0iX0j5M8
             STRIPE_UNLIMITED_V2_ANNUAL_PRICE_ID:
               value: price_1TuIap1F8wnoWYvwHWq0EvNU
+            PREPAID_CODE_REDEEM: {value: cohort, category: rollout}
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE: {value: 'true', category: rollout}
             MCP_OAUTH_CLAUDE_CLIENT_ID:
               env_var: MCP_OAUTH_CLAUDE_CLIENT_ID
@@ -4677,7 +4707,7 @@ environments:
             CONVERSATIONS_V3:
               value: 'on'
               category: ops_kill
-            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_STAGE: {value: all, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
               category: config
@@ -4739,8 +4769,6 @@ environments:
             UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
             UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-            SYNC_POLL_BACKOFF_ENABLED: {value: 'true', category: rollout}
-            SYNC_POLL_BACKOFF_PERCENT: {value: '5', category: rollout}
             SYNC_RECORD_COVERAGE_WAIT_MEMO:
               value: 'true'
               category: ops_kill
@@ -4759,6 +4787,9 @@ environments:
             BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
             BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
             BATCH_HELD_DEAD_LETTER_ENABLED:
+              value: 'true'
+              category: ops_kill
+            BATCH_PARKED_JOB_SWEEPER_ENABLED:
               value: 'true'
               category: ops_kill
             BATCH_ALLOWANCE_INTAKE_PARK_ENABLED:
@@ -4858,7 +4889,6 @@ environments:
               value: backend-sync
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
             TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
-            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
@@ -4976,7 +5006,6 @@ environments:
               category: telemetry
             PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
-            SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
             BUCKET_OBJECT_LAKE:
               category: storage_retention
               value: ''
@@ -5009,6 +5038,19 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            CONVERSATIONS_V3_LOCKED_DERIVED_ALLOWANCE:
+              value: '2048'
+              category: config
+            CONVERSATIONS_V3_LOCKED_DERIVED_BYTES:
+              value: '8388608'
+              category: config
+            CONVERSATIONS_V3_LOCKED_MAX_BATCHES:
+              value: '6'
+              category: config
+            CONVERSATIONS_V3_LOCKED_DAILY_PASSES:
+              value: '20'
+              category: config
+            CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED: {value: 'off', category: rollout}
             CONVERSATIONS_V3_BACKFILL:
               value: 'on'
               category: ops_kill
@@ -5073,6 +5115,7 @@ environments:
               value: 'true'
               category: ops_kill
             QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
+            LISTEN_BATCH_RECONNECT_ENABLED: {value: 'true', category: rollout}
             HOME_TRANSCRIPTION_PRESENTATION_GATE:
               value: 'true'
               category: ops_kill
@@ -5254,7 +5297,7 @@ environments:
             CONVERSATIONS_V3:
               value: 'on'
               category: ops_kill
-            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_STAGE: {value: all, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
               category: config
@@ -5326,8 +5369,6 @@ environments:
               value: '8'
               category: reliability
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-            SYNC_POLL_BACKOFF_ENABLED: {value: 'true', category: rollout}
-            SYNC_POLL_BACKOFF_PERCENT: {value: '5', category: rollout}
             SYNC_RECORD_COVERAGE_WAIT_MEMO:
               value: 'true'
               category: ops_kill
@@ -5346,6 +5387,9 @@ environments:
             BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
             BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
             BATCH_HELD_DEAD_LETTER_ENABLED:
+              value: 'true'
+              category: ops_kill
+            BATCH_PARKED_JOB_SWEEPER_ENABLED:
               value: 'true'
               category: ops_kill
             BATCH_ALLOWANCE_INTAKE_PARK_ENABLED:
@@ -5439,7 +5483,6 @@ environments:
               value: backend-sync-backfill
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
             TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
-            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
@@ -5556,7 +5599,6 @@ environments:
               category: telemetry
             PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
-            SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
             BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'false', category: rollout}
@@ -5573,8 +5615,27 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            CONVERSATIONS_V3_LOCKED_DERIVED_ALLOWANCE:
+              value: '2048'
+              category: config
+            CONVERSATIONS_V3_LOCKED_DERIVED_BYTES:
+              value: '8388608'
+              category: config
+            CONVERSATIONS_V3_LOCKED_MAX_BATCHES:
+              value: '6'
+              category: config
+            CONVERSATIONS_V3_LOCKED_DAILY_PASSES:
+              value: '20'
+              category: config
+            CONVERSATIONS_V3_LIVE_TITLE:
+              value: 'on'
+              category: ops_kill
+            CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED: {value: 'off', category: rollout}
+            BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED:
+              value: 'false'
+              category: ops_kill
             BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
@@ -5644,7 +5705,7 @@ environments:
             HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
               value: 'true'
               category: ops_kill
-            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'true', category: rollout}
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
               category: ops_kill
@@ -5794,7 +5855,7 @@ environments:
             CONVERSATIONS_V3:
               value: 'on'
               category: ops_kill
-            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_STAGE: {value: all, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
               category: config
@@ -5861,8 +5922,6 @@ environments:
             UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
             UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-            SYNC_POLL_BACKOFF_ENABLED: {value: 'true', category: rollout}
-            SYNC_POLL_BACKOFF_PERCENT: {value: '5', category: rollout}
             SYNC_RECORD_COVERAGE_WAIT_MEMO:
               value: 'true'
               category: ops_kill
@@ -5880,6 +5939,9 @@ environments:
             BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
             BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
             BATCH_HELD_DEAD_LETTER_ENABLED:
+              value: 'true'
+              category: ops_kill
+            BATCH_PARKED_JOB_SWEEPER_ENABLED:
               value: 'true'
               category: ops_kill
             BATCH_ALLOWANCE_INTAKE_PARK_ENABLED:
@@ -5973,7 +6035,6 @@ environments:
               value: backend-integration
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
             TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
-            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
@@ -6059,7 +6120,6 @@ environments:
             DREAM_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
             PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
-            SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
             BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'true', category: rollout}
@@ -6076,11 +6136,38 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'on', category: rollout}
+            CONVERSATIONS_V3_LOCKED_DERIVED_ALLOWANCE:
+              value: '2048'
+              category: config
+            CONVERSATIONS_V3_LOCKED_DERIVED_BYTES:
+              value: '8388608'
+              category: config
+            CONVERSATIONS_V3_LOCKED_MAX_BATCHES:
+              value: '6'
+              category: config
+            CONVERSATIONS_V3_LOCKED_DAILY_PASSES:
+              value: '20'
+              category: config
+            CONVERSATIONS_V3_LIVE_TITLE:
+              value: 'off'
+              category: ops_kill
+            CONVERSATIONS_V3_FAST_FINISH:
+              value: 'on'
+              category: ops_kill
+            CONVERSATIONS_V3_FAST_FINISH_CHUNKED:
+              value: 'on'
+              category: ops_kill
+            CONVERSATIONS_V3_FAST_FINISH_LONG_PERCENT: {value: '25', category: rollout}
+            CONVERSATIONS_V3_FAST_FINISH_LONG_DAILY_SECONDS:
+              value: '7200'
+              category: config
+            CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED: {value: 'off', category: rollout}
             BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS: {value: '200', category: rollout}
             BATCH_PIPELINE_SERVING_TICK_SECONDS: {value: '10', category: rollout}
+            BATCH_PIPELINE_PROJECTION_FOLLOWUP_SLOTS: {value: '4', category: rollout}
             BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT: {value: '16', category: rollout}
             BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             BATCH_PIPELINE_SERVING_PROJECTION_SWEEP:
               value: 'true'
@@ -6233,6 +6320,15 @@ environments:
             BATCH_PIPELINE_SERVING_METRICS_MIN_REFRESH_SECONDS:
               value: '60'
               category: reliability
+            BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_PERCENT:
+              value: '1'
+              category: ops_kill
+            BATCH_POLICY_KILL_SWITCH_LOG_ON_CHANGE_ENABLED:
+              value: 'true'
+              category: ops_kill
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
             DREAM_AGENT_CONCURRENCY:
@@ -6286,7 +6382,7 @@ environments:
             CONVERSATIONS_V3:
               value: 'on'
               category: ops_kill
-            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_STAGE: {value: all, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
               category: config
@@ -6352,8 +6448,6 @@ environments:
             UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
             UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-            SYNC_POLL_BACKOFF_ENABLED: {value: 'true', category: rollout}
-            SYNC_POLL_BACKOFF_PERCENT: {value: '5', category: rollout}
             SYNC_RECORD_COVERAGE_WAIT_MEMO:
               value: 'true'
               category: ops_kill
@@ -6371,6 +6465,9 @@ environments:
             BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
             BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
             BATCH_HELD_DEAD_LETTER_ENABLED:
+              value: 'true'
+              category: ops_kill
+            BATCH_PARKED_JOB_SWEEPER_ENABLED:
               value: 'true'
               category: ops_kill
             BATCH_ALLOWANCE_INTAKE_PARK_ENABLED:
@@ -6464,7 +6561,6 @@ environments:
               value: backend-projection-pump
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
             TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
-            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
@@ -6550,7 +6646,6 @@ environments:
             DREAM_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
             PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
-            SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
             BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'true', category: rollout}
@@ -6567,11 +6662,38 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'on', category: rollout}
+            CONVERSATIONS_V3_LOCKED_DERIVED_ALLOWANCE:
+              value: '2048'
+              category: config
+            CONVERSATIONS_V3_LOCKED_DERIVED_BYTES:
+              value: '8388608'
+              category: config
+            CONVERSATIONS_V3_LOCKED_MAX_BATCHES:
+              value: '6'
+              category: config
+            CONVERSATIONS_V3_LOCKED_DAILY_PASSES:
+              value: '20'
+              category: config
+            CONVERSATIONS_V3_LIVE_TITLE:
+              value: 'on'
+              category: ops_kill
+            CONVERSATIONS_V3_FAST_FINISH:
+              value: cohort
+              category: ops_kill
+            CONVERSATIONS_V3_FAST_FINISH_CHUNKED:
+              value: 'on'
+              category: ops_kill
+            CONVERSATIONS_V3_FAST_FINISH_LONG_PERCENT: {value: '25', category: rollout}
+            CONVERSATIONS_V3_FAST_FINISH_LONG_DAILY_SECONDS:
+              value: '7200'
+              category: config
+            CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED: {value: 'off', category: rollout}
             BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS: {value: '200', category: rollout}
             BATCH_PIPELINE_SERVING_TICK_SECONDS: {value: '10', category: rollout}
+            BATCH_PIPELINE_PROJECTION_FOLLOWUP_SLOTS: {value: '4', category: rollout}
             BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT: {value: '16', category: rollout}
             BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             BATCH_PIPELINE_SERVING_PROJECTION_SWEEP:
               value: 'true'
@@ -6783,7 +6905,7 @@ environments:
             CONVERSATIONS_V3:
               value: 'on'
               category: ops_kill
-            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_STAGE: {value: all, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
               category: config
@@ -6807,6 +6929,9 @@ environments:
           - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
           - REPEAT_WORK_REVISION_ENABLED
           - HOSTED_DIARIZATION_API_URL
+          - BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_ENABLED
+          - BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_PERCENT
+          - BATCH_POLICY_KILL_SWITCH_LOG_ON_CHANGE_ENABLED
           service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
       jobs:
         notifications-job:
@@ -6868,7 +6993,7 @@ environments:
             CONVERSATIONS_V3:
               value: 'on'
               category: ops_kill
-            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_STAGE: {value: all, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
               category: config
@@ -6945,7 +7070,7 @@ environments:
             CONVERSATIONS_V3:
               value: 'on'
               category: ops_kill
-            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_STAGE: {value: all, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
               category: config
@@ -6995,7 +7120,7 @@ environments:
             CONVERSATIONS_V3:
               value: 'on'
               category: ops_kill
-            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_STAGE: {value: all, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
               category: config
@@ -7056,7 +7181,7 @@ environments:
             CONVERSATIONS_V3:
               value: 'on'
               category: ops_kill
-            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_STAGE: {value: all, category: rollout}
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
               category: config

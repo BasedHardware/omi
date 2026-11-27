@@ -40,7 +40,13 @@ def test_account_erasure_clears_retired_list_data_even_when_user_root_is_missing
         user_data_deletion,
         'get_data_plane_firestore_client',
         lambda: SimpleNamespace(
-            collection=lambda name: SimpleNamespace(document=lambda key: SimpleNamespace(delete=lambda: None))
+            collection=lambda name: SimpleNamespace(
+                document=lambda key: SimpleNamespace(
+                    collections=lambda: [],
+                    delete=lambda: None,
+                    collection=lambda _: SimpleNamespace(list_documents=lambda: []),
+                )
+            )
         ),
     )
 
@@ -50,8 +56,8 @@ def test_account_erasure_clears_retired_list_data_even_when_user_root_is_missing
     retirements = []
     monkeypatch.setattr(
         user_data_deletion,
-        'stop_quiet_checks_for_account',
-        lambda uid, **kwargs: retirements.append((uid, kwargs['firestore_client'])),
+        'purge_finalization_jobs',
+        lambda uid, client: retirements.append((uid, client)),
     )
     assert user_data_deletion.purge_user_subtree('owner', client, recursive)['status'] == 'ok'
     assert retirements == [('owner', client)]
@@ -90,6 +96,7 @@ def test_real_conversation_route_preserves_locked_allowance_recovery(monkeypatch
         'list_read_budget_for_request',
         lambda *a, **k: SimpleNamespace(
             truncated=False,
+            remaining_seconds=30.0,
             observe=lambda outcome: None,
         ),
     )

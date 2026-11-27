@@ -203,6 +203,25 @@ def _run_main_list(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> N
                             else:
                                 trial(capture, call)
 
+    monkeypatch.setattr(conversations_router, 'conversations_v3_enabled', lambda uid: True)
+    monkeypatch.setenv('OMI_HOME_VISIBILITY_INDEX_OWNERS', 'u1')
+    trial(
+        capture,
+        conversations_router.get_conversations,
+        request=SimpleNamespace(headers={'X-Omi-Home-Page-Mode': 'auto'}),
+        response=None,
+        limit=50,
+        offset=0,
+        cursor=None,
+        statuses='processing,completed',
+        sources=None,
+        start_date=None,
+        end_date=None,
+        folder_id=None,
+        starred=None,
+        uid='u1',
+    )
+
 
 def _run_main_count(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
     for statuses in (None, '', 'completed', 'processing,completed'):
@@ -559,10 +578,10 @@ WITNESSES: dict[str, CallerWitness] = {
             _run_support_trace,
         ),
         CallerWitness(
-            'routers/conversations.py:get_conversations:database.conversations.get_conversations_without_photos',
+            'routers/conversations.py:get_conversations.read_page:database.conversations.get_conversations_without_photos',
             'database.conversations.get_conversations_without_photos',
             'database.conversations.get_conversations_without_photos',
-            ('main-list-single-status', 'main-list-default-or-multi-status'),
+            ('main-list-single-status', 'main-list-default-or-multi-status', 'main-list-indexed-home'),
             1,
             _run_main_list,
         ),

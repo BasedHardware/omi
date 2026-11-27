@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "id": "FC-live-settlement-uses-capture-clock",
+  "family": "temporal-correctness",
+  "violated_contract": "Late-arriving speech in a live stretch gets a settlement interval after it becomes available to the builder. Locking by capture time alone gives neighbouring batches no chance to join before published custody fixes the boundaries.",
+  "canonical_prevention": "Keep stretch boundaries on the recorded timeline and measure live settlement from the later of speech end and transcript landing. Compare incremental and simultaneous arrival of the same recorded speech across repeated projection commits.",
+  "canonical_prevention_artifact": ["backend/tests/unit/test_conversations_v3_live_passes.py"],
+  "evidence_prs": [],
+  "scope_hints": ["backend/utils/conversations/v3/service.py", "backend/utils/conversations/v3/outline.py"],
+  "status": "open"
+}

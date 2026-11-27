@@ -439,7 +439,7 @@ def _reprocess(pipeline, monkeypatch, config, *, language='en', row_status='in_p
         created_at=at(gen_start(L)),
         structured={'title': 'Synthetic review'},
     )
-    monkeypatch.setattr(pipeline.conversations_db, 'get_conversation', lambda *_args: deepcopy(row))
+    monkeypatch.setattr(pipeline.conversations_db, 'get_conversation', lambda *_args, **_kwargs: deepcopy(row))
     process = MagicMock()
     monkeypatch.setattr(pipeline, 'process_conversation', process)
     pipeline._reprocess_conversation_after_update('u', row['id'], language)

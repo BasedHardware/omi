@@ -22,7 +22,15 @@
     "priority": 1,
     "privacy_generation": 0,
     "protocol_version": 1,
+    "quarantine_diagnostic": {
+     "artifact_kind": "unknown",
+     "exception_class": "worker_validation",
+     "provider_error": "unknown",
+     "stage": "assemble_words",
+     "worker_reason": "empty_asr"
+    },
     "quarantine_reason": "worker_failed",
+    "record_origin": false,
     "recovery": {
      "epoch": 1,
      "failure": {
@@ -99,6 +107,7 @@
     "priority": 1,
     "privacy_generation": 0,
     "protocol_version": 1,
+    "record_origin": false,
     "requires_compute_admission": true,
     "result": {
      "outcome": "success"
@@ -157,6 +166,7 @@
     "priority": 1,
     "privacy_generation": 0,
     "protocol_version": 1,
+    "record_origin": false,
     "requires_compute_admission": true,
     "result": {
      "outcome": "success"
@@ -215,6 +225,7 @@
     "priority": 1,
     "privacy_generation": 0,
     "protocol_version": 1,
+    "record_origin": false,
     "requires_compute_admission": true,
     "result": {
      "outcome": "success"
@@ -274,6 +285,7 @@
     "priority": 1,
     "privacy_generation": 0,
     "protocol_version": 1,
+    "record_origin": false,
     "requires_compute_admission": true,
     "result": {
      "outcome": "success"
@@ -341,7 +353,15 @@
     "priority": 1,
     "privacy_generation": 0,
     "protocol_version": 1,
+    "quarantine_diagnostic": {
+     "artifact_kind": "unknown",
+     "exception_class": "worker_validation",
+     "provider_error": "unknown",
+     "stage": "assemble_words",
+     "worker_reason": "empty_asr"
+    },
     "quarantine_reason": "worker_failed",
+    "record_origin": false,
     "recovery": {
      "epoch": 1,
      "privacy_generation": 0,
@@ -440,6 +460,7 @@
     "priority": 1,
     "privacy_generation": 0,
     "protocol_version": 1,
+    "record_origin": false,
     "requires_compute_admission": true,
     "result": {
      "outcome": "success"

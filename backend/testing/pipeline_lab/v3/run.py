@@ -3,6 +3,11 @@
 Same environment as the classic chain (``chain/run.py``): the persistent emulator stack, the
 in-process vector index, capture-only sinks, the executor barrier and the virtual clock. On top:
 
+- the simulated clock by default (``clock='sim'``, ``stack/clock.py``): product code sees only the
+  replay's instants, and its monotonic and loop clocks follow them across events, so the same
+  inputs give the same day. Overlay ``model_config.v3.clock: "tick"`` restores the ticking clock
+  (each pass stamped at its instant plus real latency);
+
 - the loopback Cloud Tasks queue (``v3/tasks.py``), so the product's reconcile wakes run in
   process at their scheduled virtual time;
 - the admission evidence and attribution hooks (``v3/product.py``);
@@ -36,7 +41,7 @@ from testing.pipeline_lab.stack.io import append_jsonl, parse_time, write_json
 from testing.pipeline_lab.stack.overlay import Overlay
 from testing.pipeline_lab.v3.driver import V3Driver, default_horizon
 from testing.pipeline_lab.v3.export import home_visible, normalize_v3_conversation, pair_by_recordings
-from testing.pipeline_lab.v3.feed import DEFAULT_LAG, plan_arrivals
+from testing.pipeline_lab.v3.feed import DEFAULT_LAG, plan_arrivals, word_count
 from testing.pipeline_lab.v3.product import (
     V3_MODULES,
     ProductV3Ops,
@@ -77,6 +82,7 @@ class V3RunSpec:
     tail: timedelta = timedelta(hours=2)
     sweeps: bool = True
     max_events: int = 20000
+    clock: str = 'sim'  # sim | tick (stack/clock.py CLOCK_MODES)
 
 
 def lab_overlay(overlay: Overlay) -> Overlay:
@@ -164,9 +170,7 @@ def recording_fate(
                 'pending': bool(rec.get('v3_pending')),
                 'conversations': sorted(set(listed.get(rid, []))),
                 'claims': len(rec.get('claims') or []),
-                'words': (words or {}).get(
-                    rid, sum(len(str(s.get('text') or '').split()) for s in rec.get('transcript_segments') or [])
-                ),
+                'words': words[rid] if words is not None and rid in words else word_count(rec),
             }
         )
     return {
@@ -188,7 +192,7 @@ async def replay_v3(spec: V3RunSpec) -> dict[str, Any]:
         raise ValueError('a vector index is required (DESIGN L7)')
     config = spec.config or LabStackConfig.from_env()
     run_dir = Path(spec.run_dir)
-    clock = LabClock(spec.day_start)
+    clock = LabClock.for_mode(spec.day_start, spec.clock)
     plan = plan_arrivals(
         spec.recordings,
         lag=spec.arrival_lag,
@@ -196,7 +200,7 @@ async def replay_v3(spec: V3RunSpec) -> dict[str, Any]:
         partial_step=spec.partial_step,
         partial_lag=spec.partial_lag,
     )
-    result: dict[str, Any] = {'plan': plan.summary(), 'warnings': []}
+    result: dict[str, Any] = {'plan': plan.summary(), 'warnings': [], 'clock': clock.mode}
     timings: dict[str, float] = {}
     result['timings'] = timings
     mark = [time.perf_counter()]
@@ -224,7 +228,7 @@ async def replay_v3(spec: V3RunSpec) -> dict[str, Any]:
         install_attribution(stack)
         install_emulator_size_errors(stack)
         install_planner_trace(stack, trace_target)
-        stack.enter_context(installed_clock(clock))
+        stack.enter_context(installed_clock(clock, product_monotonic=clock.mode == 'sim'))
         if any(d.get('name') == 'typesense_unavailable' for d in env.decisions.rows):
             result['warnings'].append('typesense not listening: conversation index writes off for this run')
         phase('environment')
@@ -260,9 +264,16 @@ async def replay_v3(spec: V3RunSpec) -> dict[str, Any]:
             )
             report = await driver.run(plan.arrivals)
             phase('driver')
+            late = clock.late_monotonic_reads
+            result['late_monotonic_reads'] = late
+            if late:
+                # Real time reached a product decision: this run may not repeat (stack/clock.py).
+                report.warnings.append(f'clock: {late} product monotonic reads past the per-event grace')
             write_json(
                 run_dir / 'v3_driver.json',
                 {
+                    'clock': clock.mode,
+                    'late_monotonic_reads': late,
                     'plan': plan.summary(),
                     'arrivals': [
                         {

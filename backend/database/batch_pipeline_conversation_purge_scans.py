@@ -23,6 +23,7 @@ from google.cloud import firestore
 from config.policy.kill_switches import kill_switch
 from database import conversation_batch_purge_jobs as jobs
 from database import legal_holds, rpc_deadline
+from database.privacy_check_metrics import PURGE_COMPLETED
 from database._client import get_firestore_client, run_transactional
 from database.batch_pipeline_conversation_purge import (
     ArtifactUploadPending,
@@ -198,6 +199,7 @@ def _claim(client: Any, job: str, generation: int) -> tuple[str, dict[str, Any] 
             if (
                 value.get('uid') == row['uid']
                 and value.get('conversation_id')
+                and not value.get('post_window')
                 and not value.get('progress')
                 and not value.get('scan_epoch')
                 and not jobs.lease_held(value, now=now)
@@ -545,4 +547,5 @@ def run_job(
             raise
         logger.info('event=conversation_batch_purge_owner_scan_completed members=%d count=1', len(scan['members']))
         _audit_group('terminal', 'completed', scan['epoch'], len(scan['members']))
+        PURGE_COMPLETED.labels('conversation_owner_scan').inc()
         return 'purged'

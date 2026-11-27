@@ -38,6 +38,7 @@ class ProjectionDiscovery:
         self.pass_started = time.time()
         # None keeps the store's default drain states and its exact legacy call.
         self.states = states
+        self.outbox_was_covered: bool | None = None
         self.stripe = projection_discovery_stripe()
         self.seeded = False
         # Clock-filtered pages use a different order and cursor shape.
@@ -73,8 +74,17 @@ class ProjectionDiscovery:
             rows = self.store.projection_pending(limit=limit)
             self.observe(rows, scope)
             return rows
-        if self.outbox_coverage is not None and self.outbox_coverage() is True:
-            scope['include_outbox'] = True
+        if self.outbox_coverage is not None:
+            covered = self.outbox_coverage() is True
+            coverage_lost = self.outbox_was_covered is True and not covered
+            self.outbox_was_covered = covered
+            if coverage_lost:
+                # Covered rows are filtered after the raw page advances its
+                # cursor. Once that filter is unavailable, restart at the head
+                # so legacy discovery does not wait for a complete wrap.
+                self.after, self.seeded, self.pass_started = None, True, time.time()
+            if covered:
+                scope['include_outbox'] = True
         striped = projection_striping_enabled()
         after = self.after
         seeding = not self.seeded and after is None and striped

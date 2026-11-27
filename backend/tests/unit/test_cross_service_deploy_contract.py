@@ -604,6 +604,14 @@ def test_default_on_wrapper_on_values_flavor(tmp_path: Path) -> None:
         )
 
 
+def test_kill_switch_logger_mapping_read_is_in_inventory() -> None:
+    key = 'BATCH_POLICY_KILL_SWITCH_LOG_ON_CHANGE_ENABLED'
+    reads = contract.scan_env_reads(contract.Source(), ['backend/config/policy/kill_switches.py'])
+
+    assert key in reads
+    assert 'backend/config/policy/kill_switches.py' in reads[key].modules
+
+
 def test_ops_kill_without_reader_still_fails(results: Results) -> None:
     key = 'SYNTHETIC_UNREAD_SWITCH_ENABLED'
     # This check reads manifest entries and the reader inventory only; reuse

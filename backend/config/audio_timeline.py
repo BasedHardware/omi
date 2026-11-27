@@ -47,14 +47,6 @@ def capture_send_span_limit() -> int:
     return 4096
 
 
-def live_capture_window_merge_preservation_enabled() -> bool:
-    """Keep provider pieces when live text repair would discard known capture proof. Default off."""
-    return rollout_default_off(
-        'LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION',
-        os.getenv('LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION', '').strip().lower() in _TRUTHY,
-    )
-
-
 def live_capture_window_merge_union_enabled() -> bool:
     """Union known live windows across receiver-proven received gaps. Default off."""
     return rollout_default_off(
@@ -73,10 +65,3 @@ def live_capture_window_translator_sends_enabled() -> bool:
 def soniox_wire_ledger_enabled() -> bool:
     """Account every emitted Soniox sample, refusing unknown capture origins. Default off."""
     return rollout_default_off('SONIOX_WIRE_LEDGER', os.getenv('SONIOX_WIRE_LEDGER', 'false').strip().lower() == 'true')
-
-
-def soniox_ordered_finalize_enabled() -> bool:
-    """Verify FIFO finalize predictions at the probed 16 kHz wire rate. Default off."""
-    return rollout_default_off(
-        'SONIOX_ORDERED_FINALIZE', os.getenv('SONIOX_ORDERED_FINALIZE', 'false').strip().lower() == 'true'
-    )

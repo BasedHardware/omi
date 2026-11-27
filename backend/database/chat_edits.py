@@ -15,8 +15,35 @@ COLLECTIONS = {'conversation': 'conversations', 'person': 'people', 'task': 'act
 FIELDS = {
     'conversation': ('structured', 'user_title', 'user_overview', 'user_corrections', 'user_corrections_compressed'),
     'person': ('name', 'aliases', 'updated_at'),
-    'task': ('description', 'completed', 'completed_at', 'due_at', 'updated_at', 'deleted', 'deleted_at'),
+    # `status` and `due` are the canonical mirrors the write codec derives from
+    # `completed` and `due_at` on every partial write. They are not separately
+    # user-editable, but a chat edit that changes their source field writes them,
+    # so they belong in the reversible snapshot: undo must restore them or the
+    # row is left with a stale canonical status/due.
+    'task': (
+        'description',
+        'completed',
+        'completed_at',
+        'due_at',
+        'status',
+        'due',
+        'updated_at',
+        'deleted',
+        'deleted_at',
+    ),
 }
+
+
+class UnsupportedChatEditField(ValueError):
+    """A chat edit carried a field outside the reversible user-field fence.
+
+    The field names are kept so the tool boundary can tell the model which
+    argument to drop instead of failing the user's edit opaquely.
+    """
+
+    def __init__(self, fields):
+        self.fields = tuple(sorted(fields))
+        super().__init__('Unsupported chat edit field: ' + ', '.join(self.fields))
 
 
 def envelope(snapshot, summary):
@@ -99,8 +126,9 @@ def apply_update(uid, kind, target_id, expected, updates, *, firestore_client=No
     allowed = set(FIELDS[kind])
     if kind == 'conversation':
         allowed.add('summary_due_at')
-    if not set(updates) <= allowed or ('summary_due_at' in updates and updates['summary_due_at'] is not None):
-        raise ValueError('Unsupported chat edit field')
+    unsupported = set(updates) - allowed
+    if unsupported or ('summary_due_at' in updates and updates['summary_due_at'] is not None):
+        raise UnsupportedChatEditField(unsupported or {'summary_due_at'})
 
     @firestore.transactional
     def apply(tx):

@@ -16,7 +16,7 @@ _SEED_SCAN_CAP = 64
 
 
 def byte_ceiling(limits):
-    """Serialized seed budget by size bucket; shared with the pre-scan serve path."""
+    """Serialized seed budget by size bucket."""
     return 8000 if limits.bucket in {'empty', 'light'} else 24000
 
 

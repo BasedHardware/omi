@@ -197,11 +197,13 @@ extension AppState {
 
   func loadConversationDetail(
     _ conversation: ServerConversation,
+    polling: Bool = false,
     onCached: ((ServerConversation) -> Void)? = nil
   ) async -> ServerConversation {
     (try? await conversationRepository.detail(
       id: conversation.id,
       seed: conversation,
+      polling: polling,
       onCached: onCached
     )) ?? conversation
   }

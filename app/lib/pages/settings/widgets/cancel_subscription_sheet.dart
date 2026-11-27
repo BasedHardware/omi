@@ -220,7 +220,7 @@ class _CancelConfirmStepState extends State<_CancelConfirmStep> {
     final ok = await payment_api.acceptRetentionOffer();
     if (!mounted) return;
     if (ok) {
-      await context.read<UsageProvider>().fetchSubscription();
+      await context.read<UsageProvider>().fetchSubscription(fresh: true);
       if (!mounted) return;
       OmiFeedback.confirm(context, context.l10n.retentionOfferApplied(offer.percentOff, offer.durationMonths));
       _flow.exit.close(context, false);
@@ -325,6 +325,7 @@ class _CancelConfirmStepState extends State<_CancelConfirmStep> {
             OmiButton(
               label: context.l10n.retentionOfferAccept(offer.percentOff),
               expand: true,
+              maxLines: null,
               isLoading: _isAcceptingOffer,
               onPressed: _busy ? null : _acceptOffer,
             )
@@ -332,6 +333,7 @@ class _CancelConfirmStepState extends State<_CancelConfirmStep> {
             OmiButton(
               label: context.l10n.keepSubscription,
               expand: true,
+              maxLines: null,
               onPressed: _isCancelling
                   ? null
                   : () {
@@ -343,6 +345,7 @@ class _CancelConfirmStepState extends State<_CancelConfirmStep> {
           OmiButton.destructive(
             label: context.l10n.cancelSubscription,
             expand: true,
+            maxLines: null,
             isLoading: _isCancelling,
             onPressed: _isAcceptingOffer ? null : _confirmCancel,
           ),

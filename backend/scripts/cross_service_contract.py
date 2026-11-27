@@ -875,7 +875,11 @@ def scan_env_reads(source: Source, module_paths: list[str]) -> dict[str, EnvRead
         collections = {**shared_collections, **index.collections}
         helpers = {**shared_helpers, **index.helpers}
         # Parakeet passes its process environment into StreamAdmissionController.from_env.
-        reads_env_mapping = rel == 'backend/parakeet/admission.py'
+        # These helpers receive an explicit env mapping instead of reading os.environ directly.
+        reads_env_mapping = rel in {
+            'backend/config/policy/kill_switches.py',
+            'backend/parakeet/admission.py',
+        }
         for node in index.candidates:
             key = _is_env_call(node, constants, reads_env_mapping=reads_env_mapping)
             if key:

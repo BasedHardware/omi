@@ -30,6 +30,7 @@ from pydantic import ValidationError
 
 from database import _client
 from database.action_items_cache import bump_action_items_list_version
+from database.conversation_effect_fence import ConversationEffectSource, require_active_account
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from database.read_boundary import parse_payload_strict, parse_snapshot_strict, parse_snapshots
 from models.goal import (
@@ -659,7 +660,10 @@ def update_goal_progress(
     authority_account_generation: Optional[int] = None,
     authority_source_generation: Optional[int] = None,
     firestore_client: Any = None,
+    effect_source: ConversationEffectSource | None = None,
 ) -> Optional[Dict[str, Any]]:
+    if effect_source is not None and firestore_client is None:
+        firestore_client = _client.get_data_plane_firestore_client()
     return FirestoreGoals(uid, firestore_client=firestore_client).update_progress_document(
         goal_id,
         current_value,
@@ -667,6 +671,7 @@ def update_goal_progress(
         account_generation=account_generation,
         authority_account_generation=authority_account_generation,
         authority_source_generation=authority_source_generation,
+        effect_source=effect_source,
     )
 
 
@@ -1095,6 +1100,7 @@ class FirestoreGoals:
         authority_source_generation: Optional[int] = None,
         first_write_wins: bool = False,
         firestore_client: Any = None,
+        effect_source: ConversationEffectSource | None = None,
     ) -> GoalProgressEvent:
         uid = self.space_id
         client = self.client
@@ -1111,6 +1117,9 @@ class FirestoreGoals:
 
         @firestore.transactional
         def apply(write_transaction):
+            if effect_source is not None:
+                require_active_account(write_transaction, client, uid)
+                effect_source.validate(write_transaction, client, uid)
             if authority_account_generation is not None and authority_source_generation is not None:
                 validate_first_open_authority(
                     write_transaction,
@@ -1176,6 +1185,7 @@ class FirestoreGoals:
         authority_account_generation: Optional[int] = None,
         authority_source_generation: Optional[int] = None,
         firestore_client: Any = None,
+        effect_source: ConversationEffectSource | None = None,
     ) -> Optional[Dict[str, Any]]:
         uid = self.space_id
         firestore_client = self.client
@@ -1198,6 +1208,7 @@ class FirestoreGoals:
             authority_source_generation=authority_source_generation,
             first_write_wins=idempotency_key is not None,
             firestore_client=firestore_client,
+            effect_source=effect_source,
         )
         return (
             normalize_goal_storage(

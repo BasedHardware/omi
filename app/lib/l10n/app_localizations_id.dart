@@ -560,11 +560,11 @@ class AppLocalizationsId extends AppLocalizations {
   String get hardwareSection => 'Perangkat Keras';
 
   @override
-  String get v2Undetected => 'V2 tidak terdeteksi';
+  String get v2Undetected => 'Sinkronisasi Offline Tidak Tersedia';
 
   @override
   String get v2UndetectedMessage =>
-      'Kami melihat bahwa Anda memiliki perangkat V1 atau perangkat Anda tidak terhubung. Fungsi Kartu SD hanya tersedia untuk perangkat V2.';
+      'Sinkronisasi Offline memerlukan perangkat Omi yang terhubung dengan penyimpanan kartu SD. Perangkat Anda saat ini tidak mendukungnya.';
 
   @override
   String get endConversation => 'Akhiri Percakapan';
@@ -7063,6 +7063,26 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get authUnexpectedError => 'Terjadi kesalahan tak terduga saat masuk. Silakan coba lagi.';
+
+  @override
+  String get accountSignInMethods => 'Metode masuk';
+
+  @override
+  String get accountAddSignInMethod => 'Tambahkan metode masuk';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Tambahkan cara untuk masuk ke akun Omi ini. Paket, rekaman, dan integrasi Anda tetap tersimpan di akun ini.';
+
+  @override
+  String get accountSignInConflictTitle => 'Metode masuk ini tertaut ke akun lain';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Anda masih masuk ke akun ini. Setiap akun Omi memiliki paket, rekaman, dan integrasinya sendiri.';
+
+  @override
+  String get accountSignInMethodAdded => 'Metode masuk ditambahkan';
 
   @override
   String get authFailedToLinkGoogle => 'Gagal menautkan akun Google. Silakan coba lagi.';
@@ -14373,6 +14393,9 @@ class AppLocalizationsId extends AppLocalizations {
   String get processingProgress => 'Memproses rekaman Anda yang menunggu…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Menunggu kuota transkripsi tersedia';
+
+  @override
   String get processingDeferred => 'Menunggu pemrosesan';
 
   @override
@@ -15328,9 +15351,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get stopThese => 'Hentikan Ini';
 
   @override
-  String get meetingActionItemsTitle => 'Tindakan';
-
-  @override
   String get addToTasks => 'Tambahkan ke Tugas';
 
   @override
@@ -15736,10 +15756,105 @@ class AppLocalizationsId extends AppLocalizations {
   String get stillWorkingOnIt => 'Masih dikerjakan.';
 
   @override
+  String get deviceReadyToUse => 'Siap digunakan';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Firmware perangkat Anda terlalu lama untuk pembaruan ini. Hubungi dukungan untuk bantuan memperbarui perangkat Anda.';
 
   @override
   String get firmwareUpdateAppRequired =>
       'Pembaruan firmware ini memerlukan aplikasi Omi versi lebih baru. Perbarui aplikasi dari toko aplikasi Anda, lalu periksa lagi.';
+
+  @override
+  String get quietPayerTitle => 'Tidak ada rekaman dalam 5 hari';
+
+  @override
+  String get quietPayerMessage => 'Periksa Omi Anda.';
+
+  @override
+  String get quietPayerCheck => 'Periksa';
+
+  @override
+  String get playManageSubscription => 'Kelola langganan';
+
+  @override
+  String get playBilledByGoogle => 'Ditagih oleh Google Play';
+
+  @override
+  String get playPurchasePending => 'Pembayaran tertunda. Omi Pro dimulai setelah Google Play mengonfirmasinya.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Pembelian Google Play ini milik akun Omi lain.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Kami belum bisa mengonfirmasi pembelian. Kami akan mencoba lagi otomatis.';
+
+  @override
+  String get playRenewalTerms =>
+      'Diperpanjang otomatis dengan harga yang ditampilkan sampai Anda membatalkan. Kelola atau batalkan kapan saja di Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Tidak tersedia di Android';
+
+  @override
+  String get pageNotAvailableInApp => 'Halaman ini tidak tersedia di aplikasi.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Pesanan dibuat. Periksa email Anda untuk konfirmasinya.';
+
+  @override
+  String get prepaidCodeEntry => 'Punya kode?';
+
+  @override
+  String get prepaidCodeTitle => 'Tukarkan kode';
+
+  @override
+  String get prepaidCodeFieldHint => 'Masukkan kode Anda';
+
+  @override
+  String get prepaidCodeRedeem => 'Tukarkan';
+
+  @override
+  String get prepaidCodeRedeemed => 'Kode berhasil ditukarkan';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Kode ini tidak valid. Periksa dan coba lagi.',
+        'used': 'Kode ini sudah digunakan.',
+        'expired': 'Kode ini sudah kedaluwarsa.',
+        'hasPlan': 'Anda sudah memiliki paket. Kode Anda tidak digunakan. Tukarkan setelah paket Anda berakhir.',
+        'notPrepaid': 'Kode ini tidak bisa ditukarkan di sini. Gunakan saat memilih paket.',
+        'notEligible': 'Kode ini tidak bisa digunakan di akun ini.',
+        'rateLimited': 'Terlalu banyak percobaan. Coba lagi nanti.',
+        'other': 'Terjadi kesalahan. Silakan coba lagi.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'Ditagih melalui omi.me. Batalkan di sini kapan saja.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Ditagih melalui omi.me.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'Paket $plan kamu sedang dijeda.';
+  }
+
+  @override
+  String get firmwareNewestSupportedForDevice =>
+      'Perangkat Anda sudah menggunakan versi firmware terbaru yang didukung';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Sinkronkan rekaman Anda terlebih dahulu';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Beberapa rekaman masih berada di perangkat Anda. Biarkan rekaman tersebut selesai disinkronkan ke ponsel Anda, lalu mulai pembaruan.';
 }

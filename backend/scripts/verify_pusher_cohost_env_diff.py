@@ -119,6 +119,8 @@ _BATCH_PIPELINE_LISTEN_ONLY = frozenset(
         # Held expiry/requeue is owned by main.py maintenance/RPC and GPU workers;
         # pusher does not run the held maintenance loop or worker failure writer.
         'BATCH_HELD_DEAD_LETTER_ENABLED',
+        # The hourly census runs on the same main.py held maintenance lane.
+        'BATCH_PARKED_JOB_SWEEPER_ENABLED',
         # main.py owns the record intake drain; pusher.main never starts it.
         'RECORD_SEAL_REPAIR_FRESH_ENABLED',
         # Only main.py admits native record units; pusher never assigns GPU queue priority.
@@ -384,6 +386,9 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS",
             # Reconnect admission is local to the /v4/listen runtime; pusher does not open client listen sockets.
             "LISTEN_RECONNECT_BUDGET_PER_MIN",
+            # The mobile batch reconnect protocol is local to the /v4/listen runtime and the
+            # backend-sync quiet-check reconciler; pusher never opens client listen sockets.
+            "LISTEN_BATCH_RECONNECT_ENABLED",
             "MCP_OAUTH_CHATGPT_CLIENT_SECRET",
             "MCP_OAUTH_CLIENTS_JSON",
             "MEMORY_TYPESENSE_COLLECTION",

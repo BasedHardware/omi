@@ -1,4 +1,5 @@
 // Account-scoped UI approval. All inputs are API data, never executable PR code.
+const {setTimeout: delay} = require('node:timers/promises');
 const ACTOR_ID = 9387252; // Git-on-my-level, stable across login renames.
 const NIK_ID = 43514161;
 const APPROVER_IDS = new Set([NIK_ID, ACTOR_ID]);
@@ -12,6 +13,7 @@ const GENERATED_API_FILES = new Set([
   'desktop/macos/Desktop/Sources/Generated/OmiApi.generated.swift',
 ]);
 const STATUS = 'UI author approval';
+const READY = 'Checking account-scoped UI approval';
 const MARKER = '<!-- ui-author-approval:git-on-my-level -->';
 const isActor = user => user?.id === ACTOR_ID;
 const isUI = path => !GENERATED_API_FILES.has(path) && (/^(app\/lib\/(pages|widgets|ui|l10n)\/|desktop\/macos\/Desktop\/(Sources\/(Views|Components|Theme|UI)\/|Resources\/)|desktop\/windows\/src\/(components|pages|views|styles)\/|web\/[^/]+\/(app|src)\/.*\.(tsx|jsx|vue|css|scss|html|svg|png|jpg|webp)$|frontend\/.*\.(tsx|jsx|vue|css|scss|html|svg|png|jpg|webp)$)/.test(path)
@@ -133,28 +135,101 @@ async function unchangedUI(github, repo, approvedSha, headSha) {
   }
 }
 
-async function evaluateHead({github, context, headSha}) {
-  const repo = context.repo;
-  const pull_number = context.payload.pull_request?.number || context.payload.issue.number;
-  const trigger = (await github.rest.pulls.get({...repo,pull_number})).data;
-  if (!headSha && (trigger.state !== 'open' || trigger.base.ref !== 'main')) return;
-  const sha = headSha || trigger.head.sha;
-  const status = (state, description) => github.rest.repos.createCommitStatus({
-    ...repo,sha,state,context:STATUS,description,
+const publishStatus = (github, repo, sha, state, description) => github.rest.repos.createCommitStatus({
+  ...repo,sha,state,context:STATUS,description,
+});
+
+async function latestStatus(github, repo, sha) {
+  const pages = github.paginate.iterator(github.rest.repos.listCommitStatusesForRef, {
+    ...repo,ref:sha,per_page:100,
   });
-  await status('pending','Checking account-scoped UI approval');
+  for await (const {data} of pages) {
+    const latest = data.find(status => status.context.toLowerCase() === STATUS.toLowerCase());
+    if (latest) return latest;
+  }
+}
+
+// Status creation is append-only, with no compare-and-set. Serialize the
+// read/write pair with request admission, without putting PR jobs in the
+// worker's cancellable queue. GitHub creates a named ref at most once.
+async function withStatusLock(github, context, sha, operation) {
+  const ref = `tags/ui-author-approval-lock/${sha}`;
+  const args = {...context.repo,ref};
+  const deadline = Date.now() + 45_000;
+  for (;;) {
+    try {
+      await github.rest.git.createRef({...args,ref:`refs/${ref}`,sha:context.sha});
+      break;
+    } catch (error) {
+      if (![409,422].includes(error.status)) throw error;
+      try {
+        await github.rest.git.getRef(args);
+      } catch (lookupError) {
+        // A previous holder may have released between create and lookup.
+        if (lookupError.status !== 404) throw lookupError;
+      }
+      if (Date.now() >= deadline) {
+        await publishStatus(github,context.repo,sha,'failure','UI approval status lock timed out; see workflow logs');
+        throw new Error(`Could not acquire UI approval status lock: ${ref}`,{cause:error});
+      }
+      await delay(200 + Math.random() * 300);
+    }
+  }
   try {
-    // Commit statuses are shared by SHA, so every open main PR sharing this
-    // SHA must satisfy its own requirements before any run may write success.
-    const sameHead = async () => (await github.paginate(github.rest.pulls.list, {
-      ...repo,state:'open',base:'main',per_page:100,
-    })).filter(p => p.head.sha === sha);
-    const prs = await sameHead();
-    let allowed = prs.length > 0;
-    for (const summary of prs) {
+    return await operation();
+  } finally {
+    await github.rest.git.deleteRef(args);
+  }
+}
+
+async function sameHeadCandidates(github, repo, sha) {
+  // A commit status is shared by head SHA. Main-target PRs take precedence.
+  // Without one, reconcile every open stack on that SHA.
+  const open = await github.paginate(github.rest.pulls.list, {...repo,state:'open',per_page:100});
+  const sameHead = open.filter(pr => pr.head.sha === sha);
+  const mainTargets = sameHead.filter(pr => pr.base.ref === 'main');
+  return mainTargets.length ? mainTargets : sameHead;
+}
+
+async function evaluateHead({github, context, headSha, requestId}) {
+  const repo = context.repo;
+  let sha = headSha;
+  if (!sha) {
+    const pull_number = context.payload.pull_request?.number || context.payload.issue.number;
+    const trigger = (await github.rest.pulls.get({...repo,pull_number})).data;
+    if (trigger.state !== 'open' || trigger.base.ref !== 'main') return;
+    sha = trigger.head.sha;
+  }
+  const status = (state, description) => {
+    if (!requestId) return publishStatus(github,repo,sha,state,description);
+    return withStatusLock(github,context,sha,async () => {
+      const latest = await latestStatus(github,repo,sha);
+      if (latest?.node_id === requestId) await publishStatus(github,repo,sha,state,description);
+    });
+  };
+  try {
+    const candidates = await sameHeadCandidates(github,repo,sha);
+    // Events can refer to historical heads that no open PR uses anymore.
+    if (candidates.length === 0) return;
+    if (!requestId) await status('pending','Checking account-scoped UI approval');
+    const stack = candidates[0].base.ref !== 'main';
+    const readMain = async () => {
+      const {data} = await github.rest.git.getRef({...repo,ref:'heads/main'});
+      if (!/^[a-f0-9]{40}$/.test(data.object?.sha || '')) throw new Error('Invalid main snapshot');
+      return data.object.sha;
+    };
+    const main = stack ? await readMain() : null;
+    // All stacks use the same immutable main comparison so inherited UI
+    // changes and authors count. Approval comments remain scoped to each PR.
+    const stackEvidence = stack ? await evidence(github,repo,{base:{sha:main},head:{sha}}) : null;
+    let allowed = true;
+    for (const summary of candidates) {
       const pr = (await github.rest.pulls.get({...repo,pull_number:summary.number})).data;
-      if (pr.head.sha !== sha || pr.base.ref !== 'main') throw new Error('PR snapshot changed');
-      const {files,commits} = await evidence(github,repo,pr);
+      if (pr.state !== 'open' || pr.head.sha !== sha || pr.base.ref !== summary.base.ref
+        || pr.base.sha !== summary.base.sha) {
+        throw new Error('PR snapshot changed');
+      }
+      const {files,commits} = stackEvidence || await evidence(github,repo,pr);
       const comments = await github.paginate(github.rest.issues.listComments, {
         ...repo,issue_number:pr.number,per_page:100,
       });
@@ -175,23 +250,101 @@ async function evaluateHead({github, context, headSha}) {
           + 'Non-UI work and unrelated access are unaffected.'});
       }
     }
-    const latest = await sameHead();
-    const signature = list => list.map(p => `${p.number}:${p.base.sha}`).sort().join(',');
-    if (signature(latest) !== signature(prs)) throw new Error('PR set changed during verification');
+    const latest = await sameHeadCandidates(github,repo,sha);
+    const signature = list => list.map(pr => JSON.stringify([pr.number,pr.base.ref,pr.base.sha])).sort().join(',');
+    if (signature(latest) !== signature(candidates) || (stack && await readMain() !== main)) {
+      throw new Error('PR set or main moved during verification');
+    }
     await status(allowed ? 'success' : 'failure',allowed
-      ? 'UI approval satisfied or not required on all same-head PRs'
+      ? stack ? 'UI approval satisfied or not required for stacked PR compared with main'
+        : 'UI approval satisfied or not required on all same-head PRs'
       : 'Waiting for Nik or David approval on affected same-head PRs');
   } catch (error) {
     await status('failure','Unable to verify UI approval; see workflow logs');
     throw error;
   }
 }
-async function run(args) {
-  // Workflow concurrency is keyed to the resolved immutable head. Replaced
-  // pending events therefore still evaluate that same head's latest comments.
-  return evaluateHead(args);
+async function requestEvaluation({github, context}) {
+  const event = context.payload;
+  const pr = event.pull_request || await resolveCommentPR(github,context,event.issue.number);
+  const heads = new Set([pr.head?.sha]);
+  // Synchronize changes membership for both the event head and its predecessor.
+  if (event.pull_request && event.action === 'synchronize') heads.add(event.before);
+  if ([...heads].some(sha => !/^[a-f0-9]{40}$/.test(sha))) throw new Error('Invalid head SHA');
+  const results = await Promise.allSettled([...heads].map(sha => requestHead({github,context,pr,sha})));
+  const errors = results.filter(result => result.status === 'rejected').map(result => result.reason);
+  if (errors.length) throw new AggregateError(errors,errors.map(error => error.message).join('\n'));
+  return results.filter(result => result.value).length;
 }
-module.exports = run;
+
+async function resolveCommentPR(github, context, pull_number) {
+  try {
+    const {data: pr} = await github.rest.pulls.get({...context.repo,pull_number});
+    if (!/^[a-f0-9]{40}$/.test(pr.head?.sha)) throw new Error('Invalid head SHA');
+    return pr;
+  } catch (lookupError) {
+    try {
+      // issue_comment has no head SHA. GitHub owns this ref in the base
+      // repository, including for fork PRs. Use it only to invalidate approval.
+      const {data} = await github.rest.git.getRef({...context.repo,ref:`pull/${pull_number}/head`});
+      const sha = data.object?.sha;
+      if (!/^[a-f0-9]{40}$/.test(sha)) throw new Error('Invalid PR head ref');
+      await withStatusLock(github,context,sha,() =>
+        publishStatus(github,context.repo,sha,'failure','Unable to resolve PR for UI approval; see workflow logs'));
+    } catch (invalidationError) {
+      throw new AggregateError([lookupError,invalidationError],
+        `PR #${pull_number} lookup failed and approval invalidation reported an error: ${invalidationError.message}`);
+    }
+    throw lookupError;
+  }
+}
+
+async function requestHead({github, context, pr, sha}) {
+  return withStatusLock(github,context,sha,async () => {
+    if (pr.state !== 'open' || pr.head.sha !== sha) {
+      let candidates;
+      try {
+        candidates = await sameHeadCandidates(github,context.repo,sha);
+      } catch (error) {
+        await publishStatus(github,context.repo,sha,'failure','Unable to verify UI approval; see workflow logs');
+        throw error;
+      }
+      if (!candidates.length) return false;
+    }
+    await publishStatus(github,context.repo,sha,'pending','Requesting UI approval evaluation');
+    try {
+      await github.rest.actions.createWorkflowDispatch({
+        ...context.repo,
+        workflow_id:'ui-author-approval.yml',
+        ref:'main',
+        inputs:{pull_number:String(pr.number),head_sha:sha},
+      });
+    } catch (error) {
+      await publishStatus(github,context.repo,sha,'failure','Could not dispatch UI approval evaluation; see workflow logs');
+      throw new Error(`Could not request UI approval evaluation for ${sha}: ${error.message}`,{cause:error});
+    }
+    // Dispatch arrival is unordered. Any surviving worker may evaluate the
+    // latest successfully dispatched request, after capturing its status ID.
+    await publishStatus(github,context.repo,sha,'pending',READY);
+    return true;
+  });
+}
+
+async function evaluateDispatch({github, context}) {
+  const {pull_number, head_sha: headSha} = context.payload.inputs;
+  const pullNumber = Number(pull_number);
+  if (!/^[1-9][0-9]*$/.test(pull_number) || !Number.isSafeInteger(pullNumber)
+      || !/^[a-f0-9]{40}$/.test(headSha)) {
+    throw new Error('Invalid UI approval evaluation inputs');
+  }
+  const latest = await withStatusLock(github,context,headSha,() => latestStatus(github,context.repo,headSha));
+  if (latest?.state !== 'pending' || latest.description !== READY || !latest.node_id) return;
+  return evaluateHead({github,context,headSha,requestId:latest.node_id});
+}
+
+module.exports = evaluateHead;
+module.exports.requestEvaluation = requestEvaluation;
+module.exports.evaluateDispatch = evaluateDispatch;
 module.exports.decision = decision;
 module.exports.evidence = evidence;
 module.exports.carryCandidate = carryCandidate;

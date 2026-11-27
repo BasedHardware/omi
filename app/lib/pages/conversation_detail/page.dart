@@ -23,11 +23,16 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/pages/episodes/live_transcript_view.dart' show LivePreviewTail;
 import 'package:omi/services/live_preview/live_preview_controller.dart';
 import 'package:omi/services/live_preview/live_preview_coverage.dart';
+import 'package:omi/services/live_preview/live_words_hole.dart';
+import 'package:omi/services/live_preview/live_words_log.dart';
+import 'package:omi/services/sockets/listen_client_state.dart';
+import 'package:omi/pages/conversation_detail/widgets/streamed_lines_tail.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/chat/chat_route.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/pages/conversations/conversation_action_analytics.dart';
 import 'package:omi/pages/conversations/conversation_actions.dart';
+import 'package:omi/pages/conversations/widgets/live_conversation_end_button.dart';
 import 'package:omi/pages/paywall/value_moment_paywall.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -46,6 +51,7 @@ import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/conversations/capture_groups.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:omi/utils/reliability_experiments.dart';
 import 'package:omi/utils/share_sheet.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart';
 import 'package:omi/widgets/extensions/string.dart';
@@ -161,6 +167,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
   /// Held for dispose, when the page can no longer look the provider up.
   late final ConversationDetailProvider _detailProvider;
   late final LiveConversationRefresher _liveRefresher;
+  StreamSubscription<SummaryWaitAnswer>? _summaryAnswers;
   bool _isSharing = false;
   bool _reviewInterrupted = false;
   bool _isTogglingStarred = false;
@@ -181,6 +188,10 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
   bool _tabDragStartedOnTranscript = false;
   bool _initialLiveHydrationFinished = false;
   Timer? _liveSummaryTimer;
+
+  // Reliability experiment instant_live_text: this page has told the listening connection that its
+  // transcript is on screen.
+  bool _reportedTranscriptOnScreen = false;
   String? _liveSummaryInterval;
   int _liveSummaryTick = 0;
   int _summaryOpen = 0;
@@ -439,6 +450,13 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
         refresh: _detailProvider.refreshConversation,
         inFront: () => mounted && ModalRoute.of(context)?.isCurrent != false)
       ..start();
+    // Reliability experiment fast_end_feedback: after this conversation is ended (from this page or any
+    // other way), the app's waiting requests return it when it is committed with its outline and when its
+    // summary is stored; each answer lands through the ordinary refresh. Off, nothing is ever emitted.
+    _summaryAnswers = Provider.of<ConversationsV3Provider?>(context, listen: false)?.summaryAnswers.listen((answer) {
+      if (!mounted || _detailProvider.conversationOrNull?.id != answer.conversationId) return;
+      unawaited(_detailProvider.refreshConversation(read: (_) async => answer.result));
+    });
     WidgetsBinding.instance.addObserver(this);
     unawaited(
       SiriIntegration.instance.setCurrentScreen("/conversation/${widget.conversation.id}", widget.conversation.id),
@@ -659,8 +677,13 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
     _detailProvider.leaveSpeakerLabelingSession(widget.conversation.id);
     unawaited(SiriIntegration.instance.setCurrentScreen("", null));
     _cancelOwnedTimers();
+    if (_reportedTranscriptOnScreen) {
+      _reportedTranscriptOnScreen = false;
+      ListenClientState.instance.capturePageClosed();
+    }
     _liveSummaryTimer?.cancel();
     _liveRefresher.dispose();
+    unawaited(_summaryAnswers?.cancel());
     _separation.dispose();
     _controller?.dispose();
     focusTitleField.dispose();
@@ -1284,6 +1307,76 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
       (context.read<ConversationsV3Provider?>()?.v3 ?? false) &&
       conversation.v3?.tileState == ConversationTileState.live;
 
+  /// Reliability experiment instant_live_text. The page shows the account's open conversation and this
+  /// phone's capture feeds it: its listening recording is a source, or the server's device stamp says the
+  /// latest speech came from this install.
+  bool _showsOpenConversationThisPhoneFeeds(ServerConversation shown, CaptureProvider capture) {
+    if (!mounted || _routeUid.isEmpty || _routeUid != SharedPreferencesUtil().uid) return false;
+    if (_routeIdentityEpoch != AnalyticsManager.identityEpoch) return false;
+    final current = _providerInitialized ? _detailProvider.conversationOrNull : widget.conversation;
+    if (current == null ||
+        (_providerInitialized && _detailProvider.detailAccessUnavailable) ||
+        current.id != shown.id ||
+        current.id != widget.conversation.id ||
+        current.isLocked ||
+        current.isHiddenFromDefaultList ||
+        current.status != ConversationStatus.in_progress ||
+        !_isLiveV3(current)) {
+      return false;
+    }
+    final recordingId = capture.verifiedLiveServerRecordingId;
+    if (recordingId != null && (current.v3?.recordingIds.contains(recordingId) ?? false)) return true;
+    final live = context.read<ConversationsV3Provider?>()?.live;
+    return LiveConversationEndButton.latestSpeechFromThisDevice(current,
+        currentLiveId: live?.id, liveCaptureDeviceId: live?.v3?.captureDeviceId);
+  }
+
+  /// Reliability experiment instant_live_text: while this page shows the open conversation this phone
+  /// feeds, the listening connection reports its transcript as on screen, exactly as the Listening page
+  /// does. The server streams a batch-only session's audio for as long as that report stands, so the
+  /// lines start the moment the page opens. Off, this page never reports.
+  void _syncTranscriptOnScreenReport() {
+    final capture = context.read<CaptureProvider?>();
+    final want = ReliabilityExperiments.enabled('instant_live_text') &&
+        capture != null &&
+        _showsOpenConversationThisPhoneFeeds(widget.conversation, capture);
+    if (want == _reportedTranscriptOnScreen) return;
+    _reportedTranscriptOnScreen = want;
+    // The report notifies listeners; never do that while this widget is building.
+    scheduleMicrotask(
+        want ? ListenClientState.instance.capturePageOpened : ListenClientState.instance.capturePageClosed);
+  }
+
+  /// Reliability experiment instant_live_text: the lines the server streamed to this phone's listening
+  /// connection that the open conversation does not hold yet. Only where the phone shows no lines from
+  /// its own recogniser (a session without the on-phone preview).
+  Widget? _streamedLinesTail(ServerConversation conversation, CaptureProvider? capture, {Widget? whenEmpty}) {
+    final startedAt = conversation.startedAt;
+    if (!ReliabilityExperiments.enabled('instant_live_text') || capture == null || startedAt == null) return null;
+    bool applies() => !capture.liveWordsShown && _showsOpenConversationThisPhoneFeeds(conversation, capture);
+    if (!applies()) return null;
+    final coverage = LivePreviewCoverage.forFinals(conversation.transcriptSegments, startedAt);
+    return StreamedLinesTail(
+      capture: capture,
+      whenEmpty: whenEmpty,
+      lines: () {
+        final origin = capture.liveTranscriptStartedAt;
+        if (origin == null || !applies()) return const [];
+        DateTime at(double seconds) => origin.add(Duration(microseconds: (seconds * 1000000).round()));
+        return coverage.excludeCovered([
+          for (final segment in capture.segments)
+            if (segment.text.trim().isNotEmpty && !at(segment.start).isBefore(startedAt))
+              LivePreviewLine(
+                  id: segment.id,
+                  text: segment.text,
+                  isFinal: true,
+                  startedAt: at(segment.start),
+                  endedAt: at(segment.end)),
+        ]);
+      },
+    );
+  }
+
   Widget? _livePreviewTail(ServerConversation conversation, CaptureProvider? capture, {Widget? whenEmpty}) {
     final preview = capture?.livePreview;
     final startedAt = conversation.startedAt;
@@ -1295,7 +1388,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
           _routeUid != SharedPreferencesUtil().uid ||
           _routeIdentityEpoch != AnalyticsManager.identityEpoch ||
           !identical(capture.livePreview, preview) ||
-          !capture.localPreviewAdmitted ||
+          !capture.liveWordsShown ||
           !preview.admitted ||
           !capture.pendantCaptureVerified) {
         return false;
@@ -1307,30 +1400,85 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
           current.id != conversation.id ||
           current.id != widget.conversation.id ||
           current.isLocked ||
-          current.isHiddenFromDefaultList ||
-          current.status != ConversationStatus.in_progress ||
-          !_isLiveV3(current)) {
+          current.isHiddenFromDefaultList) {
         return false;
       }
+      if (current.status != ConversationStatus.in_progress || !_isLiveV3(current)) {
+        // Reliability experiment live_words_cascade: a conversation that has ended keeps the live words
+        // spoken inside its own time range until stored text replaces them (or they are five minutes
+        // old), exactly as an open one does. Which words those are is decided by time alone, below.
+        // Off: only the conversation in progress shows live words.
+        return LivePreviewController.cascadeEnabled() &&
+            current.v3 != null &&
+            (context.read<ConversationsV3Provider?>()?.v3 ?? false);
+      }
       final recordingId = capture.verifiedLiveServerRecordingId;
-      return recordingId != null && (current.v3?.recordingIds.contains(recordingId) ?? false);
+      if (recordingId != null && (current.v3?.recordingIds.contains(recordingId) ?? false)) return true;
+      // Reliability experiment instant_live_text: a phone that uploads its speech as files never has its
+      // listening recording among the sources. The server's device stamp on the open conversation says the
+      // latest speech came from this install, which is the same fact.
+      // Reliability experiment vendor_recognizer_on_opened_app shows its merged words by the same fact.
+      if (!ReliabilityExperiments.enabled('instant_live_text') &&
+          !ReliabilityExperiments.enabled('vendor_recognizer_on_opened_app')) {
+        return false;
+      }
+      final live = context.read<ConversationsV3Provider?>()?.live;
+      return LiveConversationEndButton.latestSpeechFromThisDevice(current,
+          currentLiveId: live?.id, liveCaptureDeviceId: live?.v3?.captureDeviceId);
     }
 
     if (!isVerified()) return null;
-    return LivePreviewTail(
+    return LivePreviewTail.continuingTranscript(
       preview: preview,
       coverage: LivePreviewCoverage.forFinals(conversation.transcriptSegments, startedAt),
-      includeBottomInset: false,
       whenEmpty: whenEmpty,
       lines: () {
         if (!isVerified()) return const [];
-        return [
-          for (final line in preview.lines)
-            if (line.startedAt case final lineStart?)
-              if (!lineStart.isBefore(startedAt)) line,
-        ];
+        final lines = LivePreviewController.cascadeEnabled()
+            // Reliability experiment live_words_cascade: the live words of this conversation's own time
+            // range, per word, whether it is open or has ended: from its start (never before the End that
+            // preceded it) to the End that closed it. The tail then drops each word once a stored line
+            // covers its moment, or after five minutes without one.
+            ? preview.wordsFor(startedAt: startedAt, until: _liveWordsUntil())
+            : [
+                for (final line in preview.lines)
+                  if (line.startedAt case final lineStart?)
+                    if (!lineStart.isBefore(startedAt)) line,
+              ];
+        _recordLiveWordsHole(conversation, startedAt, lines);
+        return lines;
       },
     );
+  }
+
+  /// Reliability experiment live_words_cascade: where this page's conversation stops owning live words.
+  /// The End that closed it when the server has stamped one; for a conversation that ended by itself, a
+  /// little after its last stored line; null while it is open (the live-words layer then stops it at an
+  /// End pressed on this phone that the page has not heard of yet).
+  DateTime? _liveWordsUntil() {
+    final current = _providerInitialized ? _detailProvider.conversationOrNull : widget.conversation;
+    if (current == null) return null;
+    final closedBy = current.v3?.manualCutAt;
+    if (closedBy != null) return closedBy;
+    if (current.status == ConversationStatus.in_progress) return null;
+    return current.finishedAt?.add(LivePreviewController.conversationLead);
+  }
+
+  // Reliability experiment vendor_recognizer_on_opened_app, step 4: a local record, numbers only, of
+  // the stored lines, the live lines and the hole between them on this page, when its live lines are
+  // first built and at most every 10 s after. Off, nothing is recorded.
+  DateTime? _liveWordsHoleRecordedAt;
+
+  void _recordLiveWordsHole(ServerConversation conversation, DateTime startedAt, List<LivePreviewLine> lines) {
+    if (!ReliabilityExperiments.enabled('vendor_recognizer_on_opened_app')) return;
+    final now = DateTime.now();
+    final last = _liveWordsHoleRecordedAt;
+    if (last != null && now.difference(last) < const Duration(seconds: 10)) return;
+    _liveWordsHoleRecordedAt = now;
+    LiveWordsLog.event('open_conversation_page', {
+      'opened': last == null,
+      ...LiveWordsHole.measure(stored: conversation.transcriptSegments, origin: startedAt, live: lines, now: now),
+    });
   }
 
   /// Header actions: Star and Share as 44pt icon buttons, then one overflow holding the summary
@@ -1424,13 +1572,20 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
     final conversation = detailProvider.conversationOrNull;
     context.select<CaptureProvider?, (LivePreviewController?, bool, bool, String?)>((capture) => (
           capture?.livePreview,
-          capture?.localPreviewAdmitted ?? false,
+          capture?.liveWordsShown ?? false,
           capture?.pendantCaptureVerified ?? false,
           capture?.verifiedLiveServerRecordingId,
         ));
     final capture = context.read<CaptureProvider?>();
     context.select<ConversationsV3Provider?, bool>((provider) => provider?.v3 ?? false);
+    if (ReliabilityExperiments.enabled('instant_live_text') ||
+        ReliabilityExperiments.enabled('vendor_recognizer_on_opened_app')) {
+      // The device stamp arrives on the live read; rebuild when it does.
+      context.select<ConversationsV3Provider?, (String?, String?)>(
+          (provider) => (provider?.live?.id, provider?.live?.v3?.captureDeviceId));
+    }
     _syncLiveSummaryTimer();
+    _syncTranscriptOnScreenReport();
     if (!_providerInitialized) {
       final preview = selectedTab == ConversationTab.transcript ? _livePreviewTail(widget.conversation, capture) : null;
       return Scaffold(
@@ -1604,7 +1759,8 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
                                 },
                                 playbackController: _playbackController,
                                 livePreviewTail: (row, whenEmpty) =>
-                                    _livePreviewTail(row, capture, whenEmpty: whenEmpty),
+                                    _livePreviewTail(row, capture, whenEmpty: whenEmpty) ??
+                                    _streamedLinesTail(row, capture, whenEmpty: whenEmpty),
                               ),
                             ),
                           ],
@@ -1662,6 +1818,12 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
                       _liveEndRequested = suppressed;
                       _summaryOpenPending = false;
                       _syncLiveSummaryTimer();
+                      if (suppressed) {
+                        // Start at the tap: the page knows its conversation before the server answers.
+                        context
+                            .read<ConversationsV3Provider?>()
+                            ?.awaitSummaryAfterEnd(_detailProvider.conversationOrNull?.id);
+                      }
                     },
                     onStopPressed: () {
                       // Empty since we don't show the stop button in detail mode

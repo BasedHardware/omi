@@ -1094,7 +1094,9 @@ async def test_native_admission_stages_references_and_drains_after_rollback(
     monkeypatch.setattr(live, 'read_reference', lambda *args, **kwargs: b'\x01\x00' * 16000)
     manifests = []
 
-    def stage(item, body):
+    def stage(item, body, *, record_origin, record_lane_owner):
+        assert record_origin is True
+        assert record_lane_owner == 'batch_live_v1'
         manifests.append(json.loads(body[len(MAGIC) :]))
         assert body.startswith(MAGIC) and len(body) < 2000
         uri = 'gs://synthetic-manifest/audio#1'
@@ -1136,6 +1138,8 @@ async def test_native_admission_stages_references_and_drains_after_rollback(
     assert unit_reads
     assert result == {'outcome': 'batch', 'job_id': 'bp_' + content}
     job = store.rows['jobs', segment]
+    assert job['record_origin'] is True
+    assert job['record_lane_owner'] == 'batch_live_v1'
     if current.get('record_upload_revision') == 9:
         assert job['record_input_upload_revision'] == 9
     else:
@@ -1302,3 +1306,15 @@ def test_late_record_transcript_has_durable_episode_read_recovery_marker(monkeyp
     monkeypatch.setenv('EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED', 'false')
     result, _ = replace_record(recording(), incoming(), {'start': 100, 'end': 102})
     assert 'episode_transcript_updated_at' not in result
+
+
+@pytest.mark.parametrize('whole_native_record', [True, False])
+def test_batch_projection_honors_late_v3_finish_only_with_whole_record(whole_native_record, monkeypatch):
+    monkeypatch.delenv('CONVERSATIONS_V3_BATCH_MANUAL_END', raising=False)
+    original = recording(recording=True, v3_manual_end_requested=True, transcript_segments=[])
+    result, _ = replace_record(
+        original, incoming(), {'start': 100, 'end': 102, 'whole_native_record': whole_native_record}
+    )
+    assert result['v3_manual_end_requested'] is True
+    assert result.get('v3_manual_end', False) == whole_native_record
+    assert result.get('v3_pending', False) == whole_native_record

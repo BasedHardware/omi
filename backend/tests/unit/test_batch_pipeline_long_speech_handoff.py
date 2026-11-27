@@ -173,7 +173,7 @@ async def test_intake_freezes_the_resolved_stt_language(monkeypatch, inherit, us
         snapshots['user']['transcription_preferences'] = {'single_language_mode': True}
         return ProtectionContext('standard', 0)
 
-    def stage_audio(work, body):
+    def stage_audio(work, body, *, record_origin):
         frozen.append(read_context(body))
         frozen_work.append(work)
         raise Captured

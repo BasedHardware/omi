@@ -229,10 +229,6 @@ env:
     value: "0"
   - name: PLAYBACK_ON_DEMAND_ENABLED
     value: "true"
-  - name: SYNC_POLL_BACKOFF_ENABLED
-    value: "false"
-  - name: SYNC_POLL_BACKOFF_PERCENT
-    value: "0"
   - name: AUDIO_ARCHIVE_LIVE_ENABLED
     value: "true"
   - name: AUDIO_ARCHIVE_READ_ENABLED
@@ -345,15 +341,11 @@ env:
   # existing v1 sessions and resumed v1 conversations are unaffected.
   - name: AUDIO_TIMELINE_V2
     value: "true"
-  - name: LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION
-    value: 'false'
   - name: LIVE_CAPTURE_WINDOW_MERGE_UNION
     value: 'false'
   - name: LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS
     value: "false"
   - name: SONIOX_WIRE_LEDGER
-    value: "false"
-  - name: SONIOX_ORDERED_FINALIZE
     value: "false"
   - name: SONIOX_CAPTURE_AXIS_DIAGNOSTICS
     value: "false"

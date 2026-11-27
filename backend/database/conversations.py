@@ -11,9 +11,9 @@ backend/docs/storing-conversations.md).
 from utils.conversations import phase_shadow
 
 from database import conversation_visibility_counts, processing_backlog, speaker_auto_enroll, capture_group_notes
-from database import conversation_recorded_time, conversations_v3_backfill_runs
-from database import pipeline_ledger
-from utils.conversations import summary_delivery, lifecycle_clocks
+from database import conversation_recorded_time, conversations_v3_backfill_runs, conversations_v3_fence
+from database import home_visibility_index, pipeline_ledger
+from utils.conversations import summary_delivery, lifecycle_clocks, terminal_settled
 from utils.observability.delivery import summary_terminal_outcome
 from utils.sync import processing_hold, bridge_pending
 from config.refactor_modes import serving_for, shadow_or_serve
@@ -21,6 +21,7 @@ import copy
 import hashlib
 import json
 import logging
+import os
 import uuid
 import zlib
 from collections.abc import Mapping
@@ -33,7 +34,6 @@ from database.account_deletion_policy import account_deletion_marker_blocks_acce
 from google.api_core.exceptions import AlreadyExists, Conflict, FailedPrecondition, NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
-from google.cloud.firestore_v1.field_path import FieldPath
 from prometheus_client import Counter, REGISTRY
 from threading import Lock
 import utils.other.hume as hume
@@ -92,6 +92,7 @@ from database.transcript_pointer import (
     TranscriptSegmentsDecodeError,
     decode_stored_transcript as decode_transcript_segments_blob,
     run_preloaded_transactional,
+    run_preloaded_transaction_with_contention_retry,
 )
 
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
@@ -385,6 +386,8 @@ def _prepare_conversation_for_write(
     allow_offload: bool = True,
 ) -> Dict[str, Any]:
     data = copy.deepcopy(data)
+    data.pop(home_visibility_index.FIELD, None)
+    data.pop('transcription_admission', None)  # Current authenticated read evidence, never persisted.
 
     # Partial writes cannot certify an entire legacy row. Explicit prepare
     # reconciles them; full creates/processing results get compact content now.
@@ -717,6 +720,7 @@ def prepare_conversation_for_read(
         return None
 
     data = copy.deepcopy(conversation_data)
+    data.pop('transcription_admission', None)  # Only the current job lookup can supply this wire field.
     # Separate encrypted card data must not leak into hydrated detail or be
     # replayed as stale projection metadata by a logical-state writer.
     for field in DISPLAY_FIELDS:
@@ -1078,25 +1082,33 @@ class _PageFill:
     would charge every full page one more read to save that rare request.
     """
 
-    def __init__(self, conversations_ref, *, limit, budget, visible):
+    def __init__(self, conversations_ref, *, limit, budget, visible, scout=None, consume=None):
         self.conversations_ref = conversations_ref
         self.limit = limit
         self.budget = budget
         self.visible = visible
+        self.consume = consume
+        # Lean refills (see :class:`_Scout`); None keeps full-document refills.
+        self.scout = scout if scout is not None and hasattr(conversations_ref, 'select') else None
+        # Hidden rows of the first, full window that the scout's flags alone would have caught.
+        self.scout_hits = 0
+        self.hydrated = 0
         self.rows: List[Dict[str, Any]] = []
         self.last_doc = None
         self.consumed = 0
         self.skipped = 0
         self.has_more = False
+        self._unconsumed_row_pending = False
         self.cap = _HIDDEN_ROW_PAGE_SKIP_CAP if budget is not None else _UNBUDGETED_HIDDEN_ROW_SKIP_CAP
 
     def run(self, query, batch_limit):
         try:
             self._run(query, batch_limit)
         except ListReadBudgetExhausted:
-            # With no row read there is no position to resume from, and an identical retry
-            # would stop at the same place, so only a page that advanced says more.
-            self.has_more = self.consumed > 0
+            # A fetched row whose preparation ran out of budget has not advanced
+            # the checkpoint. Keep that row retryable even when it is the first
+            # visible row; the next request gets a fresh budget.
+            self.has_more = self.consumed > 0 or self._unconsumed_row_pending
         return self
 
     def _run(self, query, batch_limit):
@@ -1105,11 +1117,22 @@ class _PageFill:
             fetched = 0
             for doc in budgeted_stream_iter(query, self.budget):
                 fetched += 1
+                conversation = document_data_with_revision(doc)
+                visible = conversation is not None and self.visible(conversation)
+                if self.consume is not None:
+                    try:
+                        self.budget.check()
+                        if visible:
+                            self.consume(conversation, doc, self.consumed + 1, self.skipped)
+                    except ListReadBudgetExhausted:
+                        self._unconsumed_row_pending = True
+                        raise
                 self.consumed += 1
                 self.last_doc = doc
-                conversation = document_data_with_revision(doc)
-                if conversation is None or not self.visible(conversation):
+                if not visible:
                     self.skipped += 1
+                    if self.scout is not None and conversation is not None and self.scout.hidden(conversation):
+                        self.scout_hits += 1
                     if self.skipped >= self.cap:
                         self.has_more = True
                         return
@@ -1132,11 +1155,134 @@ class _PageFill:
                 missing + self.cap - self.skipped,
                 missing if refill == 1 else max(missing, 2 * batch_limit),
             )
+            # Refill lean only where the scout's flags explain most of what this page hid so far
+            # (recordings, hidden windows, tombstones). A run hidden for reasons only the full
+            # predicate sees would make every row a candidate and pay a second read for each.
+            if self.scout is not None and self.scout_hits * 2 >= self.skipped:
+                self._run_lean(batch_limit)
+                return
             query = self.conversations_ref.start_after(self.last_doc).limit(batch_limit)
+
+    def _run_lean(self, batch_limit):
+        """Refill through a hidden run without downloading the hidden rows.
+
+        A refill only happens once a page met hidden rows. From there each batch
+        streams a few visibility fields per row, and only rows that may be
+        visible are then read in full and put through the complete predicate.
+        Every scanned row still counts as one read, but a hidden recording no
+        longer ships its document body to be thrown away.
+
+        Candidates not yet read in full are never counted as consumed: a budget
+        cut rewinds to just before the first of them, so the next request starts
+        there and no visible row is skipped.
+        """
+        scout_ref = self.conversations_ref.select(self.scout.fields)
+        while True:
+            fetched = 0
+            pending: List[Any] = []
+            rewind = None
+            stop = False
+            try:
+                for doc in budgeted_stream_iter(scout_ref.start_after(self.last_doc).limit(batch_limit), self.budget):
+                    fetched += 1
+                    hidden = self.scout.hidden(doc.to_dict() or {})
+                    if self.consume is not None:
+                        self.budget.check()
+                    if hidden:
+                        self.consumed += 1
+                        self.last_doc = doc
+                        self.skipped += 1
+                        if self.skipped >= self.cap:
+                            stop = True
+                            break
+                        continue
+                    if rewind is None:
+                        rewind = (self.consumed, self.last_doc)
+                    pending.append((doc, self.consumed, self.last_doc))
+                    self.consumed += 1
+                    self.last_doc = doc
+                    if len(self.rows) + len(pending) >= self.limit:
+                        stop = True
+                        break
+            except ListReadBudgetExhausted:
+                if rewind is not None:
+                    self.consumed, self.last_doc = rewind
+                raise
+            self._hydrate(pending)
+            if len(self.rows) >= self.limit or self.skipped >= self.cap:
+                # A full page, or the hidden-row cap: more may follow.
+                self.has_more = True
+                return
+            if not stop and fetched < batch_limit:
+                return
+            missing = self.limit - len(self.rows)
+            batch_limit = min(missing + self.cap - self.skipped, max(missing, 2 * batch_limit))
+
+    def _hydrate(self, pending):
+        if not pending:
+            return
+        try:
+            snapshots = {
+                snapshot.id: snapshot
+                for snapshot in budgeted_get_all(
+                    db, [doc.reference for doc, _, _ in pending], self.budget, field_paths=self.scout.hydrate_fields
+                )
+            }
+        except ListReadBudgetExhausted:
+            _, self.consumed, self.last_doc = pending[0]
+            raise
+        self.hydrated += len(pending)
+        for doc, preceding_count, preceding_doc in pending:
+            try:
+                if self.consume is not None:
+                    self.budget.check()
+                snapshot = snapshots.get(doc.id)
+                conversation = document_data_with_revision(snapshot) if snapshot is not None else None
+                visible = conversation is not None and self.visible(conversation)
+                if self.consume is not None:
+                    self.budget.check()
+                    if visible:
+                        self.consume(conversation, doc, preceding_count + 1, self.skipped)
+            except ListReadBudgetExhausted:
+                self.consumed, self.last_doc = preceding_count, preceding_doc
+                raise
+            if not visible:
+                self.skipped += 1
+                continue
+            self.rows.append(conversation)
 
 
 def _visibility(**options):
     return lambda conversation: is_visible_conversation(conversation, **options)
+
+
+class _Scout:
+    """The cheap first look a lean refill takes at a row.
+
+    ``hidden`` mirrors the leading clauses of :func:`is_visible_conversation`
+    that need only stored flags: raw recordings, ``home_hidden`` v3 windows and
+    tombstones. Measured 2026-11-24 on a v3 owner, those were 3,016 of the newest
+    4,000 rows the Home query matched. It may only ever say hidden for a row the
+    full predicate also hides; every other row is read in full and judged there.
+    """
+
+    def __init__(self, *, sort_field, include_recordings, hide_home, hydrate_fields=None):
+        self.fields = sorted({sort_field, 'recording', 'home_hidden', 'deleted'})
+        self.include_recordings = include_recordings
+        self.hide_home = hide_home
+        self.hydrate_fields = hydrate_fields
+
+    def hidden(self, row: Mapping[str, Any]) -> bool:
+        return bool(
+            (row.get('recording') and not self.include_recordings)
+            or (self.hide_home and row.get('home_hidden'))
+            or row.get('deleted')
+        )
+
+
+def _lean_skip_enabled() -> bool:
+    """Kill switch for lean hidden-run refills: on unless set off."""
+    return os.getenv('OMI_LIST_LEAN_SKIP_ENABLED', 'true').strip().lower() not in {'0', 'false', 'off', 'no'}
 
 
 def _collect_cursor_conversation_page(
@@ -1152,6 +1298,8 @@ def _collect_cursor_conversation_page(
     capture_only=False,
     show_held=False,
     report=None,
+    scout=None,
+    consume=None,
 ):
     """Bound the scan by page size plus the hidden-row allowance.
 
@@ -1169,9 +1317,11 @@ def _collect_cursor_conversation_page(
             capture_only=capture_only,
             show_held=show_held,
         ),
+        scout=scout,
+        consume=consume,
     ).run(conversations_ref.start_after(bookmark).limit(limit), limit)
     if report is not None:
-        report.update(storage_rows=fill.consumed, has_more=fill.has_more)
+        report.update(storage_rows=fill.consumed, has_more=fill.has_more, hidden_rows=fill.skipped)
     return fill.rows, fill.last_doc
 
 
@@ -1192,6 +1342,9 @@ def _collect_visible_conversation_page(
     hide_home: bool = False,
     capture_only: bool = False,
     show_held: bool = False,
+    hydrate_fields: Optional[List[str]] = None,
+    indexed_home: bool = False,
+    on_prepared=None,
 ) -> List[Dict[str, Any]]:
     """Page visible rows.
 
@@ -1208,12 +1361,13 @@ def _collect_visible_conversation_page(
     hidden run can cut a page short while more visible rows remain behind it.
     With the cursor lever on it also receives ``next_cursor``.
     """
-    cursor_enabled = _conversation_list_cursor_enabled(uid)
-    scope = (
-        query_scope(dict(uid=uid, sort_field=sort_field, include_discarded=include_discarded, **(cursor_filters or {})))
-        if cursor_enabled
-        else None
-    )
+    cursor_enabled = indexed_home or _conversation_list_cursor_enabled(uid)
+    scope = None
+    if cursor_enabled:
+        filters = dict(uid=uid, sort_field=sort_field, include_discarded=include_discarded, **(cursor_filters or {}))
+        if indexed_home:
+            filters[home_visibility_index.FIELD] = True
+        scope = query_scope(filters)
     visible = _visibility(
         include_discarded=include_discarded,
         presentation=presentation,
@@ -1223,10 +1377,23 @@ def _collect_visible_conversation_page(
         show_held=show_held,
     )
 
-    def finish(rows, last_doc, *, storage_rows, has_more):
+    # Only budgeted list routes refill lean; internal full-document callers keep their reads.
+    scout = (
+        _Scout(
+            sort_field=sort_field,
+            include_recordings=include_recordings,
+            hide_home=hide_home,
+            hydrate_fields=hydrate_fields,
+        )
+        if budget is not None and not include_discarded and _lean_skip_enabled()
+        else None
+    )
+
+    def finish(rows, last_doc, *, storage_rows, has_more, hidden_rows=0):
         if cursor_page is not None:
             cursor_page['storage_rows'] = storage_rows
             cursor_page['has_more'] = has_more
+            cursor_page['hidden_rows'] = hidden_rows
         if cursor_enabled and cursor_page is not None:
             cursor_page['next_cursor'] = None
             if last_doc is not None:
@@ -1236,6 +1403,24 @@ def _collect_visible_conversation_page(
                     # A null/corrupt ordering key must omit the cursor, not 500 the list route.
                     logger.warning('conversation_list_cursor: ordering key unavailable; next cursor omitted')
         return rows
+
+    def consume(row, doc, storage_rows, hidden_rows):
+        budget.check()
+        try:
+            prepared = prepare_conversation_for_read(row, uid, read_budget=budget)
+        except ListReadBudgetExhausted as error:
+            budget.mark_exhausted(error.reason)
+            raise
+        budget.check()
+        checkpoint = dict(storage_rows=storage_rows, has_more=True, hidden_rows=hidden_rows)
+        if cursor_enabled:
+            try:
+                checkpoint['next_cursor'] = encode_cursor(row.get(sort_field), doc.id, scope)
+            except (ValueError, TypeError, AttributeError):
+                pass
+        on_prepared(prepared, checkpoint)
+
+    consume_row = consume if on_prepared is not None else None
 
     if cursor_enabled and cursor is not None:
         try:
@@ -1266,6 +1451,8 @@ def _collect_visible_conversation_page(
                 capture_only=capture_only,
                 show_held=show_held,
                 bookmark=BookmarkDict({sort_field: stamp, '__name__': doc_id}),
+                scout=scout,
+                consume=consume_row,
             )
             return finish(rows, last_doc, **report)
 
@@ -1274,22 +1461,39 @@ def _collect_visible_conversation_page(
         conversations: List[Dict[str, Any]] = []
         last_doc = None
         has_more = False
+        unconsumed_row_pending = False
         try:
             for doc in budgeted_stream_iter(conversations_ref, budget):
-                last_doc = doc
-                conversation = document_data_with_revision(doc)
-                if conversation is None or not visible(conversation):
-                    continue
-                if skipped_visible < offset:
-                    skipped_visible += 1
-                    continue
-                conversations.append(conversation)
-                if len(conversations) >= limit:
-                    has_more = True
-                    break
+                try:
+                    conversation = document_data_with_revision(doc)
+                    is_visible = conversation is not None and visible(conversation)
+                    if consume_row is not None:
+                        budget.check()
+                    if not is_visible:
+                        last_doc = doc
+                        continue
+                    if skipped_visible < offset:
+                        skipped_visible += 1
+                        last_doc = doc
+                        continue
+                    if consume_row is not None:
+                        consume_row(conversation, doc, len(conversations) + 1, 0)
+                    last_doc = doc
+                    conversations.append(conversation)
+                    if len(conversations) >= limit:
+                        has_more = True
+                        break
+                except ListReadBudgetExhausted:
+                    # Preparation can fail after the query yielded a row. Leave
+                    # its checkpoint untouched so the caller can retry this
+                    # page at the same visible offset.
+                    unconsumed_row_pending = True
+                    raise
         except ListReadBudgetExhausted:
-            # An empty page advances nothing, so saying more would invite the same request again.
-            has_more = bool(conversations)
+            # If a row was fetched but not prepared, the same offset is retryable.
+            # The client marks an empty truncated page as failed so load-more
+            # waits for an explicit retry instead of requesting this offset in a loop.
+            has_more = bool(conversations) or unconsumed_row_pending
         # This scan's offset counts visible rows, so the advance is the page size.
         return finish(conversations, last_doc, storage_rows=len(conversations), has_more=has_more)
 
@@ -1300,10 +1504,12 @@ def _collect_visible_conversation_page(
             # Nothing was read, so there is no position to resume from; a retry
             # would pay the same charge and stop here again.
             return finish([], None, storage_rows=0, has_more=False)
-    fill = _PageFill(conversations_ref, limit=limit, budget=budget, visible=visible).run(
-        conversations_ref.limit(limit).offset(offset), limit
+    fill = _PageFill(
+        conversations_ref, limit=limit, budget=budget, visible=visible, scout=scout, consume=consume_row
+    ).run(conversations_ref.limit(limit).offset(offset), limit)
+    return finish(
+        fill.rows, fill.last_doc, storage_rows=fill.consumed, has_more=fill.has_more, hidden_rows=fill.skipped
     )
-    return finish(fill.rows, fill.last_doc, storage_rows=fill.consumed, has_more=fill.has_more)
 
 
 def _drop_summary_memo(uid: str) -> None:
@@ -1340,6 +1546,7 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
     summary_changed = False
     ledger_stages: tuple[str, ...] = ()
     source_revision = 0
+    settle_enabled = terminal_settled.serving(uid)
 
     @firestore.transactional
     def _write_processing_result(transaction):
@@ -1423,7 +1630,8 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
             summary_changed = processing_backlog.stage_transition(
                 transaction, uid, conversation_data['id'], existing, write_data, firestore_client=db
             )
-            transaction.set(conversation_ref, write_data, merge=True)
+            terminal_settled.stamp(existing, write_data, now=datetime.now(timezone.utc), enabled=settle_enabled)
+            transaction.set(conversation_ref, home_visibility_index.stamp(write_data, existing), merge=True)
             return
 
         write_data.setdefault('has_photos', False)
@@ -1438,7 +1646,8 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
         summary_changed = processing_backlog.stage_transition(
             transaction, uid, conversation_data['id'], {}, write_data, firestore_client=db
         )
-        transaction.set(conversation_ref, with_creation_scope_index(write_data))
+        terminal_settled.stamp({}, write_data, now=datetime.now(timezone.utc), enabled=settle_enabled)
+        transaction.set(conversation_ref, home_visibility_index.stamp(with_creation_scope_index(write_data)))
 
     run_preloaded_transactional(db, _write_processing_result)
     if ledger_stages:
@@ -1532,6 +1741,8 @@ def persist_processing_result_with_lifecycle(
     existing row onto ``completed``. It must not raise; the persist outcome is
     independent of observers.
     """
+    from database.conversations_v3_fence import permits, wake_repairs
+    from database.conversation_processing_result import stamp_native_visibility, update_fields
     from database.recurring_voice_privacy import filter_processing_write
 
     conversation_data.pop('updated_at', None)
@@ -1552,11 +1763,13 @@ def persist_processing_result_with_lifecycle(
     terminal_refusal = None
     ledger_stages: tuple[str, ...] = ()
     source_revision = 0
-    family_enabled = _terminal_family_serving(uid)
+    family_enabled = terminal_settled.serving(uid)
+    repairs = []
 
     @firestore.transactional
-    def _persist(transaction) -> bool:
+    def _persist(transaction) -> Literal['stored', 'fenced'] | conversations_v3_fence.PersistenceDecline:
         nonlocal stale_sync_revision, first_completed, summary_receipt, summary_changed, notes_refresh_state_write, delivery_outcome, terminal_refusal, ledger_stages, source_revision
+        repairs.clear()
         terminal_refusal = None
         summary_changed = False
         summary_receipt = None
@@ -1569,33 +1782,35 @@ def persist_processing_result_with_lifecycle(
         evidence_refresh = write_data.pop('_notes_evidence_reprocess', False)
         # Capture-group membership has one writer (database.capture_groups).
         write_data.pop(CAPTURE_GROUP_FIELD, None)
-        from database.conversations_v3_fence import permits
-
-        if not permits(transaction, db, uid, conversation_data['id']):
-            return False
         existing_snapshot = conversation_ref.get(transaction=transaction)
         source_revision = pipeline_ledger.source_revision(existing_snapshot)
+
+        def declined(reason: str, *, transient: bool = False):
+            return conversations_v3_fence.PersistenceDecline(
+                reason, getattr(existing_snapshot, 'update_time', None), transient
+            )
+
         if not getattr(existing_snapshot, 'exists', False):
             # A processor is never an authority to recreate a conversation.
             # Deleting one is a decision its owner made, and a merge write to a
             # missing document would create it, so a late processor could bring
             # back what they removed and emit derived side effects from it.
-            return False
+            return declined('missing')
 
         existing = existing_snapshot.to_dict() or {}
         if not python_owns_finalization(existing):
-            return False
+            return declined('foreign_owner')
         if existing.get('arrival_at'):
             write_data['arrival_at'] = existing['arrival_at']
         if expected_capture_group is not None:
             expected_group_id, expected_group_revision = expected_capture_group
             current_group = existing.get(CAPTURE_GROUP_FIELD) or {}
             if current_group.get('id') != expected_group_id or current_group.get('revision') != expected_group_revision:
-                return False
+                return declined('capture_group_changed')
         if capture_group_notes_refresh is not None:
             group_id, reservation_id = capture_group_notes_refresh
             if expected_capture_group is None or expected_capture_group[0] != group_id:
-                return False
+                return declined('capture_group_reservation')
             notes_refresh_state_write = capture_group_notes.read_success_write(
                 transaction,
                 uid,
@@ -1604,7 +1819,7 @@ def persist_processing_result_with_lifecycle(
                 firestore_client=db,
             )
             if notes_refresh_state_write is None:
-                return False
+                return declined('capture_group_reservation')
         preserve_duplicate_hint(write_data, existing)
         if existing.get('record_lane_owner'):
             write_data['record_lane_owner'] = existing['record_lane_owner']
@@ -1612,13 +1827,18 @@ def persist_processing_result_with_lifecycle(
             write_data['record_audio_partial'] = existing['record_audio_partial']
         else:
             write_data.pop('record_audio_partial', None)
-        if (
-            existing.get('deleted')
-            or summary_delivery.repair_fenced(existing)
-            or summary_delivery.processing_fenced(existing)
-            or (evidence_refresh and effective_user_title(existing.get('user_title')))
-        ):
-            return False
+        if existing.get('deleted'):
+            return declined('deleted')
+        if summary_delivery.repair_fenced(existing):
+            repair = summary_delivery.REPAIR_CONTEXT.get() or {}
+            if existing.get('sync_content_revision') != repair.get('summary_expected_revision'):
+                return declined('repair_superseded')
+            # Repair eligibility can change as another writer settles the row.
+            return declined('repair_ineligible', transient=True)
+        if summary_delivery.processing_fenced(existing):
+            return declined('processing_owner_changed', transient=True)
+        if evidence_refresh and effective_user_title(existing.get('user_title')):
+            return declined('manual_title')
         if smart_merge_refresh is not None:
             expected_revision, expected_owner = smart_merge_refresh
             merge_state = existing.get('smart_merge') or {}
@@ -1630,18 +1850,20 @@ def persist_processing_result_with_lifecycle(
                 or not isinstance(until, datetime)
                 or until <= datetime.now(timezone.utc)
             ):
-                return False
+                return declined('smart_merge_refused', transient=True)
+        if not permits(transaction, db, uid, conversation_data['id'], existing, repairs=repairs):
+            return 'fenced'
         # A processor that read before another sync append cannot replace that
         # transcript or publish a summary derived from an obsolete revision.
         if existing.get('sync_content_revision') is not None and (
             write_data.get('sync_content_revision') != existing['sync_content_revision']
         ):
             stale_sync_revision = True
-            return False
+            return 'fenced'
 
         if not _batch_identity_membership_current(uid, write_data, existing):
             stale_sync_revision = True
-            return False
+            return declined('identity_membership_changed', transient=True)
 
         if write_data.get('discarded') is True and recovery_discard_payload(write_data):
             from utils.conversations.recovery import (
@@ -1794,15 +2016,21 @@ def persist_processing_result_with_lifecycle(
                     'completed_status_regression',
                 )
 
+        else:
+            _settle_discarded_finalization_projection(existing, write_data)
+
         _offload_processing_transcript(uid, write_data, existing)
+        stamp_native_visibility(existing, write_data)
         summary_receipt = summary_delivery.merge_result(existing, write_data, uid)
         ledger_stages = pipeline_ledger.summary_stages(summary_receipt)
         delivery_outcome = summary_terminal_outcome(existing, write_data)
         summary_changed = processing_backlog.stage_transition(
             transaction, uid, conversation_data['id'], existing, write_data, firestore_client=db
         )
+        if any(flag in write_data for flag in home_visibility_index.FLAGS):
+            home_visibility_index.stamp(write_data, existing)
         if family_enabled:
-            transaction.update(conversation_ref, _processing_result_update_fields(write_data))
+            transaction.update(conversation_ref, update_fields(write_data))
         else:
             transaction.set(conversation_ref, write_data, merge=True)
         if notes_refresh_state_write is not None:
@@ -1814,12 +2042,28 @@ def persist_processing_result_with_lifecycle(
             ConversationStatus.completed,
             ConversationStatus.completed.value,
         ) and write_status in (ConversationStatus.completed, ConversationStatus.completed.value)
-        return True
+        return 'stored'
 
+    v3_processing = conversations_v3_fence.current() is not None
     try:
-        persisted = run_preloaded_transactional(db, _persist)
+        if v3_processing:
+            outcome = run_preloaded_transaction_with_contention_retry(db, _persist)
+        else:
+            outcome = run_preloaded_transactional(db, _persist)
     except (transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
         return False
+    if repairs:
+        wake_repairs(uid, repairs)
+        return False
+    if v3_processing:
+        if outcome == 'fenced':
+            raise conversations_v3_fence.ProcessingPersistenceFenced('v3_processing_not_completed')
+        conversations_v3_fence.record_persistence_outcome(
+            uid,
+            conversation_data['id'],
+            outcome if isinstance(outcome, conversations_v3_fence.PersistenceDecline) else None,
+        )
+    persisted = outcome == 'stored'
     if persisted and ledger_stages:
         # After the real commit, in the ledger's own fenced transaction.
         pipeline_ledger.record_summary(
@@ -1871,6 +2115,7 @@ def create_conversation_if_absent_with_lifecycle(uid: str, conversation_data: di
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
     summary_receipt = summary_delivery.creation_result(conversation_data, uid)
     delivery_outcome = summary_terminal_outcome({}, conversation_data)
+    terminal_settled.stamp({}, conversation_data, now=datetime.now(timezone.utc), enabled=terminal_settled.serving(uid))
 
     def stage_create(transaction, data):
         if '_notes_identity' in data:
@@ -1893,6 +2138,22 @@ def create_conversation_if_absent_with_lifecycle(uid: str, conversation_data: di
     return True
 
 
+def _mark_transcript_decode_status(uid: str, conversation_data: dict) -> None:
+    """Verify the stored blob and pass decoded segments into normal hydration."""
+    try:
+        if 'transcript_segments' in conversation_data:
+            conversation_data['transcript_segments'] = decode_transcript_segments_blob(
+                uid,
+                conversation_data['transcript_segments'],
+                bool(conversation_data.get('transcript_segments_compressed')),
+                require_decryption=True,
+            )
+        conversation_data['_recovery_transcript_decoded'] = True
+    except (TypeError, ValueError, zlib.error):
+        conversation_data['_recovery_transcript_decoded'] = False
+        conversation_data['transcript_segments'] = []
+
+
 @prepare_for_read(decrypt_func=prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
 def get_conversation(
@@ -1911,20 +2172,7 @@ def get_conversation(
         read_site, FirestoreReadOutcome.HIT if conversation_data is not None else FirestoreReadOutcome.MISS
     )
     if conversation_data is not None and include_transcript_decode_status:
-        # Recovery needs evidence from the raw field, before the tolerant read
-        # decoder turns corruption into an empty transcript. Other readers keep
-        # their existing behavior and never receive this server-only marker.
-        try:
-            _decode_transcript_segments_strict(
-                uid,
-                conversation_data.get('transcript_segments', []),
-                bool(conversation_data.get('transcript_segments_compressed')),
-                require_decryption=True,
-            )
-            conversation_data['_recovery_transcript_decoded'] = True
-        except (TypeError, ValueError, zlib.error):
-            conversation_data['_recovery_transcript_decoded'] = False
-            conversation_data['transcript_segments'] = []
+        _mark_transcript_decode_status(uid, conversation_data)
     return conversation_data
 
 
@@ -1976,8 +2224,11 @@ def _hydrate_sync_conversation_snapshot(
     *,
     firestore_client: Any = None,
     read_site: FirestoreReadSite = FirestoreReadSite.UNATTRIBUTED,
+    include_transcript_decode_status: bool = False,
 ) -> Optional[dict]:
     record_document_read(read_site, FirestoreReadOutcome.HIT)
+    if include_transcript_decode_status:
+        _mark_transcript_decode_status(uid, conversation_data)
     return conversation_data
 
 
@@ -1988,14 +2239,23 @@ def get_sync_redirected_conversation(
     *,
     firestore_client: Any = None,
     read_site: FirestoreReadSite = FirestoreReadSite.UNATTRIBUTED,
+    include_transcript_decode_status: bool = False,
 ) -> Optional[dict]:
     """Hydrate one checked snapshot; mutations still reread/CAS independently."""
     return read_redirected(
         uid,
         conversation_id,
         client_factory=lambda: firestore_client if firestore_client is not None else get_firestore_client(),
-        hydrate=_hydrate_sync_conversation_snapshot,
-        read_current=get_conversation,
+        hydrate=(
+            partial(_hydrate_sync_conversation_snapshot, include_transcript_decode_status=True)
+            if include_transcript_decode_status
+            else _hydrate_sync_conversation_snapshot
+        ),
+        read_current=(
+            partial(get_conversation, include_transcript_decode_status=True)
+            if include_transcript_decode_status
+            else get_conversation
+        ),
         read_site=read_site,
     )
 
@@ -2345,6 +2605,9 @@ def get_conversations_without_photos(
     cursor: Optional[str] = None,
     page_envelope: bool = False,
     cursor_page: Optional[Dict[str, Any]] = None,
+    indexed_home: bool = False,
+    metadata_only: bool = False,
+    on_prepared=None,
 ):
     """
     Same as get_conversations but without loading photos.
@@ -2358,6 +2621,7 @@ def get_conversations_without_photos(
     instead of pretending to be complete.
     """
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
+    hydrate_fields: Optional[List[str]] = None
     if list_fields_only and indexed_list_reads_enabled():
         # The archive list contract permits omitted transcript detail. Exclude
         # the large blob before download/decompression and correction-overlay
@@ -2392,8 +2656,11 @@ def get_conversations_without_photos(
             }
         )
         conversations_ref = conversations_ref.select(sorted(fields))
+        hydrate_fields = sorted(fields)
     if not include_discarded:
         conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
+    if indexed_home:
+        conversations_ref = conversations_ref.where(filter=FieldFilter(home_visibility_index.FIELD, '==', True))
     if sources:
         # Keep the paginated list semantically identical to the count query;
         # see `get_conversations_count` for why a singleton is equality.
@@ -2439,6 +2706,9 @@ def get_conversations_without_photos(
         uid=uid,
         cursor=cursor,
         cursor_page=cursor_page,
+        hydrate_fields=hydrate_fields,
+        indexed_home=indexed_home,
+        on_prepared=on_prepared,
         cursor_filters=dict(
             statuses=statuses,
             sources=sources,
@@ -2588,11 +2858,14 @@ def update_conversation(
         update_data, uid, doc_level, conversation_id=conversation_id, conversation_state=doc_snapshot.to_dict()
     )
     guard_match_score_size(prepared_data, doc_snapshot.to_dict(), getattr(doc_ref, 'path', None))
+    changes_visibility = any(flag in prepared_data for flag in home_visibility_index.FLAGS)
+    if changes_visibility:
+        home_visibility_index.stamp(prepared_data, doc_snapshot.to_dict())
     try:
-        if expected_audio_files is None:
+        if expected_audio_files is None and not changes_visibility:
             doc_ref.update(prepared_data)
         else:
-            # Also fence a writer arriving after the read, including label edits.
+            # Fence the source flags and audio inventory against concurrent updates.
             doc_ref.update(
                 prepared_data, option=get_firestore_client().write_option(last_update_time=doc_snapshot.update_time)
             )
@@ -2773,6 +3046,8 @@ def update_conversation_summary(uid: str, conversation_id: str, app_id: Optional
         'app_result_not_found' if app_id given but no matching apps_results entry,
         'app_result_ambiguous' if multiple entries share that app_id.
     """
+    from database.conversation_processing_result import cleared_native_visibility
+
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
 
@@ -2790,6 +3065,7 @@ def update_conversation_summary(uid: str, conversation_id: str, app_id: Optional
                     'structured.overview': content,
                     'structured.sections': firestore.DELETE_FIELD,
                     'updated_at': updated_at,
+                    **cleared_native_visibility(doc_snapshot.to_dict() or {}, has_notes=bool(content.strip())),
                 },
             )
             return 'ok'
@@ -3251,7 +3527,11 @@ def link_duplicate_capture(uid: str, primary: Any, secondary: Any, overlap: dict
         primary_row = primary_ref.get(transaction=transaction).to_dict()
         secondary_row = secondary_ref.get(transaction=transaction).to_dict()
         for row, expected in ((primary_row, primary), (secondary_row, secondary)):
-            if not row or row.get('discarded') or row.get('deleted') or row.get('status') != 'completed':
+            if (
+                not row
+                or any(row.get(field) for field in ('discarded', 'deleted', 'deferred'))
+                or row.get('status') != 'completed'
+            ):
                 return False
             compared = lifecycle_clocks.overlap_fields(uid, row)
             if any(
@@ -3310,16 +3590,6 @@ def _record_terminal_claim_refusal(family: str, reason: str) -> None:
     ).inc()
 
 
-def _terminal_family_serving(uid: str) -> bool:
-    # The on|off operator surface maps on to the shared serve mode. The shared
-    # parser retains its cohort support for a later ramp without changing defaults.
-    from config.refactor_modes import default_on
-
-    return default_on('CONVERSATION_TERMINAL_FAMILY_MODE') and serving_for(
-        'CONVERSATION_TERMINAL_FAMILY_MODE', uid, default='serve'
-    )
-
-
 def _conversation_claim_matches(current, expected_status, expected_fields=None, *, allow_discarded=False):
     if not python_owns_finalization(current):
         return False
@@ -3329,6 +3599,22 @@ def _conversation_claim_matches(current, expected_status, expected_fields=None, 
         (bool(current.get(k)) if isinstance(v, bool) else current.get(k)) != v
         for k, v in (expected_fields or {}).items()
     )
+
+
+def _settle_discarded_finalization_projection(current: Mapping[str, Any], updates: dict) -> None:
+    if (
+        updates.get('status') == ConversationStatus.completed
+        and updates.get('discarded', current.get('discarded')) is True
+        and current.get('finalization_status') in ('queued', 'leased')
+        and updates.get('finalization_status', current.get('finalization_status')) in ('queued', 'leased')
+        and (job_id := current.get('finalization_job_id'))
+        and updates.get('finalization_job_id', job_id) == job_id
+        and updates.get('finalization_revision', current.get('finalization_revision'))
+        == current.get('finalization_revision')
+    ):
+        # A confirmed discard settles the row's capture projection. A separate
+        # worker still owns the bound job and decides its immutable receipt.
+        updates['finalization_status'] = 'completed'
 
 
 def claim_conversation_status_in_txn(
@@ -3363,27 +3649,8 @@ def claim_conversation_status_in_txn(
                 raise ValueError('terminal family requires its claim timestamp')
             updates['terminal_family'] = terminal_family
             updates['terminal_family_at'] = terminal_family_at
+        _settle_discarded_finalization_projection(current, updates)
     return updates
-
-
-def _processing_result_update_fields(data: Mapping[str, Any]) -> dict:
-    """Preserve set(merge=True)'s recursive leaf mask in one update of an existing row.
-
-    Empty maps replace that map; arrays and scalars are leaves. FieldPath quotes
-    literal dotted/backtick keys rather than treating them as update paths.
-    """
-    fields = {}
-
-    def visit(value, path):
-        if isinstance(value, dict) and value:
-            for key, child in value.items():
-                visit(child, (*path, key))
-        else:
-            fields[FieldPath(*path).to_api_repr()] = value
-
-    for key, value in data.items():
-        visit(value, (key,))
-    return fields
 
 
 def claim_conversation_status(
@@ -3426,7 +3693,7 @@ def claim_conversation_status(
             bound_updates = extra_updates_with_bound_client_processing(
                 uid, current, extra_updates, transcript_corrections=corrections
             )
-        family_enabled = _terminal_family_serving(uid)
+        family_enabled = terminal_settled.serving(uid)
         updates = claim_conversation_status_in_txn(
             current,
             expected_status=expected_status.value,
@@ -4223,8 +4490,15 @@ def update_conversation_segments(
     live_capture_proofs: Optional[Dict[str, CaptureWindowProof]] = None,
     segment_update_fields: Optional[tuple[str, ...]] = None,
     owner_recognition_diagnostics: Optional[dict] = None,
+    require_row: Optional[Callable[[dict], bool]] = None,
+    guard: Optional[Callable[[Any], None]] = None,
 ):
     """Merge live speech transactionally against the current receipt and pinned timeline.
+
+    ``require_row`` is judged on the stored row inside the write transaction; a False answer
+    writes nothing and returns False, so a caller's earlier read cannot go stale.
+    ``guard`` is called with the transaction after that check and before any write, so its
+    reads join this transaction's conflict set; an exception from it writes nothing and propagates.
 
     Field-only writes preserve stored text/spans. Live writes return the durable
     merge and clear any hash-bound client projection that the new transcript
@@ -4258,6 +4532,10 @@ def update_conversation_segments(
             # The durable record owns the finalized capture. A delayed socket
             # flush cannot append its provisional twin after projection.
             return False
+        if require_row is not None and not require_row(current):
+            return False
+        if guard is not None:
+            guard(transaction)
         doc_level = current.get('data_protection_level') or data_protection_level or 'standard'
         receipt = decode_manual_speaker_assignments(
             uid, current.get('manual_speaker_assignments'), bool(current.get('manual_speaker_assignments_compressed'))

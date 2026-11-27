@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-sync-preparation.png",
+      "platform": "mobile-ios",
+      "description": "Offline Sync prepares recordings before the first upload or download phase.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-fresh-ring-backlog.png",
+      "platform": "mobile-ios",
+      "description": "Sync details shows a measured ring backlog without a virtual recording.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-unknown-ring-backlog.png",
+      "platform": "mobile-ios",
+      "description": "Sync details shows Unknown when the connected pendant has no fresh unread count.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

@@ -4066,6 +4066,48 @@
       "correlation": null
     },
     {
+      "id": "upgradeBillingProvider",
+      "wire_name": "Upgrade Billing Provider",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "provider": {
+          "type": "enum",
+          "wire_name": "provider",
+          "values": [
+            "stripe",
+            "play"
+          ]
+        },
+        "stage": {
+          "type": "enum",
+          "wire_name": "stage",
+          "values": [
+            "selected",
+            "succeeded",
+            "cancelled",
+            "pending",
+            "failed"
+          ]
+        },
+        "billingInterval": {
+          "type": "enum",
+          "wire_name": "billing_interval",
+          "values": [
+            "month",
+            "year",
+            "unknown"
+          ]
+        }
+      },
+      "consumers": [
+        "subscription-funnel"
+      ],
+      "correlation": null
+    },
+    {
       "id": "subscriptionPlanChanged",
       "wire_name": "Subscription Plan Changed",
       "status": "active",
@@ -4880,6 +4922,59 @@
       "correlation": null
     },
     {
+      "id": "mobileHeldWalBacklog",
+      "wire_name": "Mobile Held WAL Backlog",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "trigger": {
+          "type": "enum",
+          "wire_name": "trigger",
+          "values": [
+            "startup",
+            "foreground",
+            "hourly"
+          ]
+        },
+        "heldWalCount": {
+          "type": "int",
+          "wire_name": "held_wal_count"
+        },
+        "oldestHeldAgeS": {
+          "type": "int",
+          "wire_name": "oldest_held_age_s"
+        },
+        "holdFlagOn": {
+          "type": "bool",
+          "wire_name": "hold_flag_on"
+        },
+        "holdState": {
+          "type": "enum",
+          "wire_name": "hold_state",
+          "values": [
+            "bg300",
+            "fg_preview300",
+            "fg60",
+            "unknown"
+          ]
+        },
+        "cohort": {
+          "type": "enum",
+          "wire_name": "cohort",
+          "values": [
+            "on",
+            "off"
+          ]
+        }
+      },
+      "consumers": [
+        "mobile-held-wal-backlog"
+      ],
+      "correlation": null
+    },
+    {
       "id": "walReconcilePollSummary",
       "wire_name": "WAL Reconcile Poll Summary",
       "status": "active",
@@ -5325,6 +5420,32 @@
       "correlation": null
     },
     {
+      "id": "subscriptionQuietRowShown",
+      "wire_name": "Subscription Quiet Row Shown",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "subscription-quiet-row"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionQuietRowTapped",
+      "wire_name": "Subscription Quiet Row Tapped",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "subscription-quiet-row"
+      ],
+      "correlation": null
+    },
+    {
       "id": "mobileDeviceHealthDailyRingRead",
       "wire_name": "Mobile Device Health Daily",
       "status": "active",
@@ -5631,6 +5752,62 @@
       },
       "consumers": [
         "orphan-audio-reclaim"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "walCustodyAudit",
+      "wire_name": "WAL Custody Audit",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "agreeCovered": {
+          "type": "int",
+          "wire_name": "agree_covered"
+        },
+        "agreePending": {
+          "type": "int",
+          "wire_name": "agree_pending"
+        },
+        "disagree": {
+          "type": "int",
+          "wire_name": "disagree"
+        },
+        "unknown": {
+          "type": "int",
+          "wire_name": "unknown"
+        },
+        "released": {
+          "type": "int",
+          "wire_name": "released"
+        }
+      },
+      "consumers": [
+        "wal-custody-audit"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "appForegroundEnded",
+      "wire_name": "App Foreground Ended",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "foregroundSeconds": {
+          "type": "int",
+          "wire_name": "foreground_seconds"
+        },
+        "capturingSeconds": {
+          "type": "int",
+          "wire_name": "capturing_seconds"
+        }
+      },
+      "consumers": [
+        "app-foreground-time"
       ],
       "correlation": null
     }

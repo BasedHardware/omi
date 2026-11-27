@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-android-live-conversation-bar-with-player.png",
+      "platform": "mobile-android",
+      "description": "Bar of a conversation in progress with no_live_player off: the audio player shows",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-android-live-conversation-bar-no-player.png",
+      "platform": "mobile-android",
+      "description": "Bar of a conversation in progress with no_live_player on: Ask Omi only, no player",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

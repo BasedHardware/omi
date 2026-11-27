@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import logging
 from types import SimpleNamespace
 
 from fastapi import FastAPI
@@ -550,8 +551,19 @@ def test_canonical_route_fails_closed_for_invalid_cursor(monkeypatch):
     assert response.json()["detail"] == "invalid_or_stale_cursor"
 
 
-@pytest.mark.parametrize('reason', ['missing_state_head', 'malformed_memory_state_head', 'missing_cursor_secret'])
-def test_canonical_route_maps_read_unavailable_to_503(monkeypatch, reason):
+@pytest.mark.parametrize(
+    ('reason', 'logged_reason'),
+    [
+        ('missing_state_head', 'missing_state_head'),
+        ('malformed_state_head', 'malformed_state_head'),
+        ('malformed_memory_state_head', 'malformed_memory_state_head'),
+        ('read_failed', 'read_failed'),
+        ('missing_cursor_secret', 'missing_cursor_secret'),
+        ('canonical_revision_changed_during_read', 'canonical_revision_changed_during_read'),
+        ('unexpected failure with private data', 'unknown'),
+    ],
+)
+def test_canonical_route_maps_read_unavailable_to_503(monkeypatch, caplog, reason, logged_reason):
     monkeypatch.setattr(
         kg_router.canonical_graph_service,
         "get_canonical_knowledge_graph",
@@ -561,13 +573,17 @@ def test_canonical_route_maps_read_unavailable_to_503(monkeypatch, reason):
     app.include_router(kg_router.router)
     app.dependency_overrides[kg_router.auth.get_current_user_uid] = lambda: UID
 
-    response = TestClient(app).get("/v1/knowledge-graph/canonical")
+    with caplog.at_level(logging.INFO, logger=kg_router.__name__):
+        response = TestClient(app).get("/v1/knowledge-graph/canonical")
 
     assert response.status_code == 503
     assert response.json()["detail"] == "canonical_graph_unavailable"
     assert response.headers.get('x-omi-knowledge-graph-state') == (
         'unestablished' if reason == 'missing_state_head' else None
     )
+    records = [record for record in caplog.records if record.name == kg_router.__name__]
+    assert [record.getMessage() for record in records] == [f'canonical_graph_unavailable reason={logged_reason}']
+    assert records[0].exc_info is None
 
 
 def test_canonical_graph_retries_once_when_revision_changes_during_read(monkeypatch):

@@ -20,20 +20,27 @@ from scripts import select_backend_unit_tests as unit_selector  # noqa: E402
 
 PROD_HEADER = 'schema: omi.ops/v1\nenvironment: prod\nproject: based-hardware\nregion: us-central1\n'
 
-# Ruling 008024: production backlog capacity is intentionally not applied to staging.
+# Production queue capacity is intentionally not applied to staging.
 # Each field pins (prod, staging), so an exemption cannot hide drift on either side.
 INTENTIONAL_STAGING_QUEUE_CAPACITY_DIVERGENCES = {
+    # Ruling 008024: production backlog capacity.
     'enrichment': {'max_concurrent_dispatches': (300, 50)},
     'enrichment-fresh': {
         'max_concurrent_dispatches': (30, 5),
         'max_dispatches_per_second': (10.0, 2.0),
     },
+    # SCA-3552: preserve production dispatch headroom.
+    'sync-jobs-fresh': {'max_dispatches_per_second': (25.0, 15.0)},
+    'provider-stt': {
+        'max_concurrent_dispatches': (96, 48),
+        'max_dispatches_per_second': (20.0, 10.0),
+    },
 }
 
 
-def test_fresh_queue_smoothing_keeps_concurrency_and_retry_ownership():
+def test_fresh_queue_capacity_keeps_concurrency_and_retry_ownership():
     queue = yaml.safe_load((BACKEND / 'deploy/ops/prod.yaml').read_text())['cloud_tasks']['sync-jobs-fresh']
-    assert queue['max_dispatches_per_second'] == 15
+    assert queue['max_dispatches_per_second'] == 25
     assert queue['max_concurrent_dispatches'] == 160
     assert (queue['max_attempts'], queue['min_backoff'], queue['max_backoff']) == (5, '60s', '300s')
 
@@ -261,7 +268,7 @@ def test_prod_carries_both_stall_repoints_and_recovery_16_8():
     assert fresh.fields['max_attempts'] == -1
     provider = queues['provider-stt']
     assert provider.enabled is True
-    assert (provider.fields['max_concurrent_dispatches'], provider.fields['max_dispatches_per_second']) == (48, 10.0)
+    assert (provider.fields['max_concurrent_dispatches'], provider.fields['max_dispatches_per_second']) == (96, 20.0)
     assert provider.fields['max_attempts'] == -1
 
 

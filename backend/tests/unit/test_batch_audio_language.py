@@ -459,7 +459,7 @@ async def test_cpu_intake_freezes_detection_proof_with_inheritance_disabled(monk
             snapshots['user'] = {'language': 'en', 'transcription_preferences': {'single_language_mode': False}}
         return ProtectionContext('standard', 0)
 
-    def stage(work, body):
+    def stage(work, body, *, record_origin):
         captured.append(read_context(body))
         raise RuntimeError('stop after synthetic staging')
 
@@ -521,7 +521,7 @@ async def test_self_lid_intake_context_roundtrips_through_real_batch_worker(monk
             snapshots['user'] = {'language': 'multi', 'transcription_preferences': {'single_language_mode': False}}
         return ProtectionContext('standard', 0)
 
-    def stage(work, body):
+    def stage(work, body, *, record_origin):
         staged.append((work, body))
         raise RuntimeError('stop after synthetic staging')
 
@@ -606,7 +606,7 @@ async def test_legacy_off_keeps_language_probe_and_never_parakeet_for_unsupporte
             }
         return ProtectionContext('standard', 0)
 
-    def stage(work, body):
+    def stage(work, body, *, record_origin):
         captured.append(read_context(body))
         raise RuntimeError('stop after synthetic staging')
 
