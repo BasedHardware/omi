@@ -47,11 +47,12 @@ class _PendantReconnectNudgeCardState extends State<PendantReconnectNudgeCard> w
   final _preferences = SharedPreferencesUtil();
   bool _scheduled = false;
   bool _evaluated = false;
+  bool _routeCurrent = true;
   int _generation = 0;
   PendantReconnectNudgeEligible? _card;
 
   bool get _foreground => WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
-  bool get _homeVisible => widget.homeSelected && (ModalRoute.isCurrentOf(context) ?? true);
+  bool get _homeVisible => widget.homeSelected && _routeCurrent;
 
   @override
   void initState() {
@@ -62,8 +63,17 @@ class _PendantReconnectNudgeCardState extends State<PendantReconnectNudgeCard> w
   @override
   void didUpdateWidget(PendantReconnectNudgeCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.uid != widget.uid) _resetEvaluation();
-    if (!widget.homeSelected || widget.pendantConnected) _card = null;
+    final uidChanged = oldWidget.uid != widget.uid;
+    if (uidChanged || widget.pendantConnected) _card = null;
+    if (uidChanged || (!oldWidget.homeSelected && widget.homeSelected)) _resetEvaluation();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final routeCurrent = ModalRoute.isCurrentOf(context) ?? true;
+    if (!_routeCurrent && routeCurrent) _resetEvaluation();
+    _routeCurrent = routeCurrent;
   }
 
   @override
@@ -72,9 +82,9 @@ class _PendantReconnectNudgeCardState extends State<PendantReconnectNudgeCard> w
   }
 
   void _resetEvaluation() {
+    if (_card != null) return;
     _generation++;
     _evaluated = false;
-    _card = null;
   }
 
   @override
@@ -140,7 +150,7 @@ class _PendantReconnectNudgeCardState extends State<PendantReconnectNudgeCard> w
   @override
   Widget build(BuildContext context) {
     final uid = widget.uid;
-    if (uid != null && _foreground && _homeVisible && !_evaluated && !_scheduled) {
+    if (uid != null && _foreground && _homeVisible && _card == null && !_evaluated && !_scheduled) {
       _scheduled = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _scheduled = false;

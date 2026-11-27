@@ -59,7 +59,9 @@ void main() {
       home: Scaffold(
           backgroundColor: OmiColors.surface0,
           body: Column(children: [
+            if (homeSelected) const SizedBox.shrink(),
             PendantReconnectNudgeCard(
+              key: const ValueKey('nudge_fixture'),
               uid: uid,
               createdAt: DateTime.now().subtract(const Duration(days: 60)),
               paying: false,
@@ -73,6 +75,7 @@ void main() {
               emit: emitted.add,
               devicePage: const Scaffold(body: Text('Device settings fixture')),
             ),
+            if (!homeSelected) const SizedBox.shrink(),
           ])),
     ));
     await tester.pumpAndSettle();
@@ -145,6 +148,75 @@ void main() {
     await pumpHome(tester);
     expect(find.byKey(cardKey), findsNothing);
     expect(emitted, isEmpty);
+  });
+
+  testWidgets('a pending card survives switching away from and back to Home', (tester) async {
+    seed();
+    await pumpHome(tester);
+    expect(find.byKey(cardKey), findsOneWidget);
+    final shownAt = preferences.pendantReconnectNudgeLastShownAt;
+
+    await pumpHome(tester, homeSelected: false);
+    expect(find.byKey(cardKey), findsNothing);
+    await pumpHome(tester);
+    expect(find.byKey(cardKey), findsOneWidget);
+    expect(eventNames(), [eligibleName, shownName]);
+    expect(preferences.pendantReconnectNudgeLastShownAt, shownAt);
+    expect(flagReads, 1);
+  });
+
+  testWidgets('a pending card survives app resume and can still be dismissed', (tester) async {
+    seed();
+    await pumpHome(tester);
+    expect(find.byKey(cardKey), findsOneWidget);
+    final shownAt = preferences.pendantReconnectNudgeLastShownAt;
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    expect(find.byKey(cardKey), findsOneWidget);
+    expect(eventNames(), [eligibleName, shownName]);
+    expect(preferences.pendantReconnectNudgeLastShownAt, shownAt);
+    expect(flagReads, 1);
+
+    await tester.tap(find.byKey(const ValueKey('pendant_reconnect_nudge_dismiss')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(cardKey), findsNothing);
+    expect(eventNames(), [eligibleName, shownName, 'Pendant Reconnect Nudge Dismissed']);
+    expect(flagReads, 1);
+  });
+
+  testWidgets('reselecting Home evaluates a gap that crossed 72 hours on another tab', (tester) async {
+    seed(gap: const Duration(hours: 71));
+    await pumpHome(tester);
+    expect(find.byKey(cardKey), findsNothing);
+    expect(flagReads, 1);
+
+    await pumpHome(tester, homeSelected: false);
+    preferences.lastPendantConnectedAt = DateTime.now().subtract(const Duration(hours: 73)).millisecondsSinceEpoch;
+    await pumpHome(tester);
+    expect(find.byKey(cardKey), findsOneWidget);
+    expect(eventNames(), [eligibleName, shownName]);
+    expect(flagReads, 2);
+  });
+
+  testWidgets('returning to the Home route reevaluates eligibility', (tester) async {
+    seed(gap: const Duration(hours: 71));
+    await pumpHome(tester);
+    expect(find.byKey(cardKey), findsNothing);
+    expect(flagReads, 1);
+
+    final navigator = Navigator.of(tester.element(find.byType(PendantReconnectNudgeCard)));
+    final routeClosed =
+        navigator.push<void>(MaterialPageRoute(builder: (_) => const Scaffold(body: Text('Other route'))));
+    await tester.pumpAndSettle();
+    preferences.lastPendantConnectedAt = DateTime.now().subtract(const Duration(hours: 73)).millisecondsSinceEpoch;
+    navigator.pop();
+    await tester.pumpAndSettle();
+    await routeClosed;
+    expect(find.byKey(cardKey), findsOneWidget);
+    expect(eventNames(), [eligibleName, shownName]);
+    expect(flagReads, 2);
   });
 
   testWidgets('the persisted cap suppresses treatment on Home', (tester) async {

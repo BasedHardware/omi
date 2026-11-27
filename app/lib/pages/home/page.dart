@@ -947,7 +947,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                 );
                               },
                             ),
-                          HomePendantReconnectNudge(homeSelected: onHome),
+                          HomePendantReconnectNudge(
+                            key: const ValueKey('home_pendant_reconnect_nudge'),
+                            homeSelected: onHome,
+                          ),
                           // Home shows an active call in its capture row; Tasks gets the slim bar.
                           if (!onHome) const ActiveCallTopBar(),
                           Expanded(
