@@ -844,3 +844,39 @@ def test_attested_evidence_workflow_allows_only_byte_equivalent_descendant(tmp_p
     assert diff[3:9] == ['diff', '--quiet', '--no-ext-diff', 'a' * 40, 'b' * 40, '--']
     assert '.github/scripts/listen_runtime.py' in diff
     assert '.github/actions/deploy-backend-stack/action.yml' in diff
+
+
+def test_evidence_bootstrap_refuses_added_script_before_python(tmp_path):
+    workflow = yaml.safe_load((ROOT / '.github/workflows/gcp_backend_listen_helm.yml').read_text())
+    steps = next(job['steps'] for job in workflow['jobs'].values()
+                 if any(step.get('name') == 'Verify staged evidence scripts before Python'
+                        for step in job.get('steps', [])))
+    guard = next(step for step in steps if step.get('name') == 'Verify staged evidence scripts before Python')
+    reconstruct = next(step for step in steps if step.get('name') == 'Reconstruct evidence runtime before credentials')
+    assert steps.index(guard) < steps.index(reconstruct)
+
+    def git(*args):
+        return subprocess.check_output(['git', '-C', str(tmp_path), *args], text=True).strip()
+
+    git('init', '-q')
+    scripts = tmp_path / '.github/scripts'
+    scripts.mkdir(parents=True)
+    (scripts / 'listen_runtime.py').write_text('# reviewed fixture\n')
+    git('add', '.')
+    git('-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'reviewed')
+    reviewed = git('rev-parse', 'HEAD:.github/scripts')
+    command = guard['run'].replace('c9cc79160418038884fc99286730784297d61793', reviewed)
+    assert command != guard['run']
+
+    def run_guard():
+        import os
+
+        return subprocess.run(['bash', '-c', command], cwd=tmp_path, check=False,
+                              env={**os.environ, 'GITHUB_WORKFLOW_SHA': git('rev-parse', 'HEAD')}).returncode
+
+    assert run_guard() == 0
+    (scripts / 'yaml.py').write_text('# inert importable fixture\n')
+    assert run_guard() != 0
+    git('add', '.')
+    git('-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'added module')
+    assert run_guard() != 0
