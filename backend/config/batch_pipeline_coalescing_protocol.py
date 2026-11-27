@@ -1,3 +1,14 @@
-"""Compatible reader wire bound; independent of producer enable/window settings."""
+"""Upload hold and completion limits shared with flag-independent readers."""
 
+HOLD_SECONDS = 60.0
+MAX_GROUPS = 64
+MAX_OWNER_GROUPS = 2
+MAX_MEMBERS = 4
+MAX_FILES = 20
+MAX_MEMBER_BYTES = 2 * 1024 * 1024
+MAX_GROUP_BYTES = 8 * 1024 * 1024
+MAX_AUDIO_SECONDS = 300.0
+DRAIN_PAGE = 8
+LEASE_SECONDS = 120.0
 MAX_COMPLETION_MEMBERS = 16
+EXTENDED_MAX_AUDIO_SECONDS = 600.0

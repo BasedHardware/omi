@@ -8,7 +8,7 @@ Group/member/source writes recheck live authority in their own transaction.
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
-from config import batch_pipeline_coalescing as config
+from config import batch_pipeline_coalescing_protocol as limits
 from database.batch_coalescing_capabilities import extended_ready
 from database.batch_pipeline_coalescing_identity import digest
 from database import batch_pipeline_upload_metrics as upload_metrics
@@ -48,29 +48,29 @@ def enqueue(store, member, key, now):
                 return 'wait'  # Ordering fence + client custody while the drainer recovers.
             return None  # Unknown/stalled drainer: ordinary admission for a new recording.
         if not join and (
-            quota['groups'] >= config.MAX_GROUPS or quota['owners'].get(owner, 0) >= config.MAX_OWNER_GROUPS
+            quota['groups'] >= limits.MAX_GROUPS or quota['owners'].get(owner, 0) >= limits.MAX_OWNER_GROUPS
         ):
             return None  # Same 60s-path fallback; do not pay capability reads at saturation.
         # The quota has exactly the old fallback: no custody claim and no refusal.
         # A member joining an existing group does not consume another quota slot.
         extended = member.get('hold_seconds', 60) > 60 and member.get('upload_entitlement') == 'free'
-        extended = extended and member['end'] - member['start'] <= config.EXTENDED_MAX_AUDIO_SECONDS
+        extended = extended and member['end'] - member['start'] <= limits.EXTENDED_MAX_AUDIO_SECONDS
         if extended and not extended_ready(tx, now):
             extended = False
         profile = 'extended_v2' if extended else 'legacy'
-        candidate['hold_seconds'] = member['hold_seconds'] if extended else config.HOLD_SECONDS
+        candidate['hold_seconds'] = member['hold_seconds'] if extended else limits.HOLD_SECONDS
         if join and (
             group.get('profile', 'legacy') != profile
             or group.get('window_seconds', 60) != candidate['hold_seconds']
-            or len(group['members']) >= (config.EXTENDED_MAX_MEMBERS if extended else config.MAX_MEMBERS)
-            or group['bytes'] + member['bytes'] > config.MAX_GROUP_BYTES
-            or group['files'] + member['files'] > config.MAX_FILES
+            or len(group['members']) >= (limits.MAX_COMPLETION_MEMBERS if extended else limits.MAX_MEMBERS)
+            or group['bytes'] + member['bytes'] > limits.MAX_GROUP_BYTES
+            or group['files'] + member['files'] > limits.MAX_FILES
             or group['seconds'] + member['seconds']
-            > (config.EXTENDED_MAX_AUDIO_SECONDS if extended else config.MAX_AUDIO_SECONDS)
+            > (limits.EXTENDED_MAX_AUDIO_SECONDS if extended else limits.MAX_AUDIO_SECONDS)
             or extended
             and max(member['end'], *(m['end'] for m in group['members']))
             - min(member['start'], *(m['start'] for m in group['members']))
-            > config.EXTENDED_MAX_AUDIO_SECONDS
+            > limits.EXTENDED_MAX_AUDIO_SECONDS
             or any(not (member['end'] <= m['start'] or member['start'] >= m['end']) for m in group['members'])
             or set(member['filenames']).intersection(name for m in group['members'] for name in m['filenames'])
         ):
@@ -150,7 +150,7 @@ def claim(store, group_id, now, *, producer_enabled, scan=None):
         # merged to individual only if no merged intake ever committed.
         merged = tx.get('intakes', 'bp_' + digest([row['id'], 'merged']))
         row['members'].sort(key=lambda m: (m['start'], m['content_id']))
-        row.update(state='sealed', token=token, lease_until=now + config.LEASE_SECONDS)
+        row.update(state='sealed', token=token, lease_until=now + limits.LEASE_SECONDS)
         row['scan_at'] = row['lease_until']
         row['mode'] = (
             'individual'
@@ -260,7 +260,7 @@ def due(client, namespace, now, *, producer_enabled, after=None):
                 '__name__': client.collection(f'{namespace}_coalesce_groups').document(after['id']),
             }
         )
-    return [{'id': doc.id, 'scan_at': doc.to_dict()['scan_at']} for doc in query.limit(config.DRAIN_PAGE).stream()]
+    return [{'id': doc.id, 'scan_at': doc.to_dict()['scan_at']} for doc in query.limit(limits.DRAIN_PAGE).stream()]
 
 
 def scan_position(store, *, scan):

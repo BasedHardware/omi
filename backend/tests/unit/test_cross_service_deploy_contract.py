@@ -256,6 +256,13 @@ def test_current_manifests_add_no_violation_beyond_known_gaps(results: Results) 
     )
 
 
+def test_coalescing_custody_does_not_import_the_upload_gate() -> None:
+    source = contract.Source()
+    modules = contract.import_closure(source, 'database.batch_pipeline_coalescing')
+    reads = contract.scan_env_reads(source, modules)
+    assert 'BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED' not in reads
+
+
 def test_known_gaps_carry_reasons_and_no_values() -> None:
     gaps = contract.load_known_gaps()
     assert gaps, 'baseline is unexpectedly empty'
