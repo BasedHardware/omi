@@ -21,12 +21,15 @@ from database.account_deletion_policy import account_deletion_marker_blocks_acce
 from database.conversations import conversations_collection, prepare_conversation_for_read
 from database.sync_ledger import sync_content_ledger_ref
 from utils.observability.fallback import record_fallback
+from utils.conversations.v3 import metrics as v3_metrics
 from utils.conversations.v3.live import (
     FINISH_FIELDS,
     FINISH_RECORDING_FIELD,
+    FINISH_STAMP_FIELD,
     FINISH_WINDOW_FIELD,
     MAX_IDLE,
     active,
+    finish_stamp,
     has_finish_content,
 )
 
@@ -250,6 +253,10 @@ def request_finish(
     With ``newer_capture``, a capture that sealed after the window's last speech and that no window
     holds yet is the person's last speech, so the cut lands on it instead (``_newer_capture``).
     Returns ``(outcome, recording id, response row)``; the row is set only when the cut moved.
+
+    The first write on the response target also stamps the Finish (``FINISH_STAMP_FIELD``, path ``tail``,
+    ``newer`` or ``newer_dual``) for the one ``FINISH_TO_VISIBLE`` sample. In the stored-both case only the
+    window tail, which the answer names, is stamped; the capture's request rides along unstamped.
     """
     client = firestore_client if firestore_client is not None else get_firestore_client()
     collection = client.collection('users').document(uid).collection(conversations_collection)
@@ -257,10 +264,12 @@ def request_finish(
     # The transaction body re-runs on contention and each attempt resets this, so what remains is the committed
     # attempt's. Fallback telemetry is recorded once, after the commit, never from inside the body.
     degraded: List[bool] = []
+    declined: List[str] = []
 
     @firestore.transactional
     def commit(tx):
         degraded.clear()
+        declined.clear()
         window = window_ref.get(transaction=tx, field_paths=FINISH_FIELDS).to_dict() or {}
         if not _is_finishable_window(window, now):
             return 'no_live_window', '', None
@@ -296,14 +305,32 @@ def request_finish(
             both = not retry and server_batch.owned(newer_row) and not _batch_speech_landed(newer_row)
             newer_state = _native_projection_state(client, tx, uid, newer_id) if both else None
             tail_state = _batch_state(client, tx, uid, cid, row) if both else None
+            # The tail's write is planned (no read, no write) before the capture's, so the capture's request is
+            # stamped only when the answer will name it: when the tail has nothing to cut.
+            tail_plan = (
+                _window_tail_plan(
+                    client, tx, uid, window, window_id, cid, row, now, state=tail_state, stamp_path='newer_dual'
+                )
+                if both
+                else None
+            )
             outcome, response_row = _finish_capture(
-                client, tx, collection, uid, newer_id, newer_row, now, state=newer_state
+                client,
+                tx,
+                collection,
+                uid,
+                newer_id,
+                newer_row,
+                now,
+                state=newer_state,
+                stamp_path='newer',
+                stamp_request=not (tail_plan and tail_plan[1]),
             )
             if both and outcome == 'recording_requested':
-                tail_outcome, recording_id = _finish_window_tail(
-                    client, tx, uid, collection, window, window_id, cid, row, now, state=tail_state
-                )
+                tail_outcome, recording_id, patch = tail_plan
                 if recording_id:
+                    if patch:
+                        tx.update(collection.document(cid), patch)
                     logger.info('v3 Finish cut the live window tail and requested a capture that sealed after it')
                     return 'newer_dual_' + tail_outcome, recording_id, None
                 return 'newer_recording_requested', newer_id, response_row
@@ -311,27 +338,60 @@ def request_finish(
                 if not retry:
                     logger.info('v3 Finish moved from the live window tail to a capture that sealed after it')
                 return 'newer_' + outcome, newer_id, response_row
-            # Nothing to finish on the newer capture (no landed speech, already empty, declined, or a finished
-            # capture that can no longer take a Finish): _finish_capture wrote nothing, so the tail is cut.
+            # The newer capture was selected but declines the cut (already empty, batch unavailable or disabled,
+            # or ineligible): _finish_capture wrote nothing, so the tail is cut and answers. The decline is
+            # counted apart (FINISH_NEWER_DECLINED) once the transaction commits.
+            declined.append(outcome)
         outcome, recording_id = _finish_window_tail(
-            client, tx, uid, collection, window, window_id, cid, row, now, state=tail_state
+            client, tx, uid, collection, window, window_id, cid, row, now, state=tail_state, stamp_path='tail'
         )
         return outcome, recording_id, None
 
     result = commit(client.transaction())
     if degraded:
         _record_newer_capture_fallback()
+    if declined:
+        reason = declined[0] if declined[0] in v3_metrics.FINISH_NEWER_DECLINED_REASONS else 'recording_ineligible'
+        v3_metrics.safe_metric(lambda: v3_metrics.FINISH_NEWER_DECLINED.labels(reason).inc())
     return result
 
 
 def _finish_window_tail(
-    client, tx, uid, collection, window, window_id, cid, row, now, *, state: Optional[str] = None
+    client,
+    tx,
+    uid,
+    collection,
+    window,
+    window_id,
+    cid,
+    row,
+    now,
+    *,
+    state: Optional[str] = None,
+    stamp_path: Optional[str] = None,
 ) -> Tuple[str, str]:
     """Store the Finish on ``window_id``'s tail source ``cid``; every read is already done.
 
     ``state`` is the tail's native ledger state when the caller read it already (``_batch_state``).
     """
-    ref = collection.document(cid)
+    outcome, recording_id, patch = _window_tail_plan(
+        client, tx, uid, window, window_id, cid, row, now, state=state, stamp_path=stamp_path
+    )
+    if patch:
+        tx.update(collection.document(cid), patch)
+    return outcome, recording_id
+
+
+def _window_tail_plan(
+    client, tx, uid, window, window_id, cid, row, now, *, state: Optional[str] = None, stamp_path=None
+) -> Tuple[str, str, Optional[Dict[str, Any]]]:
+    """``(outcome, recording id, patch)`` for the window-tail Finish; the caller writes ``patch``.
+
+    It reads only ``cid``'s native ledger, and only when ``state`` is not given. With ``stamp_path``, the
+    first write this Finish stores on the tail (the request or the cut, not the consuming cut of an earlier
+    request) carries the Finish stamp.
+    """
+    stamp = {FINISH_STAMP_FIELD: finish_stamp(now, stamp_path)} if stamp_path else {}
     if (
         row.get('recording') is not True
         or row.get('status') != 'completed'
@@ -341,52 +401,52 @@ def _finish_window_tail(
         or any(row.get(key) for key in ('deleted', 'is_locked', 'sync_merged_into'))
         or row.get('data_protection_level') == 'private'
     ):
-        return 'no_recording', ''
+        return 'no_recording', '', None
     marked_window = row.get(FINISH_WINDOW_FIELD)
     request_pending = row.get('v3_manual_end_requested') is True
     requested_here = request_pending and marked_window == window_id
     resolved_here = row.get('v3_manual_end_requested') is False and marked_window == window_id
     if row.get('discarded'):
-        return ('already_empty', cid) if resolved_here else ('no_recording', '')
+        return ('already_empty', cid, None) if resolved_here else ('no_recording', '', None)
     if row.get('v3_manual_end'):
-        return 'already_cut', cid
+        return 'already_cut', cid, None
     if (
         request_pending
         and marked_window
         and not requested_here
         and not _can_retarget_finish(row, marked_window, window_id)
     ):
-        return 'request_conflict', ''
+        return 'request_conflict', '', None
     if server_batch.owned(row):
         if row.get('record_audio_partial') or row.get('record_upload_failed'):
-            return 'batch_unavailable', ''
+            return 'batch_unavailable', '', None
         state = state or _native_projection_state(client, tx, uid, cid)
         if state == 'pending':
             if not server_batch.manual_end_marker_enabled():
-                return 'batch_disabled', ''
+                return 'batch_disabled', '', None
             if requested_here:
-                return 'already_requested', cid
-            tx.update(ref, {'v3_manual_end_requested': True, FINISH_WINDOW_FIELD: window_id})
-            return 'requested', cid
+                return 'already_requested', cid, None
+            return 'requested', cid, {'v3_manual_end_requested': True, FINISH_WINDOW_FIELD: window_id, **stamp}
         if state == 'unavailable':
-            return ('already_empty', cid) if resolved_here else ('batch_unavailable', '')
+            return ('already_empty', cid, None) if resolved_here else ('batch_unavailable', '', None)
         if (resolved_here or state == 'empty' or row.get('has_content') is False) and not has_finish_content(
             row, window, cid
         ):
             if requested_here:
-                tx.update(ref, {'v3_manual_end_requested': False})
-                return 'resolved_empty', cid
-            return 'already_empty', cid
-    tx.update(
-        ref,
+                return 'resolved_empty', cid, {'v3_manual_end_requested': False}
+            return 'already_empty', cid, None
+    return (
+        ('consumed' if requested_here else 'cut'),
+        cid,
         {
             'v3_manual_end': True,
             'v3_pending': True,
             'v3_pending_since': row.get('v3_pending_since') or now,
             FINISH_WINDOW_FIELD: window_id,
+            # A consuming cut keeps the stamp of the Finish that stored the request.
+            **({} if requested_here else stamp),
         },
     )
-    return ('consumed' if requested_here else 'cut'), cid
 
 
 RECENT_FINISH_AGE = timedelta(minutes=5)
@@ -630,11 +690,26 @@ def request_recording_finish(uid: str, *, now: datetime, firestore_client: Any =
     return commit(client.transaction())
 
 
-def _finish_capture(client, tx, collection, uid, cid, row, now, *, state: Optional[str] = None):
+def _finish_capture(
+    client,
+    tx,
+    collection,
+    uid,
+    cid,
+    row,
+    now,
+    *,
+    state: Optional[str] = None,
+    stamp_path: Optional[str] = None,
+    stamp_request: bool = True,
+):
     """Store the recording-scoped Finish on capture ``cid``; every other read is already done.
 
-    ``state`` is the capture's native ledger state when the caller read it already.
+    ``state`` is the capture's native ledger state when the caller read it already. With ``stamp_path``, the
+    first write this Finish stores (the cut, or the request unless ``stamp_request`` is false; never the
+    consuming cut of an earlier request) carries the Finish stamp.
     """
+    stamp = {FINISH_STAMP_FIELD: finish_stamp(now, stamp_path)} if stamp_path else {}
     response_row = {key: row[key] for key in ('created_at', 'started_at', 'finished_at', 'source', 'recording')}
     response_row.update(id=cid, structured={})
     if row.get(FINISH_RECORDING_FIELD):
@@ -653,7 +728,10 @@ def _finish_capture(client, tx, collection, uid, cid, row, now, *, state: Option
                 return 'batch_disabled', None
             if row.get('v3_manual_end_requested') is True:
                 return 'already_requested', response_row
-            tx.update(ref, {'v3_manual_end_requested': True, FINISH_RECORDING_FIELD: True})
+            tx.update(
+                ref,
+                {'v3_manual_end_requested': True, FINISH_RECORDING_FIELD: True, **(stamp if stamp_request else {})},
+            )
             return 'recording_requested', response_row
         if state not in {'complete', 'empty'}:
             return 'batch_unavailable', None
@@ -672,6 +750,8 @@ def _finish_capture(client, tx, collection, uid, cid, row, now, *, state: Option
             'v3_pending': True,
             'v3_pending_since': row.get('v3_pending_since') or now,
             FINISH_RECORDING_FIELD: True,
+            # A consuming cut keeps the stamp of the Finish that stored the request.
+            **({} if row.get('v3_manual_end_requested') is True else stamp),
         },
     )
     return ('consumed' if row.get('v3_manual_end_requested') is True else 'recording_cut'), response_row

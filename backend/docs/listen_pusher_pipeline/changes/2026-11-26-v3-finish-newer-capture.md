@@ -66,12 +66,13 @@ never redirects: it passes `newer_capture=False` and cuts only the named window.
     closed" to the app and cut nothing);
   - the scan is full and its oldest row is still newer than the window;
   - `_finish_capture` declines or finds the capture already empty. It writes
-    nothing in those cases.
+    nothing in those cases. The decline is counted with its reason (see
+    Metrics), and the answer is the tail's.
 
 A qualifying capture is strictly newer than the window, so the tail cut's rule
 that an older overlapping source never cuts through visible speech still holds.
 
-**Resulting behaviour.** One Finish may end two cards: A's window is cut at once; if the pending newer capture B later lands with speech, B's request becomes its own manual end and B surfaces as its own card. The response names A's window. Latency is measured once per Finish, to the response target's first visible card.
+**Resulting behaviour.** One Finish may end two cards: A's window is cut at once; if the pending newer capture B later lands with speech, B's request becomes its own manual end and B surfaces as its own card. The response names A's window. Latency is measured once per Finish, to the response target's first visible card (see Metrics).
 
 `test_one_finish_cuts_a_at_once_and_consumes_b_once_across_resolution_and_retry`
 pins this end to end under StrictFirestore. It runs Finish, B's projection and the
@@ -103,13 +104,26 @@ a window claimed it between taps:
 
 ## Reads and writes
 
-Reads per live-window Finish with the switch on: one query, at most 8 documents
-(one billed read when it is empty). When a capture qualifies, add the
-account-deletion marker. In the stored-both case, add B's ledger read; A's ledger
-read is the one the tail cut always made. Writes: at most one recording per
-transaction, except the stored-both case, which writes two (A's cut and B's
-request). With the switch off, nothing extra is read and the transaction is
-exactly the tail cut.
+Every live-window Finish reads the window and its tail recording, as before.
+With the switch on it adds one query, at most 8 documents (one billed read when
+it is empty). When a capture qualifies, add the account-deletion marker, then by
+path:
+
+| Path | Extra reads after the marker |
+| --- | --- |
+| Live-lane capture moved to (`newer_recording_cut`, ...) | none |
+| Server-batch capture whose speech landed (`newer_recording_*`) | B's native ledger, once (`_finish_capture` reads it: `newer_state` is None) |
+| Marked capture, pending-retry (a later tap on a still-requested batch B, `newer_already_requested` / `newer_consumed`) | B's native ledger, once (`_finish_capture`, as above) |
+| Stored both (`newer_dual_*`) | B's ledger, then A's when A is a batch capture; A's is the read the tail cut always made |
+| Selected, then declined (window tail answers) | the ledger reads above for that path; the tail's own batch ledger read is unchanged |
+
+Targeted tests pin these sequences (`test_server_batch_redirect_reads_the_capture_ledger_once`,
+`test_marked_pending_retry_reads_the_capture_ledger_once`,
+`test_stored_both_reads_each_ledger_once_before_any_write`). Writes: at most one
+recording per transaction, except the stored-both case, which writes two (A's
+cut and B's request). The Finish stamp rides in the write the transaction
+already makes; it adds no write. With the switch off, nothing extra is read and
+the transaction is exactly the tail cut (still stamped `tail`).
 
 Provider cost: storing B's request makes B a fast-finish candidate. That adds at
 most one fast-finish pass per stored-both Finish, even when B turns out silent.
@@ -133,17 +147,47 @@ it is one request per unit, at most `MAX_UNITS` (8), up to 20 minutes. Bounds:
 
 ## Metrics and switch
 
-Every outcome of a Finish that found a newer capture is counted with a `newer_`
-prefix in `omi_conversations_v3_finish_no_pointer_total`, apart from the tail
-path's outcomes. All of these labels are pre-initialised:
+A Finish that answered from a newer capture is counted with a `newer_` prefix in
+`omi_conversations_v3_finish_no_pointer_total`, apart from the tail path's
+outcomes. All of these labels are pre-initialised and reachable:
 
 - Moved to the capture: `newer_recording_cut`, `newer_recording_requested`,
-  `newer_already_cut`, `newer_already_requested`, `newer_already_empty`,
-  `newer_resolved_empty`, `newer_consumed`, `newer_recording_ineligible`,
-  `newer_batch_unavailable`, `newer_batch_disabled`.
+  `newer_already_cut`, `newer_already_requested`, `newer_resolved_empty`,
+  `newer_consumed`, and `newer_recording_ineligible` (the account is being
+  deleted; nothing is written).
 - Stored both, by the tail's outcome: `newer_dual_cut`, `newer_dual_requested`,
   `newer_dual_consumed`, `newer_dual_already_cut`, `newer_dual_already_requested`,
   `newer_dual_already_empty`, `newer_dual_resolved_empty`.
+
+A newer capture that was selected but declined the cut (`_finish_capture` wrote
+nothing) leaves the window tail to answer, so `finish_no_pointer_total` counts
+the tail's outcome. The decline is counted once, after the commit, in
+`omi_conversations_v3_finish_newer_declined_total{reason}` with `reason` one of
+`already_empty`, `batch_unavailable`, `batch_disabled`, `recording_ineligible`
+(all pre-initialised). No candidate at all counts nothing there. (The earlier
+`newer_already_empty`, `newer_batch_unavailable` and `newer_batch_disabled`
+labels could never be returned and are removed.)
+
+Finish-to-visible latency: `omi_conversations_v3_finish_to_visible_seconds`, a
+histogram with one fixed label, `path` = `tail`, `newer` or `newer_dual`
+(buckets 5 s to 2 h). There is no separate correlation store:
+
+- The first write the Finish transaction stores on its response target's source
+  carries `v3_finish_requested = {at, path}`: the tail recording for `tail` and
+  `newer_dual`, B for `newer`. In the stored-both case B's request is not
+  stamped, so B's own card never samples; when the stored-both tail has nothing
+  to cut and the answer names B, B's request is stamped `newer` instead. A
+  consuming cut of an earlier request, and every `already_*` answer, writes no
+  stamp, so a retried Finish keeps the first stamp.
+- The planner carries the stamp from the cut recording to the derived row that
+  shows it, once: a row keeps the first stamp it got.
+- That row's first manual-end settlement as a visible Home card (the
+  `v3_manual_end_home_counted` transition that `manual_end_home_total` already
+  counts once per row) observes `now - at`. A later re-settlement, a hidden row,
+  or a stamp older than 2 hours (`FINISH_STAMP_MAX_AGE`) records nothing.
+  `first_speech_to_visible_seconds` cannot be reused here: it fires when a row
+  is first created, and a live window's row exists before its Finish.
+- The sync scrape profile keeps the histogram (`deploy/cloud_run_gmp_sync.yaml`).
 
 `CONVERSATIONS_V3_FINISH_NEWER_CAPTURE=off` restores the window-tail cut and
 skips the scan. Cuts already stored stay.

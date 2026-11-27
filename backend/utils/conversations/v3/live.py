@@ -9,6 +9,13 @@ from config.conversations_v3 import SPEECH_LANDED_FIELD
 MAX_IDLE = timedelta(hours=2)
 FINISH_WINDOW_FIELD = 'v3_finish_no_pointer_window_id'
 FINISH_RECORDING_FIELD = 'v3_finish_no_pointer_recording'
+# A live-window Finish stamps its request time and path (``FINISH_STAMP_PATHS``) on its response target's source
+# with the first write it stores there. The planner carries the stamp to the derived row that shows that source, and
+# that row's first manual-end settlement observes ``FINISH_TO_VISIBLE`` once. Older than ``FINISH_STAMP_MAX_AGE``, the
+# stamp is dropped instead of observed.
+FINISH_STAMP_FIELD = 'v3_finish_requested'
+FINISH_STAMP_PATHS = ('tail', 'newer', 'newer_dual')
+FINISH_STAMP_MAX_AGE = timedelta(hours=2)
 FINISH_FIELDS = [
     'started_at',
     'finished_at',
@@ -59,6 +66,20 @@ def _aware(value: Any) -> Optional[datetime]:
     if not isinstance(value, datetime):
         return None
     return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+
+def finish_stamp(at: datetime, path: str) -> dict:
+    return {'at': at, 'path': path}
+
+
+def finish_stamp_sample(stamp: Any, now: datetime) -> Optional[tuple]:
+    """``(path, seconds)`` from a Finish stamp, or None when it is malformed or older than ``FINISH_STAMP_MAX_AGE``."""
+    if not isinstance(stamp, Mapping) or stamp.get('path') not in FINISH_STAMP_PATHS:
+        return None
+    at = _aware(stamp.get('at'))
+    if at is None or now - at > FINISH_STAMP_MAX_AGE:
+        return None
+    return stamp['path'], max(0.0, (now - at).total_seconds())
 
 
 def active(rows: Sequence[Mapping[str, Any]], now: Optional[datetime] = None) -> Optional[Mapping[str, Any]]:

@@ -36,7 +36,7 @@ from models.structured import Structured
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
 from utils.batch_pipeline.live_projection import replace_record
 from utils.conversations.v3 import finish as v3_finish, live as v3_live, triggers
-from utils.conversations.v3.live import FINISH_FIELDS, FINISH_RECORDING_FIELD, FINISH_WINDOW_FIELD
+from utils.conversations.v3.live import FINISH_FIELDS, FINISH_RECORDING_FIELD, FINISH_STAMP_FIELD, FINISH_WINDOW_FIELD
 from tests.unit.test_batch_pipeline_projection import native_finish_completion
 from utils.conversations import finalizer
 from utils.conversations.processing_trigger import ProcessingTrigger
@@ -754,8 +754,10 @@ def test_finish_rearms_resolved_marker_for_pending_batch(v3_finish_route, monkey
 
     result = client.post('/v1/conversations', json={})
     assert result.status_code == 200 and result.json()['conversation']['tile_state'] == 'transcribing'
+    stamp = latest[FINISH_STAMP_FIELD]
+    assert stamp['path'] == 'tail' and isinstance(stamp['at'], datetime)
     assert db.transactions[-1].updates == [
-        (paths['latest'], {'v3_manual_end_requested': True, FINISH_WINDOW_FIELD: 'window'})
+        (paths['latest'], {'v3_manual_end_requested': True, FINISH_WINDOW_FIELD: 'window', FINISH_STAMP_FIELD: stamp})
     ]
     counter.labels.assert_called_once_with('requested')
     assert not enqueued
@@ -1699,7 +1701,9 @@ def test_live_window_finish_cuts_the_tail_without_a_newer_finishable_capture(new
     assert response.status_code == 200 and response.json()['conversation']['id'] == 'window'
     assert db.rows[paths['latest']]['v3_manual_end'] is True
     assert db.rows[paths['latest']][FINISH_WINDOW_FIELD] == 'window'
-    assert 'v3_manual_end' not in b if _B in db.rows else True
+    # b is the retained object even when the case removed it from the store: Finish wrote neither field to it.
+    assert 'v3_manual_end' not in b and 'v3_manual_end_requested' not in b
+    assert case != 'none' or _B not in db.rows  # nor recreated B's document
     assert enqueued == [(_UID, {'manual_end_id': 'latest'})]
     counter.labels.assert_called_once_with('cut')
     if case == 'full_scan':
@@ -2134,3 +2138,222 @@ def test_one_finish_cuts_a_at_once_and_consumes_b_once_across_resolution_and_ret
     assert enqueued == woken
     assert db.rows[a_path]['v3_manual_end'] is True
     assert b.get('v3_manual_end') is (True if b_lands == 'speech' else None)
+
+
+def _tx_reads(monkeypatch):
+    """Paths of every transactional document read, in order. The recent-source scan is one query and not listed."""
+    reads, get = [], StrictFirestoreDocument.get
+
+    def recording(ref, *args, **kwargs):
+        if kwargs.get('transaction') is not None:
+            reads.append(ref.path)
+        return get(ref, *args, **kwargs)
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', recording)
+    return reads
+
+
+def _ledger_path(db, cid):
+    return sync_content_ledger_ref(db, _UID, record_identity(_UID, cid)[0]).path
+
+
+@pytest.mark.parametrize('path', ['tail', 'newer', 'newer_dual'])
+def test_live_window_finish_stamps_only_its_response_target(newer_capture_route, path):
+    """One Finish-to-visible sample per Finish: the stamp lands on the source of the card the answer names."""
+    client, db, paths, enqueued, counter = newer_capture_route
+    b, a = db.rows[_B], db.rows[paths['latest']]
+    if path == 'tail':
+        del db.rows[_B]
+    elif path == 'newer_dual':
+        _batch_pending(b)
+    before = datetime.now(timezone.utc)
+
+    response = client.post('/v1/conversations', json={})
+
+    assert response.status_code == 200
+    assert response.json()['conversation']['id'] == ('capture-b' if path == 'newer' else 'window')
+    target, other = (b, a) if path == 'newer' else (a, b)
+    assert target[FINISH_STAMP_FIELD]['path'] == path
+    assert before <= target[FINISH_STAMP_FIELD]['at'] <= datetime.now(timezone.utc)
+    assert FINISH_STAMP_FIELD not in other and FINISH_STAMP_FIELD not in db.rows[paths['older']]
+    if path == 'newer_dual':
+        # B's request rides along unstamped, so B's own card never contributes a sample.
+        assert b['v3_manual_end_requested'] is True and b[FINISH_RECORDING_FIELD] is True
+
+
+@pytest.mark.parametrize('path', ['tail', 'newer', 'newer_dual'])
+def test_retried_live_window_finish_keeps_the_first_stamp(newer_capture_route, path):
+    client, db, paths, enqueued, counter = newer_capture_route
+    b, a = db.rows[_B], db.rows[paths['latest']]
+    if path == 'tail':
+        del db.rows[_B]
+    elif path == 'newer_dual':
+        _batch_pending(b)
+    first = client.post('/v1/conversations', json={}).json()['conversation']['id']
+    target = b if path == 'newer' else a
+    stamp, writes = dict(target[FINISH_STAMP_FIELD]), _writes(db)
+
+    assert client.post('/v1/conversations', json={}).json()['conversation']['id'] == first
+
+    assert _writes(db) == writes and target[FINISH_STAMP_FIELD] == stamp
+    assert FINISH_STAMP_FIELD not in (a if path == 'newer' else b)
+
+
+@pytest.mark.parametrize('target', ['tail', 'newer'])
+def test_consuming_cut_keeps_the_stamp_of_the_finish_that_stored_the_request(newer_capture_route, target):
+    """A batch request then its consuming cut: the second write never re-stamps, so the sample stays the first's."""
+    client, db, paths, enqueued, counter = newer_capture_route
+    b, a = db.rows[_B], db.rows[paths['latest']]
+    if target == 'tail':
+        del db.rows[_B]
+        _batch_tail(db, paths)
+        row, cid, outcomes = a, 'latest', ('requested', 'consumed')
+    else:
+        _batch_speech_landed(b)
+        row, cid, outcomes = b, 'capture-b', ('newer_recording_requested', 'newer_consumed')
+    client.post('/v1/conversations', json={})
+    counter.labels.assert_called_once_with(outcomes[0])
+    stamp = dict(row[FINISH_STAMP_FIELD])
+    # The whole record completed with speech before the person tapped again.
+    _ledger(
+        db,
+        cid,
+        status='completed',
+        batch_pipeline={'segment_ids': ['unit']},
+        result={'outcome': 'success', 'new_memories': [cid]},
+    )
+    row.update(has_content=True, record_projection_revision=1)
+    counter.reset_mock()
+
+    client.post('/v1/conversations', json={})
+
+    counter.labels.assert_called_once_with(outcomes[1])
+    assert row['v3_manual_end'] is True and row[FINISH_STAMP_FIELD] == stamp
+
+
+@pytest.mark.parametrize('reason', ['already_empty', 'batch_unavailable', 'batch_disabled', 'recording_ineligible'])
+def test_live_window_finish_counts_a_declined_newer_capture_and_still_cuts_the_tail(
+    newer_capture_route, monkeypatch, reason
+):
+    client, db, paths, enqueued, counter = newer_capture_route
+    declined = Mock()
+    monkeypatch.setattr(v3_finish.conversations_v3_live.v3_metrics, 'FINISH_NEWER_DECLINED', declined)
+    b = db.rows[_B]
+    if reason == 'already_empty':
+        # The whole record completed as silence before the projection cleared has_content.
+        _batch_pending(b)
+        _ledger(
+            db,
+            'capture-b',
+            status='completed',
+            batch_pipeline={'segment_ids': ['unit']},
+            result={'outcome': 'expected_silence'},
+        )
+    elif reason == 'batch_unavailable':
+        _batch_speech_landed(b)
+        _ledger(db, 'capture-b', status='completed')  # no segment binding
+    elif reason == 'batch_disabled':
+        _batch_speech_landed(b)
+        monkeypatch.setenv('CONVERSATIONS_V3_BATCH_MANUAL_END', 'off')
+    else:
+        b['v3_pending'] = False  # a live-lane capture with nothing pending to cut
+    b_before = dict(b)
+
+    response = client.post('/v1/conversations', json={})
+
+    # The window-tail fallback and its answer are unchanged; the answer is counted as the tail's outcome.
+    assert response.status_code == 200 and response.json()['conversation']['id'] == 'window'
+    assert db.rows[paths['latest']]['v3_manual_end'] is True
+    assert db.rows[paths['latest']][FINISH_STAMP_FIELD]['path'] == 'tail'
+    assert db.rows[_B] == b_before
+    counter.labels.assert_called_once_with('cut')
+    declined.labels.assert_called_once_with(reason)
+    declined.labels.return_value.inc.assert_called_once_with()
+
+
+@pytest.mark.parametrize('case', ['none', 'older_than_window', 'silent'])
+def test_live_window_finish_without_a_newer_candidate_counts_no_decline(newer_capture_route, monkeypatch, case):
+    client, db, paths, enqueued, counter = newer_capture_route
+    declined = Mock()
+    monkeypatch.setattr(v3_finish.conversations_v3_live.v3_metrics, 'FINISH_NEWER_DECLINED', declined)
+    b = db.rows[_B]
+    if case == 'none':
+        del db.rows[_B]
+    elif case == 'older_than_window':
+        b['finished_at'] = db.rows[paths['window']]['finished_at'] - timedelta(seconds=1)
+    else:
+        b['has_content'] = False
+
+    response = client.post('/v1/conversations', json={})
+
+    assert response.status_code == 200 and response.json()['conversation']['id'] == 'window'
+    assert db.rows[paths['latest']]['v3_manual_end'] is True
+    counter.labels.assert_called_once_with('cut')
+    declined.labels.assert_not_called()
+
+
+def test_newer_capture_finish_labels_are_reachable_or_absent():
+    """Every pre-initialised newer_* outcome is one request_finish can return; declines are counted apart."""
+    from utils.conversations.v3 import metrics
+
+    labels = {s.labels['outcome'] for f in metrics.FINISH_NO_POINTER.collect() for s in f.samples}
+    assert not labels & {'newer_already_empty', 'newer_batch_unavailable', 'newer_batch_disabled'}
+    declined = {s.labels['reason'] for f in metrics.FINISH_NEWER_DECLINED.collect() for s in f.samples}
+    assert declined == set(metrics.FINISH_NEWER_DECLINED_REASONS)
+    paths = {s.labels['path'] for f in metrics.FINISH_TO_VISIBLE.collect() for s in f.samples}
+    assert paths == {'tail', 'newer', 'newer_dual'}
+
+
+def test_server_batch_redirect_reads_the_capture_ledger_once(newer_capture_route, monkeypatch):
+    """F2: speech landed, so the redirect is not the stored-both case and _finish_capture reads B's ledger itself."""
+    client, db, paths, enqueued, counter = newer_capture_route
+    _batch_speech_landed(db.rows[_B])
+    reads = _tx_reads(monkeypatch)
+
+    assert client.post('/v1/conversations', json={}).json()['conversation']['id'] == 'capture-b'
+
+    counter.labels.assert_called_once_with('newer_recording_requested')
+    # Window, tail, the deletion marker, then B's native ledger: one read each. A's ledger is never read.
+    assert reads == [
+        paths['window'],
+        paths['latest'],
+        account_deletion_document(_UID, firestore_client=db).path,
+        _ledger_path(db, 'capture-b'),
+    ]
+
+
+def test_marked_pending_retry_reads_the_capture_ledger_once(newer_capture_route, monkeypatch):
+    """F4: a retry on a marked, still-requested batch capture answers from B's ledger, read once by _finish_capture."""
+    client, db, paths, enqueued, counter = newer_capture_route
+    _batch_speech_landed(db.rows[_B])
+    assert client.post('/v1/conversations', json={}).json()['conversation']['id'] == 'capture-b'
+    counter.reset_mock()
+    reads = _tx_reads(monkeypatch)
+
+    assert client.post('/v1/conversations', json={}).json()['conversation']['id'] == 'capture-b'
+
+    counter.labels.assert_called_once_with('newer_already_requested')
+    assert reads == [
+        paths['window'],
+        paths['latest'],
+        account_deletion_document(_UID, firestore_client=db).path,
+        _ledger_path(db, 'capture-b'),
+    ]
+
+
+def test_stored_both_reads_each_ledger_once_before_any_write(newer_capture_route, monkeypatch):
+    client, db, paths, enqueued, counter = newer_capture_route
+    _batch_pending(db.rows[_B])
+    _batch_tail(db, paths)
+    reads = _tx_reads(monkeypatch)
+
+    assert client.post('/v1/conversations', json={}).json()['conversation']['id'] == 'window'
+
+    counter.labels.assert_called_once_with('newer_dual_requested')
+    assert reads == [
+        paths['window'],
+        paths['latest'],
+        account_deletion_document(_UID, firestore_client=db).path,
+        _ledger_path(db, 'capture-b'),
+        _ledger_path(db, 'latest'),
+    ]

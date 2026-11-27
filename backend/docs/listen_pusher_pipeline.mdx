@@ -119,8 +119,13 @@ stores the window-tail cut and the capture's recording-scoped request together (
 reads first) and the response names the window. An exact tie, a capture already known empty, or one the
 cut declines keeps the window-tail cut. A retry never cuts the tail twice; a finished capture that can
 no longer answer leaves the tail cut rather than a 404. These outcomes count as `newer_*` (and
-`newer_dual_*`) in `omi_conversations_v3_finish_no_pointer_total`. Set it to `off` on the
-API service to restore the window-tail cut and skip the read.
+`newer_dual_*`) in `omi_conversations_v3_finish_no_pointer_total`. A newer capture that was selected but
+declined the cut counts in `omi_conversations_v3_finish_newer_declined_total{reason}`, and the tail cut that
+answers counts as the tail's outcome. Each live-window Finish stamps its response target (the card the
+answer names; only the window tail in the stored-both case), and that card's first visible manual-end
+settlement observes `omi_conversations_v3_finish_to_visible_seconds{path=tail|newer|newer_dual}` once;
+a stamp older than 2 hours is dropped. Set it to `off` on the API service to restore the window-tail cut
+and skip the read.
 
 `CONVERSATIONS_V3_FAST_FINISH` defaults to `cohort` (the `v3-fast-finish` rollout cohort, empty
 until a member is added). For a member, or for every v3 owner with `on`, a manually
