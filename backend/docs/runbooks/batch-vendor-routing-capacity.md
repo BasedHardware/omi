@@ -184,7 +184,7 @@ never with a burst in prod.
    daily cap above that total. A cap hit ends the ladder early and measures
    nothing, so it is not a clean rung.
 3. Rungs: 5 → 10 → 25 → 50 concurrent, each held 10 min, Modulate first, then
-   Soniox (failover-only, $0.10/h list), with 2-minute rungs to keep its bill
+   Soniox ($0.12/h list), with 2-minute rungs to keep its bill
    near $3 at L = 3s.
 4. Record per rung: 429 count and share, 5xx share, timeout share, L p50/p95,
    integration CPU s/unit, and vendor audio-seconds billed (from
@@ -368,8 +368,9 @@ so RECENT English overflows too while its own backlog is saturated).
 on backend-sync, backend-sync-backfill and backend-integration, so every
 backend train re-applies it. `tests/unit/test_batch_vendor_route_table_prod.py`
 pins the overlay value to the file's compact JSON and runs the real selection
-over it. Healthy and unsaturated, it routes every language exactly as
-`resolve_route` does, including blank, `multi` and unknown.
+over it. Healthy and unsaturated, only languages Parakeet cannot serve move (to
+Soniox first, Modulate as failover); English, Parakeet languages, blank, `multi` and
+unknown route exactly as `resolve_route` does.
 `tests/unit/test_batch_vendor_outage_drills.py` drives the real sampler: with
 zero GPU workers, English overflows once the fresh backlog passes the enter
 age, returns to GPU after capacity drains it, and the kill switch keeps

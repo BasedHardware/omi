@@ -88,10 +88,8 @@ def route_capable(route: str, language: str | None) -> bool:
     Vendors identify the language themselves (Modulate auto-detect, Soniox unified model), so
     vendor capability is surface admission only; tables narrow it per language class.
 
-    Soniox is not admitted on ``prerecorded`` today (only ``streaming`` and ``held_recovery``), so
-    it is never capable here and failover has no Soniox candidate until slice D adds that
-    admission to ``config.stt_provider_policy`` alongside its prerecorded adapter. That
-    reviewed policy change, not a table edit, is what enables Soniox failover.
+    Soniox is admitted on ``prerecorded`` (``config.stt_provider_policy``), so it is capable here;
+    the table's ``failover_only`` decides whether it may start a unit or only replace one.
     """
     if route == GPU:
         return parakeet_supports_language(STTServingSurface.PRERECORDED, normalized_language(language))
