@@ -21,6 +21,9 @@ python -m testing.pipeline_lab view DIR                        # look at the res
   for a pull request.
 - Agents: read [AGENTS.md](AGENTS.md) before judging a change with the lab.
 
+For speaker labeling experiments (corpora, silver truth, arms over real days, production diagnosis), see
+[speakers/README.md](speakers/README.md).
+
 ## What the lab is
 
 Two tools share this package. **Scenarios** script one capture -> Finish -> Home story in a small JSON
@@ -62,8 +65,9 @@ synthetic uid `local-dev-user`.
 | `timeline/`, `cassette/`, `lanes/` | Day timeline and lanes; STT cassettes (vendor prerecorded and Parakeet batch adapters); record/batch and sync replay; `lanes/plugin.py`. |
 | `inspector/` | Stdlib server and static UI; `sample_run.py` (synthetic Lumen Bay day). |
 | `v3/` | Conversations v3 replay: `feed.py` (recordings, arrival instants), `tasks.py` (loopback Cloud Tasks), `driver.py` (event loop), `product.py` + `run.py` + `entry.py` (real v3 code), `export.py` (contract rows, pairing by recording), `corpus.py` (add-day ingest), `select.py` (pipeline choice), `fake.py`, `smoke.py`, `prod_export.py` (read-only v3 exporter). |
-| `scenario/` | Scripted capture -> Finish -> Home stories (see [Scenarios](#scenarios)): `spec.py` (file format, event plan), `checks.py` (expectations, outcomes), `ops.py` (events as product calls), `run.py` (one scenario in process), `budget.py` (operation counts, no-op writes, budgets), `home.py` (the Home routes, paging), `stack.py` (command, emulator bring-up, report), `scenarios/` (committed synthetic scenarios), `IMPORTER.md` (slice 2 design). |
+| `scenario/` | Scripted capture -> Finish -> Home stories (see [Scenarios](#scenarios)): `spec.py` (file format, event plan), `checks.py` (expectations, outcomes), `ops.py` (events as product calls), `run.py` (one scenario in process), `budget.py` (operation counts, no-op writes, budgets), `home.py` (the Home routes, paging), `stack.py` (command, emulator bring-up, report), `compare.py` (arms against a baseline), `metrics.py` (per-arm metric extractors), `scenarios/` (committed synthetic scenarios), `IMPORTER.md` (slice 2 design). |
 | `ideal/` | Ideal days: `packet.py` (numbered lines), `schema.py` (validator), `score.py` (structure scoring), `runs.py` (score table and per-card diff across runs, no text), drafting passes. |
+| `speakers/` | Speaker identity: `peer.py` (loopback stand-in for the hosted diarizer, speaker cassettes), `scenario.py` (speakers in scenarios: peer, gallery, staged units, scorecard), `score.py` (scorecards on truth), `corpus.py` + `fixtures/` (committed public corpus, cassettes), `bench.py`, `silver.py`, `owner_export.py`, `compare_metrics.py` (metric `speakers`). |
 | `sample.py` | Minimal synthetic run, used only when the inspector plugin is absent. |
 
 ## Store
@@ -167,7 +171,8 @@ code. No deploy, no production data: the text is synthetic and the run uses the 
 cd backend
 python -m testing.pipeline_lab scenario check finish_after_reconnect_late_transcript   # validate, print the plan
 <workspace>/bin/omi-heavy run -- python -m testing.pipeline_lab scenario run [NAME|FILE ...] \
-    [--keep DIR] [--jobs N] [--repeat N] [--stt replay|record-local|record-vendor] [--json]
+    [--keep DIR] [--jobs N] [--repeat N] [--stt replay|record-local|record-vendor] [--windows vad|fixed] \
+    [--speakers replay|record-local] [--json]
 ```
 
 `run` with no names runs every committed scenario (`scenario/scenarios/*.json`). It needs `firebase`,
@@ -178,20 +183,22 @@ or failed as expected, 1 on a failure, an unexpected pass or a repeat that diffe
 **Format.** Documented at the top of `scenario/spec.py`: origins, batch-lane recordings (audio span,
 recording session, seal, batch transcript landing, scripted lines with speaker and `is_user`), stream gaps,
 device-sync fragments with arrival instants, a Finish tap (fast finish on or off, provisional latency, more
-taps of the same button with `again_at`), the account (`account`: cloud audio off takes the live lane;
+taps of the same button with `again_at`), real voices and an enrolled gallery (`speakers`), the account (`account`: cloud audio off takes the live lane;
 `sync_off_at` turns sync off mid-run), Home history before the run (`seed`: visible, hidden-below-the-word-
 floor, media, raw recording and discarded rows, in runs), an `env` overlay on top of this checkout's
 production `backend-sync` profile, an operation `budget`, and `expect` rows. A row targets
 `conversation_of` a label or `@finish` (`recordings`, `recordings_include`, `visible`, `on_home`,
 `manual_end`, `hidden_reason`, `min_words`, `kind`, `titled`, `has_notes`, `home_titled`, `home_has_notes`,
-`holders`), `no_hidden_with`, `recording` (its `fast_finish` outcome), `finish_response` (what tap N
+`holders`, `speakers`: see [Speakers in scenarios](#speakers-in-scenarios)), `no_hidden_with`, `recording` (its `fast_finish` outcome), `finish_response` (what tap N
 answered: `outcome`, `titled`, `has_notes`, `discarded`, `recordings`) or `home_paging` (`visible_once`:
 Home paged to its end shows every visible conversation once). Each row is optionally checked at an instant
-(`at`) and named (`label`). Every field of one row must hold for the same conversation.
+(`at`; its verdict evidence is what that instant saw: `result.json` `checkpoints` keep each one's facts) and
+named (`label`). Every field of one row must hold for the same conversation.
 `expected_failure: {"reason", "checks": [labels], "strict": true}` marks a known bug; the fix PR deletes it.
 
 **Operation counts and budgets** (`scenario/budget.py`). Every run counts, from the first event to the end:
-Firestore document reads, writes, deletes and no-op writes (a write that left the document unchanged:
+Firestore document reads (a query's `offset`-skipped documents included: `RunQueryResponse.skipped_results`
+counts against the queried collection, as Firestore bills them), writes, deletes and no-op writes (a write that left the document unchanged:
 Firestore answers it with the document's previous `update_time`), by top-level collection and by collection
 path, and vendor calls (requests to the fake LLM gateway; fast-finish STT calls and cassette plays). The
 counts are taken at the emulator client's GAPIC API, the client `database._client` hands the product, so
@@ -220,19 +227,32 @@ explained there too. Events run at their scripted instants (`--clock tick` adds 
 instead of `speech`. Its words come from an STT cassette for that exact audio, then pass through the lane
 code a day replay runs: production's decode, the real `PipelineWorker` (windows, packing, validation) and
 `projection_segments` for batch recordings; `retrieve_vad_segments` and `postprocess_words` for sync. VAD is
-the local Silero model; speaker labels come from the cassette; speaker identification does not run.
+the local Silero model; speaker labels come from the cassette and speaker identification does not run, unless
+the scenario has a `speakers` block ([Speakers in scenarios](#speakers-in-scenarios)).
 `--stt` picks how words are found:
 
 - `replay` (default): committed `synthetic` cassettes (`scenario/fixtures/stt_cassette/`) and the lab
   root's cache; a miss is an error naming the command that would record it. No network.
 - `record-local`: local Parakeet (production's `parakeet-tdt-0.6b-v3` checkpoint on CPU, the product's
-  decoding, 30 s windows). An optional extra in its own venv (`requirements-local-stt.txt`), never imported by
-  the default lab. Measured word error rate on synthetic speech: 2.3% on 60 s, 7.2% on 10 min. Local
-  cassettes are evidence for everything after the words, not for transcription quality.
+  decoding). An optional extra in its own venv (`requirements-local-stt.txt`), never imported by the default
+  lab. It transcribes **VAD-packed speech spans** by default (production's local Silero VAD, spans padded 0.2 s,
+  joined across pauses up to 0.3 s, packed into windows of at most 30 s, the way the batch worker cuts speech);
+  `--windows fixed` cuts plain 30 s windows instead. Fixed windows that mix speech with exact digital silence
+  make the CPU model return no words for the whole window: measured 2026-11-26 on a two-voice LibriSpeech mix,
+  38 of 102 words in fixed 30 s windows, 102 of 102 with VAD spans. The recorder never adds noise to the audio.
+  The windowing is part of the local cassette's model key (`.../cpu-fp32/vad`; fixed windows keep the original
+  key) and is recorded in the cassette's `source_detail` (mode, VAD model and parameters). Measured word error
+  rate on synthetic speech: 2.3% on 60 s, 7.2% on 10 min (fixed windows). Local cassettes are evidence for the
+  stages after the words (VAD windows, projection, landing, Finish, planner, speakers, Home), never for
+  transcription quality. `record-stt --adapter local [--windows fixed]` records a day the same way.
 - `record-vendor`: the vendor prerecorded adapter with a spend cap (`--stt-budget-usd`); needs credentials
   and an `stt` provider and model pin in the scenario.
 
 Without an `stt` pin the run takes the best cassette recorded for the file: vendor, then local, then synthetic.
+Committed STT cassettes are `synthetic` (`scenario/fixtures/stt_cassette/`), or `local` cassettes of committed
+public speaker-corpus audio (`speakers/fixtures/stt_cassette/`; the loader refuses a local cassette whose audio
+hash is not a committed public corpus file). To commit one, record it with `--stt record-local` and copy it from
+`$OMI_PIPELINE_LAB_ROOT/cache/stt_cassette/<kk>/` into that directory.
 
 **What runs as product code.** Each run lists its stand-ins in words, from its own counters, in
 `result.json` (`stand_in_notes`, `audio_steps`), `verdict.json`, the text report and the web view. In short:
@@ -241,11 +261,56 @@ Without an `stt` pin the run takes the best cassette recorded for the file: vend
 |---|---|---|
 | Capture admission, recording rows | `triggers.mark_new`, `upsert_conversation_with_lifecycle` | none |
 | Finish tap | `retrieve_in_progress_conversation` picks the branch; with nothing in progress, `finish.finish_live_window` | Capture in progress: the finalization job's capture close is written as its outcome at the seal; the job does not run. |
-| Record admission, fast finish | `batch_pipeline.live._manual_finish_admitted` -> `promote_manual_end` -> `fast_finish.run` | `admit_recording` does not run; one unit over the whole recording, a privacy check that allows, funding open. STT returns the recording's lines: scripted, or the cassette words of an audio recording. |
+| Record admission, fast finish | `batch_pipeline.live._manual_finish_admitted` -> `promote_manual_end` -> `fast_finish.run` | `admit_recording` does not run; one unit over the whole recording (one retained reference, read as silence), a privacy check that allows, funding open. STT returns the recording's lines: scripted, or the cassette words of an audio recording; per chunk (`_transcribe_words`, the lines inside the chunk's window, no language probe) on the chunked path that ships, per unit (`_transcribe`) on the kill-switch path. |
 | Batch transcript landing | `update_conversation_segments`, `triggers.committed_sync_assignment` | The projection transaction (`replace_record`, its manual-end promotion, receipts) does not run, nor does the native completion that writes the sync-content ledger and consumes a recording-scoped Finish intent. So a Finish after a batch transcript landed is answered `requested` in the lab (`_native_projection_state` reads no ledger: `pending`) where production cuts, and a recording-scoped intent (#26288 fallback) is never consumed: scenarios do not judge `manual_end` in those two shapes. |
 | Account settings | `users.set_user_private_cloud_sync_enabled` (start, `sync_off_at`) | The fast-finish privacy check reads that setting through `users.get_user_private_cloud_sync_enabled` instead of the batch privacy fence's generation read; the in-transaction fence of the write is the product's. |
 | Device-sync fragment | `mark_new`, `upsert_conversation_with_lifecycle`, `committed_sync_assignment` | `/v2/sync-local-files` intake and its job do not run. |
 | Reconcile, planner, notes, Home | `service.reconcile`, `service.sweep`, loopback named Cloud Tasks, the Home routes | Every LLM answer is the lab's fake gateway: one conversation per stretch, a new one at a line containing `switching topics`. |
+
+### Speakers in scenarios
+
+A scenario with a `speakers` block runs the product's speaker code on real voices (`speakers/scenario.py`):
+
+```json
+"speakers": {"peer": true, "gallery": {"user": "owner.wav", "person-a": "a.wav"}, "truth": "truth.json",
+             "recording": "B", "receipts": "recording"}
+```
+
+- **Peer.** The run starts a speaker peer (`speakers/peer.py`, loopback) before the lab environment and sets the
+  product's `HOSTED_DIARIZATION_API_URL` and `HOSTED_SPEAKER_EMBEDDING_API_URL` to it (after the overlay, so
+  its port never changes the overlay digest); its port joins the network guard's loopback peers.
+  `--speakers replay` (default, CI) answers from speaker cassettes only (a miss is HTTP 409); `--speakers
+  record-local` runs production's diarizer code (pyannote community-1, WeSpeaker) on this CPU for a miss, from the
+  local-models venv (`OMI_PIPELINE_LAB_LOCAL_SPEAKERS_PYTHON`, `HF_HOME`, `HF_HUB_OFFLINE=1`). Cassettes of
+  audio that is all committed and public go to `speakers/fixtures/cassettes/` (commit them); any other audio
+  records under the private lab root. CPU fp32 answers are an approximation of the GPU model's: evidence for
+  what comes after the model (assignment, naming, thresholds, persistence).
+- **Expect.** A `conversation_of` row's `speakers` field scores the conversation's persisted segments against
+  the truth (`speakers/score.score_conversation`, segment clocks moved from the conversation's `started_at` onto
+  the recording's audio clock): `attribution_min`, `owner_precision_min`, `owner_recall_min`,
+  `named_accuracy_min`, `named_coverage_min`, `wrong_name_max`, `owner_words_max`, `voices` (`N` or
+  `[N, tolerance]`), `final_pass` (the run's last `run_batch_final_pass` outcome) and `resolution` (the stored
+  `speaker_resolution.status`: the app numbers voices only when it is `resolved`). A rate with nothing to measure is `null` and fails a minimum. The scorecard (numbers only)
+  is on each conversation row in `result.json` and in the verdict's actual; `scenario compare` reports it as
+  metric `speakers` (`speakers/compare_metrics.py`).
+
+| Step | Product code | Stand-in |
+|---|---|---|
+| Batch-lane diarization | `utils.stt.diarization.HttpDiarizer` posts each unit's PCM to the peer (`/v2/diarization`: community-1 turns); the real `PipelineWorker` and `projection_segments` with the unit as batch scope, as the production projector calls it; the stored segments are the projection's own | the answer is a cassette (CPU fp32 when recorded locally) |
+| Gallery | `extract_embedding_from_bytes` (peer `/v2/embedding`), `set_user_speaker_embedding`; people through `create_person`, `add_person_speech_sample`, `update_person_speech_samples_version(3)`, `set_person_speaker_embedding`; a paid plan through `update_user_subscription` when people are enrolled (naming people is a paid entitlement) | written before the first event, not counted |
+| Resolver and final pass | `process_conversation` -> `resolve_speakers_for_processing` (`_resolve_original_batch`, `batch_identity_evidence.load`, `voice_centroids.extract`, embeddings through the peer, `resolve_conversation_speakers`, `apply_speaker_resolution`) and `run_batch_final_pass` (`HttpDiarizer` on the assembled audio, `run_final_pass`) | The batch pipeline store and its encrypted artifacts are never written: `load_reference`, `artifacts.load_result` and `artifacts.fetch_audio` are answered from this run's batch lane (the worker's payload and the unit WAV), and the store handle and runtime stage are replaced |
+
+`receipts` says whom those stood-in receipts name. `recording` (default) is what `batch_pipeline/projection.py`
+writes: the conversation the unit was projected into, the recording. The stand-in applies the product's own
+ownership rule (`database/batch_final_pass.receipt_owners`): a conversations-v3 row owns receipts naming its
+`v3_recording_ids`. **This is how the lab caught a production escape (2026-11-26):** on `origin/main` the resolver
+and the final pass on a v3 conversation got `skipped_merged` (voices grouped, attribution 1.0, nobody named); with
+the fix both speaker scenarios pass (`scenario compare origin/main --worktree --metric speakers`: final pass
+`skipped_merged` -> `success`, owner recall 0 -> 1, named accuracy 0 -> 1). `processed` remains a labelled
+what-if for experiments: the receipt names whichever conversation the pass runs on. For a real-data check of the
+same path, see [the speaker lab](speakers/README.md) (`diagnose`). Record a speaker scenario's cassettes with
+`scenario run NAME --stt record-local --speakers record-local` (a few minutes on CPU), then commit the new
+files under `speakers/fixtures/`.
 
 **Isolation, `--jobs`, `--repeat`.** Each scenario process (each repeat too) gets its own Firestore project
 `demo-lab-<run id>` on one multi-project emulator, its own leased Redis database, its own blob root and
@@ -259,9 +324,76 @@ for the run (with only `OMI_PIPELINE_LAB_REDIS` given, that Redis and a started 
 expected and actual), and per scenario `scenario.json`, `result.json`, `home.json`, `v3_tasks.jsonl`,
 `decisions.jsonl`, `repeat-<k>/`.
 
-**`scenario compare BASE [HEAD|--worktree]`** runs the same scenarios against two backend trees (a ref runs
-in a pinned worktree with this checkout's lab vendored in) and writes `base/`, `head/` and `compare.json`.
-Exit 0 when nothing differs, 1 when an outcome or conversation differs.
+**`scenario compare`** runs the same scenarios on several *arms* and compares every arm with a baseline arm.
+An arm is `{"name", "ref", "overlay", "env"}`: product code from `ref` (omitted or `null`: this working tree;
+a ref runs in a pinned worktree with this checkout's lab vendored in), then on top of each scenario's own `env`
+an optional lab overlay file (`{name, env, serving, gates, model_config}`, the [overlay schema](#command-line))
+and then `env`, which wins. Arms may share a ref and differ only by overlay or env (a threshold sweep).
+
+```bash
+python -m testing.pipeline_lab scenario compare BASE [HEAD|--worktree]        # arms base (BASE) and head (HEAD or this tree)
+python -m testing.pipeline_lab scenario compare --arms arms.json [--baseline NAME]
+python -m testing.pipeline_lab scenario compare --arm off \
+    --arm '{"name": "t8", "env": {"SOME_THRESHOLD": "8"}}' --arm '{"name": "t30", "env": {"SOME_THRESHOLD": "30"}}'
+#   common: [--scenario NAME ...] [--metric NAME ...] [--keep DIR] [--jobs N] [--timeout S] [--clock frozen|tick] [--json]
+```
+
+`--arms FILE` holds `[arm, ...]` or `{"baseline": NAME, "arms": [...]}` (overlay paths relative to the file);
+`--arm` takes an arm as JSON or `NAME[@REF]`. The baseline is `--baseline`, else the file's, else the first arm.
+Output: `DIR/<arm>/` (a `scenario run` layout per arm: `base/` and `head/` in the two-ref form), `DIR/.arms/`
+(each arm's effective overlay, 0600) and `compare.json` (schema 2):
+
+```
+{"schema": 2, "baseline": NAME,
+ "arms": [{"name", "ref", "sha", "backend_tree", "dirty", "env" (secret-shaped values redacted),
+           "overlay": null | {"file", "digest", "env_keys", "serving", "gates", "model_config"}}],
+ "base", "head",                       # the baseline and the first other arm's identity (schema 1 fields)
+ "differs", "errored", "seconds",
+ "scenarios": [{"name", "outcomes": {arm: outcome}, "differs",
+                "arms": {arm: {"outcome", "differs", "conversations": [{"key", "base", "head", "fields"}]}},
+                "base", "head", "conversations"}],   # schema 1 fields: the baseline against the first other arm
+ "metrics": {"extractors", "modules", "keys", "values": {arm: {key: value}},
+             "deltas": {arm: {key: delta}}, "errors": {arm: {metric: error}}},
+ "harness": {"path", "ran": {"source", "sha", "tree", "dirty"}, "refs_differ", "drift", "note",
+             "arms": {arm: {"ref", "sha", "tree", "same_as_ran", "same_as_baseline",
+                            "changed": {"scenarios"|"fixtures"|"code": [path, ...]}}}}}
+```
+
+A conversation differs when its recordings, visibility, hidden reason, words or manual end differ (final
+state). Exit 0 when no arm differs from the baseline, 1 when an outcome or a conversation differs, 2 when an arm
+errored, a metric extractor failed, or the arms could not be set up. `view DIR` shows a compare whose arms are
+named `base` and `head`; for other names open one arm's directory (`view DIR/<arm>`).
+
+**Harness drift.** Every arm runs *this checkout's* harness: its checks, budget counting, verdicts and
+scenario files, vendored into each ref's worktree. `compare.json` `harness` (and a `WARNING` line) says, per
+arm, whether that arm's own ref carries a different `backend/testing/pipeline_lab` than the one that ran, and
+which files (`scenarios`: expect rows and budgets; `fixtures`; `code`). An assertion weakened on a branch then
+judges both sides in a branch-against-main compare: read the warning before trusting "both green".
+
+**Metrics** (`scenario/metrics.py`). A metric is an extractor `(run_dir: Path) -> {key: int | float | str}`
+over one arm's directory (`run.json`, `verdict.json`, `<scenario>/result.json`). Compare runs every registered
+extractor (or those named by `--metric`) on every arm and reports a per-arm table (`"<metric>.<key>"`) and each
+non-baseline arm's delta (numbers: arm minus baseline; labels: `same`/`changed`; missing: `null`). Metrics are
+reported, never judged (they do not change the exit code unless an extractor fails). Built in: `ops` (reads,
+writes, deletes, no-op writes, vendor STT and LLM calls summed over the scenarios) and `outcomes` (scenarios per
+outcome, checks passed). To add one, put a `compare_metrics.py` anywhere under `testing/pipeline_lab/` (compare
+imports every such module; `$OMI_PIPELINE_LAB_METRICS` adds modules by name, comma separated):
+
+```python
+from pathlib import Path
+
+from testing.pipeline_lab.scenario.metrics import register_metric, scenario_results
+
+
+@register_metric('speakers', description='speaker attribution per scenario')
+def speaker_metrics(run_dir: Path) -> dict[str, int | float | str]:
+    return {f'{name}.labelled': len(result.get('speakers') or []) for name, result in scenario_results(run_dir)}
+```
+
+`register_metric(name, extractor=None, *, description='', replace=False)` (a decorator or a call; names have no
+dots and are unique), `scenario_results(run_dir)` yields `(name, result.json)` per scenario, `verdict_rows(run_dir)`
+the verdict rows. Values are numbers or labels of at most 80 characters, never run text (no transcript, title,
+name, uid or id); a bool, a non-finite number or a longer string is an extractor error (exit 2).
 
 **The web view** (`view DIR`, or `scenario view DIR`) is a stateless read-only page on loopback: the verdict
 and checks, Home as the route returned it with a snapshot picker and a "Not on Home" group, a timeline of
@@ -273,8 +405,13 @@ own client-side filtering is not modelled.
 **CI.** The advisory job "Pipeline Lab Scenarios" (`.github/workflows/backend-hermetic-e2e.yml`) runs every
 committed scenario with `--jobs 4 --repeat 2 --stt replay` on every backend pull request and merge-queue run,
 writes the summary to the job page and uploads the run directory (artifact `pipeline-lab-scenarios`):
-download it and run `view` on it. Measured 2026-11-26 on the lab host with the job's arguments: the 13 committed scenarios run in about
-130 s (the five before them: 35 s); `.github/ci-budget.yaml` budgets the job at a 5-minute p50.
+download it and run `view` on it. It fails closed: it skips the scenarios only when the hermetic scope job
+succeeded and answered exactly "no backend change" (the job then says "not run", with a notice); a failed or
+unknown scope runs the full suite with a warning; and a run passes only when `scenario summary DIR
+--require-committed --repeat 2` finds every `scenario/scenarios/*.json` in the verdict, run twice, with its
+checks evaluated (exit 1 otherwise), so a run that executed nothing cannot be green. Measured 2026-11-26 on the lab host with the job's arguments: the 15 committed scenarios ran in 83 s,
+the two speaker scenarios 7 to 9 s each, replay only, no torch (an earlier measurement of the 13 before them:
+about 130 s, on a busier host; the five before those: 35 s); `.github/ci-budget.yaml` budgets the job at a 5-minute p50.
 
 **Committed scenarios** (`scenario/scenarios/`), each with a budget from its measured counts:
 
@@ -290,8 +427,41 @@ download it and run `view` on it. Measured 2026-11-26 on the lab host with the j
 | `finish_cloud_audio_off` | cloud audio off (live lane): Finish finishes the recording with no STT call | #26296 |
 | `finish_privacy_refused_fast_finish` | the owner turns sync off before fast finish: `privacy_blocked`, zero STT calls | #26344 |
 | `home_paging_past_hidden_runs` | Home paged past runs of hidden rows shows every visible conversation once | #25721, #25725, #26193 |
+| `speaker_owner_and_person_finish` | real voices (public LibriSpeech): the owner and an enrolled person, Finish while capturing; owner and person named, attribution high (`receipts: processed`) | speaker scenarios |
+| `speaker_owner_absent` | an enrolled person and a stranger, the owner silent: no word labelled as the owner, the person named, the stranger unnamed (`receipts: processed`) | speaker scenarios |
+| `speaker_partial_final_pass_keeps_voices` | three voices with short turns; the final pass ends partial (diarizer-gap words) and the conversation stays `resolved` on the resolver's voice ids | `BATCH_FINAL_PASS_KEEP_RESOLVED_ON_PARTIAL_ENABLED` |
 
 Turning a production incident into a scenario: [scenario/IMPORTER.md](scenario/IMPORTER.md).
+
+### STT routing (which engine transcribes each recording)
+
+By default an `audio_file` recording plays the cassette the scenario pins, so arms that route speech
+differently transcribe identically. With `OMI_PIPELINE_LAB_STT_ROUTING=product` in the scenario or arm env,
+`stt_routing/routing.py` routes each recording with production's own decisions under that arm's env
+(production profile, then scenario env, then arm env): `batch_admission_language`, the sampled LID
+(`probe_wav` + `LanguageDecision.parakeet_safe`) and `get_prerecorded_service` for the legacy path. The
+recording then plays the cassette of the engine chosen. Capacity fallback and legacy modes other than `on`
+are not modelled (see the module's table).
+
+- `OMI_PIPELINE_LAB_STT_ROUTING_INPUTS`: a private JSON file with the user fields routing reads and each
+  label's conversation fields (`{"user", "conversations", "default_conversation"}`).
+- `OMI_PIPELINE_LAB_STT_ROUTE_CASSETTES`: JSON mapping a route (`parakeet`, `multilingual`) to the cassette pin
+  that stands in for it, e.g. `parakeet_local` for production's GPU Parakeet.
+- A routed engine with no provider/model pin (from the mapping or the route itself) is a miss, never a
+  wildcard match.
+- LID answers are recorded once per 30 s probe under `<lab root>/lid/` on a `--stt record-vendor` run with
+  `OMI_PIPELINE_LAB_LID_KEY_FILE` (a 0600 key file) and `--stt-budget-usd`. Each probe reserves and settles its
+  list price in `lid_ledger.json`. Answers are replayed after that. The self gate's later windows (Whisper-base
+  in production) are classified locally by `stt_routing/self_lid.py` under `OMI_PIPELINE_LAB_MLX_PYTHON` (a
+  venv with `mlx-whisper`) and cached under `<lab root>/self_lid/`. Every engine's cassettes are recorded
+  beforehand, one pinned `record-*` pass per engine.
+- Metric `stt_routing` (`stt_routing/compare_metrics.py`): recordings and audio per route, LID probes, and with
+  `OMI_PIPELINE_LAB_STT_REFERENCE` (a private per-audio reference, never an arm's own detector) the
+  unsupported-language speech each arm sent to Parakeet.
+
+The batch lane cannot play a multilingual cassette: the real worker refuses a window whose language Parakeet
+does not support (`vad_windows` / `unsupported_language`), as production does before recovery. Route
+multilingual audio through `sync` fragments.
 
 ## affected
 
@@ -299,7 +469,11 @@ Turning a production incident into a scenario: [scenario/IMPORTER.md](scenario/I
 the working tree) maps every changed path to the scenarios worth running and the earliest day-replay stage
 it can change, and prints the commands. Scenarios are named by `SCENARIO_TABLE` first (v3 runtime, Finish,
 fast finish, visibility, the Home routes, the manual-finish hook, the production profile, the scenario harness
-and view: every scenario; audio fixtures, cassette and lane code: the audio scenarios), then by measured
+and view: every scenario; audio fixtures, cassette and lane code: the audio scenarios; the product's speaker code
+(`utils/speakers/`, `utils/stt/speaker*`, `utils/stt/diarization*`, the resolver, the final pass,
+`database/speaker_*`, `diarizer/final_pass.py`, `diarizer/embedding.py`, `config/*speaker*`) and
+`speakers/`: the speaker scenarios plus every scenario whose measured reach holds the file; those paths map to
+the `speakers` stage unless an earlier stage runs them), then by measured
 reach: `scenario/reach.json` lists the backend files in which a function ran during each scenario. Refresh it
 after adding a scenario or when a scenario's product path changes:
 

@@ -8,6 +8,7 @@ import pytest
 from google.cloud.firestore_v1 import _helpers
 
 from database import conversations as db, recurring_voice_privacy
+from database.conversation_processing_result import update_fields
 from models.conversation_enums import ConversationStatus as Status
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.conversations import lifecycle, terminal_relevance
@@ -361,7 +362,7 @@ def test_update_mask_matches_legacy_merge_including_empty_maps_and_literal_keys(
     payload = {'structured': {'title': 'notes', 'kept': {}}, 'literal.dot': {'back`tick': 2}, 'list': [1, 2]}
     merge = _helpers.pbs_for_set_with_merge('projects/demo/databases/(default)/documents/users/u', payload, True)[0]
     update = _helpers.pbs_for_update(
-        'projects/demo/databases/(default)/documents/users/u', db._processing_result_update_fields(payload), None
+        'projects/demo/databases/(default)/documents/users/u', update_fields(payload), None
     )[0]
     assert set(merge.update_mask.field_paths) == set(update.update_mask.field_paths)
     assert merge.update.fields == update.update.fields

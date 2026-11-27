@@ -1,0 +1,292 @@
+{
+ "model": "parakeet-tdt-0.6b-v3@541d1f99/cpu-fp32/vad",
+ "source": "local",
+ "windows": "vad",
+ "words": [
+  {
+   "end": 0.472,
+   "start": 0.232,
+   "text": "On"
+  },
+  {
+   "end": 0.632,
+   "start": 0.472,
+   "text": "the"
+  },
+  {
+   "end": 1.032,
+   "start": 0.632,
+   "text": "general"
+  },
+  {
+   "end": 1.512,
+   "start": 1.032,
+   "text": "principles"
+  },
+  {
+   "end": 1.672,
+   "start": 1.512,
+   "text": "of"
+  },
+  {
+   "end": 1.832,
+   "start": 1.672,
+   "text": "art,"
+  },
+  {
+   "end": 2.232,
+   "start": 1.992,
+   "text": "mister"
+  },
+  {
+   "end": 3.112,
+   "start": 2.312,
+   "text": "Quilter"
+  },
+  {
+   "end": 3.432,
+   "start": 3.112,
+   "text": "writes"
+  },
+  {
+   "end": 3.592,
+   "start": 3.432,
+   "text": "with"
+  },
+  {
+   "end": 3.992,
+   "start": 3.592,
+   "text": "equal"
+  },
+  {
+   "end": 4.712,
+   "start": 3.992,
+   "text": "lucidity"
+  },
+  {
+   "end": 6.792,
+   "start": 5.992,
+   "text": "Kirkletham"
+  },
+  {
+   "end": 7.272,
+   "start": 6.952,
+   "text": "Yeast."
+  },
+  {
+   "end": 8.232,
+   "start": 7.752,
+   "text": "Painting,"
+  },
+  {
+   "end": 8.552,
+   "start": 8.392,
+   "text": "he"
+  },
+  {
+   "end": 8.872,
+   "start": 8.552,
+   "text": "tells"
+  },
+  {
+   "end": 9.032,
+   "start": 8.872,
+   "text": "us,"
+  },
+  {
+   "end": 9.592,
+   "start": 9.272,
+   "text": "is"
+  },
+  {
+   "end": 9.832,
+   "start": 9.592,
+   "text": "of"
+  },
+  {
+   "end": 10.072,
+   "start": 9.832,
+   "text": "a"
+  },
+  {
+   "end": 10.392,
+   "start": 10.072,
+   "text": "different"
+  },
+  {
+   "end": 10.872,
+   "start": 10.392,
+   "text": "quality"
+  },
+  {
+   "end": 11.112,
+   "start": 10.872,
+   "text": "to"
+  },
+  {
+   "end": 11.992,
+   "start": 11.112,
+   "text": "mathematics."
+  },
+  {
+   "end": 13.528,
+   "start": 12.808,
+   "text": "seventeen"
+  },
+  {
+   "end": 14.248,
+   "start": 13.608,
+   "text": "seventeen"
+  },
+  {
+   "end": 15.256,
+   "start": 15.096,
+   "text": "As"
+  },
+  {
+   "end": 15.496,
+   "start": 15.256,
+   "text": "for"
+  },
+  {
+   "end": 16.136,
+   "start": 15.496,
+   "text": "etchings,"
+  },
+  {
+   "end": 16.376,
+   "start": 16.216,
+   "text": "they"
+  },
+  {
+   "end": 16.536,
+   "start": 16.376,
+   "text": "are"
+  },
+  {
+   "end": 16.776,
+   "start": 16.536,
+   "text": "of"
+  },
+  {
+   "end": 17.096,
+   "start": 16.776,
+   "text": "two"
+  },
+  {
+   "end": 17.496,
+   "start": 17.096,
+   "text": "kinds"
+  },
+  {
+   "end": 18.376,
+   "start": 17.736,
+   "text": "British"
+  },
+  {
+   "end": 18.696,
+   "start": 18.376,
+   "text": "and"
+  },
+  {
+   "end": 19.256,
+   "start": 18.696,
+   "text": "foreign."
+  },
+  {
+   "end": 20.312,
+   "start": 20.152,
+   "text": "to"
+  },
+  {
+   "end": 20.472,
+   "start": 20.392,
+   "text": "make"
+  },
+  {
+   "end": 20.792,
+   "start": 20.712,
+   "text": "good"
+  },
+  {
+   "end": 21.752,
+   "start": 20.952,
+   "text": "homemade"
+  },
+  {
+   "end": 22.152,
+   "start": 21.752,
+   "text": "bread."
+  },
+  {
+   "end": 23.576,
+   "start": 23.416,
+   "text": "he"
+  },
+  {
+   "end": 24.216,
+   "start": 23.576,
+   "text": "laments"
+  },
+  {
+   "end": 24.456,
+   "start": 24.216,
+   "text": "most"
+  },
+  {
+   "end": 25.096,
+   "start": 24.456,
+   "text": "bitterly"
+  },
+  {
+   "end": 25.256,
+   "start": 25.096,
+   "text": "the"
+  },
+  {
+   "end": 25.736,
+   "start": 25.256,
+   "text": "divorce"
+  },
+  {
+   "end": 25.816,
+   "start": 25.736,
+   "text": "that"
+  },
+  {
+   "end": 25.976,
+   "start": 25.816,
+   "text": "has"
+  },
+  {
+   "end": 26.136,
+   "start": 25.976,
+   "text": "been"
+  },
+  {
+   "end": 26.376,
+   "start": 26.136,
+   "text": "made"
+  },
+  {
+   "end": 26.776,
+   "start": 26.376,
+   "text": "between"
+  },
+  {
+   "end": 27.496,
+   "start": 26.776,
+   "text": "decorative"
+  },
+  {
+   "end": 28.92,
+   "start": 28.36,
+   "text": "seventeen"
+  },
+  {
+   "end": 29.64,
+   "start": 29.08,
+   "text": "eighteen"
+  }
+ ]
+}

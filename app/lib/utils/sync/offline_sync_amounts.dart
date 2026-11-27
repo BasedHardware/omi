@@ -143,17 +143,19 @@ class SyncRunTracker {
 
   static String _key(Wal w) => '${w.id}#${w.storage.name}';
 
-  static SyncStep _stepOf(SyncPhase phase) => switch (phase) {
+  static SyncStep? _stepOf(SyncPhase phase) => switch (phase) {
         SyncPhase.downloadingFromDevice => SyncStep.download,
         SyncPhase.uploadingToCloud || SyncPhase.waitingForInternet => SyncStep.upload,
-        SyncPhase.processingOnServer || SyncPhase.idle => SyncStep.transcribe,
+        SyncPhase.processingOnServer => SyncStep.transcribe,
+        SyncPhase.idle => null,
       };
 
   /// Call on every build. Returns null when no sync is running.
   SyncStepProgress? update(SyncState state, List<Wal> wals, {List<Wal>? pendingWork}) {
     final pendingRows = pendingWork ?? pendingWorkRows(wals);
+    final step = state.isFetchingConversations ? SyncStep.transcribe : _stepOf(state.phase);
     final active = state.isSyncing || state.isFetchingConversations;
-    if (!active) {
+    if (!active || step == null) {
       _runSeconds = null;
       _stepKey = null;
       _stepIds = const {};
@@ -168,7 +170,6 @@ class SyncRunTracker {
     final pending = walSeconds(pendingRows);
     if (_runSeconds == null || pending > _runSeconds!) _runSeconds = pending;
 
-    final step = _stepOf(state.phase);
     if (step != _stepKey) {
       _stepKey = step;
       final members = switch (step) {

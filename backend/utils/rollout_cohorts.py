@@ -145,6 +145,9 @@ def _in_rollout_cohort(
             # The caller (utils/rollout/go_finalization_admission.py) fails closed and records
             # the fallback; a silent False would hide a membership-store outage during a ramp.
             raise policy.RolloutCohortUnavailable('go finalization membership unavailable')
+        if name == policy.V3_HOLDOUT_COHORT:
+            # config.conversations_v3 admits (fails open) and records the fallback.
+            raise policy.RolloutCohortUnavailable('conversations v3 holdout membership unavailable')
         return False
     try:
         members = members.get(rollout_environment(), {})

@@ -65,6 +65,8 @@ run_proof "LLM gateway idempotency (claim, replay, expiry, stale settlement)" \
   "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_llm_gateway_idempotency_firestore.py
 run_proof "record nojob seal (synthetic cleanup ownership)" \
   "$PYTHON" -m pytest -q -p no:cacheprovider tests/unit/test_record_seal_nojob_emulator.py
+run_proof "age-gate unpark (paging, CAS and durable enqueue debt)" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider tests/unit/test_enrichment_age_gate_unpark_emulator.py
 run_proof "lifecycle properties (real Firestore, named producer exits)" \
   "$PYTHON" -m testing.lifecycle_sim.run \
   --extra-test-module testing/lifecycle_properties/test_properties.py
@@ -104,6 +106,11 @@ run_proof "summary task recovery, concurrency and expiry" \
   tests/integration/test_candidate_accept_expiry_emulator.py -q
 run_proof "v3 reconcile write elision (unchanged pass, Home receipts, kill switch)" \
   "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_conversations_v3_unchanged_writes_firestore.py
+# The regression guards only. The full cost matrix (the 1,976- and 1,645-row shapes) runs locally with
+# V3_CLOSURE_COST_REPORT set; see the test module docstring.
+run_proof "v3 locked-closure allowance (heavy closure custody, kill switches, batch cap, per-batch lease renewal, refinement)" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_conversations_v3_locked_closure_cost_firestore.py \
+  -k "rows_1156_sources_20 or kill_switch or outlives_its_lease or batch_cap or four_line_windows"
 run_proof "desktop screen sync frame request delivery, expiry and quota" \
   "$PYTHON" -m pytest -q tests/integration/test_screen_sync_frame_queue_emulator.py
 
@@ -163,6 +170,12 @@ run_proof "enrichment budget and hold-cap conformance (PL-420/421)" \
 run_proof "enrichment revision-race conformance (PL-439)" \
   env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" OMI_ENV_STAGE=offline \
   "$PYTHON" -m pytest -q -p no:cacheprovider scripts/enrichment_revision_emulator_test.py
+
+# PL-426: local silence survives storage failure without paid/vendor-health debt.
+# CI requires sim/emulator; full local qualification also requires Postgres.
+run_proof "provider local-silence crash conformance (PL-426)" \
+  env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" OMI_ENV_STAGE=offline \
+  "$PYTHON" -m pytest -q -p no:cacheprovider scripts/provider_silence_emulator_test.py
 
 # Daily architecture parity: require both local CI backends rather than letting
 # a missing emulator look green. Local/staging runs require all three stores.

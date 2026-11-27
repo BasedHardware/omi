@@ -418,6 +418,19 @@ async def test_open_windows_and_rows_over_until_are_untouched(owner, strict):
 
 
 @pytest.mark.asyncio
+async def test_discarded_source_and_its_claimed_window_stay_untouched(owner, strict):
+    discarded = source('discarded', AT, discarded=True)
+    window = fragment('held', discarded)
+    owner(discarded, window)
+    before = conversations(strict)
+    outcome, report = await rederive()
+    assert outcome == 'committed'
+    assert conversations(strict) == before
+    assert report['sources_blocked_discarded'] == 1
+    assert report['protected_source_blocked'] == 1
+
+
+@pytest.mark.asyncio
 async def test_edited_and_locked_rows_are_skipped_and_their_speech_stays_with_them(owner, strict):
     sources, rows = lunch()
     rows[2]['user_title'] = 'My lunch title'
@@ -1539,6 +1552,21 @@ async def test_a_range_too_large_for_one_pass_blocks_with_its_own_reason(owner, 
     monkeypatch.setattr(rederive_store, 'REDERIVE_LIVE_LIMIT', 2)
     outcome, report = await rederive()
     assert outcome == 'blocked' and report['blocked_reason'] == 'rederive_live_range_overflow'
+    assert conversations(strict) == before and not priors(strict)
+
+
+@pytest.mark.asyncio
+async def test_a_locked_closure_owner_keeps_the_derived_limit(owner, strict, monkeypatch):
+    # The locked-claimant allowance (SCA-2918) is for builder passes only: a listed owner's re-derive is
+    # bounded by DERIVED_LIMIT exactly as before.
+    sources, rows = lunch(count=3)
+    owner(*sources, *rows)
+    before = conversations(strict)
+    monkeypatch.setenv('CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS', '*')
+    monkeypatch.setattr(store, 'LOCKED_DERIVED_ALLOWANCE', 2048)
+    monkeypatch.setattr(store, 'DERIVED_LIMIT', 2)
+    outcome, report = await rederive()
+    assert outcome == 'blocked' and report['blocked_reason'] == 'v3_derived_budget'
     assert conversations(strict) == before and not priors(strict)
 
 

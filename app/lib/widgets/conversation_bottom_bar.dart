@@ -13,6 +13,7 @@ import 'package:omi/backend/http/api/audio.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/conversation_v3.dart';
+import 'package:omi/utils/reliability_experiments.dart';
 import 'package:omi/pages/conversations/widgets/live_conversation_end_button.dart';
 import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:provider/provider.dart';
@@ -459,6 +460,8 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
   Future<bool> _initAudioIfNeeded() async {
     if (_isAudioInitialized) return true;
     if (!mounted || widget.conversation == null || !widget.conversation!.hasAudio()) return false;
+    // No player on screen means nothing may start playing: a seek from the page loads no audio.
+    if (_noPlayerWhileLive(context.read<ConversationsV3Provider?>()?.v3 ?? false)) return false;
 
     // If a concurrent init is already in flight, wait for it instead of starting
     // a second one — otherwise both calls would create/init an AudioPlayer
@@ -922,13 +925,21 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
   /// button beside it; on Summary, or a conversation without audio, the Ask Omi bar alone. The
   /// summarizing app is picked from the ⋯ menu. A conversation still in progress that this phone is
   /// capturing has End Conversation beside Ask Omi, the pendant double-tap's action.
+  /// Reliability experiment no_live_player: a conversation still in progress has no audio player.
+  /// Its audio is still arriving, and the bar's room goes to Ask Omi and End Conversation. Off, the
+  /// player shows over the audio saved so far.
+  bool _noPlayerWhileLive(bool v3) =>
+      v3 &&
+      widget.conversation?.v3?.tileState == ConversationTileState.live &&
+      ReliabilityExperiments.enabled('no_live_player');
+
   Widget _buildDetailBar(BuildContext context) {
     final hasAudio = widget.conversation?.hasAudio() ?? false;
-    final showPlayer = widget.selectedTab == ConversationTab.transcript && hasAudio;
     // Gated on the account's v3 answer like every other tile-state reader, so a stale live document
     // after a rollback does not grow an End button.
-    final live = context.select<ConversationsV3Provider?, bool>((p) => p?.v3 ?? false) &&
-        widget.conversation?.v3?.tileState == ConversationTileState.live;
+    final v3 = context.select<ConversationsV3Provider?, bool>((p) => p?.v3 ?? false);
+    final live = v3 && widget.conversation?.v3?.tileState == ConversationTileState.live;
+    final showPlayer = widget.selectedTab == ConversationTab.transcript && hasAudio && !_noPlayerWhileLive(v3);
     if (live) {
       // End is on both tabs: beside Ask Omi, or beside the player's round Ask button.
       return Padding(

@@ -98,6 +98,85 @@ def test_finalize_racing_projection_and_replay_preserve_one_visible_record(lane)
     assert accounting['seconds'] == 4 and accounting['completed'] and not accounting['updates']
 
 
+@pytest.mark.parametrize(
+    'trigger,lease_mode,manual',
+    [('client_finalize', 'off', True), ('client_finalize', 'serve', True), ('capture_end', 'off', False)],
+)
+def test_native_zero_preview_stop_wakes_v3_only_after_projection(lane, monkeypatch, trigger, lease_mode, manual):
+    from config.record_audio import require_record_audio_barrier
+    from database import conversation_finalization_jobs as jobs
+    from utils.conversations.v3 import triggers
+
+    monkeypatch.setenv('CONVERSATIONS_V3_BATCH_MANUAL_END', 'on')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', lease_mode)
+    monkeypatch.setenv('BATCH_PIPELINE_RECORD_PROTOCOL_READY', 'true')
+    item, binding, live = native(lane, status='processing')
+    cid, jid = 'live-record', 'finalize-live-record'
+    row_ref = lane.user.collection('conversations').document(cid)
+    job_ref = lane.client.collection(jobs.FINALIZATION_JOBS_COLLECTION).document(jid)
+    patch = {
+        'recording': True,
+        'server_batch_only': True,
+        'has_content': True,
+        'server_batch_audio_start': item.capture_at,
+        'server_batch_audio_end': item.capture_at + item.duration_seconds,
+        'finished_at': datetime.fromtimestamp(item.capture_at + item.duration_seconds, timezone.utc),
+        'finalization_job_id': jid,
+        'finalization_revision': 1,
+        'record_upload_revision': 7,
+        'record_sealed_at': item.capture_at + item.duration_seconds,
+        'transcript_segments': [],
+        'transcript_segments_compressed': False,
+    }
+    row_ref.update(patch)
+    capture = {**live, **patch}
+    job_ref.set(
+        {
+            'uid': lane.uid,
+            'conversation_id': cid,
+            'status': 'leased',
+            'dispatch_generation': 1,
+            'lease_epoch': 1,
+            'finalization_revision': 1,
+            'fanout_status': 'pending',
+            'processing_trigger': trigger,
+        }
+    )
+    tasks = []
+    monkeypatch.setattr(triggers, 'enqueue_named_task', lambda queue, url, key, body, **kw: tasks.append(key))
+    assert register_recording(lane.uid, capture, store=lane.store, now=0)
+    with pytest.raises(ValueError, match='barrier not closed'):
+        complete(lane, item, binding)
+    completed = jobs.firestore.transactional(jobs._complete_server_batch_capture_txn)(
+        lane.client.transaction(), job_ref, row_ref, lane.uid, cid, capture, 1, 1, datetime.now(timezone.utc)
+    )
+    assert completed == 'completed'
+    sealed = row_ref.get().to_dict()
+    assert 'v3_manual_end' not in sealed
+    admit(
+        lane.store,
+        [item],
+        binding,
+        0,
+        namespace=lane.store.namespace,
+        record_barrier=require_record_audio_barrier(sealed),
+    )
+    admitted = lane.client.collection(lane.store.namespace + '_jobs').document(item.segment_id).get().to_dict()
+    assert admitted.get('record_input_upload_revision') == (7 if lease_mode == 'serve' else None)
+    assert admitted.get('v3_native_manual_input_revision') == (7 if manual else None)
+    lease = lane.queue.pull(0)[0]
+    assert lane.queue.complete(WorkResult(item.segment_id, 'gs://synthetic/result#1'), lease.token, 1)
+    lane.merge.commit_next(lane.uid, 2)
+    result = lane.projector.project(item.segment_id)
+    assert lane.projector.project(item.segment_id) == result
+    projected = active_rows(lane)[0]
+    assert projected['transcript_segments'][-1]['text'].strip().endswith('project.')
+    assert bool(projected.get('v3_manual_end')) == manual
+    if manual:
+        assert projected['v3_pending'] is True
+    assert sum('-native-ready-' in key for key in tasks) == int(manual)
+
+
 async def test_allowance_held_recording_releases_and_publishes_one_transcript(lane, monkeypatch):
     from fastapi import FastAPI
     from fastapi.testclient import TestClient

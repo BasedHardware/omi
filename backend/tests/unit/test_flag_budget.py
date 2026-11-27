@@ -68,6 +68,7 @@ HELPER_KILL_SWITCHES = {
     'RECORD_FOLLOWUP_WAKE_ENABLED',
     'RECORD_SEAL_WAKE_PRESERVED_ENABLED',
     'BATCH_PIPELINE_FRESH_GUARD_ENABLED',
+    'ENRICHMENT_AGE_GATE_UNPARK_ENABLED',
     'BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED',
     'BATCH_PIPELINE_DELIVERED_SHARE_ENABLED',
     'BATCH_PROJECTION_OUTBOX',
@@ -344,6 +345,7 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
             'SUMMARY_PROJECTION_DEBT_ENABLED',
             'HOME_EMPTY_OUTPUT_NOISE',
             'EPISODE_COMPOSER_REUSE',
+            'ENRICHMENT_AGE_GATE_UNPARK_ENABLED',
         }:
             assert entry['owner'] == 'refactor-lead'
             assert entry['review_by'] == '2026-12-10'

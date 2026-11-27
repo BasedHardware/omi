@@ -127,13 +127,14 @@ class Wait:
             self.reads.append(job)
             return {'job_id': job, 'status': self.states[job]}
 
-        async def run(_executor, fn, *args):
-            return fn(*args)
+        async def run(_executor, fn, *args, **kwargs):
+            return fn(*args, **kwargs)
 
         monkeypatch.setattr(redis_db, 'get_async_redis_client', get_redis)
         monkeypatch.setattr(sync, 'admit_sync_job_poll', lambda _: True)
         monkeypatch.setattr(sync, '_read_sync_job_status', read)
         monkeypatch.setattr(sync, 'run_blocking', run)
+        monkeypatch.setattr(sync, 'account_deletion_blocks_user_work', lambda uid, fresh=False: False)
 
     def start(self, *jobs):
         class Request:

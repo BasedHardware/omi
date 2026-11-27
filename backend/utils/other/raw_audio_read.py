@@ -87,13 +87,6 @@ def _custody_manifests(bucket, uid: str, conversation_id: str, *, deadline=None,
     return manifests
 
 
-def _gap_count_matches(frames: list[dict], gap_count: int) -> bool:
-    """The writer counts a discontinuity and a retained zero-sample frame alike."""
-    return (
-        sum(frame['gap_before'] for frame in frames) + sum(1 for frame in frames if frame['samples'] == 0) == gap_count
-    )
-
-
 @object_get_reader(Reader.PLAYBACK_INVENTORY)
 def list_packs(
     bucket,
@@ -210,9 +203,8 @@ def list_packs(
                     listed_manifest=manifest,
                     reuse_inventory_body=reuse_manifest_bodies,
                     memo=memo,
+                    expected_gap_count=int(metadata['gap_count']),
                 )
-                if not _gap_count_matches(frames, int(metadata['gap_count'])):
-                    raise CoverageMismatch('capture gap count differs from frame table')
                 remember_gapped_manifest(memo, bucket, blob, uid, manifest)
                 packs.extend(entries(frames, rate, source, allow_empty=True))
                 if len(packs) > max_count:
