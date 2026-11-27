@@ -126,7 +126,7 @@ async def bind_upload_target(uid: str, cid: str) -> None:
     different target is refused, so no request reaches record routing unfenced.
     """
     state = _upload.get()
-    if state is None or not isinstance(cid, str) or not cid:
+    if state is None or not cid:
         return
     bound = state.get('cid')
     if bound is not None:
