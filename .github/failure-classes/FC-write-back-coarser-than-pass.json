@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-write-back-coarser-than-pass",
+  "family": "identity-qualifier",
+  "violated_contract": "A speaker pass that decides a voice per word writes its decision back per stored segment and keeps the earlier label on any segment whose words it gives to more than one voice. Stored segments come from coarser per-unit grouping, so the earlier, worse label survives on most of the speech: on an owner's gold-labeled conversations 55 % of words sat in such segments and attribution stayed 0.61 against the pass's own 0.99 (2026-11-27).",
+  "canonical_prevention": "Write the pass's decision back at its own granularity: split a mixed stored segment at each voice change on whole tokens of its stored text, keep the original id on the first piece and derive the rest deterministically, read the pieces back on later passes, and keep every id-keyed reader (retry obligation key, conversations-v3 planner, audio proofs, citations) whole. Measure the write-back, not only the pass, in the speaker lab.",
+  "canonical_prevention_artifact": [
+    "backend/utils/conversations/final_pass_split.py",
+    "backend/tests/unit/test_batch_final_pass.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/conversations/final_pass_batch.py",
+    "backend/utils/conversations/final_pass_split.py",
+    "backend/utils/conversations/v3/planner.py"
+  ],
+  "status": "open"
+}

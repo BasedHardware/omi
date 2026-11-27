@@ -14,6 +14,7 @@ VENDOR_SPEAKER_TURNS_ENV = 'BATCH_VENDOR_SPEAKER_TURNS_ENABLED'
 FINAL_PASS_V3_SOURCES_ENV = 'BATCH_FINAL_PASS_V3_SOURCES_ENABLED'
 FINAL_PASS_APPEND_CONFLICTS_ENV = 'BATCH_FINAL_PASS_APPEND_CONFLICTING_UNITS_ENABLED'
 FINAL_PASS_KEEP_RESOLVED_ENV = 'BATCH_FINAL_PASS_KEEP_RESOLVED_ON_PARTIAL_ENABLED'
+FINAL_PASS_SPLIT_MIXED_ENV = 'BATCH_FINAL_PASS_SPLIT_MIXED_SEGMENTS_ENABLED'
 
 
 def _default_on(name: str) -> bool:
@@ -37,6 +38,13 @@ def keep_resolved_on_partial_enabled() -> bool:
     """Kill switch: a partial final pass reuses the resolver's voice ids (one-to-one majority mapping) and keeps a
     resolved conversation resolved. False restores new ids for updated segments and ``unavailable``."""
     return _default_on(FINAL_PASS_KEEP_RESOLVED_ENV)
+
+
+def split_mixed_segments_enabled() -> bool:
+    """Kill switch: a stored segment the final pass hears as two or three voices splits at the voice change (first
+    piece keeps the id). False restores whole-segment relabeling only (a mixed segment keeps its label); existing
+    pieces are still read back."""
+    return _default_on(FINAL_PASS_SPLIT_MIXED_ENV)
 
 
 def sync_off_enabled() -> bool:
