@@ -136,7 +136,9 @@ class LimitlessRealtimeHealth {
       _reactivationInFlight = false;
     }
     if (_closed) return;
-    if (!wroteEnable && _reactivationAttempts < _maxReactivationAttemptsPerEpisode) {
+    // A successful BLE write may not restore decoded audio. Schedule the next
+    // health check either way; _check retries only if the stream is still quiet.
+    if (_reactivationAttempts < _maxReactivationAttemptsPerEpisode) {
       final deadline = _recoveryDeadline;
       if (deadline != null) {
         _timer?.cancel();

@@ -43,6 +43,33 @@ void main() {
     });
   });
 
+  test('a successful enable without decoded audio gets one bounded retry', () {
+    fakeAsync((time) {
+      var attempts = 0;
+      final outcomes = <LimitlessRealtimeHealthOutcome>[];
+      final monitor = LimitlessRealtimeHealth(
+        window: window,
+        elapsed: () => time.elapsed,
+        isCurrent: () => true,
+        reactivate: () async {
+          attempts++;
+          return true;
+        },
+        report: outcomes.add,
+      );
+
+      time.elapse(window);
+      time.flushMicrotasks();
+      expect(attempts, 1);
+      time.elapse(window);
+      time.flushMicrotasks();
+      expect(attempts, 2);
+      time.elapse(window);
+      expect(outcomes, [LimitlessRealtimeHealthOutcome.exhausted]);
+      monitor.close();
+    });
+  });
+
   test('isolated frames and a hanging write cannot reset the recovery budget', () {
     fakeAsync((time) {
       var writes = 0;

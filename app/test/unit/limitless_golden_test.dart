@@ -1039,7 +1039,7 @@ void main() {
 
     refresh();
     expect(activations, 1, reason: 'refresh must retain the exhausted watch');
-    expect(transport.writes.map((data) => decodeWrapperCommand(data)['messageNumber']), [6, 8, 21, 8]);
+    expect(transport.writes.map((data) => decodeWrapperCommand(data)['messageNumber']), [6, 8, 21, 8, 21, 8]);
   });
 
   test('decoded realtime frames suppress recovery across multiple health windows', () async {
