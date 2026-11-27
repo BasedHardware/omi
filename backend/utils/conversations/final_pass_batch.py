@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 
 from config.batch_conversation_speakers import (
     append_conflicting_units_enabled,
+    keep_resolved_on_partial_enabled,
     v3_sources_enabled,
     BATCH_CONVERSATION_SCOPE,
     batch_unit_scope,
@@ -153,6 +154,7 @@ class FinalPassResult(TypedDict, total=False):
     changed_segments: int
     speaker_count: int
     covered_segments: int
+    partial_resolution: str
 
 
 def record_final_pass_failure(outcome: str, **details) -> FinalPassResult:
@@ -745,6 +747,7 @@ def _run(uid, conversation, receipt, load_prints, apply, failure_context: UnitFa
         abs(final_owner - original_owner) / max(original_owner, final_owner, 0.001)
     )
     voice_ids = {}
+    segment_voices = {}
     unassigned = False
     for segment_id, labels in by_segment.items():
         if None in labels:
@@ -755,6 +758,7 @@ def _run(uid, conversation, receipt, load_prints, apply, failure_context: UnitFa
             unassigned = True
             continue
         voice = voices.pop()
+        segment_voices[segment_id] = voice
         if voice not in voice_ids:
             voice_ids[voice] = next_id
             next_id += 1
@@ -772,24 +776,51 @@ def _run(uid, conversation, receipt, load_prints, apply, failure_context: UnitFa
     }
     if not updates:
         return record_final_pass_failure('failed_unassigned_words' if unassigned else 'skipped_no_changes')
-    candidate = conversation.model_copy(deep=True)
-    apply(
-        candidate,
-        updates,
-        identities,
-        statuses,
-        owner_voiceprint_available=bool(cache and 'user' in cache),
-        scope=BATCH_CONVERSATION_SCOPE + conversation.id,
-    )
-    candidate.speaker_resolution = ConversationSpeakers(
-        status='resolved' if len(updates) == len(conversation.transcript_segments) else 'unavailable',
-        version=1,
-        participant_speaker_ids=(
-            significant_capture_speaker_ids(candidate.transcript_segments)
-            if len(updates) == len(conversation.transcript_segments)
-            else []
-        ),
-    )
+    scope = BATCH_CONVERSATION_SCOPE + conversation.id
+    complete = len(updates) == len(conversation.transcript_segments)
+
+    def applied(plan):
+        copy = conversation.model_copy(deep=True)
+        apply(copy, *plan, owner_voiceprint_available=bool(cache and 'user' in cache), scope=scope)
+        return copy
+
+    candidate, partial_resolution = None, None
+    if not complete:
+        mapping, partial_resolution = _resolver_voice_mapping(conversation, stored, outcome['assignments'])
+        if mapping is not None:
+            # One person, one number: updated segments take the resolver's id for the same voice, so they agree
+            # with the segments this pass left alone.
+            renumber = {voice_ids[voice]: mapping[voice] for voice in voice_ids}
+            kept = applied(
+                (
+                    {sid: mapping[segment_voices[sid]] for sid in updates},
+                    {renumber[k]: v for k, v in identities.items()},
+                    {renumber[k]: v for k, v in statuses.items()},
+                )
+            )
+            if _consistent_voices(kept):
+                candidate, partial_resolution = kept, 'kept'
+                updates = {sid: mapping[segment_voices[sid]] for sid in updates}
+                voice_ids = {voice: mapping[voice] for voice in voice_ids}
+            else:
+                partial_resolution = 'inconsistent'
+        logger.info('event=batch_final_pass_partial_resolution outcome=%s', partial_resolution)
+    if candidate is None:
+        candidate = applied((updates, identities, statuses))
+    if partial_resolution == 'kept':
+        candidate.speaker_resolution = ConversationSpeakers(
+            status='resolved',
+            version=conversation.speaker_resolution.version,
+            participant_speaker_ids=significant_capture_speaker_ids(candidate.transcript_segments),
+        )
+    else:
+        candidate.speaker_resolution = ConversationSpeakers(
+            status='resolved' if complete else 'unavailable',
+            version=1,
+            participant_speaker_ids=(
+                significant_capture_speaker_ids(candidate.transcript_segments) if complete else []
+            ),
+        )
     recurring_labels = {}
     if (
         not missing
@@ -872,6 +903,7 @@ def _run(uid, conversation, receipt, load_prints, apply, failure_context: UnitFa
             speaker_count=len(voice_ids),
             coverage=coverage,
             coverage_reasons=coverage_reasons,
+            partial_resolution=partial_resolution,
         )
     if missing:
         return record_final_pass_failure(
@@ -881,10 +913,11 @@ def _run(uid, conversation, receipt, load_prints, apply, failure_context: UnitFa
             coverage_reasons=coverage_reasons,
             changed_segments=len(updates),
             speaker_count=len(voice_ids),
+            partial_resolution=partial_resolution,
         )
     count_terminal('success')
     logger.info('event=batch_final_pass outcome=success')
-    return {
+    result: FinalPassResult = {
         'outcome': 'success',
         'coverage': coverage,
         'coverage_reasons': coverage_reasons,
@@ -892,3 +925,62 @@ def _run(uid, conversation, receipt, load_prints, apply, failure_context: UnitFa
         'speaker_count': len(voice_ids),
         'covered_segments': len(covered),
     }
+    if partial_resolution is not None:
+        # Complete coverage with manual or other-lane segments left alone.
+        result['partial_resolution'] = partial_resolution
+    return result
+
+
+def _majority(counts: Counts):
+    """The key holding more than half of the words, else None."""
+    key, top = counts.most_common(1)[0]
+    return key if top * 2 > sum(counts.values()) else None
+
+
+def _resolver_voice_mapping(conversation, stored, assignments) -> tuple[dict | None, str]:
+    """Each final-pass voice -> the resolver voice id that holds most of its assigned words, when that is one-to-one.
+
+    Only for a conversation the resolver already resolved: its ids are one voice each across the conversation, and
+    a partial pass leaves some of them in place. Manual segments count: the resolver groups them into its voices,
+    and only their labels are the person's (they are never updated). Words outside the conversation scope belong to
+    no resolver voice. Ambiguous (no clear majority either way), split (two final voices onto one resolver voice)
+    and merge (a resolver voice mostly held by a final voice mapped elsewhere) keep today's behaviour.
+    """
+    if not keep_resolved_on_partial_enabled():
+        return None, 'disabled'
+    prior = conversation.speaker_resolution
+    if prior is None or prior.status != 'resolved':
+        return None, 'not_resolved'
+    scope = BATCH_CONVERSATION_SCOPE + conversation.id
+    by_voice, by_resolver = {}, {}
+    for word in assignments:
+        voice = word['speaker']
+        if voice is None:
+            continue
+        segment = stored[word['segment_id']]
+        resolver = segment.speaker_id if segment.speaker_id_scope == scope else None
+        by_voice.setdefault(voice, Counts())[resolver] += 1
+        if resolver is not None:
+            by_resolver.setdefault(resolver, Counts())[voice] += 1
+    mapping = {voice: _majority(counts) for voice, counts in by_voice.items()}
+    if not mapping or None in mapping.values():
+        return None, 'ambiguous'
+    if len(set(mapping.values())) < len(mapping):
+        return None, 'split'
+    if any(mapping.get(_majority(counts)) != resolver for resolver, counts in by_resolver.items()):
+        return None, 'merge'
+    return mapping, 'mapped'
+
+
+def _consistent_voices(conversation) -> bool:
+    """Each speaker number denotes one voice: the app numbers voices by ``speaker_id`` alone, so every automatic
+    segment holding an id shares its scope and identity. Segments neither pass placed keep the resolver's own
+    labels, which it already counted inside its resolved coverage."""
+    voices = {}
+    for segment in conversation.transcript_segments:
+        if segment.speaker_label_source == 'manual':
+            continue
+        voice = (segment.speaker_id_scope, segment.is_user, segment.person_id)
+        if voices.setdefault(segment.speaker_id, voice) != voice:
+            return False
+    return True
