@@ -210,6 +210,10 @@ class Grafana:
         try:
             with urllib.request.build_opener(NoRedirect()).open(request, timeout=30) as response:
                 data = response.read(8_000_001)
+                # Grafana's successful rule DELETE returns 204 with no JSON body.
+                # Other empty responses still fail closed below.
+                if method == 'DELETE' and response.status == 204 and not data:
+                    return None
         except urllib.error.HTTPError as exc:
             raise ValueError(f'Grafana {method} {path}: HTTP {exc.code}') from None
         except OSError:

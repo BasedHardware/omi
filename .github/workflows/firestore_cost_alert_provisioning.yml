@@ -1,0 +1,117 @@
+name: Provision selected Firestore cost alerts
+
+# Separate from the bundle workflow: no dashboard or unrelated-alert steps.
+on:
+  workflow_dispatch:
+    inputs:
+      target_uids:
+        description: Exact comma-separated SCA-2189 UIDs (only these three are allowed)
+        required: true
+        type: string
+        default: omi-firestore-batch-reads-audio-hour,omi-firestore-batch-reads-no-output,omi-firestore-billed-reads-step
+      source_sha:
+        description: Reviewed merged main SHA; must equal this run's checkout
+        required: true
+        type: string
+      operation:
+        description: Release-owned operation (dry-run writes no production resources)
+        required: true
+        type: choice
+        options: [dry-run, apply, restore]
+        default: dry-run
+      restore_run_id:
+        description: For restore only, prior scoped apply run containing the reviewed backup
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
+
+jobs:
+  provision:
+    if: github.ref == 'refs/heads/main' && github.repository == 'BasedHardware/omi'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: prod
+    concurrency:
+      group: grafana-alert-provisioning-prod
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+      - name: Verify reviewed main source before accessing Grafana
+        env:
+          EXPECTED_SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          test "$EXPECTED_SOURCE_SHA" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_SHA"
+      - name: Verify and record the original restore run metadata
+        if: inputs.operation == 'restore'
+        uses: actions/github-script@v9
+        env:
+          RESTORE_RUN_ID: ${{ inputs.restore_run_id }}
+          RESTORE_RUN_METADATA_FILE: ${{ runner.temp }}/firestore-restore-run.json
+        with:
+          script: |
+            const fs = require('fs');
+            const rawRunId = process.env.RESTORE_RUN_ID;
+            if (!/^[0-9]+$/.test(rawRunId)) throw new Error('restore run ID must be numeric');
+            const runId = Number(rawRunId);
+            if (!Number.isSafeInteger(runId)) throw new Error('restore run ID is out of range');
+            const { data } = await github.rest.actions.getWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: runId,
+            });
+            fs.writeFileSync(process.env.RESTORE_RUN_METADATA_FILE, JSON.stringify(data), {
+              encoding: 'utf8', mode: 0o600, flag: 'wx',
+            });
+      - name: Retrieve the prior scoped backup for a gated restore
+        if: inputs.operation == 'restore'
+        uses: actions/download-artifact@v8
+        with:
+          name: firestore-alert-evidence-${{ inputs.restore_run_id }}
+          run-id: ${{ inputs.restore_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/firestore-restore
+      - name: Provision only selected Firestore alerts
+        env:
+          MONITOR_GRAFANA_TOKEN: ${{ secrets.MONITOR_GRAFANA_TOKEN }}
+          TARGET_UIDS: ${{ inputs.target_uids }}
+          OPERATION: ${{ inputs.operation }}
+          RESTORE_RUN_ID: ${{ inputs.restore_run_id }}
+        run: |
+          set -euo pipefail
+          umask 077
+          args=()
+          case "$OPERATION" in
+            apply) args+=(--apply --backup-file "$RUNNER_TEMP/firestore-alert-backup.json") ;;
+            dry-run) ;;
+            restore)
+              test -n "$RESTORE_RUN_ID"
+              args+=(--apply --backup-file "$RUNNER_TEMP/firestore-alert-backup.json"
+                --restore-file "$RUNNER_TEMP/firestore-restore/firestore-alert-backup.json"
+                --restore-receipt-file "$RUNNER_TEMP/firestore-restore/firestore-alert-receipt.json"
+                --restore-run-metadata-file "$RUNNER_TEMP/firestore-restore-run.json"
+                --restore-run-id "$RESTORE_RUN_ID")
+              ;;
+            *) exit 1 ;;
+          esac
+          python3 backend/scripts/provision_firestore_cost_alerts.py \
+            --target-uids "$TARGET_UIDS" --source-sha "$GITHUB_SHA" --run-id "$GITHUB_RUN_ID" \
+            --receipt-file "$RUNNER_TEMP/firestore-alert-receipt.json" "${args[@]}"
+      - name: Preserve selected-rule rollback and non-target readback evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: firestore-alert-evidence-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/firestore-alert-backup.json
+            ${{ runner.temp }}/firestore-alert-receipt.json
+          if-no-files-found: warn
+          retention-days: 15
