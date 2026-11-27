@@ -604,6 +604,25 @@ void _batteryDisplayGuardTests() {
     expect(provider.hasLowBatteryAlertedForTesting, isTrue);
   });
 
+  testWidgets('ordinary percentage changes keep the level throttle', (tester) async {
+    final transport = _ChargingTransport()..value = [0];
+    final clock = _Clock();
+    final provider = guarded(transport, clock);
+    addTearDown(transport.notifications.close);
+    addTearDown(transport.batteryNotifications.close);
+    addTearDown(provider.dispose);
+    provider.connectedDevice = _device();
+    provider.setIsConnected(true);
+    await provider.initiateChargingStatusListener();
+    await provider.initiateBleBatteryListener();
+    transport.batteryNotifications.add([80]);
+    var notified = 0;
+    provider.addListener(() => notified++);
+    transport.batteryNotifications.add([79]);
+    expect(provider.displayBatteryLevel, 79);
+    expect(notified, 0, reason: 'a one-point change is throttled as before');
+  });
+
   testWidgets('the kill switch shows the pendant reading as reported', (tester) async {
     final transport = _ChargingTransport()..value = [1];
     final clock = _Clock();

@@ -43,6 +43,19 @@ void main() {
     expect(policy.hideReason(2, charging: false), isNull, reason: 'a confirmed drain is never re-hidden as flat');
   });
 
+  test('a new charge clears an earlier confirmed drain', () {
+    policy.onSample(3, charging: false);
+    policy.onSample(2, charging: false);
+    expect(policy.confirmedDrainForTesting, isTrue);
+    policy.onCharging('omi', true);
+    expect(policy.confirmedDrainForTesting, isFalse);
+    advance(const Duration(minutes: 30));
+    policy.onCharging('omi', false);
+    policy.onSample(2, charging: false);
+    expect(policy.hideReason(2, charging: false), BatteryHideReason.longCharge,
+        reason: 'the reading stuck through the charge is not the drain seen before it');
+  });
+
   test('first pairing hides a near-empty reading until a believable one arrives', () {
     policy.markFirstPairing('omi');
     policy.onSample(1, charging: false);

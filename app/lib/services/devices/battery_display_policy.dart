@@ -110,6 +110,8 @@ class BatteryDisplayPolicy {
     final now = _clock();
     if (charging) {
       _chargeStartedAt.putIfAbsent(deviceId, () => now);
+      // A drain seen before this charge says nothing about the reading after it.
+      if (deviceId == _deviceId) _confirmedDrain = false;
       return;
     }
     final started = _chargeStartedAt.remove(deviceId);
