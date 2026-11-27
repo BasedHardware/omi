@@ -1,17 +1,19 @@
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_core_platform_interface/test.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nested/nested.dart';
 import 'package:provider/provider.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/gen/speaker_tag_prompts_wire.g.dart';
 import 'package:omi/providers/speaker_tag_prompts_provider.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/pages/home/home_navigation.dart';
 import 'package:omi/pages/home/page.dart';
+import 'package:omi/models/subscription.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/announcement_provider.dart';
 import 'package:omi/providers/app_provider.dart';
@@ -28,10 +30,16 @@ import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/providers/user_provider.dart';
+import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/services/experiments/pendant_absence.dart';
+import 'package:omi/ui/prompts/prompt_queue.dart';
+import 'package:omi/utils/analytics/analytics_adapter.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart' show AnalyticsManager;
 
 import '../../integration_test/journeys/support/hermetic_boot.dart';
+import '../support/crashlytics_recorder.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -88,6 +96,184 @@ void main() {
     await _disposeHomePage(tester);
     expect(HomeNavigation.isHomeMounted, isFalse);
   });
+
+  for (final (plan, expected) in [(PlanType.plus, 'paid'), (PlanType.basic, 'free'), (null, 'unknown')]) {
+    testWidgets('mounted Home startup attributes survey answers to the current $expected plan', (tester) async {
+      final analytics = await _mountHomeForSurvey(tester);
+      final prefs = SharedPreferencesUtil();
+      final uid = prefs.uid;
+      _seedSurveyGap(uid);
+      final usage = tester.element(find.byType(HomePage)).read<UsageProvider>();
+
+      await _runHomeStartupPrompts(tester);
+      expect(find.text(_surveyTitle), findsOneWidget);
+
+      // The plan is read when the user answers, even if it loaded after showing the sheet.
+      usage.debugSetSubscription(plan == null ? null : _surveySubscription(plan));
+      await tester.pump();
+      await tester.tap(find.text('Charging is a hassle'));
+      await tester.pumpAndSettle();
+      await AnalyticsManager.flushPending(force: true);
+
+      expect(PendantAbsence.instance.questionShown(uid), isTrue);
+      expect(analytics.answers.single, containsPair('plan', expected));
+      expect(analytics.answers.single, containsPair('days_without_connection', 4));
+      await _disposeHomePage(tester);
+    });
+  }
+
+  for (final gate in ['signed-out', 'onboarding', 'background', 'paired device', 'live link', 'link opening']) {
+    testWidgets('mounted Home startup suppresses the survey for $gate', (tester) async {
+      final analytics = await _mountHomeForSurvey(tester);
+      try {
+        final prefs = SharedPreferencesUtil();
+        final uid = prefs.uid;
+        final device = tester.element(find.byType(HomePage)).read<DeviceProvider>();
+        _seedSurveyGap(uid);
+        switch (gate) {
+          case 'signed-out':
+            prefs.uid = '';
+          case 'onboarding':
+            prefs.onboardingCompleted = false;
+          case 'background':
+            tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+          case 'paired device':
+            prefs.btDevice = _surveyPendant.copyWith(type: DeviceType.openglass);
+          case 'live link':
+            device.isConnected = true;
+          case 'link opening':
+            device.connectedDevice = _surveyPendant;
+        }
+
+        await _runHomeStartupPrompts(tester);
+
+        expect(find.text(_surveyTitle), findsNothing);
+        expect(PendantAbsence.instance.questionShown(uid), isFalse);
+        expect(analytics.answers, isEmpty);
+      } finally {
+        await _disposeHomePage(tester);
+        tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      }
+    });
+  }
+
+  testWidgets('mounted Home drops a queued survey when the account changes', (tester) async {
+    final analytics = await _mountHomeForSurvey(tester);
+    try {
+      final prefs = SharedPreferencesUtil();
+      final originalUid = prefs.uid;
+      _seedSurveyGap(originalUid);
+      _seedSurveyGap('second-survey-account');
+      final queue = PromptQueue.instance;
+      queue.blocked = () => true;
+      await _runHomeStartupPrompts(tester);
+      expect(queue.pendingIds, contains('pendant-stop-question'));
+
+      prefs.uid = 'second-survey-account';
+      queue.blocked = () => false;
+      queue.pump();
+      await tester.pumpAndSettle();
+      expect(find.text(_surveyTitle), findsNothing);
+      expect(PendantAbsence.instance.questionShown(originalUid), isFalse);
+      expect(PendantAbsence.instance.questionShown(prefs.uid), isFalse);
+      expect(analytics.answers, isEmpty);
+    } finally {
+      await _disposeHomePage(tester);
+    }
+  });
+
+  testWidgets('mounted Home resume checks the current account and its paired pendant', (tester) async {
+    final analytics = await _mountHomeForSurvey(tester);
+    final prefs = SharedPreferencesUtil();
+    final initialUid = prefs.uid;
+    _seedSurveyGap(initialUid);
+    final home = tester.element(find.byType(HomePage));
+    final device = home.read<DeviceProvider>()..connectedDevice = _surveyPendant;
+    await _runHomeStartupPrompts(tester);
+    expect(find.text(_surveyTitle), findsNothing);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    device.connectedDevice = null;
+    prefs.uid = 'second-survey-account';
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    expect(find.text(_surveyTitle), findsNothing, reason: 'the first account’s gap cannot qualify the second');
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    prefs.uid = initialUid;
+    home.read<UsageProvider>().debugSetSubscription(_surveySubscription(PlanType.plus));
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    expect(find.text(_surveyTitle), findsOneWidget);
+    await tester.tap(find.text('Other'));
+    await tester.pumpAndSettle();
+    await AnalyticsManager.flushPending(force: true);
+    expect(PendantAbsence.instance.questionShown(initialUid), isTrue);
+    expect(PendantAbsence.instance.questionShown('second-survey-account'), isFalse);
+    expect(analytics.answers.single, containsPair('plan', 'paid'));
+    await _disposeHomePage(tester);
+  });
+}
+
+const _surveyTitle = 'Why did you stop wearing your pendant?';
+final _surveyPendant = BtDevice(id: 'survey-pendant', name: 'Omi', type: DeviceType.omi, rssi: -55);
+
+void _seedSurveyGap(String uid) {
+  SharedPreferencesUtil().btDevice = _surveyPendant;
+  PendantAbsence(now: () => DateTime.now().subtract(const Duration(days: 4, hours: 2))).observeAbsence(uid);
+}
+
+Future<_SurveyAnalytics> _mountHomeForSurvey(WidgetTester tester) async {
+  PromptQueue.instance.reset();
+  AnalyticsManager.resetForTesting();
+  addTearDown(PromptQueue.instance.reset);
+  addTearDown(AnalyticsManager.resetForTesting);
+  tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+  PackageInfo.setMockInitialValues(
+    appName: 'Omi Test',
+    packageName: 'com.omi.test',
+    version: '1.0.0',
+    buildNumber: '1',
+    buildSignature: '',
+  );
+  await _pumpHomePage(tester);
+  final analytics = _SurveyAnalytics();
+  AnalyticsManager.configure(analytics);
+  await AnalyticsManager.init();
+  return analytics;
+}
+
+Future<void> _runHomeStartupPrompts(WidgetTester tester) async {
+  await tester.pump(const Duration(seconds: 2));
+  await tester.pumpAndSettle();
+}
+
+UserSubscriptionResponse _surveySubscription(PlanType plan) => UserSubscriptionResponse(
+      subscription: Subscription(plan: plan, status: SubscriptionStatus.active),
+      transcriptionSecondsUsed: 0,
+      transcriptionSecondsLimit: 0,
+      wordsTranscribedUsed: 0,
+      wordsTranscribedLimit: 0,
+      insightsGainedUsed: 0,
+      insightsGainedLimit: 0,
+    );
+
+class _SurveyAnalytics implements AnalyticsAdapter {
+  final answers = <Map<String, Object>>[];
+
+  @override
+  bool get isInitialized => true;
+
+  @override
+  Future<void> init() async {}
+
+  @override
+  void track({required String eventName, Map<String, Object>? properties}) {
+    if (eventName == 'Pendant Stop Question Answered' && properties != null) answers.add(Map.of(properties));
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => null;
 }
 
 Future<void> _disposeHomePage(WidgetTester tester) async {
@@ -98,17 +284,7 @@ Future<void> _disposeHomePage(WidgetTester tester) async {
 
 Future<void> _pumpHomePage(WidgetTester tester) async {
   _stubPlugins();
-  setupFirebaseCoreMocks();
-  if (Firebase.apps.isEmpty) {
-    await Firebase.initializeApp(
-      options: const FirebaseOptions(
-        apiKey: 'fake',
-        appId: '1:1:ios:fake',
-        messagingSenderId: '1',
-        projectId: 'demo-omi-local',
-      ),
-    );
-  }
+  await installCrashlyticsRecorder();
   await tester.runAsync(() async {
     await JourneyHermeticBoot.start(
       extraPrefs: {'onboardingCompleted': true, 'permissionsCompleted': true, 'aiConsentGiven': true},
