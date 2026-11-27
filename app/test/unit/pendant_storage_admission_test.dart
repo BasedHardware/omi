@@ -28,12 +28,14 @@ class _Listener implements IWalSyncListener {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late Directory directory;
+  late String documentsPath;
 
   setUpAll(() async {
     directory = await Directory.systemTemp.createTemp('pendant_storage_admission_');
+    documentsPath = directory.path;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
       const MethodChannel('plugins.flutter.io/path_provider'),
-      (_) async => directory.path,
+      (_) async => documentsPath,
     );
   });
 
@@ -141,7 +143,12 @@ void main() {
   }
 
   test('a failed pendant file write still blocks ingress even when the risk is count_cap', () async {
-    final sync = LocalWalSyncImpl(_Listener(), freeDiskBytes: () async => 64 << 30);
+    final telemetry = <RegisteredEvent>[];
+    final sync = LocalWalSyncImpl(
+      _Listener(),
+      freeDiskBytes: () async => 64 << 30,
+      backlogTelemetry: WalBacklogTelemetry(emit: telemetry.add),
+    );
     sync.setDeviceInfo('test-pendant', 'Omi');
     final buffered = Wal(
       timerStart: 1700000000,
@@ -158,17 +165,32 @@ void main() {
       buffered,
     ];
     await sync.enforceRetentionPolicyForTesting();
-    // A directory at the planned file path makes the actual write fail after
-    // a successful free-space probe, engaging the separate storage latch.
-    final obstruction = await Directory('${directory.path}/${buffered.getFileName()}').create();
-    addTearDown(() => obstruction.delete());
-    await sync.onAudioCodecChanged(BleAudioCodec.opus);
-    expect(sync.retentionRisk?.reason, 'count_cap');
-    expect(buffered.storage, WalStorage.mem);
-    expect(buffered.data, hasLength(2000));
-    sync.onFrameCaptured(frame(2000));
-    expect(sync.testFrames, isEmpty, reason: 'the full memory WAL counts toward the storage-blocked buffer');
-    expect((await eventsOfType('WARN')).single['extra']['dropped_count'], 1);
+    // Point Documents at a regular file: the free-space probe succeeds, while
+    // every candidate WAL path has an invalid parent, so its actual write fails
+    // even when the receipt manager adds a fresh managed-name discriminator.
+    final blockedDocuments = File('${directory.path}/blocked-documents');
+    await blockedDocuments.writeAsString('not a directory');
+    final originalDocumentsPath = documentsPath;
+    documentsPath = blockedDocuments.path;
+    try {
+      await sync.onAudioCodecChanged(BleAudioCodec.opus);
+      expect(sync.retentionRisk?.reason, 'count_cap');
+      expect(buffered.storage, WalStorage.mem);
+      expect(buffered.data, hasLength(2000));
+      final dropped = frame(2000);
+      expect(sync.onFrameCaptured(dropped), same(dropped));
+      expect(sync.testFrames, isEmpty, reason: 'the full memory WAL counts toward the storage-blocked buffer');
+      await sync.onAudioCodecChanged(BleAudioCodec.opus);
+      expect(
+        telemetry.whereType<PendantFramesDropped>().map((event) => event.properties),
+        [
+          {'count': 1, 'reason': 'storage_write_failed'},
+        ],
+      );
+    } finally {
+      documentsPath = originalDocumentsPath;
+      await blockedDocuments.delete();
+    }
   });
 
   test('the real flush reports one count-only observation per nonempty pendant drop window', () async {
