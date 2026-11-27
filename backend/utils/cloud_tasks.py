@@ -31,6 +31,7 @@ from google.oauth2 import id_token
 from google.protobuf import duration_pb2
 from google.protobuf import timestamp_pb2
 
+from database import speaker_evidence_verification as verification
 from utils.log_sanitizer import sanitize
 from utils.sync.backfill_order import direct_schedule_at
 
@@ -656,7 +657,6 @@ def enqueue_account_deletion_wipe(wipe_job_id: str, *, verification_uid: str = '
         raise ValueError('wipe_job_id must be non-empty')
     job_hash = hashlib.sha256(wipe_job_id.encode('utf-8')).hexdigest()[:32]
     task_id = f"account-delete-{job_hash}-{uuid.uuid4().hex}"
-    from database import speaker_evidence_verification as verification
 
     payload = {'job_id': wipe_job_id}
     task = (
