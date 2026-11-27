@@ -128,6 +128,35 @@ class LiveWalReceipt {
     await audio.writeAsBytes(bytes, flush: true);
   }
 
+  /// Receiptless files have no replay journal to fence an incomplete write.
+  /// Persist their directory entry before index admission and remove a partial
+  /// reservation if either the write or its directory barrier fails.
+  static Future<void> writeReceiptlessAudio(File audio, List<int> bytes) async {
+    try {
+      await writeAudio(audio, bytes);
+      await syncAudioParentDirectory(audio);
+    } catch (error, stackTrace) {
+      try {
+        await discardReceiptlessAudio(audio);
+      } catch (_) {
+        // Keep the WAL in memory; a later recovery scan remains conservative.
+      }
+      Error.throwWithStackTrace(error, stackTrace);
+    }
+  }
+
+  static Future<void> discardReceiptlessAudio(File audio) async {
+    final type = await FileSystemEntity.type(audio.path, followLinks: false);
+    if (type == FileSystemEntityType.file) {
+      await audio.delete();
+    } else if (type == FileSystemEntityType.notFound) {
+      return;
+    } else {
+      throw const FileSystemException('invalid receiptless WAL audio path');
+    }
+    await _syncDirectory(audio.parent);
+  }
+
   static Future<bool> matchesPublishedAudio(File audio, int length, String digest) =>
       _matchesPurgeAudio(audio, length, digest);
 

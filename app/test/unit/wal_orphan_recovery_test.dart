@@ -652,6 +652,30 @@ void main() {
     expect((await WalFileManager.loadIndexedWals()).any((wal) => wal.filePath == written.filePath), isTrue);
   }, skip: LiveWalReceipt.writeEnabled ? false : 'Receipt writer is disabled by dart-define');
 
+  test('partial receiptless fallback write is removed and leaves the WAL in memory', () async {
+    final synced = <String>[];
+    LiveWalReceipt.syncDirectoryForTesting = (directory) async => synced.add(directory.path);
+    LiveWalReceipt.writeReceiptForTesting = (file, body) async {
+      await file.writeAsString(body.substring(0, 12), flush: true);
+      throw const FileSystemException('injected receipt publication failure');
+    };
+    LiveWalReceipt.writeAudioForTesting = (file, bytes) async {
+      await file.writeAsBytes(bytes.take(bytes.length ~/ 2).toList(), flush: true);
+      throw const FileSystemException('injected partial receiptless write');
+    };
+    final writer = await ledger(realCensus: true);
+    await captureReceiptAudio(writer);
+
+    await writer.finalizeCurrentSession();
+
+    final pending = writer.testWals.singleWhere((wal) => wal.recordingSessionId == 'receipt-session');
+    expect(pending.storage, WalStorage.mem);
+    expect(pending.data, isNotEmpty);
+    expect(dir.listSync().whereType<File>().where((file) => file.path.endsWith('.bin')), isEmpty);
+    expect(LiveWalReceipt.directory(dir).listSync(recursive: true).whereType<File>(), isEmpty);
+    expect(synced, contains(dir.path));
+  }, skip: LiveWalReceipt.writeEnabled ? false : 'Receipt writer is disabled by dart-define');
+
   test('surviving ambiguous receipt removes the empty exclusive audio reservation', () async {
     final receiptDirectory = LiveWalReceipt.directory(dir);
     String? sidecarPath;
@@ -1342,6 +1366,8 @@ void main() {
   }
 
   test('receipt issuance kill switch still replays and retires existing receipts', () async {
+    final syncedDirectories = <String>[];
+    LiveWalReceipt.syncDirectoryForTesting = (directory) async => syncedDirectories.add(directory.path);
     final id = LiveWalReceipt.newId();
     final filename = LiveWalReceipt.uniqueName(name(now - 10), id);
     final file = File('${dir.path}/$filename');
@@ -1362,10 +1388,12 @@ void main() {
     final writer = await ledger(realCensus: true, realPersistence: true);
     expect(writer.testWals.singleWhere((w) => w.filePath == filename).liveFileWriteId, id);
     await captureReceiptAudio(writer);
+    final audioParentSyncsBeforeFlush = syncedDirectories.where((path) => path == dir.path).length;
     await writer.finalizeCurrentSession();
     final newlyWritten = writer.testWals.singleWhere((w) => w.recordingSessionId == 'receipt-session');
     expect(newlyWritten.liveFileWriteId, isNull);
     expect(LiveWalReceipt.isManagedBasename(newlyWritten.filePath!), isFalse);
+    expect(syncedDirectories.where((path) => path == dir.path).length, greaterThan(audioParentSyncsBeforeFlush));
     expect(await receiptFor(filename).exists(), isTrue);
 
     await ledger(realCensus: true);

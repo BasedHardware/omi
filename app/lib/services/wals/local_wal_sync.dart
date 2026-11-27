@@ -1545,26 +1545,17 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
                 } catch (_) {}
                 rethrow;
               }
-              await file.writeAsBytes(data, flush: true);
-              // The receipt barrier may have failed before audio was written.
-              // A flushed file does not persist its parent directory entry; do
-              // not index it or release RAM unless the native barrier succeeds.
-              try {
-                await LiveWalReceipt.syncAudioParentDirectory(file);
-              } catch (_) {
-                try {
-                  await file.delete();
-                } catch (_) {}
-                rethrow;
-              }
+              await LiveWalReceipt.writeReceiptlessAudio(file, data);
             }
           }
-          if (writeId == null || digest != null) {
+          if (writeId == null) {
+            await LiveWalReceipt.writeReceiptlessAudio(file, data);
+          } else if (digest != null) {
             try {
               await LiveWalReceipt.writeAudio(file, data);
             } catch (error, stackTrace) {
               var completeAndFlushed = false;
-              if (digest != null && writeId != null && owner != null) {
+              if (owner != null) {
                 final binding = (id: writeId, owner: owner, digest: digest);
                 try {
                   if (await LiveWalReceipt.matchesPublishedAudio(file, data.length, digest)) {
