@@ -271,7 +271,7 @@ async def gpu_idle(body: IdleRequest):
 
 @router.post('/reconcile', include_in_schema=False)
 async def reconcile(body: WorkerRequest):
-    await body.service().reconcile_async(recover_quarantine=True)
+    await body.service().reconcile_async(recover_quarantine=True, run_held_expiry=False)
     return {'status': 'reconciled'}
 
 
@@ -282,7 +282,7 @@ async def metrics():
         await run_blocking(db_executor, service.metrics.refresh, service.store, time.time())
     else:
         # Periodic maintenance uses the leader lease; per-unit policy decides follow-ups.
-        await service.reconcile_async(periodic=True)
+        await service.reconcile_async(periodic=True, run_held_expiry=False)
     return Response(generate_latest(), headers={'Content-Type': CONTENT_TYPE_LATEST})
 
 
