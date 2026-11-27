@@ -172,6 +172,8 @@ class _SpySdcard extends SDCardWalSyncImpl {
   _SpySdcard() : super(_Listener());
 
   BtDevice? attached;
+  int refreshCalls = 0;
+  bool refreshConfirmed = true;
   int listings = 0;
   int reads = 0;
   int starts = 0;
@@ -188,6 +190,12 @@ class _SpySdcard extends SDCardWalSyncImpl {
 
   @override
   void setDevice(BtDevice? device) => attached = device;
+
+  @override
+  Future<bool> refreshWalsFromDevice() async {
+    refreshCalls++;
+    return refreshConfirmed;
+  }
 
   @override
   Future<List<Wal>> getMissingWals() async {
@@ -209,6 +217,26 @@ class _SpySdcard extends SDCardWalSyncImpl {
     reads++;
     return null;
   }
+}
+
+class _InventoryStorage extends StorageSyncImpl {
+  _InventoryStorage({required this.confirmed}) : super(_Listener());
+
+  final bool confirmed;
+  int refreshCalls = 0;
+
+  @override
+  Future<bool> refreshWalsFromDevice() async {
+    refreshCalls++;
+    return confirmed;
+  }
+}
+
+class _ReadyFlashPage extends FlashPageWalSyncImpl {
+  _ReadyFlashPage() : super(_Listener());
+
+  @override
+  Future<bool> refreshWalsFromDevice() async => true;
 }
 
 // Regression: background/auto-sync discovery read firmware off the raw connect
@@ -491,6 +519,75 @@ void main() {
     test('older multi-file firmware still routes to storage', () {
       final resolved = WalSyncs.resolveDiscoveryFirmware('3.0.18', 'Unknown');
       expect(WalSyncs.isRingBufferFirmware(resolved), isFalse);
+    });
+
+    test('legacy SD firmware confirms deletes from the SD-card inventory', () async {
+      final sdcard = _SpySdcard();
+      final storage = _InventoryStorage(confirmed: false);
+      final syncs = WalSyncs(
+        _Listener(),
+        sdcardSync: sdcard,
+        storageSync: storage,
+        flashPageSync: _ReadyFlashPage(),
+        phoneSync: _PhoneSync(),
+      );
+      syncs.setDevice(BtDevice(
+        id: 'pendant',
+        name: 'Omi',
+        type: DeviceType.omi,
+        rssi: -40,
+        firmwareRevision: '3.0.16',
+      ));
+
+      expect(await syncs.refreshWalsFromDevice(), isTrue);
+      expect(storage.refreshCalls, 0, reason: 'pre-3.0.17 firmware has no multi-file inventory command');
+      expect(sdcard.refreshCalls, 1);
+    });
+
+    test('multi-file firmware requires both device inventories to confirm', () async {
+      final sdcard = _SpySdcard();
+      final storage = _InventoryStorage(confirmed: true);
+      final syncs = WalSyncs(
+        _Listener(),
+        sdcardSync: sdcard,
+        storageSync: storage,
+        flashPageSync: _ReadyFlashPage(),
+        phoneSync: _PhoneSync(),
+      );
+      syncs.setDevice(BtDevice(
+        id: 'pendant',
+        name: 'Omi',
+        type: DeviceType.omi,
+        rssi: -40,
+        firmwareRevision: '3.0.18',
+      ));
+
+      expect(await syncs.refreshWalsFromDevice(), isTrue);
+      expect(storage.refreshCalls, 1);
+      expect(sdcard.refreshCalls, 1);
+    });
+
+    test('multi-file firmware fails confirmation when the SD-card listing is unavailable', () async {
+      final sdcard = _SpySdcard()..refreshConfirmed = false;
+      final storage = _InventoryStorage(confirmed: true);
+      final syncs = WalSyncs(
+        _Listener(),
+        sdcardSync: sdcard,
+        storageSync: storage,
+        flashPageSync: _ReadyFlashPage(),
+        phoneSync: _PhoneSync(),
+      );
+      syncs.setDevice(BtDevice(
+        id: 'pendant',
+        name: 'Omi',
+        type: DeviceType.omi,
+        rssi: -40,
+        firmwareRevision: '3.0.18',
+      ));
+
+      expect(await syncs.refreshWalsFromDevice(), isFalse);
+      expect(storage.refreshCalls, 1);
+      expect(sdcard.refreshCalls, 1);
     });
   });
 }

@@ -150,6 +150,34 @@ void main() {
   });
 
   group('SDCardWalSyncImpl durable delete', () {
+    test('refresh confirms an empty legacy card and removes stale cached WALs', () async {
+      final connection = _FakeConnection(storageList: [0, 0]);
+      final device = _device.copyWith(firmwareRevision: '3.0.16');
+      final sync = SDCardWalSyncImpl(_Listener())
+        ..testDevice = device
+        ..testConnection = connection
+        ..testWals = [_sdWal()];
+
+      expect(await sync.refreshWalsFromDevice(), isTrue);
+
+      expect(connection.storageListCalls, 1);
+      expect(await sync.getMissingWals(), isEmpty);
+    });
+
+    test('refresh preserves cached WALs when the storage-list read is ambiguous', () async {
+      final connection = _FakeConnection(storageList: []);
+      final device = _device.copyWith(firmwareRevision: '3.0.16');
+      final sync = SDCardWalSyncImpl(_Listener())
+        ..testDevice = device
+        ..testConnection = connection
+        ..testWals = [_sdWal()];
+
+      expect(await sync.refreshWalsFromDevice(), isFalse);
+
+      expect(connection.storageListCalls, 1);
+      expect((await sync.getMissingWals()).map((wal) => wal.id), [_sdWal().id]);
+    });
+
     test('removes the wal after the delete command and a readback showing the bytes gone', () async {
       final connection = _FakeConnection(storageList: [0]);
       final sync = SDCardWalSyncImpl(_Listener())

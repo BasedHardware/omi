@@ -16,6 +16,7 @@ import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:version/version.dart';
 
 class WalSyncs implements IWalSync {
   late LocalWalSyncImpl _phoneSync;
@@ -226,6 +227,17 @@ class WalSyncs implements IWalSync {
   /// firmware (3.0.17–3.0.19) keeps using StorageSync.
   static bool isRingBufferFirmware(String? version) => RingProtocol.isRingBufferFirmware(version);
 
+  /// Firmware before 3.0.17 only exposes the legacy SD-card inventory; the
+  /// multi-file stats read is unsupported and cannot confirm a deletion.
+  static bool isMultiFileStorageFirmware(String? version) {
+    if (version == null || version.isEmpty || version == 'Unknown' || isRingBufferFirmware(version)) return false;
+    try {
+      return Version.parse(version) >= Version.parse('3.0.17');
+    } catch (_) {
+      return false;
+    }
+  }
+
   WalSyncs(
     this.listener, {
     SDCardWalSyncImpl? sdcardSync,
@@ -335,11 +347,16 @@ class WalSyncs implements IWalSync {
       // The independent ring reader uses INFO without a discovery STOP and
       // reports whether that authoritative read completed.
       storageInventoryConfirmed = await _ringSync.refreshWalsFromDevice();
+    } else if (_usesLegacySdcard && !isMultiFileStorageFirmware(fw)) {
+      // Old firmware has no multi-file stats command; the SD-card list below
+      // is its authoritative device inventory.
+      storageInventoryConfirmed = true;
     } else {
       storageInventoryConfirmed = await _storageSync.refreshWalsFromDevice();
     }
+    final sdcardInventoryConfirmed = !_usesLegacySdcard || await _sdcardSync.refreshWalsFromDevice();
     final flashInventoryConfirmed = await _flashPageSync.refreshWalsFromDevice();
-    return storageInventoryConfirmed && flashInventoryConfirmed;
+    return storageInventoryConfirmed && sdcardInventoryConfirmed && flashInventoryConfirmed;
   }
 
   Future<WalStats> getWalStats() async {
