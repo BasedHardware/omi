@@ -175,7 +175,10 @@ def test_grafana_writers_share_environment_lock_and_prod_checks_query_path():
     alert_step = next(
         s for s in writer['steps'] if s.get('name') == 'Apply production alert definitions and check drift'
     )
-    assert alert_step['if'] == "github.event_name == 'workflow_dispatch' && matrix.environment == 'prod'"
+    assert alert_step['if'] == (
+        "github.event_name == 'workflow_dispatch' && matrix.environment == 'prod' "
+        "&& inputs.alert_scope != 'soniox-alert'"
+    )
     assert '--backup-file' in alert_step['run']
 
 

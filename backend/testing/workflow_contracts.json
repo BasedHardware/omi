@@ -952,6 +952,7 @@
         ".github/workflows/grafana_dashboard_provisioning.yml",
         "backend/scripts/provision_grafana_dashboards.py",
         "backend/scripts/provision_monitoring_alerts.py",
+        "backend/scripts/restore_soniox_alert.py",
         "backend/scripts/verify_gmp_frontend_render.py",
         "backend/charts/monitoring/gmp/**",
         "backend/scripts/monitoring_gmp_shadow.py",
@@ -961,6 +962,8 @@
       "tests": [
         "tests/unit/test_provision_grafana_dashboards.py",
         "tests/unit/test_provision_monitoring_alerts.py",
+        "tests/unit/test_restore_soniox_alert.py",
+        "tests/unit/test_grafana_soniox_workflow.py",
         "tests/unit/test_monitoring_gmp_frontend.py",
         "tests/unit/test_monitoring_datasource_health.py",
         "tests/unit/test_cloud_run_metrics_egress_workflow.py",
@@ -969,32 +972,12 @@
       "checks": [],
       "invariants": [
         "production alert changes require explicit prod dispatch with the production Environment secret; dashboard JSON applies to prod on push from the no-reviewer grafana-dashboards-prod environment",
+        "soniox-alert dispatch skips every dashboard step, writes only omi-batch-soniox-daily-hours after read-only receiver and canary checks, and captures a source-bound inverse that verifies restored definition or absence",
         "alert upserts retain unknown live rules, preserve provenance, back up before writes, and verify complete definitions",
         "dashboard imports preserve folders and authenticated requests never follow redirects",
         "GMP addition preserves local sources, HPA routing, recording rules and the history warmup pin",
         "canaries are installed, read back and queried before KeepLast business updates",
         "shadow comparison rejects missingness, nonfinite values and redirected credentials; it never authorizes cutover"
-      ]
-    },
-    {
-      "id": "grafana_soniox_alert_provisioning",
-      "risk": "high",
-      "sources": [
-        ".github/workflows/grafana_soniox_alert.yml",
-        "backend/scripts/provision_monitoring_alerts.py",
-        "backend/scripts/restore_soniox_alert.py"
-      ],
-      "tests": [
-        "tests/unit/test_provision_monitoring_alerts.py",
-        "tests/unit/test_restore_soniox_alert.py",
-        "tests/unit/test_grafana_soniox_workflow.py"
-      ],
-      "checks": [],
-      "invariants": [
-        "alert-only apply writes only omi-batch-soniox-daily-hours",
-        "KeepLast datasource canaries are read and probed without being written by the scoped route",
-        "rollback artifact is bound to its source SHA and run ID and captures only the scoped rule state",
-        "rollback changes only the Soniox UID, refuses concurrent drift, and verifies the restored state"
       ]
     },
     {
