@@ -9,8 +9,9 @@ class RefactorFlagAdapter
         AnalyticsFeatureFlagAdapter,
         AnalyticsBooleanFlagAdapter,
         AnalyticsResolvedFlagAdapter {
-  RefactorFlagAdapter(this.flags);
+  RefactorFlagAdapter(this.flags) : cachedFlags = Map<String, bool>.from(flags);
   final Map<String, bool> flags;
+  final Map<String, bool> cachedFlags;
   final Set<String> multivariateFlags = {};
   bool initialized = false;
   int reloadFailuresRemaining = 0;
@@ -27,13 +28,14 @@ class RefactorFlagAdapter
   @override
   bool isBooleanFeatureEnabledCached(String key) {
     onCachedRead?.call();
-    return flags[key] == true && !multivariateFlags.contains(key);
+    return cachedFlags[key] == true && !multivariateFlags.contains(key);
   }
 
   @override
-  Future<bool> isBooleanFeatureEnabled(String key) async => flags[key] == true && !multivariateFlags.contains(key);
+  Future<bool> isBooleanFeatureEnabled(String key) async =>
+      cachedFlags[key] == true && !multivariateFlags.contains(key);
   @override
-  Future<bool?> resolvedFeatureEnabled(String key) async => flags[key];
+  Future<bool?> resolvedFeatureEnabled(String key) async => cachedFlags[key];
   @override
   Future<bool> isFeatureEnabled(String key) async => flags[key] == true;
   @override
@@ -42,6 +44,9 @@ class RefactorFlagAdapter
       reloadFailuresRemaining--;
       return false;
     }
+    cachedFlags
+      ..clear()
+      ..addAll(flags);
     return true;
   }
 

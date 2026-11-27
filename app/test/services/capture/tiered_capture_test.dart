@@ -234,6 +234,36 @@ void main() {
     expect(connection.stopCalls, greaterThan(0));
   });
 
+  test('a failed refresh cannot reuse a stale cached false kill switch', () async {
+    const flag = 'android-custom-live-audio-recovery-kill';
+    final adapter = await setRefactorFlags({flag: false});
+    addTearDown(AnalyticsManager.resetForTesting);
+    world.controller.updateRecordingDevice(null);
+    await world.settle();
+    SharedPreferencesUtil().uid = 'capture-test-owner';
+    await SharedPreferencesUtil().saveCustomSttConfig(
+      const CustomSttConfig(provider: SttProvider.customLive, url: 'wss://local-stt.example.test'),
+    );
+    final device = BtDevice(id: 'limitless-stale-flag', name: 'Limitless', type: DeviceType.limitless, rssi: -40);
+    final connection = _WatchedLimitlessConnection();
+    world.deviceConnection = connection;
+    await world.controller.streamDeviceRecording(device: device);
+    await world.settle();
+    expect(connection.captureIsCurrent?.call(), isTrue);
+
+    await world.controller.stopStreamDeviceRecording();
+    await world.settle();
+    adapter.flags[flag] = true;
+    adapter.reloadFailuresRemaining = 1;
+    await world.controller.streamDeviceRecording(device: device);
+    await world.settle();
+
+    expect(connection.captureIsCurrent, isNull, reason: 'a failed refresh cannot trust cached false');
+    await world.elapse(const Duration(seconds: 5));
+    await world.settle();
+    expect(connection.captureIsCurrent, isNull, reason: 'the successful retry observes the enabled kill switch');
+  });
+
   test('a failed kill-switch fetch can retry on a later capture gate pass', () async {
     AnalyticsManager.resetForTesting();
     addTearDown(AnalyticsManager.resetForTesting);

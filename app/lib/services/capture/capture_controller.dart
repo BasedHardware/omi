@@ -2930,17 +2930,20 @@ class CaptureController extends ChangeNotifier
         return;
       }
       _customLiveAudioRecoveryFlagRefreshInFlight = false;
+      if (refreshFailed && enabled != true) {
+        // A failed refresh may return a stale cached false. Keep recovery
+        // gated until a successful read confirms the current kill-switch value.
+        _customLiveAudioRecoveryKillSwitchEnabled = null;
+        if (_customLiveAudioRecoveryFlagFetchRetriesForEpoch == 0) {
+          _customLiveAudioRecoveryFlagFetchRetriesForEpoch = 1;
+          _scheduleCustomLiveAudioFlagRetry(generation, identityEpoch);
+        } else {
+          _customLiveAudioRecoveryFlagIdentityEpoch = -1;
+        }
+        return;
+      }
       _customLiveAudioRecoveryKillSwitchEnabled = enabled;
       if (enabled == null) {
-        if (refreshFailed) {
-          if (_customLiveAudioRecoveryFlagFetchRetriesForEpoch == 0) {
-            _customLiveAudioRecoveryFlagFetchRetriesForEpoch = 1;
-            _scheduleCustomLiveAudioFlagRetry(generation, identityEpoch);
-          } else {
-            _customLiveAudioRecoveryFlagIdentityEpoch = -1;
-          }
-          return;
-        }
         if (_customLiveAudioRecoveryFlagRetriesForEpoch == 0) {
           _customLiveAudioRecoveryFlagRetriesForEpoch = 1;
           _scheduleCustomLiveAudioFlagRetry(generation, identityEpoch);
