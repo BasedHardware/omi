@@ -825,3 +825,22 @@ def test_chart_only_argv_keeps_backend_digest():
     argv = evidence.helm_args('chart', 'values', digest, 'based-hardware', 'based-hardware', [])
     assert f'image.digest={digest}' in argv
     assert not any(arg.startswith('image.tag=') for arg in argv)
+
+
+def test_attested_evidence_workflow_allows_only_byte_equivalent_descendant(tmp_path):
+    from unittest.mock import Mock
+
+    reader = Mock()
+    request = {'control_sha': 'a' * 40}
+    environ = {'GITHUB_WORKFLOW_SHA': 'b' * 40}
+    with pytest.raises(evidence.Refused, match='workflow_binding'):
+        evidence.verify_evidence_workflow(request, reader, environ, tmp_path)
+    reader.run.assert_not_called()
+
+    request['image_only'] = {}
+    evidence.verify_evidence_workflow(request, reader, environ, tmp_path)
+    ancestry, diff = [call.args[0] for call in reader.run.call_args_list]
+    assert ancestry[3:] == ['merge-base', '--is-ancestor', 'a' * 40, 'b' * 40]
+    assert diff[3:9] == ['diff', '--quiet', '--no-ext-diff', 'a' * 40, 'b' * 40, '--']
+    assert '.github/scripts/listen_runtime.py' in diff
+    assert '.github/actions/deploy-backend-stack/action.yml' in diff
