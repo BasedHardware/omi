@@ -23,7 +23,7 @@ from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.fixtures.speaker_final_pass_retry import retry_state  # noqa: F401
 from models.audio_file import AudioFile
-from models.conversation import Conversation
+from models.conversation import Conversation, ConversationSpeakers
 from models.diarization import OMI_EMBEDDING_SPACE
 from models.structured import Structured
 from utils.batch_pipeline.contracts import WorkItem, ProjectionBinding, Priority
@@ -1618,3 +1618,133 @@ def test_append_kill_switch_restores_the_clock_conflict_refusal(monkeypatch):
     )
     with pytest.raises(batch.IncompleteCoverage, match='conflicting capture clocks'):
         batch._assemble(stream)
+
+
+# ---- partial final pass on a resolved conversation (BATCH_FINAL_PASS_KEEP_RESOLVED_ON_PARTIAL_ENABLED) ----------
+
+
+def _resolved_by(monkeypatch, ids, *, person_id=None, status='resolved'):
+    """The resolver grouped the voices: conversation-scope ids, one identity per voice, and its status."""
+
+    def resolver(uid, current, **kwargs):
+        for segment, speaker_id in zip(current.transcript_segments, ids):
+            segment.assign_resolved_speaker(speaker_id, f'final:batch:conversation:{current.id}')
+            if segment.speaker_label_source != 'manual':
+                segment.is_user, segment.person_id = person_id is None, person_id
+                segment.speaker_label_source = 'auto'
+        current.speaker_resolution = ConversationSpeakers(status=status, version=2, participant_speaker_ids=[])
+
+    monkeypatch.setattr(stage, '_resolve', resolver)
+
+
+def _turns(monkeypatch, *turns):
+    """The final pass diarizes ``(start, end, voice)`` turns; voice ``A`` sounds like the owner, others do not."""
+    original = final.diarize
+
+    def diarize(*args, **kwargs):
+        output = original(*args, **kwargs)
+        output['turns'] = [{'start': start, 'end': end, 'speaker': voice} for start, end, voice in turns]
+        output['centroids'] = {
+            voice: {'embedding': [1.0, 0.0] if voice == 'A' else [0.0, 1.0], 'evidence_seconds': 12}
+            for voice in {t[2] for t in turns}
+        }
+        return output
+
+    monkeypatch.setattr(final, 'diarize', diarize)
+
+
+@pytest.fixture
+def results(monkeypatch):
+    captured = []
+    original = batch.run_batch_final_pass
+
+    def run(*args, **kwargs):
+        captured.append(original(*args, **kwargs))
+        return captured[-1]
+
+    monkeypatch.setattr(batch, 'run_batch_final_pass', run)
+    return captured
+
+
+def test_partial_pass_reuses_the_resolver_voice_and_keeps_resolved(lane, monkeypatch, results):
+    _resolved_by(monkeypatch, [7, 7])
+    _turns(monkeypatch, (4, 16, 'A'))  # 'Hello' of the first segment falls in a diarizer gap
+    first, second = resolve(lane)
+    assert results[-1]['outcome'] == 'failed_unassigned_words'
+    assert results[-1]['partial_resolution'] == 'kept'
+    # Before: the applied segment took a new id (8) beside the resolver's 7, one person as two numbers.
+    assert (first.speaker_id, second.speaker_id) == (7, 7)
+    assert {s.speaker_id_scope for s in (first, second)} == {'final:batch:conversation:conversation'}
+    assert first.is_user and second.is_user
+    resolution = lane.conversation.speaker_resolution
+    assert resolution.status == 'resolved' and resolution.version == 2
+
+
+@pytest.mark.parametrize('switch, prior', [('false', 'resolved'), ('true', 'unavailable')])
+def test_kill_switch_off_or_unresolved_prior_keeps_new_ids_and_unavailable(lane, monkeypatch, results, switch, prior):
+    monkeypatch.setenv('BATCH_FINAL_PASS_KEEP_RESOLVED_ON_PARTIAL_ENABLED', switch)
+    _resolved_by(monkeypatch, [7, 7], status=prior)
+    _turns(monkeypatch, (4, 16, 'A'))
+    first, second = resolve(lane)
+    assert results[-1]['partial_resolution'] == ('disabled' if switch == 'false' else 'not_resolved')
+    assert (first.speaker_id, second.speaker_id) == (7, 8)
+    assert lane.conversation.speaker_resolution.status == 'unavailable'
+
+
+@pytest.mark.parametrize(
+    'ids, turns, reason',
+    [
+        # Two final voices on one resolver voice: the final pass split it.
+        ([7, 7], [(4, 8, 'A'), (8, 16, 'B')], 'split'),
+        # Resolver voice 7 is mostly the final voice mapped onto 9: the final pass merged them.
+        ([7, 9], [(4, 16, 'A')], 'merge'),
+    ],
+)
+def test_ambiguous_mapping_falls_back_to_new_ids(lane, monkeypatch, results, ids, turns, reason):
+    _resolved_by(monkeypatch, ids)
+    _turns(monkeypatch, *turns)
+    first, second = resolve(lane)
+    assert results[-1]['partial_resolution'] == reason
+    assert first.speaker_id == ids[0] and second.speaker_id == max(ids) + 1
+    assert lane.conversation.speaker_resolution.status == 'unavailable'
+
+
+def test_mapping_needs_a_clear_majority():
+    scope = 'final:batch:conversation:c'
+    stored = {
+        'a': SimpleNamespace(speaker_id=7, speaker_id_scope=scope),
+        'b': SimpleNamespace(speaker_id=9, speaker_id_scope=scope),
+        'u': SimpleNamespace(speaker_id=0, speaker_id_scope='final:batch:unit'),
+    }
+    conversation = SimpleNamespace(id='c', speaker_resolution=ConversationSpeakers(status='resolved'))
+    words = lambda *pairs: [{'segment_id': sid, 'speaker': voice} for sid, voice in pairs]  # noqa: E731
+    assert batch._resolver_voice_mapping(conversation, stored, words(('a', 'A'), ('b', 'A'))) == (None, 'ambiguous')
+    # Words outside the conversation scope belong to no resolver voice.
+    assert batch._resolver_voice_mapping(conversation, stored, words(('a', 'A'), ('u', 'A'))) == (None, 'ambiguous')
+    mapped = words(('a', 'A'), ('a', 'A'), ('u', 'A'), ('b', 'B'), ('b', None))
+    assert batch._resolver_voice_mapping(conversation, stored, mapped) == ({'A': 7, 'B': 9}, 'mapped')
+
+
+def test_identity_disagreement_on_one_number_falls_back(lane, monkeypatch, results):
+    # The resolver named voice 7 a person; the final pass names it the owner. Reusing 7 would show one number with
+    # two names, so the pass keeps today's new id.
+    _resolved_by(monkeypatch, [7, 7], person_id='resolver-person')
+    _turns(monkeypatch, (4, 16, 'A'))
+    first, second = resolve(lane)
+    assert results[-1]['partial_resolution'] == 'inconsistent'
+    assert (first.speaker_id, first.person_id) == (7, 'resolver-person')
+    assert second.speaker_id == 8 and second.is_user
+    assert lane.conversation.speaker_resolution.status == 'unavailable'
+
+
+def test_manual_segment_is_untouched_and_the_rest_keeps_resolved(lane, monkeypatch, results):
+    sid = lane.conversation.transcript_segments[0].id
+    lane.receipts['segments'] = {sid: {'is_user': True, 'person_id': None, 'source': 'manual', 'generation': 1}}
+    _resolved_by(monkeypatch, [7, 7])
+    _turns(monkeypatch, (0, 16, 'A'))
+    manual, other = resolve(lane)
+    assert results[-1]['outcome'] == 'success' and results[-1]['partial_resolution'] == 'kept'
+    assert manual.speaker_label_source == 'manual' and manual.is_user and manual.speaker_id == 7
+    # The receipt reserves the owner (joint naming), so the final voice is no_match; it still reuses voice 7.
+    assert other.speaker_id == 7 and other.speaker_identity_status == 'no_match'
+    assert lane.conversation.speaker_resolution.status == 'resolved'

@@ -150,6 +150,61 @@ batch of short topics joins its sit-down instead of locking on arrival. Set it t
 restore the recorded clock at the default timing; custom timing always uses landing. See the
 [short-topic sit-down change note](./listen_pusher_pipeline/changes/2026-11-25-v3-short-topic-sitdown.md).
 
+`CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS` defaults to empty (off). It lists owner tags
+(`sha256(uid)[:12]`, the `owner=` tag of the blocked log) or `*`. This repository is public, so the list
+never goes in Git: it ships unbound on every loader, and a later change binds it to the Secret Manager
+secret of the same name, after an operator provisions it (version 1 `none`). It is read by every runtime
+that runs builder passes (`store.load()`): the on-open builder on `backend` and `backend-integration`, and
+builder tasks on `backend-sync` and `backend-sync-backfill`. `pusher` and `backend-listen` only mark
+pending and enqueue. The sizes, cap and daily budget below must have one value on all four loaders
+(`deploy/activation/conversations-v3.yaml`, `v3-locked-closure-*`). Only builder passes get the
+allowance; derive and re-derive keep their bounds.
+
+For a listed owner, the live closure's locked claimants (rows `preserve_finished_windows` keeps fixed)
+may go past the origin bound:
+- past `CONVERSATIONS_V3_DERIVED_LIMIT` (1024) by `CONVERSATIONS_V3_LOCKED_DERIVED_ALLOWANCE` rows
+  (default 2048);
+- past `CONVERSATIONS_V3_DERIVED_BYTES` (16 MiB) by `CONVERSATIONS_V3_LOCKED_DERIVED_BYTES` (default 8 MiB).
+
+The row room never exceeds what the batch cap can commit: at most `LOCKED_MAX_BATCHES` x (449 - loaded
+sources) rows in all, so 2,694 at the defaults, and fewer as sources load. This is an upper bound from sources and the lease only: removals, absorption redirects (up to 16 writes),
+retire, retired and settle writes, and the byte and pointer splits on prepared rows are not known at load
+time. A closure that needs more batches for those reasons still parks at the commit's batch cap
+(`LockedBatchCap`, before any transaction), which stays the backstop. The load
+also reads at most twice its row bound of derived documents, plus the one sentinel document that detects an
+overflow, counting a row each time a claim read or an interval query returns it. The attempt is charged to the
+pass's own builder lease token; a stale pass charges nothing and gets the origin bound.
+
+Rewritable rows keep the original bound. Such a closure may commit in at most
+`CONVERSATIONS_V3_LOCKED_MAX_BATCHES` (default 6) projection batches. Otherwise the commit raises
+`LockedBatchCap` (`v3_derived_budget`) before any transaction and before anything is uploaded to the object
+lake, so a capped attempt leaves no uploaded copy behind. Preparation runs once with uploads deferred: a row the
+real offload test would offload carries a stand-in pointer at least as large as the real one, so the cap (and the
+partition's settle refusal) is decided on the exact pointer count, and the uploads run only after it passes. The
+builder then retries down the load
+ladder below the seeds it read (pending + unlocked: 32 + 8, 8 + 8, 1 + 1, then one of either kind). It
+re-enters at most three times and parks only at one seed.
+
+`CONVERSATIONS_V3_LOCKED_DAILY_PASSES` (default 20) is the owner's daily budget of allowance attempts.
+Every builder load of a listed owner charges one in `v3_locked_day` and `v3_locked_passes` on the builder
+lease, under the held lease and before it reads, whatever the pass does next. A spent day, or a charge
+that cannot be written, loads with the origin bound. Ceiling: 20 attempts x about 78k reads (a load of at most
+5,389 fetched derived documents plus 400 sources and the seeds, an on-open load reading at most 400 seed ids,
+each once, plus a commit whose batches each run their body at most three times: contention retries and
+transcript-pointer replays alike, with each batch's pointers loaded from the lake before its transaction, for any
+listed owner's commit with pointer rows, inside the origin bound too), about 1.6M Firestore reads per listed owner per day. Lake object reads are
+separate: about one GET per decoded pointer row in the load (about 5.8k) plus at most 192 for the commit's preload,
+so about 0.12M per owner per day, and none while rows stay inline (prod admits no lake writes today).
+
+An empty list, or `CONVERSATIONS_V3_LOCKED_DERIVED_ALLOWANCE`, `CONVERSATIONS_V3_LOCKED_DERIVED_BYTES`,
+`CONVERSATIONS_V3_LOCKED_MAX_BATCHES` or `CONVERSATIONS_V3_LOCKED_DAILY_PASSES` set to `0`, restores the origin
+bound. A negative or unparseable value keeps the default.
+
+`CONVERSATIONS_V3_COMMIT_LEASE_RENEWAL` defaults to on. A multi-batch projection commit renews the
+pass's lease (`builder`, or `backfill-builder` for a derive pass) before each batch after the first.
+Set it to `off` to restore the single renewal before the commit. See the
+[locked-closure allowance change note](./listen_pusher_pipeline/changes/2026-11-26-v3-locked-closure-allowance.md).
+
 `POST /v1/conversations-v3/reconcile` returns HTTP 409 with
 `{"status":"retry","reason":"dependency_warming"}` for exhausted Firestore contention,
 expiry, or retry deadlines. Confirmed processing fences use `persistence_fenced` in the

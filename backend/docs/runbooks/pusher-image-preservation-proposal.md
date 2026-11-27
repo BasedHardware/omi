@@ -270,3 +270,80 @@ also exercises mismatched qualification and canary receipts, unavailable
 effective inputs, admission drift and concurrent changes. The fixture's
 coverage and writer-exclusion flags model preconditions that the production
 adapter must independently prove.
+
+## Protected workflow operation
+
+This path is for the pinned SCA-4763 baseline. The default dispatch continues
+to use the existing workflow. Release must keep the hold until David has
+approved the reviewed workflow and the exact candidate. Do not publish
+kubeconfigs, raw admission responses or the protected evidence packet.
+
+Use `gcp_backend_pusher.yml` from main, with `environment=prod`,
+`service=pusher`, `branch=<full qualified source SHA>`,
+`pusher_image_digest=<sha256 digest>`, and
+`pusher_dev_qualification_run_id=<automatic development qualification run>`.
+Select `pusher_image_only=preview`, `canary`, `promote`, or `rollback`. The job
+uses the existing prod environment and prod-train lock. It does not build,
+push, tag, install charts, apply configuration, or create or delete a canary.
+
+Stage two secrets on the protected prod environment before approving the job.
+`PUSHER_IMAGE_ONLY_ISOLATED_KUBECONFIG` is the reviewed isolated context,
+including its credentials and certificate data, with no external files or
+credential commands. `PUSHER_IMAGE_ONLY_PACKET` is JSON containing:
+
+- `schema: 1`, the selected `mode`, the full `workflow_sha` from the dispatch
+  and its numeric `run_id`.
+- `proof` and `rehearsal_receipt` from the isolated rehearsal above. Retain the
+  restored isolated server and the protected evidence it names. The scope of
+  the reviewed writer exclusion includes HPA and GitOps where applicable,
+  Helm release state, shared dependencies and admission throughout canary,
+  cleanup, rollout and verification. A change to those assumptions requires a
+  fresh proof and review. Preserve the Helm values throughout and reconcile
+  subsequent standard train intent with the live image-only receipt before
+  allowing a Helm write.
+- `release_approval` for canary, promote and rollback. Use the protected record
+  ID for the specific run and action. Record the independently reviewed
+  workflow head and David's authorization separately in Release custody.
+- For canary and promote, `canary` with `workflow_sha`, canonical
+  `deployment_receipt`, `semantic_receipt` and `evidence` JSON objects. Include
+  `preservation_review` with its record `id`, the baseline Deployment UID and
+  resourceVersion array as `baseline`, the rehearsal `proof_sha256`, and
+  `evidence_sha256` from the canonical JSON receipt hash. The review covers
+  effective startup input equality, admitted Pusher and listener isolation,
+  the canonical semantic and observability results, and safe cleanup.
+- For promote, `reviewed_preview` with the successful preview's `run_id` and
+  its `review_id`, and `reviewed_inverse_rehearsal` with the independently
+  reviewed candidate-state reverse admission record ID.
+
+Run preview with the live baseline and retained rehearsal. Its redacted
+receipt proves live forward server admission projected to exactly one image
+change. Before approving a canary run, Release provisions its isolated probe
+target and listener under separate authorization using the run ID in the
+canonical names. Use the candidate image and the baseline's Pod spec and
+references verbatim. Keep the existing shared ConfigMap as-is and restrict
+the canary to the synthetic probe principal. Use `validate_live_identity` to
+record the isolated Pusher Deployment and pods, run `pusher_semantic_probe.py`
+against the isolated listener, and use `pusher_prod_canary.py record-canary`
+to assemble the canonical evidence. Use the preservation review to verify the
+receipt's expected and admitted Pod template identity. The Helm-rendered
+legacy canary receipt does not establish equality to the preserved template.
+
+The canary job validates the canonical receipts and checks the live canary
+Pod spec, image, readiness, pod identity and ordinary Service exclusion. It
+uploads a redacted attestation bound to the proof and canonical evidence.
+After Release removes both isolated workloads and Services, promote requires
+that successful attestation, the reviewed preview and inverse, and a fresh
+guarded forward dry-run and live surge check. The job then patches only the
+Pusher image, dry-runs the exact live inverse, and checks readiness for every
+serving Pusher replica at the approved digest. The first true live inverse
+dry-run needs the candidate as the production Deployment's old object. The
+pre-move inverse rehearsal is admission evidence from the isolated server.
+
+Rollback uses a separately approved protected run. It accepts the same
+candidate identity, proof and rehearsal, verifies the pinned prior image in
+the production registry, checks the exact live candidate and inverse
+admission, and restores only the original Pusher image field. It does not
+depend on the candidate being healthy. For either write, a patch error or
+post-patch verification failure requires Release to reconcile the actual
+Deployment and pods under the approved writer exclusion before attempting
+another write. A failed workflow can follow a successful API patch.
