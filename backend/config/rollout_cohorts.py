@@ -12,9 +12,15 @@ class RolloutCohortUnavailable(RuntimeError):
     """Membership is unknown, rather than an authoritative negative grant."""
 
 
+# Owners returned to legacy v3 intake at any stage (SCA-2918). Unknown membership raises
+# RolloutCohortUnavailable at runtime; config.conversations_v3 then admits and records the fallback.
+V3_HOLDOUT_COHORT = 'conversations-v3-holdout'
+
 # Literal env reads keep the migration fallbacks visible to the flag registry.
 COHORT_ENVS = {
     'conversations-v3': lambda: os.getenv('CONVERSATIONS_V3_UID_ALLOWLIST', ''),
+    # Conversations v3 holdout (V3_HOLDOUT_COHORT): runtime membership only, no env fallback.
+    'conversations-v3-holdout': lambda: '',
     'v3-recording-rotation': lambda: '',
     # Manual-finish first transcript (SCA-3024): runtime membership only, no env fallback.
     'v3-fast-finish': lambda: '',

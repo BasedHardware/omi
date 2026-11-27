@@ -13,12 +13,14 @@ import time
 from types import SimpleNamespace
 from typing import Any
 
-from cachetools import TTLCache
+from cachetools import TLRUCache
 from google.api_core.exceptions import NotFound, PreconditionFailed
+from prometheus_client import Counter
 
 from config.record_wal_storage import private_archive_bucket
 from utils import encryption
-from config.refactor_modes import default_on
+from config.refactor_modes import default_off, default_on
+from utils.other.audio_raw_read_metrics import CoverageMismatch
 from utils.other.gcs_read_reuse import REPLACEMENT_CALLS, avoided
 from utils.pusher_audio_window import AUDIO_TIMELINE_CONTINUITY_TOLERANCE
 
@@ -31,7 +33,31 @@ def _inventory_body_size(body: bytes) -> int:
     return len(body) + 256  # Charge an entry as well as its encoded body.
 
 
-_inventory_bodies = TTLCache(maxsize=8 * 1024 * 1024, ttl=120, getsizeof=_inventory_body_size)
+_INVENTORY_CACHE = Counter(
+    'omi_pusher_inventory_manifest_cache_events_total',
+    'Pusher manifest cache lookups and byte-budget evictions',
+    ['event'],
+)
+for _event in ('hit', 'miss', 'eviction'):
+    _INVENTORY_CACHE.labels(event=_event)
+
+
+def _inventory_body_expires(_key, _body, now):
+    ttl = 900 if default_off('PUSHER_INVENTORY_MANIFEST_LONG_TTL_ENABLED') else 120
+    # Expire from the verified download even if later refreshes hit the cache.
+    return now + ttl
+
+
+class _InventoryBodyCache(TLRUCache):
+    def popitem(self):
+        entry = super().popitem()
+        _INVENTORY_CACHE.labels(event='eviction').inc()
+        return entry
+
+
+_inventory_bodies = _InventoryBodyCache(
+    maxsize=8 * 1024 * 1024, ttu=_inventory_body_expires, getsizeof=_inventory_body_size
+)
 _inventory_lock = threading.Lock()
 
 
@@ -121,6 +147,7 @@ def _listed_manifest_bytes(
         cache_key = (*partition, blob.name, generation, metageneration, checksum, encrypted)
         with _inventory_lock:
             cached_body = _inventory_bodies.get(cache_key)
+        _INVENTORY_CACHE.labels(event='hit' if cached_body is not None else 'miss').inc()
     memo_key = None
     memo_hit = False
     if memo is not None and default_on('PRIVATE_SYNC_REQUEST_READ_MEMO_ENABLED') and not reuse_inventory_body:
@@ -130,6 +157,8 @@ def _listed_manifest_bytes(
     try:
         if cached_body is not None:
             # Read the live object's metadata without selecting an older generation.
+            if reuse_inventory_body:
+                REPLACEMENT_CALLS.labels('pusher_inventory_manifest', 'metadata').inc()
             blob.reload(
                 if_generation_match=generation,
                 if_metageneration_match=metageneration,
@@ -139,6 +168,8 @@ def _listed_manifest_bytes(
             if memo_hit:
                 avoided('manifest_memo', 'payload', payload_bytes=len(cached_body))
                 REPLACEMENT_CALLS.labels('manifest_memo', 'metadata').inc()
+            elif reuse_inventory_body:
+                avoided('pusher_inventory_manifest', 'payload', payload_bytes=len(cached_body))
             return cached_body, metadata, None, memo_key
         raw = blob.download_as_bytes(
             if_generation_match=generation,
@@ -148,6 +179,9 @@ def _listed_manifest_bytes(
         )
     except PreconditionFailed:
         # The listing lost a race. Re-read current metadata through the ordinary path.
+        if reuse_inventory_body:
+            REPLACEMENT_CALLS.labels('pusher_inventory_manifest', 'metadata').inc()
+            REPLACEMENT_CALLS.labels('pusher_inventory_manifest', 'payload').inc()
         return None
     return raw, metadata, cache_key, memo_key
 
@@ -165,6 +199,8 @@ def _manifest(
     reuse_inventory_body=False,
     memo=None,
     require_listed=False,
+    expected_media=None,
+    expected_gap_count=None,
 ) -> dict:
     if not path.startswith(f'audio-outbox/{uid}/'):
         raise ValueError('frame manifest owner mismatch')
@@ -219,7 +255,15 @@ def _manifest(
                 REPLACEMENT_CALLS.labels('manifest_memo', 'payload').inc()
                 # Restart from live metadata using the ordinary verified read.
                 return _manifest(
-                    bucket, uid, path, generation, digest, deadline=deadline, require_frame_schema=require_frame_schema
+                    bucket,
+                    uid,
+                    path,
+                    generation,
+                    digest,
+                    deadline=deadline,
+                    require_frame_schema=require_frame_schema,
+                    expected_media=expected_media,
+                    expected_gap_count=expected_gap_count,
                 )
     else:
         encoded, manifest_metadata, cache_key, memo_key = observed
@@ -239,6 +283,14 @@ def _manifest(
         validate_frames(manifest['frames'], int(manifest['capture']['sample_rate']))
     else:
         validate_frames(manifest['frames'], int(manifest['capture']['sample_rate']), allow_empty=True)
+    if expected_media is not None and manifest['media'] != expected_media:
+        raise ValueError('capture frame media mismatch')
+    if expected_gap_count is not None:
+        # The writer counts both discontinuities and retained zero-sample frames.
+        frames = manifest['frames']
+        gap_count = sum(frame['gap_before'] for frame in frames) + sum(frame['samples'] == 0 for frame in frames)
+        if gap_count != expected_gap_count:
+            raise CoverageMismatch('capture gap count differs from frame table')
     if memo is not None and memo_key is not None:
         memo.put(memo_key, encoded, len(encoded))
     if cache_key is not None:
@@ -273,6 +325,7 @@ def unframed_frames(
     reuse_inventory_body=False,
     require_listed=False,
     memo=None,
+    expected_gap_count=None,
 ) -> tuple[list[dict], int]:
     """Frame positions for a pack whose writer did not declare a frame schema.
 
@@ -293,14 +346,14 @@ def unframed_frames(
         reuse_inventory_body=reuse_inventory_body,
         require_listed=require_listed,
         memo=memo,
+        expected_media={
+            'bucket': bucket.name,
+            'path': blob.name,
+            'generation': str(blob.generation),
+            'sha256': metadata['sha256'],
+        },
+        expected_gap_count=expected_gap_count,
     )
-    if manifest['media'] != {
-        'bucket': bucket.name,
-        'path': blob.name,
-        'generation': str(blob.generation),
-        'sha256': metadata['sha256'],
-    }:
-        raise ValueError('capture frame media mismatch')
     rate = int(manifest['capture']['sample_rate'])
     return manifest['frames'], rate
 

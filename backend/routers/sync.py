@@ -16,7 +16,7 @@ from utils.sync.future_capture_request import Outcome as FutureCaptureOutcome
 from utils.other.playback_identity import PlaybackSourceChanged
 from utils.capture.coverage_endpoint import router as coverage_router
 from utils.observability.sync_phases import sync_attempt, set_sync_metrics_lane
-from utils.observability.sync_upload import observe_hold_age
+from utils.observability.sync_upload import compare_recovery_label, observe_hold_age
 import asyncio
 import json
 import logging
@@ -793,6 +793,9 @@ async def sync_local_files_v2(
     x_omi_upload_trace: Optional[str] = Header(None, alias='X-Omi-Upload-Trace', include_in_schema=False),
     x_omi_upload_hold: Optional[str] = Header(None, alias='X-Omi-Upload-Hold', include_in_schema=False),
     x_omi_upload_recovered: Optional[str] = Header(None, alias='X-Omi-Upload-Recovered', include_in_schema=False),
+    x_omi_upload_journal_recovery: Optional[str] = Header(
+        None, alias='X-Omi-Upload-Journal-Recovery', include_in_schema=False
+    ),
     x_omi_upload_hold_age_ms: Optional[str] = Header(None, alias='X-Omi-Upload-Hold-Age-Ms', include_in_schema=False),
 ):
     """
@@ -825,6 +828,11 @@ async def sync_local_files_v2(
                 },
             )
         return JSONResponse(status_code=200, content={'new_memories': [], 'updated_memories': []})
+    compare_recovery_label(
+        x_omi_upload_journal_recovery if isinstance(x_omi_upload_journal_recovery, str) else None,
+        x_omi_upload_recovered,
+        x_omi_upload_hold,
+    )
     clamp_enabled = future_capture_clamp_enabled()
     if clamp_enabled:
         future_capture_request.classify_upload((file.filename or '' for file in files), capture_received_at)
@@ -2236,6 +2244,10 @@ def _read_sync_job_status(job_id: str, uid: str, surface_open: bool, x_omi_custo
     return sync_job_poll_response(resp, uid, surface_open)
 
 
+# Bounds the account-deletion recheck so a hung marker read cannot outlive the client's request.
+RECEIPT_DELETION_CHECK_TIMEOUT_SECONDS = 3
+
+
 @router.post(
     '/v2/sync-local-files/receipts/wait',
     response_model=SyncReceiptsWaitResponse,
@@ -2245,9 +2257,6 @@ def _read_sync_job_status(job_id: str, uid: str, surface_open: bool, x_omi_custo
 async def wait_for_sync_receipts(
     body: SyncReceiptsWaitRequest, request: Request, uid: str = Depends(auth.get_current_user_uid)
 ):
-    from database.redis_db import get_async_redis_client
-    from database.sync_jobs import receipt_channel, receipt_note_key, TERMINAL_STATUSES
-
     # Experiment receipt_long_poll. For an account it is off for, the path answers as an unknown route does.
     await warm_experiments(uid)
     if not experiment('receipt_long_poll', uid):
@@ -2258,6 +2267,30 @@ async def wait_for_sync_receipts(
             detail='Receipt requests too frequent',
             headers={'Retry-After': str(SYNC_POLL_WINDOW_SECONDS)},
         )
+    result = await _wait_for_sync_receipts(body, request, uid)
+    if not result['receipts'] and not result['fallback']:
+        return result
+    # The auth fence ran before a wait of up to ~23s. Deletion can become pending meanwhile, and a
+    # completed Redis job carries its raw result with no deletion check of its own. One uncached
+    # marker read gates every answer that names a job; an unreadable marker answers no job.
+    try:
+        blocked = await asyncio.wait_for(
+            run_blocking(db_executor, account_deletion_blocks_user_work, uid, fresh=True),
+            RECEIPT_DELETION_CHECK_TIMEOUT_SECONDS,
+        )
+    except Exception as error:
+        logger.error('event=sync_receipts_wait outcome=deletion_check_failed exception_type=%s', type(error).__name__)
+        raise HTTPException(status_code=503, detail='Receipt waiter unavailable')
+    if blocked:
+        logger.info('event=sync_receipts_wait outcome=account_pending_deletion')
+        return JSONResponse(status_code=503, content={'status': 'account_pending_deletion'})
+    return result
+
+
+async def _wait_for_sync_receipts(body: SyncReceiptsWaitRequest, request: Request, uid: str) -> dict:
+    from database.redis_db import get_async_redis_client
+    from database.sync_jobs import receipt_channel, receipt_note_key, TERMINAL_STATUSES
+
     jobs = set(body.job_ids)
     # Experiment receipt_finished_note: job state is read only for a job that a note or a wake
     # says finished. Off, every start, wake and expiry reads every listed job.

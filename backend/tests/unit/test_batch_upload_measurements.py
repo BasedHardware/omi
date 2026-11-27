@@ -4,9 +4,11 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 from pathlib import Path
 import re
+import subprocess
+import sys
 
 import pytest
-from prometheus_client import CollectorRegistry, generate_latest
+from prometheus_client import REGISTRY, CollectorRegistry, generate_latest
 import yaml
 
 from database import batch_pipeline_upload_metrics as upload_metrics
@@ -16,8 +18,16 @@ from diarizer.batch_pipeline_runtime import merge_metrics
 from utils.batch_pipeline import upload_entitlement
 from utils.metrics import metrics_response
 from utils.observability import sync_upload
+from utils.sync import legacy_dark
+from tests.support.firestore_shape_recorder import RecordingFirestore, install_recorder
 from tests.unit.test_batch_pipeline_intake import proposal, submit, cohort  # noqa: F401
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
+from tests.unit.test_sync_capture_time_skew import _default_skew, _filename, client  # noqa: F401
+
+MISMATCH_METRIC = 'omi_batch_pipeline_upload_recovery_label_mismatch_total'
+COMPARISONS_METRIC = 'omi_batch_pipeline_upload_recovery_label_comparisons_total'
+DIRECTIONS = ('fresh_labelled_recovered', 'recovered_labelled_fresh', 'missing')
+JOURNAL_STATES = ('fresh', 'recovered', 'mixed')
 
 
 @pytest.mark.parametrize(
@@ -121,6 +131,92 @@ def test_hold_age_is_exported_from_sync_with_guard_buckets():
         )
 
 
+def test_recovery_comparison_is_exported_while_idle():
+    page = subprocess.check_output(
+        [
+            sys.executable,
+            '-c',
+            'from routers import sync; from utils.metrics import metrics_response; print(metrics_response().body.decode())',
+        ],
+        text=True,
+    )
+    for direction in DIRECTIONS:
+        assert f'{MISMATCH_METRIC}{{direction="{direction}"}} 0.0\n' in page
+    for state in JOURNAL_STATES:
+        assert f'{COMPARISONS_METRIC}{{journal_state="{state}"}} 0.0\n' in page
+
+
+@pytest.mark.parametrize(
+    'journal,label,hold,comparison,mismatch',
+    [
+        ('fresh', '1', 'bg300', 1, 'fresh_labelled_recovered'),
+        ('recovered', '0', 'fg60', 1, 'recovered_labelled_fresh'),
+        ('fresh', '0', 'fg_preview300', 1, None),
+        ('recovered', '1', 'bg300', 1, None),
+        ('recovered', None, 'bg300', 1, 'missing'),
+        ('fresh', None, 'none', 1, 'missing'),
+        ('recovered', 'private', 'fg60', 1, 'missing'),
+        (None, '1', 'bg300', 0, 'missing'),
+        ('private', '1', 'bg300', 0, 'missing'),
+        ('mixed', '0', 'bg300', 1, 'recovered_labelled_fresh'),
+        ('mixed', '1', 'bg300', 1, 'fresh_labelled_recovered'),
+        (None, None, None, 0, None),
+        (None, None, 'none', 0, None),
+        (None, '1', 'none', 0, None),
+    ],
+)
+def test_v2_upload_compares_recovery_labels_without_firestore(
+    client, monkeypatch, journal, label, hold, comparison, mismatch
+):
+    headers = {
+        name: value
+        for name, value in (
+            ('X-Omi-Upload-Journal-Recovery', journal),
+            ('X-Omi-Upload-Recovered', label),
+            ('X-Omi-Upload-Hold', hold),
+        )
+        if value is not None
+    }
+    # Isolate the comparator from the route's existing legacy-mode lookup,
+    # which may read rollout_cohorts when its process cache is cold.
+    monkeypatch.setattr(legacy_dark, 'current_mode', lambda _uid: legacy_dark.LegacySyncMode.ON)
+    firestore = RecordingFirestore()
+    # The shape recorder captures query terminals. Spy on reference builders
+    # as well to cover direct document reads and writes in this path.
+    firestore_calls = Mock()
+    for method in ('document', 'collection', 'collection_group', 'get_all', 'batch', 'transaction'):
+        spy = Mock(wraps=getattr(firestore, method))
+        firestore_calls.attach_mock(spy, method)
+        monkeypatch.setattr(firestore, method, spy)
+
+    def mismatches():
+        return {
+            direction: REGISTRY.get_sample_value(MISMATCH_METRIC, {'direction': direction}) for direction in DIRECTIONS
+        }
+
+    def comparisons():
+        return {
+            state: REGISTRY.get_sample_value(COMPARISONS_METRIC, {'journal_state': state}) for state in JOURNAL_STATES
+        }
+
+    before = mismatches()
+    evaluated = comparisons()
+    filename = _filename(-60).replace('audio_omi_', 'audio_omimobilebatch001_', 1)
+    with install_recorder(firestore):
+        response = client.post(
+            '/v2/sync-local-files',
+            headers=headers,
+            files=[('files', (filename, b'\x00' * 32, 'application/octet-stream'))],
+        )
+    assert response.status_code == 202, response.text
+    assert firestore_calls.mock_calls == []
+    assert firestore.shapes == []
+    assert comparisons() == {
+        state: count + (comparison if state == journal else 0) for state, count in evaluated.items()
+    }
+    assert mismatches() == {direction: count + (direction == mismatch) for direction, count in before.items()}
+
+
 def test_completion_latency_counts_originals_not_merged_units_or_replays(monkeypatch):
     delivered = Mock()
     monkeypatch.setattr(upload_metrics, 'DELIVERED', delivered)
@@ -174,6 +270,8 @@ def test_upload_metrics_forward_through_worker_multiprocess_exposition():
         'omi_batch_pipeline_upload_hold_age_seconds_bucket',
         'omi_batch_pipeline_upload_hold_age_seconds_sum',
         'omi_batch_pipeline_upload_hold_age_seconds_count',
+        MISMATCH_METRIC,
+        COMPARISONS_METRIC,
         'omi_batch_pipeline_inter_upload_gap_seconds_bucket',
         'omi_batch_pipeline_inter_upload_gap_seconds_sum',
         'omi_batch_pipeline_inter_upload_gap_seconds_count',

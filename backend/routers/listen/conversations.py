@@ -878,6 +878,8 @@ class LiveConversationController:
             request.uid,
             payload,
             idempotent=idempotent_create,
+            # Only a v3 rotation (of a ``recording`` row) supersedes: its successor continues that capture.
+            **({'v3_continuation': True} if supersede else {}),
             **(
                 {
                     'server_batch_requested': True,

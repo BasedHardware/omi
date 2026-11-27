@@ -218,6 +218,11 @@ spec:
             - {name: BATCH_PIPELINE_SHADOW_PERCENT, value: {{ .Values.worker.shadowPercent | quote }}}
             - {name: BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR, value: {{ .Values.worker.shadowPaidRecoveryPerHour | quote }}}
             - {name: BATCH_PIPELINE_SHADOW_RECOVERY_API_URL, value: {{ .Values.worker.shadowRecoveryApiUrl | quote }}}
+            {{- if .Values.worker.flagStoreProject }}
+            # Per-owner rules of the Omi flag store (commit_wake). Absent, every rule reads off.
+            - {name: OMI_FLAGS_FIRESTORE_PROJECT, value: {{ .Values.worker.flagStoreProject | quote }}}
+            - {name: OMI_FLAGS_FIRESTORE_DATABASE, value: {{ .Values.worker.flagStoreDatabase | quote }}}
+            {{- end }}
             # Sampled strict-VAD shadow; 100 restores full, 0 turns the shadow off.
             # No `default` here: Helm's default treats 0 as empty, which would
             # silently turn the documented 0-disable into 10.

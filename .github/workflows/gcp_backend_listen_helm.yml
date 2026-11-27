@@ -186,13 +186,14 @@ jobs:
           [[ "$GITHUB_EVENT_NAME" == workflow_dispatch && "$GITHUB_REF" == refs/heads/main &&
              "$GITHUB_RUN_ATTEMPT" == 1 && "$DEPLOY_ENV" == prod &&
              "$GITHUB_SHA" == "$(git rev-parse HEAD)" ]]
-          jq -e --arg control "$GITHUB_SHA" '.inputs | .branch == "main" and (.image_tag | test("^[0-9a-f]{7}$"))
+          jq -e --arg control "$GITHUB_SHA" '.inputs | .branch == "main" and .image_tag == ""
               and (.expected_sha | test("^[0-9a-f]{40}$")) and .break_glass_lock == "false"
               and .helm_revision == "" and .listen_edge_image_digest == "" and .evidence_request_id == ""
               and .gateway_feature_mode == "chart-default" and .chat_agent_route == "chart-default"
               and .allow_direct_model_exception == "chart-default" and .stt_service_models == ""
               and .translation_service_models == "" and (.control_sha // "") == ""
-              and (.evidence_request | fromjson | .control_sha == $control)' "$GITHUB_EVENT_PATH" >/dev/null
+              and (.evidence_request | fromjson | .control_sha == $control
+                  and (.operation == "deploy" or .operation == "rollback"))' "$GITHUB_EVENT_PATH" >/dev/null
 
       - name: Bind shared record token lease rollout inputs
         if: ${{ inputs.mode != 'evidence' && ((github.event.inputs.mode || 'deploy') == 'deploy') }}
@@ -321,6 +322,10 @@ jobs:
           location: ${{ env.REGION }}
           project_id: ${{ vars.GCP_PROJECT_ID }}
 
+      - name: Authenticate digest inspection for the protected Listen route
+        if: ${{ inputs.mode == 'image-only' || (inputs.mode == 'evidence' && fromJSON(inputs.evidence_request).image_only != null) }}
+        run: gcloud auth configure-docker gcr.io --quiet
+
       - name: Produce private-overlay effect receipt without mutation
         if: ${{ inputs.mode == 'evidence' }}
         env:
@@ -356,16 +361,29 @@ jobs:
 
       - name: Resolve backend-listen image tag
         id: resolve-listen-image
-        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' || inputs.mode == 'image-only' }}
+        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' }}
         env:
           REQUESTED_TAG: ${{ github.event.inputs.image_tag }}
-          EXPECTED_SHA: ${{ inputs.expected_sha }}
-          DEPLOY_MODE: ${{ inputs.mode }}
         run: |
           set -euo pipefail
           IMAGE="$(kubectl -n ${{ vars.ENV }}-omi-backend get deploy/${{ vars.ENV }}-omi-backend-listen -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || true)"
           RUNNING_TAG="${IMAGE##*:}"
           if [[ -z "${REQUESTED_TAG}" ]]; then
+            # Keep the digest installed by the protected image-only route.
+            if [[ "$IMAGE" =~ ^gcr\.io/based-hardware/backend@(sha256:[0-9a-f]{64})$ &&
+                  "${{ github.event.inputs.environment }}" == prod ]]; then
+              RUNNING_DIGEST="${BASH_REMATCH[1]}"
+              gcloud auth configure-docker gcr.io --quiet
+              RUNNING_COMMIT="$(docker buildx imagetools inspect "$IMAGE" --format '{{ index .Image.Config.Labels "org.opencontainers.image.revision" }}')"
+              if [[ ! "$RUNNING_COMMIT" =~ ^[0-9a-f]{40}$ ]] ||
+                  ! git merge-base --is-ancestor "$RUNNING_COMMIT" origin/main ||
+                  ! git cat-file -e "${RUNNING_COMMIT}:backend/config/rollout_cohorts.py" 2>/dev/null; then
+                echo "ERROR: the running Listen digest does not identify a cohort-aware commit on origin/main." >&2
+                exit 1
+              fi
+              echo "BACKEND_LISTEN_IMAGE_DIGEST=$RUNNING_DIGEST" >> "$GITHUB_ENV"
+              exit 0
+            fi
             # Chart-only upgrade: keep whatever is serving. This is the auto-push path.
             if [[ -z "$RUNNING_TAG" || "$RUNNING_TAG" == "$IMAGE" || "$RUNNING_TAG" == "latest" ]]; then
               echo "ERROR: backend-listen is not pinned to an immutable tag (${IMAGE:-<missing>}) and no image_tag was given." >&2
@@ -401,10 +419,6 @@ jobs:
               exit 1
             fi
           fi
-          if [[ "${DEPLOY_MODE:-deploy}" == image-only && "$(git rev-parse "${REQUESTED_TAG}^{commit}")" != "$EXPECTED_SHA" ]]; then
-            echo "::error::The image tag must resolve to the exact admitted source."
-            exit 1
-          fi
           echo "BACKEND_LISTEN_SOURCE_SHA=$(git rev-parse "${REQUESTED_TAG}^{commit}")" >> "$GITHUB_ENV"
           RESOLVED_TAG=$(git rev-parse --short=7 "${REQUESTED_TAG}^{commit}")
           if ! gcloud container images describe "gcr.io/${{ vars.GCP_PROJECT_ID }}/backend:${RESOLVED_TAG}" >/dev/null 2>&1; then
@@ -415,6 +429,13 @@ jobs:
           echo "Deploying image tag ${RESOLVED_TAG} (currently ${RUNNING_TAG:-<none>})"
           echo "BACKEND_LISTEN_IMAGE_TAG=$RESOLVED_TAG" >> "$GITHUB_ENV"
           echo "neg_coverage_exporter_image_tag=$RESOLVED_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Bind the forward Listen digest source for the index gate
+        if: ${{ inputs.mode != 'evidence' && inputs.mode == 'image-only' && fromJSON(inputs.evidence_request).operation == 'deploy' }}
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          echo "BACKEND_LISTEN_SOURCE_SHA=$EXPECTED_SHA" >> "$GITHUB_ENV"
 
       # Plan D D2: the listen-edge image is admitted by digest before anything is
       # applied. The admission reads only the image config (the same imagetools
@@ -668,7 +689,7 @@ jobs:
           ARGV_FILE="$RUNNER_TEMP/listen-deploy.argv"
           python3 .github/scripts/listen_overlay_evidence.py argv \
             --overrides-file "$LISTEN_HELM_ENV_OVERRIDES_ARGV" --output "$ARGV_FILE" \
-            --image-tag "$BACKEND_LISTEN_IMAGE_TAG" --environment "${{ vars.ENV }}" \
+            --image-tag "${BACKEND_LISTEN_IMAGE_DIGEST:-$BACKEND_LISTEN_IMAGE_TAG}" --environment "${{ vars.ENV }}" \
             --project "${{ vars.GCP_PROJECT_ID }}" --runtime-project "${{ vars.RUNTIME_GCP_PROJECT_ID }}"
           mapfile -t DEPLOY_ARGV < "$ARGV_FILE"
           DRY_RUN=("${DEPLOY_ARGV[@]}" --dry-run=client)
@@ -742,6 +763,7 @@ jobs:
         if: ${{ inputs.mode != 'evidence' && inputs.mode == 'image-only' }}
         env:
           IMAGE_ONLY_PROOF: ${{ inputs.evidence_request }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
         run: |
           set -euo pipefail
           export LD_LIBRARY_PATH="$RUNNER_TEMP/listen-runtime/python/lib"
@@ -763,6 +785,7 @@ jobs:
         if: ${{ inputs.mode != 'evidence' && inputs.mode == 'image-only' }}
         env:
           IMAGE_ONLY_PROOF: ${{ inputs.evidence_request }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
         run: |
           set -euo pipefail
           export LD_LIBRARY_PATH="$RUNNER_TEMP/listen-runtime/python/lib"

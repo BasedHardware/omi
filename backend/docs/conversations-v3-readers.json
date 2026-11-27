@@ -7,6 +7,10 @@
     "policy": "conversations",
     "reason": "After a V3 refinement, repair retirement or undo marker hit, the task transaction checks only deletion and recording fields to allow an active product card with the same ID."
   },
+  "backend/database/batch_final_pass.py:collection": {
+    "policy": "both",
+    "reason": "Reads only the fence fields (claims, deleted spans, deleted, locked) of a v3 row's source recordings, by id and owner-scoped, before speaker inference."
+  },
   "backend/database/batch_pipeline_privacy.py:collection": {
     "policy": "both",
     "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
@@ -118,6 +122,10 @@
   "backend/database/conversations_v3_context.py:collection": {
     "policy": "conversations",
     "reason": "Owner-scoped bounded title projection excludes recordings, hidden, deleted, locked and absorbed rows before decoding."
+  },
+  "backend/database/conversations_v3_fence.py:collection": {
+    "policy": "storage",
+    "reason": "The native manual summary writer checks the exact source recording and its sealed upload revision inside the owner-scoped notes transaction."
   },
   "backend/database/conversations_v3_live.py:collection": {
     "policy": "conversations",

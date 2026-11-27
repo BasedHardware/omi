@@ -593,7 +593,7 @@ def expire_input_in_transaction(tx, job, now):
     """Use the existing held scan and content/privacy CAS; never delete retained artifacts."""
     from config.refactor_modes import batch_input_expiring_enabled
     from utils.batch_pipeline.input_retention import held_input_leg, staged_enqueue, TERMINAL_SECONDS, REASON
-    from database.batch_pipeline_projection import assignment_held_without_recovery
+    from utils.batch_pipeline.held_terminal import assignment_held_without_recovery
 
     if not batch_input_expiring_enabled():
         return False

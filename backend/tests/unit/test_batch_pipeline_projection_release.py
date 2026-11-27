@@ -279,7 +279,7 @@ def test_persisted_multipart_release_preserves_proven_suffix(monkeypatch, summar
     elif blocked == 'privacy':
         seeded[('batch_pipeline_prod_results', 'held')]['projection_privacy_refusal'] = True
     elif blocked == 'operator':
-        from database.batch_pipeline_projection import OPERATOR_INTENTS
+        from utils.batch_pipeline.held_terminal import OPERATOR_INTENTS
 
         seeded[('batch_pipeline_prod_jobs', 'held')][next(iter(OPERATOR_INTENTS))] = {'state': 'pending'}
     client, store = store_for(seeded)

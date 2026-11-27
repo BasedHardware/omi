@@ -23,6 +23,7 @@ from utils.batch_pipeline.correctness_metrics import record as record_correctnes
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
 from utils.batch_pipeline.result_protocol import stamp
 from utils.batch_pipeline.scheduler import Scheduler, owner_key
+from utils.conversations.v3.policy import NATIVE_MANUAL_INPUT_REVISION, NATIVE_MANUAL_STOP
 from utils.observability.stt_cap_dispatch import DispatchPath, DispatchReason, record_decision
 
 PROTOCOL = 'batch_v1'
@@ -243,6 +244,12 @@ def admit(
                 # conversation snapshots already read in this transaction.
                 job['record_intake_claimed_at'] = pending.get('record_intake_claimed_at')
                 job['record_sealed_at'] = row.get('record_sealed_at')
+                if not binding.partial_record and row.get(NATIVE_MANUAL_STOP) and record_barrier is not None:
+                    # The already-checked staging barrier binds manual notes to this upload even
+                    # when the independent token-lease rollout is off. Never repin a replay.
+                    revision = record_barrier.get('record_upload_revision')
+                    if type(revision) is int and revision > 0:
+                        job[NATIVE_MANUAL_INPUT_REVISION] = revision
                 job['record_ready_at'] = time.time()
                 finished = row.get('finished_at')
                 if isinstance(finished, datetime):

@@ -1,0 +1,680 @@
+{
+ "adapter": "local",
+ "audio": {
+  "format": "pcm16le_mono",
+  "sample_rate": 16000,
+  "seconds": 39.1726875
+ },
+ "detected_language": "en",
+ "key": {
+  "audio_sha256": "a4e90e258b771f761a6481de32b388b5fc7d143d93c6d0c782495d1b73e68f45",
+  "language": "en",
+  "model": "parakeet-tdt-0.6b-v3@541d1f99/cpu-fp32/vad",
+  "provider": "parakeet_local",
+  "vocabulary_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+ },
+ "key_digest": "62bc7abbff043625d53cc27136db044571c4280c1ba3ed9f5d63c784c4a31cba",
+ "recorded_at": "2026-11-26T16:52:56.725857Z",
+ "schema": "pipeline_lab.stt_cassette/v1",
+ "segments": [
+  {
+   "end": 4.888,
+   "speaker": null,
+   "start": 0.888,
+   "text": "He tells us that at this festive season of the year, with Christmas"
+  },
+  {
+   "end": 8.968,
+   "speaker": null,
+   "start": 6.008,
+   "text": "This change came about from an adventure we had together."
+  },
+  {
+   "end": 29.32,
+   "speaker": null,
+   "start": 10.12,
+   "text": "He has grave doubts whether Sir Frederick Leighton's work is really great. One day when I rode over to the Shimerdas, I found Antonia starting off on foot. Linnell's pictures are a sort of upguard and Adam painting. There had been another black frost the night before, and the air was clear and heady as"
+  },
+  {
+   "end": 38.711999999999996,
+   "speaker": null,
+   "start": 30.424,
+   "text": "It is obviously unnecessary for us to point out how luminous the It was on one of these gravel beds that I met my adventure."
+  }
+ ],
+ "served": {
+  "model": "parakeet-tdt-0.6b-v3@541d1f99/cpu-fp32/vad",
+  "provider": "parakeet_local"
+ },
+ "source": "local",
+ "source_detail": {
+  "vad": {
+   "join_gap": 0.3,
+   "max_seconds": 30.0,
+   "model": "silero_vad.onnx (utils/stt/local_vad.py, threshold 0.5)",
+   "pad": 0.2
+  },
+  "windows": "vad"
+ },
+ "usd": 0.0,
+ "words": [
+  {
+   "end": 1.048,
+   "speaker": null,
+   "start": 0.888,
+   "text": "He"
+  },
+  {
+   "end": 1.448,
+   "speaker": null,
+   "start": 1.048,
+   "text": "tells"
+  },
+  {
+   "end": 1.608,
+   "speaker": null,
+   "start": 1.448,
+   "text": "us"
+  },
+  {
+   "end": 1.928,
+   "speaker": null,
+   "start": 1.608,
+   "text": "that"
+  },
+  {
+   "end": 2.168,
+   "speaker": null,
+   "start": 1.928,
+   "text": "at"
+  },
+  {
+   "end": 2.408,
+   "speaker": null,
+   "start": 2.168,
+   "text": "this"
+  },
+  {
+   "end": 2.968,
+   "speaker": null,
+   "start": 2.408,
+   "text": "festive"
+  },
+  {
+   "end": 3.3680000000000003,
+   "speaker": null,
+   "start": 2.968,
+   "text": "season"
+  },
+  {
+   "end": 3.5280000000000005,
+   "speaker": null,
+   "start": 3.3680000000000003,
+   "text": "of"
+  },
+  {
+   "end": 3.6879999999999997,
+   "speaker": null,
+   "start": 3.5280000000000005,
+   "text": "the"
+  },
+  {
+   "end": 4.008,
+   "speaker": null,
+   "start": 3.6879999999999997,
+   "text": "year,"
+  },
+  {
+   "end": 4.408,
+   "speaker": null,
+   "start": 4.168,
+   "text": "with"
+  },
+  {
+   "end": 4.888,
+   "speaker": null,
+   "start": 4.408,
+   "text": "Christmas"
+  },
+  {
+   "end": 6.328,
+   "speaker": null,
+   "start": 6.008,
+   "text": "This"
+  },
+  {
+   "end": 6.648,
+   "speaker": null,
+   "start": 6.328,
+   "text": "change"
+  },
+  {
+   "end": 6.968,
+   "speaker": null,
+   "start": 6.648,
+   "text": "came"
+  },
+  {
+   "end": 7.208,
+   "speaker": null,
+   "start": 6.968,
+   "text": "about"
+  },
+  {
+   "end": 7.448,
+   "speaker": null,
+   "start": 7.208,
+   "text": "from"
+  },
+  {
+   "end": 7.6080000000000005,
+   "speaker": null,
+   "start": 7.448,
+   "text": "an"
+  },
+  {
+   "end": 8.088000000000001,
+   "speaker": null,
+   "start": 7.6080000000000005,
+   "text": "adventure"
+  },
+  {
+   "end": 8.328,
+   "speaker": null,
+   "start": 8.088000000000001,
+   "text": "we"
+  },
+  {
+   "end": 8.488,
+   "speaker": null,
+   "start": 8.328,
+   "text": "had"
+  },
+  {
+   "end": 8.968,
+   "speaker": null,
+   "start": 8.488,
+   "text": "together."
+  },
+  {
+   "end": 10.28,
+   "speaker": null,
+   "start": 10.12,
+   "text": "He"
+  },
+  {
+   "end": 10.52,
+   "speaker": null,
+   "start": 10.28,
+   "text": "has"
+  },
+  {
+   "end": 10.84,
+   "speaker": null,
+   "start": 10.52,
+   "text": "grave"
+  },
+  {
+   "end": 11.319999999999999,
+   "speaker": null,
+   "start": 10.84,
+   "text": "doubts"
+  },
+  {
+   "end": 11.719999999999999,
+   "speaker": null,
+   "start": 11.319999999999999,
+   "text": "whether"
+  },
+  {
+   "end": 11.879999999999999,
+   "speaker": null,
+   "start": 11.719999999999999,
+   "text": "Sir"
+  },
+  {
+   "end": 12.36,
+   "speaker": null,
+   "start": 11.879999999999999,
+   "text": "Frederick"
+  },
+  {
+   "end": 13.0,
+   "speaker": null,
+   "start": 12.36,
+   "text": "Leighton's"
+  },
+  {
+   "end": 13.239999999999998,
+   "speaker": null,
+   "start": 13.0,
+   "text": "work"
+  },
+  {
+   "end": 13.399999999999999,
+   "speaker": null,
+   "start": 13.239999999999998,
+   "text": "is"
+  },
+  {
+   "end": 13.559999999999999,
+   "speaker": null,
+   "start": 13.399999999999999,
+   "text": "really"
+  },
+  {
+   "end": 14.12,
+   "speaker": null,
+   "start": 13.719999999999999,
+   "text": "great."
+  },
+  {
+   "end": 15.24,
+   "speaker": null,
+   "start": 15.0,
+   "text": "One"
+  },
+  {
+   "end": 15.48,
+   "speaker": null,
+   "start": 15.24,
+   "text": "day"
+  },
+  {
+   "end": 15.64,
+   "speaker": null,
+   "start": 15.48,
+   "text": "when"
+  },
+  {
+   "end": 15.72,
+   "speaker": null,
+   "start": 15.64,
+   "text": "I"
+  },
+  {
+   "end": 15.96,
+   "speaker": null,
+   "start": 15.72,
+   "text": "rode"
+  },
+  {
+   "end": 16.12,
+   "speaker": null,
+   "start": 15.96,
+   "text": "over"
+  },
+  {
+   "end": 16.2,
+   "speaker": null,
+   "start": 16.12,
+   "text": "to"
+  },
+  {
+   "end": 16.36,
+   "speaker": null,
+   "start": 16.2,
+   "text": "the"
+  },
+  {
+   "end": 17.16,
+   "speaker": null,
+   "start": 16.36,
+   "text": "Shimerdas,"
+  },
+  {
+   "end": 17.4,
+   "speaker": null,
+   "start": 17.32,
+   "text": "I"
+  },
+  {
+   "end": 17.64,
+   "speaker": null,
+   "start": 17.4,
+   "text": "found"
+  },
+  {
+   "end": 18.44,
+   "speaker": null,
+   "start": 17.64,
+   "text": "Antonia"
+  },
+  {
+   "end": 18.76,
+   "speaker": null,
+   "start": 18.44,
+   "text": "starting"
+  },
+  {
+   "end": 18.92,
+   "speaker": null,
+   "start": 18.76,
+   "text": "off"
+  },
+  {
+   "end": 19.08,
+   "speaker": null,
+   "start": 18.92,
+   "text": "on"
+  },
+  {
+   "end": 19.32,
+   "speaker": null,
+   "start": 19.08,
+   "text": "foot."
+  },
+  {
+   "end": 21.240000000000002,
+   "speaker": null,
+   "start": 20.28,
+   "text": "Linnell's"
+  },
+  {
+   "end": 21.8,
+   "speaker": null,
+   "start": 21.240000000000002,
+   "text": "pictures"
+  },
+  {
+   "end": 21.96,
+   "speaker": null,
+   "start": 21.8,
+   "text": "are"
+  },
+  {
+   "end": 22.12,
+   "speaker": null,
+   "start": 21.96,
+   "text": "a"
+  },
+  {
+   "end": 22.36,
+   "speaker": null,
+   "start": 22.12,
+   "text": "sort"
+  },
+  {
+   "end": 22.520000000000003,
+   "speaker": null,
+   "start": 22.36,
+   "text": "of"
+  },
+  {
+   "end": 23.32,
+   "speaker": null,
+   "start": 22.76,
+   "text": "upguard"
+  },
+  {
+   "end": 23.560000000000002,
+   "speaker": null,
+   "start": 23.48,
+   "text": "and"
+  },
+  {
+   "end": 24.12,
+   "speaker": null,
+   "start": 23.720000000000002,
+   "text": "Adam"
+  },
+  {
+   "end": 24.6,
+   "speaker": null,
+   "start": 24.200000000000003,
+   "text": "painting."
+  },
+  {
+   "end": 25.479999999999997,
+   "speaker": null,
+   "start": 25.24,
+   "text": "There"
+  },
+  {
+   "end": 25.639999999999997,
+   "speaker": null,
+   "start": 25.479999999999997,
+   "text": "had"
+  },
+  {
+   "end": 25.799999999999997,
+   "speaker": null,
+   "start": 25.639999999999997,
+   "text": "been"
+  },
+  {
+   "end": 26.04,
+   "speaker": null,
+   "start": 25.799999999999997,
+   "text": "another"
+  },
+  {
+   "end": 26.439999999999998,
+   "speaker": null,
+   "start": 26.04,
+   "text": "black"
+  },
+  {
+   "end": 26.84,
+   "speaker": null,
+   "start": 26.439999999999998,
+   "text": "frost"
+  },
+  {
+   "end": 27.0,
+   "speaker": null,
+   "start": 26.84,
+   "text": "the"
+  },
+  {
+   "end": 27.24,
+   "speaker": null,
+   "start": 27.0,
+   "text": "night"
+  },
+  {
+   "end": 27.639999999999997,
+   "speaker": null,
+   "start": 27.24,
+   "text": "before,"
+  },
+  {
+   "end": 27.959999999999997,
+   "speaker": null,
+   "start": 27.799999999999997,
+   "text": "and"
+  },
+  {
+   "end": 28.04,
+   "speaker": null,
+   "start": 27.959999999999997,
+   "text": "the"
+  },
+  {
+   "end": 28.279999999999998,
+   "speaker": null,
+   "start": 28.04,
+   "text": "air"
+  },
+  {
+   "end": 28.439999999999998,
+   "speaker": null,
+   "start": 28.279999999999998,
+   "text": "was"
+  },
+  {
+   "end": 28.759999999999998,
+   "speaker": null,
+   "start": 28.439999999999998,
+   "text": "clear"
+  },
+  {
+   "end": 28.919999999999998,
+   "speaker": null,
+   "start": 28.759999999999998,
+   "text": "and"
+  },
+  {
+   "end": 29.159999999999997,
+   "speaker": null,
+   "start": 28.919999999999998,
+   "text": "heady"
+  },
+  {
+   "end": 29.32,
+   "speaker": null,
+   "start": 29.24,
+   "text": "as"
+  },
+  {
+   "end": 30.584,
+   "speaker": null,
+   "start": 30.424,
+   "text": "It"
+  },
+  {
+   "end": 30.823999999999998,
+   "speaker": null,
+   "start": 30.584,
+   "text": "is"
+  },
+  {
+   "end": 31.544,
+   "speaker": null,
+   "start": 30.823999999999998,
+   "text": "obviously"
+  },
+  {
+   "end": 32.263999999999996,
+   "speaker": null,
+   "start": 31.544,
+   "text": "unnecessary"
+  },
+  {
+   "end": 32.504,
+   "speaker": null,
+   "start": 32.263999999999996,
+   "text": "for"
+  },
+  {
+   "end": 32.664,
+   "speaker": null,
+   "start": 32.504,
+   "text": "us"
+  },
+  {
+   "end": 32.903999999999996,
+   "speaker": null,
+   "start": 32.664,
+   "text": "to"
+  },
+  {
+   "end": 33.064,
+   "speaker": null,
+   "start": 32.903999999999996,
+   "text": "point"
+  },
+  {
+   "end": 33.224,
+   "speaker": null,
+   "start": 33.064,
+   "text": "out"
+  },
+  {
+   "end": 33.464,
+   "speaker": null,
+   "start": 33.224,
+   "text": "how"
+  },
+  {
+   "end": 34.184,
+   "speaker": null,
+   "start": 33.464,
+   "text": "luminous"
+  },
+  {
+   "end": 34.424,
+   "speaker": null,
+   "start": 34.184,
+   "text": "the"
+  },
+  {
+   "end": 35.592,
+   "speaker": null,
+   "start": 35.352,
+   "text": "It"
+  },
+  {
+   "end": 35.751999999999995,
+   "speaker": null,
+   "start": 35.592,
+   "text": "was"
+  },
+  {
+   "end": 35.912,
+   "speaker": null,
+   "start": 35.751999999999995,
+   "text": "on"
+  },
+  {
+   "end": 36.071999999999996,
+   "speaker": null,
+   "start": 35.912,
+   "text": "one"
+  },
+  {
+   "end": 36.151999999999994,
+   "speaker": null,
+   "start": 36.071999999999996,
+   "text": "of"
+  },
+  {
+   "end": 36.312,
+   "speaker": null,
+   "start": 36.151999999999994,
+   "text": "these"
+  },
+  {
+   "end": 36.872,
+   "speaker": null,
+   "start": 36.312,
+   "text": "gravel"
+  },
+  {
+   "end": 37.272,
+   "speaker": null,
+   "start": 36.872,
+   "text": "beds"
+  },
+  {
+   "end": 37.431999999999995,
+   "speaker": null,
+   "start": 37.272,
+   "text": "that"
+  },
+  {
+   "end": 37.592,
+   "speaker": null,
+   "start": 37.431999999999995,
+   "text": "I"
+  },
+  {
+   "end": 37.912,
+   "speaker": null,
+   "start": 37.592,
+   "text": "met"
+  },
+  {
+   "end": 38.071999999999996,
+   "speaker": null,
+   "start": 37.912,
+   "text": "my"
+  },
+  {
+   "end": 38.711999999999996,
+   "speaker": null,
+   "start": 38.071999999999996,
+   "text": "adventure."
+  }
+ ]
+}
