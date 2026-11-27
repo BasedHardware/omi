@@ -34,7 +34,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Not a user outcome. Share of accepted pendant listen sockets that delivered at least one audio byte. The rest closed before any audio (reconnects). Same rate on iOS and Android. Do not chase 99% here. A user who was not sending audio did not fail to get a recording. Select a time range of at least 5 minutes to see this panel.",
+      "description": "Not a user outcome. Share of accepted pendant listen sockets that delivered at least one audio byte. The rest closed before any audio (reconnects). Same rate on iOS and Android. Do not chase 99% here. A user who was not sending audio did not fail to get a recording.",
       "fieldConfig": {
         "defaults": {
           "max": 100,
@@ -78,7 +78,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(100 * (sum(increase(omi_listen_audio_outcome_total{transcription_source=\"omi\",outcome=\"first_audio\"}[$__range])) or 0 * sum(increase(omi_listen_accepted_total{transcription_source=\"omi\"}[$__range]))) / sum(increase(omi_listen_accepted_total{transcription_source=\"omi\"}[$__range]))) and on() (vector(${__range_s}) >= 300)",
+          "expr": "100 * (sum(increase(omi_listen_audio_outcome_total{transcription_source=\"omi\",outcome=\"first_audio\"}[$__range])) or 0 * sum(increase(omi_listen_accepted_total{transcription_source=\"omi\"}[$__range]))) / sum(increase(omi_listen_accepted_total{transcription_source=\"omi\"}[$__range]))",
           "refId": "A",
           "instant": true
         }
@@ -2865,7 +2865,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "description": "Pendant is a capture source, not a client_kind. Live listen admissions over the selected range; not unique users. Offline pendant capture arrives through the WAL/sync path, which never enters the finalization journey and whose service is not scraped by Prometheus, so this row covers live listen sessions only. Select a time range of at least 5 minutes to see this panel.",
+          "description": "Pendant is a capture source, not a client_kind. Live listen admissions over the selected range; not unique users. Offline pendant capture arrives through the WAL/sync path, which never enters the finalization journey and whose service is not scraped by Prometheus, so this row covers live listen sessions only.",
           "fieldConfig": {
             "defaults": {
               "noValue": "no traffic",
@@ -2907,7 +2907,7 @@
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "(round(sum(increase(omi_listen_accepted_total{transcription_source=\"omi\"}[$__range])))) and on() (vector(${__range_s}) >= 300)",
+              "expr": "round(sum(increase(omi_listen_accepted_total{transcription_source=\"omi\"}[$__range])))",
               "refId": "A",
               "instant": true
             }
