@@ -28,8 +28,11 @@ import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_evidence_runs.dart';
 import 'package:omi/services/wals/wal_frame_encoder.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/wal_file_manager.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../support/recording_analytics.dart';
 
 class _Listener implements IWalSyncListener {
   @override
@@ -389,6 +392,7 @@ void main() {
       bool Function()? foregroundProbe,
       bool realCensus = false,
       bool realPersistence = false,
+      bool typedTelemetry = false,
       Future<void> Function(List<Wal>)? persist,
       List<Map<String, Object?>>? events,
       Future<bool> Function()? reclaimOff,
@@ -402,10 +406,13 @@ void main() {
         orphanReclaimOff: reclaimOff,
         orphanReclaimTelemetry: onReclaim,
         orphanForeground: foregroundProbe ?? () => foreground,
-        periodic: periodic ?? ((_, callback) => _RecoveryTimer(callback)), orphanTelemetry: (v) {
-      events?.add(v);
-      onEvent?.call(v);
-    },
+        periodic: periodic ?? ((_, callback) => _RecoveryTimer(callback)),
+        orphanTelemetry: typedTelemetry
+            ? null
+            : (v) {
+                events?.add(v);
+                onEvent?.call(v);
+              },
         liveWalReceiptTelemetry: receiptTelemetry,
         deltaIndexAllowed: realPersistence ? () async => true : null,
         persistWals: realPersistence
@@ -1373,6 +1380,40 @@ void main() {
     expect(result.complete, isTrue);
     expect(result.summary['receipt_scan_truncated'], isTrue);
     expect(receiptlessManagedCount(result), greaterThan(0));
+  });
+
+  test('recovery emits typed receiptless custody counts and scan status', () async {
+    final analytics = RecordingAnalytics();
+    AnalyticsManager.resetForTesting();
+    AnalyticsManager.configure(analytics.adapter);
+    PackageInfo.setMockInitialValues(
+        appName: 'Omi Test', packageName: 'com.omi.test', version: '1.0.543', buildNumber: '992', buildSignature: '');
+    await AnalyticsManager.init();
+    try {
+      final sync = await ledger(realCensus: true, typedTelemetry: true);
+      for (var i = 0; i <= LiveWalReceipt.maxInventorySourceEntries; i++) {
+        await makePendingReceipt('owner-a');
+      }
+      final snapshot = await census();
+      expect(snapshot.complete, isTrue);
+      expect(snapshot.summary['receipt_scan_truncated'], isTrue);
+      final classes = (snapshot.summary['orphan_classification'] as Map)['classes'] as Map;
+      final receiptless = classes['receiptless_managed'] as Map;
+
+      await sync.recoverOrphanAudio();
+      await AnalyticsManager.flushPending(force: true);
+
+      analytics.expectSingle('Orphan Audio Receiptless Custody', {
+        'phase': 'recovery',
+        'receiptless_managed_count': receiptless['count'] as int,
+        'receiptless_managed_bytes': receiptless['bytes'] as int,
+        'managed_receipt_missing_skip_count': receiptless['count'] as int,
+        'receipt_scan_truncated': true,
+        'census_complete': true,
+      });
+    } finally {
+      AnalyticsManager.resetForTesting();
+    }
   });
 
   test('over-budget quarantine reference scan retains audio and reports incomplete evidence', () async {

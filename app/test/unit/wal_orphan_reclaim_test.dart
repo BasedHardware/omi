@@ -7,11 +7,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
+import 'package:omi/services/wals/live_wal_receipt.dart';
 import 'package:omi/services/wals/recording_inventory.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/wal_file_manager.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../support/recording_analytics.dart';
 
 class _Listener implements IWalSyncListener {
   @override
@@ -51,6 +55,7 @@ void main() {
       Future<RecordingOrphanCensus> Function()? scan,
       void Function()? afterTombstone,
       void Function(Map<String, Object?>)? event,
+      bool typedTelemetry = false,
       bool foreground = true}) async {
     final sync = LocalWalSyncImpl(_Listener(),
         now: () => DateTime.fromMillisecondsSinceEpoch(now * 1000),
@@ -58,7 +63,7 @@ void main() {
         orphanCensus: scan,
         orphanForeground: () => foreground,
         orphanReclaimAfterTombstone: afterTombstone,
-        orphanReclaimTelemetry: event ?? (_) {},
+        orphanReclaimTelemetry: typedTelemetry ? null : event ?? (_) {},
         orphanRecoveryOff: () async => true,
         persistWals: (rows) => WalFileManager.saveWals(rows));
     sync.start();
@@ -105,6 +110,42 @@ void main() {
     expect(jsonEncode(events), isNot(contains('audio_')));
     await sync.reclaimOrphanAudio();
     expect(events.last['deleted_files'], 0);
+  });
+  test('receiptless managed files are counted as reclaim skips', () async {
+    final filename = LiveWalReceipt.uniqueName(name(old), LiveWalReceipt.newId());
+    final file = await audio(filename);
+    final skips = <Map<String, Object?>>[];
+    final sync = await ledger(event: skips.add);
+    await sync.reclaimOrphanAudio();
+    expect(await file.exists(), isTrue);
+    expect((skips.single['skips'] as Map)['managed_receipt_missing'], 1);
+  });
+  test('reclaim emits typed receiptless custody counts and scan status', () async {
+    final analytics = RecordingAnalytics();
+    AnalyticsManager.resetForTesting();
+    AnalyticsManager.configure(analytics.adapter);
+    PackageInfo.setMockInitialValues(
+        appName: 'Omi Test', packageName: 'com.omi.test', version: '1.0.543', buildNumber: '992', buildSignature: '');
+    await AnalyticsManager.init();
+    try {
+      final filename = LiveWalReceipt.uniqueName(name(old), LiveWalReceipt.newId());
+      final file = await audio(filename);
+      final sync = await ledger(typedTelemetry: true);
+      await sync.reclaimOrphanAudio();
+      await AnalyticsManager.flushPending(force: true);
+
+      expect(await file.exists(), isTrue);
+      analytics.expectSingle('Orphan Audio Receiptless Custody', {
+        'phase': 'reclaim',
+        'receiptless_managed_count': 1,
+        'receiptless_managed_bytes': await file.length(),
+        'managed_receipt_missing_skip_count': 1,
+        'receipt_scan_truncated': false,
+        'census_complete': true,
+      });
+    } finally {
+      AnalyticsManager.resetForTesting();
+    }
   });
   for (final source in [
     'wals.json',
