@@ -118,7 +118,8 @@ ops kill switch) splits every unit into chunks of at most five minutes, sends th
 a 45 s end-to-end deadline and stitches them in order, for recordings of up to nine chunks (about 44
 minutes). Recordings over 20 minutes take that path only for `CONVERSATIONS_V3_FAST_FINISH_LONG_PERCENT`
 (default 25) of owners and up to `CONVERSATIONS_V3_FAST_FINISH_LONG_DAILY_SECONDS` (default 7200) of
-their audio per process per UTC day. `off` restores one serial request per unit and the 20-minute bound.
+their audio per UTC day across the fleet; each chunk retry reserves its own seconds before it sends and
+is skipped (`retry_cap`) when they do not fit. `off` restores one serial request per unit and the 20-minute bound.
 
 `CONVERSATIONS_V3_MAX_WINDOW_SECONDS` defaults to 10800. A transcript line
 starting at or after that elapsed time starts a separate v3 stretch. Set the
