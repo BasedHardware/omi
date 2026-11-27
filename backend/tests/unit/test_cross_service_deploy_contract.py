@@ -568,6 +568,188 @@ def test_default_on_wrapper_on_values_flavor(tmp_path: Path, results: Results) -
         ), f"Expected boolean-token violation for typo/invalid token {invalid!r}"
 
 
+def test_boolean_helper_name_requires_suffix_anchor(tmp_path: Path) -> None:
+    for non_helper in ('set_category_default_on_error', 'default_once', 'default_only'):
+        assert not contract._is_boolean_helper(non_helper)
+
+    memories_index = contract._index(contract.Source().read('backend/utils/llm/memories.py'))
+    assert memories_index is not None
+    assert 'set_category_default_on_error' not in memories_index.helpers
+
+    rel = 'backend/config/synthetic_non_boolean_helper.py'
+    source = OverlaySource(
+        tmp_path,
+        {
+            rel: (
+                "UNREAD_ENV = 'SYNTHETIC_NON_BOOLEAN_HELPER_KEY'\n"
+                "def set_category_default_on_error(val):\n"
+                "    return val in {'interesting', 'manual'}\n"
+                "def default_once(val):\n"
+                "    return val\n"
+                "def use_them():\n"
+                "    return (set_category_default_on_error(UNREAD_ENV), default_once(UNREAD_ENV))\n"
+            ),
+        },
+    )
+    assert contract.scan_env_reads(source, [rel]) == {}
+
+
+def test_delegating_default_on_wrapper_uses_fallback_grammar(tmp_path: Path, results: Results) -> None:
+    other_rel = 'backend/config/a_other_default_on.py'
+    rel = 'backend/config/synthetic_delegating_switch.py'
+    key = 'SYNTHETIC_DELEGATING_SWITCH_ENABLED'
+    source = OverlaySource(
+        tmp_path,
+        {
+            other_rel: (
+                "import os\n"
+                "_ON_VALUES = frozenset({'1', 'true', 'on', 'yes', 'enabled'})\n"
+                "def _default_on(name):\n"
+                "    raw = os.getenv(name, '').strip().lower()\n"
+                "    return not raw or raw in _ON_VALUES\n"
+            ),
+            rel: (
+                "def default_on(name):\n"
+                "    return True\n"
+                "def _default_on(name):\n"
+                "    return default_on(name)\n"
+                f"SWITCH_ENV = {key!r}\n"
+                "def enabled():\n"
+                "    return _default_on(SWITCH_ENV)\n"
+            ),
+        },
+    )
+    reads = contract.scan_env_reads(source, [other_rel, rel])
+    read = reads[key]
+    assert read.defaults == {'true'}
+    assert 'true' in read.truthy
+    assert {'true', 'false', '0', 'off'}.issubset(read.compared)
+
+    for valid in ('true', 'false', '0', 'off'):
+        ctx = _context_with_flag(results, reads, key, valid)
+        violations = contract.check_boolean_tokens(ctx)
+        assert not any(v.invariant == 'boolean-token' and v.scope.endswith(f'/{key}') for v in violations)
+
+    ctx = _context_with_flag(results, reads, key, 'flase')
+    violations = contract.check_boolean_tokens(ctx)
+    assert any(v.invariant == 'boolean-token' and v.scope.endswith(f'/{key}') for v in violations)
+
+    for batch_key in (
+        'BATCH_FINAL_PASS_ENABLED',
+        'BATCH_FINAL_PASS_V3_SOURCES_ENABLED',
+        'BATCH_FINAL_PASS_APPEND_CONFLICTING_UNITS_ENABLED',
+        'BATCH_FINAL_PASS_KEEP_RESOLVED_ON_PARTIAL_ENABLED',
+    ):
+        batch_read = results.baseline.readers.all_reads[batch_key]
+        assert batch_read.defaults == {'true'}
+        assert 'true' in batch_read.truthy
+
+
+@pytest.mark.parametrize(
+    'getenv_expr',
+    [
+        "os.getenv(name, 'false')",
+        "(os.getenv(name) or '')",
+    ],
+)
+def test_default_off_wrapper_boolean_tokens(tmp_path: Path, results: Results, getenv_expr: str) -> None:
+    rel = 'backend/config/synthetic_default_off_switch.py'
+    key = 'SYNTHETIC_DEFAULT_OFF_SWITCH_ENABLED'
+    source = OverlaySource(
+        tmp_path,
+        {
+            rel: (
+                "import os\n"
+                f"SWITCH_ENV = {key!r}\n"
+                "def _default_off(name):\n"
+                f"    return {getenv_expr}.strip().lower() in {{'true', '1'}}\n"
+                "def enabled():\n"
+                "    return _default_off(SWITCH_ENV)\n"
+            ),
+        },
+    )
+    reads = contract.scan_env_reads(source, [rel])
+    read = reads[key]
+    assert read.defaults == {'false'}
+    assert read.truthy == {'true', '1'}
+
+    for valid in ('true', '1', 'false', '0', 'off', 'no'):
+        ctx = _context_with_flag(results, reads, key, valid)
+        violations = contract.check_boolean_tokens(ctx)
+        assert not any(v.invariant == 'boolean-token' and v.scope.endswith(f'/{key}') for v in violations)
+
+    for invalid in ('flase', 'enabled'):
+        ctx = _context_with_flag(results, reads, key, invalid)
+        violations = contract.check_boolean_tokens(ctx)
+        assert any(v.invariant == 'boolean-token' and v.scope.endswith(f'/{key}') for v in violations)
+
+
+def test_wrapped_defaults_flow_into_effective_and_edge_declared(
+    tmp_path: Path, results: Results, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    key = 'SYNTHETIC_WRAPPED_EDGE_ENABLED'
+    edge = contract.TaskEdge(
+        id='synthetic-wrapped-edge',
+        route='/v2/synthetic-wrapped',
+        dispatch_when={key: 'true'},
+        target_env='SYNTHETIC_WRAPPED_URL',
+    )
+    monkeypatch.setattr(contract, 'TASK_EDGES', (edge,))
+    prod = results.baseline.models['prod']
+    sample_deploy = prod.deployments['cloud_run/backend']
+
+    on_rel = 'backend/config/synthetic_edge_on.py'
+    on_reads = contract.scan_env_reads(
+        OverlaySource(
+            tmp_path,
+            {
+                on_rel: (
+                    "import os\n"
+                    f"SWITCH_ENV = {key!r}\n"
+                    "def _default_on(name):\n"
+                    "    return os.getenv(name, 'true').lower() not in {'false', '0', 'off'}\n"
+                    "def enabled():\n"
+                    "    return _default_on(SWITCH_ENV)\n"
+                ),
+            },
+        ),
+        [on_rel],
+    )
+    on_readers = replace(
+        results.baseline.readers,
+        all_reads={**results.baseline.readers.all_reads, **on_reads},
+    )
+    assert contract.effective(sample_deploy, key, on_readers) == 'true'
+    assert contract.check_edges_declared(replace(results.baseline, models={'prod': prod}, readers=on_readers)) == []
+
+    off_rel = 'backend/config/synthetic_edge_off.py'
+    off_reads = contract.scan_env_reads(
+        OverlaySource(
+            tmp_path,
+            {
+                off_rel: (
+                    "import os\n"
+                    f"SWITCH_ENV = {key!r}\n"
+                    "def _default_off(name):\n"
+                    "    return os.getenv(name, 'false').lower() in {'true', '1'}\n"
+                    "def enabled():\n"
+                    "    return _default_off(SWITCH_ENV)\n"
+                ),
+            },
+        ),
+        [off_rel],
+    )
+    off_readers = replace(
+        results.baseline.readers,
+        all_reads={**results.baseline.readers.all_reads, **off_reads},
+    )
+    assert contract.effective(sample_deploy, key, off_readers) == 'false'
+    edge_violations = contract.check_edges_declared(
+        replace(results.baseline, models={'prod': prod}, readers=off_readers)
+    )
+    assert [v.key for v in edge_violations] == [f'edge-declared|prod|synthetic-wrapped-edge/{key}']
+
+
 def test_kill_switch_logger_mapping_read_is_in_inventory() -> None:
     key = 'BATCH_POLICY_KILL_SWITCH_LOG_ON_CHANGE_ENABLED'
     reads = contract.scan_env_reads(contract.Source(), ['backend/config/policy/kill_switches.py'])

@@ -220,6 +220,7 @@ GKE_ENTRYPOINTS = {'backend-listen': BACKEND_ENTRYPOINT, 'pusher': 'pusher.main'
 UID_KEY_PATTERN = re.compile(r'(UID|USER|OWNER)S?_?(ALLOW|DENY)?LIST|_UIDS$|COHORT_UIDS|TEST_UIDS')
 FIREBASE_UID_PATTERN = re.compile(r'(?<![A-Za-z0-9])[A-Za-z0-9]{28}(?![A-Za-z0-9])')
 
+# Wrappers such as _ON_VALUES also recognize 'enabled' alongside standard boolean words.
 TRUTHY = frozenset({'true', '1', 'yes', 'on', 'enabled'})
 FALSY = frozenset({'false', '0', 'no', 'off', ''})
 
@@ -627,6 +628,7 @@ def build_model(source: Source, env: str) -> EnvModel:
 # --------------------------------------------------------------------------------------------------
 
 _ENV_KEY = re.compile(r'^[A-Z][A-Z0-9_]{2,}$')
+_BOOLEAN_HELPER = re.compile(r'(?:^|_)default_(?:on|off)$')
 
 
 @dataclass
@@ -648,7 +650,7 @@ def _literal_key(node: ast.AST, constants: dict[str, str]) -> str | None:
 
 
 def _is_boolean_helper(name: str) -> bool:
-    return 'default_on' in name or 'default_off' in name
+    return _BOOLEAN_HELPER.search(name) is not None
 
 
 def _is_env_call(node: ast.AST, constants: dict[str, str], *, reads_env_mapping: bool = False) -> str | None:
@@ -780,13 +782,7 @@ def _extract_helpers(
                             else:
                                 truthy |= toks
                                 compared |= toks | {'0', 'false', 'off', 'no'}
-            if default is None:
-                if 'default_off' in node.name:
-                    default = 'false'
-                else:
-                    default = 'true'
-            if truthy or compared or default is not None:
-                helpers[node.name] = (truthy, compared, default)
+            helpers[node.name] = (truthy, compared, default)
     return helpers
 
 
@@ -843,7 +839,8 @@ def scan_env_reads(source: Source, module_paths: list[str]) -> dict[str, EnvRead
     shared_helpers: dict[str, tuple[set[str], set[str], str | None]] = {}
     for index in indexes.values():
         for name, grammar in index.helpers.items():
-            shared_helpers.setdefault(name, grammar)
+            if grammar[0]:
+                shared_helpers.setdefault(name, grammar)
     reads: dict[str, EnvRead] = {}
     for rel, key, default, boolean in policy_env_reads(source, module_paths):
         read = reads.setdefault(key, EnvRead())
@@ -877,18 +874,17 @@ def scan_env_reads(source: Source, module_paths: list[str]) -> dict[str, EnvRead
                     if name in helpers or _is_boolean_helper(name):
                         wrapper_name = name
                 if wrapper_name:
-                    if wrapper_name in helpers:
-                        h_truthy, h_compared, h_default = helpers[wrapper_name]
+                    h_truthy, h_compared, h_default = helpers.get(wrapper_name, (set(), set(), None))
+                    if h_truthy:
                         read.truthy |= h_truthy
                         read.compared |= h_compared
-                        if h_default is not None:
-                            read.defaults.add(h_default)
-                        else:
-                            read.defaults.add('false' if 'default_off' in wrapper_name else 'true')
                     else:
-                        read.defaults.add('false' if 'default_off' in wrapper_name else 'true')
                         read.truthy.add('true')
                         read.compared |= {'true', 'false', '0', 'off'}
+                    if h_default is not None:
+                        read.defaults.add(h_default)
+                    else:
+                        read.defaults.add('false' if wrapper_name.endswith('default_off') else 'true')
                 else:
                     read.defaults.add(default)
             if isinstance(node, ast.Compare) and len(node.ops) == 1:
