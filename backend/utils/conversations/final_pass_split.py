@@ -142,6 +142,11 @@ def split_segment(segment, words: list[dict], runs: list[Run]) -> Optional[list]
         piece.id = segment.id if k == 0 else split_segment_id(segment.id, k)
         piece.text = text
         piece.start = min(max(start, segment.start), segment.end)
+        if segment.speaker_word_seconds is not None:
+            # Measured speech is per piece: copying the aggregate would count the segment's speech once per piece.
+            piece.speaker_word_seconds = sum(
+                max(0.0, w['timestamp'][1] - w['timestamp'][0]) for w in words[run.first : run.last + 1]
+            )
         pieces.append(piece)
     for a, b in zip(pieces, pieces[1:]):
         b.start = max(b.start, a.start)
@@ -170,11 +175,14 @@ def _is_number(value) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
-def refusal(segment) -> Optional[str]:
-    """Why ``segment`` must not split, or ``None``."""
+def refusal(segment, receipt=None) -> Optional[str]:
+    """Why ``segment`` must not split, or ``None``. A segment-level manual receipt (an assignment or a ``not_me``
+    rejection) is keyed by the segment id: only the first piece would keep it, so such a segment never splits."""
 
     if segment.speaker_label_source == 'manual':
         return 'manual'
+    if segment.id in ((receipt or {}).get('segments') or {}):
+        return 'manual_receipt'
     if segment.original_text is not None:
         return 'corrected_text'
     if segment.translations:
@@ -242,8 +250,11 @@ def unsplit_lines(segments) -> list[dict]:
 
 
 def derived_piece_ids(segments) -> set[str]:
-    """Ids of the pieces after the first in every split run: the obligation key ignores them, so a split never opens
-    a new final-pass obligation for the same unit membership."""
+    """Ids of the pieces after the first in every split run among stored segments (dicts or models): the obligation
+    key ignores them, so a split never opens a new final-pass obligation for the same unit membership."""
 
-    by_id = {s.id: s for s in segments if s.id}
-    return {piece.id for segment_id in by_id for piece in expand_split(segment_id, by_id)[1:]}
+    def get(segment, key):
+        return segment.get(key) if isinstance(segment, dict) else getattr(segment, key, None)
+
+    by_id = {str(get(s, 'id')): s for s in segments if get(s, 'id')}
+    return {str(get(piece, 'id')) for segment_id in by_id for piece in expand_split(segment_id, by_id)[1:]}

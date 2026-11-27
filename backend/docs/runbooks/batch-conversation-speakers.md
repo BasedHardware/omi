@@ -126,7 +126,8 @@ piece keeps the segment id and later pieces take `uuid5('<id>:split:<k>')`, so
 references to the segment still resolve and a later pass reads the pieces back
 (their text must spell the projection segment). Words in a diarizer gap join the
 neighbouring voice while they are at most a quarter of the segment's words.
-Manual, corrected (`original_text`) and translated segments, already-split pieces,
+Manual segments, segments a segment-level manual receipt covers (including a `not_me`
+rejection), corrected (`original_text`) and translated segments, already-split pieces,
 segments of more than eight runs, and segments whose words do not spell their text
 never split; they and segments mostly in a gap abstain, with
 `failed_unassigned_words` if any remain; covered segments may already have changed,
@@ -135,7 +136,9 @@ and recurring learning is suppressed. The result carries `split_segments` and
 recognises a split segment as published (its pieces span the original timing), so a
 replan does not re-add it. Splitting runs only on a conversation's first pass, never on
 the identity-only retry (notes may already cite the segment). Each piece keeps a saved
-sync audio window re-timed to the piece. Kill switch:
+sync audio window re-timed to the piece and its own measured speech seconds. The late
+identity repair skips a conversation holding split pieces (`split_by_final_pass`): it
+regroups by the units' original labels and would merge the pieces back. Kill switch:
 `BATCH_FINAL_PASS_SPLIT_MIXED_SEGMENTS_ENABLED=false` (default on, read per call) stops
 new splits; existing pieces are still read back and relabeled.
 

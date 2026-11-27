@@ -814,7 +814,7 @@ def _run(uid, conversation, receipt, load_prints, apply, failure_context: UnitFa
         reason = (
             'too_many_voices'
             if len(runs) > splitting.MAX_PIECES
-            else 'already_split' if segment_id in split_members else splitting.refusal(stored[segment_id])
+            else 'already_split' if segment_id in split_members else splitting.refusal(stored[segment_id], receipt)
         )
         pieces = None if reason else splitting.split_segment(stored[segment_id], segment_words, runs)
         if pieces is None:

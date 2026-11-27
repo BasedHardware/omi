@@ -1903,3 +1903,39 @@ def test_a_saved_sync_window_moves_with_each_piece():
     assert (first.audio_source['start'], first.audio_source['end']) == (1010, 1012)
     assert (second.audio_source['start'], second.audio_source['end']) == (1012, 1014)
     assert segment.audio_source == {'type': 'sync', 'start': 1010, 'end': 1014}
+
+
+def test_a_segment_level_not_me_receipt_never_splits(lane, monkeypatch, results):
+    original = _six_words(lane)
+    lane.receipts['segments'] = {
+        original[0].id: {'is_user': False, 'person_id': None, 'generation': 2, 'rejection': {'kind': 'not_me'}}
+    }
+    _turns(monkeypatch, (0, 3.65, 'A'), (3.65, 16, 'B'))
+    segments = resolve(lane)
+    assert results[-1]['split_refusals'] == {'manual_receipt': 1}
+    assert [s.id for s in segments] == [s.id for s in original] and not segments[0].is_user
+
+
+def test_measured_speech_is_per_piece():
+    from models.transcript_segment import TranscriptSegment
+
+    segment = TranscriptSegment(id='s', text='one two three four', start=0, end=4, is_user=False)
+    segment.speaker_word_seconds = 3.6
+    words = [
+        {'text': t, 'speaker': v, 'timestamp': [i, i + 0.9]}
+        for i, (t, v) in enumerate(zip(segment.text.split(), 'AABB'))
+    ]
+    first, second = splitting.split_segment(segment, words, splitting.plan_runs(words))
+    assert (first.speaker_word_seconds, second.speaker_word_seconds) == (pytest.approx(1.8), pytest.approx(1.8))
+
+
+def test_the_late_identity_repair_skips_a_conversation_with_split_pieces():
+    raw = {
+        'status': 'completed',
+        'private_cloud_sync_enabled': True,
+        'updated_at': 'revision',
+        'transcript_segments': [{'id': 's', 'text': 'a'}, {'id': splitting.split_segment_id('s', 1), 'text': 'b'}],
+    }
+    assert stage.completed_identity_retry_skip_reason(raw) == 'split_by_final_pass'
+    raw['transcript_segments'] = raw['transcript_segments'][:1]
+    assert stage.completed_identity_retry_skip_reason(raw) is None

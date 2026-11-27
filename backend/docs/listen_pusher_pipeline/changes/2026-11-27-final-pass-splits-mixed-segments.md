@@ -29,6 +29,12 @@ diagnosis of the owner's 24 fresh conversations-v3 rows, 16 final passes ended `
 - Splitting runs only on a conversation's first pass, never on the identity-only retry (`final_pass_retry.run_only`):
   by then structured notes may cite the segment, and a split would narrow the citation to its first piece.
 - A saved sync audio window (`audio_source`) is re-timed for each piece, so each piece keeps its audio proof.
+- Each piece gets its own measured speech seconds (`speaker_word_seconds`), so totals are not counted twice.
+- A segment that a segment-level manual receipt covers (an assignment or a `not_me` rejection) never splits: the
+  receipt is keyed by the segment id and would only cover the first piece.
+- The late identity repair (`refresh_completed_speaker_identity`) skips a conversation holding split pieces
+  (`split_by_final_pass`): it regroups by the units' original labels, which every piece still carries, and would
+  merge the pieces back into one voice.
 - A later pass reads the pieces back, whatever the kill switch: `decode_unit_evidence` recognises the run of stored pieces that a projection
   segment became, checks that they spell its text, and moves its words onto the pieces by token position.
 - The retry obligation key (`final_pass_retry.scope_key`) ignores pieces after the first, so a split never opens a
