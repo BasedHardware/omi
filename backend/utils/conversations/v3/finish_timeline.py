@@ -60,8 +60,8 @@ def samples(row: Mapping[str, Any], now: datetime) -> tuple[Optional[tuple[str, 
     return finish, _seconds_since(row.get('finished_at'), now)
 
 
-def observe(stage: str, row: Mapping[str, Any], now: Optional[datetime] = None) -> None:
-    """Record ``stage`` for ``row`` on both anchors that the row carries. Never raises."""
+def observe(stage: str, row: Any, now: Optional[datetime] = None) -> None:
+    """Record ``stage`` for ``row`` (a row mapping; anything else is ignored) on both anchors it carries. Never raises."""
 
     def run():
         if stage not in STAGES or not isinstance(row, Mapping):

@@ -200,7 +200,7 @@ def test_home_visibility_at_commit_uses_the_home_filters():
 
 
 def test_notes_start_is_observed_only_for_a_first_attempt(meters):
-    finish, ended = meters
+    finish, _ = meters
 
     finish_timeline.observe_notes_started(card(v3_process_attempts=1))
     finish.labels.assert_not_called()
