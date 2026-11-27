@@ -9698,8 +9698,10 @@ publication latency. Clients send `none`, `bg300`, `fg_preview300`, or `fg60`.
 An absent or unrecognized value becomes `unknown`. The value does not control
 admission, processing priority, or custody.
 Clients with holding enabled also send `X-Omi-Upload-Hold-Age-Ms` for a held
-upload. It is the oldest included file's age at send time, as an integer in
-`0..86400000` milliseconds. An absent or malformed age produces no sample.
+upload. It is the oldest included file's age at send time, as an ASCII decimal
+integer in `0..86400000` milliseconds. Leading zeroes are accepted. An absent
+or malformed age produces no sample. The phone-age histogram uses the
+bounded `gate` from the upload trace, with `other` for an absent or malformed trace.
 The optional `X-Omi-Upload-Recovered: 1` header labels a held file recovered
 from the phone journal. Both latency histograms expose `recovered="true"`
 for this exact value and `recovered="false"` for all other values, including

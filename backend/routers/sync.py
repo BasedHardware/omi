@@ -1427,7 +1427,13 @@ async def sync_local_files_v2(
                 # owner is a follow-on, not a batch landing).
                 if intake_evidence.batch_accepted and not intake_evidence.final_pass_owner_followed:
                     record_upload_outcome('batch')
-                    observe_hold_age(x_omi_upload_hold_age_ms, x_omi_upload_hold, upload_recovered)
+                    observe_hold_age(
+                        x_omi_upload_hold_age_ms,
+                        x_omi_upload_hold,
+                        upload_recovered,
+                        upload_trace=x_omi_upload_trace,
+                        received_at=capture_received_at,
+                    )
                 return batch_response
             sequencer_registration_started = False
 

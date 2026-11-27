@@ -99,10 +99,13 @@ rollback expression per state is
 Use H = 60 s for `fg60` and H = 300 s for `bg300` or `fg_preview300`.
 For both histograms, filter to `recovered="false"` for the guard and chart
 `recovered="true"` separately. During the exporter rollout, wait for both
-histograms to expose the label before using this filter. The phone histogram captures age
-through send, including time spent suspended, on each fresh batch admission.
+histograms to expose the label before using this filter. On the phone
+histogram also select `gate=~".+",gate!~"offline|retries_exhausted"`.
+The phone histogram captures age through send, including time spent
+suspended, on each fresh batch admission.
 The server histogram starts at request arrival. The sum of their p90s is the
 rollout guard and is not a directly measured end-to-end p90.
+[Pre-ramp latency receipt](../listen_pusher_pipeline/changes/2026-11-25-mobile-upload-hold-metric.md#pre-ramp-latency-receipt).
 
 Sync exports all three families in its default Cloud Run registry. The worker
 private registry and multiprocess forwarding carry unit creation and server

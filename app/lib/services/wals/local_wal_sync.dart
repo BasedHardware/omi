@@ -2569,24 +2569,30 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     final holdLabel =
         batchHold?.label ?? (MobileBatchUploadHoldGate.enabled() ? MobileBatchUploadHold.indexedLabel : null);
     final initialNowSeconds = _now().millisecondsSinceEpoch ~/ 1000;
-    var wals = _wals
+    final eligibleWals = _wals
         .where((wal) =>
             isAutoUploadEligible(wal, nowSeconds: initialNowSeconds) &&
-            !(batchHold?.isHeld(wal) ?? false) &&
             !_isDiscardedRecording(wal) &&
             (!liveCaptureOnly || isLiveCaptureWal(wal, initialNowSeconds)))
         .toList();
+    final wals = eligibleWals.where((wal) => !(batchHold?.isHeld(wal) ?? false)).toList();
     if (wals.isEmpty) {
-      Logger.debug("All synced!");
-      DebugLogManager.logInfo('Local upload: no files to sync');
-      // No pending work does not mean no retention work: expired synced
-      // copies must still age out even when every WAL is already synced.
+      final heldOnly = eligibleWals.isNotEmpty;
+      if (heldOnly) {
+        DebugLogManager.logEvent('local_upload_held', {'walCount': eligibleWals.length});
+      } else {
+        Logger.debug("All synced!");
+        DebugLogManager.logInfo('Local upload: no files to sync');
+      }
+      // Expired synced copies still age out on a pass with no uploads.
       try {
         await _removeExpiredSyncedCopies();
       } catch (e) {
         Logger.warning('Synced-copy retention sweep failed: $e');
       }
-      return null;
+      return heldOnly
+          ? SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: [], localUploadHeldOnly: true)
+          : null;
     }
 
     if (SyncRateLimiter.instance.isLimited) {

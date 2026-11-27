@@ -38,6 +38,7 @@ class MobileBatchUploadHold {
   var _released = Expando<MobileBatchHoldState>();
   bool _foreground;
   bool _preview = false;
+  bool _disposed = false;
   Timer? _timer;
   DateTime? _lastFlagRefresh;
 
@@ -48,7 +49,7 @@ class MobileBatchUploadHold {
           : MobileBatchHoldState.foreground;
 
   void sealed(Wal wal) {
-    if (!enabled() || wal.recordingSessionId?.isNotEmpty != true) return;
+    if (_disposed || !enabled() || wal.recordingSessionId?.isNotEmpty != true) return;
     final sealedAt = _now();
     // Keep the timestamp through process eviction. The stored hint never
     // reinstates a hold when the WAL index is loaded.
@@ -172,6 +173,12 @@ class MobileBatchUploadHold {
     _pending.clear();
     _released = Expando<MobileBatchHoldState>();
     _lastFlagRefresh = null;
+  }
+
+  /// A buffer may still seal and publish its last file during provider teardown.
+  void dispose() {
+    _disposed = true;
+    clear();
   }
 }
 
