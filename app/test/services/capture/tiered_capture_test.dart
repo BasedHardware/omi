@@ -177,6 +177,33 @@ void main() {
     expect(connection.captureIsCurrent?.call(), isTrue);
   });
 
+  test('an unresolved kill switch gets one bounded refresh retry', () async {
+    AnalyticsManager.resetForTesting();
+    addTearDown(AnalyticsManager.resetForTesting);
+    world.controller.updateRecordingDevice(null);
+    await world.settle();
+    SharedPreferencesUtil().uid = 'capture-test-owner';
+    await SharedPreferencesUtil().saveCustomSttConfig(
+      const CustomSttConfig(provider: SttProvider.customLive, url: 'wss://local-stt.example.test'),
+    );
+    final device = BtDevice(id: 'limitless-retry', name: 'Limitless', type: DeviceType.limitless, rssi: -40);
+    final connection = _WatchedLimitlessConnection();
+    world.deviceConnection = connection;
+    await world.controller.streamDeviceRecording(device: device);
+    await world.settle();
+    expect(connection.watchStarts, 1);
+
+    final adapter = await setRefactorFlags({});
+    await world.settle();
+    expect(connection.captureIsCurrent, isNull, reason: 'an unresolved remote flag keeps recovery gated');
+    adapter.flags['android-custom-live-audio-recovery-kill'] = false;
+
+    await world.elapse(const Duration(seconds: 5));
+    await world.settle();
+    expect(connection.watchStarts, 2);
+    expect(connection.captureIsCurrent?.call(), isTrue);
+  });
+
   test('resolved kill switch prevents a Custom Live watch from being installed', () async {
     await setRefactorFlags({'android-custom-live-audio-recovery-kill': true});
     addTearDown(AnalyticsManager.resetForTesting);

@@ -13,7 +13,7 @@ class FakeDeviceTransport extends DeviceTransport {
   final Map<String, StreamController<List<int>>> _rxControllers = {};
   final StreamController<DeviceTransportState> _stateController = StreamController<DeviceTransportState>.broadcast();
   final List<List<int>> writes = [];
-  void Function(List<int>)? onWrite;
+  FutureOr<void> Function(List<int>)? onWrite;
 
   StreamController<List<int>> _controllerFor(String characteristicUuid) {
     return _rxControllers.putIfAbsent(characteristicUuid, () => StreamController<List<int>>.broadcast());
@@ -53,7 +53,7 @@ class FakeDeviceTransport extends DeviceTransport {
   @override
   Future<void> writeCharacteristic(String serviceUuid, String characteristicUuid, List<int> data) async {
     writes.add(List<int>.from(data));
-    onWrite?.call(data);
+    await onWrite?.call(data);
   }
 
   @override
@@ -1232,6 +1232,87 @@ void main() {
     expect(connection.isBatchMode, isFalse);
     expect(activations, 2, reason: 'successful reconciliation rearms the retained watch');
     expect(transport.writes, hasLength(5), reason: 'one failed mode write is followed by one reconciliation write');
+  });
+
+  test('stale batch mode clears and reconnect resumes realtime after disable failure', () async {
+    final transport = FakeDeviceTransport();
+    final connection = LimitlessDeviceConnection(
+      BtDevice(name: 'Limitless Pendant', id: 'fake-limitless', type: DeviceType.limitless, rssi: -50),
+      transport,
+      setupSettleDelay: Duration.zero,
+      reconnectSettleDelay: Duration.zero,
+    );
+    addTearDown(connection.disconnect);
+    await connection.connect();
+    await connection.enableBatchMode();
+    expect(connection.isBatchMode, isTrue);
+
+    var failOnce = true;
+    transport.onWrite = (_) async {
+      if (!failOnce) return;
+      failOnce = false;
+      transport.emitState(DeviceTransportState.disconnected);
+      await Future<void>.delayed(Duration.zero);
+      throw StateError('transport dropped during mode switch');
+    };
+    await connection.disableBatchMode();
+    expect(connection.isBatchMode, isFalse);
+
+    final reinitialized = Completer<void>();
+    final reconnectMessages = <Object?>[];
+    var sawTimeSync = false;
+    transport.onWrite = (data) {
+      final messageNumber = decodeWrapperCommand(data)['messageNumber'];
+      reconnectMessages.add(messageNumber);
+      if (messageNumber == 6) sawTimeSync = true;
+      if (sawTimeSync && messageNumber == 8 && !reinitialized.isCompleted) reinitialized.complete();
+    };
+    transport.emitState(DeviceTransportState.connected);
+    await reinitialized.future.timeout(const Duration(seconds: 2));
+
+    expect(connection.isBatchMode, isFalse);
+    expect(reconnectMessages, [6, 8]);
+  });
+
+  test('a stale failed reconciliation cannot relatch batch mode after reconnect', () async {
+    final transport = FakeDeviceTransport();
+    final connection = LimitlessDeviceConnection(
+      BtDevice(name: 'Limitless Pendant', id: 'fake-limitless', type: DeviceType.limitless, rssi: -50),
+      transport,
+      setupSettleDelay: Duration.zero,
+      reconnectSettleDelay: Duration.zero,
+    );
+    addTearDown(connection.disconnect);
+    await connection.connect();
+    await connection.enableBatchMode();
+
+    final reconnectTimeSync = Completer<void>();
+    final allowTimeSync = Completer<void>();
+    final reconnectRealtime = Completer<void>();
+    var batchModeWrites = 0;
+    transport.onWrite = (data) async {
+      final messageNumber = decodeWrapperCommand(data)['messageNumber'];
+      if (messageNumber == 6) {
+        if (!reconnectTimeSync.isCompleted) reconnectTimeSync.complete();
+        await allowTimeSync.future;
+      } else if (messageNumber == 8 && batchModeWrites < 2) {
+        batchModeWrites++;
+        if (batchModeWrites == 1) throw StateError('transient mode switch failure');
+        transport.emitState(DeviceTransportState.disconnected);
+        await Future<void>.delayed(Duration.zero);
+        transport.emitState(DeviceTransportState.connected);
+        await reconnectTimeSync.future.timeout(const Duration(seconds: 2));
+        throw StateError('reconciliation failed after reconnect');
+      } else if (messageNumber == 8 && !reconnectRealtime.isCompleted) {
+        reconnectRealtime.complete();
+      }
+    };
+
+    await connection.disableBatchMode();
+    allowTimeSync.complete();
+    await reconnectRealtime.future.timeout(const Duration(seconds: 2));
+
+    expect(connection.isBatchMode, isFalse);
   });
 
   test('Transcribe Later immediately censors a pending Custom Live retry', () async {

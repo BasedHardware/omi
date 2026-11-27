@@ -54,6 +54,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
   bool _closed = false;
   Future<void>? _disconnectOperation;
   bool _isBatchMode = false;
+  int? _batchModeEpoch;
   final Duration _streamHealthWindow;
   final Duration _storageStatusTimeout;
   Timer? _streamHealthTimer;
@@ -163,6 +164,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
     await _flashPageController.close();
     await _buttonController.close();
     _isBatchMode = false;
+    _batchModeEpoch = null;
     await super.disconnect();
   }
 
@@ -286,6 +288,10 @@ class LimitlessDeviceConnection extends DeviceConnection {
   Future<void> _reinitializeAfterReconnect(int epoch) async {
     _realtimeSuppressed = realtimeSuppressionPolicy?.call() ?? _realtimeSuppressed;
     // The native drain engine owns the control characteristic during a flash drain.
+    if (_isBatchMode && _batchModeEpoch != epoch) {
+      _isBatchMode = false;
+      _batchModeEpoch = null;
+    }
     if (_isBatchMode || !_isCurrentSession(epoch)) return;
     try {
       _resetProtocolSessionForReconnect();
@@ -1434,6 +1440,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
   /// Enable batch mode to download stored flash pages (offline recordings)
   Future<void> enableBatchMode() async {
     if (!_isInitialized) return;
+    final epoch = connectionEpoch;
 
     try {
       // Flash drain temporarily owns the stream. Retire the current episode but
@@ -1445,11 +1452,17 @@ class LimitlessDeviceConnection extends DeviceConnection {
       _fragmentBuffer.clear();
       _completedFlashPages.clear();
       _isBatchMode = true;
+      _batchModeEpoch = epoch;
       final cmd = _encodeDownloadFlashPages(batchMode: true, realTime: false);
       await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, cmd);
+      if (!_isCurrentSession(epoch)) return;
       DebugLogManager.logInfo('Limitless batch mode enabled');
     } catch (e) {
-      _isBatchMode = false;
+      if (_batchModeEpoch == epoch) {
+        _isBatchMode = false;
+        _batchModeEpoch = null;
+      }
+      if (!_isCurrentSession(epoch)) return;
       if (!_realtimeSuppressed) _armStreamHealthWatch(reason: 'batch_mode_enable_failed');
       Logger.debug('Limitless: Error enabling batch mode: $e');
       DebugLogManager.logError(e, null, 'Limitless failed to enable batch mode');
@@ -1476,15 +1489,29 @@ class LimitlessDeviceConnection extends DeviceConnection {
           ? _encodeEnableDataStream(enable: false)
           : _encodeDownloadFlashPages(batchMode: false, realTime: true);
       await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, cmd);
+      if (!_isCurrentSession(epoch)) {
+        if (_batchModeEpoch == epoch) {
+          _isBatchMode = false;
+          _batchModeEpoch = null;
+        }
+        return;
+      }
 
       _isBatchMode = false;
+      _batchModeEpoch = null;
       if (!_realtimeSuppressed) _armStreamHealthWatch(reason: 'batch_mode_disabled');
       DebugLogManager.logInfo('Limitless batch mode disabled', {
         'pendingPagesCleared': pendingPages,
         'pendingFragmentsCleared': pendingFragments,
       });
     } catch (e) {
-      if (!_isCurrentSession(epoch)) return;
+      if (!_isCurrentSession(epoch)) {
+        if (_batchModeEpoch == epoch) {
+          _isBatchMode = false;
+          _batchModeEpoch = null;
+        }
+        return;
+      }
       try {
         final reconcileCommand = _realtimeSuppressed
             ? _encodeEnableDataStream(enable: false)
@@ -1492,9 +1519,16 @@ class LimitlessDeviceConnection extends DeviceConnection {
         await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, reconcileCommand);
         if (!_isCurrentSession(epoch)) return;
         _isBatchMode = false;
+        _batchModeEpoch = null;
         if (!_realtimeSuppressed) _armStreamHealthWatch(reason: 'batch_mode_disable_reconciled');
       } catch (reconcileError) {
-        _isBatchMode = true;
+        if (_isCurrentSession(epoch)) {
+          _isBatchMode = true;
+          _batchModeEpoch = epoch;
+        } else if (_batchModeEpoch == epoch) {
+          _isBatchMode = false;
+          _batchModeEpoch = null;
+        }
         DebugLogManager.logError(
           reconcileError,
           null,

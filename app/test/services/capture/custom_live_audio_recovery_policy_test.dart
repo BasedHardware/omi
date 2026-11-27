@@ -1,10 +1,21 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/capture/custom_live_audio_recovery_policy.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../support/refactor_flag_adapter.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+  });
+
   bool disabled({required bool contextAvailable, required bool? killSwitch}) => shouldDisableCustomLiveAudioRecovery(
         buildEnabled: true,
         flagReadContextAvailable: contextAvailable,
@@ -38,6 +49,7 @@ void main() {
   test('refresh keeps an absent kill switch unresolved instead of reporting it off', () async {
     await setRefactorFlags({});
     addTearDown(AnalyticsManager.resetForTesting);
+    await _waitForSettledIdentity();
 
     expect(
       await AnalyticsManager().resolvedBooleanFeatureFlag(
@@ -47,4 +59,34 @@ void main() {
       isNull,
     );
   });
+
+  test('a resolved multivariate arm is not enabled as a boolean kill switch', () async {
+    final adapter = await setRefactorFlags({'multivariate-kill': true});
+    addTearDown(AnalyticsManager.resetForTesting);
+    await _waitForSettledIdentity();
+    adapter.multivariateFlags.add('multivariate-kill');
+
+    expect(
+      await AnalyticsManager().resolvedBooleanFeatureFlag('multivariate-kill', refresh: true),
+      isFalse,
+    );
+  });
+}
+
+Future<void> _waitForSettledIdentity() async {
+  final identity = AnalyticsManager.settledIdentity;
+  if (identity.value != null) return;
+
+  final settled = Completer<void>();
+  void onChanged() {
+    if (identity.value != null && !settled.isCompleted) settled.complete();
+  }
+
+  identity.addListener(onChanged);
+  try {
+    onChanged();
+    await settled.future.timeout(const Duration(seconds: 1));
+  } finally {
+    identity.removeListener(onChanged);
+  }
 }

@@ -11,7 +11,9 @@ class RefactorFlagAdapter
         AnalyticsResolvedFlagAdapter {
   RefactorFlagAdapter(this.flags);
   final Map<String, bool> flags;
+  final Set<String> multivariateFlags = {};
   bool initialized = false;
+  int reloadFailuresRemaining = 0;
   void Function()? onCachedRead;
   @override
   bool get isInitialized => initialized;
@@ -25,17 +27,24 @@ class RefactorFlagAdapter
   @override
   bool isBooleanFeatureEnabledCached(String key) {
     onCachedRead?.call();
-    return flags[key] == true;
+    return flags[key] == true && !multivariateFlags.contains(key);
   }
 
   @override
-  Future<bool> isBooleanFeatureEnabled(String key) async => flags[key] == true;
+  Future<bool> isBooleanFeatureEnabled(String key) async => flags[key] == true && !multivariateFlags.contains(key);
   @override
   Future<bool?> resolvedFeatureEnabled(String key) async => flags[key];
   @override
   Future<bool> isFeatureEnabled(String key) async => flags[key] == true;
   @override
-  Future<bool> reloadFeatureFlags() async => true;
+  Future<bool> reloadFeatureFlags() async {
+    if (reloadFailuresRemaining > 0) {
+      reloadFailuresRemaining--;
+      return false;
+    }
+    return true;
+  }
+
   @override
   Future<Object?> getFeatureFlagPayload(String key) async => null;
   @override
@@ -44,11 +53,11 @@ class RefactorFlagAdapter
   dynamic noSuchMethod(Invocation invocation) => null;
 }
 
-Future<RefactorFlagAdapter> setRefactorFlags(Map<String, bool> flags) async {
+Future<RefactorFlagAdapter> setRefactorFlags(Map<String, bool> flags, {int reloadFailures = 0}) async {
   AnalyticsManager.resetForTesting();
   PackageInfo.setMockInitialValues(
       appName: 'Test', packageName: 'test', version: '1', buildNumber: '1', buildSignature: '');
-  final adapter = RefactorFlagAdapter(flags);
+  final adapter = RefactorFlagAdapter(flags)..reloadFailuresRemaining = reloadFailures;
   AnalyticsManager.configure(adapter);
   await AnalyticsManager.init();
   AnalyticsManager().bindIdentity('synthetic-owner');

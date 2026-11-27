@@ -614,7 +614,8 @@ class AnalyticsManager {
         final boolean = adapter as AnalyticsBooleanFlagAdapter;
         if (refresh && await adapter.reloadFeatureFlags()) {
           if (adapter is AnalyticsResolvedFlagAdapter) {
-            return (adapter as AnalyticsResolvedFlagAdapter).resolvedFeatureEnabled(key);
+            final resolved = await (adapter as AnalyticsResolvedFlagAdapter).resolvedFeatureEnabled(key);
+            if (resolved == null) return null;
           }
           return boolean.isBooleanFeatureEnabledCached(key);
         }

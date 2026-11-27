@@ -288,6 +288,8 @@ class CaptureController extends ChangeNotifier
   int _customLiveAudioRecoveryFlagIdentityEpoch = -1;
   int _customLiveAudioRecoveryFlagGeneration = 0;
   bool _customLiveAudioRecoveryFlagRefreshInFlight = false;
+  int _customLiveAudioRecoveryFlagRetriesForEpoch = 0;
+  Timer? _customLiveAudioRecoveryFlagRetryTimer;
 
   String get _captureEvidenceRoot {
     final sync = _wal.getSyncs().phone;
@@ -2861,6 +2863,7 @@ class CaptureController extends ChangeNotifier
     _recordingTelemetry.observeCustomLiveAudioEligibility();
     if (AnalyticsManager.canResolveBooleanFeatureFlags && _customLiveAudioRecoveryKillSwitchEnabled == null) {
       connection.stopCustomLiveAudioWatch();
+      _recordingTelemetry.observeCustomLiveAudioDetection(enabled: false);
       _refreshCustomLiveAudioKillSwitch();
       return;
     }
@@ -2885,6 +2888,9 @@ class CaptureController extends ChangeNotifier
     _customLiveAudioRecoveryFlagGeneration++;
     _customLiveAudioRecoveryFlagIdentityEpoch = -1;
     _customLiveAudioRecoveryFlagRefreshInFlight = false;
+    _customLiveAudioRecoveryFlagRetriesForEpoch = 0;
+    _customLiveAudioRecoveryFlagRetryTimer?.cancel();
+    _customLiveAudioRecoveryFlagRetryTimer = null;
     _customLiveAudioRecoveryKillSwitchEnabled = null;
     _refreshLimitlessCustomLiveWatch();
   }
@@ -2908,6 +2914,22 @@ class CaptureController extends ChangeNotifier
       }
       _customLiveAudioRecoveryFlagRefreshInFlight = false;
       _customLiveAudioRecoveryKillSwitchEnabled = enabled;
+      if (enabled == null) {
+        if (_customLiveAudioRecoveryFlagRetriesForEpoch == 0) {
+          _customLiveAudioRecoveryFlagRetriesForEpoch = 1;
+          _customLiveAudioRecoveryFlagRetryTimer = _scheduling.once(const Duration(seconds: 5), () {
+            _customLiveAudioRecoveryFlagRetryTimer = null;
+            if (generation != _customLiveAudioRecoveryFlagGeneration ||
+                identityEpoch != AnalyticsManager.identityEpoch) {
+              return;
+            }
+            _customLiveAudioRecoveryFlagIdentityEpoch = -1;
+            _refreshLimitlessCustomLiveWatch();
+          });
+        }
+      } else {
+        _customLiveAudioRecoveryFlagRetriesForEpoch = 0;
+      }
       _refreshLimitlessCustomLiveWatch();
     }());
   }
