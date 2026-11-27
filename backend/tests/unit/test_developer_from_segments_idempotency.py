@@ -497,12 +497,12 @@ def test_postprocess_arrival_adapter_failure_does_not_fail_creation(monkeypatch)
     persisted.assert_called_once()
 
 
-def test_client_session_id_retry_returns_existing_without_processing(monkeypatch):
+def test_client_session_id_alias_replays_completed_without_processing(monkeypatch):
     expected_id = developer._from_segments_conversation_id('uid1', 'local-session-1')
     monkeypatch.setattr(
         conversations_db,
         'get_conversation',
-        MagicMock(return_value={'id': expected_id, 'status': 'processing', 'discarded': False}),
+        MagicMock(return_value={'id': expected_id, 'status': 'completed', 'discarded': False}),
     )
     process = MagicMock()
     monkeypatch.setattr(developer, 'process_conversation', process)
@@ -510,7 +510,7 @@ def test_client_session_id_retry_returns_existing_without_processing(monkeypatch
     response = developer._create_conversation_from_segments('uid1', _request(session_id='local-session-1'))
 
     assert response.id == expected_id
-    assert response.status == 'processing'
+    assert response.status == 'completed'
     assert response.discarded is False
     process.assert_not_called()
 
@@ -598,7 +598,7 @@ def test_completed_ambient_retry_cannot_reclassify_conversation_as_meeting(monke
     )
 
 
-def test_client_session_id_concurrent_claim_loser_returns_existing_without_processing(monkeypatch):
+def test_client_session_id_concurrent_claim_loser_retries_without_processing(monkeypatch):
     expected_id = developer._from_segments_conversation_id('uid1', 'local-session-1')
     monkeypatch.setattr(
         conversations_db,
@@ -609,10 +609,11 @@ def test_client_session_id_concurrent_claim_loser_returns_existing_without_proce
     process = MagicMock()
     monkeypatch.setattr(developer, 'process_conversation', process)
 
-    response = developer._create_conversation_from_segments('uid1', _request(client_session_id='local-session-1'))
+    with pytest.raises(HTTPException) as error:
+        developer._create_conversation_from_segments('uid1', _request(client_session_id='local-session-1'))
 
-    assert response.id == expected_id
-    assert response.status == 'processing'
+    assert error.value.status_code == 503
+    assert raise_site_of(error.value) == 'from_segments_processing_in_flight'
     process.assert_not_called()
 
 
@@ -620,10 +621,11 @@ def test_client_session_id_concurrent_claim_loser_returns_existing_without_proce
     'rollout_mode', [pytest.param('off', id='flag-off'), pytest.param('shadow', id='outside-cohort')]
 )
 @pytest.mark.parametrize('claim_race', [False, True], ids=['existing-claim', 'claim-race'])
-def test_keyed_ios_processing_replay_is_retryable_without_continuation(
-    monkeypatch, segment_api_client, caplog, rollout_mode, claim_race
+@pytest.mark.parametrize(('platform', 'source'), [('ios', 'phone'), ('macos', 'desktop')])
+def test_keyed_processing_replay_is_retryable_without_continuation(
+    monkeypatch, segment_api_client, caplog, rollout_mode, claim_race, platform, source
 ):
-    session = 'keyed-ios-replay'
+    session = 'keyed-replay'
     conversation_id = developer._from_segments_conversation_id('uid1', session)
     row = {'id': conversation_id, 'status': ConversationStatus.processing, 'discarded': False}
     monkeypatch.setenv(refactor_modes.FROM_SEGMENTS_CONTINUED_PROCESSING_MODE_ENV, rollout_mode)
@@ -638,8 +640,8 @@ def test_keyed_ios_processing_replay_is_retryable_without_continuation(
     monkeypatch.setattr(conversations_db, 'get_conversation', lookup)
     monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', claim)
     monkeypatch.setattr(developer, 'process_conversation', process)
-    body = _request(source='phone', client_session_id=session).model_dump(mode='json')
-    headers = {'X-App-Platform': 'ios'}
+    body = _request(source=source, client_session_id=session).model_dump(mode='json')
+    headers = {'X-App-Platform': platform}
     path = '/v1/conversations/from-segments'
 
     active = segment_api_client.post(path, headers=headers, json=body)
