@@ -1,5 +1,6 @@
 """The strongest local lease proofs must have an automatic CI caller."""
 
+from functools import lru_cache
 from pathlib import Path
 import yaml
 import pytest
@@ -152,10 +153,20 @@ def test_invalid_rollout_vector_cannot_partially_write_job_env(monkeypatch, tmp_
     assert target.read_text() == 'PREVIOUS=kept\n'
 
 
+@lru_cache(maxsize=None)
+def _workflow(name):
+    return yaml.safe_load((ROOT / '.github/workflows' / name).read_text())
+
+
+@lru_cache(maxsize=1)
 def _deploy_backend_stack_callers():
+    # Text prefilter keeps this inside the per-test CPU budget: only workflows
+    # that mention the composite are parsed; the parsed step is authoritative.
     callers = []
     for path in sorted((ROOT / '.github/workflows').glob('*.y*ml')):
-        config = yaml.safe_load(path.read_text())
+        if 'actions/deploy-backend-stack' not in path.read_text():
+            continue
+        config = _workflow(path.name)
         for job_name, job in (config.get('jobs') or {}).items():
             for step in job.get('steps', []):
                 if step.get('uses') == './.github/actions/deploy-backend-stack':
@@ -180,7 +191,7 @@ def test_every_deploy_backend_stack_caller_passes_the_shared_lease_vector():
 def test_stack_callers_use_the_same_lease_expressions_as_listen_and_pusher():
     callers = _deploy_backend_stack_callers()
     for workflow in ('gcp_backend_pusher.yml', 'gcp_backend_listen_helm.yml'):
-        config = yaml.safe_load((ROOT / '.github/workflows' / workflow).read_text())
+        config = _workflow(workflow)
         bindings = [
             step['env']
             for job in config['jobs'].values()
