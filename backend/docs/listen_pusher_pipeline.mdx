@@ -109,6 +109,24 @@ transaction rechecks its live state and persists the cut or deferred batch
 request on its recording. A multi-unit batch request can cut only after the full
 native binding has projected. Set the switch to `off` on the API service to restore the lookup-miss 404.
 
+`CONVERSATIONS_V3_FINISH_NEWER_CAPTURE` defaults to `on`. When that Finish resolves to a live
+window, the same transaction reads at most `RECENT_FINISH_LIMIT` (8) recent sources. The newest sealed
+Listen capture that ended after the window's `finished_at`, is not one of its sources, carries
+`has_content`, is unclaimed and passes the recording-Finish checks is the newer capture. If its speech
+has landed, it takes the recording-scoped cut instead of the window tail and the response names it. If
+it is a server-batch capture whose speech has not landed (it may hold only silence), the transaction
+stores the window-tail cut and the capture's recording-scoped request together (two writes, both ledger
+reads first) and the response names the window. An exact tie, a capture already known empty, or one the
+cut declines keeps the window-tail cut. A retry never cuts the tail twice; a finished capture that can
+no longer answer leaves the tail cut rather than a 404. These outcomes count as `newer_*` (and
+`newer_dual_*`) in `omi_conversations_v3_finish_no_pointer_total`. A newer capture that was selected but
+declined the cut counts in `omi_conversations_v3_finish_newer_declined_total{reason}`, and the tail cut that
+answers counts as the tail's outcome. Each live-window Finish stamps its response target (the card the
+answer names; only the window tail in the stored-both case), and that card's first visible manual-end
+settlement observes `omi_conversations_v3_finish_to_visible_seconds{path=tail|newer|newer_dual}` once;
+a stamp older than 2 hours is dropped. Set it to `off` on the API service to restore the window-tail cut
+and skip the read.
+
 `CONVERSATIONS_V3_FAST_FINISH` defaults to `cohort` (the `v3-fast-finish` rollout cohort, empty
 until a member is added). For a member, or for every v3 owner with `on`, a manually
 finished v3 recording of up to 20 minutes is transcribed once through the prerecorded provider
@@ -9700,8 +9718,10 @@ publication latency. Clients send `none`, `bg300`, `fg_preview300`, or `fg60`.
 An absent or unrecognized value becomes `unknown`. The value does not control
 admission, processing priority, or custody.
 Clients with holding enabled also send `X-Omi-Upload-Hold-Age-Ms` for a held
-upload. It is the oldest included file's age at send time, as an integer in
-`0..86400000` milliseconds. An absent or malformed age produces no sample.
+upload. It is the oldest included file's age at send time, as an ASCII decimal
+integer in `0..86400000` milliseconds. Leading zeroes are accepted. An absent
+or malformed age produces no sample. The phone-age histogram uses the
+bounded `gate` from the upload trace, with `other` for an absent or malformed trace.
 The optional `X-Omi-Upload-Recovered: 1` header labels a held file recovered
 from the phone journal. Both latency histograms expose `recovered="true"`
 for this exact value and `recovered="false"` for all other values, including

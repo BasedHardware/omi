@@ -313,7 +313,7 @@ def test_existing_v3_work_drains_for_a_held_out_owner(monkeypatch):
     monkeypatch.setattr(finish, 'finish_no_pointer_enabled', lambda: True)
     monkeypatch.setattr(finish, 'conversations_v3_enabled', switch.conversations_v3_enabled)
     monkeypatch.setattr(finish.conversations_v3_live, 'live_window', lambda uid, **kw: window)
-    monkeypatch.setattr(finish.conversations_v3_live, 'request_finish', lambda uid, wid, **kw: ('cut', 'rec'))
+    monkeypatch.setattr(finish.conversations_v3_live, 'request_finish', lambda uid, wid, **kw: ('cut', 'rec', None))
     monkeypatch.setattr(finish, '_acknowledge', lambda *a: acknowledged.append(a) or 'answer')
     assert finish.finish_live_window('synthetic') == 'answer'
     assert acknowledged == [('synthetic', window, 'cut', 'rec')]
@@ -350,7 +350,7 @@ class _MixedFinish:
         live_db = finish.conversations_v3_live
         monkeypatch.setattr(live_db, 'live_window_by_id', lambda uid, wid, **kw: window if window_live else None)
         monkeypatch.setattr(
-            live_db, 'request_finish', lambda uid, wid, **kw: self.finished.append(wid) or ('cut', 'rec')
+            live_db, 'request_finish', lambda uid, wid, **kw: self.finished.append(wid) or ('cut', 'rec', None)
         )
         monkeypatch.setattr(
             live_db,

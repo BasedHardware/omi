@@ -166,6 +166,7 @@ def admit(
             )
         if not admission.batch_enabled:
             raise AdmissionDisabled('recorded admission policy does not enable batch')
+        record_lane_owner = None
         if binding.record_origin:
             key = f'{binding.owner_id}/{binding.target_conversation_id}'
             if binding.native_record:
@@ -180,6 +181,7 @@ def admit(
                 raise ValueError('record owner is immutable')
             if row.get('record_lane_owner') != expected:
                 tx.patch('conversations', key, {'record_lane_owner': expected})
+            record_lane_owner = expected
         park_allowance = (
             intake_refusal is not None
             and enqueue is None
@@ -204,7 +206,10 @@ def admit(
                     or artifact.get('erasure_requested')
                 ):
                     raise ValueError('audio staging reservation missing or reclaimed')
-                artifact.pop('write_pending_until', None)
+                deadline = artifact.pop('write_pending_until', None)
+                if isinstance(deadline, datetime):
+                    # Admission ends the active upload, but a policy Commit during it still owes erasure.
+                    artifact['late_erasure_pending_until'] = deadline
                 tx.put('artifacts', key, artifact)
             proposal = (source_aliases or {}).get(item.segment_id)
             if proposal is not None:
@@ -232,6 +237,9 @@ def admit(
             if not created and previous_binding != serialized_binding:
                 raise ValueError('existing segment cannot change its immutable intake binding')
             job['projection_binding'] = serialized_binding
+            job['record_origin'] = binding.record_origin or binding.native_record
+            if record_lane_owner is not None:
+                job['record_lane_owner'] = record_lane_owner
             if created and packing_observations and item.segment_id in packing_observations:
                 job['packing_observation'] = packing_observations[item.segment_id]
             if created and binding.native_record:

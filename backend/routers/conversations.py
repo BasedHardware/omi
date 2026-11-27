@@ -8,12 +8,14 @@ a second copy of those codecs here would bypass the at-rest protection.
 
 from utils.generated_compute import require_generated_compute, generated_compute_allowed, generated_compute_scope
 import asyncio
+import contextvars
 import hashlib
 import os
 import time
-from concurrent.futures import Future
+from concurrent.futures import Future, wait
 from contextlib import ExitStack, nullcontext
 from threading import Lock
+from types import SimpleNamespace
 
 from fastapi.responses import StreamingResponse
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, BackgroundTasks, Header
@@ -129,7 +131,14 @@ from utils.episodes.member_notes import open_recording
 from utils.conversations import share_email
 from utils.conversations.meeting_receipt import record_finalized_meeting_receipt
 from utils.integration_telemetry import emit_posthog_event
-from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
+from utils.executors import (
+    conversation_list_executor,
+    db_executor,
+    llm_executor,
+    postprocess_executor,
+    run_blocking,
+    submit_with_context,
+)
 from utils.memory.memory_service import MemoryService
 from utils.metrics import record_lazy_desktop_deferral
 from utils.memory.retraction_scope import retraction_can_be_skipped
@@ -162,10 +171,12 @@ from utils.product_telemetry import emit_product_event
 from services.conversation_frame_evidence import delete_conversation_and_frame_evidence
 from utils.other.list_budget import (
     ListReadBudget,
+    ListReadBudgetExhausted,
     OMI_LIST_TRUNCATED_HEADER,
     OMI_LIST_TRUNCATED_VALUE,
     finish_list_budget,
     list_read_budget_for_request,
+    resolve_list_read_budget_seconds,
 )
 from utils.conversations.calendar_linking import (
     get_overlapping_calendar_event,
@@ -1262,6 +1273,44 @@ def _validate_reprocess_app_selection(uid: str, app_id: str) -> App:
 LEGACY_SEGMENT_INDEX_PREFIX = '#index:'
 
 
+# Finish Firestore and row preparation by 24 seconds, then allow up to two
+# seconds for membership, admissions, and redaction before returning the prefix.
+_LIST_PAGE_READ_SECONDS = 24.0
+_LIST_PAGE_FINISH_SECONDS = 2.0
+
+
+def _log_abandoned_list_page_failure(future: Future) -> None:
+    if future.cancelled():
+        return
+    error = future.exception()
+    if error is not None and not isinstance(error, ListReadBudgetExhausted):
+        logger.error(
+            'conversation_list_abandoned_work_failed',
+            exc_info=(type(error), error, error.__traceback__),
+        )
+
+
+def _within_list_page_deadline(fn, deadline, *, executor):
+    if time.monotonic() >= deadline:
+        raise ListReadBudgetExhausted('deadline')
+    context = contextvars.copy_context()
+    future = executor.submit(context.run, fn)
+    timed_out = False
+    try:
+        done, _ = wait((future,), timeout=max(0.0, deadline - time.monotonic()))
+        if not done or time.monotonic() >= deadline:
+            timed_out = True
+            raise ListReadBudgetExhausted('deadline')
+        return future.result()
+    finally:
+        # Queued work can be cancelled. A running sync call observes the
+        # budget when it returns; list reads live in their own pool so they
+        # cannot starve the DB worker that finalizes the returned prefix.
+        future.cancel()
+        if timed_out and not future.cancelled():
+            future.add_done_callback(_log_abandoned_list_page_failure)
+
+
 @router.get(
     '/v1/conversations',
     response_model=List[Conversation],
@@ -1322,79 +1371,164 @@ def get_conversations(
     # Request-scoped budget: the server-side offset is charged before the
     # query and the page stream runs under the derived per-RPC timeout, so a
     # deep page cannot consume the whole HTTP_GET_TIMEOUT (#11831).
-    budget = list_read_budget_for_request(request, route='conversations')
+    wall_budget = os.getenv('OMI_LIST_PAGE_WALL_BUDGET_ENABLED', 'true').strip().lower() not in {
+        '0',
+        'false',
+        'off',
+        'no',
+    }
+    budget_options = (
+        {'seconds': min(_LIST_PAGE_READ_SECONDS, resolve_list_read_budget_seconds())} if wall_budget else {}
+    )
+    budget = list_read_budget_for_request(request, route='conversations', **budget_options)
+    wall_budget = wall_budget and budget is not None
+    read_deadline = time.monotonic() + min(_LIST_PAGE_READ_SECONDS, budget.remaining_seconds) if wall_budget else None
+    finish_deadline = read_deadline + _LIST_PAGE_FINISH_SECONDS if read_deadline is not None else None
     page: Dict[str, Any] = {}
     reveal = include_discarded or sources or folder_id or starred is not None or statuses != 'processing,completed'
     default_home = not (reveal or start_date or end_date)
-    # Legacy Home only: a v3 owner's Home is built from derived rows, so a held
-    # legacy sync piece there would duplicate them.
-    # A held-out owner (SCA-2918) reads legacy Home: it shows their v3_derived cards too, and their new
-    # legacy pieces held for notes, which v3 Home would hide for the whole capture.
-    v3_home = default_home and conversations_v3_enabled(uid) and not v3_intake_held_out(uid)
-    show_held = default_home and not v3_home
-    requested_mode = request.headers.get(list_page_headers.HOME_MODE_HEADER) if request is not None else None
-    first_page = offset == 0 and not cursor
-    indexed_home = (
-        v3_home
-        and (requested_mode == 'indexed' or (requested_mode == 'auto' and first_page))
-        and home_visibility_index.enabled(uid)
-    )
-    if requested_mode == 'indexed' and not indexed_home:
-        # The gate was removed. An indexed continuation cannot use the legacy offset.
-        offset, cursor = 0, None
-    if requested_mode in {'auto', 'legacy', 'indexed'} and response is not None:
-        response.headers[list_page_headers.HOME_MODE_HEADER] = 'indexed' if indexed_home else 'legacy'
+    # A v3 Home is built from derived rows. Intake holdouts stay on legacy Home,
+    # which also shows their v3-derived cards and legacy pieces held for notes.
     read_started = time.monotonic()
-    conversations = conversations_db.get_conversations_without_photos(
-        uid,
-        limit,
-        offset,
-        cursor=cursor,
-        cursor_page=page,
-        include_discarded=include_discarded,
-        statuses=status_filter,
-        sources=source_list,
-        start_date=start_date,
-        end_date=end_date,
-        folder_id=folder_id,
-        starred=starred,
-        budget=budget,
-        list_fields_only=True,
-        presentation=True,
-        include_recordings=status_filter == ['in_progress'],
-        capture_only=status_filter == ['in_progress'],
-        # A date range alone is still Home: the day view is Home's own drill-in,
-        # so it hides what Home hides. Explicit reveal filters still opt out.
-        hide_home=not reveal,
-        show_held=show_held,
-        indexed_home=indexed_home,
-    )
+    prepared = []
+    read_mode = 'legacy'
+    requested_mode = request.headers.get(list_page_headers.HOME_MODE_HEADER) if request is not None else None
+
+    def read_page():
+        nonlocal read_mode
+        v3_home = default_home and conversations_v3_enabled(uid) and not v3_intake_held_out(uid)
+        show_held = default_home and not v3_home
+        indexed_home = (
+            v3_home
+            and (requested_mode == 'indexed' or (requested_mode == 'auto' and offset == 0 and not cursor))
+            and home_visibility_index.enabled(uid)
+        )
+        read_mode = 'indexed' if indexed_home else 'legacy'
+        # An indexed continuation cannot use the legacy offset after the gate is removed.
+        page_offset, page_cursor = (0, None) if requested_mode == 'indexed' and not indexed_home else (offset, cursor)
+        read_options = {'metadata_only': True, 'on_prepared': record_prepared} if wall_budget else {}
+        raw = conversations_db.get_conversations_without_photos(
+            uid,
+            limit,
+            page_offset,
+            cursor=page_cursor,
+            cursor_page=page,
+            include_discarded=include_discarded,
+            statuses=status_filter,
+            sources=source_list,
+            start_date=start_date,
+            end_date=end_date,
+            folder_id=folder_id,
+            starred=starred,
+            budget=budget,
+            list_fields_only=True,
+            presentation=True,
+            include_recordings=status_filter == ['in_progress'],
+            capture_only=status_filter == ['in_progress'],
+            # A date range alone is Home's own drill-in.
+            hide_home=not reveal,
+            show_held=show_held,
+            indexed_home=indexed_home,
+            **read_options,
+        )
+        return raw, page.copy(), show_held
+
+    def record_prepared(row, checkpoint):
+        prepared.append((row, checkpoint))
+
+    try:
+        raw, page_result, show_held = (
+            _within_list_page_deadline(read_page, read_deadline, executor=conversation_list_executor)
+            if wall_budget
+            else read_page()
+        )
+        scanned = prepared.copy()
+        # The production reader publishes every accepted row. An empty scan
+        # may still advance over hidden rows, represented by page_result.
+        rows = [row for row, _ in scanned if row is not None] if scanned else raw
+    except ListReadBudgetExhausted as error:
+        budget.mark_exhausted(error.reason)
+        record_fallback(
+            component='firestore_read',
+            from_mode='complete_page',
+            to_mode='truncated_prefix',
+            reason='other',
+            outcome='degraded',
+            log=logger,
+        )
+        scanned = prepared.copy()
+        rows = [row for row, _ in scanned if row is not None]
+        # A wall deadline can expire before the reader publishes its first
+        # checkpoint. Keep the caller at the same offset and report that the
+        # incomplete scan may have more rows, so pagination can retry it.
+        page_result = scanned[-1][1] if scanned else {'storage_rows': 0, 'has_more': True}
+        show_held = default_home and read_mode == 'legacy'
 
     read_done = time.monotonic()
-    conversations = home_membership.project_list(
-        uid,
-        conversations,
-        request,
-        response,
-        filtered=bool(
-            include_discarded or sources or folder_id or starred is not None or statuses != 'processing,completed'
-        ),
-    )
-    if response is not None:
-        list_page_headers.apply(response, page)
-    _heal_locked_conversations_if_eligible(uid, conversations)
-    admissions = transcribing_hold.read_admissions(uid, conversations, budget=budget)
-    conversations = [
-        historical_projection.project(
-            transcribing_hold.project(
-                home_step.project(row, show_held=show_held),
-                home_list=True,
-                admission=admissions.get(row.get('id')),
+    checkpoints = {id(row): checkpoint for row, checkpoint in scanned if row is not None}
+    finished = []
+    staged_response = SimpleNamespace(headers={}) if response is not None else None
+
+    def check_finish_deadline():
+        if finish_deadline is not None and time.monotonic() >= finish_deadline:
+            raise ListReadBudgetExhausted('deadline')
+
+    def finish_page():
+        check_finish_deadline()
+        retained = home_membership.project_list(uid, rows, request, staged_response, filtered=bool(reveal))
+        check_finish_deadline()
+        if not wall_budget or (not budget.truncated and budget.remaining_seconds > _LIST_PAGE_FINISH_SECONDS):
+            _heal_locked_conversations_if_eligible(uid, retained)
+        check_finish_deadline()
+        admissions = transcribing_hold.read_admissions(uid, retained, budget=budget)
+        for row in retained:
+            check_finish_deadline()
+            projected = historical_projection.project(
+                transcribing_hold.project(
+                    home_step.project(row, show_held=show_held),
+                    home_list=True,
+                    admission=admissions.get(row.get('id')),
+                )
             )
+            if wall_budget:
+                redact_conversations_for_list([projected])
+                check_finish_deadline()
+            finished.append((projected, checkpoints.get(id(row))))
+        if not wall_budget:
+            redact_conversations_for_list([row for row, _ in finished])
+        return dict(staged_response.headers) if staged_response is not None else {}
+
+    try:
+        headers = (
+            _within_list_page_deadline(finish_page, finish_deadline, executor=db_executor)
+            if wall_budget
+            else finish_page()
         )
-        for row in conversations
-    ]
-    redact_conversations_for_list(conversations)
+        conversations = [row for row, _ in finished]
+    except ListReadBudgetExhausted as error:
+        budget.mark_exhausted(error.reason)
+        record_fallback(
+            component='conversation_finalization',
+            from_mode='complete_page',
+            to_mode='truncated_prefix',
+            reason='other',
+            outcome='degraded',
+            log=logger,
+        )
+        prefix = finished.copy()
+        conversations = [row for row, _ in prefix]
+        page_result = (prefix[-1][1] if prefix else None) or {
+            'storage_rows': 0,
+            'has_more': bool(scanned) or bool(page_result.get('has_more')),
+        }
+        headers = {}
+
+    if response is not None:
+        for name, value in headers.items():
+            response.headers[name] = value
+        if requested_mode in {'auto', 'legacy', 'indexed'}:
+            response.headers[list_page_headers.HOME_MODE_HEADER] = read_mode
+        list_page_headers.apply(response, page_result)
     if budget.truncated and response is not None:
         response.headers[OMI_LIST_TRUNCATED_HEADER] = OMI_LIST_TRUNCATED_VALUE
     budget.observe('truncated' if budget.truncated else 'complete')
@@ -1403,12 +1537,12 @@ def get_conversations(
         'conversation_list_read home=%s indexed_home=%s paged=%s limit=%d docs=%s storage_rows=%s hidden=%s rows=%d '
         'truncated=%s read_ms=%d total_ms=%d',
         default_home,
-        indexed_home,
+        read_mode == 'indexed',
         'cursor' if cursor else ('offset' if offset else 'first'),
         limit,
         getattr(budget, 'docs_scanned', None),
-        page.get('storage_rows'),
-        page.get('hidden_rows'),
+        page_result.get('storage_rows'),
+        page_result.get('hidden_rows'),
         len(conversations),
         budget.truncated,
         (read_done - read_started) * 1000,

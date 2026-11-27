@@ -14,7 +14,7 @@ from typing import Any, Callable, Literal, TypedDict, cast
 
 from firebase_admin import auth as firebase_auth
 
-from database import vector_db
+from database import speaker_evidence_verification, vector_db
 from database.sync_jobs import renew_job_run_lock
 from database import _client as database_client
 from database.legal_holds import (
@@ -649,7 +649,10 @@ def background_wipe_user_data(
 def enqueue_deletion_wipe(uid: str, wipe_job_id: str):
     """Dispatch the account-deletion wipe using the configured durable mechanism."""
     if is_account_deletion_dispatch_enabled() is True:
-        enqueue_account_deletion_wipe(wipe_job_id)
+        if speaker_evidence_verification.enabled_for(uid) is True:
+            enqueue_account_deletion_wipe(wipe_job_id, verification_uid=uid)
+        else:
+            enqueue_account_deletion_wipe(wipe_job_id)
         return
     if go_queue_erase_required():
         raise RuntimeError('Go queue erase requires Cloud Tasks account deletion dispatch')

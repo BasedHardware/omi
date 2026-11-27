@@ -5,6 +5,7 @@ Provides shared executors with strict separation (bulkhead pattern):
   small session/code cache reads. Must never starve — gates every request.
 - quiet_replay_executor: bounded quiet-check replay leaves, separate from the DB coordinator.
 - db_executor: Firestore CRUD and Redis data mutations. High volume, moderate latency.
+- conversation_list_executor: deadline-bounded conversation list scans and row preparation.
 - record_barrier_executor: pusher recording custody transactions, isolated from
   integrations and webhook DB work even during Firestore retries.
 - context_executor: optional context reads and fresh mount fences, four workers,
@@ -284,6 +285,14 @@ critical_executor = MonitoredThreadPoolExecutor(
 db_executor = MonitoredThreadPoolExecutor(
     name="db", max_workers=int(os.getenv('PUSHER_DB_EXECUTOR_WORKERS', '32')), thread_name_prefix="db"
 )
+# List row decoding can outlive the HTTP request and cannot be cancelled once
+# it enters a synchronous Firestore or correction-overlay call. Keep those
+# abandoned reads away from the DB pool used to finalize their successful prefix.
+conversation_list_executor = MonitoredThreadPoolExecutor(
+    name="conversation_list",
+    max_workers=int(os.getenv('CONVERSATION_LIST_EXECUTOR_WORKERS', '32')),
+    thread_name_prefix='conversation-list',
+)
 # Optional read-cache checks cannot queue behind, or consume, serving DB workers.
 # Shadow allowance IO cannot occupy the serving DB pool or grow an unbounded queue.
 free_allowance_executor = MonitoredThreadPoolExecutor(
@@ -399,6 +408,7 @@ _ALL_EXECUTORS = [
     quiet_replay_executor,
     critical_executor,
     db_executor,
+    conversation_list_executor,
     free_allowance_executor,
     read_cache_shadow_executor,
     record_barrier_executor,

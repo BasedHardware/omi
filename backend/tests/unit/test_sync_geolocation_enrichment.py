@@ -60,6 +60,7 @@ def _build_pipeline_fakes() -> dict:
     importlib.import_module('utils.stt.transcript_admission')
     importlib.import_module('utils.batch_pipeline.language_metrics')
     importlib.import_module('utils.observability.sync_phases')
+    importlib.import_module('utils.sync.capture_end')
     fakes: dict = {}
 
     for parent in ('database', 'models'):

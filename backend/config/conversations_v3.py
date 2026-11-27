@@ -95,6 +95,12 @@ def finish_no_pointer_enabled() -> bool:
     return os.getenv('CONVERSATIONS_V3_FINISH_NO_POINTER', 'on').strip().lower() not in {'off', 'false', '0', 'no'}
 
 
+def finish_newer_capture_enabled() -> bool:
+    """Default on. A live-window Finish cuts a capture that sealed after the window's last speech and
+    no window holds yet. Off cuts the window tail as before and skips the recent-capture read."""
+    return os.getenv('CONVERSATIONS_V3_FINISH_NEWER_CAPTURE', 'on').strip().lower() not in {'off', 'false', '0', 'no'}
+
+
 def live_recap_enabled(uid: str) -> bool:
     """Only explicit authenticated testers. Empty or invalid config closes the whole cohort."""
     raw = os.getenv('CONVERSATIONS_V3_LIVE_RECAP_COHORT', '')

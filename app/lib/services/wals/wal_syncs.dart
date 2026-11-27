@@ -507,16 +507,19 @@ class WalSyncs implements IWalSync {
       resp.localUploadFailures += partialRes.localUploadFailures;
       resp.localUploadPermanentFailures += partialRes.localUploadPermanentFailures;
       resp.localUploadPermanentError ??= partialRes.localUploadPermanentError;
+      resp.localUploadHeldOnly = partialRes.localUploadHeldOnly && (preDrainResult?.localUploadHeldOnly ?? true);
     }
 
     // Keep the device failure visible after the phone ledger has had its turn.
     // The original device record is still pending; this is not a completed sync.
     if (deviceError != null) Error.throwWithStackTrace(deviceError, deviceStack!);
 
-    DebugLogManager.logEvent('sync_completed', {
-      'newConversations': resp.newConversationIds.length,
-      'updatedConversations': resp.updatedConversationIds.length,
-    });
+    if (!resp.localUploadHeldOnly) {
+      DebugLogManager.logEvent('sync_completed', {
+        'newConversations': resp.newConversationIds.length,
+        'updatedConversations': resp.updatedConversationIds.length,
+      });
+    }
 
     return resp;
   }

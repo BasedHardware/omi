@@ -90,7 +90,7 @@ def history(tmp_path_factory):
     control.write_text("# control v2\n")
     changed_controls = commit("new deployment control")
     policy_commits = {}
-    for kind in ("pusher", "config_map", "chart", "alert", "missing"):
+    for kind in ("pusher", "config_map", "chart", "alert", "missing", "inverse_helper", "inverse_dependency"):
         _git(repository, "checkout", "-q", "--detach", workflow)
         if kind in {"pusher", "config_map"}:
             changed = yaml.safe_load(manifest.read_text())
@@ -98,6 +98,12 @@ def history(tmp_path_factory):
             manifest.write_text(yaml.safe_dump(changed))
         elif kind == "missing":
             manifest.unlink()
+        elif kind in {"inverse_helper", "inverse_dependency"}:
+            # The canary inverse receipt names its producer; its code must match the workflow revision.
+            name = "pusher_canary_inverse.py" if kind == "inverse_helper" else "pusher_image_rehearsal.py"
+            path = repository / ".github/scripts" / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("# changed canary inverse producer\n")
         else:
             relative = "pusher/values.yaml" if kind == "chart" else "monitoring/alerts/policy.yaml"
             path = repository / "backend/charts" / relative
@@ -160,7 +166,9 @@ def test_changed_or_stale_deployment_controls_refuse(admitted_history):
         h.verifier.admit_source(h.repository, release_sha=h.source, workflow_sha=h.changed_controls)
 
 
-@pytest.mark.parametrize("kind", ["pusher", "config_map", "chart", "alert", "missing"])
+@pytest.mark.parametrize(
+    "kind", ["pusher", "config_map", "chart", "alert", "missing", "inverse_helper", "inverse_dependency"]
+)
 def test_runtime_and_monitoring_policy_cannot_be_downgraded_by_a_pin(admitted_history, kind):
     h = admitted_history
     changed = h.policy_commits[kind]

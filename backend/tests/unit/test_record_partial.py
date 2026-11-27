@@ -447,8 +447,8 @@ async def test_continuation_intake_rechecks_after_staging_race(source, audio, mo
     await audio.drain()
     original = audio.artifacts.stage_audio
 
-    def racing(item, body):
-        uri = original(item, body)
+    def racing(item, body, *, record_origin, record_lane_owner):
+        uri = original(item, body, record_origin=record_origin, record_lane_owner=record_lane_owner)
         if refusal == 'byok':
             set_byok(source)
         else:
@@ -901,8 +901,8 @@ async def test_producer_starts_during_staging_prevents_intake_commit(source, aud
     await audio.drain()
     original = audio.artifacts.stage_audio
 
-    def racing(item, body):
-        uri = original(item, body)
+    def racing(item, body, *, record_origin, record_lane_owner):
+        uri = original(item, body, record_origin=record_origin, record_lane_owner=record_lane_owner)
         set_record_upload_pending('synthetic', 'record', 'late', True, firestore_client=source[1])
         return uri
 

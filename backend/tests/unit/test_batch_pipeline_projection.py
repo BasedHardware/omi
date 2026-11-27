@@ -1256,7 +1256,17 @@ def test_committed_transcript_signals_episode_before_playback_or_enrichment(bind
 
 
 def native_finish_completion(
-    monkeypatch, db, uid, cid, unit_count, *, empty_outcome=None, native_record=True, settle_allowance=None
+    monkeypatch,
+    db,
+    uid,
+    cid,
+    unit_count,
+    *,
+    empty_outcome=None,
+    native_record=True,
+    settle_allowance=None,
+    admitted_binding=None,
+    namespace='synthetic',
 ):
     """Supply ready sibling fixtures; use the real completion transaction and ledger writer."""
     from contextlib import nullcontext
@@ -1267,9 +1277,8 @@ def native_finish_completion(
     monkeypatch.setattr(completion, 'writing', lambda *_: nullcontext())
     monkeypatch.setattr(completion, 'record_notes_eager_enabled', lambda: False)
     monkeypatch.setattr(completion.capture_end, 'enabled', lambda: False)
-    namespace = 'synthetic'
     content, first = record_identity(uid, cid)
-    binding = ProjectionBinding(
+    binding = admitted_binding or ProjectionBinding(
         uid,
         'bp_' + content,
         content,
@@ -1278,13 +1287,16 @@ def native_finish_completion(
         record_origin=native_record,
         native_record=native_record,
     )
-    ledger = sync_content_ledger_ref(db, uid, content)
-    db.rows[ledger.path] = {
-        'status': 'processing',
-        'dispatch_protocol': 'batch_v1',
-        'job_id': binding.job_id,
-        'batch_pipeline': {'segment_ids': list(binding.segment_ids)},
-    }
+    ledger = sync_content_ledger_ref(db, uid, binding.content_id)
+    db.rows.setdefault(
+        ledger.path,
+        {
+            'status': 'processing',
+            'dispatch_protocol': 'batch_v1',
+            'job_id': binding.job_id,
+            'batch_pipeline': {'segment_ids': list(binding.segment_ids)},
+        },
+    )
     for sid in binding.segment_ids:
         db.rows[f'{namespace}_jobs', sid] = {'projection_binding': asdict(binding), 'duration_seconds': 3.0}
         db.rows[f'{namespace}_results', sid] = {
@@ -1298,6 +1310,7 @@ def native_finish_completion(
         }
 
     store = _ledger_completion_store(db)
+    store.store.namespace = namespace
     session = Mock(job={}, ledger_ref=ledger)
     session.prepare.side_effect = lambda tx, **_: setattr(session, 'ledger', ledger.get(transaction=tx).to_dict())
     monkeypatch.setattr(store, 'session', lambda *a, **k: session)
@@ -1307,7 +1320,7 @@ def native_finish_completion(
     accounting = {'seconds': 0.0 if empty_outcome else float(unit_count), 'updates': {}}
 
     def complete(now):
-        return store.complete(first, binding, now, accounting)
+        return store.complete(binding.segment_ids[0], binding, now, accounting)
 
     return complete, ledger.path, [db.rows[f'{namespace}_results', sid]['projection'] for sid in binding.segment_ids]
 
