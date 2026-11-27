@@ -197,7 +197,7 @@ fallback reports `component=stt_prerecorded,from=soniox,to=modulate,outcome=degr
 and logs `event=prerecorded_soniox_multilingual outcome=fallback kind=<kind>`. An empty
 Soniox transcript is the answer; legacy sync's bounded empty retry of the same audio then runs
 Velma, not Soniox again. A Soniox-first attempt also disables the Modulate credit-refusal hop for
-that audio, so Soniox never receives it twice. Soniox's language is the one with the most text.
+that audio, so Soniox never receives it twice.
 
 Files over 300 s (Soniox's client deadline is 120 s), a process already running 8 Soniox-first
 calls (the file goes to Velma without waiting), retries (`attempts > 0`), held-piece recovery, prompt verification,

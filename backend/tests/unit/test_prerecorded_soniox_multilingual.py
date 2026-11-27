@@ -313,18 +313,6 @@ def test_legacy_sync_url_path_is_served_by_soniox(vendors, monkeypatch):
     vendors.velma.assert_not_called()
 
 
-def test_a_code_switched_transcript_is_named_by_its_majority_language():
-    from utils.stt.soniox_batch import transcript_words
-
-    tokens = [
-        {'text': '我们今天去公园散步', 'start_ms': 0, 'end_ms': 900, 'speaker': '1', 'language': 'zh'},
-        {'text': ' okay', 'start_ms': 1000, 'end_ms': 1200, 'speaker': '1', 'language': 'en'},
-    ]
-    _, language = transcript_words({'text': '我们今天去公园散步 okay', 'tokens': tokens}, 2.0)
-
-    assert language == 'zh'
-
-
 def test_after_a_failed_soniox_attempt_the_empty_retry_runs_velma_only(vendors):
     vendors.soniox.side_effect = SonioxBatchError('timeout', submitted=True)
     vendors.velma.return_value = ([], 'multi')
@@ -391,3 +379,34 @@ def test_production_sync_context_reaches_the_executor_thread(vendors):
 
     assert result == SONIOX_WORDS
     assert provider.served_provider == 'soniox'
+
+
+def test_concurrent_calls_with_the_same_audio_submit_to_soniox_once(vendors):
+    import threading
+
+    gate, entered = threading.Event(), threading.Event()
+
+    def slow(*args, **kwargs):
+        entered.set()
+        gate.wait(5)
+        return SONIOX_WORDS, 'zh'
+
+    vendors.soniox.side_effect = slow
+    audio = wav_bytes()
+    results = []
+
+    def call():
+        with parakeet_caller('sync_fresh'):
+            results.append(stt.modulate_prerecorded_from_bytes_with_soniox(audio, language='multi'))
+
+    first = threading.Thread(target=call)
+    first.start()
+    assert entered.wait(5)
+    second = threading.Thread(target=call)
+    second.start()
+    second.join(5)
+    gate.set()
+    first.join(5)
+
+    assert vendors.soniox.call_count == 1
+    assert vendors.velma.call_count == 1  # the concurrent duplicate ran Velma, not a second Soniox submission

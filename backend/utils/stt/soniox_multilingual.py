@@ -61,20 +61,24 @@ _TRIED_LOCK = threading.Lock()
 FAILED = object()
 
 
-def _seen_recently(digest: str) -> bool:
+def _claim(digest: str) -> bool:
+    """Record an attempt on this audio; False when it was already attempted recently. One lock: two concurrent
+    calls with the same audio cannot both claim it."""
     now = time.monotonic()
     with _TRIED_LOCK:
         while _TRIED and next(iter(_TRIED.values())) < now - TRIED_SECONDS:
             _TRIED.popitem(last=False)
-        return digest in _TRIED
-
-
-def _remember(digest: str) -> None:
-    with _TRIED_LOCK:
-        _TRIED[digest] = time.monotonic()
-        _TRIED.move_to_end(digest)
+        if digest in _TRIED:
+            return False
+        _TRIED[digest] = now
         while len(_TRIED) > 2048:
             _TRIED.popitem(last=False)
+        return True
+
+
+def _release(digest: str) -> None:
+    with _TRIED_LOCK:
+        _TRIED.pop(digest, None)
 
 
 _REASON_BY_KIND = {
@@ -104,12 +108,12 @@ def transcribe(audio_bytes: bytes, *, language: Optional[str], diarize: bool) ->
     Soniox submission); or None when Soniox was not attempted (run Velma exactly as before)."""
     duration = wav_duration_seconds(audio_bytes)
     digest = hashlib.sha256(audio_bytes).hexdigest()
-    if not 0 < duration <= MAX_SECONDS or _seen_recently(digest):
+    if not 0 < duration <= MAX_SECONDS or not _claim(digest):
         return None
     if not _IN_FLIGHT.acquire(blocking=False):
+        _release(digest)  # never attempted: a later call may still try Soniox
         logger.info('event=prerecorded_soniox_multilingual outcome=skipped reason=in_flight_cap')
         return None
-    _remember(digest)
     try:
         words, detected = soniox_transcribe(
             audio_bytes,
