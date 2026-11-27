@@ -168,6 +168,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
     _isBatchMode = false;
     _batchDrainActive = false;
     _batchModeEpoch = null;
+    _unconfirmedStoredPageIndices.clear();
     await super.disconnect();
   }
 
@@ -605,15 +606,22 @@ class LimitlessDeviceConnection extends DeviceConnection {
               foundAudioField = true;
               final storageBuffer = payload.sublist(valueStart, pos);
               final pageFrames = _extractOpusFramesFromFlashPage(storageBuffer);
-              storedFrames.addAll(pageFrames);
               if (_batchDrainActive && !_isBatchMode && pageFrames.isNotEmpty) {
                 final pageIndex = _extractStorageBufferPageIndex(storageBuffer);
-                if (pageIndex != null) _unconfirmedStoredPageIndices.add(pageIndex);
-                DebugLogManager.logEvent('limitless_stored_frames_dropped', {
-                  'frames': pageFrames.length,
-                  'pageIndex': pageIndex,
-                  'drainActive': true,
-                });
+                if (pageIndex == null) {
+                  // Without an index there is no safe ACK barrier to protect
+                  // this page, so preserve its frames in the live delivery path.
+                  storedFrames.addAll(pageFrames);
+                } else {
+                  _unconfirmedStoredPageIndices.add(pageIndex);
+                  DebugLogManager.logEvent('limitless_stored_frames_dropped', {
+                    'frames': pageFrames.length,
+                    'pageIndex': pageIndex,
+                    'drainActive': true,
+                  });
+                }
+              } else {
+                storedFrames.addAll(pageFrames);
               }
             } else if (fieldNumber == 4) {
               foundAudioField = true;
@@ -634,10 +642,10 @@ class LimitlessDeviceConnection extends DeviceConnection {
     }
 
     if (!foundAudioField) return false;
-    // During reconnect the active drain's mode is unconfirmed. Keep stored
-    // pages out of the live stream and cap ACKs until the page is replayed.
-    if (_batchDrainActive && !_isBatchMode) storedFrames.clear();
-    _publishAudioFrames(storedFrames, fromRealtimeStream: false);
+    // During reconnect, indexed pages in an active drain are withheld from the
+    // live stream and ACK-capped until replay. In other modes, stored frames can
+    // represent live progress and keep the recovery watchdog from false stalls.
+    _publishAudioFrames(storedFrames, fromRealtimeStream: !(_batchDrainActive && !_isBatchMode));
     _publishAudioFrames(liveFrames, fromRealtimeStream: true);
     return true;
   }
@@ -1504,8 +1512,8 @@ class LimitlessDeviceConnection extends DeviceConnection {
     return _encodeBleWrapper(cmd);
   }
 
-  Future<void> acknowledgeProcessedData(int upToIndex) async {
-    if (!_isInitialized) return;
+  Future<int?> acknowledgeProcessedData(int upToIndex) async {
+    if (!_isInitialized) return null;
 
     try {
       var acknowledgedIndex = upToIndex;
@@ -1518,9 +1526,9 @@ class LimitlessDeviceConnection extends DeviceConnection {
             'acknowledgedIndex': acknowledgedIndex,
             'lowestUnconfirmedPageIndex': lowestUnconfirmed,
           });
-          if (acknowledgedIndex <= _lastAcknowledgedIndex) return;
         }
       }
+      if (acknowledgedIndex <= _lastAcknowledgedIndex) return _lastAcknowledgedIndex;
       final ackCmd = _encodeAcknowledgeProcessedData(acknowledgedIndex);
       await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, ackCmd);
       Logger.debug('Limitless: Acknowledged processed data up to index $acknowledgedIndex');
@@ -1529,9 +1537,11 @@ class LimitlessDeviceConnection extends DeviceConnection {
         'lastAcknowledgedIndex': _lastAcknowledgedIndex,
       });
       _lastAcknowledgedIndex = acknowledgedIndex;
+      return acknowledgedIndex;
     } catch (e) {
       Logger.debug('Limitless: Error sending acknowledgment: $e');
       DebugLogManager.logError(e, null, 'Limitless ACK failed', {'upToIndex': upToIndex});
+      return null;
     }
   }
 

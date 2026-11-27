@@ -2817,6 +2817,18 @@ class CaptureController extends ChangeNotifier
     _limitlessCustomLiveSocketUnavailable = false;
   }
 
+  void _cancelCustomLiveAudioFlagRetry() {
+    _customLiveAudioRecoveryFlagGeneration++;
+    _customLiveAudioRecoveryFlagIdentityEpoch = -1;
+    _customLiveAudioRecoveryFlagRefreshInFlight = false;
+    _customLiveAudioRecoveryFlagFetchRetriesForEpoch = 0;
+    _customLiveAudioRecoveryFlagUnresolvedRetriesExhausted = false;
+    _customLiveAudioRecoveryFlagRetryTimer?.cancel();
+    _customLiveAudioRecoveryFlagRetryTimer = null;
+    _customLiveAudioRecoveryKillSwitchEnabled = null;
+    _customLiveAudioRecoveryFlagRecordingId = null;
+  }
+
   void _refreshLimitlessCustomLiveWatch({bool refreshKillSwitch = true, bool restartWatch = false}) {
     final connection = _limitlessAudioConnection;
     if (connection == null) return;
@@ -3323,6 +3335,7 @@ class CaptureController extends ChangeNotifier
   @override
   void dispose() {
     _stopLimitlessCustomLiveWatch();
+    _cancelCustomLiveAudioFlagRetry();
     _clearIngressByteObserver();
     _uplinkSilence.cancel();
     _captureControllerDisposed = true;
@@ -3331,8 +3344,6 @@ class CaptureController extends ChangeNotifier
     _reconnectGraceTimer = null;
     _captureHealthTimer?.cancel();
     _captureHealthTimer = null;
-    _customLiveAudioRecoveryFlagRetryTimer?.cancel();
-    _customLiveAudioRecoveryFlagRetryTimer = null;
     _calendarGapTimer?.cancel();
     _calendarGapTimer = null;
     unawaited(_setIngressAuthorized(false));
@@ -3874,6 +3885,7 @@ class CaptureController extends ChangeNotifier
 
   Future<void> _stopDeviceSessionBody({required bool cleanDevice}) async {
     _rollCaptureSession('stopped');
+    _cancelCustomLiveAudioFlagRetry();
     await _cleanupCurrentState(disableNativeBackground: true);
     await _wal.getSyncs().phone.finalizeCurrentSession();
     if (cleanDevice) {

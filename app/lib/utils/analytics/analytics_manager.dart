@@ -640,7 +640,9 @@ class AnalyticsManager {
           return boolean.isBooleanFeatureEnabledCached(key);
         }
         return null;
-      }, timeout: const Duration(seconds: 6), onFailure: refresh ? onRefreshFailure : null);
+      },
+          timeout: refresh ? refreshTimeout + const Duration(seconds: 1) : const Duration(seconds: 6),
+          onFailure: refresh ? onRefreshFailure : null);
 
   bool isBooleanFeatureEnabledCached(String key) {
     final adapter = _adapter;

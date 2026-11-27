@@ -1144,7 +1144,57 @@ void main() {
     expect(decoded, [storedFrame, liveFrame]);
   });
 
-  test('stored flash-page frames do not satisfy realtime health and retries probe status first', () async {
+  test('unindexed stored frames stay live when batch-mode re-entry is unconfirmed', () async {
+    final transport = FakeDeviceTransport();
+    final connection = LimitlessDeviceConnection(
+      BtDevice(name: 'Limitless Pendant', id: 'fake-limitless', type: DeviceType.limitless, rssi: -50),
+      transport,
+      setupSettleDelay: Duration.zero,
+      reconnectSettleDelay: Duration.zero,
+    );
+    addTearDown(connection.disconnect);
+    await connection.connect();
+    await connection.enableBatchMode();
+
+    final reentryAttempted = Completer<void>();
+    transport.onWrite = (data) {
+      if (decodeWrapperCommand(data)['messageNumber'] == 8) {
+        if (!reentryAttempted.isCompleted) reentryAttempted.complete();
+        throw StateError('batch mode re-entry failed');
+      }
+    };
+    await connection.onNetworkSocketReconnected();
+    await reentryAttempted.future.timeout(const Duration(seconds: 2));
+
+    final frame = opusFrame(0xb8, 51, 40);
+    final received = Completer<void>();
+    final subscription = await connection.performGetBleAudioBytesListener(
+      onAudioBytesReceived: (_) {
+        if (!received.isCompleted) received.complete();
+      },
+    );
+    addTearDown(() => subscription?.cancel());
+    final malformedStorageBuffer = [
+      ...intField(2, 7),
+      0x1b, // Invalid wire type before the page index makes strict extraction fail.
+      ...intField(5, 100),
+      ...bytesField(
+          6,
+          flashPageBytes(1750000000000, [
+            audioWrapper(audioBlobOfFrames([frame]))
+          ])),
+    ];
+    transport.emit(limitlessRxCharUuid, bleWrapper(11, 0, 1, pendantMessage(malformedStorageBuffer)));
+    await received.future.timeout(const Duration(seconds: 2));
+
+    final acknowledged = await connection.acknowledgeProcessedData(150);
+    expect(acknowledged, 150, reason: 'live delivery consumed the frame, so no unknown-page barrier is needed');
+    final ack = transport.writes.lastWhere((data) => decodeWrapperCommand(data)['messageNumber'] == 7);
+    final ackBody = decodeWrapperCommand(ack)['messageBytes'] as List<int>;
+    expect(decodeVarint(ackBody, 1)[0], 150);
+  });
+
+  test('stored flash-page frames count as live progress when no unconfirmed drain owns the stream', () async {
     final transport = FakeDeviceTransport();
     final connection = LimitlessDeviceConnection(
       BtDevice(name: 'Limitless Pendant', id: 'fake-limitless', type: DeviceType.limitless, rssi: -50),
@@ -1173,31 +1223,35 @@ void main() {
     await activated.future;
 
     final frames = [for (var i = 0; i < 8; i++) opusFrame(0xb8, i, 40)];
-    final recovery = waitForProbeThenEnable(transport);
-    transport.emit(
-      limitlessRxCharUuid,
-      bleWrapper(
-        10,
-        0,
-        1,
-        [
-          ...intField(1, 1234),
-          ...pendantMessage(
-            storageBufferBytes(
-              session: 7,
-              seq: 1,
-              index: 100,
-              page: flashPageBytes(1750000000000, [audioWrapper(audioBlobOfFrames(frames))]),
-            ),
-          )
-        ],
-      ),
-    );
+    void emitStoredFrames() => transport.emit(
+          limitlessRxCharUuid,
+          bleWrapper(
+            10,
+            0,
+            1,
+            [
+              ...intField(1, 1234),
+              ...pendantMessage(
+                storageBufferBytes(
+                  session: 7,
+                  seq: 1,
+                  index: 100,
+                  page: flashPageBytes(1750000000000, [audioWrapper(audioBlobOfFrames(frames))]),
+                ),
+              )
+            ],
+          ),
+        );
+
+    emitStoredFrames();
 
     await gotFrame.future.timeout(const Duration(seconds: 2));
-    await recovery;
-    expect(decoded, frames, reason: 'stored audio is delivered but excluded from live health progress');
-    expect(transport.writes.map((data) => decodeWrapperCommand(data)['messageNumber']), [6, 8, 21, 8]);
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+    emitStoredFrames();
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    expect(decoded, [...frames, ...frames]);
+    expect(transport.writes.map((data) => decodeWrapperCommand(data)['messageNumber']), [6, 8],
+        reason: 'stored frames in a live session refresh the watchdog and prevent a false recovery stall');
   });
 
   test('Custom Live retry waits through a disconnected transcription socket', () async {
@@ -1586,38 +1640,47 @@ void main() {
         ),
       ),
     );
-    transport.onWrite = (data) {
+    transport.onWrite = (data) async {
       if (decodeWrapperCommand(data)['messageNumber'] == 8) {
         if (!reentryAttempted.isCompleted) reentryAttempted.complete();
         transport.emit(limitlessRxCharUuid, storedPacket);
+        await Future<void>.delayed(const Duration(milliseconds: 1));
         throw StateError('batch mode re-entry failed');
       }
     };
 
     await connection.onNetworkSocketReconnected();
     await reentryAttempted.future.timeout(const Duration(seconds: 2));
+    await Future<void>.delayed(
+        const Duration(milliseconds: 1)); // Drain the async RX callback while mode is unconfirmed.
 
     expect(connection.isBatchMode, isFalse, reason: 'unconfirmed mode keeps the live parser selected');
     expect(receivedFrames, isEmpty, reason: 'stored pages stay out of the live stream until batch mode is confirmed');
     expect(activations, 1, reason: 'an active flash drain keeps the Custom Live monitor stopped');
 
-    await connection.acknowledgeProcessedData(150);
+    expect(await connection.acknowledgeProcessedData(150), 99);
     final cappedAck = transport.writes.lastWhere((data) => decodeWrapperCommand(data)['messageNumber'] == 7);
     final cappedAckBody = decodeWrapperCommand(cappedAck)['messageBytes'] as List<int>;
     expect(decodeVarint(cappedAckBody, 1)[0], 99, reason: 'the dropped page remains on pendant flash');
+    final ackWriteCount = transport.writes.where((data) => decodeWrapperCommand(data)['messageNumber'] == 7).length;
+
+    await connection.disableBatchMode();
+    expect(await connection.acknowledgeProcessedData(150), 99,
+        reason: 'an unresolved page barrier survives an abandoned drain');
+    expect(transport.writes.where((data) => decodeWrapperCommand(data)['messageNumber'] == 7).length, ackWriteCount,
+        reason: 'the already acknowledged prefix is not written twice');
 
     transport.onWrite = (_) {};
-    await connection.onNetworkSocketReconnected();
-    expect(connection.isBatchMode, isTrue, reason: 'the next reconnect retries the active flash drain');
+    await connection.enableBatchMode();
+    expect(connection.isBatchMode, isTrue, reason: 'a later drain retries in confirmed batch mode');
     final replayedPageEvent = connection.getFlashPageStream().first;
     transport.emit(limitlessRxCharUuid, storedPacket);
     await replayedPageEvent.timeout(const Duration(seconds: 2));
     final replayedPage = connection.extractFramesWithSessionInfo();
     expect(replayedPage?['max_index'], 100);
     expect(replayedPage?['opus_frames'], [storedFrame]);
-    expect(receivedFrames, isEmpty, reason: 'confirmed flash pages remain on the batch path');
 
-    await connection.acknowledgeProcessedData(150);
+    expect(await connection.acknowledgeProcessedData(150), 150);
     final replayedAck = transport.writes.lastWhere((data) => decodeWrapperCommand(data)['messageNumber'] == 7);
     final replayedAckBody = decodeWrapperCommand(replayedAck)['messageBytes'] as List<int>;
     expect(decodeVarint(replayedAckBody, 1)[0], 150,

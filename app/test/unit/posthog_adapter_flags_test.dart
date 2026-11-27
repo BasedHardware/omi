@@ -100,22 +100,24 @@ void main() {
     expect(await adapter.resolvedFeatureEnabled('b'), isNull);
   });
 
-  test('a slower same-account refresh cannot overwrite a newer flag snapshot', () async {
-    final older = Completer<Map<String, OmiFlag>?>();
-    final newer = Completer<Map<String, OmiFlag>?>();
+  test('overlapping same-account refreshes share the winning flag snapshot', () async {
+    final pending = Completer<Map<String, OmiFlag>?>();
     var calls = 0;
     final adapter = PostHogAnalyticsAdapter(
       apiKey: 'test',
-      omiFlags: () => ++calls == 1 ? older.future : newer.future,
+      omiFlags: () {
+        calls++;
+        return pending.future;
+      },
     )..identify(userId: 'u');
 
-    final olderRead = adapter.reloadFeatureFlags();
-    final newerRead = adapter.reloadFeatureFlags();
-    newer.complete({'kill': (enabled: true, variant: null, payloadJson: null)});
-    expect(await newerRead, isTrue);
-    older.complete({'kill': (enabled: false, variant: null, payloadJson: null)});
+    final firstRead = adapter.reloadFeatureFlags();
+    final overlappingRead = adapter.reloadFeatureFlags();
+    expect(calls, 1, reason: 'overlapping readers wait on one authenticated snapshot');
+    pending.complete({'kill': (enabled: true, variant: null, payloadJson: null)});
 
-    expect(await olderRead, isFalse, reason: 'a superseded request cannot claim to have refreshed the cache');
+    expect(await firstRead, isTrue);
+    expect(await overlappingRead, isTrue);
     expect(await adapter.resolvedFeatureEnabled('kill'), isTrue);
   });
 

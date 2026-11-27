@@ -169,6 +169,7 @@ class _FakeLimitless implements LimitlessDeviceConnection {
   final List<Map<String, Object?>?> pages;
   int _extractIdx = 0;
   final acks = <int>[];
+  int? ackLimit;
   bool batchMode = false;
   bool realTimeMode = false;
 
@@ -195,8 +196,10 @@ class _FakeLimitless implements LimitlessDeviceConnection {
   }
 
   @override
-  Future<void> acknowledgeProcessedData(int index) async {
-    acks.add(index);
+  Future<int?> acknowledgeProcessedData(int index) async {
+    final acknowledged = ackLimit == null || index <= ackLimit! ? index : ackLimit!;
+    if (acks.isEmpty || acknowledged > acks.last) acks.add(acknowledged);
+    return acknowledged;
   }
 
   @override
@@ -915,6 +918,46 @@ void main() {
     expect(card.acks.first, 1);
     expect(card.acks.last, 2);
     await sync.stop();
+  });
+
+  test('Limitless: a withheld ACK keeps the WAL pending at the acknowledged resume page', () async {
+    const ts = 1700000000000;
+    final card = _FakeLimitless(
+      pages: [
+        for (var index = 0; index <= 2; index++)
+          {
+            'opus_frames': [
+              [index + 1, index + 2, index + 3],
+            ],
+            'timestamp_ms': ts,
+            'max_index': index,
+          },
+      ],
+    )..ackLimit = 1;
+    final wal = Wal(
+      timerStart: ts ~/ 1000,
+      codec: BleAudioCodec.opus,
+      seconds: 5,
+      status: WalStatus.miss,
+      storage: WalStorage.flashPage,
+      device: 'limitless-1',
+      fileNum: 0,
+      storageOffset: 0,
+      storageTotalBytes: 2,
+    );
+    final sync = FlashPageWalSyncImpl(_Listener())
+      ..testDevice = BtDevice(id: 'limitless-1', name: 'Limitless', type: DeviceType.limitless, rssi: -40)
+      ..testConnection = card
+      ..testWals = [wal];
+    sync.setLocalSync(_FakeLocalSync());
+    addTearDown(sync.stop);
+
+    await expectLater(sync.syncWal(wal: wal), throwsException);
+
+    expect(wal.status, WalStatus.miss, reason: 'a partial device ACK cannot complete the transfer');
+    expect(wal.storageOffset, 2,
+        reason: 'resume after the acknowledged prefix, not the durable but unacknowledged page');
+    expect(card.acks, [1]);
   });
 
   test('Limitless: a failed durable save fails the transfer — no ACK, wal stays miss', () async {

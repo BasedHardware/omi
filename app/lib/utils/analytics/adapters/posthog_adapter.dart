@@ -34,10 +34,11 @@ class PostHogAnalyticsAdapter
   final Future<Map<String, OmiFlag>?> Function()? omiFlags;
   Map<String, OmiFlag> _omi = const {};
 
-  /// Bumped on every identity change; a reload commits its answer only if the generation it started
-  /// in is still current, so a slow response for account A cannot land after B took over.
+  /// Bumped on every identity change so an in-flight answer for account A
+  /// cannot land after B takes over.
   int _identityGeneration = 0;
-  int _omiFlagsReloadGeneration = 0;
+  Future<bool>? _omiFlagsReloadInFlight;
+  int? _omiFlagsReloadInFlightIdentityGeneration;
   String? _flagIdentity;
 
   void _identityChanged(String? identity, {bool reset = false}) {
@@ -208,21 +209,31 @@ class PostHogAnalyticsAdapter
   Future<bool> reloadFeatureFlags() => _reloadOmiFlags();
 
   /// A failed or superseded fetch keeps the previous Omi answer for this identity.
-  Future<bool> _reloadOmiFlags() async {
+  Future<bool> _reloadOmiFlags() {
+    final inFlight = _omiFlagsReloadInFlight;
+    if (inFlight != null && _omiFlagsReloadInFlightIdentityGeneration == _identityGeneration) return inFlight;
     final fetch = omiFlags;
-    if (fetch == null) return false;
+    if (fetch == null) return Future.value(false);
     final identityGeneration = _identityGeneration;
-    final reloadGeneration = ++_omiFlagsReloadGeneration;
-    try {
-      final flags = await fetch();
-      if (flags == null || identityGeneration != _identityGeneration || reloadGeneration != _omiFlagsReloadGeneration) {
+    late final Future<bool> reload;
+    reload = () async {
+      try {
+        final flags = await fetch();
+        if (flags == null || identityGeneration != _identityGeneration) return false;
+        _omi = Map.unmodifiable(flags);
+        return true;
+      } catch (_) {
         return false;
+      } finally {
+        if (identical(_omiFlagsReloadInFlight, reload)) {
+          _omiFlagsReloadInFlight = null;
+          _omiFlagsReloadInFlightIdentityGeneration = null;
+        }
       }
-      _omi = Map.unmodifiable(flags);
-      return true;
-    } catch (_) {
-      return false;
-    }
+    }();
+    _omiFlagsReloadInFlight = reload;
+    _omiFlagsReloadInFlightIdentityGeneration = identityGeneration;
+    return reload;
   }
 
   @override
