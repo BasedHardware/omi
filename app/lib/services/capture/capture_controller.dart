@@ -254,6 +254,11 @@ class CaptureController extends ChangeNotifier
   @override
   void sealOpenPhoneFile() => _mobileStandardBatch?.sealForEnd();
 
+  /// Reliability experiment live_words_cascade: told the instant of every End. Cuts the live words there
+  /// and returns the words shown for the conversation being ended, for the End request (`live_tail`);
+  /// null when the experiment is off or there are none. Set by the composition root.
+  Map<String, Object?>? Function(DateTime endedAt)? liveWordsOnEnd;
+
   @override
   void showLiveWordsInFront(bool value) {
     if (_liveWordsInFront == value) return;
@@ -4440,6 +4445,9 @@ class CaptureController extends ChangeNotifier
     // moment is published, and send the moment with the request. Off: neither happens.
     final endedAt = ReliabilityExperiments.enabled('end_open_conversation') ? DateTime.now() : null;
     if (endedAt != null) _mobileStandardBatch?.sealForEnd();
+    // Reliability experiment live_words_cascade: the same instant cuts the live words, and the words shown
+    // up to it go with the request. Off: null, and the live words are left as they are.
+    final liveTail = endedAt == null ? null : liveWordsOnEnd?.call(endedAt);
     final recordingSessionId = activeRecordingId;
     final conversationRevision = _systemSurfaceConversationRevision;
     final close = _admitConversationClose(processNow: true);
@@ -4483,7 +4491,10 @@ class CaptureController extends ChangeNotifier
               ? _processInProgressConversationOverride!().then((result) =>
                   InProgressProcessOutcome(response: result, absence: result == null ? ProcessAbsence.transport : null))
               : processInProgressConversationOutcome(
-                  liveConversationId: liveConversationId, endedAt: endedAt, sendRequest: _processRequestSender);
+                  liveConversationId: liveConversationId,
+                  endedAt: endedAt,
+                  liveTail: liveTail,
+                  sendRequest: _processRequestSender);
       requestAdmitted = true;
       if (confirmedProcessing) _lastProcessRequest = request;
       _processInFlight = request.then((_) {}, onError: (_) {});

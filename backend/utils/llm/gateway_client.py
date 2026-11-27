@@ -611,6 +611,27 @@ def _gateway_timeout(timeout_seconds: float) -> httpx.Timeout:
     )
 
 
+class ImageGatewayError(RuntimeError):
+    """A classified image dependency failure with a payload-free public response."""
+
+    def __init__(self, status_code: int, code: str, *, retryable: bool, retry_after: str | None = None):
+        super().__init__(code)
+        self.status_code = status_code
+        self.detail = {'code': code, 'retryable': retryable}
+        self.headers = {'Retry-After': retry_after} if retry_after is not None else None
+
+
+def _image_gateway_has_invalid_config(response: httpx.Response) -> bool:
+    try:
+        body = response.json()
+    except ValueError:
+        return False
+    if not isinstance(body, dict) or not isinstance(error := body.get('error'), dict):
+        return False
+    # The deployed gateway predates the machine-readable code.
+    return error.get('code') == 'invalid_config' or error.get('message') == 'provider request failed: invalid_config'
+
+
 def generate_image_via_gateway(
     *,
     model: str,
@@ -622,20 +643,31 @@ def generate_image_via_gateway(
 ) -> Mapping[str, object]:
     """Call the gateway-owned image generation surface."""
 
-    with httpx.Client(timeout=timeout_seconds) as client:
-        response = client.post(
-            f'{get_llm_gateway_base_url()}/v1/images/generations',
-            headers=_gateway_headers(feature='app_generator'),
-            json={
-                'model': model,
-                'prompt': prompt,
-                'size': size,
-                'quality': quality,
-                'n': n,
-            },
-        )
-        response.raise_for_status()
-        body = response.json()
+    try:
+        with httpx.Client(timeout=timeout_seconds) as client:
+            response = client.post(
+                f'{get_llm_gateway_base_url()}/v1/images/generations',
+                headers=_gateway_headers(feature='app_generator'),
+                json={
+                    'model': model,
+                    'prompt': prompt,
+                    'size': size,
+                    'quality': quality,
+                    'n': n,
+                },
+            )
+            if response.status_code == 429:
+                raise ImageGatewayError(
+                    429, 'icon_generation_rate_limited', retryable=True, retry_after=response.headers.get('Retry-After')
+                )
+            if response.status_code == 503 and _image_gateway_has_invalid_config(response):
+                raise ImageGatewayError(424, 'icon_generation_invalid_config', retryable=False)
+            if response.status_code in {408, 502, 503, 504}:
+                raise ImageGatewayError(503, 'icon_generation_unavailable', retryable=True)
+            response.raise_for_status()
+            body = response.json()
+    except (httpx.NetworkError, httpx.TimeoutException, httpx.RemoteProtocolError) as exc:
+        raise ImageGatewayError(503, 'icon_generation_unavailable', retryable=True) from exc
     if not isinstance(body, Mapping):
         raise ValueError('gateway image response must be an object')
     return cast('Mapping[str, object]', body)

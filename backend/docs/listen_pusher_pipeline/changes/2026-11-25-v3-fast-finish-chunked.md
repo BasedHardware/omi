@@ -102,13 +102,18 @@ Recordings over 20 minutes are the spend this change adds. They take the chunked
 `CONVERSATIONS_V3_FAST_FINISH_LONG_DAILY_SECONDS` of their audio per UTC day across the fleet (default
 7200; past it, `long_cap`). The counter is one Redis key per UTC day,
 `v3_fast_finish:long_audio_seconds:<day>` (26 h TTL), shared by every process, so it survives scaling
-and restarts. A long pass reserves the most it can send, every chunk twice (its one retry) plus one 30 s
-probe clip, with `INCRBYFLOAT` (taken back at once if that went over the cap), so retries can never
-push the day past the cap. It reserves only with at least `RESERVE_MIN_SECONDS` (3 s) of its deadline
-left, and settles in the background, off the slot, to the audio actually sent: chunk overlaps, retries
-and the vendor language probe included, and chunks never sent refunded. It fails closed: when Redis errors or takes over
-1 s, long passes are refused as `long_cap`; short passes never ask it. Finishes up to 20 minutes are not
-gated.
+and restarts. A long pass reserves every chunk once plus one 30 s probe clip at admission, with
+`INCRBYFLOAT` (taken back at once if that went over the cap). Each chunk retry then reserves its own
+seconds on the same key, after the pass's privacy and stop checks and just before it sends; when that
+does not fit, Redis errors or takes over 1 s, or under `RESERVE_MIN_SECONDS` (3 s) of the deadline is
+left, the retry is not sent and the chunk fails as a failed retry does, so the pass yields to batch
+(`retry_cap` when the reservation was refused). No audio is sent unreserved, so retries can never push
+the day past the cap. The pass settles in the background, off the slot, to the audio actually sent:
+chunk overlaps, retries and the vendor language probe included, and chunks and reserved retries never
+sent refunded. It fails closed: when Redis errors or takes over 1 s at admission, long passes are
+refused as `long_cap`; short passes never ask it. Finishes up to 20 minutes are not gated. At the 7200 s
+default about three 30-minute passes fit a day, and two at once (reserving every retry up front fit two
+a day, one at a time); the bound is unchanged.
 
 ## Metrics
 
@@ -120,7 +125,7 @@ New metrics, all with no labels unless noted:
 - `omi_conversations_v3_fast_finish_audio_seconds_total{path=short|long}` (provider audio, retries and the
   vendor language probe clip included: the same audio the daily cap charges)
 
-New outcomes: `deadline`, `long_canary`, `long_cap`. In the chunked path,
+New outcomes: `deadline`, `long_canary`, `long_cap`, `retry_cap`. In the chunked path,
 `omi_conversations_v3_fast_finish_seconds{stage="provider"}` is the whole concurrent span. All of these
 are kept by `cloud_run_gmp_sync.yaml`.
 
@@ -129,6 +134,10 @@ are kept by `cloud_run_gmp_sync.yaml`.
 `CONVERSATIONS_V3_FAST_FINISH_CHUNKED` is declared `on` for prod `backend` and `backend-integration`.
 `CONVERSATIONS_V3_FAST_FINISH_LONG_PERCENT=25` and `CONVERSATIONS_V3_FAST_FINISH_LONG_DAILY_SECONDS=7200`
 are declared for `backend-integration`; the projection pump inherits integration's values.
+
+Ramp: move `CONVERSATIONS_V3_FAST_FINISH_LONG_PERCENT` 25 → 100 after the first 24 h readback of
+long-pass latency (first card within 60 s) and long audio seconds. Any raise of
+`CONVERSATIONS_V3_FAST_FINISH_LONG_DAILY_SECONDS` is David's spend decision.
 
 Rollback options:
 - `CONVERSATIONS_V3_FAST_FINISH_LONG_PERCENT=0` stops long passes only.

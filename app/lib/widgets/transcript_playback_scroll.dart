@@ -138,6 +138,9 @@ extension _TranscriptPlaybackScrolling on _TranscriptWidgetState {
     if (targetId == _lastFollowTargetId && widget.playbackFollowRequest == _lastFollowRequest) return;
     _lastFollowTargetId = targetId;
     _lastFollowRequest = widget.playbackFollowRequest;
+    // The line being played outranks the newest line: the latest-line follow waits for the reader
+    // to return to the end.
+    if (widget.followLatest) _userHasScrolled = true;
     _locateSegment(targetId, alignment: 1 / 3);
   }
 
@@ -157,8 +160,10 @@ extension _TranscriptPlaybackScrolling on _TranscriptWidgetState {
         if (mounted && _isUserScrolling) _reportTopVisibleSegment();
       });
     } else if (_isUserScrolling && !_isRestoringAnchor && !_pendingAnchorRestore && !_readerDragRecovered) {
-      _captureCurrentPosition();
+      // The gesture is over before the position is read: a reader who let go at the end is
+      // following again, however they got there (a slow drag as much as a fling).
       _isUserScrolling = false;
+      _captureCurrentPosition();
       _userGestureEnded();
     }
     return false;
@@ -217,8 +222,12 @@ extension _TranscriptPlaybackScrolling on _TranscriptWidgetState {
     final shouldFollow = !_userHasScrolled;
     if (shouldFollow && notification.metrics.extentAfter > 0.5) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _scrollToBottomGently(animated: false);
+        // On the conversation page the live words grow under the stored lines without a rebuild of
+        // this list: the end travels to them, as it does for a new stored line.
+        if (mounted) _scrollToBottomGently(animated: widget.isConversationDetail);
       });
+      // This arrives after the frame that grew the content; nothing else may be asking for another.
+      WidgetsBinding.instance.ensureVisualUpdate();
     }
     return false;
   }

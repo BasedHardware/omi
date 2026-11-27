@@ -397,7 +397,8 @@ def test_batches_count_source_claim_rewrites_against_the_request(strict, monkeyp
         wrapped = original(body)
 
         def run(tx, *args):
-            commits.append(len(args[0]))
+            if body.__name__ == 'commit':  # lease renewals between batches are transactions too
+                commits.append(len(args[0]))
             return wrapped(tx, *args)
 
         return run

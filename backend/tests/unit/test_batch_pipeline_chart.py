@@ -491,6 +491,36 @@ def test_production_cutover_preserves_live_single_od_hpa_min6_max16():
         assert env['BATCH_PIPELINE_WORKER_PIPELINE_DEPTH'] == ('4' if processes == '2' else '2')
 
 
+def worker_envs(result):
+    """Env of every GPU pump deployment (primary, T4 fallback, borrower); the record-seal worker is another program."""
+    docs = [doc for doc in yaml.safe_load_all(result.stdout) if doc]
+    envs = {}
+    for name, doc in by_name(docs, 'Deployment').items():
+        container = doc['spec']['template']['spec']['containers'][0]
+        if container['name'] == 'worker':
+            envs[name] = {v['name']: v.get('value') for v in container['env']}
+    assert envs
+    return envs
+
+
+def test_production_workers_read_the_flag_store_the_serving_roles_read():
+    # commit_wake is decided per owner on the worker and on the serving backend: both must read one store.
+    result = render_prod()
+    assert result.returncode == 0, result.stderr
+    overlay = yaml.safe_load((CHART.parents[1] / 'deploy/runtime_env/prod.overlay.yaml').read_text())['overlay']
+    serving = overlay['cloud_run']['services']['backend-integration']['env']
+    for name, env in worker_envs(result).items():
+        assert env['OMI_FLAGS_FIRESTORE_PROJECT'] == serving['OMI_FLAGS_FIRESTORE_PROJECT']['value'], name
+        assert env['OMI_FLAGS_FIRESTORE_DATABASE'] == serving['OMI_FLAGS_FIRESTORE_DATABASE']['value'], name
+
+
+def test_worker_without_a_flag_store_renders_no_flag_store_binding():
+    result = render(*enabled_arguments())
+    assert result.returncode == 0, result.stderr
+    for name, env in worker_envs(result).items():
+        assert not [key for key in env if key.startswith('OMI_FLAGS_')], name
+
+
 PROD_BORROWED = ['parakeet-pool', 'parakeet-pool-b', 'parakeet-pool-v2']
 
 

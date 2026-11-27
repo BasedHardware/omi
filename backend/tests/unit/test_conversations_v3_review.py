@@ -82,7 +82,7 @@ async def test_on_open_scopes_load_and_queues_processing(builder, monkeypatch):
 
     monkeypatch.setattr(store, 'load', load)
     await service.reconcile('u', on_open=True, conversation_id='c')
-    assert seen == [{'conversation_id': 'c'}]
+    assert seen == [{'conversation_id': 'c', 'lease_token': 'token'}]
     service.drain_processing.assert_not_awaited()
     assert committed
 

@@ -267,8 +267,6 @@ def with_memory_env(payload: str) -> str:
         {"name": "BATCH_PIPELINE_SHARED_LIVE_ENABLED", "value": "false"},
         {"name": "PLAYBACK_ON_DEMAND_ENABLED", "value": "true"},
         {"name": "REPEAT_WORK_LLM_VERSION", "value": "2026-10-16-v1"},
-        {"name": "SYNC_POLL_BACKOFF_ENABLED", "value": "false"},
-        {"name": "SYNC_POLL_BACKOFF_PERCENT", "value": "0"},
         {"name": "SYNC_RECORD_COVERAGE_WAIT_MEMO", "value": "true"},
         {"name": "SYNC_RECORD_WAIT_MEMO_FIRST", "value": "true"},
         {"name": "SYNC_RECORD_DECODE_FAILURE_MEMO", "value": "true"},
@@ -1143,6 +1141,32 @@ def test_gke_config_map_contract_rejects_missing_config_map(tmp_path):
             'gke/backend-listen',
             "env FAKE_RUNTIME_CONFIG must come from ConfigMap 'test-omi-backend-config'",
         )
+    ]
+
+
+def test_selected_release_reads_the_admitted_listen_chart(tmp_path):
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    prod = manifest['environments']['prod']
+    bindings = prod['gke']['backend-listen']
+    values_relative = Path(bindings['values_file'])
+    current_values = validator._load_yaml(validator.ROOT / values_relative)
+    # An older admitted source still binds this key through envFrom. The
+    # control's newer chart has moved it to a direct secret reference.
+    env_name = 'FIREBASE_SERVICE_ACCOUNT_JSON'
+    values = copy.deepcopy(current_values)
+    values['env'] = [entry for entry in values.get('env', []) if entry.get('name') != env_name]
+    values.setdefault('envFrom', []).append({'configMapRef': {'name': 'legacy-config'}})
+    bindings['env'][env_name] = {'config_map': {'name': 'legacy-config'}}
+    config = {'gke': {'backend-listen': bindings}}
+    admitted_chart = tmp_path / values_relative
+    admitted_chart.parent.mkdir(parents=True)
+    write_yaml(admitted_chart, values)
+
+    control_errors = validator._validate_gke(config, strict_provisional=False)
+    assert any(env_name in error.message for error in control_errors)
+    assert validator._validate_gke(config, strict_provisional=False, chart_root=tmp_path) == [
+        error for error in control_errors if env_name not in error.message
     ]
 
 

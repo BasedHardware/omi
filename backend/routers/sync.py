@@ -16,7 +16,7 @@ from utils.sync.future_capture_request import Outcome as FutureCaptureOutcome
 from utils.other.playback_identity import PlaybackSourceChanged
 from utils.capture.coverage_endpoint import router as coverage_router
 from utils.observability.sync_phases import sync_attempt, set_sync_metrics_lane
-from utils.observability.sync_upload import observe_hold_age
+from utils.observability.sync_upload import compare_recovery_label, observe_hold_age
 import asyncio
 import json
 import logging
@@ -45,6 +45,7 @@ from database.batch_ramp import ramp_admission_policy
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from utils.sync.recovery_source import recovery_source_conversation
 from utils.sync.deleted_conversation import deleted_conversation_result, is_conversation_deleted
+from utils.sync import designed_refusal
 from database.batch_privacy_attempt import with_batch_privacy_attempt
 from database.account_deletion_marker import account_deletion_blocks_user_work
 from utils.batch_pipeline.intake import (
@@ -95,6 +96,7 @@ from database.sync_jobs import (
     delete_sync_job_run_lock_epoch,
     fenced_mark_job_queued_for_retry,
     get_sync_ledger_fence_mode,
+    sync_ledger_fence_standby_configured,
     get_sync_job,
     is_sync_job_stale,
     mark_job_completed,
@@ -181,8 +183,7 @@ from utils.metrics import (
     OMI_SYNC_QUEUE_WAIT_SECONDS,
     OMI_SYNC_RECORDING_AGE_SECONDS,
 )
-from utils.sync.poll_limit import SYNC_POLL_WINDOW_SECONDS, admit_sync_job_poll, sync_job_poll_response
-from utils.sync.poll_metrics import record_sync_job_poll_request
+from utils.sync.poll_limit import SYNC_POLL_WINDOW_SECONDS, admit_sync_job_poll, with_custody_hold_poll_hint
 from utils.sync.retired_handle_ack import acknowledge_retired_handle
 from config.repeat_work import playback_on_demand
 from contextlib import nullcontext
@@ -760,8 +761,10 @@ def _backfill_day_cap_defers(uid: str, lane: SyncLane, repair_identity: Optional
     responses=SYNC_LOCAL_FILES_V2_RESPONSES,
 )
 @max_part_size(SYNC_AUDIO_MAX_PART_SIZE)
+@designed_refusal.records_designed_refusals
 @custody_lease.custody_upload
 @future_capture_request.observe_upload
+@designed_refusal.designed_refusal_outcome
 async def sync_local_files_v2(
     files: List[UploadFile] = File(...),
     uid: str = Depends(auth.get_current_user_uid),
@@ -793,6 +796,9 @@ async def sync_local_files_v2(
     x_omi_upload_trace: Optional[str] = Header(None, alias='X-Omi-Upload-Trace', include_in_schema=False),
     x_omi_upload_hold: Optional[str] = Header(None, alias='X-Omi-Upload-Hold', include_in_schema=False),
     x_omi_upload_recovered: Optional[str] = Header(None, alias='X-Omi-Upload-Recovered', include_in_schema=False),
+    x_omi_upload_journal_recovery: Optional[str] = Header(
+        None, alias='X-Omi-Upload-Journal-Recovery', include_in_schema=False
+    ),
     x_omi_upload_hold_age_ms: Optional[str] = Header(None, alias='X-Omi-Upload-Hold-Age-Ms', include_in_schema=False),
 ):
     """
@@ -825,6 +831,11 @@ async def sync_local_files_v2(
                 },
             )
         return JSONResponse(status_code=200, content={'new_memories': [], 'updated_memories': []})
+    compare_recovery_label(
+        x_omi_upload_journal_recovery if isinstance(x_omi_upload_journal_recovery, str) else None,
+        x_omi_upload_recovered,
+        x_omi_upload_hold,
+    )
     clamp_enabled = future_capture_clamp_enabled()
     if clamp_enabled:
         future_capture_request.classify_upload((file.filename or '' for file in files), capture_received_at)
@@ -866,6 +877,9 @@ async def sync_local_files_v2(
     ledger_fence_mode = await run_blocking(db_executor, get_sync_ledger_fence_mode)
     if ledger_fence_mode is SyncLedgerFenceMode.STANDBY:
         future_capture_request.mark(FutureCaptureOutcome.PREFLIGHT_REFUSED)
+        # An invalid setting also fails closed to STANDBY; only a configured cutover is designed.
+        if await run_blocking(db_executor, sync_ledger_fence_standby_configured):
+            designed_refusal.mark_designed_refusal(uid, 'sync_ledger_fence_cutover', x_cloud_trace_context)
         # The one-time hard-revision-retirement cutover intentionally blocks
         # before app-managed raw-file persistence or a content claim. Clients
         # retain their WAL/audio and retry after the services become active.
@@ -969,6 +983,7 @@ async def sync_local_files_v2(
     )
     if lane_decision.lane == SyncLane.BACKFILL and os.getenv('SYNC_BACKFILL_ENABLED', 'true').lower() != 'true':
         future_capture_request.mark(FutureCaptureOutcome.PREFLIGHT_REFUSED)
+        designed_refusal.mark_designed_refusal(uid, 'backfill_disabled', x_cloud_trace_context)
         return JSONResponse(
             status_code=503,
             headers={'Retry-After': '3600', 'X-Omi-Rate-Limit-Reason': 'backfill_capacity'},
@@ -1035,7 +1050,7 @@ async def sync_local_files_v2(
             critical_executor, _backfill_day_cap_defers, uid, lane_decision.lane, repair_identity, allowance
         ):
             future_capture_request.mark(FutureCaptureOutcome.PREFLIGHT_REFUSED)
-            logger.info('sync_upload_refused uid=%s status=503 reason=backfill_day_cap', uid)
+            designed_refusal.mark_designed_refusal(uid, 'backfill_day_cap', x_cloud_trace_context)
             return JSONResponse(
                 status_code=503,
                 headers={
@@ -1115,6 +1130,7 @@ async def sync_local_files_v2(
                 raise
             if os.getenv('SYNC_BACKFILL_ENABLED', 'true').lower() != 'true':
                 future_capture_request.mark(FutureCaptureOutcome.PREFLIGHT_REFUSED)
+                designed_refusal.mark_designed_refusal(uid, 'retained_recovery_disabled', x_cloud_trace_context)
                 raise HTTPException(503, detail='Historical recovery is paused; retain local audio')
             lane_decision = replace(
                 lane_decision,
@@ -1165,6 +1181,7 @@ async def sync_local_files_v2(
                 and not client_device_context.client_device_id
             ):
                 future_capture_request.mark(FutureCaptureOutcome.IDENTITY_REQUIRED)
+                designed_refusal.mark_designed_refusal(uid, 'capture_clock_identity_required', x_cloud_trace_context)
                 return JSONResponse(
                     status_code=503,
                     headers={'Retry-After': '30'},
@@ -1417,6 +1434,7 @@ async def sync_local_files_v2(
         if estimated_capture or retained_capture:
             # A repaired clock must retain its per-source isolation even when
             # the batch cohort/language/capacity path declines this upload.
+            designed_refusal.mark_designed_refusal(uid, 'repaired_clock_batch_declined', x_cloud_trace_context)
             return JSONResponse(
                 status_code=503,
                 headers={'Retry-After': '30'},
@@ -1660,6 +1678,7 @@ async def sync_local_files_v2(
                     await run_blocking(db_executor, release_backfill_slot, uid, job_id)
                     backfill_slot_acquired = False
                 if dispatch_hold:
+                    designed_refusal.mark_designed_refusal(uid, 'dispatch_hold', x_cloud_trace_context)
                     return JSONResponse(
                         status_code=503,
                         headers={
@@ -2030,12 +2049,11 @@ def release_sync_upload_hold(job_id: str, uid: str = Depends(auth.get_current_us
 def get_sync_job_status(
     job_id: str,
     uid: str = Depends(auth.get_current_user_uid),
-    surface_open: bool = False,
+    surface_open: bool = False,  # Retain the released query parameter.
     x_omi_custody_repair_protocol: Optional[str] = Header(None, alias='X-Omi-Custody-Repair-Protocol'),
 ):
     """Poll for the status of an async sync job."""
     OMI_SYNC_JOB_POLL_REQUESTS_TOTAL.inc()
-    record_sync_job_poll_request(uid)
     if not admit_sync_job_poll(uid):
         OMI_SYNC_JOB_POLL_THROTTLED_TOTAL.inc()
         raise HTTPException(
@@ -2043,10 +2061,10 @@ def get_sync_job_status(
             detail='Sync job polling too frequent; retry later',
             headers={'Retry-After': str(SYNC_POLL_WINDOW_SECONDS)},
         )
-    return _read_sync_job_status(job_id, uid, surface_open, x_omi_custody_repair_protocol)
+    return _read_sync_job_status(job_id, uid, x_omi_custody_repair_protocol)
 
 
-def _read_sync_job_status(job_id: str, uid: str, surface_open: bool, x_omi_custody_repair_protocol: Optional[str]):
+def _read_sync_job_status(job_id: str, uid: str, x_omi_custody_repair_protocol: Optional[str]):
     try:
         durable = (
             get_durable_job_status(job_id, uid, artifact_retry=True)
@@ -2060,7 +2078,7 @@ def _read_sync_job_status(job_id: str, uid: str, surface_open: bool, x_omi_custo
             raise
         raise sync_finalization_retrying() from error
     if durable is not None:
-        return sync_job_poll_response(durable, uid, surface_open)
+        return with_custody_hold_poll_hint(durable)
     job = get_sync_job(job_id)
     if job and job['uid'] != uid:
         raise HTTPException(status_code=403, detail="Not authorized to view this sync job")
@@ -2080,11 +2098,11 @@ def _read_sync_job_status(job_id: str, uid: str, surface_open: bool, x_omi_custo
             reason='unavailable',
             outcome='recovered',
         )
-        return sync_job_poll_response(completed, uid, surface_open)
+        return with_custody_hold_poll_hint(completed)
     if not job:
         retired = acknowledge_retired_handle(job_id, uid)  # custody-held expiry-retired handles
         if retired is not None:
-            return sync_job_poll_response(retired, uid, surface_open)
+            return with_custody_hold_poll_hint(retired)
         raise HTTPException(status_code=404, detail="Sync job not found or expired")
 
     # A stale state can only be finalized by the holder of the same run lease
@@ -2233,7 +2251,7 @@ def _read_sync_job_status(job_id: str, uid: str, surface_open: bool, x_omi_custo
         if job.get('error'):
             resp['error'] = job['error']
 
-    return sync_job_poll_response(resp, uid, surface_open)
+    return with_custody_hold_poll_hint(resp)
 
 
 # Bounds the account-deletion recheck so a hung marker read cannot outlive the client's request.
@@ -2292,7 +2310,7 @@ async def _wait_for_sync_receipts(body: SyncReceiptsWaitRequest, request: Reques
         receipts, fallback = [], []
         for job_id in jobs if named is None else named:
             try:
-                status = _read_sync_job_status(job_id, uid, False, None)
+                status = _read_sync_job_status(job_id, uid, None)
             except HTTPException as error:
                 if error.status_code not in (403, 404, 503):
                     raise

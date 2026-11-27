@@ -21,6 +21,7 @@ from datetime import datetime, timedelta, timezone
 from config import reliability_experiments
 from config.conversations_v3 import conversations_v3_enabled, v3_intake_held_out
 from database import conversations_v3_manual_cuts as cuts_db
+from utils.conversations.v3 import live_tail as tail_lines
 from utils.conversations.v3 import triggers
 from utils.conversations.v3.end_sides import ATTACH_KEY
 
@@ -67,11 +68,16 @@ def cut_instant(ended_at, now) -> datetime:
     return at if now - ENDED_AT_MAX_BEHIND <= at <= now + ENDED_AT_MAX_AHEAD else now
 
 
-def record_end(uid, *, ended_at=None, now=None):
+def record_end(uid, *, ended_at=None, now=None, live_tail=None):
     """Store the cut for an admitted owner and return its id; None when off, not admitted or on any fault.
 
     Never raises: End keeps its baseline path. Does not wake the builder: the caller does, once it
     knows whether the baseline path already woke it for this End (two wakes at once collide).
+
+    Reliability experiment ``live_words_cascade``: ``live_tail`` is the raw request field with the live
+    words the phone was showing for the conversation being ended. It is checked, bounded and kept with
+    the cut for that conversation's summary; a malformed one is dropped and the End is stored without
+    it. Off (or None), the cut is stored exactly as before.
     """
     if not enabled(uid):
         return None
@@ -79,7 +85,22 @@ def record_end(uid, *, ended_at=None, now=None):
         # A held-out owner keeps experiment-off End handling, paired with mark_new (SCA-2918).
         if not conversations_v3_enabled(uid) or v3_intake_held_out(uid):
             return None
-        cut_id = cuts_db.record(uid, cut_instant(ended_at, now or datetime.now(timezone.utc)))
+        at = cut_instant(ended_at, now or datetime.now(timezone.utc))
+        tail = tail_lines.accept(live_tail, cut_at=at, uid=uid) if live_tail is not None else None
+        if tail:
+            try:
+                words = tail_lines.word_count(tail)
+                cut_id = cuts_db.record(uid, at, tail=tail, tail_words=words)
+            except Exception as error:
+                # The words could not be kept (encryption, size): the End is stored without them, below.
+                logger.warning('event=v3_manual_cut outcome=tail_error exception_type=%s', type(error).__name__)
+            else:
+                # The stored words of this owner's Ends from more than a day ago go now.
+                tail_lines.forget_old(uid, at)
+                # Counts only: the words themselves are never logged.
+                logger.info('event=v3_manual_cut outcome=recorded tail_words=%d tail_lines=%d', words, len(tail))
+                return cut_id
+        cut_id = cuts_db.record(uid, at)
         logger.info('event=v3_manual_cut outcome=recorded')
         return cut_id
     except Exception as error:

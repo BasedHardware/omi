@@ -1457,6 +1457,7 @@ def commit_v3_projection(
     remove=(),
     removed_ids=None,
     retire=None,
+    settle=None,
     key='builder',
     bounded_pending_limit=None,
     unlocked_page=None,
@@ -1476,6 +1477,7 @@ def commit_v3_projection(
         removed_ids=removed_ids,
         retire=retire,
         key=key,
+        **({'settle': settle} if settle else {}),
         **({'bounded_pending_limit': bounded_pending_limit} if bounded_pending_limit is not None else {}),
         **({'unlocked_page': unlocked_page} if unlocked_page is not None else {}),
     )
