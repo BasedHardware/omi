@@ -82,6 +82,38 @@ class _LocalSyncs {
   }
 }
 
+class _MixedDeviceDeleteSyncs extends _LocalSyncs {
+  _MixedDeviceDeleteSyncs(
+    super.phone, {
+    required Iterable<Wal> initialInventory,
+    required Iterable<Wal> refreshedInventory,
+    required this.failedWalId,
+  })  : _deviceWals = List.of(initialInventory),
+        _refreshedInventory = List.of(refreshedInventory);
+
+  final String failedWalId;
+  final List<Wal> _deviceWals;
+  final List<Wal> _refreshedInventory;
+
+  @override
+  Future<List<Wal>> getAllWals() async => [...await phone.getAllWals(), ..._deviceWals];
+
+  @override
+  Future<void> deleteWal(Wal wal) async {
+    individualDeleteCalls.add(wal.id);
+    if (wal.id == failedWalId) throw StateError('simulated unconfirmed device delete');
+    _deviceWals.removeWhere((item) => item.id == wal.id);
+  }
+
+  @override
+  Future<void> refreshWalsFromDevice({String? firmwareVersion}) async {
+    deviceRefreshCalls++;
+    _deviceWals
+      ..clear()
+      ..addAll(_refreshedInventory);
+  }
+}
+
 class _WalService implements IWalService {
   _WalService(this.syncs);
 
@@ -354,5 +386,39 @@ void main() {
 
     expect(syncs.deviceRefreshCalls, 1);
     expect(syncProvider.allWals.map((wal) => wal.id), contains(deviceWal.id));
+  });
+
+  test('Clear All trusts a successful refreshed inventory after a partial device failure', () async {
+    Wal deviceWal(int timerStart) => Wal(
+          timerStart: timerStart,
+          codec: BleAudioCodec.opus,
+          seconds: 60,
+          status: WalStatus.outsideRecoveryWindow,
+          storage: WalStorage.sdcard,
+          device: 'device-1',
+          fileNum: timerStart,
+        );
+
+    final failedWal = deviceWal(6000);
+    final deletedWal = deviceWal(7000);
+    final syncs = _MixedDeviceDeleteSyncs(
+      localSync,
+      initialInventory: [failedWal, deletedWal],
+      refreshedInventory: [failedWal],
+      failedWalId: failedWal.id,
+    );
+    final syncProvider = SyncProvider(
+      walService: _WalService(syncs),
+      uploadGate: _offlineGate(),
+      startBackgroundSync: false,
+    );
+    provider = syncProvider;
+    await syncProvider.initialized;
+
+    await expectLater(syncProvider.deleteAllClearableWals(), throwsStateError);
+
+    expect(syncs.deviceRefreshCalls, 1);
+    expect(syncs.individualDeleteCalls, containsAll([failedWal.id, deletedWal.id]));
+    expect(syncProvider.allWals.map((wal) => wal.id), [failedWal.id]);
   });
 }

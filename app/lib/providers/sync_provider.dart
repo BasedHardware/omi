@@ -883,9 +883,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   }
 
   /// A device delete can evict its cached row before the pendant confirms it.
-  /// Re-enumerate after every attempted device deletion, and if the operation
-  /// failed keep the original rows visible until a later successful inventory
-  /// proves they are gone.
+  /// Re-enumerate after every attempted device deletion. Preserve the original
+  /// rows only when the refreshed inventory cannot be confirmed.
   Future<void> _deleteAndRefreshInventory({
     required Iterable<Wal> candidates,
     required Future<void> Function() delete,
@@ -903,17 +902,19 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       firstStackTrace = stackTrace;
     }
 
+    var inventoryConfirmed = false;
     try {
       if (deviceTargets.isNotEmpty && refreshDevice) {
         await _walService.getSyncs().refreshWalsFromDevice(firmwareVersion: firmwareVersion);
       }
       await _refreshWals(generation);
+      inventoryConfirmed = deviceTargets.isEmpty || refreshDevice;
     } catch (error, stackTrace) {
       firstError ??= error;
       firstStackTrace ??= stackTrace;
     }
 
-    if (firstError != null && deviceTargets.isNotEmpty && _isCurrent(generation)) {
+    if (firstError != null && deviceTargets.isNotEmpty && !inventoryConfirmed && _isCurrent(generation)) {
       _retainUnconfirmedDeviceWals(deviceTargets);
     }
     if (firstError != null) Error.throwWithStackTrace(firstError, firstStackTrace!);
