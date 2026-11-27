@@ -8,9 +8,13 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 from database import batch_pipeline_intake
 from database import sync_ledger  # noqa: F401  # warm legacy_dark's lazy ledger import outside the call budget
+from database.firestore_transaction_retry import FirestoreContentionExhausted
+from routers import batch_provider_stt
 from utils.batch_pipeline.intake import stranded_adopter
 from testing.pipeline_sim.store import CustomerData, SimStore
 from utils.batch_pipeline.contracts import Priority, ProjectionBinding, WorkItem
@@ -491,6 +495,28 @@ def test_abandoned_running_intent_settles_failed_held_without_spend(world, monke
     inspect.assert_not_called()
 
 
+@pytest.mark.parametrize('expired', [False, True])
+def test_abandoned_provider_attempt_only_fails_over_with_retained_input(world, monkeypatch, expired):
+    from config.batch_pipeline_retention import LIFECYCLE_SECONDS
+
+    _, store = world
+    monkeypatch.setenv('BATCH_VENDOR_FAILOVER_ENABLED', 'true')
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
+    artifacts, vendor = Artifacts(), Vendor()
+    artifacts.fail_persist = True
+    stage(store, artifacts, vendor).run('p1')
+    now = 100.0 + LIFECYCLE_SECONDS if expired else 201.0 + ABANDON_SECONDS
+    replay = stage(store, artifacts, vendor, now=now)
+    replay.armed = lambda: True
+    replay.failover_routes = lambda _: ('soniox',)
+
+    outcome = replay.run('p1')
+
+    assert outcome.outcome == ('done' if expired else 'deferred')
+    assert job(store, 'p1')['state'] == ('quarantined' if expired else PENDING)
+    assert vendor.calls == 1 and artifacts.fetches == 1
+
+
 def test_vad_is_durable_before_vendor_call_and_losing_start_keeps_it(world, monkeypatch):
     _, store = world
     admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
@@ -930,10 +956,6 @@ def test_consumer_contract_and_malformed_rows_close_without_work():
     ],
 )
 def test_route_rejects_malformed_tasks_with_400_and_requires_task_auth(body, monkeypatch):
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
-    from routers import batch_provider_stt
-
     app = FastAPI()
     app.include_router(batch_provider_stt.router)
     client = TestClient(app)
@@ -992,7 +1014,9 @@ def dark_intake(world, monkeypatch):
     contexts = []
     monkeypatch.setattr(intake, 'with_context', lambda wav, context: contexts.append(context) or wav)
     monkeypatch.setattr(
-        intake, 'artifacts_for', lambda _store: SimpleNamespace(stage_audio=lambda i, w: 'gs://synthetic/a')
+        intake,
+        'artifacts_for',
+        lambda _store: SimpleNamespace(stage_audio=lambda i, w, *, record_origin: 'gs://synthetic/a'),
     )
     monkeypatch.setattr(
         intake,
@@ -1704,3 +1728,23 @@ def test_a_legacy_silent_intent_without_the_marker_also_settles_as_silence(world
     row = job(store, 'p1')
     assert row['state'] == 'result_ready'
     assert 'abandoned' not in [a.get('outcome') for a in row.get('provider_attempts') or []]
+
+
+def test_provider_stage_transaction_exhaustion_releases_lease_and_retries(monkeypatch):
+
+    outbox = PushOutbox(_claim())
+    stage = ProviderSttStage(None, None)
+    monkeypatch.setattr(stage, '_prepare', Mock(side_effect=FirestoreContentionExhausted('synthetic contention')))
+    consumer = provider_stt.ProviderSttConsumer(lambda: stage)
+    monkeypatch.setattr(batch_provider_stt, 'ProviderSttConsumer', lambda **kwargs: consumer)
+    monkeypatch.setattr(batch_provider_stt, 'outbox_for', lambda kind: outbox)
+
+    app = FastAPI()
+    app.include_router(batch_provider_stt.router)
+    app.dependency_overrides[batch_provider_stt.verify_provider_stt_task] = lambda: 0
+    response = TestClient(app).post(
+        batch_provider_stt.ROUTE, json={'kind': 'provider_stt', 'row_id': 'p1', 'wake_token': 'wake'}
+    )
+    assert response.status_code == 409
+    assert response.json() == {'status': 'retry', 'reason': 'dependency_warming'}
+    assert [call[0] for call in outbox.calls] == ['claim_key', 'release']

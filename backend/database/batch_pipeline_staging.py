@@ -44,6 +44,9 @@ def reap_one(store: Store, key: str, now: datetime) -> bool:
         if source.get('uri', '').split('#', 1)[0] == uri:
             return False  # Accepted pre-unit custody has no TTL, including OFF/outage.
         attached = job.get('audio_uri') if row['kind'] == 'audio' else (job.get('result') or {}).get('result_uri')
+        if row['kind'] != 'audio':
+            # A parked sweep still needs the original window after this reaper retires the upload marker.
+            row['late_erasure_pending_until'] = deadline
         if attached and attached.split('#', 1)[0] == uri:
             row.pop('write_pending_until', None)
         elif job.get('state') == 'leased' and row['kind'] != 'audio' and job.get('lease_until', 0) > now.timestamp():

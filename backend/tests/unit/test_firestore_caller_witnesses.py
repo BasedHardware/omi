@@ -117,7 +117,7 @@ def test_completeness_fails_on_alias_binding(discovered_callers):
 
 def test_completeness_fails_on_wrapper_reference(discovered_callers):
     mutated = {key: dict(row) for key, row in discovered_callers.items()}
-    key = 'routers/conversations.py:get_conversations:database.conversations.get_conversations_without_photos'
+    key = 'routers/conversations.py:get_conversations.read_page:database.conversations.get_conversations_without_photos'
     mutated[key]['references'] += 1
     assert witness_completeness_errors(mutated)
 

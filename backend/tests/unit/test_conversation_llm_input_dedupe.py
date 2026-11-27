@@ -574,7 +574,8 @@ def test_key_modes_do_not_read_dependency_metadata_per_call(enabled, monkeypatch
 
 
 @pytest.mark.parametrize(
-    'version,words', [('notes-3', 200), ('notes-4', 200), ('notes-4', 6000), ('notes-8', 200), ('notes-8', 6000)]
+    'version,words',
+    [('notes-3', 200), ('notes-4', 200), ('notes-4', 6000), ('notes-8', 200), ('notes-8', 6000), ('notes-10', 6000)],
 )
 def test_quality_contract_reuses_clean_old_checkpoint_without_a_paid_call(enabled, monkeypatch, version, words):
     from models.structured import Structured

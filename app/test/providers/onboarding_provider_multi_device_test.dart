@@ -47,6 +47,22 @@ void main() {
       expect(provider.visibleDeviceList[1].rssi, -30);
     });
 
+    test('a forgotten device is no longer listed as saved on the pairing screen', () async {
+      final forgotten = _device(id: 'AA:AA:AA:AA:AA:01', name: 'Forgotten');
+      final kept = _device(id: 'AA:AA:AA:AA:AA:02', name: 'Kept');
+      await SharedPreferencesUtil().btDeviceSet(kept);
+      await SharedPreferencesUtil().btDeviceSet(forgotten);
+
+      await SharedPreferencesUtil().btDeviceForget(forgotten.id);
+
+      final provider = OnboardingProvider();
+      expect(provider.visibleDeviceList.map((device) => device.id), [kept.id]);
+      // Still advertising nearby: it is offered as a new device, not as a saved one.
+      provider.onDevices([forgotten]);
+      expect(provider.visibleDeviceList.map((device) => device.id), [kept.id, forgotten.id]);
+      expect(provider.isSavedDevice(forgotten), isFalse);
+    });
+
     test('nearby count and online state ignore saved devices that are not advertising', () async {
       final savedOffline = _device(id: 'AA:AA:AA:AA:AA:01', name: 'Saved Offline');
       final liveNew = _device(id: 'AA:AA:AA:AA:AA:02', name: 'New Nearby', rssi: -45);

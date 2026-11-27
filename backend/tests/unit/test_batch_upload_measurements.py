@@ -4,9 +4,11 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 from pathlib import Path
 import re
+import subprocess
+import sys
 
 import pytest
-from prometheus_client import CollectorRegistry, generate_latest
+from prometheus_client import REGISTRY, CollectorRegistry, generate_latest
 import yaml
 
 from database import batch_pipeline_upload_metrics as upload_metrics
@@ -16,8 +18,16 @@ from diarizer.batch_pipeline_runtime import merge_metrics
 from utils.batch_pipeline import upload_entitlement
 from utils.metrics import metrics_response
 from utils.observability import sync_upload
+from utils.sync import legacy_dark
+from tests.support.firestore_shape_recorder import RecordingFirestore, install_recorder
 from tests.unit.test_batch_pipeline_intake import proposal, submit, cohort  # noqa: F401
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
+from tests.unit.test_sync_capture_time_skew import _default_skew, _filename, client  # noqa: F401
+
+MISMATCH_METRIC = 'omi_batch_pipeline_upload_recovery_label_mismatch_total'
+COMPARISONS_METRIC = 'omi_batch_pipeline_upload_recovery_label_comparisons_total'
+DIRECTIONS = ('fresh_labelled_recovered', 'recovered_labelled_fresh', 'missing')
+JOURNAL_STATES = ('fresh', 'recovered', 'mixed')
 
 
 @pytest.mark.parametrize(
@@ -92,33 +102,142 @@ def test_upload_latency_labels_are_closed(monkeypatch, state, expected):
 
 @pytest.mark.parametrize(
     'age_ms,state,expected_label,seconds',
-    [('0', 'fg60', 'fg60', 0), ('360123', 'bg300', 'bg300', 360.123), ('86400000', 'invalid', 'unknown', 86400)],
+    [
+        ('0', 'fg60', 'fg60', 0),
+        ('0' * 100, 'fg60', 'fg60', 0),
+        ('360123', 'bg300', 'bg300', 360.123),
+        ('000086400', 'bg300', 'bg300', 86.4),
+        ('00086400000', 'invalid', 'unknown', 86400),
+    ],
 )
 @pytest.mark.parametrize('recovered,label', [(True, 'true'), (False, 'false'), ('private', 'false')])
 def test_hold_age_observes_bounded_milliseconds(monkeypatch, age_ms, state, expected_label, seconds, recovered, label):
     histogram = Mock()
     monkeypatch.setattr(sync_upload, 'HOLD_AGE', histogram)
-    sync_upload.observe_hold_age(age_ms, state, recovered)
-    histogram.labels.assert_called_once_with(expected_label, label)
+    sync_upload.observe_hold_age(age_ms, state, recovered, upload_trace='sealed=100;gate=offline', received_at=400)
+    histogram.labels.assert_called_once_with(expected_label, label, 'offline')
     histogram.labels.return_value.observe.assert_called_once_with(seconds)
 
 
-@pytest.mark.parametrize('age_ms', [None, '', '1.5', ' 10', '-1', '+1', '١', '86400001', '1' * 100, 1000])
+@pytest.mark.parametrize('age_ms', [None, '', '1.5', ' 10', '-1', '+1', '١', '00086400001', '1' * 100, 1000])
 def test_malformed_hold_age_is_not_observed(monkeypatch, age_ms):
     histogram = Mock()
     monkeypatch.setattr(sync_upload, 'HOLD_AGE', histogram)
-    sync_upload.observe_hold_age(age_ms, 'bg300')
+    sync_upload.observe_hold_age(age_ms, 'bg300', False, upload_trace=None, received_at=400)
     histogram.labels.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    'trace,expected',
+    [
+        ('sealed=100;gate=retries_exhausted', 'retries_exhausted'),
+        ('sealed=100;gate=none', 'none'),
+        ('sealed=100;gate=synthetic-private-value', 'other'),
+        ('sealed=invalid;gate=offline', 'other'),
+        (None, 'other'),
+    ],
+)
+def test_hold_age_reuses_the_bounded_upload_trace_gate(monkeypatch, trace, expected):
+    histogram = Mock()
+    monkeypatch.setattr(sync_upload, 'HOLD_AGE', histogram)
+    sync_upload.observe_hold_age('60000', 'fg60', False, upload_trace=trace, received_at=400)
+    histogram.labels.assert_called_once_with('fg60', 'false', expected)
+
+
 def test_hold_age_is_exported_from_sync_with_guard_buckets():
-    sync_upload.observe_hold_age('60000', 'fg60', True)
+    sync_upload.observe_hold_age('60000', 'fg60', True, upload_trace='sealed=100;gate=none', received_at=400)
     samples = metrics_response().body
     for boundary in ('60.0', '300.0', '360.0', '600.0', '900.0', '1800.0'):
         assert (
-            f'omi_batch_pipeline_upload_hold_age_seconds_bucket{{hold_state="fg60",le="{boundary}",recovered="true"}}'.encode()
+            f'omi_batch_pipeline_upload_hold_age_seconds_bucket{{gate="none",hold_state="fg60",le="{boundary}",recovered="true"}}'.encode()
             in samples
         )
+
+
+def test_recovery_comparison_is_exported_while_idle():
+    page = subprocess.check_output(
+        [
+            sys.executable,
+            '-c',
+            'from routers import sync; from utils.metrics import metrics_response; print(metrics_response().body.decode())',
+        ],
+        text=True,
+    )
+    for direction in DIRECTIONS:
+        assert f'{MISMATCH_METRIC}{{direction="{direction}"}} 0.0\n' in page
+    for state in JOURNAL_STATES:
+        assert f'{COMPARISONS_METRIC}{{journal_state="{state}"}} 0.0\n' in page
+
+
+@pytest.mark.parametrize(
+    'journal,label,hold,comparison,mismatch',
+    [
+        ('fresh', '1', 'bg300', 1, 'fresh_labelled_recovered'),
+        ('recovered', '0', 'fg60', 1, 'recovered_labelled_fresh'),
+        ('fresh', '0', 'fg_preview300', 1, None),
+        ('recovered', '1', 'bg300', 1, None),
+        ('recovered', None, 'bg300', 1, 'missing'),
+        ('fresh', None, 'none', 1, 'missing'),
+        ('recovered', 'private', 'fg60', 1, 'missing'),
+        (None, '1', 'bg300', 0, 'missing'),
+        ('private', '1', 'bg300', 0, 'missing'),
+        ('mixed', '0', 'bg300', 1, 'recovered_labelled_fresh'),
+        ('mixed', '1', 'bg300', 1, 'fresh_labelled_recovered'),
+        (None, None, None, 0, None),
+        (None, None, 'none', 0, None),
+        (None, '1', 'none', 0, None),
+    ],
+)
+def test_v2_upload_compares_recovery_labels_without_firestore(
+    client, monkeypatch, journal, label, hold, comparison, mismatch
+):
+    headers = {
+        name: value
+        for name, value in (
+            ('X-Omi-Upload-Journal-Recovery', journal),
+            ('X-Omi-Upload-Recovered', label),
+            ('X-Omi-Upload-Hold', hold),
+        )
+        if value is not None
+    }
+    # Isolate the comparator from the route's existing legacy-mode lookup,
+    # which may read rollout_cohorts when its process cache is cold.
+    monkeypatch.setattr(legacy_dark, 'current_mode', lambda _uid: legacy_dark.LegacySyncMode.ON)
+    firestore = RecordingFirestore()
+    # The shape recorder captures query terminals. Spy on reference builders
+    # as well to cover direct document reads and writes in this path.
+    firestore_calls = Mock()
+    for method in ('document', 'collection', 'collection_group', 'get_all', 'batch', 'transaction'):
+        spy = Mock(wraps=getattr(firestore, method))
+        firestore_calls.attach_mock(spy, method)
+        monkeypatch.setattr(firestore, method, spy)
+
+    def mismatches():
+        return {
+            direction: REGISTRY.get_sample_value(MISMATCH_METRIC, {'direction': direction}) for direction in DIRECTIONS
+        }
+
+    def comparisons():
+        return {
+            state: REGISTRY.get_sample_value(COMPARISONS_METRIC, {'journal_state': state}) for state in JOURNAL_STATES
+        }
+
+    before = mismatches()
+    evaluated = comparisons()
+    filename = _filename(-60).replace('audio_omi_', 'audio_omimobilebatch001_', 1)
+    with install_recorder(firestore):
+        response = client.post(
+            '/v2/sync-local-files',
+            headers=headers,
+            files=[('files', (filename, b'\x00' * 32, 'application/octet-stream'))],
+        )
+    assert response.status_code == 202, response.text
+    assert firestore_calls.mock_calls == []
+    assert firestore.shapes == []
+    assert comparisons() == {
+        state: count + (comparison if state == journal else 0) for state, count in evaluated.items()
+    }
+    assert mismatches() == {direction: count + (direction == mismatch) for direction, count in before.items()}
 
 
 def test_completion_latency_counts_originals_not_merged_units_or_replays(monkeypatch):
@@ -174,6 +293,8 @@ def test_upload_metrics_forward_through_worker_multiprocess_exposition():
         'omi_batch_pipeline_upload_hold_age_seconds_bucket',
         'omi_batch_pipeline_upload_hold_age_seconds_sum',
         'omi_batch_pipeline_upload_hold_age_seconds_count',
+        MISMATCH_METRIC,
+        COMPARISONS_METRIC,
         'omi_batch_pipeline_inter_upload_gap_seconds_bucket',
         'omi_batch_pipeline_inter_upload_gap_seconds_sum',
         'omi_batch_pipeline_inter_upload_gap_seconds_count',

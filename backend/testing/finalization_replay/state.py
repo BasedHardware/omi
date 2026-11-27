@@ -9,7 +9,12 @@ import re
 from threading import Lock
 
 from testing.finalization_replay.corpus import FIXED_DATE, pack, seed_document
-from testing.finalization_replay.metrics import embedding_token_estimate, prompt_token_estimate, token_estimate
+from testing.finalization_replay.metrics import (
+    embedding_token_estimate,
+    prompt_token_estimate,
+    suspend_meter,
+    token_estimate,
+)
 
 # Python stores its queue and queue metrics projection in Firestore. Go stores
 # the queue in Postgres. The disposition is compared separately from these rows.
@@ -150,11 +155,12 @@ def episode_attach_memo_failure_reason(
     )
 
 
-def ordinary_sync_attach_memo_failure_reason(uid, cid, conversation, documents, *, key_fn, python_keys=None):
+def ordinary_sync_attach_memo_failure_reason(
+    uid, cid, conversation, documents, *, key_fn=None, python_keys=None, require_memo=False
+):
     """Verify final Go memo binding or the proven Python skip-cache fallthrough."""
-    final_key = key_fn(uid, conversation)
     link = documents.get(f'users/{uid}/episode_links/{cid}')
-    if link is None and python_keys is not None:
+    if link is None and python_keys is not None and not require_memo:
         return ''
     if not isinstance(link, dict):
         return 'missing_link'
@@ -162,7 +168,7 @@ def ordinary_sync_attach_memo_failure_reason(uid, cid, conversation, documents, 
     revision, completed, finalized = (link.get(f'attach_{name}') for name in ('revision', 'completed', 'finalized'))
     owner = link.get('attach_owner_id')
     if python_keys is not None and all(value is None for value in (revision, completed, finalized, owner)):
-        return ''
+        return 'missing_memo_fields' if require_memo else ''
     if not owner or owner != link.get('episode_id') or owner != conversation.get('episode_id'):
         return 'owner_binding_mismatch'
     if python_keys is not None:
@@ -171,11 +177,31 @@ def ordinary_sync_attach_memo_failure_reason(uid, cid, conversation, documents, 
         if finalized is not None and finalized != revision:
             return 'finalized_binding_mismatch'
         return ''
+    final_key = key_fn(uid, conversation)
     if not final_key or revision != final_key or completed != final_key:
         return 'completed_key_mismatch'
     if finalized != final_key:
         return 'finalized_binding_mismatch'
     return ''
+
+
+def fenced_sync_attach_memo_check(uid, cid, conversation, before_link, after_link, *, intake_key):
+    """Report whether intake requires a memo and validate the pre-delete binding."""
+    if conversation is None:
+        return False, 'missing_conversation_before_worker_delete'
+    expected = bool(intake_key and conversation.get('episode_id'))
+    reason = ordinary_sync_attach_memo_failure_reason(
+        uid,
+        cid,
+        conversation,
+        {f'users/{uid}/episode_links/{cid}': before_link},
+        # Both sides use the same intake writer. A fenced worker cannot finalize its memo.
+        python_keys=(intake_key,) if intake_key else (),
+        require_memo=expected,
+    )
+    if not reason and not _same_snapshot_value(before_link, after_link):
+        reason = 'link_changed_after_worker_delete'
+    return expected, reason
 
 
 class CaseState:
@@ -346,6 +372,13 @@ class CaseState:
         snapshot = self.client.collection(collection).document(document).get()
         return {'exists': snapshot.exists, 'fields': pack(snapshot.to_dict() or {})}
 
+    def capture_memo_before_worker_delete(self):
+        with suspend_meter():
+            self.memo_before_worker_delete = (
+                self.conversation.get().to_dict(),
+                pack(self.client.document(self.home_dirty_receipt_path).get().to_dict()),
+            )
+
     def capture_before_erasure(self):
         snapshot = self.observe('completed', self.initial_documents, load_memo_bindings=load_memo_bindings)
         if snapshot['conversation'] is None:
@@ -395,17 +428,28 @@ class CaseState:
         if side in {'python', 'go'}:
             memo_bindings = load_memo_bindings()
             stored = document or {}
-            memo_failure_reason = ordinary_sync_attach_memo_failure_reason(
-                self.uid,
-                self.cid,
-                stored,
-                derived_documents,
-                python_keys=self.episode_attach_memo_writer_keys if side == 'python' else None,
-                key_fn=memo_bindings.current_key,
-            )
+            if status == 'fenced' and document is None and hasattr(self, 'memo_before_worker_delete'):
+                before_conversation, before_link = self.memo_before_worker_delete
+                memo_expected, memo_failure_reason = fenced_sync_attach_memo_check(
+                    self.uid,
+                    self.cid,
+                    before_conversation,
+                    before_link,
+                    after.get(self.home_dirty_receipt_path),
+                    intake_key=self.fence_intake_memo_key,
+                )
+            else:
+                memo_failure_reason = ordinary_sync_attach_memo_failure_reason(
+                    self.uid,
+                    self.cid,
+                    stored,
+                    derived_documents,
+                    python_keys=self.episode_attach_memo_writer_keys if side == 'python' else None,
+                    key_fn=memo_bindings.current_key,
+                )
             if side == 'go':
                 link = derived_documents.get(self.home_dirty_receipt_path) or {}
-                memo_expected = bool(
+                memo_expected = memo_expected or bool(
                     link.get('attach_finalized') is not None
                     or (
                         status == 'completed'

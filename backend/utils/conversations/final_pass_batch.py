@@ -4,6 +4,7 @@ After successful revalidation, retained private recurring profiles may be publis
 Only batch-backed positive-duration segments are candidates for relabeling.
 """
 
+import hashlib
 import io
 import math
 import logging
@@ -21,12 +22,16 @@ from prometheus_client import Counter
 from datetime import datetime, timezone
 
 from config.batch_conversation_speakers import (
+    append_conflicting_units_enabled,
+    keep_resolved_on_partial_enabled,
+    split_mixed_segments_enabled,
+    v3_sources_enabled,
     BATCH_CONVERSATION_SCOPE,
     batch_unit_scope,
     final_pass_enabled_for,
     recurring_enabled_for,
 )
-from database.batch_final_pass import load_reference, ReferenceUnavailable
+from database.batch_final_pass import load_reference, ReferenceUnavailable, source_recording_fence
 from database import recurring_voices
 from utils.observability.recurring_voices import identity_speech
 from utils.speakers.recurring_voices import near_misses
@@ -41,6 +46,7 @@ from utils.batch_pipeline.projection_parts import split_result, bounded_projecti
 from utils.batch_pipeline.projection_segments import projection_segments
 from utils.conversations.final_pass_assignment import assign_words
 from utils.conversations.final_pass_errors import error_details
+from utils.conversations import final_pass_split as splitting
 from utils.conversations.final_pass_dependencies import transient_cause
 from utils.conversations.final_pass_pyannote import run_final_pass, OUTCOMES, OWNER_DELTA
 from utils.manual_speaker_assignments import manual_owner_reserved
@@ -150,6 +156,9 @@ class FinalPassResult(TypedDict, total=False):
     changed_segments: int
     speaker_count: int
     covered_segments: int
+    partial_resolution: str
+    split_segments: int
+    split_refusals: dict[str, int]
 
 
 def record_final_pass_failure(outcome: str, **details) -> FinalPassResult:
@@ -198,32 +207,150 @@ class UnitStream:
     read_budget: ArtifactReadBudget
 
 
+APPEND_GAP_BYTES = 32000  # one second of silence before a unit placed after the timeline
+
+
 def _assemble(stream):
+    """One PCM buffer for the diarizer: each unit at its capture clock, words shifted with it.
+
+    A unit whose capture clock overlaps audio already placed with different samples (measured 2026-11-26 on
+    owner v3 conversations: a 131 s unit inside a 298 s unit of the same recording, correlation 0 at every lag
+    within 0.5 s) cannot sit at that clock. Labels do not need the conversation's timeline: words are
+    assigned to turns on the unit's own audio and the result maps back by segment id. So that unit is
+    appended after the timeline (one second of silence first) instead of refusing the whole conversation.
+    Identical overlaps still share their samples.
+    """
     stream.read_budget.timeout(60)
     # Metadata is small and sorted before decoding. Only one decoded unit lives
-    # alongside this buffer; the returned read-only view never copies it.
-    pcm = memoryview(bytearray(stream.capacity))
-    used, words, checks = 0, [], []
+    # alongside this buffer; it grows only for appended units.
+    pcm = bytearray(stream.capacity)
+    used, native, words, checks, appended = 0, 0, [], [], 0
+    # Appended units go after the whole native timeline (its capacity), so a later unit at its own clock never
+    # collides with one placed there.
+    append_at = stream.capacity
     for item, audio, local_words, validate in stream.units:
         stream.read_budget.timeout(60)
         position = round((item.capture_at - stream.origin) * 16000) * 2
+        overlap = max(0, min(native - position, len(audio)))
+        if overlap:
+            with memoryview(pcm) as placed, memoryview(audio) as source:
+                same = placed[position : position + overlap] == source[:overlap]
+            if not same:
+                if not append_conflicting_units_enabled():
+                    raise IncompleteCoverage('conflicting capture clocks')
+                position, overlap = max(append_at, used) + APPEND_GAP_BYTES, 0
+                appended += 1
+        if position < append_at:
+            native = max(native, position + len(audio))
         end = position + len(audio)
-        if end > len(pcm):
+        if end > MAX_AUDIO_SECONDS * 32000:
             raise OverflowError('audio timeline too long')
-        overlap = max(0, min(used - position, len(audio)))
-        source = memoryview(audio)
-        if overlap and pcm[position : position + overlap] != source[:overlap]:
-            raise IncompleteCoverage('conflicting capture clocks')
-        pcm[position + overlap : end] = source[overlap:]
+        if end > len(pcm):
+            pcm.extend(bytes(end - len(pcm)))
+        with memoryview(audio) as source:
+            pcm[position + overlap : end] = source[overlap:]
         used = max(used, end)
         for word in local_words:
             word['timestamp'][0] += position / 32000
             word['timestamp'][1] += position / 32000
         words.extend(local_words)
         checks.append(validate)
-        del source, audio, local_words
+        del audio, local_words
+    if appended:
+        logger.info('event=batch_final_pass unit_placement=appended_after_timeline units=%d', appended)
     stream.read_budget.timeout(60)
-    return pcm[:used].toreadonly(), words, checks
+    return memoryview(pcm)[:used].toreadonly(), words, checks
+
+
+def receipt_sources(conversation) -> tuple[str, ...]:
+    """Recordings a conversations-v3 row was built from: their projection receipts are this row's (empty when
+    ``BATCH_FINAL_PASS_V3_SOURCES_ENABLED`` is false)."""
+    if not v3_sources_enabled():
+        return ()
+    return tuple(sorted({str(rid) for rid in (getattr(conversation, 'v3_recording_ids', None) or []) if rid}))
+
+
+def _epoch(value) -> float:
+    if isinstance(value, datetime):
+        return (value if value.tzinfo else value.replace(tzinfo=timezone.utc)).timestamp()
+    if isinstance(value, (int, float)):
+        return float(value)
+    parsed = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+    return (parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)).timestamp()
+
+
+def _subtract(start: float, end: float, holes) -> list[tuple[float, float]]:
+    pieces = [(start, end)]
+    for left, right in sorted(holes):
+        pieces = [(a, b) for x, y in pieces for a, b in ((x, min(y, left)), (max(x, right), y)) if b > a]
+    return pieces
+
+
+@dataclass(frozen=True)
+class SourceScope:
+    """A conversations-v3 row's live hold on its source recordings: its claims minus deleted spans (epoch seconds,
+    on the stored clock) and a fingerprint of that evidence. Reading it refuses a deleted, locked or unclaiming
+    recording; the fingerprint is re-checked after inference so a revoked claim or a new deletion refuses."""
+
+    intervals: tuple[tuple[float, float], ...]
+    fingerprint: str
+
+
+def source_scope(uid, conversation) -> SourceScope | None:
+    sources = receipt_sources(conversation)
+    if not sources:
+        return None
+    intervals, evidence = [], []
+    for rid in sources:
+        recording = source_recording_fence(uid, rid)
+        if not recording or recording.get('deleted') or recording.get('is_locked'):
+            raise ReferenceUnavailable('skipped_merged')
+        claims = [c for c in recording.get('claims') or [] if c.get('conversation_id') == conversation.id]
+        if not claims:
+            raise ReferenceUnavailable('skipped_merged')
+        deleted = [(_epoch(d['start']), _epoch(d['end'])) for d in recording.get('deleted_spans') or []]
+        for claim in claims:
+            intervals.extend(_subtract(_epoch(claim['start']), _epoch(claim['end']), deleted))
+        evidence.append((rid, sorted((_epoch(c['start']), _epoch(c['end'])) for c in claims), sorted(deleted)))
+    fingerprint = hashlib.sha256(repr(sorted(evidence)).encode()).hexdigest()
+    return SourceScope(tuple(sorted(intervals)), fingerprint)
+
+
+OWN_SPEECH_PAD_SECONDS = 0.25
+OWN_SPEECH_JOIN_SECONDS = 1.0
+
+
+def own_speech_spans(words) -> list[tuple[float, float]]:
+    """Unit-clock stretches around this conversation's own words (``timestamp`` on the unit's audio), joined
+    across short pauses and padded. Claim times come from stored segment clocks, which need not match the
+    unit's capture clock, so the words, not the claims, say where this conversation's speech is."""
+    spans: list[list[float]] = []
+    for left, right in sorted((float(w['timestamp'][0]), float(w['timestamp'][1])) for w in words):
+        left, right = max(0.0, left - OWN_SPEECH_PAD_SECONDS), right + OWN_SPEECH_PAD_SECONDS
+        if spans and left - spans[-1][1] <= OWN_SPEECH_JOIN_SECONDS:
+            spans[-1][1] = max(spans[-1][1], right)
+        else:
+            spans.append([left, right])
+    return [(a, b) for a, b in spans]
+
+
+def masked_pcm(pcm: bytes, spans) -> bytes:
+    """``pcm`` with every sample outside ``spans`` (unit seconds) silenced; length and clock unchanged."""
+    keep = bytearray(len(pcm))
+    for start, end in spans:
+        left, right = max(0, round(start * 16000)) * 2, min(len(pcm), round(end * 16000) * 2)
+        if right > left:
+            keep[left:right] = pcm[left:right]
+    return bytes(keep)
+
+
+def clip_turns(turns, spans) -> list[dict]:
+    return [
+        {**turn, 'start': max(turn['start'], a), 'end': min(turn['end'], b)}
+        for turn in turns
+        for a, b in spans
+        if min(turn['end'], b) > max(turn['start'], a)
+    ]
 
 
 def read_unit_references(
@@ -233,7 +360,9 @@ def read_unit_references(
     for unit in units:
         read_budget.timeout(3)
         try:
-            reference = load_reference(store, uid, unit, conversation.id, read_budget=read_budget)
+            reference = load_reference(
+                store, uid, unit, conversation.id, read_budget=read_budget, source_ids=receipt_sources(conversation)
+            )
             if reference is None:
                 raise IncompleteCoverage('no_job')
             references[unit] = reference
@@ -328,6 +457,7 @@ def decode_unit_evidence(
     identity_turns=None,
 ):
     total_bytes = 0
+    owned = source_scope(uid, conversation)
     for unit, reference in references.items():
         read_budget.timeout(60)
         try:
@@ -380,8 +510,31 @@ def decode_unit_evidence(
                 for s in conversation.transcript_segments
                 if (scope := batch_unit_scope(s)) and scope.removeprefix('final:batch:') == unit
             }
+            # A segment an earlier pass split is a run of stored pieces (the first keeps the projection id): its
+            # words move to the pieces by token position, and the pieces must spell the projection text exactly.
+            pieces_of = {}
+            for sid, source in reconstructed.items():
+                chain = splitting.expand_split(sid, stored)
+                if len(chain) < 2:
+                    continue
+                pieces_of.update((piece.id, sid) for piece in chain)
+                mine = [word for word in words if word['segment_id'] == sid]
+                owners = (
+                    splitting.assign_words_to_pieces(mine, chain)
+                    if source.end > source.start and ' '.join(p.text for p in chain).split() == source.text.split()
+                    else None
+                )
+                if owners is None:
+                    diagnostics.update((piece.id, 'projection_text_mismatch') for piece in chain)
+                    continue
+                for word, owner in zip(mine, owners):
+                    word['segment_id'] = owner
             placed = {word['segment_id'] for word in words}
             for sid, segment in stored.items():
+                if sid in pieces_of:
+                    if sid not in diagnostics and sid not in placed:
+                        diagnostics[sid] = 'projection_unassigned_words'
+                    continue
                 source = reconstructed.get(sid)
                 reason = (
                     'projection_segment_missing'
@@ -399,16 +552,30 @@ def decode_unit_evidence(
                 if reason:
                     diagnostics[sid] = reason
             words = [word for word in words if word['segment_id'] not in diagnostics]
+            spans: list[tuple[float, float]] = []
+            if owned is not None:
+                # A source recording's unit also holds sibling conversations' speech and speech the owner
+                # deleted: only this conversation's own speech (its own segments' words, on the unit clock)
+                # reaches the diarizer and voice evidence.
+                words = [word for word in words if word['segment_id'] in stored]
+                spans = own_speech_spans(words)
+                pcm = masked_pcm(pcm, spans)
             if identity_turns is not None:
-                identity_turns[unit] = payload['diarization']['turns']
+                turns = payload['diarization']['turns']
+                identity_turns[unit] = clip_turns(turns, spans) if owned is not None else turns
 
-            def validate(unit=unit, reference=reference):
+            def validate(unit=unit, reference=reference, owned=owned):
                 try:
-                    return (
-                        load_reference(
-                            store, uid, unit, conversation.id, read_budget=ArtifactReadBudget(deadline, 0, 0)
-                        )
-                        == reference
+                    current = source_scope(uid, conversation)
+                    return load_reference(
+                        store,
+                        uid,
+                        unit,
+                        conversation.id,
+                        read_budget=ArtifactReadBudget(deadline, 0, 0),
+                        source_ids=receipt_sources(conversation),
+                    ) == reference and (current.fingerprint if current else None) == (
+                        owned.fingerprint if owned else None
                     )
                 except Exception:
                     failure_context.unit = unit
@@ -553,7 +720,9 @@ def _run(uid, conversation, receipt, load_prints, apply, failure_context: UnitFa
         return _reserve_budget(seconds)
 
     expected = None
-    if recurring_enabled_for(uid, conversation.transcript_segments):
+    # Units of source recordings: the live-claim bound is checked before inference, not inside the profile
+    # publish transaction, so no recurring profile is learned from them.
+    if recurring_enabled_for(uid, conversation.transcript_segments) and not receipt_sources(conversation):
         try:
             expected = recurring_voices.checkpoint(uid, conversation.id, receipt=receipt)
         except Exception:
@@ -594,7 +763,7 @@ def _run(uid, conversation, receipt, load_prints, apply, failure_context: UnitFa
     labels_by_voice = {s.speaker: s for s in passed if s.speaker is not None}
     by_segment = {}
     for word in outcome['assignments']:
-        by_segment.setdefault(word['segment_id'], []).append(word['speaker'])
+        by_segment.setdefault(word['segment_id'], []).append(word)
     original_owner = sum(w['timestamp'][1] - w['timestamp'][0] for w in words if stored[w['segment_id']].is_user)
     final_owner = sum(
         w['timestamp'][1] - w['timestamp'][0]
@@ -605,16 +774,19 @@ def _run(uid, conversation, receipt, load_prints, apply, failure_context: UnitFa
         abs(final_owner - original_owner) / max(original_owner, final_owner, 0.001)
     )
     voice_ids = {}
+    segment_voices = {}
     unassigned = False
-    for segment_id, labels in by_segment.items():
-        if None in labels:
-            unassigned = True
-            continue
-        voices = set(labels)
-        if len(voices) != 1:
-            unassigned = True
-            continue
-        voice = voices.pop()
+    splits, origin, word_piece = {}, {}, {}
+    split_refusals = Counts()
+    # Never on the identity-only retry: notes may already cite the segment (see final_pass_split).
+    can_split = split_mixed_segments_enabled() and not _IDENTITY_ONLY.get()
+    split_members = {piece.id for sid in stored for piece in splitting.expand_split(sid, stored)[1:]} | {
+        sid for sid in stored if splitting.split_segment_id(sid, 1) in stored
+    }
+
+    def assign(segment_id, voice):
+        nonlocal next_id
+        segment_voices[segment_id] = voice
         if voice not in voice_ids:
             voice_ids[voice] = next_id
             next_id += 1
@@ -624,32 +796,103 @@ def _run(uid, conversation, receipt, load_prints, apply, failure_context: UnitFa
         if label.is_user or label.person_id:
             identities[new_id] = Identity(is_user=label.is_user, person_id=label.person_id)
         statuses[new_id] = label.speaker_identity_status
+
+    for segment_id, segment_words in by_segment.items():
+        labels = [word['speaker'] for word in segment_words]
+        if None not in labels and len(set(labels)) == 1:
+            assign(segment_id, labels[0])
+            continue
+        runs = splitting.plan_runs(segment_words) if can_split else None
+        if runs is None:
+            if can_split:
+                split_refusals['no_voice' if all(v is None for v in labels) else 'mostly_gap'] += 1
+            unassigned = True
+            continue
+        if len(runs) == 1:  # a gap or a short aside inside one voice's segment: the voice holding the rest
+            assign(segment_id, runs[0].voice)
+            continue
+        reason = (
+            'too_many_voices'
+            if len(runs) > splitting.MAX_PIECES
+            else 'already_split' if segment_id in split_members else splitting.refusal(stored[segment_id], receipt)
+        )
+        pieces = None if reason else splitting.split_segment(stored[segment_id], segment_words, runs)
+        if pieces is None:
+            split_refusals[reason or 'text_mismatch'] += 1
+            unassigned = True
+            continue
+        splits[segment_id] = pieces
+        for piece, run in zip(pieces, runs):
+            origin[piece.id] = segment_id
+            assign(piece.id, run.voice)
+            for word in segment_words[run.first : run.last + 1]:
+                word_piece[id(word)] = piece.id
     # Apply atomically after reference revalidation. Manual segments keep their groups.
     updates = {
         sid: value
         for sid, value in updates.items()
-        if any(s.id == sid and s.speaker_label_source != 'manual' for s in conversation.transcript_segments)
+        if (segment := stored.get(origin.get(sid, sid))) is not None and segment.speaker_label_source != 'manual'
     }
+    split_details = {'split_segments': len(splits), 'split_refusals': dict(split_refusals)}
+    if splits or split_refusals:
+        logger.info(
+            'event=batch_final_pass_split segments=%d refusals=%s', len(splits), dict(sorted(split_refusals.items()))
+        )
     if not updates:
-        return record_final_pass_failure('failed_unassigned_words' if unassigned else 'skipped_no_changes')
-    candidate = conversation.model_copy(deep=True)
-    apply(
-        candidate,
-        updates,
-        identities,
-        statuses,
-        owner_voiceprint_available=bool(cache and 'user' in cache),
-        scope=BATCH_CONVERSATION_SCOPE + conversation.id,
-    )
-    candidate.speaker_resolution = ConversationSpeakers(
-        status='resolved' if len(updates) == len(conversation.transcript_segments) else 'unavailable',
-        version=1,
-        participant_speaker_ids=(
-            significant_capture_speaker_ids(candidate.transcript_segments)
-            if len(updates) == len(conversation.transcript_segments)
-            else []
-        ),
-    )
+        return record_final_pass_failure(
+            'failed_unassigned_words' if unassigned else 'skipped_no_changes', **split_details
+        )
+    scope = BATCH_CONVERSATION_SCOPE + conversation.id
+    complete = len(updates) == len(conversation.transcript_segments) + sum(len(p) - 1 for p in splits.values())
+
+    def applied(plan):
+        copy = conversation.model_copy(deep=True)
+        if splits:
+            copy.transcript_segments = [
+                piece.model_copy(deep=True)
+                for segment in copy.transcript_segments
+                for piece in (splits.get(segment.id) or [segment])
+            ]
+        apply(copy, *plan, owner_voiceprint_available=bool(cache and 'user' in cache), scope=scope)
+        return copy
+
+    candidate, partial_resolution = None, None
+    if not complete:
+        mapping, partial_resolution = _resolver_voice_mapping(conversation, stored, outcome['assignments'])
+        if mapping is not None:
+            # One person, one number: updated segments take the resolver's id for the same voice, so they agree
+            # with the segments this pass left alone.
+            renumber = {voice_ids[voice]: mapping[voice] for voice in voice_ids}
+            kept = applied(
+                (
+                    {sid: mapping[segment_voices[sid]] for sid in updates},
+                    {renumber[k]: v for k, v in identities.items()},
+                    {renumber[k]: v for k, v in statuses.items()},
+                )
+            )
+            if _consistent_voices(kept):
+                candidate, partial_resolution = kept, 'kept'
+                updates = {sid: mapping[segment_voices[sid]] for sid in updates}
+                voice_ids = {voice: mapping[voice] for voice in voice_ids}
+            else:
+                partial_resolution = 'inconsistent'
+        logger.info('event=batch_final_pass_partial_resolution outcome=%s', partial_resolution)
+    if candidate is None:
+        candidate = applied((updates, identities, statuses))
+    if partial_resolution == 'kept':
+        candidate.speaker_resolution = ConversationSpeakers(
+            status='resolved',
+            version=conversation.speaker_resolution.version,
+            participant_speaker_ids=significant_capture_speaker_ids(candidate.transcript_segments),
+        )
+    else:
+        candidate.speaker_resolution = ConversationSpeakers(
+            status='resolved' if complete else 'unavailable',
+            version=1,
+            participant_speaker_ids=(
+                significant_capture_speaker_ids(candidate.transcript_segments) if complete else []
+            ),
+        )
     recurring_labels = {}
     if (
         not missing
@@ -703,7 +946,7 @@ def _run(uid, conversation, receipt, load_prints, apply, failure_context: UnitFa
     projected = {s.id: s for s in candidate.transcript_segments}
     speech_mix = dict(owner=0.0, person=0.0, recurring=0.0, unnamed=0.0)
     for word in outcome['assignments']:
-        segment = projected.get(word['segment_id'])
+        segment = projected.get(word_piece.get(id(word), word['segment_id']))
         if segment is not None:
             kind = (
                 'owner'
@@ -728,27 +971,92 @@ def _run(uid, conversation, receipt, load_prints, apply, failure_context: UnitFa
     if unassigned:
         return record_final_pass_failure(
             'failed_unassigned_words',
+            **split_details,
             changed_segments=len(updates),
             speaker_count=len(voice_ids),
             coverage=coverage,
             coverage_reasons=coverage_reasons,
+            partial_resolution=partial_resolution,
         )
     if missing:
         return record_final_pass_failure(
             'partial_coverage',
             reason='projection_coverage_partial',
+            **split_details,
             coverage=coverage,
             coverage_reasons=coverage_reasons,
             changed_segments=len(updates),
             speaker_count=len(voice_ids),
+            partial_resolution=partial_resolution,
         )
     count_terminal('success')
     logger.info('event=batch_final_pass outcome=success')
-    return {
+    result: FinalPassResult = {
         'outcome': 'success',
         'coverage': coverage,
         'coverage_reasons': coverage_reasons,
         'changed_segments': len(updates),
         'speaker_count': len(voice_ids),
         'covered_segments': len(covered),
+        'split_segments': len(splits),
+        'split_refusals': dict(split_refusals),
     }
+    if partial_resolution is not None:
+        # Complete coverage with manual or other-lane segments left alone.
+        result['partial_resolution'] = partial_resolution
+    return result
+
+
+def _majority(counts: Counts):
+    """The key holding more than half of the words, else None."""
+    key, top = counts.most_common(1)[0]
+    return key if top * 2 > sum(counts.values()) else None
+
+
+def _resolver_voice_mapping(conversation, stored, assignments) -> tuple[dict | None, str]:
+    """Each final-pass voice -> the resolver voice id that holds most of its assigned words, when that is one-to-one.
+
+    Only for a conversation the resolver already resolved: its ids are one voice each across the conversation, and
+    a partial pass leaves some of them in place. Manual segments count: the resolver groups them into its voices,
+    and only their labels are the person's (they are never updated). Words outside the conversation scope belong to
+    no resolver voice. Ambiguous (no clear majority either way), split (two final voices onto one resolver voice)
+    and merge (a resolver voice mostly held by a final voice mapped elsewhere) keep today's behaviour.
+    """
+    if not keep_resolved_on_partial_enabled():
+        return None, 'disabled'
+    prior = conversation.speaker_resolution
+    if prior is None or prior.status != 'resolved':
+        return None, 'not_resolved'
+    scope = BATCH_CONVERSATION_SCOPE + conversation.id
+    by_voice, by_resolver = {}, {}
+    for word in assignments:
+        voice = word['speaker']
+        if voice is None:
+            continue
+        segment = stored[word['segment_id']]
+        resolver = segment.speaker_id if segment.speaker_id_scope == scope else None
+        by_voice.setdefault(voice, Counts())[resolver] += 1
+        if resolver is not None:
+            by_resolver.setdefault(resolver, Counts())[voice] += 1
+    mapping = {voice: _majority(counts) for voice, counts in by_voice.items()}
+    if not mapping or None in mapping.values():
+        return None, 'ambiguous'
+    if len(set(mapping.values())) < len(mapping):
+        return None, 'split'
+    if any(mapping.get(_majority(counts)) != resolver for resolver, counts in by_resolver.items()):
+        return None, 'merge'
+    return mapping, 'mapped'
+
+
+def _consistent_voices(conversation) -> bool:
+    """Each speaker number denotes one voice: the app numbers voices by ``speaker_id`` alone, so every automatic
+    segment holding an id shares its scope and identity. Segments neither pass placed keep the resolver's own
+    labels, which it already counted inside its resolved coverage."""
+    voices = {}
+    for segment in conversation.transcript_segments:
+        if segment.speaker_label_source == 'manual':
+            continue
+        voice = (segment.speaker_id_scope, segment.is_user, segment.person_id)
+        if voices.setdefault(segment.speaker_id, voice) != voice:
+            return False
+    return True

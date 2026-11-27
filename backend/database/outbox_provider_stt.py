@@ -14,9 +14,13 @@ sweep. A provider unit is admitted exactly once, so a second ``enqueue`` of an o
 
 from __future__ import annotations
 
+import math
 import re
 import uuid
 from typing import Any, Callable, Literal, Mapping
+
+from google.cloud import firestore
+from google.cloud.firestore_v1 import FieldFilter
 
 from config.policy import sweep_age
 from database.outbox import Claim, EnqueueResult, OutboxKind, Outcome, SweepCounts
@@ -27,6 +31,8 @@ _ROW_ID = re.compile('[0-9a-f]{64}')
 _TOKEN = re.compile('[0-9a-f]{32}')
 OPEN, CLOSED = 'open', 'closed'
 TASK_PREFIX = 'pst'
+OUTBOX_SUFFIX = '_provider_stt_outbox'
+RUNNING_RECOVERY_PAGE_SIZE = 25
 # A wake younger than this may still be queued (Cloud Tasks backoff); the sweep leaves it alone.
 REWAKE_AFTER_SECONDS = 600.0
 
@@ -36,7 +42,7 @@ def collection_name(stage: str | None = None) -> str:
         from utils.sync.stage import current_stage
 
         stage = current_stage()
-    return f'batch_pipeline_{stage}_provider_stt_outbox'
+    return f'batch_pipeline_{stage}{OUTBOX_SUFFIX}'
 
 
 def task_name(row_id: str, wake_token: str) -> str:
@@ -59,6 +65,18 @@ def _new_row(row_id: str, owner_id: str, available_at: float, policy_id: str | N
         'created_at': now,
         'closed_reason': None,
     }
+
+
+def _ready_to_rewake(row: Row, now: float) -> bool:
+    return (
+        row.get('due_at', 0) <= now
+        and row.get('lease_until', 0) <= now
+        and now - float(row.get('woken_at') or 0) >= REWAKE_AFTER_SECONDS
+    )
+
+
+def _rearm_wake(row: Row, now: float) -> Row:
+    return {**row, 'task_token': uuid.uuid4().hex, 'woken_at': now, 'lease_token': None, 'lease_until': 0.0}
 
 
 def _claim(row: Mapping[str, Any]) -> Claim:
@@ -105,7 +123,9 @@ class FirestoreProviderSttOutbox:
         self._privacy_blocked = privacy_blocked
         self._create_wake = create_wake or _default_wake
         self._collection = collection
-        self._sweep_cursor: Any = None  # The production factory caches this instance across maintenance ticks.
+        # The production factory caches this instance across maintenance ticks.
+        self._sweep_cursor: Any = None
+        self._running_cursor: Any = None
 
     # --- plumbing -------------------------------------------------------------------------------
     def _client(self) -> Any:
@@ -126,7 +146,7 @@ class FirestoreProviderSttOutbox:
     def _wake(self, row: Mapping[str, Any]) -> None:
         self._create_wake(row['segment_id'], row['task_token'], float(row['due_at']))
 
-    def _blocked(self, row_id: str, owner_id: str) -> bool:
+    def _blocked(self, row_id: str, owner_id: str, *, transaction=None) -> bool:
         if self._privacy_blocked is not None:
             # Contract (b) seam: (owner_id, payload). Provider rows carry no conversation in the payload.
             return self._privacy_blocked(owner_id, {'segment_id': row_id})
@@ -134,8 +154,7 @@ class FirestoreProviderSttOutbox:
 
         client = self._client()
         try:
-            # Plain reads: an unstarted transaction raises 'Transaction not in progress' on real Firestore.
-            assert_batch_write_allowed(client, None, owner_id)
+            assert_batch_write_allowed(client, transaction, owner_id, allow_token_mint=transaction is None)
         except BatchPrivacyBlocked:
             return True
         return False
@@ -234,8 +253,6 @@ class FirestoreProviderSttOutbox:
 
     def claim(self, n: int, lease_seconds: float, *, now: float) -> list[Claim]:
         """Pull: due, unleased open rows (single-field filter; lease checked by the CAS)."""
-        from google.cloud.firestore_v1 import FieldFilter
-
         query = (
             self._client()
             .collection(self._collection or collection_name())
@@ -301,8 +318,6 @@ class FirestoreProviderSttOutbox:
 
     def sweep(self, *, now: float, limit: int = 100) -> SweepCounts:
         """Re-wake due open rows whose lease is absent or expired; discard privacy-fenced rows."""
-        from google.cloud.firestore_v1 import FieldFilter
-
         rewoken = expired = discarded = errors = 0
         query = (
             self._client()
@@ -327,11 +342,7 @@ class FirestoreProviderSttOutbox:
                     self._mutate(snapshot.id, lambda old: (self._close(old, 'privacy_blocked') if old else old, None))
                     discarded += 1
                     continue
-                if (
-                    row.get('due_at', 0) > now
-                    or row.get('lease_until', 0) > now
-                    or now - float(row.get('woken_at') or 0) < REWAKE_AFTER_SECONDS
-                ):
+                if not _ready_to_rewake(row, now):
                     continue
                 if skip_ancient(row, 'provider-stt', now=now):
                     continue
@@ -339,15 +350,10 @@ class FirestoreProviderSttOutbox:
                     expired += 1
 
                 def rearm(old: Row | None) -> tuple[Row | None, Row | None]:
-                    if not old or old.get('state') != OPEN or old.get('lease_until', 0) > now:
+                    # The job-side sweep or a concurrent delivery may have already rearmed this row.
+                    if not old or old.get('state') != OPEN or not _ready_to_rewake(old, now):
                         return old, None
-                    fresh = {
-                        **old,
-                        'task_token': uuid.uuid4().hex,
-                        'woken_at': now,
-                        'lease_token': None,
-                        'lease_until': 0.0,
-                    }
+                    fresh = _rearm_wake(old, now)
                     return fresh, fresh
 
                 fresh = self._mutate(snapshot.id, rearm)
@@ -357,3 +363,71 @@ class FirestoreProviderSttOutbox:
             except Exception:
                 errors += 1
         return SweepCounts(rewoken=rewoken, expired_leases=expired, discarded=discarded, errors=errors)
+
+    def sweep_running(self, *, now: float, limit: int = RUNNING_RECOVERY_PAGE_SIZE) -> tuple[int, int]:
+        """Recover stale running jobs even when the open-outbox sweep cannot reach them."""
+        client = self._client()
+        namespace = (self._collection or collection_name()).removesuffix(OUTBOX_SUFFIX)
+        cutoff = now - sweep_age.PROVIDER_RUNNING_RECOVERY_SECONDS
+        page_size = max(1, min(limit, RUNNING_RECOVERY_PAGE_SIZE))
+        query = (
+            client.collection(f'{namespace}_jobs')
+            .where(filter=FieldFilter('state', '==', 'provider_running'))
+            .where(filter=FieldFilter('enqueued_at', '<=', cutoff))
+            .order_by('enqueued_at')
+            .order_by('__name__')
+            .limit(page_size)
+        )
+        if self._running_cursor is not None:
+            query = query.start_after(self._running_cursor)
+        page = list(query.stream(timeout=10, retry=None))
+        self._running_cursor = page[-1] if len(page) == page_size else None
+        rewoken = errors = 0
+        for snapshot in page:
+            try:
+                fresh = self._rearm_running(snapshot.reference, cutoff, now)
+                if fresh is not None:
+                    self._wake(fresh)
+                    rewoken += 1
+            except Exception:
+                errors += 1
+        return rewoken, errors
+
+    def _rearm_running(self, job_ref, cutoff: float, now: float) -> Row | None:
+        row_id = job_ref.id
+        if not _ROW_ID.fullmatch(row_id):
+            raise ValueError('invalid provider-stt job id')
+        client = self._client()
+        outbox_ref = self._ref(row_id, client)
+
+        @firestore.transactional
+        def commit(transaction):
+            job = job_ref.get(transaction=transaction, timeout=5, retry=None).to_dict() or {}
+            enqueued_at = job.get('enqueued_at')
+            if (
+                job.get('state') != 'provider_running'
+                or isinstance(enqueued_at, bool)
+                or not isinstance(enqueued_at, (int, float))
+                or not math.isfinite(enqueued_at)
+                or enqueued_at > cutoff
+            ):
+                return None
+            row = outbox_ref.get(transaction=transaction, timeout=5, retry=None).to_dict()
+            owner = job['owner_id']
+            if row is not None:
+                if row.get('owner_id') != owner or row.get('closed_reason') == 'privacy_blocked':
+                    return None
+                if row.get('state') == OPEN and not _ready_to_rewake(row, now):
+                    return None
+            if self._blocked(row_id, owner, transaction=transaction):
+                return None
+            # The normal consumer reconciles the existing intent and fences late results.
+            # Keep its open obligation's history even when created_at is beyond the normal age gate.
+            if row is not None and row.get('state') == OPEN:
+                fresh = _rearm_wake(row, now)
+            else:
+                fresh = _new_row(row_id, owner, now, job.get('policy_id'), now)
+            transaction.set(outbox_ref, fresh)
+            return fresh
+
+        return commit(client.transaction(max_attempts=3))

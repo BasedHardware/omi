@@ -85,7 +85,7 @@ def _memo_world(monkeypatch, tmp_path, *, user_row, mode):
         return ProtectionContext('standard', 0)
 
     monkeypatch.setattr(intake, 'batch_artifact_authorize', authorize)
-    monkeypatch.setattr(intake, 'artifacts_for', lambda _store: SimpleNamespace(stage_audio=lambda *_: 'x'))
+    monkeypatch.setattr(intake, 'artifacts_for', lambda _store: SimpleNamespace(stage_audio=lambda *a, **kw: 'x'))
     counts = {'decode': 0, 'stage': 0, 'sample': 0}
     failure = {'error': ValueError('truncated sync audio frame')}
 

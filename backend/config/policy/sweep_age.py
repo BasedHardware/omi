@@ -6,6 +6,8 @@ import os
 from config.batch_pipeline_retention import LIFECYCLE_SECONDS
 
 DEFAULT_MAX_AGE_DAYS = 14.0
+# Enqueue age of a running job, shared with the production census alert.
+PROVIDER_RUNNING_RECOVERY_SECONDS = 6 * 3600
 
 
 def enabled() -> bool:

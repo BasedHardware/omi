@@ -35,7 +35,6 @@ from database.account_deletion_policy import account_deletion_marker_blocks_acce
 from google.api_core.exceptions import AlreadyExists, Conflict, FailedPrecondition, NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
-from google.cloud.firestore_v1.field_path import FieldPath
 from prometheus_client import Counter, REGISTRY
 from threading import Lock
 import utils.other.hume as hume
@@ -1098,12 +1097,13 @@ class _PageFill:
     would charge every full page one more read to save that rare request.
     """
 
-    def __init__(self, conversations_ref, *, limit, budget, visible, read_row, scout=None):
+    def __init__(self, conversations_ref, *, limit, budget, visible, read_row, scout=None, consume=None):
         self.conversations_ref = conversations_ref
         self.limit = limit
         self.budget = budget
         self.visible = visible
         self.read_row = read_row
+        self.consume = consume
         # Lean refills (see :class:`_Scout`); None keeps full-document refills.
         self.scout = scout if scout is not None and hasattr(conversations_ref, 'select') else None
         # Hidden rows of the first, full window that the scout's flags alone would have caught.
@@ -1114,15 +1114,17 @@ class _PageFill:
         self.consumed = 0
         self.skipped = 0
         self.has_more = False
+        self._unconsumed_row_pending = False
         self.cap = _HIDDEN_ROW_PAGE_SKIP_CAP if budget is not None else _UNBUDGETED_HIDDEN_ROW_SKIP_CAP
 
     def run(self, query, batch_limit):
         try:
             self._run(query, batch_limit)
         except ListReadBudgetExhausted:
-            # With no row read there is no position to resume from, and an identical retry
-            # would stop at the same place, so only a page that advanced says more.
-            self.has_more = self.consumed > 0
+            # A fetched row whose preparation ran out of budget has not advanced
+            # the checkpoint. Keep that row retryable even when it is the first
+            # visible row; the next request gets a fresh budget.
+            self.has_more = self.consumed > 0 or self._unconsumed_row_pending
         return self
 
     def _run(self, query, batch_limit):
@@ -1131,10 +1133,19 @@ class _PageFill:
             fetched = 0
             for doc in budgeted_stream_iter(query, self.budget):
                 fetched += 1
-                conversation = self.read_row(doc)
+                try:
+                    conversation = self.read_row(doc)
+                    visible = conversation is not None and self.visible(conversation)
+                    if self.consume is not None:
+                        self.budget.check()
+                        if visible:
+                            self.consume(conversation, doc, self.consumed + 1, self.skipped)
+                except ListReadBudgetExhausted:
+                    self._unconsumed_row_pending = True
+                    raise
                 self.consumed += 1
                 self.last_doc = doc
-                if conversation is None or not self.visible(conversation):
+                if not visible:
                     self.skipped += 1
                     if self.scout is not None and conversation is not None and self.scout.hidden(conversation):
                         self.scout_hits += 1
@@ -1190,7 +1201,10 @@ class _PageFill:
             try:
                 for doc in budgeted_stream_iter(scout_ref.start_after(self.last_doc).limit(batch_limit), self.budget):
                     fetched += 1
-                    if self.scout.hidden(doc.to_dict() or {}):
+                    hidden = self.scout.hidden(doc.to_dict() or {})
+                    if self.consume is not None:
+                        self.budget.check()
+                    if hidden:
                         self.consumed += 1
                         self.last_doc = doc
                         self.skipped += 1
@@ -1200,17 +1214,17 @@ class _PageFill:
                         continue
                     if rewind is None:
                         rewind = (self.consumed, self.last_doc, self.skipped)
+                    pending.append((doc, self.consumed, self.last_doc, self.skipped))
                     self.consumed += 1
                     self.last_doc = doc
-                    pending.append(doc)
                     if len(self.rows) + len(pending) >= self.limit:
                         stop = True
                         break
-                self._hydrate(pending)
             except ListReadBudgetExhausted:
                 if rewind is not None:
                     self.consumed, self.last_doc, self.skipped = rewind
                 raise
+            self._hydrate(pending)
             if len(self.rows) >= self.limit or self.skipped >= self.cap:
                 # A full page, or the hidden-row cap: more may follow.
                 self.has_more = True
@@ -1223,24 +1237,40 @@ class _PageFill:
     def _hydrate(self, pending):
         if not pending:
             return
-        snapshots = {
-            snapshot.id: snapshot
-            for snapshot in budgeted_get_all(
-                db, [doc.reference for doc in pending], self.budget, field_paths=self.scout.hydrate_fields
-            )
-        }
+        try:
+            snapshots = {
+                snapshot.id: snapshot
+                for snapshot in budgeted_get_all(
+                    db, [doc.reference for doc, _, _, _ in pending], self.budget, field_paths=self.scout.hydrate_fields
+                )
+            }
+        except ListReadBudgetExhausted:
+            _, self.consumed, self.last_doc, self.skipped = pending[0]
+            self._unconsumed_row_pending = True
+            raise
         self.hydrated += len(pending)
-        rows, skipped = [], 0
-        for doc in pending:
-            snapshot = snapshots.get(doc.id)
-            conversation = self.read_row(snapshot) if snapshot is not None else None
-            if conversation is None or not self.visible(conversation):
-                skipped += 1
+        hydrated_skipped = 0
+        for doc, preceding_count, preceding_doc, preceding_skipped in pending:
+            try:
+                if self.consume is not None:
+                    self.budget.check()
+                snapshot = snapshots.get(doc.id)
+                conversation = self.read_row(snapshot) if snapshot is not None else None
+                visible = conversation is not None and self.visible(conversation)
+                if self.consume is not None:
+                    self.budget.check()
+                    if visible:
+                        self.consume(conversation, doc, preceding_count + 1, preceding_skipped + hydrated_skipped)
+            except ListReadBudgetExhausted:
+                self.consumed, self.last_doc = preceding_count, preceding_doc
+                self.skipped = preceding_skipped + hydrated_skipped
+                self._unconsumed_row_pending = True
+                raise
+            if not visible:
+                hydrated_skipped += 1
                 continue
-            rows.append(conversation)
-        # The lean refill rewinds this batch if any of its reads exhaust the budget.
-        self.rows.extend(rows)
-        self.skipped += skipped
+            self.rows.append(conversation)
+        self.skipped += hydrated_skipped
 
 
 def _list_conversation_row(snapshot, *, budget, field_paths, hidden):
@@ -1299,6 +1329,7 @@ def _collect_cursor_conversation_page(
     show_held=False,
     report=None,
     scout=None,
+    consume=None,
 ):
     """Bound the scan by page size plus the hidden-row allowance.
 
@@ -1318,6 +1349,7 @@ def _collect_cursor_conversation_page(
             show_held=show_held,
         ),
         scout=scout,
+        consume=consume,
     ).run(conversations_ref.start_after(bookmark).limit(limit), limit)
     if report is not None:
         report.update(storage_rows=fill.consumed, has_more=fill.has_more, hidden_rows=fill.skipped)
@@ -1343,6 +1375,7 @@ def _collect_visible_conversation_page(
     show_held: bool = False,
     hydrate_fields: Optional[List[str]] = None,
     indexed_home: bool = False,
+    on_prepared=None,
 ) -> List[Dict[str, Any]]:
     """Page visible rows.
 
@@ -1399,6 +1432,24 @@ def _collect_visible_conversation_page(
                     logger.warning('conversation_list_cursor: ordering key unavailable; next cursor omitted')
         return rows
 
+    def consume(row, doc, storage_rows, hidden_rows):
+        budget.check()
+        try:
+            prepared = prepare_conversation_for_read(row, uid, read_budget=budget)
+        except ListReadBudgetExhausted as error:
+            budget.mark_exhausted(error.reason)
+            raise
+        budget.check()
+        checkpoint = dict(storage_rows=storage_rows, has_more=True, hidden_rows=hidden_rows)
+        if cursor_enabled:
+            try:
+                checkpoint['next_cursor'] = encode_cursor(row.get(sort_field), doc.id, scope)
+            except (ValueError, TypeError, AttributeError):
+                pass
+        on_prepared(prepared, checkpoint)
+
+    consume_row = consume if on_prepared is not None else None
+
     if cursor_enabled and cursor is not None:
         try:
             stamp, doc_id = decode_cursor(cursor, scope)
@@ -1430,6 +1481,7 @@ def _collect_visible_conversation_page(
                 show_held=show_held,
                 bookmark=BookmarkDict({sort_field: stamp, '__name__': doc_id}),
                 scout=scout,
+                consume=consume_row,
             )
             return finish(rows, last_doc, **report)
 
@@ -1438,22 +1490,39 @@ def _collect_visible_conversation_page(
         conversations: List[Dict[str, Any]] = []
         last_doc = None
         has_more = False
+        unconsumed_row_pending = False
         try:
             for doc in budgeted_stream_iter(conversations_ref, budget):
-                conversation = read_row(doc)
-                last_doc = doc
-                if conversation is None or not visible(conversation):
-                    continue
-                if skipped_visible < offset:
-                    skipped_visible += 1
-                    continue
-                conversations.append(conversation)
-                if len(conversations) >= limit:
-                    has_more = True
-                    break
+                try:
+                    conversation = read_row(doc)
+                    is_visible = conversation is not None and visible(conversation)
+                    if consume_row is not None:
+                        budget.check()
+                    if not is_visible:
+                        last_doc = doc
+                        continue
+                    if skipped_visible < offset:
+                        skipped_visible += 1
+                        last_doc = doc
+                        continue
+                    if consume_row is not None:
+                        consume_row(conversation, doc, len(conversations) + 1, 0)
+                    last_doc = doc
+                    conversations.append(conversation)
+                    if len(conversations) >= limit:
+                        has_more = True
+                        break
+                except ListReadBudgetExhausted:
+                    # Preparation can fail after the query yielded a row. Leave
+                    # its checkpoint untouched so the caller can retry this
+                    # page at the same visible offset.
+                    unconsumed_row_pending = True
+                    raise
         except ListReadBudgetExhausted:
-            # An empty page advances nothing, so saying more would invite the same request again.
-            has_more = bool(conversations)
+            # If a row was fetched but not prepared, the same offset is retryable.
+            # The client marks an empty truncated page as failed so load-more
+            # waits for an explicit retry instead of requesting this offset in a loop.
+            has_more = bool(conversations) or unconsumed_row_pending
         # This scan's offset counts visible rows, so the advance is the page size.
         return finish(conversations, last_doc, storage_rows=len(conversations), has_more=has_more)
 
@@ -1465,7 +1534,13 @@ def _collect_visible_conversation_page(
             # would pay the same charge and stop here again.
             return finish([], None, storage_rows=0, has_more=False)
     fill = _PageFill(
-        conversations_ref, limit=limit, budget=budget, visible=visible, read_row=read_row, scout=scout
+        conversations_ref,
+        limit=limit,
+        budget=budget,
+        visible=visible,
+        read_row=read_row,
+        scout=scout,
+        consume=consume_row,
     ).run(conversations_ref.limit(limit).offset(offset), limit)
     return finish(
         fill.rows, fill.last_doc, storage_rows=fill.consumed, has_more=fill.has_more, hidden_rows=fill.skipped
@@ -1701,6 +1776,8 @@ def persist_processing_result_with_lifecycle(
     existing row onto ``completed``. It must not raise; the persist outcome is
     independent of observers.
     """
+    from database.conversations_v3_fence import permits, wake_repairs
+    from database.conversation_processing_result import stamp_native_visibility, update_fields
     from database.recurring_voice_privacy import filter_processing_write
 
     conversation_data.pop('updated_at', None)
@@ -1722,10 +1799,12 @@ def persist_processing_result_with_lifecycle(
     ledger_stages: tuple[str, ...] = ()
     source_revision = 0
     family_enabled = terminal_settled.serving(uid)
+    repairs = []
 
     @firestore.transactional
     def _persist(transaction) -> Literal['stored', 'fenced'] | conversations_v3_fence.PersistenceDecline:
         nonlocal stale_sync_revision, first_completed, summary_receipt, summary_changed, notes_refresh_state_write, delivery_outcome, terminal_refusal, ledger_stages, source_revision
+        repairs.clear()
         terminal_refusal = None
         summary_changed = False
         summary_receipt = None
@@ -1818,7 +1897,7 @@ def persist_processing_result_with_lifecycle(
                 or until <= datetime.now(timezone.utc)
             ):
                 return declined('smart_merge_refused', transient=True)
-        if not conversations_v3_fence.permits(transaction, db, uid, conversation_data['id']):
+        if not permits(transaction, db, uid, conversation_data['id'], existing, repairs=repairs):
             return 'fenced'
         # A processor that read before another sync append cannot replace that
         # transcript or publish a summary derived from an obsolete revision.
@@ -1983,7 +2062,11 @@ def persist_processing_result_with_lifecycle(
                     'completed_status_regression',
                 )
 
+        else:
+            _settle_discarded_finalization_projection(existing, write_data)
+
         _offload_processing_transcript(uid, write_data, existing)
+        stamp_native_visibility(existing, write_data)
         summary_receipt = summary_delivery.merge_result(existing, write_data, uid)
         ledger_stages = pipeline_ledger.summary_stages(summary_receipt)
         delivery_outcome = summary_terminal_outcome(existing, write_data)
@@ -2002,7 +2085,7 @@ def persist_processing_result_with_lifecycle(
                 allow_promotion=allow_promotion,
             )
         elif family_enabled:
-            transaction.update(conversation_ref, _processing_result_update_fields(write_data))
+            transaction.update(conversation_ref, update_fields(write_data))
         else:
             transaction.set(conversation_ref, write_data, merge=True)
         if notes_refresh_state_write is not None:
@@ -2023,6 +2106,9 @@ def persist_processing_result_with_lifecycle(
         else:
             outcome = run_preloaded_transactional(db, _persist)
     except (transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
+        return False
+    if repairs:
+        wake_repairs(uid, repairs)
         return False
     if v3_processing:
         if outcome == 'fenced':
@@ -2621,6 +2707,8 @@ def get_conversations_without_photos(
     page_envelope: bool = False,
     cursor_page: Optional[Dict[str, Any]] = None,
     indexed_home: bool = False,
+    metadata_only: bool = False,
+    on_prepared=None,
 ):
     """
     Same as get_conversations but without loading photos.
@@ -2722,6 +2810,7 @@ def get_conversations_without_photos(
         cursor_page=cursor_page,
         hydrate_fields=hydrate_fields,
         indexed_home=indexed_home,
+        on_prepared=on_prepared,
         cursor_filters=dict(
             statuses=statuses,
             sources=sources,
@@ -3091,6 +3180,8 @@ def update_conversation_summary(uid: str, conversation_id: str, app_id: Optional
         'app_result_not_found' if app_id given but no matching apps_results entry,
         'app_result_ambiguous' if multiple entries share that app_id.
     """
+    from database.conversation_processing_result import cleared_native_visibility
+
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
 
@@ -3111,6 +3202,7 @@ def update_conversation_summary(uid: str, conversation_id: str, app_id: Optional
                     'structured.overview': content,
                     'structured.sections': firestore.DELETE_FIELD,
                     'updated_at': updated_at,
+                    **cleared_native_visibility(doc_snapshot.to_dict() or {}, has_notes=bool(content.strip())),
                 },
             )
             return 'ok' if updated else 'not_found'
@@ -3664,6 +3756,22 @@ def _conversation_claim_matches(current, expected_status, expected_fields=None, 
     )
 
 
+def _settle_discarded_finalization_projection(current: Mapping[str, Any], updates: dict) -> None:
+    if (
+        updates.get('status') == ConversationStatus.completed
+        and updates.get('discarded', current.get('discarded')) is True
+        and current.get('finalization_status') in ('queued', 'leased')
+        and updates.get('finalization_status', current.get('finalization_status')) in ('queued', 'leased')
+        and (job_id := current.get('finalization_job_id'))
+        and updates.get('finalization_job_id', job_id) == job_id
+        and updates.get('finalization_revision', current.get('finalization_revision'))
+        == current.get('finalization_revision')
+    ):
+        # A confirmed discard settles the row's capture projection. A separate
+        # worker still owns the bound job and decides its immutable receipt.
+        updates['finalization_status'] = 'completed'
+
+
 def claim_conversation_status_in_txn(
     current: Mapping[str, Any],
     *,
@@ -3696,27 +3804,8 @@ def claim_conversation_status_in_txn(
                 raise ValueError('terminal family requires its claim timestamp')
             updates['terminal_family'] = terminal_family
             updates['terminal_family_at'] = terminal_family_at
+        _settle_discarded_finalization_projection(current, updates)
     return updates
-
-
-def _processing_result_update_fields(data: Mapping[str, Any]) -> dict:
-    """Preserve set(merge=True)'s recursive leaf mask in one update of an existing row.
-
-    Empty maps replace that map; arrays and scalars are leaves. FieldPath quotes
-    literal dotted/backtick keys rather than treating them as update paths.
-    """
-    fields = {}
-
-    def visit(value, path):
-        if isinstance(value, dict) and value:
-            for key, child in value.items():
-                visit(child, (*path, key))
-        else:
-            fields[FieldPath(*path).to_api_repr()] = value
-
-    for key, value in data.items():
-        visit(value, (key,))
-    return fields
 
 
 def _processing_result_payload_patch(current: Mapping[str, Any], updates: Mapping[str, Any]) -> dict:

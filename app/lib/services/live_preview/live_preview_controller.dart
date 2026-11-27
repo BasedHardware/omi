@@ -9,7 +9,9 @@ import 'package:omi/services/live_preview/live_preview_engine.dart';
 import 'package:omi/services/live_preview/live_preview_notes.dart';
 import 'package:omi/services/live_preview/live_preview_word_budget.dart';
 import 'package:omi/services/live_preview/live_preview_telemetry.dart';
+import 'package:omi/services/live_preview/live_words_cut.dart';
 import 'package:omi/services/live_preview/live_words_merge.dart';
+import 'package:omi/services/live_preview/own_draft_language.dart';
 import 'package:omi/services/live_preview/local_preview_admission.dart';
 import 'package:omi/utils/reliability_experiments.dart';
 
@@ -51,6 +53,18 @@ class LivePreviewLine {
   /// unavailable and the server's settled watermark eventually passes it.
   final DateTime? firstSeenAt;
   final List<LivePreviewSpan> spans;
+
+  static final _whiteSpace = RegExp(r'\s+');
+
+  /// The text of [spans] as one line. The phone's own recogniser returns word pieces that carry
+  /// their own leading space (" Where", " are"); the vendor's words carry none. Either way the
+  /// result has single spaces and none at its ends, so a line rebuilt from part of its words starts
+  /// at the same left edge as every other line.
+  static String textOf(Iterable<LivePreviewSpan> spans) {
+    final spaced = spans.any((span) => span.text.isNotEmpty && span.text != span.text.trim());
+    final raw = spaced ? spans.map((span) => span.text).join() : spans.map((span) => span.text).join(' ');
+    return raw.replaceAll(_whiteSpace, ' ').trim();
+  }
 }
 
 /// Display-only on-device preview for mobile local-preview sessions.
@@ -74,6 +88,9 @@ class LivePreviewController extends ChangeNotifier {
     Future<bool> Function()? requestAllowed,
     bool Function()? ownResultsMuted,
     bool Function()? retimeOwnResults,
+    bool Function()? cascade,
+    bool Function(String language)? ownDraftAllowed,
+    this.cascadeSettle = const Duration(seconds: 20),
     this.watchdogSilence = const Duration(seconds: 10),
     this.watchdogMinInterval = const Duration(minutes: 3),
     this.watchdogMinWords = 4,
@@ -90,7 +107,9 @@ class LivePreviewController extends ChangeNotifier {
         _requestAllowed = requestAllowed ?? (() async => true),
         _ownResultsMuted = ownResultsMuted ?? (() => ReliabilityExperiments.enabled(muteExperiment)),
         _retimeOwnResults = retimeOwnResults ??
-            (() => platform == LivePreviewPlatform.ios && ReliabilityExperiments.enabled(liveWordsExperiment)) {
+            (() => platform == LivePreviewPlatform.ios && ReliabilityExperiments.enabled(liveWordsExperiment)),
+        _cascade = cascade ?? cascadeEnabled,
+        _ownDraftAllowedOverride = ownDraftAllowed {
     // Notes draft from the preview text on this phone; they clear with it.
     notes = LivePreviewNotes(
       engine: notesEngine ?? noLivePreviewNotesEngine,
@@ -114,8 +133,26 @@ class LivePreviewController extends ChangeNotifier {
   final Future<bool> Function() _requestAllowed;
   final bool Function() _ownResultsMuted;
   final bool Function() _retimeOwnResults;
+  final bool Function() _cascade;
+  final bool Function(String language)? _ownDraftAllowedOverride;
 
   static const liveWordsExperiment = 'vendor_recognizer_on_opened_app';
+
+  /// Reliability experiment `live_words_cascade`: the vendor's words come first, an End cuts the live
+  /// words, and the End request carries them. It builds on [liveWordsExperiment] and does nothing
+  /// without it.
+  static const cascadeExperiment = 'live_words_cascade';
+
+  static bool cascadeEnabled() =>
+      ReliabilityExperiments.enabled(cascadeExperiment) && ReliabilityExperiments.enabled(liveWordsExperiment);
+
+  /// Whether the phone's own recogniser may draft words for [language]. Always, unless the cascade is
+  /// on and the language is multi-language or outside the recogniser's list ([OwnDraftLanguage]).
+  bool ownDraftAllowed(String language) =>
+      _ownDraftAllowedOverride?.call(language) ?? (!_cascade() || OwnDraftLanguage.allowed(language, platform));
+
+  /// Cascade counters look only at audio at least this old: the vendor's words trail speech by seconds.
+  final Duration cascadeSettle;
 
   /// Test-only reliability experiment: the phone's recogniser runs, and its results are dropped before
   /// display, so the vendor fallback can be seen on a phone whose recogniser works.
@@ -150,9 +187,86 @@ class LivePreviewController extends ChangeNotifier {
   /// `vendor_recognizer_on_opened_app`, also the vendor stream's words for the stretches the phone's
   /// recogniser returned nothing for ([LiveWordsMerge]). Without vendor lines this is the same list
   /// object as before.
+  ///
+  /// Under reliability experiment `live_words_cascade` the vendor's words come first and the phone's
+  /// own show only where the vendor has none, and after an End only the words spoken after it show
+  /// ([cutAtEnd]).
   List<LivePreviewLine> get lines {
-    if (_vendorLines.isEmpty) return _linesView;
-    return _merged ??= UnmodifiableListView(LiveWordsMerge.merge(_lines, _vendorLines));
+    final cut = _cutAt;
+    final cascade = _cascade();
+    if (_vendorLines.isEmpty && cut == null && !cascade) return _linesView;
+    return _merged ??= UnmodifiableListView(cut == null ? _mergedLines() : LiveWordsCut.after(_mergedLines(), cut));
+  }
+
+  List<LivePreviewLine> _mergedLines() {
+    // The cascade also runs with no vendor words yet: it joins the phone's recogniser's phrases.
+    if (_cascade()) return LiveWordsMerge.cascade(_lines, _vendorLines);
+    return _vendorLines.isEmpty ? _lines : LiveWordsMerge.merge(_lines, _vendorLines);
+  }
+
+  // ------------------------------------------------------ the End cut (display) --
+
+  // Reliability experiment live_words_cascade. Words before the cut stay in the two lists (the End
+  // request reads them, the conversation they belong to shows them until stored text replaces them,
+  // and the stalled-recogniser check needs them); only [lines] leaves them out.
+  DateTime? _cutAt;
+
+  // The End instants of this capture, oldest first (the newest few).
+  final List<DateTime> _endCuts = [];
+  static const _maxEndCuts = 8;
+
+  /// Where the current stretch of live words begins: the last End, or the last silence as long as a
+  /// conversation; null when there was neither in this capture.
+  DateTime? get cutAt => _cutAt;
+
+  /// A conversation's first stored line can start a little after its first live word.
+  static const conversationLead = Duration(seconds: 30);
+
+  /// Reliability experiment `live_words_cascade`: the live words of one conversation, whatever its
+  /// state: those that start at or after its start (less [conversationLead], and never before the End
+  /// that preceded it) and before [until], the instant it ended. With no [until] the conversation runs
+  /// to the first End pressed after its start, or is still open. The page that shows them drops the
+  /// words stored text has replaced and the ones that waited too long ([LivePreviewCoverage]).
+  List<LivePreviewLine> wordsFor({required DateTime startedAt, DateTime? until}) {
+    var from = startedAt.subtract(conversationLead);
+    var before = until;
+    for (final cut in _endCuts) {
+      if (!cut.isAfter(startedAt)) {
+        if (cut.isAfter(from)) from = cut;
+      } else {
+        before ??= cut;
+      }
+    }
+    return LiveWordsCut.within(_mergedLines(), from: from, before: before);
+  }
+
+  /// A silence as long as a conversation, under `live_words_cascade`: the stretch the Listening row and
+  /// page show starts again, as it always did, but the earlier words are kept for the conversation they
+  /// belong to until stored text replaces them, instead of being wiped at once.
+  void _silenceBoundary(DateTime lastHeardAt) {
+    _sessionGeneration++;
+    _totalWordsSeen = 0;
+    _lineWordHighWater.clear();
+    final cut = _cutAt;
+    if (cut == null || lastHeardAt.isAfter(cut)) _cutAt = lastHeardAt;
+    _merged = null;
+  }
+
+  /// The live words between the previous End (or the start of the list) and [endedAt], per word, by
+  /// the same priority the screens use: what the phone was showing for the conversation being ended.
+  List<LivePreviewLine> wordsUntil(DateTime endedAt) =>
+      List.unmodifiable(LiveWordsCut.within(_mergedLines(), from: _cutAt, before: endedAt));
+
+  /// A conversation was ended at [endedAt] (the instant the End request carries): from now on [lines]
+  /// holds only words spoken at or after it, split per word.
+  void cutAtEnd(DateTime endedAt) {
+    final cut = _cutAt;
+    if (cut != null && !endedAt.isAfter(cut)) return;
+    _cutAt = endedAt;
+    _endCuts.add(endedAt);
+    if (_endCuts.length > _maxEndCuts) _endCuts.removeRange(0, _endCuts.length - _maxEndCuts);
+    _merged = null;
+    notifyListeners();
   }
 
   // Vendor stream lines (display only, never stored), kept apart from the phone's own.
@@ -270,7 +384,11 @@ class LivePreviewController extends ChangeNotifier {
   void _startEngine(int generation) {
     _serial = _serial.then((_) async {
       if (generation != _generation) return;
-      final start = await _engine.start(_language, exclude: Set.of(_failedEngines));
+      // Reliability experiment live_words_cascade: no draft from the phone's recogniser for a language
+      // it cannot do; the session is the same calm no-engine state an unsupported locale gives.
+      final start = ownDraftAllowed(_language)
+          ? await _engine.start(_language, exclude: Set.of(_failedEngines))
+          : const LivePreviewStart.none(LivePreviewReason.localeUnsupported);
       if (generation != _generation) {
         if (start.running) await _engine.stop();
         return;
@@ -340,6 +458,10 @@ class LivePreviewController extends ChangeNotifier {
     _lastOwnWordsAt = null;
     _unansweredSince = null;
     _unansweredWords = 0;
+    _cutAt = null;
+    _endCuts.clear();
+    _heard.clear();
+    _lastSettleAt = null;
     if (hadState) notifyListeners();
   }
 
@@ -498,7 +620,9 @@ class LivePreviewController extends ChangeNotifier {
     if (text.isNotEmpty) {
       // A silence as long as the conversation timeout is a conversation
       // boundary: the earlier span becomes its own record, so stop showing it.
-      if (last != null && now.difference(last) >= _conversationGap()) _clearLines();
+      if (last != null && now.difference(last) >= _conversationGap()) {
+        _cascade() ? _silenceBoundary(last) : _clearLines();
+      }
       _lastResultAt = now;
       _noteFirstWord(now);
     }
@@ -629,6 +753,70 @@ class LivePreviewController extends ChangeNotifier {
   int vendorFilledSpeechMs = 0;
   int watchdogRestarts = 0;
 
+  /// Local reliability measure under `live_words_cascade` (counts only, never text), in place of the
+  /// two "filled" numbers: words of the phone's recogniser the vendor's words replaced on screen, words
+  /// only the phone's recogniser had (the vendor was sent that audio and returned nothing for it), and
+  /// milliseconds of audio sent to the vendor that neither recogniser returned a word for (pauses and
+  /// other sound included). The last two count audio older than [cascadeSettle].
+  int vendorReplacedWords = 0;
+  int ownOnlyWords = 0;
+  int neitherMs = 0;
+
+  // Stretches of audio the display connection carried, oldest first, until they are counted.
+  final List<(DateTime, DateTime)> _heard = [];
+  DateTime? _lastSettleAt;
+  static const _maxHeard = 600;
+
+  /// The display connection carried [ms] of audio captured from [capturedAt] (reliability experiment
+  /// `live_words_cascade`; nothing is kept without it).
+  void noteAudioSent(DateTime capturedAt, double ms) {
+    if (!_cascade() || ms <= 0) return;
+    final end = capturedAt.add(Duration(microseconds: (ms * 1000).round()));
+    if (_heard.isNotEmpty) {
+      final (start, lastEnd) = _heard.last;
+      if (capturedAt.difference(lastEnd).inMilliseconds.abs() <= 500) {
+        if (end.isAfter(lastEnd)) _heard[_heard.length - 1] = (start, end);
+        return;
+      }
+    }
+    _heard.add((capturedAt, end));
+    if (_heard.length > _maxHeard) _heard.removeRange(0, _heard.length - _maxHeard);
+  }
+
+  /// Counts the audio older than [cascadeSettle] into [ownOnlyWords] and [neitherMs].
+  void settleCascadeCounters() {
+    if (_heard.isEmpty || !_cascade()) return;
+    final now = _now();
+    final until = now.subtract(cascadeSettle);
+    if (!_heard.first.$1.isBefore(until)) return;
+    _lastSettleAt = now;
+    final settled = <(DateTime, DateTime)>[];
+    while (_heard.isNotEmpty) {
+      final (start, end) = _heard.first;
+      if (!start.isBefore(until)) break;
+      if (end.isAfter(until)) {
+        settled.add((start, until));
+        _heard[0] = (until, end);
+        break;
+      }
+      settled.add((start, end));
+      _heard.removeAt(0);
+    }
+    final vendor = LiveWordsMerge.coverage(_vendorLines);
+    final own = LiveWordsMerge.coverage(_lines);
+    for (final (start, end) in settled) {
+      neitherMs +=
+          LiveWordsMerge.uncoveredMicros(start.microsecondsSinceEpoch, end.microsecondsSinceEpoch, vendor, own) ~/ 1000;
+    }
+    bool sent(DateTime at) => settled.any((stretch) => !at.isBefore(stretch.$1) && at.isBefore(stretch.$2));
+    for (final line in _lines) {
+      for (final span in line.spans) {
+        if (span.text.trim().isEmpty || !sent(span.startedAt)) continue;
+        if (!LiveWordsMerge.covered(vendor, span.startedAt, span.endedAt)) ownOnlyWords++;
+      }
+    }
+  }
+
   /// New or longer lines from the vendor stream, timed on the phone's capture clock. Display only:
   /// they join [lines] where the phone's recogniser has nothing, and are never stored.
   void onVendorLines(List<LivePreviewLine> updates) {
@@ -636,9 +824,13 @@ class LivePreviewController extends ChangeNotifier {
     final now = _now();
     final last = _lastResultAt;
     // The same conversation boundary as the phone's own lines.
-    if (last != null && now.difference(last) >= _conversationGap()) _clearLines();
+    if (last != null && now.difference(last) >= _conversationGap()) {
+      _cascade() ? _silenceBoundary(last) : _clearLines();
+    }
     _lastResultAt = now;
     final own = LiveWordsMerge.coverage(_lines);
+    final cascade = _cascade();
+    final vendorBefore = cascade ? LiveWordsMerge.coverage(_vendorLines) : const <(int, int)>[];
     for (final line in updates) {
       final index = _vendorLines.indexWhere((existing) => existing.id == line.id);
       final previousWords = _lineWordHighWater[line.id] ?? 0;
@@ -668,8 +860,38 @@ class LivePreviewController extends ChangeNotifier {
       }
     }
     _merged = null;
+    if (cascade) {
+      _countReplaced(updates, vendorBefore);
+      final settledAt = _lastSettleAt;
+      if (settledAt == null || now.difference(settledAt) >= const Duration(seconds: 1)) settleCascadeCounters();
+    }
     _checkStalledRecogniser(now);
     notifyListeners();
+  }
+
+  /// Words of the phone's recogniser that these vendor [updates] have just covered: they were on screen
+  /// as the draft and the vendor's words now stand in their place.
+  void _countReplaced(List<LivePreviewLine> updates, List<(int, int)> vendorBefore) {
+    if (_lines.isEmpty) return;
+    DateTime? earliest;
+    for (final line in updates) {
+      final start = line.startedAt;
+      if (start != null && (earliest == null || start.isBefore(earliest))) earliest = start;
+    }
+    if (earliest == null) return;
+    final from = earliest.subtract(LiveWordsMerge.tolerance * 2);
+    final vendorNow = LiveWordsMerge.coverage(_vendorLines);
+    for (final line in _lines) {
+      final end = line.endedAt;
+      if (end != null && end.isBefore(from)) continue;
+      for (final span in line.spans) {
+        if (span.text.trim().isEmpty || span.endedAt.isBefore(from)) continue;
+        if (LiveWordsMerge.covered(vendorNow, span.startedAt, span.endedAt) &&
+            !LiveWordsMerge.covered(vendorBefore, span.startedAt, span.endedAt)) {
+          vendorReplacedWords++;
+        }
+      }
+    }
   }
 
   /// A vendor word the phone's recogniser has not answered: no line of its own for that audio, and

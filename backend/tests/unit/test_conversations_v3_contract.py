@@ -43,6 +43,89 @@ def test_manual_end_wake_survives_a_completed_live_task_in_same_minute(monkeypat
     assert all(kw['schedule_at'] == int(fixed.timestamp()) for _, kw in tasks.values())
 
 
+def test_native_ready_name_survives_live_tombstone_and_retains_same_revision(monkeypatch):
+    monkeypatch.setenv('CONVERSATIONS_V3_TASKS_URL', 'https://test.invalid')
+    from google.api_core.exceptions import AlreadyExists
+    from utils import cloud_tasks
+
+    class FakeCloudTasks:
+        tasks = {}
+
+        @staticmethod
+        def queue_path(project, location, queue):
+            return queue
+
+        @staticmethod
+        def task_path(project, location, queue, task_id):
+            return queue + '/' + task_id
+
+        def create_task(self, *, parent, task):
+            if task.name in self.tasks:
+                raise AlreadyExists('completed name retained')
+            self.tasks[task.name] = task
+
+    fake = FakeCloudTasks()
+    monkeypatch.setattr(cloud_tasks, '_get_tasks_client', lambda: fake)
+    monkeypatch.setenv('SYNC_TASKS_PROJECT', 'synthetic')
+    monkeypatch.setenv('SYNC_TASKS_LOCATION', 'synthetic')
+    monkeypatch.setenv('SYNC_TASKS_INVOKER_SA', 'synthetic@example.invalid')
+    start = datetime(2026, 11, 16, 12, 0, tzinfo=timezone.utc)
+    triggers.enqueue('owner', at=start)
+    triggers.enqueue('owner', at=start, native_manual_ready=('recording', 7))
+    triggers.enqueue('owner', at=start + timedelta(minutes=1), native_manual_ready=('recording', 7))
+    triggers.enqueue('owner', at=start, native_manual_ready=('recording', 8))
+    triggers.enqueue('owner', at=start, native_manual_ready=('recording', 7), native_rearm=True)
+    triggers.enqueue('owner', at=start + timedelta(minutes=1), native_manual_ready=('recording', 7), native_rearm=True)
+    assert len(fake.tasks) == 4
+    assert sum('-native-rearm-' in name for name in fake.tasks) == 1
+    ready = [task for task in fake.tasks.values() if b'native_manual_ready' in task.http_request.body]
+    assert len(ready) == 3
+
+
+@pytest.mark.asyncio
+async def test_busy_native_ready_leaves_cloud_task_retryable(monkeypatch):
+    from starlette.requests import Request
+
+    from routers import conversations_v3_tasks
+
+    lanes = []
+
+    async def busy(uid, *, background=False):
+        lanes.append(background)
+        return 'busy'
+
+    monkeypatch.setattr(service, 'reconcile', busy)
+    http_request = Request({'type': 'http', 'headers': []})
+    request = conversations_v3_tasks.ReconcileRequest(uid='owner')
+    assert await conversations_v3_tasks.reconcile(request, http_request) == {'outcome': 'busy'}
+    request = conversations_v3_tasks.ReconcileRequest(uid='owner', trigger='native_manual_ready')
+    with pytest.raises(HTTPException) as error:
+        await conversations_v3_tasks.reconcile(request, http_request)
+    assert error.value.status_code == 503
+    assert lanes == [True, False]
+
+
+def test_scheduled_wake_rounds_up_and_coalesces_in_delivery_minute(monkeypatch):
+    tasks = {}
+    attempts = []
+    monkeypatch.setenv('CONVERSATIONS_V3_TASKS_URL', 'https://test.invalid')
+
+    def enqueue(queue, url, name, payload, *, schedule_at):
+        attempts.append((name, schedule_at))
+        tasks.setdefault(name, schedule_at)
+
+    monkeypatch.setattr(triggers, 'enqueue_named_task', enqueue)
+    start = datetime(2026, 11, 16, 12, 0, tzinfo=timezone.utc)
+    for seconds in (5, 5.5, 60, 59.5):
+        triggers.enqueue('owner', at=start + timedelta(seconds=seconds))
+
+    epoch = int(start.timestamp())
+    assert [when - epoch for _, when in attempts] == [5, 6, 60, 60]
+    assert [name.rsplit('-', 1)[-1] for name, when in attempts] == [str(when // 60) for _, when in attempts]
+    assert len(tasks) == 2
+    assert attempts[2] == attempts[3]
+
+
 @pytest.mark.parametrize(
     'stage,seen,capable,cohort,expected',
     [
@@ -68,10 +151,329 @@ def test_switch_is_per_owner_not_device(monkeypatch, stage, seen, capable, cohor
     monkeypatch.delenv('CONVERSATIONS_V3', raising=False)
     monkeypatch.setattr(switch.client_gate, 'client_seen_cached', lambda uid: seen)
     monkeypatch.setattr(switch.client_capability, 'capable_cached', lambda uid: capable)
-    monkeypatch.setattr(switch, 'in_rollout_cohort', lambda uid, key: cohort)
+    monkeypatch.setattr(switch, 'in_rollout_cohort', lambda uid, key: cohort and key == 'conversations-v3')
     assert switch.conversations_v3_enabled('synthetic') is expected
     monkeypatch.setenv('CONVERSATIONS_V3', 'off')
     assert switch.conversations_v3_enabled('synthetic') is False
+
+
+class _Holdout:
+    """Synthetic holdout membership behind the real admission predicates; stage ``all``, capable owner."""
+
+    def __init__(self, monkeypatch):
+        self.member, self.unavailable, self.reads, self.fallbacks = False, False, [], []
+        monkeypatch.setenv('CONVERSATIONS_V3_STAGE', 'all')
+        monkeypatch.delenv('CONVERSATIONS_V3', raising=False)
+        monkeypatch.delenv('CONVERSATIONS_V3_HOLDOUT', raising=False)
+        monkeypatch.setattr(switch.client_gate, 'client_seen_cached', lambda uid: False)
+        monkeypatch.setattr(switch.client_capability, 'capable_cached', lambda uid: True)
+        monkeypatch.setattr(switch, 'in_rollout_cohort', self._membership)
+        monkeypatch.setattr(switch, 'record_fallback', lambda **kw: self.fallbacks.append(kw))
+        for module in (triggers, routes):
+            monkeypatch.setattr(module, 'conversations_v3_enabled', switch.conversations_v3_enabled)
+            monkeypatch.setattr(module, 'v3_intake_held_out', switch.v3_intake_held_out)
+
+    def _membership(self, uid, key):
+        self.reads.append(key)
+        if key != 'conversations-v3-holdout':
+            return False
+        if self.unavailable:
+            raise switch.RolloutCohortUnavailable('synthetic outage')
+        return self.member
+
+    def new_row(self):
+        row = {'source': 'omi', 'data_protection_level': 'standard'}
+        triggers.mark_new('synthetic', row)
+        return row
+
+
+def _serve_live(monkeypatch, window):
+    monkeypatch.setattr(routes.client_gate, 'note_client_seen', lambda uid: None)
+    monkeypatch.setattr(routes.v3_client_capability, 'note_capable', lambda uid: None)
+    monkeypatch.setattr(routes.reliability_experiments, 'any_enabled', lambda *a: False)
+    monkeypatch.setattr(
+        routes.conversations_v3_live,
+        'live_window_lookup',
+        lambda uid, **kw: (window.get('row'), window.get('complete', True)),
+    )
+
+
+def test_holdout_keeps_stage_admission_for_existing_v3_work(monkeypatch):
+    holdout = _Holdout(monkeypatch)
+    holdout.member = True
+    for stage in ('all', 'beta', 'cohort'):
+        monkeypatch.setenv('CONVERSATIONS_V3_STAGE', stage)
+        monkeypatch.setattr(switch.client_gate, 'client_seen_cached', lambda uid: True)
+        monkeypatch.setattr(switch, 'in_rollout_cohort', lambda uid, key: True)
+        # Finish, episodes and builders keep reaching the owner's stored v3 work.
+        assert switch.conversations_v3_enabled('synthetic') is True
+        assert switch.v3_intake_held_out('synthetic') is True
+
+
+def test_intake_with_known_membership(monkeypatch):
+    holdout = _Holdout(monkeypatch)
+    assert holdout.new_row()['recording'] is True
+    holdout.member = True
+    row = holdout.new_row()
+    assert 'recording' not in row and 'v3_pending' not in row
+    assert holdout.fallbacks == [] and set(holdout.reads) == {'conversations-v3-holdout'}
+    # A rotation successor continues the capture in flight: still v3 for a held-out owner.
+    successor = {'source': 'omi', 'data_protection_level': 'standard'}
+    triggers.mark_new('synthetic', successor, continuation=True)
+    assert successor['recording'] is True
+
+
+def test_intake_with_unavailable_membership_admits_and_records_fallback(monkeypatch):
+    holdout = _Holdout(monkeypatch)
+    holdout.member = holdout.unavailable = True
+    assert holdout.new_row()['recording'] is True
+    assert holdout.fallbacks == [
+        {
+            'component': 'feature_flags',
+            'from_mode': 'v3_holdout',
+            'to_mode': 'admitted',
+            'reason': 'unavailable',
+            'outcome': 'degraded',
+            'log': switch.logger,
+        }
+    ]
+
+
+@pytest.mark.parametrize('value', ['off', 'false', '0', 'no'])
+def test_holdout_env_off_ignores_cohort_and_skips_read(monkeypatch, value):
+    holdout = _Holdout(monkeypatch)
+    holdout.member = True
+    monkeypatch.setenv('CONVERSATIONS_V3_HOLDOUT', value)
+    assert holdout.new_row()['recording'] is True
+    assert holdout.reads == []
+
+
+def test_kill_switch_wins_without_a_holdout_read(monkeypatch):
+    holdout = _Holdout(monkeypatch)
+    monkeypatch.setenv('CONVERSATIONS_V3', 'off')
+    assert 'recording' not in holdout.new_row()
+    assert holdout.reads == []
+
+
+def test_holdout_added_mid_capture_serves_the_active_window_then_legacy(monkeypatch):
+    holdout = _Holdout(monkeypatch)
+    window = {'row': None}
+    _serve_live(monkeypatch, window)
+    capturing = holdout.new_row()
+    window['row'] = {'id': 'open', 'status': 'in_progress', 'tile_state': 'live', 'structured': {'title': 't'}}
+    holdout.member = True
+    # The capture already admitted keeps its stored marker; only the next generation is legacy.
+    assert capturing['recording'] is True and 'recording' not in holdout.new_row()
+    reads = len(holdout.reads)
+    live = routes.get_live_conversation('synthetic', 'store')
+    assert live['v3'] is True and live['conversation']['id'] == 'open'
+    assert len(holdout.reads) == reads  # An active window is served without the membership read.
+    window['row'] = None
+    assert routes.get_live_conversation('synthetic', 'store') == {'v3': False, 'conversation': None}
+
+
+def test_holdout_live_keeps_v3_when_the_window_lookup_is_capped(monkeypatch):
+    holdout = _Holdout(monkeypatch)
+    holdout.member = True
+    window = {'row': None, 'complete': False}
+    _serve_live(monkeypatch, window)
+    fallbacks = []
+    monkeypatch.setattr(routes, 'record_fallback', lambda **kw: fallbacks.append(kw))
+    # A capped lookup has not proven there is no window: fail toward the existing one and count it.
+    assert routes.get_live_conversation('synthetic', 'store') == {'v3': True, 'conversation': None}
+    assert [(f['from_mode'], f['to_mode'], f['reason']) for f in fallbacks] == [('v3_holdout', 'v3_live', 'lookup_cap')]
+    from utils.observability.fallback import bucket_reason
+
+    assert bucket_reason(fallbacks[0]['reason']) == 'lookup_cap'  # Emitted as itself, not relabelled 'other'.
+    window['complete'] = True
+    assert routes.get_live_conversation('synthetic', 'store') == {'v3': False, 'conversation': None}
+    assert len(fallbacks) == 1
+
+
+def test_holdout_removed_mid_capture_readmits_the_next_row(monkeypatch):
+    holdout = _Holdout(monkeypatch)
+    window = {'row': None}
+    _serve_live(monkeypatch, window)
+    holdout.member = True
+    capturing = holdout.new_row()
+    assert routes.get_live_conversation('synthetic', 'store') == {'v3': False, 'conversation': None}
+    holdout.member = False
+    # The legacy capture in flight stays legacy; the next new row is v3 again.
+    assert 'recording' not in capturing and holdout.new_row()['recording'] is True
+    assert routes.get_live_conversation('synthetic', 'store') == {'v3': True, 'conversation': None}
+
+
+def test_existing_v3_work_drains_for_a_held_out_owner(monkeypatch):
+    from utils.conversations.v3 import finish, manual_cuts
+
+    holdout = _Holdout(monkeypatch)
+    holdout.member = True
+    window = {'id': 'open', 'status': 'in_progress', 'v3_derived': True}
+    acknowledged = []
+    monkeypatch.setattr(finish, 'finish_no_pointer_enabled', lambda: True)
+    monkeypatch.setattr(finish, 'conversations_v3_enabled', switch.conversations_v3_enabled)
+    monkeypatch.setattr(finish.conversations_v3_live, 'live_window', lambda uid, **kw: window)
+    monkeypatch.setattr(finish.conversations_v3_live, 'request_finish', lambda uid, wid, **kw: ('cut', 'rec', None))
+    monkeypatch.setattr(finish, '_acknowledge', lambda *a: acknowledged.append(a) or 'answer')
+    assert finish.finish_live_window('synthetic') == 'answer'
+    assert acknowledged == [('synthetic', window, 'cut', 'rec')]
+    # End cuts follow new intake: a held-out owner gets experiment-off End handling.
+    monkeypatch.setattr(manual_cuts, 'enabled', lambda uid: True)
+    monkeypatch.setattr(manual_cuts, 'conversations_v3_enabled', switch.conversations_v3_enabled)
+    monkeypatch.setattr(manual_cuts, 'v3_intake_held_out', switch.v3_intake_held_out)
+    monkeypatch.setattr(manual_cuts.cuts_db, 'record', lambda *a: pytest.fail('held-out owner recorded a cut'))
+    assert manual_cuts.record_end('synthetic') is None
+
+
+class _MixedFinish:
+    """Finish endpoint while a held-out owner's old v3 window coexists with a new legacy in-progress row."""
+
+    def __init__(self, monkeypatch, *, window_live=True, member=True, unavailable=False):
+        from types import SimpleNamespace
+
+        from utils.conversations.v3 import finish
+
+        holdout = _Holdout(monkeypatch)
+        holdout.member, holdout.unavailable = member, unavailable
+        self.legacy = {'id': 'legacy-row', 'status': 'in_progress', 'source': 'omi'}
+        self.finished, self.finalized, self.woken, self.named = [], [], [], []
+        window = {'id': 'old-window', 'status': 'in_progress', 'v3_derived': True}
+        monkeypatch.setattr(routes, 'finish_live_window', finish.finish_live_window)
+        monkeypatch.setattr(routes, 'retrieve_in_progress_conversation', lambda uid: self.legacy)
+        monkeypatch.setattr(routes, 'is_listen_finalization_dispatch_enabled', lambda: True)
+        monkeypatch.setattr(routes.byok, 'has_byok_keys', lambda: False)
+        monkeypatch.setattr(routes, 'finalize_conversation', lambda cid, **kw: self.finalized.append(cid) or 'legacy')
+        monkeypatch.setattr(routes.v3_end_answer, 'answer', lambda uid, cut_id, baseline, *a, **kw: baseline)
+        monkeypatch.setattr(routes.v3_manual_cuts, 'wake', lambda uid, cut_id: self.woken.append(cut_id))
+        monkeypatch.setattr(finish, 'finish_no_pointer_enabled', lambda: True)
+        monkeypatch.setattr(finish, 'conversations_v3_enabled', switch.conversations_v3_enabled)
+        live_db = finish.conversations_v3_live
+        monkeypatch.setattr(live_db, 'live_window_by_id', lambda uid, wid, **kw: window if window_live else None)
+        monkeypatch.setattr(
+            live_db, 'request_finish', lambda uid, wid, **kw: self.finished.append(wid) or ('cut', 'rec', None)
+        )
+        monkeypatch.setattr(
+            live_db,
+            'request_named_finish',
+            lambda uid, wid, **kw: self.named.append((wid, kw.get('strict'))) or (None, None, ''),
+        )
+        monkeypatch.setattr(
+            finish,
+            '_acknowledge',
+            lambda uid, row, outcome, rid: SimpleNamespace(
+                conversation=SimpleNamespace(id=row['id'], tile_state='writing')
+            ),
+        )
+        monkeypatch.setattr(
+            live_db, 'live_window', lambda *a, **kw: pytest.fail('a named Finish fell back to another window')
+        )
+
+    def finish(self, named):
+        from fastapi import Response
+        from models.conversation import ProcessConversationRequest
+
+        request = ProcessConversationRequest(live_conversation_id=named) if named else None
+        return routes.process_in_progress_conversation(request, 'synthetic', None, response=Response())
+
+
+def test_named_v3_finish_closes_its_window_while_a_legacy_row_is_in_progress(monkeypatch):
+    mixed = _MixedFinish(monkeypatch)
+    answer = mixed.finish('old-window')
+    assert answer.conversation.id == 'old-window' and mixed.finished == ['old-window']
+    # The legacy row stays in progress: not finalized, not changed.
+    assert mixed.finalized == [] and mixed.legacy == {'id': 'legacy-row', 'status': 'in_progress', 'source': 'omi'}
+    assert mixed.woken == []  # The window cut answered as writing; the baseline path woke the builder.
+
+
+def test_unnamed_finish_beside_an_old_v3_window_still_finalizes_the_legacy_row(monkeypatch):
+    mixed = _MixedFinish(monkeypatch)
+    assert mixed.finish(None) == 'legacy'
+    assert mixed.finalized == ['legacy-row'] and mixed.finished == []
+    # Naming the legacy row itself is the legacy Finish too.
+    assert mixed.finish('legacy-row') == 'legacy'
+    assert mixed.finalized == ['legacy-row', 'legacy-row'] and mixed.finished == []
+
+
+def test_named_finish_miss_falls_back_to_the_legacy_finish(monkeypatch):
+    mixed = _MixedFinish(monkeypatch, window_live=False)
+    assert mixed.finish('old-window') == 'legacy'
+    assert mixed.named == [('old-window', True)] and mixed.finalized == ['legacy-row'] and mixed.finished == []
+
+
+@pytest.mark.parametrize('member,unavailable', [(False, False), (True, True)])
+def test_named_finish_override_is_a_no_op_unless_holdout_is_confirmed(monkeypatch, member, unavailable):
+    from utils.conversations.v3 import finish
+
+    mixed = _MixedFinish(monkeypatch, member=member, unavailable=unavailable)
+    monkeypatch.setattr(
+        finish.conversations_v3_live, 'live_window_by_id', lambda *a, **kw: pytest.fail('non-member read the window')
+    )
+    # A non-member, or a membership read that failed, keeps today's Finish: the legacy row is finalized.
+    assert mixed.finish('old-window') == 'legacy'
+    assert mixed.finalized == ['legacy-row'] and mixed.finished == [] and mixed.named == []
+
+
+def test_named_finish_beside_a_v3_recording_in_progress_keeps_today_path(monkeypatch):
+    mixed = _MixedFinish(monkeypatch)
+    mixed.legacy = {'id': 'session-recording', 'status': 'in_progress', 'recording': True}
+    assert mixed.finish('old-window') == 'legacy'
+    assert mixed.finalized == ['session-recording'] and mixed.finished == []
+
+
+def test_held_out_owner_reads_legacy_home_with_v3_cards_and_held_pieces(monkeypatch):
+    from tests.unit.test_home_held_sync_piece import piece
+
+    holdout = _Holdout(monkeypatch)
+    calls = []
+    monkeypatch.setattr(
+        routes.conversations_db, 'get_conversations_without_photos', lambda *a, **kw: calls.append(kw) or []
+    )
+    monkeypatch.setattr(routes, '_heal_locked_conversations_if_eligible', lambda *a: None)
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from utils.other import endpoints as auth
+
+    app = FastAPI()
+    app.include_router(routes.router)
+    app.dependency_overrides[auth.get_current_user_uid] = lambda: 'synthetic'
+    with TestClient(app) as client:
+        assert (
+            client.get('/v1/conversations', headers={routes.list_page_headers.HOME_MODE_HEADER: 'auto'}).status_code
+            == 200
+        )
+        holdout.member = True
+        legacy = client.get('/v1/conversations', headers={routes.list_page_headers.HOME_MODE_HEADER: 'auto'})
+    assert [kw['show_held'] for kw in calls] == [False, True]
+    assert legacy.headers.get(routes.list_page_headers.HOME_MODE_HEADER) == 'legacy'
+    # Legacy Home shows the owner's existing v3 card next to a new legacy piece held for notes.
+    card = {'id': 'card', 'status': 'completed', 'v3_derived': True, 'structured': {'title': 't'}}
+    for show_held, expected in ((True, True), (False, False)):
+        kwargs = dict(presentation=True, hide_home=True, show_held=show_held)
+        assert db.is_visible_conversation(card, **kwargs) is True
+        assert db.is_visible_conversation(piece(), **kwargs) is expected
+
+
+def test_runtime_resolver_reports_unknown_holdout_membership(monkeypatch):
+    from utils import rollout_cohorts as runtime
+
+    monkeypatch.setattr(runtime._cache, 'get', lambda uid: None)
+    with pytest.raises(runtime.policy.RolloutCohortUnavailable):
+        runtime._in_rollout_cohort('synthetic', 'conversations-v3-holdout')
+    # Other cohorts keep reading an unknown membership as a plain miss.
+    assert runtime._in_rollout_cohort('synthetic', 'conversations-v3') is False
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    monkeypatch.setattr(runtime._cache, 'get', lambda uid: {'prod': {'conversations-v3-holdout': True}})
+    assert runtime._in_rollout_cohort('synthetic', 'conversations-v3-holdout') is True
+
+
+def test_rollout_cohort_script_accepts_holdout_cohort(tmp_path, capsys):
+    from scripts import rollout_cohort
+
+    uid_file = tmp_path / 'uid'
+    uid_file.write_text('synthetic-owner')
+    argv = ['--uid-file', str(uid_file), '--cohort', 'conversations-v3-holdout', '--project', 'based-hardware-dev']
+    assert rollout_cohort.main(argv + ['--environment', 'dev', '--add', '--dry-run']) == 0
+    assert 'cohorts=conversations-v3-holdout' in capsys.readouterr().out
 
 
 @pytest.mark.parametrize('channel,expected', [('beta', ['seen', 'capable', 'check']), ('store', ['capable', 'check'])])
@@ -590,6 +992,13 @@ def test_live_read_with_nothing_open_stops_at_its_cap_and_logs(monkeypatch, capl
     # The cap is shared across both bands: 4 rows in the recent band, then 3 more.
     assert [call['size'] for call in log] == [3, 3, 3]
     assert 'stopped at its bound of 3 windows' in caplog.text
+    # The lookup reports the capped miss as incomplete; a short scan that finds nothing is complete.
+    now = datetime.now(timezone.utc)
+    args = dict(now=now, max_idle=routes.v3_live.MAX_IDLE, pick=routes.v3_live.active)
+    capped = _finished(4, newest_minutes_ago=1) + _finished(20, newest_minutes_ago=30)
+    assert live_db.live_window_lookup('u', firestore_client=_WindowQuery(capped, []), **args) == (None, False)
+    short = _finished(2, newest_minutes_ago=1)
+    assert live_db.live_window_lookup('u', firestore_client=_WindowQuery(short, []), **args) == (None, True)
 
 
 def test_merge_rejects_recording_before_admission(monkeypatch):

@@ -1,0 +1,45 @@
+name: Feature Flag Deadlines
+
+on:
+  schedule:
+    # The checker's three-day window opens at midnight UTC.
+    - cron: "11 0 * * *"
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
+
+concurrency:
+  group: feature-flag-deadline-tracker
+  cancel-in-progress: false
+
+jobs:
+  notify:
+    if: github.repository == 'BasedHardware/omi'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version-file: backend/.python-version
+      - run: python -m pip install PyYAML==6.0.1
+      - name: Scan feature flag deadlines
+        id: scan
+        shell: bash
+        run: |
+          status=0
+          python scripts/check_feature_flag_registry.py > "$RUNNER_TEMP/flag-check.txt" || status=$?
+          cat "$RUNNER_TEMP/flag-check.txt"
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+      - name: Update the deadline tracking issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHECK_STATUS: ${{ steps.scan.outputs.status }}
+        run: python scripts/report_feature_flag_deadlines.py "$RUNNER_TEMP/flag-check.txt" "$GITHUB_REPOSITORY" "$CHECK_STATUS"

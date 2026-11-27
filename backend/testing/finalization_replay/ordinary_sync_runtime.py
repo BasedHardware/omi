@@ -2,11 +2,12 @@
 
 from collections.abc import Mapping
 from contextlib import ExitStack
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 import json
 import os
 import re
+from selectors import DefaultSelector, EVENT_READ
 import subprocess
 from unittest.mock import patch
 from uuid import UUID
@@ -25,6 +26,7 @@ from testing.finalization_replay.corpus import FIXED_DATE, unpack
 from testing.finalization_replay.driver import _observe
 from testing.finalization_replay.firestore_proxy import FirestoreProxy
 from testing.finalization_replay.metrics import suspend_meter
+from testing.finalization_replay.reference import _run as _run_python_job
 from testing.finalization_replay.ordinary_sync_retry import UNREADABLE, check_ciphertext, retry_to_park
 from testing.finalization_replay.speaker_trace import record_speaker_trace
 from testing.replay_harness.env import emulator_endpoint
@@ -94,27 +96,88 @@ class UnexpectedGoOutcome(RuntimeError):
     """An ordinary-sync fixture stopped before its expected terminal path."""
 
 
-def _go_sync(state, binary, database, key, url, firestore_proxy):
+def _apply_go_checkpoint(state, lifecycle, proxy):
+    if lifecycle == 'fence':
+        state.capture_memo_before_worker_delete()
+        state.conversation.delete()
+        return
+
+    with suspend_meter():
+        state.capture_before_erasure()
+        now = datetime.now(timezone.utc)
+        # The fixture supplies a live marker. The serving Go endpoint checks
+        # the claim, reads the marker and commits queue erasure itself.
+        state.client.collection('account_deletions').document(state.uid).set(
+            {
+                'wipe_status': 'running',
+                'wipe_job_id': 'replay-account-wipe',
+                'go_queue_erase_claim': 'a3c4' * 16,
+                'go_queue_erase_armed_at': now,
+                'go_queue_erase_claim_expires_at': now + timedelta(seconds=60),
+            }
+        )
+    cost = state.before_erasure['cost']['firestore_operations']
+    for key, count in proxy.counts().items():
+        cost[key] += count
+
+
+def _run_go_replay(state, binary, database, key, url, proxy, wait_for_background):
+    lifecycle = ''
+    if state.replay_fence:
+        lifecycle = 'fence'
+    if state.replay_erase:
+        lifecycle = 'erase'
+    args = [str(binary), '-test.run=^TestOrdinarySyncReplay$', '-test.timeout=75s']
+    env = {
+        'PATH': os.environ['PATH'],
+        'FIRESTORE_EMULATOR_HOST': proxy.address,
+        'TEST_DATABASE_URL': database,
+        'TEST_DATABASE_REQUIRED': '1',
+        'OMI_ORDINARY_SYNC_REPLAY': '1',
+    }
+    payload = json.dumps(
+        {
+            'Project': state.client.project,
+            'Origin': url,
+            'Key': key,
+            'Owner': state.uid,
+            'Conversation': state.cid,
+            'Lifecycle': lifecycle,
+        }
+    )
+    if not lifecycle:
+        return subprocess.run(args, env=env, input=payload, text=True, capture_output=True, timeout=80)
+
+    with subprocess.Popen(
+        args, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0
+    ) as proc:
+        try:
+            proc.stdin.write((payload + '\n').encode())
+            with DefaultSelector() as selector:
+                selector.register(proc.stdout, EVENT_READ)
+                if not selector.select(timeout=65):
+                    raise TimeoutError('workerd did not reach the lifecycle checkpoint')
+                checkpoint = proc.stdout.readline(256).decode('ascii').strip()
+            if checkpoint != f'ORDINARY_SYNC_CHECKPOINT={lifecycle}':
+                raise RuntimeError(f'workerd did not report the {lifecycle} checkpoint')
+            if lifecycle == 'erase':
+                wait_for_background()
+            _apply_go_checkpoint(state, lifecycle, proxy)
+            stdout, stderr = proc.communicate((json.dumps(lifecycle) + '\n').encode(), timeout=15)
+            return subprocess.CompletedProcess(
+                args, proc.returncode, stdout.decode(errors='replace'), stderr.decode(errors='replace')
+            )
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+
+
+def _go_sync(state, binary, database, key, url, firestore_proxy, wait_for_background):
     with suspend_meter():
         original = state.conversation.get().to_dict() if state.case['name'] == UNREADABLE else None
         job = _seed_worker_intent(state)
     firestore_proxy.reset()
-    process = subprocess.run(
-        [str(binary), '-test.run=^TestOrdinarySyncReplay$', '-test.timeout=75s'],
-        env={
-            'PATH': os.environ['PATH'],
-            'FIRESTORE_EMULATOR_HOST': firestore_proxy.address,
-            'TEST_DATABASE_URL': database,
-            'TEST_DATABASE_REQUIRED': '1',
-            'OMI_ORDINARY_SYNC_REPLAY': '1',
-        },
-        input=json.dumps(
-            {'Project': state.client.project, 'Origin': url, 'Key': key, 'Owner': state.uid, 'Conversation': state.cid}
-        ),
-        text=True,
-        capture_output=True,
-        timeout=80,
-    )
+    process = _run_go_replay(state, binary, database, key, url, firestore_proxy, wait_for_background)
     state.add_firestore_operations(**firestore_proxy.counts())
     state.firestore_operation_sources = firestore_proxy.operation_sources()
     for bucket, count in firestore_proxy.home_receipt_trace().items():
@@ -146,6 +209,11 @@ def _go_sync(state, binary, database, key, url, firestore_proxy):
             'cause': cause[1] if cause else '',
         },
     }
+    if state.replay_fence:
+        with suspend_meter():
+            if result[1] != 'fenced' or state.conversation.get().exists or state.provider_calls:
+                raise UnexpectedGoOutcome('missing row did not fence without provider work')
+        return 'fenced'
     if result[1] != 'success':
         if (
             state.case['name'] == UNREADABLE
@@ -161,7 +229,18 @@ def _go_sync(state, binary, database, key, url, firestore_proxy):
         raise UnexpectedGoOutcome
     with suspend_meter():
         final = state.conversation.get().to_dict()
-    return 'discarded' if final.get('discarded') else final['status']
+    status = 'discarded' if final.get('discarded') else final['status']
+    if state.replay_erase:
+        receipt = re.search(r'^ORDINARY_SYNC_ERASED=(\d+),(\d+)$', process.stdout, re.MULTILINE)
+        if status != 'completed' or receipt is None:
+            raise UnexpectedGoOutcome('serving erasure had no completed queue receipt')
+        erasure = reference_module.erase_reference(state)
+        erasure['jobs_for_uid'], erasure['tenants_for_uid'] = map(int, receipt.groups())
+        state.effects['erasure'] = erasure
+        state.go_evidence['erasure'] = erasure
+        with suspend_meter():
+            state.client.collection('account_deletions').document(state.uid).delete()
+    return status
 
 
 def _receiver(client):
@@ -200,7 +279,15 @@ def _observe_sync(state, run, leaves, url):
     leaves.enter_context(patch.object(callback, 'submit_with_context', track))
     leaves.enter_context(patch.object(finalize, 'submit_with_context', track))
     leaves.enter_context(patch.object(ai_profile_refresh, 'submit_with_context', track))
-    leaves.enter_context(patch.object(reference_module, '_run', run))
+
+    def wait_for_background():
+        for future in futures:
+            future.result(timeout=12)
+
+    def run_finalization(target):
+        return run(target, wait_for_background)
+
+    leaves.enter_context(patch.object(reference_module, '_run', run_finalization))
     if state.replay_side == 'python':
         original_attach_recorded = episode_timeline.attach_recorded
         original_complete = episode_attach_memo.complete
@@ -225,11 +312,10 @@ def _observe_sync(state, run, leaves, url):
         if state.replay_side == 'python' and state.case['name'] == UNREADABLE:
             # The route drives its own durable outbox. The direct callback
             # harness's BYOK and provider setup does not belong to its meter.
-            return run(state)
+            return run_finalization(state)
         return reference_module.run_reference(state, leaves, url)
     finally:
-        for future in futures:
-            future.result(timeout=12)
+        wait_for_background()
 
 
 def run_cases(states, side, binary, database, key, worker_backend, server, client, url):
@@ -237,22 +323,27 @@ def run_cases(states, side, binary, database, key, worker_backend, server, clien
         if side == 'go':
             server.reference = _receiver(client)
 
-        def invoke(state):
+        def invoke(state, wait_for_background):
             state.replay_side = side
             if side == 'python':
                 if state.case['name'] == UNREADABLE:
                     state.python_retry = retry_to_park(state, worker_backend)
                     return state.python_retry['outcome']
+                if state.replay_fence:
+                    return _run_python_job(state, before_worker_delete=state.capture_memo_before_worker_delete)
                 return _python_sync(state)
             privacy_document_path = f"batch_pipeline_privacy/{sha256(state.uid.encode('utf-8')).hexdigest()}"
             with FirestoreProxy(emulator_endpoint(), privacy_document_path, state.home_dirty_receipt_path) as proxy:
-                return _go_sync(state, binary, database, key, url, proxy)
+                return _go_sync(state, binary, database, key, url, proxy, wait_for_background)
 
         def attach_at_intake(target):
             row = target.conversation.get().to_dict() or {}
-            key = episode_attach_memo.current_key(target.uid, row) if side == 'python' else None
+            key = episode_attach_memo.current_key(target.uid, row) if side == 'python' or target.replay_fence else None
             result = finalize.attach_synced_at_intake(target.uid, target.cid, row)
-            remember_python_memo(target, key)
+            if target.replay_fence:
+                target.fence_intake_memo_key = key
+            if side == 'python':
+                remember_python_memo(target, key)
             return result
 
         outputs = []
@@ -265,9 +356,20 @@ def run_cases(states, side, binary, database, key, worker_backend, server, clien
             state.replay_side = side
             client_gate.note_client_seen(state.uid)
             with ExitStack() as leaves:
+
+                def run_paired_lifecycle(target):
+                    status = _observe_sync(target, invoke, leaves, url)
+                    if side == 'python' and target.replay_erase:
+                        if status != 'completed':
+                            raise RuntimeError('serving Python replay did not complete before erasure')
+                        with suspend_meter():
+                            target.capture_before_erasure()
+                        target.effects['erasure'] = reference_module.erase_reference(target)
+                    return status
+
                 _observe(
                     state,
-                    lambda target: _observe_sync(target, invoke, leaves, url),
+                    run_paired_lifecycle,
                     out,
                     side,
                     setup=attach_at_intake,

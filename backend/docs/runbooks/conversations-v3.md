@@ -1,9 +1,9 @@
 # Recording-derived conversations v3
 
-The code default is `CONVERSATIONS_V3_STAGE=beta`, and the deployed source (`runtime_env/_base.yaml`)
-is `beta` again since 2026-11-18 (it held at `cohort` on 2026-11-17 while reconcile commit
-conflicts were fixed). Change the stage only there, never by a live-only env edit, which the next
-workflow deploy would revert. `CONVERSATIONS_V3=off`
+The code default is `CONVERSATIONS_V3_STAGE=beta`; the deployed source (`runtime_env/_base.yaml`)
+is `all` (step 2 below; it was `cohort` on 2026-11-17 and `beta` from 2026-11-18). Change the stage
+only there, never by a live-only env edit, which the next workflow deploy would revert. Rollback is
+the source back to `beta` (TestFlight-seen owners) plus a train. `CONVERSATIONS_V3=off`
 stops marking new mobile pendant documents. Stages are `cohort`, `beta`, `all`;
 `rollout_cohorts/conversations-v3` is for named qualification accounts. Admission
 needs a v3-capable app: only those builds call `GET /v1/conversations/live`, on any
@@ -24,10 +24,11 @@ Provision the dedicated queue on dev/prod before enabling admission; the prod
 ops manifest declares its bounded concurrency/retry policy. The same stage must reach backend/API, backend-listen (including realtime role),
 backend-sync, backend-sync-backfill, sync-backfill-worker, backend-integration,
 and pusher wherever their deployed image can create or finalize pendant rows.
-The desktop backend must use the same value for capability/episode responses;
-its desktop creates remain one-to-one. Refresh the runtime image/service census
+The desktop backend reads the code default (`beta`): it mounts no conversations or
+episodes router, so no capability/episode response depends on it, and its desktop
+creates remain one-to-one. A desktop route that reads the stage must first carry it. Refresh the runtime image/service census
 before rollout. `backend/deploy/runtime_env/_base.yaml` is the shared stage
-source; composition binds Cloud Run services/jobs and desktop directly, and
+source; composition binds Cloud Run services/jobs directly (not desktop), and
 backend-listen/pusher through the generated shared ConfigMap. The uninstalled
 sync-backfill-worker pilot references that ConfigMap. STT-only parakeet workers
 do not create/finalize/read conversation documents. A stage edit must be composed
@@ -35,6 +36,40 @@ and deployed to every relevant role; no runtime source was changed outside this
 worktree. Leave `CONVERSATIONS_V3_FIRST_APP_BUILD` unset in source. At rollout,
 lead2 sets it through the shared runtime source from the first TestFlight build
 containing this PR; unset/invalid yields unknown and cannot qualify deletion evidence.
+
+## Per-owner holdout
+
+An owner in the `conversations-v3-holdout` rollout cohort keeps legacy intake for NEW captures at
+every stage. Use it to return specific heavy owners to legacy at `all` without a roll. Stage
+admission (`conversations_v3_enabled`) ignores the holdout. New-intake sites ask
+`v3_intake_held_out` after admission:
+
+- `triggers.mark_new` (in-progress create, sync ingest, batch projection): no `recording` marker on new rows.
+  A listen v3 rotation successor is the same capture continuing, so it stays v3.
+- Manual cuts (`record_end`, `ends_around`): experiment-off End handling.
+- Home list: legacy read mode (offset paging, `show_held`). It still shows the owner's existing
+  `v3_derived` cards, and their new legacy pieces held for notes.
+- `GET /v1/conversations/live`: an existing active v3 window is still served (`v3:true`).
+  Without one, the answer is `v3:false`.
+
+Finish, episodes and the builders keep stage admission, so existing v3 recordings drain on the
+v3 path and an active v3 capture can still be finished. While a legacy row is in progress beside an
+older v3 window, a Finish that names a different id finishes only that named window (or its just-sealed
+capture) and leaves the legacy row recording. An unnamed Finish, or a miss, runs the legacy Finish. The cohort starts empty. Add or remove
+one owner per command from a private UID file (never pass a UID on the command line):
+
+```bash
+GCP_AGENT_TIER=prod-operator python backend/scripts/rollout_cohort.py --uid-file <private-file> \
+  --cohort conversations-v3-holdout --project based-hardware --environment prod --add --apply
+# --remove instead of --add writes an explicit false and returns the owner to normal admission.
+```
+
+Allow about 60 s for the per-process cohort cache, plus up to 120 s for the capability read cache.
+The capture in flight keeps its layer; only new rows move. An unknown membership read admits as
+before and counts `omi_fallback_total{component="feature_flags",from_mode="v3_holdout"}`, so a cold
+cache can still admit a held-out owner. Check: once the writers have resolved membership, the owner
+gets no new `recording`-marked rows. `CONVERSATIONS_V3_HOLDOUT=off` (default on) skips the check and
+its read; members stay stored.
 
 ## Internal live recap beta
 
@@ -131,8 +166,46 @@ recording's language and writes the result with `update_conversation_segments`. 
 recording pending and wakes reconcile, and the stored manual end cuts the window, so notes start
 without waiting for the batch merge and delivery. The batch record projection later replaces the
 provisional segments; once `record_projection_revision` is set the fast write is refused. Recordings
-over 20 minutes, partial records, custom STT, locked rows and private rows are skipped. Read
-`omi_conversations_v3_fast_finish_total{outcome}` and `omi_conversations_v3_fast_finish_seconds{stage}`.
+of more than nine chunks (about 44 minutes) or eight units, partial records, custom STT, locked rows and
+private rows are skipped. `CONVERSATIONS_V3_FAST_FINISH_CHUNKED` (default `on`) splits each unit into
+chunks of at most five minutes, cut at retained-audio silences where possible and otherwise at even
+offsets with a 3 s overlap, and sends them to the provider concurrently on the six-worker
+`fast_finish_chunk` pool: four in flight, three for a recording over 20 minutes. Only audio over 20
+minutes makes a pass long, never its chunk count; a long pass takes its own pass slot, so it never holds
+a short Finish's slot, and a short Finish waits up to 10 s for a slot instead of answering `busy`. Length,
+canary and cap refusals are counted before any slot is taken. Each chunk asks the batch privacy fence
+again when it actually starts, and so does the language probe right before it sends; one refusal or
+error ends the pass (`privacy_blocked`), and every later check refuses without asking; a chunk is retried
+once if time allows. One 45 s deadline from record admission (not the Finish tap) covers slot wait, the
+Firestore reads before chunking, every retained-audio reference read (its storage timeouts capped to what
+is left), both language probes, queueing and provider requests (their connect, pool, write and read
+timeouts share what is left); past it the pass cancels queued chunks, waits at most 2 s more for running
+ones and yields to batch as `deadline`. Language resolution (both probes) is abandoned at the deadline
+as a whole, and skipped, keeping the row's language, with under 3 s left. Every Firestore call of a chunked pass (row refresh, funding,
+privacy, the transcript write and the cut) is waited for only until the deadline, or 1.5 s past it after
+the chunks, then abandoned as `deadline`; the write's own transaction refuses to run past that bound, and
+no cut follows an abandoned write. A pass that stops early sends no further request or retry and
+releases its slot when the requests in flight end. At a fixed cut the earlier chunk owns lines that start before the overlap's middle; every
+later line that starts before the earlier chunk's last line ended is compared against it (words by time,
+utterances by text, allowing a clipped word on either side) and keeps only what is new. Recordings over 20 minutes are a canary: `CONVERSATIONS_V3_FAST_FINISH_LONG_PERCENT`
+(default 25, `long_canary` outside it) and `CONVERSATIONS_V3_FAST_FINISH_LONG_DAILY_SECONDS` (default
+7200 per UTC day across the fleet, of audio actually sent, retries, overlaps and the vendor probe
+included, in the Redis key `v3_fast_finish:long_audio_seconds:<UTC day>`; `long_cap` past it, and also
+whenever Redis errors or takes over 1 s). A long pass reserves every chunk once plus a 30 s probe clip
+at admission, and each chunk retry reserves its own seconds on the same key just before it sends; a
+retry that does not fit (or meets a Redis error, a 1 s Redis stall or under 3 s of the deadline) is not
+sent, and the pass yields to batch as `retry_cap`. No audio is sent unreserved, so the day cannot pass
+the cap. The pass settles in the background to what it sent (unsent chunks and reserved but unsent
+retries refunded); while passes run the key reads high. At 7200 about three 30-minute passes fit a day
+(two while every retry was reserved up front); raising the cap is David's spend decision. Ramp
+`CONVERSATIONS_V3_FAST_FINISH_LONG_PERCENT` 25 → 100 only after the first 24 h readback of long-pass
+latency (first card within 60 s) and long audio seconds. Read today's total with `GET` on that key. Set `CONVERSATIONS_V3_FAST_FINISH_CHUNKED=off` on
+`backend-integration` to restore one serial request per unit and the 20-minute bound. Read
+`omi_conversations_v3_fast_finish_total{outcome}`, `omi_conversations_v3_fast_finish_seconds{stage}`,
+`omi_conversations_v3_fast_finish_chunks`, `omi_conversations_v3_fast_finish_chunk_seconds`,
+`omi_conversations_v3_fast_finish_chunk_queue_seconds`, `omi_conversations_v3_fast_finish_audio_seconds_total{path}`
+(vendor probe clip included) and `omi_conversations_v3_fast_finish_wall_seconds` (written passes, from
+record admission, not the Finish tap).
 A manual finish that never starts the pass is counted in
 `omi_conversations_v3_fast_finish_skipped_total{reason}`: `mode_off`, `already_started`, or the first
 failing `fast_finish.candidate_rejection` predicate (`not_recording`, `no_manual_end`,
@@ -185,6 +258,46 @@ Count `event=v3_transcript_size_cap_split` log lines to see splits. A commit Fir
 rejects for size (whole document or one property) parks the owner as `document_too_large`
 instead of retrying. To roll back, set `CONVERSATIONS_V3_TRANSCRIPT_SIZE_CAP=off` on builder
 and backfill runners.
+
+The cap budgets `transcript_segments` only. A finished row that predates it, a source recording
+already at 1 MiB, or recording aliases can still fill a document. `CONVERSATIONS_V3_SIZE_QUARANTINE`
+defaults to on. When a live pass that seeded exactly one pending recording parks on `document_too_large`,
+it may set work aside in `v3_size_quarantine` on the builder lease (all or nothing, at most 64 ids):
+- **Attribution.** Firestore's error must name the oversize document. It must be the seed, a row the seed
+  claims or feeds, or a source the commit writes for those rows. It must also lie outside everything the
+  lease's open window and any unlocked seed reach through claims, time neighbours and sources: those load
+  on every pass. An unnamed or unattributable rejection parks with the usual backoff.
+- **The set** is the seed plus the pending sources the rejected commit writes for the seed's rows. Time
+  siblings of unrelated rows are not set aside. The early attempt is re-armed, so the next seed runs on the
+  following wake.
+- **Skipping.** Seeding is the only thing that skips quarantined ids: closures still load them, so claims
+  are never filtered. Seeding skips them only on a bounded pass (`CONVERSATIONS_V3_BOUNDED_PENDING` on), and
+  the pass chain and the 5-minute sweep don't wake an owner whose only stale pending rows are quarantined
+  under exactly that condition. A failed lease read in the sweep counts as not quarantined and wakes the owner,
+  recorded as `omi_fallback_total{component="conversations_v3",to_mode="unfiltered_wake",outcome="recovered"}`.
+- **Pruning.** While seeding skips held ids (the switch and bounded pending on), each size park first drops held ids that are no longer `v3_pending`
+  (landed, deleted or repaired). A failed prune read keeps the list, records
+  `omi_fallback_total{component="conversations_v3",from_mode="size_quarantine_prune",outcome="degraded"}` and
+  still parks with the usual backoff. Otherwise nothing is read for pruning and the list is not changed. A
+  closure that still doesn't fit parks with the usual backoff and records
+  `omi_fallback_total{component="conversations_v3",outcome="exhausted"}` and
+  `reconciles_total{outcome="size_quarantine_full"}`. Each new quarantine records `outcome="degraded"` and
+  `reconciles_total{outcome="size_quarantined"}`.
+- **Re-attempt.** Each id is held for 24 hours from when it was set aside (`v3_size_quarantine_at`). After
+  that it is seeded again: the sweep wakes the owner, a repaired recording commits, and one still oversize
+  is set aside again on that attempt with a fresh hold. An id with no timestamp is not held.
+- **Readback.** The lease keeps naming quarantined rows after the park clears. Report three numbers, never
+  added together: owners recovering (park cleared, the backlog outside the quarantine draining), work
+  quarantined (held ids per `held_quarantine`: inside their hold and still `v3_pending`, which is what
+  seeding skips; owners holding any; owners whose list is full), and owners parking without attribution
+  (still parked on `document_too_large` with nothing quarantined). A repaired recording that landed leaves
+  the work-quarantined count at once, though the raw list keeps naming it until the next prune.
+- **Repair and rollback.** Repair the oversize document, then either wait for the hold to lapse or clear it
+  as in the retry step below. Set the switch off on live builders to restore head-of-line retries; stored
+  ids are then ignored.
+
+See the [size quarantine](../listen_pusher_pipeline/changes/2026-11-26-v3-size-quarantine.md)
+change note.
 
 `CONVERSATIONS_V3_MAX_WINDOW_SECONDS` defaults to 10800 (three hours).
 The first transcript line whose recorded start reaches the limit starts a new
@@ -265,13 +378,123 @@ closure-budget or document-size park gets an early background attempt. A closure
 starts with eight seeds and can fall back to one. A document-size park starts with one seed.
 The final commit remembers a successful smaller page on the builder lease. Before loading
 the projection, the builder can clear discarded or deleted markers within the oldest 50
-pending rows under that lease. Owner-wide unlocked-window overflows survive even at one
-seed. See the [bounded pending change note](../listen_pusher_pipeline/changes/2026-11-26-v3-bounded-pending.md)
-for the unlocked-window reconciliation follow-up.
-A new failed bounded pass records `v3_bounded_pending_attempted` on the builder lease and
-observes the usual backoff. An operator clears the park by deleting `v3_blocked_count`,
-`v3_blocked_reason`, `v3_backoff_until` and `v3_bounded_pending_attempted` on
-`users/{uid}/conversation_v3_leases/builder`.
+pending rows under that lease. A pass loads owner-wide unlocked windows one page at a time and,
+while windows remain unvisited, wakes itself a minute later with a task named by its lease token.
+A derived-budget park recorded before paging shipped, with indexed unlocked windows and no
+`v3_unlocked_paging_attempted` yet, gets one more early attempt that sets it; a new park sets it
+when it is recorded and waits out the usual backoff. See the [bounded pending](../listen_pusher_pipeline/changes/2026-11-26-v3-bounded-pending.md)
+and [bounded unlocked](../listen_pusher_pipeline/changes/2026-11-26-v3-bounded-unlocked.md) change notes.
+A one-seed closure still over the derived budget (one long recording owning hundreds of locked
+one-line windows) parks with `v3_bounded_pending_attempted` already set. The allowance ships with
+`CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS` unbound on every loader: the code default is empty, so nobody is
+admitted. Owner tags never go in Git (this repository is public), so the list reaches the loaders only
+through Secret Manager.
+
+**Before the first owner (once, its own change).** This step needs an operator with Secret Manager and
+IAM rights in `based-hardware`; Release's `ro-prod` identity cannot verify or create secrets or grants.
+1. The operator creates the secret `CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS` with version 1 payload `none`
+   (it admits nobody) and grants `roles/secretmanager.secretAccessor` on that secret to
+   `backend-runtime@based-hardware.iam.gserviceaccount.com`. They post the secret metadata and the grant on
+   SCA-2918, never the value.
+2. Only then, a small PR binds it on the four loaders in `deploy/runtime_env/prod.overlay.yaml`
+   (`secrets:` entry `CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS`, `secret` of the same name; the pump inherits
+   it from integration), adds `v3-locked-closure-owners` to the activation manifest over the same four
+   runtimes, and adds the binding to the approved secret-binding baseline. A binding to a secret that does
+   not exist stops the next revision of all four services from starting, so this PR merges only after
+   step 1's receipt.
+3. Roll the four loaders. Record the secret version their serving revisions read: equal `latest`
+   references cannot show they loaded the same version.
+
+**To admit an owner.**
+1. Take the owner's `owner=` tag from the `v3 reconcile blocked reason=v3_derived_budget` log line.
+2. The operator adds a new version of the secret whose payload is the full comma-separated tag list.
+   Never put a tag in Git or in an env edit.
+3. Roll a new revision of every runtime that runs `store.load()`: `backend` and `backend-integration`
+   (the on-open builder), and `backend-sync` and `backend-sync-backfill` (builder tasks; the task handler
+   can target either). `pusher` and `backend-listen` only mark pending and enqueue; they never load a
+   closure. A loader still on an old revision keeps parking the owner until it rolls.
+4. Clear the park as below.
+
+The next pass loads the locked claimants within the allowance and commits in at most
+`CONVERSATIONS_V3_LOCKED_MAX_BATCHES` batches. That is about 6.5k to 30k reads per pass. A pass whose
+commit would need more batches writes nothing, uploads no transcript to the object lake (the cap is decided
+before preparation can offload), and retries down the same ladder a load-time overflow
+uses, pending and unlocked seeds alike: 32 pending + 8 unlocked, then 8 + 8, then 1 + 1, then one seed of
+either kind. The step comes from the seeds the pass read, so it re-enters at most three times, and it parks
+only at one seed. Only builder passes get the allowance: derive and re-derive keep their partition bounds,
+so a heavy derive is planned as its own run.
+
+**Per-owner daily budget.** While pending remains, a pending-seeded request can run up to 3 inline passes,
+and the owner is woken again each minute, so the budget counts attempts. Every builder load of a listed
+owner charges one attempt to `v3_locked_day` / `v3_locked_passes` on the builder lease, in its own
+transaction under the held lease, before the load reads anything. That covers a capped attempt and each
+smaller-page retry, a commit interrupted after a committed prefix, a smaller page that fits the origin
+bound, and a parked pass. `CONVERSATIONS_V3_LOCKED_DAILY_PASSES` (default 20) is the day's budget. A
+spent day, a lease that is not held, or a charge that cannot be written loads with the origin bound, so
+the owner parks as before.
+
+The ceiling is attempts x the most one attempt can read:
+- the charge: 1 read and 1 write, at most three tries;
+- the load: at most about 5.9k reads. It admits at most 6 x (449 - sources) rows (2,694 with no sources), what
+  six batches can commit, and fetches at most twice that many derived documents plus one sentinel (5,389),
+  repeats included:
+  a row that a claim read and a time query both return, or that spans several interval queries, counts each
+  time. Add up to 400 sources and the seeds. An on-open load's seeds are the open window's recording ids, which the
+  planner appends uncapped: an allowance load reads at most 400 of them, each once, and parks on
+  `v3_source_closure_budget` before reading any when there are more (main reads every entry before that same park);
+- the commit: up to about 24k reads, and each batch runs its body at most three times, whatever restarts it
+  (main's contention retry, or a cold transcript pointer). The commit loads each batch's pointers from the lake
+  before its transaction, so pointers never replay the body; a fourth run parks before it reads. So up to about
+  72k (3 x 24k). The preload and the three-run cap apply to every listed owner's builder commit that has pointer
+  rows, inside the origin bound too: every such load is charged. A commit inside the origin bound keeps main's
+  batches (the batch cap and the row clamp apply only past it), so it reads what main's pass of the same closure
+  reads, with at most three runs per batch instead of main's replays. An inline-only commit inside the bound is
+  main's path unchanged;
+- the load's own lake reads: decoding a fetched row or source whose transcript is a lake pointer costs about one
+  object GET, repeats included, because the decoded memo holds only 32 entries. At most 5,388 decoded derived
+  documents (the sentinel is never decoded), 400 sources and the open window: about 5.8k GETs;
+- the pointer preload: at most 32 lake object reads per batch (192 per attempt past the origin bound; inside it, one
+  per pointer row committed, which main's transaction loads anyway), and no Firestore reads;
+- renewals: a few reads.
+
+That is about 78k Firestore reads and about 6k lake object GETs per attempt past the origin bound. Per listed owner per day, the ceiling
+is **about 1.6M Firestore reads (20 x 78k) and about 0.12M lake GETs (20 x 6k)**. The lake term is zero while the
+closure's rows are inline, which is every row in prod today: prod admits no lake writes (`OBJECT_LAKE_WRITE_ENABLED`
+false, and the prod stage is not a lake write stage). If lake writes are ever admitted, each offloaded row's upload
+also runs the upload-candidate protocol (owner-fence reads and candidate transactions, reuse included); restate
+this ceiling before that rollout. Measured attempts read 6.5k to 22k, so a typical day is well under it. A listed owner can spend its 20
+attempts early in the UTC day and then runs at the origin bound, parking as before, until 00:00Z resets the
+day: in the readback, a `v3_locked_passes` of 20 with pending still owed is that case, not a regression. The
+readback reports both terms: Firestore reads per attempt, and lake object GETs on the lake bucket (Cloud Monitoring
+`storage.googleapis.com/api/request_count`, method `ReadObject`, an aggregate read with `ro-prod`). Parked retries after the
+budget is spent run at the origin bound, as for any parked owner today. Admit owners one at a time first. A
+step expected to exceed 10M reads a day (more than about six listed owners) needs the Firestore cost owner
+(SCA-2173).
+
+The row clamp is an upper bound from sources and the lease only: removals, absorption redirects (up to 16 writes),
+retire, retired and settle writes, and the byte and pointer splits on prepared rows are not known at load
+time. A closure that needs more batches for those reasons still parks at the commit's batch cap
+(`LockedBatchCap`, before any transaction), which stays the backstop.
+Each attempt is charged to the pass's own builder lease token: a stale pass, whose token no longer holds the
+lease, charges nothing and loads with the origin bound.
+
+Kill switches: an empty list, or `CONVERSATIONS_V3_LOCKED_DERIVED_ALLOWANCE`, `_DERIVED_BYTES`, `_MAX_BATCHES` or
+`_DAILY_PASSES` (each `CONVERSATIONS_V3_LOCKED_*`) set to `0`, restores the origin bound for every owner; a
+negative or unparseable value keeps the default.
+
+An owner that still parks needs the fragment repair (SCA-2918). To undo, add a secret version without the tag (or `none`) and roll the four loaders.
+`CONVERSATIONS_V3_COMMIT_LEASE_RENEWAL=off` stops the lease renewal before each later projection batch.
+A renewal that fails mid-commit leaves the batches already written: a committed prefix, as any multi-batch
+commit can today. Pending stays owed, and the next pass completes the closure.
+See the [locked-closure allowance change note](../listen_pusher_pipeline/changes/2026-11-26-v3-locked-closure-allowance.md).
+
+A new failed bounded pass records `v3_bounded_pending_attempted` (and, with unlocked windows,
+`v3_unlocked_paging_attempted`) on the builder lease and observes the usual backoff. An operator
+clears the park by deleting `v3_blocked_count`, `v3_blocked_reason`, `v3_backoff_until`,
+`v3_bounded_pending_attempted` and `v3_unlocked_paging_attempted` on
+`users/{uid}/conversation_v3_leases/builder`. After repairing a size-quarantined recording, retry it at once
+by also deleting `v3_size_quarantine` and `v3_size_quarantine_at` on that lease (or only the repaired ids
+from both).
 
 Each source has a durable `v3_pending` obligation. Tasks use the dedicated `conversations-v3`
 Cloud Tasks queue and the configured sync origin/OIDC identity unless
@@ -596,11 +819,20 @@ Rollout owner: lead2. Step 0: set CONVERSATIONS_V3_FIRST_APP_BUILD through the s
 from the first TestFlight build containing this PR. Then dev named accounts,
 live/sync/late qualification and
 current App Store/TestFlight fallback acceptance; prod named cohort only. Step 1:
-beta in prod after that acceptance. Step 2: all within 12 hours if first-speech
-visibility, end-to-summary latency, conversations/calls/cost per user-day,
-share/delete/processing error rates, pending age and stuck counts remain clean,
-and late rewrite cost share is at most 5%. Stage rollback or kill switch affects
-new intake only; previously marked recordings continue draining.
+beta in prod after that acceptance. Step 2 expands to all owners with a recent
+v3-capable app. Keep the stage at beta until lead2 records a full clean beta hour
+before merge. Reconcile 5xx must be below 1%, reconciles must commit every hour,
+pending recordings older than one hour must be near zero, outline calls must be
+at most one per conversation, and late rewrite cost share must be at most 5%.
+First-speech visibility, end-to-summary latency, conversations/calls/cost per
+user-day, and share/delete/processing error rates must stay clean.
+
+Use production request logs and approved aggregate builder and accounting
+readbacks for the pre-merge gate. Missing samples do not qualify the ramp.
+Verify that the backend-sync GMP profile exposes the builder series after
+the train, then repeat the gate readout at one and four hours. Stage rollback
+or kill switch affects new intake only; previously marked recordings continue
+draining.
 
 Delete the old episode implementation in a follow-up only after stage all for
 14 days, kill switch unused for seven days, episode calls below 1% of active

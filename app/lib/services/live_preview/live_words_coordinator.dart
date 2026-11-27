@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/live_preview/live_preview_controller.dart';
+import 'package:omi/services/live_preview/live_tail.dart';
 import 'package:omi/services/live_preview/live_words_log.dart';
 import 'package:omi/services/live_preview/vendor_live_words.dart';
 import 'package:omi/utils/enums.dart';
@@ -39,11 +40,13 @@ class LiveWordsCoordinator {
     required this.preview,
     required this.vendor,
     bool Function()? enabled,
+    bool Function()? cascade,
     String Function()? language,
     AppLifecycleState? Function()? lifecycleState,
     void Function(String event, Map<String, Object?> fields)? log,
     this.reportEvery = const Duration(seconds: 15),
   })  : _enabled = enabled ?? (() => ReliabilityExperiments.enabled(experiment)),
+        _cascade = cascade ?? LivePreviewController.cascadeEnabled,
         _language = language ?? _preferredLanguage,
         _lifecycleState = lifecycleState ?? (() => WidgetsBinding.instance.lifecycleState),
         _log = log ?? ((event, fields) => LiveWordsLog.event(event, fields));
@@ -55,6 +58,7 @@ class LiveWordsCoordinator {
   final VendorLiveWords vendor;
   final Duration reportEvery;
   final bool Function() _enabled;
+  final bool Function() _cascade;
   final String Function() _language;
   final AppLifecycleState? Function() _lifecycleState;
   final void Function(String event, Map<String, Object?> fields) _log;
@@ -144,16 +148,55 @@ class LiveWordsCoordinator {
     }
   }
 
-  void _reportCounters() => _log('counters', {
-        'own_phase': preview.phase.name,
-        'own_results': preview.ownResultsHeard,
+  /// Reliability experiment `live_words_cascade`: the person ended the conversation at [endedAt], the
+  /// instant the End request carries. Returns the live words shown for the conversation being ended,
+  /// as that request sends them (`live_tail`), then cuts the live words there, so every screen of the
+  /// next conversation shows only words spoken after it, and tells the display connection, so the
+  /// vendor's line in progress breaks at the same place. Off (or without the base experiment): null,
+  /// and nothing is cut or sent.
+  Map<String, Object?>? onEnd(DateTime endedAt) {
+    if (!_started || !_enabled() || !_cascade()) return null;
+    try {
+      final tail = LiveTail.payload(preview.wordsUntil(endedAt), endedAt: endedAt);
+      preview.cutAtEnd(endedAt);
+      vendor.markEnd(endedAt);
+      // Counts only: never a word.
+      _log('end_cut', {
+        'tail_words': LiveTail.wordCount(tail),
+        'tail_lines': (tail?['lines'] as List?)?.length ?? 0,
         'vendor_connected': vendor.connected,
-        'vendor_sent_s': (vendor.totalSentMs / 1000).round(),
-        'vendor_lines': vendor.linesReceived,
-        'vendor_words': preview.vendorWordsSeen,
+      });
+      return tail;
+    } catch (error) {
+      // The End itself must go through whatever the live words do: it is then sent without a tail.
+      _log('end_cut_failed', {'type': error.runtimeType.toString()});
+      return null;
+    }
+  }
+
+  void _reportCounters() {
+    final cascade = _enabled() && _cascade();
+    if (cascade) preview.settleCascadeCounters();
+    _log('counters', {
+      'own_phase': preview.phase.name,
+      'own_results': preview.ownResultsHeard,
+      'vendor_connected': vendor.connected,
+      'vendor_sent_s': (vendor.totalSentMs / 1000).round(),
+      'vendor_lines': vendor.linesReceived,
+      'vendor_words': preview.vendorWordsSeen,
+      if (cascade) ...{
+        // What "filled" meant has no meaning once the vendor comes first.
+        'cascade': true,
+        'own_draft': preview.ownDraftAllowed(preview.language),
+        'replaced_words': preview.vendorReplacedWords,
+        'own_only_words': preview.ownOnlyWords,
+        'neither_s': (preview.neitherMs / 1000).round(),
+      } else ...{
         'filled_words': preview.vendorFilledWords,
         'filled_speech_ms': preview.vendorFilledSpeechMs,
-        'own_restarts': preview.watchdogRestarts,
-        'dropped_connections': vendor.droppedConnections,
-      });
+      },
+      'own_restarts': preview.watchdogRestarts,
+      'dropped_connections': vendor.droppedConnections,
+    });
+  }
 }

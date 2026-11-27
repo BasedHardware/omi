@@ -75,7 +75,7 @@ def admission(client, anchors, monkeypatch):
     monkeypatch.setattr(intake, 'batch_artifact_authorize', authorize)
     staged = []
 
-    def stage(item, wav):
+    def stage(item, wav, *, record_origin):
         staged.append((item, wav))
         uri = 'gs://synthetic/audio#1'
         store.rows['artifacts', artifact_id(item.segment_id, uri)] = {

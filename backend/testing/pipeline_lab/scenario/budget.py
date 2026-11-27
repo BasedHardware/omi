@@ -6,9 +6,11 @@ What is counted (``result.json`` ``ops``; the verdict row's ``ops``; the web vie
   client ``database._client`` hands to the product (``stack/env.py``). :func:`install` wraps that client's
   GAPIC API (``client._firestore_api``), so every path the product takes (document gets, queries,
   transactions, batches, the bulk writer) is seen once, at the RPC. Reads are counted the way Firestore bills
-  them: one per document a get or query returns, one for a get of a missing document, one for a query that
-  returns nothing, one per aggregation query. A write is one ``Write`` in a successful commit or batch write
-  (an update, a set, a transform); a delete is one delete ``Write``. A commit that fails (a contention
+  them: one per document a get or query returns, one per document a query's ``offset`` skipped
+  (``RunQueryResponse.skipped_results``, the legacy Home offset path), one for a get of a missing document,
+  one for a query that neither returned nor skipped anything, one per aggregation query. A write is one
+  ``Write`` in a successful commit or batch write (an update, a set, a transform); a delete is one delete
+  ``Write``. A commit that fails (a contention
   retry) counts its writes when the retry succeeds, not before. Split by top-level collection
   (``by_collection``) and by collection path with the ids removed (``by_path``, e.g. ``users/conversations``).
 - **No-op writes**: an update whose resulting document equals the previous one. Firestore (and the emulator,
@@ -332,17 +334,22 @@ class CountingFirestoreApi:
         counter = self._counter
 
         def counted() -> Iterator[Any]:
-            found = 0
+            found = skipped = 0
             try:
                 for response in stream:
                     pb = _pb(response)
+                    # Documents an ``offset`` skipped (the legacy Home offset path) are billed as reads too;
+                    # each response carries the count skipped since the previous one.
+                    skipped += int(getattr(pb, 'skipped_results', 0) or 0)
                     if pb.HasField('document'):
                         found += 1
                         counter.add('reads', pb.document.name)
                     yield response
             finally:
-                if found == 0:  # an empty result is billed one read
-                    counter.add('reads', _query_parent(request))
+                parent = _query_parent(request)
+                counter.add('reads', parent, skipped)
+                if found + skipped == 0:  # a query that read nothing is still billed one read
+                    counter.add('reads', parent)
 
         return _Stream(stream, counted())
 

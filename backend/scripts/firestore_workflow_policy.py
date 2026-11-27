@@ -272,12 +272,14 @@ _KNOWN_NAME_BOUNDARY = r'(?<![A-Za-z0-9_-]){}(?![A-Za-z0-9_-])'
 LISTEN_WORKFLOW = 'gcp_backend_listen_helm.yml'
 _LISTEN_SOURCE_ATOM = ('env.BACKEND_LISTEN_SOURCE_SHA', '!=', '')
 _NOTIFICATIONS_FORWARD_ATOM = ('inputs.mode', '!=', 'image-only-rollback')
+_PUSHER_IMAGE_ONLY_FORWARD_ATOM = ('inputs.pusher_image_only', '!=', 'rollback')
 _SUPPORTED_GATE_ATOMS = frozenset(
     {
         ('steps.admitted_source.outputs.superseded', '!=', 'true'),
         ('inputs.mode', '==', 'prove'),
         _LISTEN_SOURCE_ATOM,
         _NOTIFICATIONS_FORWARD_ATOM,
+        _PUSHER_IMAGE_ONLY_FORWARD_ATOM,
     }
 )
 _UNSUPPORTED_SCOPE = frozenset({('@unsupported', '==', '@')})
@@ -778,6 +780,7 @@ def _gate_errors(step: dict, expanded: list[dict], index: int, job: dict, job_id
     elif _LISTEN_SOURCE_ATOM in gate_key and not is_listen:
         errors.append('env.BACKEND_LISTEN_SOURCE_SHA gating is only valid in gcp_backend_listen_helm.yml')
     is_notifications_image_only = pathlib.Path(name).name == 'gcp_notifications_job.yml' and job_id == 'image-only'
+    is_pusher_image_only = pathlib.Path(name).name == 'gcp_backend_pusher.yml' and job_id == 'pusher-image-only'
     if is_notifications_image_only:
         if gate_key != frozenset({_NOTIFICATIONS_FORWARD_ATOM}):
             errors.append('notifications image-only readiness must gate validate and apply while allowing rollback')
@@ -785,6 +788,13 @@ def _gate_errors(step: dict, expanded: list[dict], index: int, job: dict, job_id
             errors.append('notifications image-only readiness must use inputs.release_sha')
     elif gate_key and _NOTIFICATIONS_FORWARD_ATOM in gate_key:
         errors.append('notifications forward gating is only valid in the notifications image-only job')
+    if is_pusher_image_only:
+        if gate_key != frozenset({_PUSHER_IMAGE_ONLY_FORWARD_ATOM}):
+            errors.append('pusher image-only readiness must gate forward operations while allowing rollback')
+        if (step.get('with') or {}).get('source_sha') != '${{ inputs.branch }}':
+            errors.append('pusher image-only readiness must use inputs.branch')
+    elif gate_key and _PUSHER_IMAGE_ONLY_FORWARD_ATOM in gate_key:
+        errors.append('pusher image-only forward gating is only valid in the pusher-image-only job')
     if is_listen and gate_key != frozenset({_LISTEN_SOURCE_ATOM}):
         errors.append('listen readiness gate must be conditioned on env.BACKEND_LISTEN_SOURCE_SHA != \'\'')
     with_block = step.get('with') or {}
@@ -793,7 +803,11 @@ def _gate_errors(step: dict, expanded: list[dict], index: int, job: dict, job_id
         errors.append('readiness gate requires a source_sha input')
     elif 'github.workflow_sha' in source_sha:
         errors.append('readiness gate source_sha must be the deployed source, not the workflow commit')
-    elif not (re.fullmatch(r'[0-9a-f]{40}', source_sha) or 'sha' in source_sha.lower()):
+    elif not (
+        re.fullmatch(r'[0-9a-f]{40}', source_sha)
+        or 'sha' in source_sha.lower()
+        or (is_pusher_image_only and source_sha == '${{ inputs.branch }}')
+    ):
         errors.append('readiness gate source_sha must resolve to a full source commit SHA')
     if str(with_block.get('service_account', '')) != READINESS_SERVICE_ACCOUNT:
         errors.append('readiness gate must sign in as the omi-ci-index-check@ read-only service account')
@@ -1045,6 +1059,7 @@ def workflow_gate_violations(
             continue
         expanded = _expand_steps(steps, local_actions, name, job_id, errors)
         job_state = {'var_images': {}, 'tag_images': {}, 'env': {}, 'built_firestore': False}
+        is_pusher_image_only = pathlib.Path(name).name == 'gcp_backend_pusher.yml' and job_id == 'pusher-image-only'
 
         valid_gates: list[tuple[int, dict, frozenset]] = []
         for index, step in enumerate(expanded):
@@ -1056,7 +1071,7 @@ def workflow_gate_violations(
                 scope = _gate_scope(step) or frozenset()
                 valid_gates.append((index, step, scope))
                 # This job can succeed in rollback mode without running readiness.
-                if _NOTIFICATIONS_FORWARD_ATOM not in scope:
+                if _NOTIFICATIONS_FORWARD_ATOM not in scope or is_pusher_image_only:
                     gate_jobs.add(job_id)
 
         gate_positions = [(index, scope) for index, _step, scope in valid_gates]
@@ -1086,7 +1101,16 @@ def workflow_gate_violations(
             for scope, names in shipments:
                 if not names or names <= set(NON_FIRESTORE_IMAGE_EXCLUSIONS):
                     continue
-                if any(position < index and gate_key <= scope for position, gate_key in gate_positions):
+                if any(
+                    position < index
+                    and (
+                        gate_key <= scope
+                        # The protected Pusher verifier has an explicit rollback
+                        # branch; readiness is deliberately skipped only there.
+                        or (is_pusher_image_only and gate_key == frozenset({_PUSHER_IMAGE_ONLY_FORWARD_ATOM}))
+                    )
+                    for position, gate_key in gate_positions
+                ):
                     continue
                 uncovered.setdefault(job_id, []).append(names)
 

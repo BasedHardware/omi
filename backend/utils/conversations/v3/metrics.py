@@ -8,6 +8,7 @@ from threading import Lock
 from prometheus_client import Counter, Histogram, Gauge
 
 from database.firestore_write_probe import count_committed_writes, probe_enabled, probe_installed
+from utils.conversations.v3.finish_stamp import FINISH_STAMP_PATHS
 
 logger = logging.getLogger(__name__)
 _metric_warning_lock = Lock()
@@ -88,6 +89,20 @@ for outcome in (
     'recording_cut',
     'named_recording_cut',
     'named_recording_requested',
+    'newer_recording_cut',
+    'newer_recording_requested',
+    'newer_already_cut',
+    'newer_already_requested',
+    'newer_resolved_empty',
+    'newer_consumed',
+    'newer_recording_ineligible',
+    'newer_dual_cut',
+    'newer_dual_requested',
+    'newer_dual_consumed',
+    'newer_dual_already_cut',
+    'newer_dual_already_requested',
+    'newer_dual_already_empty',
+    'newer_dual_resolved_empty',
     'named_not_finishable',
     'named_superseded',
     'already_visible',
@@ -101,6 +116,28 @@ for outcome in (
     'settled',
 ):
     FINISH_NO_POINTER.labels(outcome)
+
+# A newer capture the live-window Finish selected but whose recording-scoped Finish declined (it wrote nothing), so the
+# window tail took the cut and answered. FINISH_NO_POINTER counts that answer as the tail's outcome.
+FINISH_NEWER_DECLINED_REASONS = ('already_empty', 'batch_unavailable', 'batch_disabled', 'recording_ineligible')
+FINISH_NEWER_DECLINED = Counter(
+    'omi_conversations_v3_finish_newer_declined_total',
+    'Live-window Finish newer captures that declined the cut, so the window tail answered, by decline reason',
+    ['reason'],
+)
+for reason in FINISH_NEWER_DECLINED_REASONS:
+    FINISH_NEWER_DECLINED.labels(reason)
+
+# One sample per live-window Finish: its stamp (v3 finish_stamp.FINISH_STAMP_FIELD) on the response target, observed at
+# that target's first manual-end settlement as a visible Home card. Stamps older than FINISH_STAMP_MAX_AGE are dropped.
+FINISH_TO_VISIBLE = Histogram(
+    'omi_conversations_v3_finish_to_visible_seconds',
+    'Live-window Finish request to its response target first settling as a visible Home card, by Finish path',
+    ['path'],
+    buckets=(5, 10, 20, 30, 60, 120, 300, 600, 1800, 3600, 7200),
+)
+for path in FINISH_STAMP_PATHS:
+    FINISH_TO_VISIBLE.labels(path)
 
 BATCH_MANUAL_END = Counter(
     'omi_conversations_v3_batch_manual_end_total',

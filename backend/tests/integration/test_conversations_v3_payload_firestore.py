@@ -476,12 +476,21 @@ def test_lean_home_refill_skips_hidden_chunks_and_hydrates_the_visible_card(row,
         monkeypatch.setattr(conversations, 'read_list_conversation_payload', hydrate)
         budget = ListReadBudget(deadline_monotonic=time.monotonic() + 10, max_documents=16, strict_documents=True)
         page = {}
+        emitted = []
         [card] = conversations.get_conversations_without_photos(
-            uid, limit=1, list_fields_only=True, budget=budget, cursor_page=page
+            uid,
+            limit=1,
+            list_fields_only=True,
+            budget=budget,
+            cursor_page=page,
+            on_prepared=lambda prepared, checkpoint: emitted.append((prepared, checkpoint)),
         )
         assert reads == [ref.id]
         assert card['structured']['title'] == 'Locked title'
         assert page['hidden_rows'] == 1 and page['storage_rows'] == 2
+        [(prepared, checkpoint)] = emitted
+        assert prepared['structured']['title'] == 'Locked title'
+        assert checkpoint['hidden_rows'] == 1 and checkpoint['storage_rows'] == 2
     finally:
         for chunk in hidden.collection(PAYLOAD_CHUNKS).list_documents():
             chunk.delete()

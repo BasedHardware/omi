@@ -527,6 +527,16 @@ def test_loader_refuses_an_overfull_partition(loader, monkeypatch):
         store.load_derive('u', since=AT, until=AT + timedelta(days=1), run_id=RUN, firestore_client=Client(rows))
 
 
+def test_a_locked_closure_owner_keeps_the_partition_bound(loader, monkeypatch):
+    # The locked-claimant allowance (SCA-2918) is for builder passes only; a heavy derive is planned as its own run.
+    monkeypatch.setenv('CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS', '*')
+    monkeypatch.setattr(store, 'LOCKED_DERIVED_ALLOWANCE', 2048)
+    monkeypatch.setattr(store, 'LIMIT', 2)
+    rows = {f'r{i}': legacy(f'r{i}', AT, 10) for i in range(3)}
+    with pytest.raises(store.Conflict, match='backfill_partition_budget'):
+        store.load_derive('u', since=AT, until=AT + timedelta(days=1), run_id=RUN, firestore_client=Client(rows))
+
+
 # ---- reversible conversion and undo ---------------------------------------------------------
 
 LEGACY_DONOR = {

@@ -17,8 +17,10 @@ from unittest.mock import Mock
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
+from google.api_core.exceptions import Aborted
 
 from database import _client as firestore_client
+from database import firestore_transaction_retry
 from database.outbox_firestore import ENRICHMENT_OUTBOX
 from database.summary_processing import EmptyFailureOutcome
 import database.summary_processing as summary_processing
@@ -979,6 +981,23 @@ async def test_legacy_handler_retries_processing_dependency_failures_without_5xx
         assert json.loads(response.body) == {'status': 'retry', 'reason': 'dependency_warming'}
 
 
+@pytest.mark.asyncio
+async def test_legacy_sync_handler_retries_wrapped_firestore_contention(monkeypatch):
+    monkeypatch.setenv('ENRICHMENT_ROUTE', 'sync_handler')
+    monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
+    error = ValueError('Failed to commit transaction in 1 attempts.')
+    error.__cause__ = Aborted('transaction contention')
+    monkeypatch.setattr(route, 'run_enrichment', Mock(side_effect=error))
+
+    async def run(_executor, func, *args):
+        return func(*args)
+
+    monkeypatch.setattr(route, 'run_blocking', run)
+    response = await route.enrichment_response({'kind': 'sync_reprocess', 'key': KEY, 'task_token': 'b' * 32})
+    assert response.status_code == 409
+    assert json.loads(response.body) == {'status': 'retry', 'reason': 'dependency_warming'}
+
+
 def test_consumer_retries_a_processing_dependency_failure_and_keeps_the_wake(rows):
     from fastapi import HTTPException
 
@@ -1275,12 +1294,8 @@ def test_non_transient_gateway_status_stays_5xx_and_keeps_the_lease(rows, client
     assert rows[0][KEY]['lease_until'] > 0
 
 
-def _provider_sweep(monkeypatch, sweep):
-    """Stub the C8 provider-STT outbox that maintain() also sweeps (M3 review); never touches Firestore."""
-    import database.outbox as outbox_module
-    from types import SimpleNamespace
-
-    monkeypatch.setattr(outbox_module, 'outbox_for', lambda kind: SimpleNamespace(sweep=sweep))
+def _provider_sweep(monkeypatch, sweep, sweep_running=lambda *, now: (3, 0)):
+    monkeypatch.setattr(route, 'provider_stt_outbox', lambda: SimpleNamespace(sweep=sweep, sweep_running=sweep_running))
 
 
 @pytest.mark.parametrize('near_expiry', [2, None], ids=['current', 'legacy'])
@@ -1305,6 +1320,8 @@ def test_maintenance_sweeps_the_outbox_and_admits_summary_debt(rows, monkeypatch
         'provider_stt_rewoken': 4,
         'provider_stt_discarded': 2,
         'provider_stt_sweep_errors': 1,
+        'provider_stt_running_rewoken': 3,
+        'provider_stt_running_errors': 0,
         'summary_debt_scanned': 5,
         'summary_debt_expired_seen': 2,
         'summary_debt_admitted': 3,
@@ -1339,6 +1356,7 @@ def test_maintenance_isolates_a_provider_stt_sweep_failure(rows, monkeypatch):
     )
     counts = route.maintain(1000.0)
     assert counts['rewoken'] == 1 and counts['provider_stt_sweep_errors'] == 1
+    assert counts['provider_stt_running_rewoken'] == 3
     assert counts['summary_debt_admitted'] == 1
 
 
@@ -1475,3 +1493,23 @@ def test_enrichment_early_abort_and_streak_metrics_pass_the_gmp_sync_allowlist()
         'omi_enrichment_early_abort',
     ):
         assert not any(re.fullmatch(pattern, name) for pattern in keep), name
+
+
+@pytest.mark.parametrize('budget', ['0', '300'])
+def test_claim_contention_is_409_and_leaves_custody_untouched(rows, client, monkeypatch, budget):
+
+    state = deepcopy(rows[0][KEY])
+    monkeypatch.setenv('ENRICHMENT_DELIVERY_BUDGET_SECONDS', budget)
+
+    def contended(_row_id):
+        deadline = firestore_transaction_retry._retry_deadline.get()
+        assert (deadline is not None) == (budget != '0')
+        raise Aborted('privacy read contention')
+
+    monkeypatch.setattr(custody, 'discard_blocked', contended)
+    response = client.post(
+        '/v2/enrichment/run', json={'kind': 'enrichment', 'key': KEY, 'task_token': state['task_token']}
+    )
+    assert response.status_code == 409
+    assert response.json() == {'status': 'retry', 'reason': 'dependency_warming'}
+    assert rows[0][KEY] == state

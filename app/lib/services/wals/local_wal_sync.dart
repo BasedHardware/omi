@@ -244,6 +244,17 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   // Weak identity reservations keep an unresolved close from being claimed
   // by the next conversation without retaining removed WALs indefinitely.
   Expando<Object> _conversationWalReservations = Expando<Object>('conversationWalReservations');
+  // Snapshot the presence of the persisted hold at load, independently of
+  // the mutable recovery label used to group and report uploads.
+  final _journalRecoveredHolds = Expando<bool>();
+
+  WalJournalRecovery _journalRecoveryForUpload(List<Wal> wals) {
+    final recovered = _journalRecoveredHolds[wals.first] == true;
+    if (wals.any((wal) => (_journalRecoveredHolds[wal] == true) != recovered)) {
+      return WalJournalRecovery.mixed;
+    }
+    return recovered ? WalJournalRecovery.recovered : WalJournalRecovery.fresh;
+  }
 
   void setActiveRecordingSessionId(String? recordingSessionId) {
     final trimmed = recordingSessionId?.trim();
@@ -312,6 +323,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     final admitted = <Wal>[];
     final foreign = <Wal>[];
     for (final wal in loaded) {
+      if (wal.mobileBatchHold != null) _journalRecoveredHolds[wal] = true;
       wal.recoveredMobileBatchHold = MobileBatchUploadHold.indexedLabel(wal) != 'none';
       if (_walAdmittedAtLoad(wal)) {
         admitted.add(wal);
@@ -1435,7 +1447,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     return File(path).exists();
   }
 
-  Future _flush(int generation) async {
+  Future _flush(int generation, {void Function(String stage)? onIndexSave}) async {
     _backlogTelemetry.flushPendantDrops();
     Logger.debug("_flushing");
     int flushedCount = 0;
@@ -1522,7 +1534,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
     await _persistCaptureCommits(generation);
     await _evaluateRetentionPressure();
+    onIndexSave?.call('index_save_started');
     final indexSaved = await _saveWalsToFile(generation);
+    onIndexSave?.call('index_save_finished');
     if (indexSaved && flushedCount > 0) _pendantBlockedByStorage = false;
 
     if (indexSaved) {
@@ -2530,8 +2544,23 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     // Start the pass before yielding to queued IO. A cancel during the flush
     // belongs to this pass and must never be cleared when the flush completes.
     _isCancelled = false;
-    await _enqueueBuffer(() => _flush(generation));
+    final preamble = Stopwatch()..start();
+    void notePreamble(String stage) {
+      if (!liveCaptureOnly) return;
+      DebugLogManager.logEvent('local_upload_preamble', {'stage': stage, 'elapsed_ms': preamble.elapsedMilliseconds});
+    }
+
+    notePreamble('buffer_queued');
+    await _enqueueBuffer(() async {
+      if (!_isCurrent(generation) || passCancelled()) return;
+      notePreamble('flush_started');
+      await _flush(generation, onIndexSave: liveCaptureOnly ? notePreamble : null);
+      notePreamble('flush_finished');
+    });
+    if (!_isCurrent(generation) || passCancelled()) return null;
+    notePreamble('discard_started');
     await _dropDiscardedWals(generation);
+    notePreamble('discard_finished');
     if (!_isCurrent(generation) || passCancelled()) return null;
     _accumulatedResponse = null;
 
@@ -2540,24 +2569,30 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     final holdLabel =
         batchHold?.label ?? (MobileBatchUploadHoldGate.enabled() ? MobileBatchUploadHold.indexedLabel : null);
     final initialNowSeconds = _now().millisecondsSinceEpoch ~/ 1000;
-    var wals = _wals
+    final eligibleWals = _wals
         .where((wal) =>
             isAutoUploadEligible(wal, nowSeconds: initialNowSeconds) &&
-            !(batchHold?.isHeld(wal) ?? false) &&
             !_isDiscardedRecording(wal) &&
             (!liveCaptureOnly || isLiveCaptureWal(wal, initialNowSeconds)))
         .toList();
+    final wals = eligibleWals.where((wal) => !(batchHold?.isHeld(wal) ?? false)).toList();
     if (wals.isEmpty) {
-      Logger.debug("All synced!");
-      DebugLogManager.logInfo('Local upload: no files to sync');
-      // No pending work does not mean no retention work: expired synced
-      // copies must still age out even when every WAL is already synced.
+      final heldOnly = eligibleWals.isNotEmpty;
+      if (heldOnly) {
+        DebugLogManager.logEvent('local_upload_held', {'walCount': eligibleWals.length});
+      } else {
+        Logger.debug("All synced!");
+        DebugLogManager.logInfo('Local upload: no files to sync');
+      }
+      // Expired synced copies still age out on a pass with no uploads.
       try {
         await _removeExpiredSyncedCopies();
       } catch (e) {
         Logger.warning('Synced-copy retention sweep failed: $e');
       }
-      return null;
+      return heldOnly
+          ? SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: [], localUploadHeldOnly: true)
+          : null;
     }
 
     if (SyncRateLimiter.instance.isLimited) {
@@ -2783,13 +2818,15 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         final audioBounds = syncUploadAudioBounds(batchWals);
         clockRecoveryAttempted = walCaptureTimeClass(batchWals.first, batchNowSeconds) == WalCaptureTimeClass.unknown;
         final oldest = batchWals.reduce((a, b) => a.timerStart <= b.timerStart ? a : b);
+        final mobileBatch = isMobileStandardBatchWal(oldest);
         UploadTrace.instance.prepare(
           firstFilePath: files.first.path,
           oldestId: oldest.id,
           sealedAtSeconds: oldest.timerStart + oldest.seconds,
-          holdState: isMobileStandardBatchWal(oldest) ? holdLabel?.call(oldest) ?? 'none' : null,
+          holdState: mobileBatch ? holdLabel?.call(oldest) ?? 'none' : null,
           holdSealedAtMs: MobileBatchUploadHold.oldestSealedAtMs(batchWals),
           recovered: oldest.recoveredMobileBatchHold,
+          journalRecovery: mobileBatch ? _journalRecoveryForUpload(batchWals) : null,
         );
         final result = await _uploadGate.upload(
           files,
@@ -3124,15 +3161,17 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         _now().millisecondsSinceEpoch ~/ 1000,
       );
       final audioBounds = syncUploadAudioBounds([walToSync]);
+      final mobileBatch = isMobileStandardBatchWal(walToSync);
       UploadTrace.instance.prepare(
         firstFilePath: walFile.path,
         oldestId: walToSync.id,
         sealedAtSeconds: walToSync.timerStart + walToSync.seconds,
-        holdState: isMobileStandardBatchWal(walToSync)
+        holdState: mobileBatch
             ? mobileBatchUploadHold?.label(walToSync) ?? MobileBatchUploadHold.indexedLabel(walToSync)
             : null,
         holdSealedAtMs: walToSync.mobileBatchHold?.sealedAtMs,
         recovered: walToSync.recoveredMobileBatchHold,
+        journalRecovery: mobileBatch ? _journalRecoveryForUpload([walToSync]) : null,
       );
       final result = await _uploadGate.upload(
         [walFile],
