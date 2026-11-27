@@ -52,7 +52,7 @@ retirement, language exclusion and legacy fallback still work as before.
 The lead then writes mode and percent in one CAS with `ramp_set.py
 --legacy-sync draining --legacy-percent <percent>` and the existing confirmed
 preconditions. Increasing that percent requires the same preconditions again.
-Rollback is one write, `--legacy-sync on`, without changing percent or env.
+Rollback is one write, `--legacy-sync on`, without changing percent or env. The write takes effect on the next successful `_ramp` read: during a read outage processes keep their last-known-good mode, so confirm `omi_runtime_percent_source{source="firestore"}` before relying on it; reverting the image is the fallback.
 Missing `legacy-sync` now means zero: existing non-`on` configurations need an
 explicit scope before retirement resumes. Do not turn language exclusion back
 on as part of emergency rollback; accepted batch work keeps its durable route.
@@ -220,17 +220,31 @@ step. Until then, full `scheduler_reconcile.py --check` runs report the job as
 `UNLISTED` drift.
 
 ```bash
+set -euo pipefail
 source ~/.local/bin/gcp-agent-env.sh prod-operator
-gcloud scheduler jobs delete sync-backfill-uid-sequencer --project based-hardware --location us-central1 --quiet
-gcloud scheduler jobs delete sync-backfill-uid-sequencer --project based-hardware-dev --location us-central1 --quiet   # dev copy is PAUSED
-for NAME in 'Sync backfill UID sequencer stalled' \
-            'Sync backfill UID sequencer Scheduler execution failed' \
-            'Sync backfill UID sequencer Scheduler heartbeat missing'; do
-  for POLICY in $(gcloud monitoring policies list --project based-hardware --filter="displayName=\"$NAME\"" --format='value(name)'); do
-    gcloud monitoring policies update "$POLICY" --project based-hardware --no-enabled
+JOB=sync-backfill-uid-sequencer
+for PROJECT in based-hardware based-hardware-dev; do   # the dev copy is PAUSED
+  if gcloud scheduler jobs describe "$JOB" --project "$PROJECT" --location us-central1 >/dev/null 2>&1; then
+    gcloud scheduler jobs delete "$JOB" --project "$PROJECT" --location us-central1 --quiet
+  fi
+  # Verify absence before touching alerts; a describe that succeeds means the delete did not land.
+  if gcloud scheduler jobs describe "$JOB" --project "$PROJECT" --location us-central1 >/dev/null 2>&1; then
+    echo "STOP: $PROJECT/$JOB still exists; alerts left enabled" >&2; exit 1
+  fi
+done
+for PROJECT in based-hardware based-hardware-dev; do
+  for NAME in 'Sync backfill UID sequencer stalled' \
+              'Sync backfill UID sequencer Scheduler execution failed' \
+              'Sync backfill UID sequencer Scheduler heartbeat missing'; do
+    for POLICY in $(gcloud monitoring policies list --project "$PROJECT" --filter="displayName=\"$NAME\"" --format='value(name)'); do
+      gcloud monitoring policies update "$POLICY" --project "$PROJECT" --no-enabled >/dev/null
+      [[ "$(gcloud monitoring policies describe "$POLICY" --project "$PROJECT" --format='value(enabled)')" == "False" ]] \
+        || { echo "STOP: $POLICY still enabled" >&2; exit 1; }
+      echo "disabled $PROJECT $NAME"
+    done
   done
 done
-gcloud scheduler jobs describe sync-backfill-uid-sequencer --project based-hardware --location us-central1   # expect NOT_FOUND
+echo "OK: $JOB absent in both projects; sequencer alert policies disabled"
 ```
 
 The heartbeat policy is a 10-minute absence condition, so it pages once the job

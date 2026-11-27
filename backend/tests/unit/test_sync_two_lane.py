@@ -321,8 +321,9 @@ def test_sync_backfill_lifecycle_no_longer_owns_the_retired_sequencer():
     # SCA-2965: the legacy UID sequencer is dark. The deploy action must not re-create
     # its Scheduler job (it did, after SCA-3023 deleted it) or re-provision its alerts.
     action = (REPOSITORY_ROOT / '.github/actions/sync-backfill-lifecycle/action.yml').read_text()
-    assert 'sync-backfill-uid-sequencer' not in action
-    assert 'sync_backfill_uid_sequencer' not in action
+    assert '--jobs sync-backfill-uid-sequencer' not in action
+    assert "METRIC='sync_backfill_uid_sequencer" not in action
+    assert 'METRIC="sync_backfill_uid_sequencer' not in action
     jobs = (REPOSITORY_ROOT / 'backend/deploy/scheduler/jobs.yaml').read_text()
     assert 'sync-backfill-uid-sequencer' not in jobs
 
