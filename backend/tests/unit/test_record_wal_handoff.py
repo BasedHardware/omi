@@ -239,6 +239,39 @@ async def test_duplicate_settlement_only_falls_back_before_commit(world, monkeyp
                 late_dispatch[0]()
 
 
+@pytest.mark.parametrize('has_jobs', (False, True))
+async def test_duplicate_shadow_skips_jobs_missing_refusals_like_settle(world, monkeypatch, has_jobs):
+    """SCA-3376: a record_jobs_missing 503 never claims the window's shadow slot."""
+    from config.record_audio import record_identity
+    from utils.batch_pipeline import record_wal_duplicate as duplicate
+
+    content = record_identity(UID, CID)[0]
+    if has_jobs:
+        world.client.rows[(f'{NS}_intakes', 'bp_' + content)] = {'segment_ids': ['segment']}
+        world.client.rows[(f'{NS}_jobs', 'segment')] = {'state': 'committed'}
+    reason = (
+        live_upload.RecordUploadWait.AUDIO_COVERAGE_UNPROVEN
+        if has_jobs
+        else live_upload.RecordUploadWait.RECORD_JOBS_MISSING
+    )
+    refused = live_upload._pending(reason, content)
+    legacy = AsyncMock(return_value=refused)
+    evaluate = AsyncMock(return_value=None)
+    monkeypatch.setattr(live_upload, '_answer_registered_upload', legacy)
+    monkeypatch.setattr(duplicate, 'select', lambda *_: ('shadow', 7))
+    monkeypatch.setattr(duplicate, 'evaluate', evaluate)
+
+    response = await world.upload(upload_paths=world.paths[:1], capture_claims={'wal': {}})
+
+    assert response is refused and response.status_code == 503
+    legacy.assert_awaited_once()
+    if has_jobs:
+        evaluate.assert_awaited_once()
+        assert evaluate.call_args.args[-3:] == ({'wal': {}}, 'shadow', 7)
+    else:
+        evaluate.assert_not_awaited()
+
+
 async def test_legacy_coverage_cannot_replace_a_concurrently_settled_alias(world, monkeypatch):
     from config.record_audio import record_identity
     from config.record_wal_duplicate import RECEIPT_FIELD

@@ -39,6 +39,17 @@ MAX_PACKS = 6
 MAX_FILES = 20
 MAX_PACKETS = 50_000
 _SHA256 = re.compile(r"[0-9a-f]{64}")
+# The shipped app's upload grammar (app/lib/services/wals/orphan_audio_classifier.dart):
+# audio_<device>_<codec>_<rate>_<channels>_fs<frame>[_r<n>_<seq>][_u<n>][_clke<run>]_<ts>[_u<n>].
+# ``opus_fs320`` is BleAudioCodec.opusFS320 (bt_device.dart mapCodecToName),
+# and wal.dart writes ``_clke<run>`` directly before the timestamp.
+_UNPARSED = {'format': 'as-captured-file-v1'}
+_STAGED_NAME = re.compile(
+    r'audio_(?P<device>[0-9A-Za-z]+)_(?P<codec>opus(?:_fs(?P<codec_frame>160|320))?|pcm16|pcm8)'
+    r'_(?P<rate>\d{1,6})_(?P<channels>\d{1,2})_fs(?P<frame>\d{1,4})'
+    r'(?:_r\d{1,9}_\d{1,9})?(?:_u\d{1,9})?(?:_clke[0-9a-z]{1,32})?'
+    r'_(?P<start>\d{1,16}(?:\.\d{1,6})?)(?:_u\d{1,9})?'
+)
 
 attempts = Metric('omi_record_wal_handoff_sample_attempts_total', 'One-time sampling attempts', ['outcome', 'revision'])
 totals = Metric(
@@ -85,6 +96,39 @@ def _try_process_slot(slot: int) -> bool:
         return True
 
 
+def staged_name_provenance(path: str) -> dict[str, Any]:
+    """``filename_provenance`` for the names the current app uploads (SCA-3376).
+
+    Names the shared fixed-position parser accepts keep exactly its fields. A
+    current name (``opus_fs320`` codec, ``_clke<run>`` clock run, collision
+    nonces) yields the same fields that parser gives the old shape. Anything
+    else, or an ``opus_fs<N>`` codec whose frame disagrees with ``fs<frame>``,
+    stays unparsed.
+    """
+    legacy = filename_provenance(path)
+    if legacy != _UNPARSED:
+        return legacy
+    match = _STAGED_NAME.fullmatch(Path(path).stem)
+    if match is None:
+        return dict(_UNPARSED)
+    frame = int(match['frame'])
+    if match['codec_frame'] is not None and int(match['codec_frame']) != frame:
+        return dict(_UNPARSED)
+    codec = 'opus' if match['codec'].startswith('opus') else match['codec']
+    capture_start = float(match['start'])
+    if capture_start > 10_000_000_000:
+        capture_start /= 1000
+    return {
+        'device_model': match['device'],
+        'codec': codec,
+        'sample_rate': int(match['rate']),
+        'channels': int(match['channels']),
+        'frame_size': frame,
+        'capture_start': capture_start,
+        'format': WAL_FORMAT if codec == 'opus' else 'omi-wal-uint32le-pcm-v1',
+    }
+
+
 def read_staged_packets(
     paths: Sequence[str], budget: ArtifactReadBudget, *, descriptors=None
 ) -> list[tuple[str, int, list[Packet]]]:
@@ -99,7 +143,7 @@ def read_staged_packets(
         if not 0 < size <= remaining:
             raise ArtifactReadLimit('WAL sample staged bytes')
         remaining -= size
-        info = filename_provenance(str(path))
+        info = staged_name_provenance(str(path))
         packets = []
         if info.get('format') == WAL_FORMAT and info.get('channels') == 1:
             try:

@@ -482,7 +482,10 @@ async def registered_record_response(
         jobs,
         before_coverage,
     )
-    if duplicate_mode == 'shadow' and response.status_code == 503 and not prior and client_device_id:
+    # Like settle above, require the record's jobs: a jobs-missing 503
+    # (record_jobs_missing) has no admitted intake to prove against, so it
+    # would only burn the window's single 30 s shadow slot (SCA-3376).
+    if duplicate_mode == 'shadow' and response.status_code == 503 and not prior and jobs and client_device_id:
         await record_wal_duplicate.evaluate(*proof_args, paths, claims, 'shadow', shadow_slot)
     await record_wal_sample.observe(
         store=store,

@@ -57,6 +57,11 @@ def provenance(raw: bytes, supplied: dict[str, Any]) -> dict[str, str]:
 
 
 def filename_provenance(path: str) -> dict[str, Any]:
+    # TODO(SCA-3376): fixed token positions refuse current app names, whose
+    # codec may be ``opus_fs320`` and which may carry ``_clke<run>`` before the
+    # timestamp. The duplicate shadow/sampler path parses those locally in
+    # ``record_wal_sample.staged_name_provenance``; storage, handoff and
+    # no-speech coverage still use this parser and keep its behavior.
     tokens = Path(path).stem.split('_')
     if len(tokens) < 7 or tokens[0] != 'audio':
         return {'format': 'as-captured-file-v1'}
