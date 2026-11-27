@@ -16250,7 +16250,8 @@ export async function reprocess_conversation_v1_conversations__conversation_id__
   const _path = `/v1/conversations/${path.conversation_id}/reprocess`;
   const _params = query ? Object.entries(query)
     .filter(([, v]) => v !== undefined && v !== null)
-    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+    .flatMap(([k, v]) => (["app_ids"].includes(k) && Array.isArray(v) ? v : [v])
+      .map(item => `${k}=${encodeURIComponent(String(item))}`)).join('&') : '';
   const _search = _params ? `?${_params}` : "";
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "POST",

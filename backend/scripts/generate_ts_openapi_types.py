@@ -269,6 +269,7 @@ def generate_client_methods(spec: dict[str, Any]) -> str:
             raw_params = operation.get('parameters', [])
             path_params: list[tuple[str, str]] = []
             query_params: list[tuple[str, str, bool]] = []
+            exploded_query_names: list[str] = []
             header_params: list[tuple[str, str, bool]] = []
             if isinstance(raw_params, list):
                 for p in raw_params:
@@ -282,6 +283,8 @@ def generate_client_methods(spec: dict[str, Any]) -> str:
                         path_params.append((pname, ts_type))
                     elif location == 'query':
                         query_params.append((pname, ts_type, required))
+                        if p.get('style') == 'form' and p.get('explode') is True:
+                            exploded_query_names.append(pname)
                     elif location == 'header':
                         header_params.append((pname, ts_type, required))
 
@@ -331,7 +334,12 @@ def generate_client_methods(spec: dict[str, Any]) -> str:
             if query_params:
                 body_lines.append('  const _params = query ? Object.entries(query)')
                 body_lines.append("    .filter(([, v]) => v !== undefined && v !== null)")
-                body_lines.append("    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';")
+                if exploded_query_names:
+                    names = ', '.join(string_literal(name) for name in exploded_query_names)
+                    body_lines.append(f'    .flatMap(([k, v]) => ([{names}].includes(k) && Array.isArray(v) ? v : [v])')
+                    body_lines.append("      .map(item => `${k}=${encodeURIComponent(String(item))}`)).join('&') : '';")
+                else:
+                    body_lines.append("    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';")
                 body_lines.append('  const _search = _params ? `?${_params}` : "";')
             else:
                 body_lines.append('  const _search = "";')

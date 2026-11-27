@@ -760,6 +760,7 @@ def generate_swift_client_methods(spec: dict[str, Any]) -> str:
             raw_params = operation.get('parameters', [])
             path_params: list[tuple[str, str]] = []  # (wire name, swift type)
             query_params: list[tuple[str, str, bool]] = []  # (wire name, swift type, required)
+            exploded_query_names: set[str] = set()
             header_params: list[tuple[str, str, bool]] = []  # (wire name, swift type, required)
             if isinstance(raw_params, list):
                 for p in raw_params:
@@ -770,7 +771,15 @@ def generate_swift_client_methods(spec: dict[str, Any]) -> str:
                     required = bool(p.get('required', False))
                     ptype, _ = _swift_type(p.get('schema', {}), required=True)
                     ptype = _resolve_type(ptype, emitted)
-                    if ptype not in ('String', 'Int', 'Double', 'Bool'):
+                    exploded = (
+                        location == 'query'
+                        and p.get('style') == 'form'
+                        and p.get('explode') is True
+                        and ptype in ('[String]', '[Int]', '[Double]', '[Bool]')
+                    )
+                    if exploded:
+                        exploded_query_names.add(pname)
+                    elif ptype not in ('String', 'Int', 'Double', 'Bool'):
                         ptype = 'String'
                     if location == 'path':
                         path_params.append((pname, ptype))
@@ -828,13 +837,27 @@ def generate_swift_client_methods(spec: dict[str, Any]) -> str:
                 for pname, qtype, required in query_params:
                     sw = _swift_prop_name(pname)
                     name_lit = _swift_string_literal(pname)
+                    if pname in exploded_query_names:
+                        append = (
+                            f'queryItems.append(contentsOf: {sw}.map {{ '
+                            f'URLQueryItem(name: {name_lit}, value: String($0)) }})'
+                        )
+                    else:
+                        append = f'queryItems.append(URLQueryItem(name: {name_lit}, value: String({sw})))'
                     if required:
-                        body_lines.append(f'  queryItems.append(URLQueryItem(name: {name_lit}, value: String({sw})))')
+                        body_lines.append(f'  {append}')
                     else:
                         body_lines.append(f'  if let {sw} {{')
-                        body_lines.append(f'    queryItems.append(URLQueryItem(name: {name_lit}, value: String({sw})))')
+                        body_lines.append(f'    {append}')
                         body_lines.append('  }')
                 body_lines.append('  if !queryItems.isEmpty { components.queryItems = queryItems }')
+                if exploded_query_names:
+                    # URLQueryItem leaves literal plus signs unescaped, while
+                    # the server decodes form query values with plus-as-space.
+                    body_lines.append(
+                        '  components.percentEncodedQuery = components.percentEncodedQuery?'
+                        '.replacingOccurrences(of: "+", with: "%2B")'
+                    )
             body_lines.append('  guard let url = components.url else { throw OmiApiError.invalidURL }')
             body_lines.append('  var req = URLRequest(url: url)')
             body_lines.append(f'  req.httpMethod = {_swift_string_literal(http_method.upper())}')

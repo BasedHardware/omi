@@ -55561,6 +55561,7 @@
             }
           },
           {
+            "explode": true,
             "in": "query",
             "name": "app_ids",
             "required": false,
@@ -55577,7 +55578,8 @@
                 }
               ],
               "title": "App Ids"
-            }
+            },
+            "style": "form"
           },
           {
             "in": "query",

@@ -10925,7 +10925,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  public static func reprocessConversationV1ConversationsConversationIdReprocessPost(client: OmiApiClient, conversationId: String, languageCode: String? = nil, appId: String? = nil, appIds: String? = nil, source: String? = nil, speakerSummaryRefresh: Bool? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> Conversation {
+  public static func reprocessConversationV1ConversationsConversationIdReprocessPost(client: OmiApiClient, conversationId: String, languageCode: String? = nil, appId: String? = nil, appIds: [String]? = nil, source: String? = nil, speakerSummaryRefresh: Bool? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> Conversation {
     let _path = "/v1/conversations/\(conversationId)/reprocess"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -10938,7 +10938,7 @@ public enum OmiAPI {
       queryItems.append(URLQueryItem(name: "app_id", value: String(appId)))
     }
     if let appIds {
-      queryItems.append(URLQueryItem(name: "app_ids", value: String(appIds)))
+      queryItems.append(contentsOf: appIds.map { URLQueryItem(name: "app_ids", value: String($0)) })
     }
     if let source {
       queryItems.append(URLQueryItem(name: "source", value: String(source)))
@@ -10947,6 +10947,7 @@ public enum OmiAPI {
       queryItems.append(URLQueryItem(name: "speaker_summary_refresh", value: String(speakerSummaryRefresh)))
     }
     if !queryItems.isEmpty { components.queryItems = queryItems }
+    components.percentEncodedQuery = components.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
     guard let url = components.url else { throw OmiApiError.invalidURL }
     var req = URLRequest(url: url)
     req.httpMethod = "POST"
