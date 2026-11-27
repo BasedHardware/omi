@@ -5829,7 +5829,7 @@
         "type": "stackdriver",
         "uid": "beuxmaq8oxhq8e"
       },
-      "description": "Elapsed time from job completion to the first observed terminal status read, split by sync poll backoff cohort. Only jobs with an observed terminal read count. Uses the 24 h bucket layout to keep cohorts comparable during rollout.",
+      "description": "Elapsed time from job completion to an observed terminal status read, grouped by assigned sync poll-backoff cohort. Terminal reads are deduplicated per job within each backend process using a bounded cache, so a job can contribute observations from multiple processes. Cohort labels reflect assignment even when poll backoff is disabled by its kill switch. Uses the 24 h bucket layout during rollout.",
       "fieldConfig": {
         "defaults": {
           "min": 0,
@@ -5914,7 +5914,7 @@
           }
         }
       ],
-      "title": "Job settlement lag by cohort (attempt-weighted)",
+      "title": "Job settlement lag by assigned cohort",
       "type": "timeseries"
     }
   ],
