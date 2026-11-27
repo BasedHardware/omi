@@ -165,7 +165,7 @@ BODY_DIGEST = {
     'utils.support.retention._select_conversations': 'f36920350f4e3a557e0e474e8801ae414c21ce67203e0627f7a39ba820243d16',
     'database.conversations_v3_live._recent_window_query': '6f2c323bfa8df890362c6bdc4796182a70e4c704376bcb4944358560b12edc75',
     'database.conversations_v3._oldest_pending': 'e2da208a3dcbae7d7c7c59335883b422e27dc71c9cfae51568883aa452bcfc57',
-    'database.conversations_v3.commit_projection': '474fb34477e2f0b764b7d166e14b15af78eea8081710dd9c27e9a45e17f207dc',
+    'database.conversations_v3.commit_projection': '640139cd7426c52682b6d77ac8218e391d70eb62f31547a6387a19c58f158dec',
     'database.batch_pipeline_conversation_purge_scans._claim': 'faa5dabcf01dc5bd377b2e14a149282aa2db93b2872cdc97a3b756157701532c',
     'database.batch_pipeline_conversation_purge_scans.run_job': 'fe5d30b77da198a7e0dc188115c8906fb6446925079a4e96339d36675a55faeb',
     'database.batch_pipeline_store.FirestoreStore.protected_retries': 'b55d2960c94057cb8df9b9cdd2e7728b6af63728bc0a2cb6f5bd333efed443a2',
@@ -3738,7 +3738,16 @@ for entry in (
         'the documents the commit had already loaded. Re-reviewed 2026-11-26: discarded sources clear '
         'their pending marker using the same fenced point update as deleted sources. '
         'Linked backfill replacements use the existing task and memory query results and loaded claims. '
-        'Unlocked paging carries unvisited IDs and the cursor into the existing builder lease write; no new query.',
+        'Unlocked paging carries unvisited IDs and the cursor into the existing builder lease write; no new query. '
+        'Re-reviewed 2026-11-26 (SCA-2918 locked-closure allowance): each batch after the first renews the pass '
+        'lease (builder or backfill-builder) with a transactional point read and update of that one lease document, '
+        'behind CONVERSATIONS_V3_COMMIT_LEASE_RENEWAL; the locked-closure batch cap only counts the planned batches '
+        'before any read and raises LockedBatchCap; the daily attempt counter moved to load (a point transaction on the '
+        'builder lease document); no new query. Re-reviewed 2026-11-27: for a closure past the origin bound the '
+        'batch cap is decided before any lake upload (no Firestore read); no new query. Re-reviewed 2026-11-27 (Codex r4715443730): a locked-closure batch preloads its transcript '
+        'pointers from the lake before its transaction and runs its body at most three times; no new Firestore query. '
+        'The locked-closure cap is now decided on one preparation pass with uploads deferred '
+        '(transcript_pointer.deferred_offloads); no new Firestore query.',
         expect_observed=False,
         body_digest=BODY_DIGEST['database.conversations_v3.commit_projection'],
     ),

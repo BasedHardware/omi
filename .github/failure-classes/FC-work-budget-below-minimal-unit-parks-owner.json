@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-work-budget-below-minimal-unit-parks-owner",
+  "family": "work-bounded-resumable",
+  "violated_contract": "A per-pass work budget must not be smaller than the smallest unit of work the pass can split down to. Shrinking the batch (32, 8, 1 pending seeds) cannot help when one seed's indivisible ownership closure, every row that owns its lines, already exceeds the budget. The owner then parks on every retry and never makes progress. On 2026-11-26, 21 conversations v3 owners were parked on v3_derived_budget because one long recording owned up to 1,002 locked one-line windows.",
+  "canonical_prevention": "Give the rows the pass cannot rewrite (locked claimants) a separate, owner-admitted allowance with its own cost bound, while rewritable rows keep the original budget. Pin the cost of a pass at the allowance with an emulator fixture that runs the real load, planner and commit, and assert the owner commits instead of parking.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_conversations_v3_derived_budget.py",
+    "backend/tests/integration/test_conversations_v3_locked_closure_cost_firestore.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/database/conversations_v3.py",
+    "backend/utils/conversations/v3/service.py"
+  ],
+  "status": "open"
+}
