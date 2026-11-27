@@ -670,13 +670,16 @@ void main() {
     expect(LiveWalReceipt.directory(dir).listSync().whereType<File>(), isEmpty);
   }, skip: LiveWalReceipt.writeEnabled ? false : 'Receipt writer is disabled by dart-define');
 
-  test('repeated directory sync failures emit telemetry and fail fast with RAM custody', () async {
+  test('repeated directory sync failures back off and recover only after a successful barrier probe', () async {
     var currentSeconds = now;
+    var syncNow = DateTime.fromMillisecondsSinceEpoch(currentSeconds * 1000);
+    var allowSync = false;
     var syncCalls = 0;
     LiveWalReceipt.syncDirectoryForTesting = (_) async {
       syncCalls++;
-      throw const FileSystemException('injected persistent directory sync failure');
+      if (!allowSync) throw const FileSystemException('injected persistent directory sync failure');
     };
+    LiveWalReceipt.directorySyncNowForTesting = () => syncNow;
     final events = <WalWriteReceipt>[];
     final writer = await ledger(
       realCensus: true,
@@ -692,13 +695,36 @@ void main() {
     expect(LiveWalReceipt.directorySyncCircuitOpenForTesting, isTrue);
 
     currentSeconds += 60;
+    await captureReceiptAudio(writer, sessionId: 'fast-retry-session');
+    await writer.finalizeCurrentSession();
+
+    var retained = writer.testWals.where((wal) => wal.storage == WalStorage.mem).toList();
+    expect(retained.map((wal) => wal.recordingSessionId), containsAll(['receipt-session', 'fast-retry-session']));
+    expect(syncCalls, 3, reason: 'the open circuit fails fast without repeatedly calling the native channel');
+    expect(dir.listSync().whereType<File>().where((file) => file.path.endsWith('.bin')), isEmpty);
+
+    final firstRetryAfter = LiveWalReceipt.directorySyncRetryAfterForTesting!;
+    syncNow = firstRetryAfter.add(const Duration(milliseconds: 1));
+    await expectLater(
+      LiveWalReceipt.syncAudioParentDirectory(File('${dir.path}/probe.bin')),
+      throwsA(isA<LiveWalDirectorySyncException>()),
+    );
+    final secondRetryAfter = LiveWalReceipt.directorySyncRetryAfterForTesting!;
+    expect(secondRetryAfter, syncNow.add(const Duration(seconds: 60)));
+    expect(syncCalls, 4);
+
+    syncNow = secondRetryAfter.add(const Duration(milliseconds: 1));
+    currentSeconds = syncNow.millisecondsSinceEpoch ~/ 1000;
+    allowSync = true;
     await captureReceiptAudio(writer, sessionId: 'retry-session');
     await writer.finalizeCurrentSession();
 
-    final retained = writer.testWals.where((wal) => wal.storage == WalStorage.mem).toList();
-    expect(retained.map((wal) => wal.recordingSessionId), containsAll(['receipt-session', 'retry-session']));
-    expect(syncCalls, 3, reason: 'the open circuit fails fast without repeatedly calling the native channel');
-    expect(dir.listSync().whereType<File>().where((file) => file.path.endsWith('.bin')), isEmpty);
+    retained = writer.testWals.where((wal) => wal.storage == WalStorage.mem).toList();
+    expect(retained, isEmpty);
+    expect(LiveWalReceipt.directorySyncCircuitOpenForTesting, isFalse);
+    expect(syncCalls, greaterThan(3));
+    expect(writer.testWals.any((wal) => wal.recordingSessionId == 'retry-session' && wal.storage == WalStorage.disk),
+        isTrue);
   });
 
   test('partial audio write retires its published receipt durably and keeps the WAL in memory', () async {

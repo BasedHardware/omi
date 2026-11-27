@@ -232,7 +232,7 @@ jobs:
           flutter test --no-pub --reporter json --dart-define=OMI_LIVE_WAL_RECEIPT_OFF=true \
             --plain-name "receipt issuance kill switch still replays and retires existing receipts" \
             test/unit/wal_orphan_recovery_test.dart |
-            python3 -c "import json,sys; count=sum(json.loads(line).get('type') == 'testStart' for line in sys.stdin if line.strip()); print(f'matched {count} test(s)'); sys.exit(count < 1)"
+            python3 -c "import json,sys; rows=[json.loads(line) for line in sys.stdin if line.strip()]; name='receipt issuance kill switch still replays and retires existing receipts'; started={r['test']['id'] for r in rows if r.get('type') == 'testStart' and r.get('test',{}).get('name') == name and not r.get('test',{}).get('metadata',{}).get('skip',False)}; passed={r.get('testID') for r in rows if r.get('type') == 'testDone' and r.get('result') == 'success' and not r.get('skipped') and not r.get('hidden')}; matched=started & passed; print(f'matched {len(matched)} named test(s)'); sys.exit(not matched)"
 
       - name: Run analyzer ratchet
         working-directory: app

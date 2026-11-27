@@ -61,9 +61,14 @@ typedef LiveWalReplay = ({List<Wal> rows, Map<LiveWalWithheld, int> withheld, bo
 class LiveWalReceipt {
   static const MethodChannel _durabilityChannel = MethodChannel('com.omi/live_wal_receipt_durability');
   static const _directorySyncFailureLimit = 3;
+  static const _initialDirectorySyncBackoffSeconds = 30;
+  static const _maxDirectorySyncBackoffSeconds = 1800;
   static int _consecutiveDirectorySyncFailures = 0;
+  static int _directorySyncBackoffSeconds = _initialDirectorySyncBackoffSeconds;
   static bool _directorySyncCircuitOpen = false;
   static bool _directorySyncCircuitTripUnreported = false;
+  static DateTime? _directorySyncRetryAfter;
+  static DateTime Function()? directorySyncNowForTesting;
   static Future<void> Function(Directory directory)? syncDirectoryForTesting;
   static const directoryName = '.wal-live-receipts';
   static const writeEnabled = !bool.fromEnvironment('OMI_LIVE_WAL_RECEIPT_OFF');
@@ -131,18 +136,58 @@ class LiveWalReceipt {
 
   static File _receipt(Directory documents, String name) => File(path.join(directory(documents).path, name + _pending));
 
+  static DateTime _directorySyncNow() => directorySyncNowForTesting?.call() ?? DateTime.now();
+
+  static bool get _directorySyncBackoffActive {
+    final retryAfter = _directorySyncRetryAfter;
+    return _directorySyncCircuitOpen && retryAfter != null && _directorySyncNow().isBefore(retryAfter);
+  }
+
+  static Future<void> _invokeDirectorySync(Directory directory) async {
+    final override = syncDirectoryForTesting;
+    if (override != null) {
+      await override(directory);
+    } else {
+      await _durabilityChannel.invokeMethod<void>('syncDirectory', {'path': directory.path});
+    }
+  }
+
+  static void _scheduleDirectorySyncRetry() {
+    _directorySyncRetryAfter = _directorySyncNow().add(Duration(seconds: _directorySyncBackoffSeconds));
+    _directorySyncBackoffSeconds = (_directorySyncBackoffSeconds * 2)
+        .clamp(
+          _initialDirectorySyncBackoffSeconds,
+          _maxDirectorySyncBackoffSeconds,
+        )
+        .toInt();
+  }
+
+  static void _resetDirectorySyncCircuit() {
+    _consecutiveDirectorySyncFailures = 0;
+    _directorySyncBackoffSeconds = _initialDirectorySyncBackoffSeconds;
+    _directorySyncCircuitOpen = false;
+    _directorySyncCircuitTripUnreported = false;
+    _directorySyncRetryAfter = null;
+  }
+
   static Future<void> _syncDirectory(Directory directory) async {
-    if (_directorySyncCircuitOpen) {
+    if (_directorySyncBackoffActive) {
       throw LiveWalDirectorySyncException(StateError('directory sync circuit is open'),
           circuitOpened: false, reportFailure: false);
     }
-    try {
-      final override = syncDirectoryForTesting;
-      if (override != null) {
-        await override(directory);
-      } else {
-        await _durabilityChannel.invokeMethod<void>('syncDirectory', {'path': directory.path});
+    if (_directorySyncCircuitOpen) {
+      try {
+        await _invokeDirectorySync(directory);
+        _resetDirectorySyncCircuit();
+        return;
+      } catch (error, stackTrace) {
+        _scheduleDirectorySyncRetry();
+        Error.throwWithStackTrace(
+            LiveWalDirectorySyncException(error, circuitOpened: false, reportFailure: true), stackTrace);
       }
+    }
+    try {
+      await _invokeDirectorySync(directory);
       _consecutiveDirectorySyncFailures = 0;
     } catch (error, stackTrace) {
       _consecutiveDirectorySyncFailures++;
@@ -150,6 +195,7 @@ class LiveWalReceipt {
       if (circuitOpened) {
         _directorySyncCircuitOpen = true;
         _directorySyncCircuitTripUnreported = true;
+        _scheduleDirectorySyncRetry();
       }
       Error.throwWithStackTrace(
           LiveWalDirectorySyncException(error, circuitOpened: circuitOpened, reportFailure: true), stackTrace);
@@ -157,6 +203,7 @@ class LiveWalReceipt {
   }
 
   static bool get directorySyncCircuitOpenForTesting => _directorySyncCircuitOpen;
+  static DateTime? get directorySyncRetryAfterForTesting => _directorySyncRetryAfter;
 
   static bool consumeDirectorySyncCircuitTrip() {
     final pending = _directorySyncCircuitTripUnreported;
@@ -165,9 +212,8 @@ class LiveWalReceipt {
   }
 
   static void resetDirectorySyncCircuitForTesting() {
-    _consecutiveDirectorySyncFailures = 0;
-    _directorySyncCircuitOpen = false;
-    _directorySyncCircuitTripUnreported = false;
+    _resetDirectorySyncCircuit();
+    directorySyncNowForTesting = null;
   }
 
   static Future<void> _syncConfirmedDirectory(Directory directory) async {
@@ -191,7 +237,7 @@ class LiveWalReceipt {
   /// reservation if either the write or its directory barrier fails.
   static Future<void> writeReceiptlessAudio(File audio, List<int> bytes) async {
     try {
-      if (_directorySyncCircuitOpen) {
+      if (_directorySyncBackoffActive) {
         throw LiveWalDirectorySyncException(StateError('directory sync circuit is open'),
             circuitOpened: false, reportFailure: false);
       }
