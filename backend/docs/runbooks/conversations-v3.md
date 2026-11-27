@@ -234,10 +234,11 @@ it may set work aside in `v3_size_quarantine` on the builder lease (all or nothi
   the pass chain and the 5-minute sweep don't wake an owner whose only stale pending rows are quarantined
   under exactly that condition. A failed lease read in the sweep counts as not quarantined and wakes the owner,
   recorded as `omi_fallback_total{component="conversations_v3",to_mode="unfiltered_wake",outcome="recovered"}`.
-- **Pruning.** With the switch on, each size park first drops held ids that are no longer `v3_pending`
+- **Pruning.** While seeding skips held ids (the switch and bounded pending on), each size park first drops held ids that are no longer `v3_pending`
   (landed, deleted or repaired). A failed prune read keeps the list, records
   `omi_fallback_total{component="conversations_v3",from_mode="size_quarantine_prune",outcome="degraded"}` and
-  still parks with the usual backoff. With the switch off nothing is read for pruning. A closure that still doesn't fit parks with the usual backoff and records
+  still parks with the usual backoff. Otherwise nothing is read for pruning and the list is not changed. A
+  closure that still doesn't fit parks with the usual backoff and records
   `omi_fallback_total{component="conversations_v3",outcome="exhausted"}` and
   `reconciles_total{outcome="size_quarantine_full"}`. Each new quarantine records `outcome="degraded"` and
   `reconciles_total{outcome="size_quarantined"}`.
@@ -246,8 +247,10 @@ it may set work aside in `v3_size_quarantine` on the builder lease (all or nothi
   is set aside again on that attempt with a fresh hold. An id with no timestamp is not held.
 - **Readback.** The lease keeps naming quarantined rows after the park clears. Report three numbers, never
   added together: owners recovering (park cleared, the backlog outside the quarantine draining), work
-  quarantined (ids, owners holding any, owners whose list is full), and owners parking without attribution
-  (still parked on `document_too_large` with nothing quarantined).
+  quarantined (held ids per `held_quarantine`: inside their hold and still `v3_pending`, which is what
+  seeding skips; owners holding any; owners whose list is full), and owners parking without attribution
+  (still parked on `document_too_large` with nothing quarantined). A repaired recording that landed leaves
+  the work-quarantined count at once, though the raw list keeps naming it until the next prune.
 - **Repair and rollback.** Repair the oversize document, then either wait for the hold to lapse or clear it
   as in the retry step below. Set the switch off on live builders to restore head-of-line retries; stored
   ids are then ignored.

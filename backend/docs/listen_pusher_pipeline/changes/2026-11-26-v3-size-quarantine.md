@@ -31,7 +31,8 @@ Rollback: set the switch off on the builder runners; stored ids are then ignored
 Readback, as three numbers that are never added together:
 - **owners recovering:** parked `document_too_large` owners whose park cleared and whose
   non-quarantined pending rows older than 1 h are draining;
-- **work quarantined:** ids in `v3_size_quarantine`, owners holding any, and owners whose list is full.
+- **work quarantined:** held ids (`held_quarantine`: inside their hold and still pending, which is what
+  seeding skips), owners holding any, and owners whose list is full.
   Quarantined work stays unrepaired until the oversize document is fixed;
 - **parking without attribution:** owners still parked on `document_too_large` with nothing quarantined,
   because Firestore named no document or named one the open or unlocked windows reach.

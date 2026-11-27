@@ -2003,6 +2003,7 @@ def has_pending(uid: str, deferred: Collection[str] = ()) -> bool:
     pending = (
         store.user_conversations(store.get_firestore_client(), uid)
         .where(filter=FieldFilter('v3_pending', '==', True))
+        .select(['v3_pending'])  # Only ids are needed: up to 65 for an owner holding a full quarantine.
         .limit(len(deferred) + 1)
         .stream()
     )

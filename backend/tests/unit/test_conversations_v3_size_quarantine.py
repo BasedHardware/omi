@@ -63,9 +63,12 @@ def test_a_size_park_sets_its_closure_aside_and_runs_the_next_seed_without_the_b
     assert store.backoff_state('u') == (None, 'document_too_large')
     store.mark_bounded_attempt('u', token)
     assert store.backoff_state('u')[0] is not None
-    # Nothing new to set aside: the park spends the usual backoff.
+    # Nothing new to set aside: the park spends the usual backoff and leaves the live holds' stamps alone,
+    # so an unrelated park can never extend a hold.
+    stamps = deepcopy(held[store.SIZE_QUARANTINE_AT_FIELD])
     assert store.record_blocked('u', token, 'document_too_large', quarantine=('b',))
     assert held[store.SIZE_QUARANTINE_FIELD] == ['a', 'b']
+    assert held[store.SIZE_QUARANTINE_AT_FIELD] == stamps
     assert store.backoff_state('u')[0] is not None
     assert store.size_quarantined('u') == {'a', 'b'}
 
@@ -113,9 +116,14 @@ def test_a_failed_prune_read_keeps_the_list_and_still_records_the_backoff(lease,
     ]
 
 
-@pytest.mark.parametrize('enabled', [True, False])
-def test_with_the_switch_off_a_size_park_reads_only_its_lease(lease, monkeypatch, enabled):
-    monkeypatch.setenv('CONVERSATIONS_V3_SIZE_QUARANTINE', 'on' if enabled else 'off')
+@pytest.mark.parametrize(
+    'quarantine,bounded', [('on', 'on'), ('off', 'on'), ('on', 'off')], ids=['prunes', 'switch-off', 'bounded-off']
+)
+def test_with_the_switch_off_a_size_park_reads_only_its_lease(lease, monkeypatch, quarantine, bounded):
+    monkeypatch.setenv('CONVERSATIONS_V3_SIZE_QUARANTINE', quarantine)
+    # Bounded pending off: nothing seeds, chains or sweeps on the list, so the park must not read it (F1).
+    monkeypatch.setenv('CONVERSATIONS_V3_BOUNDED_PENDING', bounded)
+    enabled = quarantine == bounded == 'on'
     pending(lease, 'b')
     pending(lease, 'a', value=False)  # Settled: a prune would drop it.
     lease.rows[LEASE].update(hold('a'))
@@ -152,11 +160,23 @@ def test_a_lapsed_hold_is_seeded_again_and_set_aside_afresh_if_still_oversize(le
     assert datetime.now(timezone.utc) - stamps['a'] < timedelta(minutes=1)
     assert store.size_quarantined('u') == {'a', 'b'}
     assert calls == ['degraded']
-    # An unrelated park drops a lapsed id (it is being re-attempted), keeping the live one.
+    # An unrelated park drops a lapsed id (it is being re-attempted), keeping the live one's older stamp.
     stamps['a'] -= store.SIZE_QUARANTINE_HOLD
+    live = stamps['b']
     assert store.record_blocked('u', 'token', 'document_too_large')
     assert lease.rows[LEASE][store.SIZE_QUARANTINE_FIELD] == ['b']
-    assert set(lease.rows[LEASE][store.SIZE_QUARANTINE_AT_FIELD]) == {'b'}
+    assert lease.rows[LEASE][store.SIZE_QUARANTINE_AT_FIELD] == {'b': live}
+
+
+def test_the_readback_counts_held_pending_ids_so_a_landed_repair_leaves_it_without_a_park(lease):
+    pending(lease, 'a', 'b')
+    lease.rows[LEASE].update(hold('a', 'b'))
+    assert store.held_quarantine('u') == {'a', 'b'}
+    pending(lease, 'a', value=False)  # Repaired and landed; no size park follows.
+    assert store.held_quarantine('u') == {'b'}
+    assert lease.rows[LEASE][store.SIZE_QUARANTINE_FIELD] == ['a', 'b']  # The raw list still names it.
+    lease.rows[LEASE][store.SIZE_QUARANTINE_AT_FIELD]['b'] -= store.SIZE_QUARANTINE_HOLD
+    assert store.held_quarantine('u') == frozenset()  # A lapsed hold is not skipped, so not counted.
 
 
 def test_an_unstamped_id_is_not_held():

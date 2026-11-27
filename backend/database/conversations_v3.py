@@ -49,7 +49,6 @@ from config.record_wal_duplicate import (
 from config.conversations_v3 import (
     bounded_pending_enabled,
     boundary_seconds,
-    size_quarantine_enabled,
     size_quarantine_filters,
     skip_unchanged_writes_enabled,
     stretch_cohesion_enabled,
@@ -286,8 +285,9 @@ def record_blocked(uid, token, reason, *, on_open=False, quarantine=(), firestor
     """
     client = firestore_client or get_firestore_client()
     ref = leases.lease_ref(client, uid, 'builder')
-    # Pruning only runs with the switch on: off restores today's park exactly, with no extra read.
-    pruning = reason == 'document_too_large' and size_quarantine_enabled()
+    # Pruning only runs while live seeding skips held ids (the switch and bounded pending on): otherwise
+    # the park is today's exactly, with no extra read and no list change.
+    pruning = reason == 'document_too_large' and size_quarantine_filters()
     settled = _settled_quarantine(client, uid, ref) if pruning else frozenset()
 
     @firestore.transactional
@@ -316,7 +316,7 @@ def record_blocked(uid, token, reason, *, on_open=False, quarantine=(), firestor
         # Lapsed holds leave the list with settled ids: a lapsed id is being re-attempted, not held.
         held = [rid for rid in stored if rid not in settled and rid in live]
         added = [rid for rid in dict.fromkeys(quarantine) if rid not in held]
-        wanted = bool(added and reason == 'document_too_large' and size_quarantine_enabled())
+        wanted = bool(added and pruning)  # Only set aside what live seeding will actually skip.
         quarantined = wanted and len(held) + len(added) <= SIZE_QUARANTINE_MAX
         if quarantined:
             held = [*held, *added]
@@ -362,12 +362,8 @@ def _settled_quarantine(client, uid, ref):
     Best effort: a failed read keeps every held id, so the park transaction still records its backoff.
     """
     try:
-        held = (ref.get().to_dict() or {}).get(SIZE_QUARANTINE_FIELD) or []
-        if not held:
-            return frozenset()
-        coll = user_conversations(client, uid)
-        snapshots = client.get_all([coll.document(rid) for rid in held], field_paths=['v3_pending'])
-        return frozenset(s.id for s in snapshots if not s.exists or (s.to_dict() or {}).get('v3_pending') is not True)
+        held = frozenset((ref.get().to_dict() or {}).get(SIZE_QUARANTINE_FIELD) or ())
+        return held - _still_pending(client, uid, held)
     except Exception as error:
         logger.warning('event=v3_size_quarantine_prune outcome=error exception_type=%s', type(error).__name__)
         record_fallback(
@@ -379,6 +375,28 @@ def _settled_quarantine(client, uid, ref):
             log=logger,
         )
         return frozenset()
+
+
+def _still_pending(client, uid, ids):
+    """The ids among ``ids`` whose recording is still v3_pending: one field-masked BatchGet, none when empty."""
+    if not ids:
+        return frozenset()
+    coll = user_conversations(client, uid)
+    snapshots = client.get_all([coll.document(rid) for rid in sorted(ids)], field_paths=['v3_pending'])
+    return frozenset(s.id for s in snapshots if s.exists and (s.to_dict() or {}).get('v3_pending') is True)
+
+
+def held_quarantine(uid, *, firestore_client=None):
+    """The readback's work-quarantined set for one owner: ids inside their hold that are still pending.
+
+    This is what live seeding actually skips. A repaired recording that landed leaves it at once, without
+    another size park, though the lease list keeps naming it until the next prune or its hold lapses.
+    """
+    if not size_quarantine_filters():
+        return frozenset()
+    client = firestore_client or get_firestore_client()
+    row = leases.lease_ref(client, uid, 'builder').get().to_dict() or {}
+    return _still_pending(client, uid, _held_ids(row, datetime.now(timezone.utc)))
 
 
 def _held_ids(row, now):
