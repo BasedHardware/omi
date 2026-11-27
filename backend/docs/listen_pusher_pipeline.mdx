@@ -109,6 +109,16 @@ transaction rechecks its live state and persists the cut or deferred batch
 request on its recording. A multi-unit batch request can cut only after the full
 native binding has projected. Set the switch to `off` on the API service to restore the lookup-miss 404.
 
+`CONVERSATIONS_V3_FINISH_FAST_REWAKE` defaults to `on`. A builder pass that commits around a moved
+source recording (`source_moved`) or answers `raced` still schedules the coalesced next-minute wake. When
+one of those recordings is a Finish (`v3_manual_end` or `v3_manual_end_requested`) whose `finished_at` is
+within `FINISH_REWAKE_WINDOW` (3 minutes) of now, the pass also schedules a wake `FINISH_REWAKE` (3 s)
+later, named `finish-rewake-<10 s slot>` through the existing `wake_key`, so one slot holds one follow-up
+per owner. A raced pass judges the rows it loaded and requires `v3_pending`. A moved pass whose loaded rows
+show no Finish reads only the marker fields of at most 8 moved recordings. Outcomes count in
+`omi_conversations_v3_finish_rewakes_total{reason="source_moved"|"raced"}`. A failed read or dispatch is
+logged and leaves the minute wake. Set it to `off` on backend-sync to keep only the minute wake.
+
 `CONVERSATIONS_V3_FINISH_NEWER_CAPTURE` defaults to `on`. When that Finish resolves to a live
 window, the same transaction reads at most `RECENT_FINISH_LIMIT` (8) recent sources. The newest sealed
 Listen capture that ended after the window's `finished_at`, is not one of its sources, carries
