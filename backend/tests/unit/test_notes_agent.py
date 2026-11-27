@@ -17,6 +17,8 @@ from llm_gateway.gateway.accounting import rate_card_for
 from utils.conversations import notes_agent_tools as tools
 from utils.conversations.screen_people_leads import screen_people_leads
 from utils.conversations.meeting_participants import MeetingRoster, RosterEntry
+from utils.conversations.processing_steps import run_async
+from utils.executors import postprocess_executor
 from utils.llm import conversation_processing as notes
 from utils.llm import notes_agent as agent
 from utils.llm import notes_agent_policy as policy
@@ -717,9 +719,6 @@ def test_repair_keeps_only_new_commitments():
 
 @pytest.mark.parametrize('async_steps', [False, True])
 def test_synthetic_replay_through_shaped_notes_writer(monkeypatch, async_steps):
-    from utils.conversations.processing_steps import run_async
-    from utils.executors import postprocess_executor
-
     fixture = json.loads(FIXTURE.read_text())
     lines = [f'[{sid} {spk}] {text}' for sid, spk, text in fixture['segments']] * fixture['repeat']
     prefix = build_conversation_prompt_prefix(

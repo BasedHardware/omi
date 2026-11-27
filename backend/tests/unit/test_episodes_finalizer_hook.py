@@ -6,6 +6,7 @@ import pytest
 
 from config import episodes as config
 from utils.conversations import finalizer
+from utils.conversations.processing_steps import run_inline
 from utils.conversations.processing_trigger import ProcessingTrigger
 
 
@@ -408,7 +409,6 @@ def test_empty_batch_preview_passes_notes_gate_before_transcript_custody(monkeyp
     from types import SimpleNamespace
     from unittest.mock import Mock
     from utils.conversations import process_conversation as pc
-    from utils.conversations.processing_steps import run_inline
     from utils.episodes import member_notes
 
     monkeypatch.setenv('HOME_LIVE_MEMBER_NOTES_DEFERRED_ENABLED', 'true')
