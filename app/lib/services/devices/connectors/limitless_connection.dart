@@ -535,17 +535,21 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
   /// Handle reassembled payload in real-time mode
   void _handleRealTimePayload(List<int> payload) {
-    // Extract Opus frames from the protobuf payload
-    final frames = _extractOpusFramesFromFlashPage(payload);
-
-    if (frames.isNotEmpty) {
-      _publishAudioFrames(frames, fromRealtimeStream: false);
-    } else {
+    // Pendant message field 2 is the stored-buffer envelope; field 4 (0x22)
+    // carries live frames. Classify before scanning either payload because
+    // arbitrary live Opus bytes can contain the flash wrapper marker 0x1a.
+    if (payload.isEmpty || payload.first != 0x12) {
       final result = _extractOpusFrames(payload);
       final extractedFrames = result[0] as List<List<int>>;
       if (extractedFrames.isNotEmpty) {
         _publishAudioFrames(extractedFrames, fromRealtimeStream: true);
       }
+      return;
+    }
+
+    final storedFrames = _extractOpusFramesFromFlashPage(payload);
+    if (storedFrames.isNotEmpty) {
+      _publishAudioFrames(storedFrames, fromRealtimeStream: false);
     }
   }
 

@@ -1053,10 +1053,12 @@ void main() {
     );
     addTearDown(connection.disconnect);
     var decodedFrames = 0;
+    List<int>? lastDecodedFrame;
     Completer<void>? nextFrame;
     final subscription = await connection.performGetBleAudioBytesListener(
-      onAudioBytesReceived: (_) {
+      onAudioBytesReceived: (frame) {
         decodedFrames++;
+        lastDecodedFrame = List<int>.from(frame);
         if (nextFrame != null && !nextFrame!.isCompleted) nextFrame!.complete();
       },
     );
@@ -1080,7 +1082,20 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 25));
     }
 
-    expect(decodedFrames, 20);
+    final embeddedStoredFrame = opusFrame(0x78, 99, 10);
+    final liveFrameWithFlashShapeBytes = [
+      0xb8,
+      ...bytesField(3, bytesField(2, bytesField(1, embeddedStoredFrame))),
+    ];
+    nextFrame = Completer<void>();
+    transport.emit(
+      limitlessRxCharUuid,
+      bleWrapper(11, 0, 1, realtimeAudioBytes([liveFrameWithFlashShapeBytes])),
+    );
+    await nextFrame!.future.timeout(const Duration(seconds: 2));
+
+    expect(decodedFrames, 21);
+    expect(lastDecodedFrame, liveFrameWithFlashShapeBytes);
     expect(transport.writes.map((data) => decodeWrapperCommand(data)['messageNumber']), [6, 8]);
   });
 
