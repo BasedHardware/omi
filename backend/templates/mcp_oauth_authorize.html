@@ -77,7 +77,7 @@
                 {% if unverified_client %}
                 <div class="unverified-client" dir="ltr">
                     <span class="unverified-client-badge">Unverified third-party app</span>
-                    <span class="unverified-client-host-label">Client ID host:</span>
+                    <span class="unverified-client-host-label">{{ client_host_label }}</span>
                     <span class="unverified-client-host">{{ client_host }}</span>
                 </div>
                 {% endif %}

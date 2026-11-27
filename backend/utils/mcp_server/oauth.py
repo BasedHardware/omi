@@ -215,6 +215,15 @@ def _redirect_with_code(redirect_uri: str, code: str, state: Optional[str]) -> s
     )
 
 
+def _ascii_host(uri: str) -> str:
+    """Return the URI's hostname in ASCII (IDNA) form for display on consent."""
+    hostname = urlsplit(uri).hostname or ""
+    try:
+        return hostname.encode("idna").decode("ascii")
+    except UnicodeError:
+        return hostname.encode("ascii", "backslashreplace").decode("ascii")
+
+
 def _redirect_with_error(redirect_uri: str, error: str, description: str, state: Optional[str]) -> str:
     return _redirect_with_params(
         redirect_uri,
@@ -273,11 +282,22 @@ async def mcp_authorize(
         return _oauth_error("invalid_request", "Invalid authorization request")
 
     client_name = str(client.get("name") or client_id)
-    # URL-form (CIMD) clients are unverified third parties: the consent page
-    # shows the metadata document's ASCII host next to a fixed marker so a
-    # spoofed client_name cannot impersonate a registered connector.
-    unverified_client = client.get("registration_mode") == "client_id_metadata_document"
-    client_host = str(client.get("metadata_host") or "") if unverified_client else ""
+    # URL-form (CIMD) and dynamically registered clients are unverified third
+    # parties: their name is chosen by whoever published the metadata document
+    # or called POST /register. The consent page shows a fixed marker plus a
+    # host the client cannot fake (the metadata document's host for CIMD, the
+    # exact-matched redirect URI's host for dynamic clients), so a spoofed
+    # client_name cannot impersonate a registered connector.
+    registration_mode = client.get("registration_mode")
+    client_host_label = ""
+    client_host = ""
+    if registration_mode == "client_id_metadata_document":
+        client_host_label = "Client ID host:"
+        client_host = str(client.get("metadata_host") or "")
+    elif registration_mode == mcp_oauth_db.DYNAMIC_CLIENT_REGISTRATION_MODE:
+        client_host_label = "Redirect host:"
+        client_host = _ascii_host(redirect_uri)
+    unverified_client = bool(client_host_label)
     permissions = [SCOPE_PERMISSION_TEXT[item] for item in scopes]
     return templates.TemplateResponse(
         request,
@@ -285,6 +305,7 @@ async def mcp_authorize(
         {
             "client_name": client_name,
             "client_host": client_host,
+            "client_host_label": client_host_label,
             "unverified_client": unverified_client,
             "oauth_params": {
                 "response_type": response_type,

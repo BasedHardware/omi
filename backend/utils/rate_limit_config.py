@@ -78,7 +78,7 @@ ACTION_ITEMS_LIST_HOT_CLIENT_MAX: int = _hot_client_max()
 _BOOST_EXEMPT_DEFAULT = (
     "storefront:plans,import:upload,action_items:list,action_items:list_hot_client,static_map:get,"
     "dev:memories,dev:memories_write_burst,dev:conversations,dev:conversations_from_segments,"
-    "mcp:oauth_url_client,mcp:oauth_url_client_global,screen_task:gate,screen_task:gate_daily,users:budget_choice,"
+    "mcp:oauth_url_client,mcp:oauth_url_client_global,mcp:client_registration,screen_task:gate,screen_task:gate_daily,users:budget_choice,"
     "conversations:task-presence,google_calendar:selection,"
     "conversations:historical_summary_open,conversations:historical_summary_open_daily"
 )

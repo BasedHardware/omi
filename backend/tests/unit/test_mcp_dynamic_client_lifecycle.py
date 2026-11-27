@@ -12,6 +12,7 @@ idempotency and the expiry math itself are covered in test_mcp_oauth.py.
 
 import base64
 import hashlib
+import re
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -227,3 +228,47 @@ def test_expiry_refresh_failure_does_not_fail_the_token_response(
 
     assert response.status_code == 200
     assert response.json()["access_token"] == "at-1"
+
+
+def test_dynamic_client_consent_is_marked_unverified_with_redirect_host(client, fake_db, clock):
+    # The client name comes from an unauthenticated POST /register, so anyone
+    # can pick "ChatGPT". Consent must flag it and show the redirect host.
+    fake_db.collections["mcp_oauth_clients"][CLIENT_ID]["name"] = "ChatGPT"
+
+    response = _authorize(client)
+
+    assert response.status_code == 200
+    assert "Unverified third-party app" in response.text
+    assert "Redirect host:" in response.text
+    assert "Client ID host:" not in response.text
+    assert re.findall(r'<span class="unverified-client-host">([^<]*)</span>', response.text) == ["lifecycle.example"]
+
+
+def test_successful_refresh_slides_dynamic_client_expiry(client, oauth_db, fake_db, clock, monkeypatch):
+    rotations = []
+
+    def fake_rotate(refresh_token, client_id, resource, scope, on_outcome=None):
+        rotations.append((refresh_token, client_id))
+        if on_outcome is not None:
+            on_outcome("rotated")
+        return {
+            "access_token": "at-2",
+            "refresh_token": "rt-2",
+            "token_type": "Bearer",
+            "expires_in": 3600,
+            "scope": "memories.read",
+        }
+
+    monkeypatch.setattr(oauth_db, "rotate_refresh_token", fake_rotate)
+    clock.now = REGISTERED_AT + timedelta(hours=3)
+
+    response = client.post(
+        "/token",
+        data={"grant_type": "refresh_token", "client_id": CLIENT_ID, "refresh_token": "rt-1"},
+    )
+
+    assert response.status_code == 200
+    assert rotations == [("rt-1", CLIENT_ID)]
+    stored = fake_db.collections["mcp_oauth_clients"][CLIENT_ID]
+    assert stored["last_used_at"] == clock.now
+    assert stored["expires_at"] == clock.now + timedelta(days=oauth_db.DYNAMIC_CLIENT_IDLE_TTL_DAYS)
