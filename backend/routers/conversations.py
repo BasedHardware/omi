@@ -2033,6 +2033,11 @@ def _delete_privacy_audio_after_response(uid: str, conversation_id: str, *, sour
 
     try:
         delete_privacy_conversation_audio(uid, conversation_id, source_ids=source_ids)
+    except LegalHoldActive:
+        # Keep the merge donors after the primary row is gone. The runner can
+        # resume even if the hold releases before this write reaches support's scan.
+        conversation_tombstones.defer_audio_erasure(uid, conversation_id, source_ids=source_ids)
+        logger.info('event=conversation_audio_purge outcome=held_deferred')
     except StoragePrefixPurgeError as error:
         logger.error(
             'event=conversation_audio_purge uid=%s conversation_id=%s outcome=%s reason=%s',
