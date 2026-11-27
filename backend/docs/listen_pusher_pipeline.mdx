@@ -485,9 +485,13 @@ stamps cannot extend it. Only explicit server-observed activity renews it. Lease
 proof. Custody uploads first acquire an exact fence and bump revision only after
 durable acceptance; failed/refused uploads clear only that fence. Intentionally
 disabled archives do not advance the revision or schedule recovery; any already
-acquired fence is cleared. A podless custody fence exits only by its own
-lease, which the kill switch holds; accepted bytes still schedule recovery after
-the kill switch engages mid-request.
+acquired fence is cleared. A podless custody fence exits by its upload's finish
+or its own lease; the kill switch withholds that lease exit even after expiry.
+Accepted bytes still schedule recovery after the kill switch engages mid-request.
+Every deploy writer of the vector (Sync and the backend stack, Listen, Pusher,
+and the worker Helm upgrade for record-seal-worker and record-seal-repair) binds
+all four `vars.RECORD_TOKEN_LEASE_*`; a prod deploy fails when any is missing or
+empty, and the prod worker chart refuses to render without them.
 An accepted durable append whose exact fence was lost records a revision bump
 and partial continuation transactionally, with an idempotent per-request receipt
 under the conversation's `record_custody_recoveries` subcollection. Privacy gates

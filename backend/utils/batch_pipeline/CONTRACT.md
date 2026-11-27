@@ -311,10 +311,13 @@ re-activates its producer fence before bytes. Custody uploads acquire a separate
 exact token before archive/staging; only durable acceptance bumps
 `record_upload_revision` and clears that token. Refusals/failures clear without a
 bump or late-append count; a crashed uploader remains fenced for its own lease.
-Only serve creates these podless custody tokens; their own lease remains an
-exit in off/shadow after rollback. Existing frame-token pod proof is unchanged
-in off. A custody upload accepted after rollback still revises and schedules
-recovery; the flag cannot revoke an already acquired custody obligation.
+Only serve creates these podless custody tokens. Under the kill (any non-serve
+mode) they have no expiry exit: a lapsed custody token keeps fencing the seal
+until its own upload finishes or serve returns. Frame-token pod and abandonment
+proof is unchanged under the kill. A custody upload already fenced when the kill
+engages still revises and schedules recovery; the kill cannot revoke an acquired
+custody obligation. The kill is an upload pause, never a behavior rollback; roll
+back by reverting the change or restoring the prior image.
 Memoized waits do no token IO. Custody heartbeats renew at most once per lease/2
 per conversation, only on observed manifests or completed archive file appends.
 Serve-only frames revise and reopen the row. If original input has already been
@@ -329,8 +332,9 @@ Late WAL holes are retained create-only against actual sample coverage, so
 partial rows and interior gaps are processed without the tail-only gap-fill
 ramp. Partial results retain their partial marker; no completeness is invented.
 Off keeps old writes/decisions, and post-seal shadow frames only count.
-Raw audio is never deleted. Off/shadow restore original frame-token seal authority
-and retain the lease exit and accepted-byte recovery of existing custody tokens.
+Raw audio is never deleted. The kill keeps frame-token pod and abandonment seal
+authority and accepted-byte recovery, and withholds every lease-expiry exit,
+including that of existing podless custody tokens.
 The active repair CronJob exports its bounded age sample and folded child probe
 counters on its scraped metrics port; the idle worker scanner remains disabled.
 

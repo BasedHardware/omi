@@ -6,6 +6,7 @@ import subprocess
 
 import pytest
 import yaml
+from tests.unit._worker_lease_render import WORKER_LEASE_SET_ARGS
 
 CHARTS = Path(__file__).resolve().parents[2] / 'charts'
 
@@ -26,7 +27,7 @@ def helm():
 def test_workload_service_labels_render_and_are_exported(helm, stage, chart, suffix):
     directory = CHARTS / chart
     image = (
-        ['--set-string', 'image.digest=sha256:' + 'a' * 64]
+        ['--set-string', 'image.digest=sha256:' + 'a' * 64, *WORKER_LEASE_SET_ARGS]
         if chart == 'batch-pipeline-worker'
         else ['--set-string', 'image.tag=synthetic']
     )
@@ -125,6 +126,7 @@ def test_batch_worker_accepts_empty_pod_labels(helm, tmp_path, labels):
             str(override),
             '--set-string',
             'image.digest=sha256:' + 'a' * 64,
+            *WORKER_LEASE_SET_ARGS,
         ],
         capture_output=True,
         text=True,

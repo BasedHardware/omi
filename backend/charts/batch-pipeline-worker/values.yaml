@@ -4,9 +4,10 @@ enabled: false
 audioDerivedBucket: ""
 # The lease is the only producer custody path (SCA-3748). "serve" serves every
 # account; "off" (or any other value) is the fail-closed kill that pauses
-# custody, never the behavior rollback. All repair children inherit the shared
-# serve-enable epoch David ruled for SCA-3748 (1795662310), so an unset value
-# never renders a kill or re-anchors stock tokens per process.
+# custody, never the behavior rollback. Development and staging inherit the
+# shared serve-enable epoch David ruled for SCA-3748 (1795662310), so an unset
+# value never renders a kill or re-anchors stock tokens per process. Prod values
+# blank all four: the prod deploy passes them from vars.RECORD_TOKEN_LEASE_*.
 recordTokenLease:
   mode: "serve"
   servePercent: 100

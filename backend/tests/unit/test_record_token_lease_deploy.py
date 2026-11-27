@@ -106,26 +106,73 @@ SERVE_VECTOR = {
 }
 
 
-def test_prod_worker_pins_the_serve_vector_and_no_age_grace_remains():
-    # documents() renders the checked-in prod values. On this release off is a
-    # kill, so a worker Helm upgrade must keep both seal readers on serve.
+def _unbound_prod_render(*args):
+    # The raw prod render without the deploy's lease binding (no test default vector).
+    chart = Path(__file__).resolve().parents[2] / 'charts/batch-pipeline-worker'
+    return subprocess.run(
+        [
+            'helm',
+            'template',
+            'prod-omi-batch-pipeline-worker',
+            str(chart),
+            '-n',
+            'prod-omi-backend',
+            '-f',
+            str(chart / 'prod_omi_batch-pipeline-worker_values.yaml'),
+            '--set-string',
+            'image.digest=sha256:' + 'a' * 64,
+            *args,
+        ],
+        capture_output=True,
+        text=True,
+    )
+
+
+def test_prod_worker_values_carry_no_vector_and_refuse_to_render_without_it():
+    # SCA-3748 r2: a literal vector here let every worker Helm upgrade undo an
+    # operator's epoch change or "off". Prod values are empty; gcp_diarizer.yml
+    # passes all four from vars.RECORD_TOKEN_LEASE_* and the chart fails without them.
     prod = yaml.safe_load(
         (
             Path(__file__).resolve().parents[2]
             / 'charts/batch-pipeline-worker/prod_omi_batch-pipeline-worker_values.yaml'
         ).read_text()
     )
-    # The epoch is a string: Helm renders a bare YAML int this large as 1.79566231e+09.
-    assert prod['recordTokenLease'] == {
-        'mode': 'serve',
-        'servePercent': 100,
-        'seconds': 3600,
-        'deployedAt': '1795662310',
-    }
-    for container in containers(documents()):
+    assert prod['recordTokenLease'] == {'mode': '', 'servePercent': '', 'seconds': '', 'deployedAt': ''}
+    unbound = _unbound_prod_render()
+    assert unbound.returncode != 0
+    assert 'recordTokenLease.mode is required' in unbound.stderr
+    for missing in WORKFLOW_PINS:
+        pins = [f'recordTokenLease.{key}={value}' for key, value in WORKFLOW_PINS.items() if key != missing]
+        partial = _unbound_prod_render(*(arg for pin in pins for arg in ('--set-string', pin)))
+        assert partial.returncode != 0 and f'recordTokenLease.{missing} is required' in partial.stderr
+    bound = _unbound_prod_render(
+        *(arg for k, v in WORKFLOW_PINS.items() for arg in ('--set-string', f'recordTokenLease.{k}={v}'))
+    )
+    assert bound.returncode == 0, bound.stderr
+    docs = {(doc['kind'], doc['metadata']['name']): doc for doc in yaml.safe_load_all(bound.stdout) if doc}
+    for container in containers(docs):
         env = {e['name']: e.get('value') for e in container['env']}
         assert {key: env[key] for key in SERVE_VECTOR} == SERVE_VECTOR
         assert not any('LIVE_PRODUCER_GRACE' in k for k in env)
+
+
+WORKFLOW_PINS = {'mode': 'serve', 'servePercent': '100', 'seconds': '3600', 'deployedAt': '1795662310'}
+
+
+@pytest.mark.parametrize('mode,percent,epoch', [('off', '0', '0'), ('serve', '0', '1800000000')])
+def test_workflow_string_pins_override_the_prod_render(mode, percent, epoch):
+    # gcp_diarizer.yml passes --set-string; Helm applies those after every --set,
+    # so the operator's vector wins over the test default and renders verbatim.
+    pins = {'mode': mode, 'servePercent': percent, 'seconds': '3600', 'deployedAt': epoch}
+    docs = documents(
+        *(arg for key, value in pins.items() for arg in ('--set-string', f'recordTokenLease.{key}={value}'))
+    )
+    for container in containers(docs):
+        env = {e['name']: e.get('value') for e in container['env']}
+        assert env['RECORD_TOKEN_LEASE_MODE'] == mode
+        assert env['RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT'] == percent
+        assert env['RECORD_TOKEN_LEASE_DEPLOYED_AT'] == epoch
 
 
 def test_chart_default_lease_vector_is_serve_not_a_kill():

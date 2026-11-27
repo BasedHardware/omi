@@ -8,6 +8,7 @@ import subprocess
 
 import pytest
 import yaml
+from tests.unit._worker_lease_render import WORKER_LEASE_SET_ARGS
 
 CHART = Path(__file__).resolve().parents[2] / 'charts' / 'batch-pipeline-worker'
 # Rolls replace pods in place: no surge GPU, and no GPU node left empty mid-roll (SCA-3274).
@@ -21,8 +22,10 @@ def render(*arguments, namespace='synthetic'):
     # Production sweeps require their real namespace even in offline templates.
     if namespace == 'synthetic' and any('prod_omi_' in arg for arg in arguments):
         namespace = 'prod-omi-backend'
+    # Prod values leave the lease vector to the deploy's vars binding (SCA-3748).
+    lease = WORKER_LEASE_SET_ARGS if any('prod_omi_' in arg for arg in arguments) else ()
     return subprocess.run(
-        [helm, 'template', 'synthetic-worker', str(CHART), '--namespace', namespace, *arguments],
+        [helm, 'template', 'synthetic-worker', str(CHART), '--namespace', namespace, *lease, *arguments],
         capture_output=True,
         text=True,
     )

@@ -174,7 +174,16 @@ GKE_WORKLOADS: dict[str, GkeWorkload] = {
         values_file='backend/charts/batch-pipeline-worker/{env}_omi_batch-pipeline-worker_values.yaml',
         deployment='{env}-omi-batch-pipeline-worker',
         container='worker',
-        helm_image_args=('image.digest=sha256:' + '0' * 64,),
+        # Prod values leave the lease vector empty and the chart refuses to render
+        # without it (SCA-3748). The lease env sits on record-seal-worker/-repair,
+        # not on the worker container compared here, so synthetic values suffice.
+        helm_image_args=(
+            'image.digest=sha256:' + '0' * 64,
+            'recordTokenLease.mode=serve',
+            'recordTokenLease.servePercent=100',
+            'recordTokenLease.seconds=3600',
+            'recordTokenLease.deployedAt=1795662310',
+        ),
     ),
 }
 DEFAULT_GKE_WORKLOADS = tuple(GKE_WORKLOADS)

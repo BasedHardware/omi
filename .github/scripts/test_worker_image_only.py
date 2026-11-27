@@ -1320,7 +1320,8 @@ class WorkflowTests(unittest.TestCase):
 
     # Every run: step, in any job, that is NOT excluded from dry-run mode, pinned by position, name and the
     # sha256 of its exact script. A new or moved step, or any edit to one of these scripts, fails here until it
-    # is reviewed for writes (fail closed), whatever it calls.
+    # is reviewed for writes (fail closed), whatever it calls. SCA-3748 r2 inserted the worker lease binding
+    # before the Helm upgrade; it is excluded from dry-run, so only later positions moved (digests unchanged).
     DRY_RUN_REACHABLE_RUN_STEPS = {
         ("deploy", 0, "Validate Environment Input"): "72be50fd7a2df45c8ed4d49faf9b1afba93ef11ea22ce103e2997db61ae78e3b",
         ("deploy", 1, "Delete huge unnecessary tools folder"): "5a5faacb04df5aab268eb9209ca091013f37c875222610c5a0ddd92bbd270e8a",
@@ -1328,7 +1329,7 @@ class WorkflowTests(unittest.TestCase):
         ("deploy", 7, "Resolve deployment target"): "70e03ebe8dfbbf768522c6bc295b2c93c160c8e9346d29e3946a3afe55df14b5",
         ("deploy", 11, None): "37e80faecb6c46539e3d79a02169716302de6d9ec0e83e2b7ad178fbf2a580ad",  # gcloud auth configure-docker
         ("deploy", 13, "Verify promoted worker digest"): "b785655ffe66200fcb07ff9ae3cb1b59712edc7ff104cc875077996818b43f65",
-        ("deploy", 18, "Dry-run worker image preserving live runtime"): "344ade981770f2dbfb00d02bca7c30a8cf24000b144de5410256f0ac44f5a40e",
+        ("deploy", 19, "Dry-run worker image preserving live runtime"): "344ade981770f2dbfb00d02bca7c30a8cf24000b144de5410256f0ac44f5a40e",
     }
 
     @staticmethod
@@ -1371,8 +1372,8 @@ class WorkflowTests(unittest.TestCase):
         ("deploy", 9, "google-github-actions/auth@v3"): "6fc980f3f5bfc28ac2316bf7d0b0a8d3742dcb06f095984d3b19f5db6849f6b4",
         ("deploy", 10, "google-github-actions/setup-gcloud@v3"): "81788bbf5c63a19208a6c40180026073562ec37f254843f07dfeae9348f616c9",
         ("deploy", 14, "google-github-actions/get-gke-credentials@v3"): "45f3c39c6de870255d441dea6ea993c5cceb60a5c0b034d9d3563ec03f331090",
-        ("deploy", 22, "BasedHardware/omi/.github/actions/deployment-summary@979b573718fd74b31edab3530adf2ed6082622dc"): "c257060cea729ac65883e35ee3b6903cac984e060e3fdc1dbf89194ad3e89c76",
-        ("deploy", 23, "BasedHardware/omi/.github/actions/deployment-notifier@979b573718fd74b31edab3530adf2ed6082622dc"): "06ded6f4ab1d55dfa518648cb4d7bb066492375329d6b87b320750b4f8fa8276",
+        ("deploy", 23, "BasedHardware/omi/.github/actions/deployment-summary@979b573718fd74b31edab3530adf2ed6082622dc"): "c257060cea729ac65883e35ee3b6903cac984e060e3fdc1dbf89194ad3e89c76",
+        ("deploy", 24, "BasedHardware/omi/.github/actions/deployment-notifier@979b573718fd74b31edab3530adf2ed6082622dc"): "06ded6f4ab1d55dfa518648cb4d7bb066492375329d6b87b320750b4f8fa8276",
     }
 
     @staticmethod

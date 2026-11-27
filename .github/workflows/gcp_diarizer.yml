@@ -427,6 +427,48 @@ jobs:
         timeout-minutes: 3
         run: timeout 120 python3 backend/scripts/deploy_status_report.py --env prod --include-gke --gke-service batch-pipeline-worker
 
+      # SCA-3748: the worker Helm upgrade writes record-seal-worker and
+      # record-seal-repair lease env, so it binds the same four variables as
+      # Sync, Listen and Pusher; prod values carry no vector of their own.
+      - name: Bind shared record token lease rollout inputs
+        if: env.SERVICE == 'batch-pipeline-worker' && inputs.mode != 'worker-depth-only' && inputs.preserve_live_worker != true && inputs.worker_dry_run != true
+        shell: bash
+        env:
+          RECORD_TOKEN_LEASE_ENVIRONMENT: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
+          RECORD_TOKEN_LEASE_MODE: ${{ vars.RECORD_TOKEN_LEASE_MODE }}
+          RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT: ${{ vars.RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT }}
+          RECORD_TOKEN_LEASE_SECONDS: ${{ vars.RECORD_TOKEN_LEASE_SECONDS }}
+          RECORD_TOKEN_LEASE_DEPLOYED_AT: ${{ vars.RECORD_TOKEN_LEASE_DEPLOYED_AT }}
+        run: |
+          python3 - <<'PYTHON'
+          import math, os
+          # SCA-3748: prod binds the four Actions variables verbatim. GitHub cannot tell a
+          # missing variable from an empty one, and a blank mode is the runtime kill, so a
+          # prod deploy refuses either instead of inventing serve. Only development keeps
+          # the documented defaults; any other environment name fails closed like prod.
+          keys = ('RECORD_TOKEN_LEASE_MODE', 'RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT',
+                  'RECORD_TOKEN_LEASE_SECONDS', 'RECORD_TOKEN_LEASE_DEPLOYED_AT')
+          development_defaults = dict(zip(keys, ('serve', '100', '3600', '1795662310')))
+          raw = {key: os.environ.get(key, '').strip() for key in keys}
+          missing = [key for key in keys if not raw[key]]
+          if missing and os.environ.get('RECORD_TOKEN_LEASE_ENVIRONMENT') != 'development':
+              raise ValueError('set non-empty Actions variables before a prod deploy: ' + ', '.join(missing))
+          raw.update({key: development_defaults[key] for key in missing})
+          mode = raw['RECORD_TOKEN_LEASE_MODE']
+          percent = int(raw['RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT'])
+          seconds = int(raw['RECORD_TOKEN_LEASE_SECONDS'])
+          epoch = float(raw['RECORD_TOKEN_LEASE_DEPLOYED_AT'])
+          if mode not in {'off', 'shadow', 'serve'} or not 0 <= percent <= 100 or not 1800 <= seconds <= 7200:
+              raise ValueError('invalid record token lease rollout vector')
+          if not math.isfinite(epoch) or epoch < 0 or (mode != 'off' and epoch <= 0):
+              raise ValueError('enabled record token leases require a pinned release epoch')
+          epoch_value = str(int(epoch)) if epoch.is_integer() else repr(epoch)
+          with open(os.environ['GITHUB_ENV'], 'a') as output:
+              for key, value in {'RECORD_TOKEN_LEASE_MODE': mode, 'RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT': percent,
+                                 'RECORD_TOKEN_LEASE_SECONDS': seconds, 'RECORD_TOKEN_LEASE_DEPLOYED_AT': epoch_value}.items():
+                  output.write(f'{key}={value}\n')
+          PYTHON
+
       - name: Deploy Diarizer to GKE cluster using Helm
         if: inputs.mode != 'worker-depth-only' && inputs.preserve_live_worker != true && inputs.worker_dry_run != true
         env:
@@ -438,7 +480,11 @@ jobs:
         run: |
           if [[ "$SERVICE" == "batch-pipeline-worker" ]]; then
             helm -n "$DEPLOY_NAMESPACE" upgrade --install "$TARGET_RELEASE" "./$TARGET_CHART" \
-              -f "./$TARGET_VALUES" --set-string "image.digest=${{ steps.build.outputs.image_digest || steps.promote.outputs.image_digest }}"
+              -f "./$TARGET_VALUES" --set-string "image.digest=${{ steps.build.outputs.image_digest || steps.promote.outputs.image_digest }}" \
+              --set-string "recordTokenLease.mode=${RECORD_TOKEN_LEASE_MODE:?bind step did not run}" \
+              --set-string "recordTokenLease.servePercent=${RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT:?bind step did not run}" \
+              --set-string "recordTokenLease.seconds=${RECORD_TOKEN_LEASE_SECONDS:?bind step did not run}" \
+              --set-string "recordTokenLease.deployedAt=${RECORD_TOKEN_LEASE_DEPLOYED_AT:?bind step did not run}"
           elif [[ "$SERVICE" == "diarizer-batch" ]]; then
             # Same invocation as the lead-only install (backend/scripts/diarization_eval/
             # batch_install.md): base values with the batch overlay stacked on top, the

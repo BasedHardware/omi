@@ -11,6 +11,7 @@ from urllib.parse import urlsplit
 
 import pytest
 import yaml
+from tests.unit._worker_lease_render import WORKER_LEASE_SET_ARGS
 
 from scripts import worker_primary_cas as carrier
 
@@ -140,6 +141,7 @@ def render(kubeconfig, *args):
             str(CHART / 'prod_omi_batch-pipeline-worker_values.yaml'),
             '--set-string',
             f'image.digest={DIGEST}',
+            *WORKER_LEASE_SET_ARGS,
             '--dry-run=server',
             # The loopback fixture provides discovery and live objects only.
             '--disable-openapi-validation',

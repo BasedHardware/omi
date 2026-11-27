@@ -5,6 +5,7 @@ import subprocess
 
 import pytest
 import yaml
+from tests.unit._worker_lease_render import WORKER_LEASE_SET_ARGS
 
 ROOT = Path(__file__).resolve().parents[3]
 OLD = 'BATCH_HELD_DEAD_LETTER_ENABLED'
@@ -76,6 +77,7 @@ def test_worker_chart_renders_default_on_and_off_kill(environment):
                 f'worker.inputExpiringEnabled={enabled}',
                 '--set',
                 'image.digest=sha256:' + 'a' * 64,
+                *WORKER_LEASE_SET_ARGS,
             ],
             check=True,
             capture_output=True,
