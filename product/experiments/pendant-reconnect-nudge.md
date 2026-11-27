@@ -36,6 +36,15 @@ significant and meaningless number. The 50% holdout is what makes the estimate c
   recorded in PostHog by construction (`Pendant Reconnect Nudge Eligible` with
   `arm=holdout`), so it cannot vanish from the denominator.
 
+**Cap scope (amended 2026-11-27, before enrollment).** The 30-day cap is enforced
+per installation, not per account: the timestamp lives in app storage, so a reinstall
+or a second phone can receive one more card inside the window. Accepted because the
+arm is a uid hash (a reinstall keeps its arm) and an extra card only in treatment
+attenuates the measured effect rather than creating it. The readback counts
+`Pendant Reconnect Nudge Shown` per uid per 30 days and reports the share of uids
+above one; any wider rollout, or graduation after a positive readback, must move the
+claim to an authenticated account-level record first.
+
 ## Eligibility
 
 All of:
