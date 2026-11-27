@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/services/experiments/mobile_batch_upload_hold_gate.dart';
 import 'package:omi/services/wals/mobile_batch_buffer.dart';
 import 'package:omi/services/wals/mobile_batch_upload_hold.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
@@ -37,6 +39,12 @@ void _publish(MobileBatchUploadHold hold, Wal wal) {
 }
 
 void main() {
+  test('hold gate uses the registered mobile flag key', () {
+    final registry = File('../config/feature-flags.yaml').readAsStringSync();
+    expect(registry, contains('"key":"${MobileBatchUploadHoldGate.enabledFlag}"'));
+    expect(MobileBatchUploadHoldGate.enabledFlag, 'mobile-batch-upload-hold');
+  });
+
   for (final (foreground, preview, limit, label) in [
     (false, false, 300, 'bg300'),
     (true, true, 300, 'fg_preview300'),
@@ -173,6 +181,73 @@ void main() {
       expect(hold.isHeld(held), isFalse);
       expect(hold.label(held), 'none');
     });
+  });
+
+  test('held files refresh the kill switch at most once a minute and release as soon as refresh completes', () {
+    fakeAsync((time) {
+      var enabled = true;
+      var wakes = 0;
+      final refreshes = <Duration>[];
+      final disableRefresh = Completer<void>();
+      final hold = MobileBatchUploadHold(
+        enabled: () => enabled,
+        wake: () => wakes++,
+        now: () => _start.add(time.elapsed),
+        foreground: false,
+        refreshFlags: () async {
+          refreshes.add(time.elapsed);
+          if (refreshes.length == 2) {
+            await disableRefresh.future;
+            enabled = false;
+          }
+        },
+      );
+      final file = _wal(1, 7);
+      _publish(hold, file);
+      time.elapse(const Duration(seconds: 59));
+      expect(refreshes, [Duration.zero]);
+      time.elapse(const Duration(seconds: 1));
+      expect(refreshes, [Duration.zero, const Duration(minutes: 1)]);
+      expect(hold.isHeld(file), isTrue);
+
+      disableRefresh.complete();
+      time.flushMicrotasks();
+      expect(wakes, 1);
+      expect(hold.isHeld(file), isFalse);
+      time.elapse(const Duration(minutes: 2));
+      expect(refreshes, hasLength(2));
+    });
+  });
+
+  test('a buffer closing after hold disposal publishes its final WAL without rearming the hold', () async {
+    final directory = await custodyDirectory();
+    addTearDown(() => directory.delete(recursive: true));
+    var wakes = 0;
+    var refreshes = 0;
+    final hold = MobileBatchUploadHold(
+      enabled: () => true,
+      wake: () => wakes++,
+      refreshFlags: () async => refreshes++,
+    );
+    addTearDown(hold.dispose);
+    final published = <Wal>[];
+    final buffer = MobileBatchBuffer(
+      directory: directory,
+      onSealed: hold.sealed,
+      publish: (wal) async {
+        published.add(wal);
+        expect(hold.published(wal), isFalse);
+      },
+    );
+    expect(buffer.append([1], uid: 'owner', codec: BleAudioCodec.opus, now: _start, recordingSessionId: 'r'), isTrue);
+    hold.dispose();
+    await buffer.close();
+
+    expect(published, hasLength(1));
+    expect(hold.isHeld(published.single), isFalse);
+    expect(published.single.mobileBatchHold, isNull);
+    expect(refreshes, 0);
+    expect(wakes, 0);
   });
 
   for (final (seconds, count, firstBatchSize) in [(55, 6, 5), (14, 22, 20)]) {

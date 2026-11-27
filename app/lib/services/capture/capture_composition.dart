@@ -374,7 +374,7 @@ Future<void> _installMobileStandardBatch(CaptureProvider provider) async {
       phone.onRecordingUploadAccepted = reporter.uploadAccepted;
     }
     provider.lifetime.own(() {
-      hold.clear();
+      hold.dispose();
       if (phone is LocalWalSyncImpl && identical(phone.mobileBatchUploadHold, hold)) {
         phone.mobileBatchUploadHold = null;
         phone.onRecordingUploadAccepted = null;
