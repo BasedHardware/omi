@@ -45,17 +45,31 @@ A failed renewal stops the commit after the committed prefix and leaves pending 
 The emulator fixture shows a 6-batch commit holding its lease while the commit clock advances 200 s per batch.
 Without renewal, the same commit loses the lease after two batches.
 
-**Runtimes.** `store.load()` runs on every runtime that loads a closure: the on-open builder on `backend` and
-`backend-integration`, builder tasks on `backend-sync`, and derive on `backend-sync-backfill`. `pusher` and
+**Builder passes only.** The allowance applies only to builder passes (lease `builder`), so the batch cap and the
+daily cap apply wherever it does. Derive (`load_derive`, partition budget) and live re-derive (`load_live_rederive`,
+`DERIVED_LIMIT`) keep today's bounds for a listed owner; a heavy derive is planned as its own run.
+
+**Seed retry.** A pass whose commit would exceed the batch cap raises `LockedBatchCap` before any transaction. The
+builder re-enters below the seeds it used (32, 8, 1), as a load-time overflow does, and parks only at one seed. The
+ceiling only falls, so a pass re-enters at most twice. Each retry repeats the load and the outline.
+
+**Runtimes.** `store.load()` runs on every runtime that runs builder passes: the on-open builder on `backend` and
+`backend-integration`, and builder tasks on `backend-sync` and `backend-sync-backfill`. `pusher` and
 `backend-listen` only mark pending and enqueue (`triggers.changed`); they never load a closure. The allowlist, sizes,
-batch cap and daily passes must agree on the four loaders. The prod runtime env declares them on each, and the
-activation manifest (`deploy/activation/conversations-v3.yaml`, `v3-locked-closure-*`) requires one value. Lease
-renewal is decided per commit, so it is not in the manifest.
+batch cap and daily passes must agree on the four loaders, and the activation manifest
+(`deploy/activation/conversations-v3.yaml`, `v3-locked-closure-*`) requires one value. Lease renewal is decided per
+commit, so it is not in the manifest.
+
+**Owner list in Secret Manager.** This repository is public, so owner tags never go in Git. The four loaders bind
+`CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS` to the Secret Manager secret of the same name, `version: latest`. Release
+provisions it, with first version `none` and `secretAccessor` for `backend-runtime@`, before this change merges: a
+Cloud Run revision bound to a missing secret does not start. Admitting an owner is a new secret version, then a new
+revision on the four loaders. The four size keys stay literal in the prod overlay, at the code defaults.
 
 **Refinement.** Serving backend-sync runs 300/300 timing, so the live planner never offers refinement. Under
 custom timing it is offered, one merge of 2 to 8 donors per pass, and the fixture keeps custody either way.
 
 **Rollout.** Off by default. List one parked owner whose closure is at most 1,200 rows, then five (at most about 8M
 reads a day at the cap), then all parked owners. Listing more than about six owners, `*`, or any step that expects
-more than 10M reads a day needs a yes from the Firestore cost owner (SCA-2173). Roll back by emptying the list. A follow-up should fence unchanged locked rows
+more than 10M reads a day needs a yes from the Firestore cost owner (SCA-2173). Roll back with a secret version of `none` and a revision roll. A follow-up should fence unchanged locked rows
 once, not in every batch, which would cut commit reads from about 12k to about 3k per heavy pass.

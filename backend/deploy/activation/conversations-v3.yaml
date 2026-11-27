@@ -129,7 +129,8 @@ env:
       builder (backend, backend-integration), builder tasks (backend-sync) and derive (backend-sync-backfill).
       A loader without the owner keeps parking it and re-arming the backoff, so admission must not be
       half-applied (SCA-2918). pusher and backend-listen only mark pending and enqueue (triggers.changed);
-      they never load a closure
+      they never load a closure. The value is a Secret Manager binding (CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS,
+      version latest; owner tags stay out of this public repo), so equal compares the secret reference
     keys: [CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS]
     default: ''
     runtimes: &v3_closure_loaders [backend, backend-integration, backend-sync, backend-sync-backfill]

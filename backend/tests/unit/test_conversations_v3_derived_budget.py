@@ -7,7 +7,7 @@ import pytest
 
 from database import conversations_v3 as store, conversations_v3_leases as leases, memories
 from database.firestore_transaction_retry import FirestoreContentionExhausted
-from utils.conversations.v3 import Conflict, planner, service, triggers
+from utils.conversations.v3 import Conflict, UnlockedPage, planner, service, triggers
 from tests.unit.test_conversations_v3_claim_growth import T0, UID, path, strict  # noqa: F401
 from tests.unit.test_conversations_v3_lock_timing import _locked_pair
 from tests.unit.test_conversations_v3_review import AT, MemoryQuery, builder, source  # noqa: F401
@@ -1203,3 +1203,117 @@ def test_the_daily_pass_cap_turns_the_allowance_off_for_the_rest_of_the_day(monk
     else:
         with pytest.raises(Conflict, match='v3_derived_budget'):
             store.load('u', firestore_client=MemoryQuery(rows))
+
+
+# ---- builder passes only: derive and re-derive keep today's bound (Home v3 lead ruling, 2026-11-27) ----------
+# The derive and live re-derive loaders are pinned in test_conversations_v3_backfill.py and
+# test_conversations_v3_live_rederive.py.
+
+
+def test_the_allowance_is_for_builder_passes_only(monkeypatch):
+    allowance(monkeypatch, 20)
+    assert store._locked_allowance('u') == (20, 1 << 30)
+    assert store._locked_allowance('u', key=store.BACKFILL_LEASE) == (0, 0)
+    assert store._past_origin_bound('u', {f'd{i}': {} for i in range(11)}) is True
+    assert store._past_origin_bound('u', {f'd{i}': {} for i in range(11)}, key=store.BACKFILL_LEASE) is False
+
+
+def test_a_listed_owners_derive_commit_is_never_capped_or_counted(strict, monkeypatch):
+    # Past the origin bound and over the cap: a builder commit would park (above); a derive commit is not an
+    # allowance pass, so it commits as today and adds nothing to the owner's day.
+    events = heavy_commit(strict, monkeypatch, listed=True, past_bound='rows', cap=2, key=store.BACKFILL_LEASE)
+    assert events == [3, ('renew', store.BACKFILL_LEASE), 3, ('renew', store.BACKFILL_LEASE), 2]
+    lease = strict.rows[('users', UID, 'conversation_v3_leases', store.BACKFILL_LEASE)]
+    assert 'v3_locked_passes' not in lease
+
+
+def test_the_secret_payloads_admit_exactly_their_tags(monkeypatch):
+    # The list is a Secret Manager version (this repo is public): its first version is `none`, and a version
+    # written from a file may end in a newline.
+    import hashlib
+
+    tag = hashlib.sha256(b'u').hexdigest()[:12]
+    for payload, admitted in [('none', False), ('none\n', False), (f'{tag}\n', True), (f'none,{tag.upper()}', True)]:
+        monkeypatch.setenv('CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS', payload)
+        assert store.locked_closure_owner('u') is admitted, payload
+
+
+# ---- the commit-time batch cap goes through the seed ladder (Codex P2 on #26443) ------------------------------
+
+
+def batch_cap_pass(builder, monkeypatch, *, fits_at, parked=None, pending=32):
+    """A builder pass whose commit hits the locked-closure batch cap above ``fits_at`` seeds; ``pending``
+    recordings are owed, so a page reads min(limit, pending) seeds."""
+    committed, _ = builder
+    loads, commits, parks = [], [], []
+
+    def load(uid, *, pending_limit=32, unlocked_page=None, **kw):
+        loads.append(pending_limit)
+        if unlocked_page is not None:
+            unlocked_page.seeds = (min(pending_limit, pending), 0)
+        return {'r': source()}, {}, []
+
+    def commit(*a, bounded_pending_limit=None, **kw):
+        commits.append(bounded_pending_limit)
+        if fits_at is None or bounded_pending_limit > fits_at:
+            raise store.LockedBatchCap('v3_derived_budget')  # before any transaction
+        committed.append(a)
+        return set()
+
+    monkeypatch.setattr(store, 'load', load)
+    monkeypatch.setattr(service, '_commit', commit)
+    monkeypatch.setattr(store, 'backoff_state', lambda *a: (None, parked))
+    monkeypatch.setattr(store, 'mark_bounded_attempt', lambda *a, **kw: None)
+    monkeypatch.setattr(store, 'record_blocked', lambda uid, token, reason, **kw: parks.append(reason))
+    monkeypatch.setattr(service, '_drain_blocked', AsyncMock())
+    monkeypatch.setattr(service, '_wake_after_backoff', AsyncMock())
+    return loads, commits, parks
+
+
+@pytest.mark.asyncio
+async def test_eight_seeds_over_the_batch_cap_retry_at_one_seed_and_commit(builder, monkeypatch):
+    # A parked owner starts at eight seeds; eight fit the load allowance but need too many batches.
+    loads, commits, parks = batch_cap_pass(builder, monkeypatch, fits_at=1, parked='v3_derived_budget')
+    assert await service.reconcile('u') == 'committed'
+    assert loads == [8, 1] and commits == [8, 1]
+    assert parks == []
+
+
+@pytest.mark.asyncio
+async def test_the_full_page_falls_to_eight_seeds_when_eight_fit(builder, monkeypatch):
+    loads, commits, parks = batch_cap_pass(builder, monkeypatch, fits_at=8)
+    assert await service.reconcile('u') == 'committed'
+    assert loads == [32, 8] and commits == [32, 8] and parks == []
+
+
+@pytest.mark.asyncio
+async def test_a_one_seed_pass_over_the_batch_cap_parks_once_without_looping(builder, monkeypatch):
+    loads, commits, parks = batch_cap_pass(builder, monkeypatch, fits_at=None)
+    report = {}
+    assert await service.reconcile('u', report=report) == 'blocked'
+    assert loads == [32, 8, 1] and commits == [32, 8, 1]
+    assert parks == ['v3_derived_budget'] and report['blocked_reason'] == 'v3_derived_budget'
+
+
+@pytest.mark.asyncio
+async def test_an_on_open_pass_over_the_batch_cap_parks_as_before(builder, monkeypatch):
+    loads, commits, parks = batch_cap_pass(builder, monkeypatch, fits_at=None)
+    assert await service.reconcile('u', on_open=True) == 'blocked'
+    assert commits == [None]  # on-open does not page pending seeds, so there is no smaller page to try
+
+
+@pytest.mark.asyncio
+async def test_a_page_that_held_one_seed_parks_without_repeating_the_load(builder, monkeypatch):
+    # One pending recording: a 32-seed page already read one seed, so a smaller page is the same closure.
+    loads, commits, parks = batch_cap_pass(builder, monkeypatch, fits_at=None, pending=1)
+    assert await service.reconcile('u') == 'blocked'
+    assert loads == [32] and commits == [32] and parks == ['v3_derived_budget']
+
+
+def test_only_the_batch_cap_steps_the_seed_ceiling_down():
+    cap = store.LockedBatchCap('v3_derived_budget')
+    assert [service._smaller_seed_page(cap, seeded) for seeded in (32, 8, 1, None)] == [8, 1, None, None]
+    page = UnlockedPage(seeds=(5, 0))
+    assert service._smaller_seed_page(cap, 32, page) == 1  # five seeds read: the next page is one seed
+    assert service._smaller_seed_page(cap, 8, UnlockedPage(seeds=(1, 0))) is None
+    assert service._smaller_seed_page(Conflict('v3_derived_budget'), 32) is None  # load overflow has its ladder

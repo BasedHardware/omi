@@ -331,6 +331,14 @@ def record_blocked(uid, token, reason, *, on_open=False, firestore_client=None):
 BOUNDED_RETRY_REASONS = frozenset({'v3_derived_budget', 'v3_source_closure_budget', 'document_too_large'})
 
 
+class LockedBatchCap(Conflict):
+    """A locked-claimant closure needs more commit batches than LOCKED_MAX_BATCHES (reason v3_derived_budget).
+
+    Raised before any transaction. The builder retries with fewer pending seeds (32, 8, 1) before parking,
+    as it does for a load-time overflow: eight seeds can fit the load allowance and still need too many
+    batches when one seed would commit."""
+
+
 def mark_bounded_attempt(uid, token, *, firestore_client=None):
     """Spend a legacy park's one early attempt under the acquired builder lease, before any paid work.
 
@@ -439,9 +447,13 @@ def _locked_passes_today(lease, now=None):
     return int(lease.get(LOCKED_PASSES_FIELD) or 0) if lease.get(LOCKED_DAY_FIELD) == day else 0
 
 
-def _locked_allowance(uid, lease=None):
-    """(rows, bytes) the closure may add for locked claimants; (0, 0) off the allowlist, when switched off, or
-    (given the builder lease) once the owner has used today's committed allowance passes."""
+def _locked_allowance(uid, lease=None, *, key='builder'):
+    """(rows, bytes) the closure may add for locked claimants; (0, 0) off the allowlist, when switched off, for
+    any pass but a builder pass, or (given the builder lease) once the owner has used today's committed
+    allowance passes. Builder passes only, so the batch cap and the daily cap apply wherever the allowance
+    does: derive and re-derive keep their own partition bounds, and a heavy derive is planned as its own run."""
+    if key != 'builder':
+        return 0, 0
     if not LOCKED_DERIVED_ALLOWANCE or not LOCKED_DERIVED_BYTES or not locked_closure_owner(uid):
         return 0, 0
     if lease is not None and _locked_passes_today(lease) >= LOCKED_DAILY_PASSES:
@@ -449,9 +461,9 @@ def _locked_allowance(uid, lease=None):
     return LOCKED_DERIVED_ALLOWANCE, LOCKED_DERIVED_BYTES
 
 
-def _past_origin_bound(uid, existing):
+def _past_origin_bound(uid, existing, *, key='builder'):
     """The closure used the locked-claimant allowance: a listed owner past DERIVED_LIMIT or DERIVED_BYTES."""
-    if _locked_allowance(uid) == (0, 0):
+    if _locked_allowance(uid, key=key) == (0, 0):
         return False
     if len(existing) > DERIVED_LIMIT:
         return True
@@ -547,7 +559,8 @@ def load(
             existing[opened['id']] = opened
     queried = set()
     by_claims = closure_by_claims()
-    extra_rows, extra_bytes = _locked_allowance(uid, state)
+    # load() is the builder pass's loader (it reads the builder lease); derive uses load_derive.
+    extra_rows, extra_bytes = _locked_allowance(uid, state, key='builder')
     row_limit = DERIVED_LIMIT + extra_rows
     sizes = {cid: _encoded_bytes(row.get('transcript_segments') or []) for cid, row in existing.items()}
     locked = {cid for cid, row in existing.items() if locked_claimant(row)}
@@ -1324,12 +1337,12 @@ def commit_projection(
         pointers += pointer
     if current or not batches:
         batches.append(current)
-    heavy = key == 'builder' and _past_origin_bound(uid, existing)
+    heavy = _past_origin_bound(uid, existing, key=key)
     if heavy and len(batches) > LOCKED_MAX_BATCHES:
         # Each batch rereads the whole closure: a locked-claimant closure may not buy an unbounded commit.
         # Park on the derived budget before any transaction, so nothing is written and pending stays owed.
         metrics.safe_metric(lambda: logger.info('event=v3_locked_closure_batches batches=%d', len(batches)))
-        raise Conflict('v3_derived_budget')
+        raise LockedBatchCap('v3_derived_budget')
     if replacing_claimants and len(batches) > 1:
         raise Conflict('backfill_partition_budget')
     for index, batch in enumerate(batches):

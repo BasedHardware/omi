@@ -4111,6 +4111,9 @@ environments:
             SCREEN_FRAME_SIGNING_SECRET:
               secret: SCREEN_FRAME_SIGNING_SECRET
               version: latest
+            CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS:
+              secret: CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS
+              version: latest
             CONVERSATIONS_V3_LIVE_RECAP_COHORT:
               secret: CONVERSATIONS_V3_LIVE_RECAP_COHORT
               version: '1'
@@ -4448,7 +4451,6 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
-            CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS: {value: '', category: rollout}
             CONVERSATIONS_V3_LOCKED_DERIVED_ALLOWANCE:
               value: '2048'
               category: config
@@ -4763,6 +4765,9 @@ environments:
             GOOGLE_MAPS_API_KEY:
               secret: GOOGLE_MAPS_API_KEY
               version: latest
+            CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS:
+              secret: CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS
+              version: latest
             SONIOX_API_KEY:
               secret: SONIOX_API_KEY
               version: latest
@@ -5059,7 +5064,6 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
-            CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS: {value: '', category: rollout}
             CONVERSATIONS_V3_LOCKED_DERIVED_ALLOWANCE:
               value: '2048'
               category: config
@@ -5360,6 +5364,9 @@ environments:
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
+            CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS:
+              secret: CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS
+              version: latest
             SONIOX_API_KEY:
               secret: SONIOX_API_KEY
               version: latest
@@ -5639,7 +5646,6 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
-            CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS: {value: '', category: rollout}
             CONVERSATIONS_V3_LOCKED_DERIVED_ALLOWANCE:
               value: '2048'
               category: config
@@ -5925,6 +5931,9 @@ environments:
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
+            CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS:
+              secret: CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS
+              version: latest
             SONIOX_API_KEY:
               secret: SONIOX_API_KEY
               version: latest
@@ -6163,7 +6172,6 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'on', category: rollout}
-            CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS: {value: '', category: rollout}
             CONVERSATIONS_V3_LOCKED_DERIVED_ALLOWANCE:
               value: '2048'
               category: config
@@ -6454,6 +6462,9 @@ environments:
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
+            CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS:
+              secret: CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS
+              version: latest
             SONIOX_API_KEY:
               secret: SONIOX_API_KEY
               version: latest
@@ -6692,7 +6703,6 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'on', category: rollout}
-            CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS: {value: '', category: rollout}
             CONVERSATIONS_V3_LOCKED_DERIVED_ALLOWANCE:
               value: '2048'
               category: config

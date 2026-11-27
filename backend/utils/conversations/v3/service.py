@@ -351,8 +351,10 @@ async def _release_reconcile_lease(uid, key, token, *, primary_failed):
         )
 
 
-async def _load_live_batch(uid, token, parked, unlocked_page=None):
-    """Reduce pending seeds without clipping any selected source's ownership closure."""
+async def _load_live_batch(uid, token, parked, unlocked_page=None, pending_cap=None):
+    """Reduce pending seeds without clipping any selected source's ownership closure.
+
+    ``pending_cap`` is the retry after a commit-time locked-closure batch cap: seed at most that many."""
     if parked in store.BOUNDED_RETRY_REASONS:
         # Spend a legacy park's one early attempt under this lease before any paid work.
         await run_blocking(db_executor, store.mark_bounded_attempt, uid, token)
@@ -363,6 +365,8 @@ async def _load_live_batch(uid, token, parked, unlocked_page=None):
         sizes = (1,)
     elif parked in budget_reasons or remembered == 8:
         sizes = (8, 1)
+    if pending_cap is not None:
+        sizes = tuple(size for size in sizes if size <= pending_cap) or (1,)
     attempts: list[dict[str, Any]] = [{'pending_limit': size} if size < 32 else {} for size in sizes]
     if unlocked_page is not None:
         # One pending and one unlocked seed can overflow together while each fits alone. Seed one lane at a
@@ -393,6 +397,19 @@ async def _load_live_batch(uid, token, parked, unlocked_page=None):
             # Only a pass that seeded pending rows may change the remembered pending page.
             return (*result, size or None)
     raise AssertionError('bounded pending batch sizes are empty')
+
+
+def _smaller_seed_page(error, limit, page=None):
+    """The next pending ceiling after a commit-time locked-closure batch cap, or None to park.
+
+    Strictly below the pending seeds the pass actually loaded (at most its limit: 32, 8 or 1), so the retries
+    end at one seed, and a page that already held one seed parks without repeating the load and outline."""
+    if not isinstance(error, store.LockedBatchCap) or not limit:
+        return None
+    seeded = min(limit, page.seeds[0]) if page is not None else limit
+    if seeded <= 1:
+        return None
+    return 8 if seeded > 8 else 1
 
 
 def _lane_without_seed(options, page):
@@ -430,7 +447,7 @@ async def _wake_after_backoff(uid, page, token):
 def _measure_reconcile_writes(run):
     @wraps(run)
     async def measured(*args, **kwargs):
-        if kwargs.get('_pass', 0):  # The outer pass owns the measurement for the whole chain.
+        if kwargs.get('_pass', 0) or kwargs.get('_pending_cap'):  # The outer pass owns the whole chain.
             return await run(*args, **kwargs)
         caller = 'backfill' if kwargs.get('derive') else 'on_open' if kwargs.get('on_open') else 'builder'
         with metrics.measure_reconcile_writes(caller):
@@ -469,6 +486,7 @@ async def reconcile(
     background=False,
     report=None,
     _pass=0,
+    _pending_cap=None,
 ):
     """One builder pass. ``derive`` is one planned backfill partition ([since, until), one owner).
 
@@ -508,6 +526,7 @@ async def reconcile(
         return 'busy'
     primary_failed = False
     bounded_pending_limit = None
+    smaller_seeds = None
     unlocked_page = None
     unlocked_wake = None
     try:
@@ -543,7 +562,7 @@ async def reconcile(
         elif not on_open and bounded_pending_enabled():
             unlocked_page = UnlockedPage()
             recordings, existing, cached, bounded_pending_limit = await _load_live_batch(
-                uid, token, parked, unlocked_page
+                uid, token, parked, unlocked_page, _pending_cap
             )
         else:
             recordings, existing, cached = await run_blocking(
@@ -1076,21 +1095,30 @@ async def reconcile(
         if reason not in BLOCKED:
             metrics.safe_metric(lambda: metrics.RECONCILES.labels('error').inc())
             raise
-        # A deterministic conflict fails identically on every retry: answer the task (no Cloud Tasks
-        # retry storm through the shared queue) and back this owner off; v3_pending stays owed.
-        metrics.safe_metric(lambda: metrics.RECONCILES.labels('blocked').inc())
-        metrics.safe_metric(lambda: metrics.BLOCKED.labels(reason).inc())
-        metrics.safe_metric(
-            lambda: logger.warning(
-                'v3 reconcile blocked reason=%s owner=%s cause=%s', reason, owner_tag(uid), redacted_cause(error)
+        smaller_seeds = None if on_open or derive else _smaller_seed_page(error, bounded_pending_limit, unlocked_page)
+        if smaller_seeds is not None:
+            # The locked-closure batch cap fails before any write, and fewer seeds may fit (Codex P2 on
+            # #26443). Retry below the seeds this pass used, as a load-time overflow does; park at one seed.
+            metrics.safe_metric(
+                lambda: logger.info('event=v3_locked_closure_batches retry pending_limit=%d', smaller_seeds)
             )
-        )
-        report['blocked_reason'] = reason
-        if not derive:
-            # A backfill conflict must not park the owner's live builder.
-            await run_blocking(db_executor, store.record_blocked, uid, token, reason, on_open=on_open)
-        blocked = reason
-        primary_failed = False
+            primary_failed = False
+        else:
+            # A deterministic conflict fails identically on every retry: answer the task (no Cloud Tasks
+            # retry storm through the shared queue) and back this owner off; v3_pending stays owed.
+            metrics.safe_metric(lambda: metrics.RECONCILES.labels('blocked').inc())
+            metrics.safe_metric(lambda: metrics.BLOCKED.labels(reason).inc())
+            metrics.safe_metric(
+                lambda: logger.warning(
+                    'v3 reconcile blocked reason=%s owner=%s cause=%s', reason, owner_tag(uid), redacted_cause(error)
+                )
+            )
+            report['blocked_reason'] = reason
+            if not derive:
+                # A backfill conflict must not park the owner's live builder.
+                await run_blocking(db_executor, store.record_blocked, uid, token, reason, on_open=on_open)
+            blocked = reason
+            primary_failed = False
     except BaseException as error:
         primary_failed = True
         if isinstance(error, Exception):
@@ -1098,6 +1126,16 @@ async def reconcile(
         raise
     finally:
         await _release_reconcile_lease(uid, key, token, primary_failed=primary_failed)
+    if smaller_seeds is not None:
+        # Nothing was written and pending is still owed; the lease is released, so the retry can take it.
+        return await reconcile(
+            uid,
+            background=background,
+            internal_end=internal_end,
+            report=report,
+            _pass=_pass,
+            _pending_cap=smaller_seeds,
+        )
     if blocked is not None:
         if not derive and not on_open:
             # Windows earlier passes (or earlier batches) committed still owe their notes.

@@ -307,18 +307,25 @@ A one-seed closure still over the derived budget (one long recording owning hund
 one-line windows) parks with `v3_bounded_pending_attempted` already set. To admit it:
 
 1. Take the owner's `owner=` tag from the `v3 reconcile blocked reason=v3_derived_budget` log line.
-2. Add the tag to `CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS` (comma-separated) on **every runtime that runs
-   `store.load()`**: `backend` and `backend-integration` (the on-open builder), `backend-sync` (builder
-   tasks) and `backend-sync-backfill` (derive). Edit all four in
-   `deploy/runtime_env/prod.overlay.yaml` in one PR, then compose `runtime_env.yaml`. `pusher` and
-   `backend-listen` only mark pending and enqueue; they never load a closure. A loader without the tag
-   keeps parking the owner and re-arming its backoff. The activation manifest
-   (`deploy/activation/conversations-v3.yaml`, `v3-locked-closure-*`) reports a mismatch across the four
-   as not ready. An env change rolls a revision.
-3. Clear the park as below.
+2. Ask Release to add the tag to the secret version: a new version of the Secret Manager secret
+   `CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS` (project `based-hardware`) whose payload is the full
+   comma-separated tag list, through the normal secret workflow. Never put a tag in Git or in an env
+   edit: this repository is public. The first version's payload is `none`, which admits nobody.
+3. Release rolls a new revision of every runtime that runs `store.load()`: `backend` and
+   `backend-integration` (the on-open builder), and `backend-sync` and `backend-sync-backfill` (builder
+   tasks). All four bind `version: latest` (`deploy/runtime_env/prod.overlay.yaml`), so a revision reads
+   the newest version at startup; `backend-projection-pump` inherits the binding from integration. `pusher`
+   and `backend-listen` only mark pending and enqueue; they never load a closure. A loader still on an old
+   revision keeps parking the owner and re-arming its backoff until it rolls. The activation manifest
+   (`deploy/activation/conversations-v3.yaml`, `v3-locked-closure-*`) checks that the four bind the same
+   secret reference.
+4. Clear the park as below.
 
 The next pass loads the locked claimants within the allowance and commits in at most
-`CONVERSATIONS_V3_LOCKED_MAX_BATCHES` batches. That is about 6.5k to 30k reads per pass.
+`CONVERSATIONS_V3_LOCKED_MAX_BATCHES` batches. That is about 6.5k to 30k reads per pass. A pass whose
+commit would need more batches writes nothing and retries below the seeds it used (32, then 8, then 1),
+as a load-time overflow does; it parks only at one seed. Only builder passes get the allowance: derive
+and re-derive keep their partition bounds, so a heavy derive is planned as its own run.
 
 **Per-owner ceiling.** While pending remains, a pending-seeded request can run up to 3 inline passes, and
 the owner is woken again each minute. Without a cap that is up to 3 x 30k reads a minute (about 130M a
@@ -329,7 +336,7 @@ about 6k reads. In total that is about 1.6M reads per listed owner per day. Admi
 first. A step expected to exceed 10M reads a day (more than about six listed owners at the cap) needs
 the Firestore cost owner (SCA-2173).
 
-An owner that still parks needs the fragment repair (SCA-2918). Remove the tag to undo.
+An owner that still parks needs the fragment repair (SCA-2918). To undo, add a secret version without the tag (or `none`) and roll the four loaders.
 `CONVERSATIONS_V3_COMMIT_LEASE_RENEWAL=off` stops the lease renewal before each later projection batch.
 See the [locked-closure allowance change note](../listen_pusher_pipeline/changes/2026-11-26-v3-locked-closure-allowance.md).
 
