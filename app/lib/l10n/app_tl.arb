@@ -12325,5 +12325,8 @@
     "playStripePlanPaused": "Naka-pause ang iyong {plan} plan.",
     "firmwareNewestSupportedForDevice": "Ang iyong device ay nasa pinakabagong firmware version na kayang suportahan nito",
     "firmwareSyncRecordingsFirstTitle": "I-sync muna ang iyong mga recording",
-    "firmwareSyncRecordingsFirstMessage": "May mga recording pa na nasa iyong device. Hayaang matapos munang i-sync ang mga ito sa iyong phone, pagkatapos ay simulan ang pag-update."
+    "firmwareSyncRecordingsFirstMessage": "May mga recording pa na nasa iyong device. Hayaang matapos munang i-sync ang mga ito sa iyong phone, pagkatapos ay simulan ang pag-update.",
+    "experimentalDesign": "Eksperimental na disenyo",
+    "experimentalDesignDescription": "Subukan ang bagong itsura ng Home at mga pag-uusap bago ito ilabas.",
+    "endConversationShort": "Tapusin"
 }

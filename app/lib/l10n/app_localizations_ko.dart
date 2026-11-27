@@ -15614,4 +15614,13 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get firmwareSyncRecordingsFirstMessage => '일부 녹음이 아직 기기에 남아 있습니다. 휴대폰으로의 동기화가 완료되면 업데이트를 시작해 주세요.';
+
+  @override
+  String get experimentalDesign => '실험적 디자인';
+
+  @override
+  String get experimentalDesignDescription => '홈과 대화의 새로운 디자인을 출시 전에 사용해 보세요.';
+
+  @override
+  String get endConversationShort => '종료';
 }

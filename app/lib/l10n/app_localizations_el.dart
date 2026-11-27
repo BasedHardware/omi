@@ -15947,4 +15947,14 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Μερικές ηχογραφήσεις βρίσκονται ακόμη στη συσκευή σας. Περιμένετε να ολοκληρωθεί ο συγχρονισμός τους στο τηλέφωνό σας και, στη συνέχεια, ξεκινήστε την ενημέρωση.';
+
+  @override
+  String get experimentalDesign => 'Πειραματικός σχεδιασμός';
+
+  @override
+  String get experimentalDesignDescription =>
+      'Δοκιμάστε τη νέα εμφάνιση της Αρχικής και των συνομιλιών πριν κυκλοφορήσει.';
+
+  @override
+  String get endConversationShort => 'Τέλος';
 }

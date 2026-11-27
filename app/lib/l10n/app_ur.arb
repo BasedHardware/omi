@@ -12325,5 +12325,8 @@
     "playStripePlanPaused": "آپ کا {plan} پلان روک دیا گیا ہے۔",
     "firmwareNewestSupportedForDevice": "آپ کا ڈیوائس پہلے ہی سپورٹ شدہ تازہ ترین فرم ویئر ورژن پر ہے",
     "firmwareSyncRecordingsFirstTitle": "پہلے اپنی ریکارڈنگز سنک کریں",
-    "firmwareSyncRecordingsFirstMessage": "کچھ ریکارڈنگز ابھی آپ کے ڈیوائس پر ہیں۔ انہیں فون پر سنک ہونے دیں، پھر اپڈیٹ شروع کریں۔"
+    "firmwareSyncRecordingsFirstMessage": "کچھ ریکارڈنگز ابھی آپ کے ڈیوائس پر ہیں۔ انہیں فون پر سنک ہونے دیں، پھر اپڈیٹ شروع کریں۔",
+    "experimentalDesign": "تجرباتی ڈیزائن",
+    "experimentalDesignDescription": "ریلیز سے پہلے ہوم اور گفتگو کی نئی شکل آزمائیں۔",
+    "endConversationShort": "ختم"
 }

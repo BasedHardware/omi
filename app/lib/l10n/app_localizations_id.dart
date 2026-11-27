@@ -15857,4 +15857,13 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Beberapa rekaman masih berada di perangkat Anda. Biarkan rekaman tersebut selesai disinkronkan ke ponsel Anda, lalu mulai pembaruan.';
+
+  @override
+  String get experimentalDesign => 'Desain eksperimental';
+
+  @override
+  String get experimentalDesignDescription => 'Coba tampilan baru Beranda dan percakapan sebelum dirilis.';
+
+  @override
+  String get endConversationShort => 'Akhiri';
 }

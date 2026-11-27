@@ -15877,4 +15877,13 @@ class AppLocalizationsBe extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Некаторыя запісы ўсё яшчэ на вашай прыладзе. Дайце ім завяршыць сінхранізацыю на тэлефон, а потым пачніце абнаўленне.';
+
+  @override
+  String get experimentalDesign => 'Эксперыментальны дызайн';
+
+  @override
+  String get experimentalDesignDescription => 'Паспрабуйце новы выгляд галоўнай старонкі і размоў да выхаду.';
+
+  @override
+  String get endConversationShort => 'Завяршыць';
 }

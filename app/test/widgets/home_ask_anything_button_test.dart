@@ -5,7 +5,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
+import 'package:omi/services/experiments/experimental_design.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/widgets/footer_glass.dart';
 import 'package:omi/widgets/home_bottom_bar.dart';
@@ -81,9 +81,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  group('glass footer (iPhone)', () {
-    setUp(() => FooterGlass.debugOverride = true);
-    tearDown(() => FooterGlass.debugOverride = null);
+  group('experimental design', () {
+    setUp(() => ExperimentalDesign.debugOverride = true);
+    tearDown(() => ExperimentalDesign.debugOverride = null);
 
     for (final brightness in Brightness.values) {
       testWidgets('glass body keeps the label, the key and the tap ($brightness)', (tester) async {
@@ -93,7 +93,7 @@ void main() {
         );
         await tester.pump(const Duration(milliseconds: 300));
 
-        expect(find.byType(GlassButton), findsOneWidget, reason: 'a glass button, so it answers a press');
+        expect(find.byType(FooterGlassSurface), findsOneWidget, reason: 'a frosted surface that answers a press');
         expect(find.text('Ask anything'), findsOneWidget);
         expect(find.byType(FaIcon), findsNothing);
         expect(tester.getSize(find.byKey(const ValueKey('home_ask_omi_bar'))), const Size(300, kHomeChatBarHeight));
@@ -112,7 +112,7 @@ void main() {
     testWidgets('the solid backdrop is not painted, so the list shows behind the row', (tester) async {
       await tester.pumpWidget(_buildHarness(child: const Stack(children: [HomeChatBarBackdrop()])));
       expect(find.byType(DecoratedBox), findsNothing);
-      FooterGlass.debugOverride = false;
+      ExperimentalDesign.debugOverride = false;
       await tester
           .pumpWidget(_buildHarness(child: const Stack(key: ValueKey('off'), children: [HomeChatBarBackdrop()])));
       expect(
@@ -137,13 +137,11 @@ void main() {
       expect(rect.bottom, tester.getSize(find.byType(MaterialApp)).height - 8);
     });
 
-    testWidgets('on for iOS only, so Android keeps the flat footer', (tester) async {
-      FooterGlass.debugOverride = null;
-      for (final platform in TargetPlatform.values) {
-        debugDefaultTargetPlatformOverride = platform;
-        expect(FooterGlass.enabled, platform == TargetPlatform.iOS, reason: '$platform');
-      }
-      debugDefaultTargetPlatformOverride = null;
+    testWidgets('off unless the setting or the flag turns it on', (tester) async {
+      ExperimentalDesign.debugOverride = null;
+      expect(ExperimentalDesign.enabled, isFalse);
+      await tester.pumpWidget(_buildHarness(child: HomeAskAnythingButton(onTap: () {})));
+      expect(find.byType(FooterGlassSurface), findsNothing);
     });
   });
 }

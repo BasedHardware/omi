@@ -1,3 +1,4 @@
+import 'package:omi/services/experiments/experimental_design.dart';
 import 'package:omi/pages/phone_calls/phone_calls_feature.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
@@ -457,7 +458,7 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
             onLongPress: canShowOptions ? () => _showRecordOptions(context) : null,
             // "Record with this phone": a neutral circle with a white dot, a stop square while the
             // phone records. The ⌄ badge opens the other ways to record.
-            child: FooterGlass.enabled
+            child: ExperimentalDesign.of(context)
                 ? FooterGlassSurface(height: 62, circle: true, onTap: () => _startRecording(context), child: glyph)
                 : Container(
                     width: 62,

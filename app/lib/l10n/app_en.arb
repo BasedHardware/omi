@@ -19360,5 +19360,17 @@
     "firmwareSyncRecordingsFirstMessage": "Some recordings are still on your device. Let them finish syncing to your phone, then start the update.",
     "@firmwareSyncRecordingsFirstMessage": {
         "description": "Dialog body explaining that recordings must finish syncing from the pendant to the phone before the firmware update can start."
+    },
+    "experimentalDesign": "Experimental Design",
+    "@experimentalDesign": {
+        "description": "Developer Settings toggle title: turn on the experimental look of Home and conversations"
+    },
+    "experimentalDesignDescription": "Try the new look for Home and conversations before it is released.",
+    "@experimentalDesignDescription": {
+        "description": "Subtitle for the Experimental Design toggle in Developer Settings"
+    },
+    "endConversationShort": "End",
+    "@endConversationShort": {
+        "description": "Short label of the button that ends the conversation in progress, in a bar beside Pause and Ask Omi; keep it to one short word"
     }
 }

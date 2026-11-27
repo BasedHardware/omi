@@ -15888,4 +15888,13 @@ class AppLocalizationsPl extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Niektóre nagrania wciąż znajdują się na urządzeniu. Poczekaj, aż zostaną zsynchronizowane z telefonem, a następnie rozpocznij aktualizację.';
+
+  @override
+  String get experimentalDesign => 'Eksperymentalny wygląd';
+
+  @override
+  String get experimentalDesignDescription => 'Wypróbuj nowy wygląd ekranu głównego i rozmów przed wydaniem.';
+
+  @override
+  String get endConversationShort => 'Zakończ';
 }

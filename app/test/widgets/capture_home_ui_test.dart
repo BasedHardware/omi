@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/services/experiments/experimental_design.dart';
 import 'package:omi/services/live_preview/live_preview_controller.dart';
 import 'package:omi/pages/phone_calls/phone_calls_feature.dart';
 import 'package:omi/backend/http/api_result.dart';
@@ -32,7 +33,6 @@ import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/widgets/footer_glass.dart';
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart' show GlassButton;
 
 enum _Live { idle, idleDeviceConnected, pendant, pendantPaused, pendantBatch, phone, phoneAfterPendant }
 
@@ -741,11 +741,11 @@ void main() {
       expect(find.bySemanticsLabel(en.moreWaysToRecord), findsNothing);
     });
 
-    testWidgets('glass footer: same size, labels and long-press options on a glass circle', (tester) async {
-      FooterGlass.debugOverride = true;
-      addTearDown(() => FooterGlass.debugOverride = null);
+    testWidgets('experimental design: same size, labels and long-press options on a frosted circle', (tester) async {
+      ExperimentalDesign.debugOverride = true;
+      addTearDown(() => ExperimentalDesign.debugOverride = null);
       await pump(tester, const HomeRecordButton(), capture: _Capture(_Live.idle));
-      expect(find.byType(GlassButton), findsOneWidget);
+      expect(find.byType(FooterGlassSurface), findsOneWidget);
       expect(tester.getSize(find.byType(HomeRecordButton)), const Size(62, 62));
       expect(find.bySemanticsLabel(en.startRecording), findsOneWidget);
       await pump(tester, const HomeRecordButton(), capture: _Capture(_Live.phone));

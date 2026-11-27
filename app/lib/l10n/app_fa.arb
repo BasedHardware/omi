@@ -12325,5 +12325,8 @@
     "playStripePlanPaused": "طرح {plan} شما متوقف شده است.",
     "firmwareNewestSupportedForDevice": "دستگاه شما در حال حاضر روی جدیدترین نسخه فریم‌ور پشتیبانی‌شده قرار دارد",
     "firmwareSyncRecordingsFirstTitle": "ابتدا ضبط‌های خود را همگام‌سازی کنید",
-    "firmwareSyncRecordingsFirstMessage": "برخی ضبط‌ها هنوز روی دستگاه شما هستند. اجازه دهید همگام‌سازی آن‌ها به گوشی شما کامل شود، سپس بروزرسانی را شروع کنید."
+    "firmwareSyncRecordingsFirstMessage": "برخی ضبط‌ها هنوز روی دستگاه شما هستند. اجازه دهید همگام‌سازی آن‌ها به گوشی شما کامل شود، سپس بروزرسانی را شروع کنید.",
+    "experimentalDesign": "طراحی آزمایشی",
+    "experimentalDesignDescription": "ظاهر جدید صفحه اصلی و گفتگوها را پیش از انتشار امتحان کنید.",
+    "endConversationShort": "پایان"
 }

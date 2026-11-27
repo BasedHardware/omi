@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:omi/services/experiments/experimental_design.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
@@ -26,6 +27,7 @@ import 'package:omi/utils/audio/conversation_playback_controller.dart';
 import 'package:omi/utils/audio/partial_audio_coverage.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/pages/conversations/widgets/live_conversation_pause_button.dart';
 import 'package:omi/widgets/footer_glass.dart';
 import 'package:omi/widgets/home_bottom_bar.dart' show kAskOmiGlyph;
 
@@ -65,10 +67,6 @@ List<double> speechLevels(List<TranscriptSegment> segments, int count, {double? 
 }
 
 class ConversationBottomBar extends StatefulWidget {
-  /// Whether the page should fade its own colour in behind the bar. Glass needs the content
-  /// behind it, so the glass footer (iPhone) goes without.
-  static bool get needsBackdrop => !FooterGlass.enabled;
-
   final ConversationBottomBarMode mode;
   final ConversationTab selectedTab;
   final Function(ConversationTab) onTabSelected;
@@ -950,6 +948,8 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
         child: Row(children: [
+          // Experimental design: Pause opposite End, Ask Omi between them.
+          if (ExperimentalDesign.of(context)) LiveConversationPauseButton(conversation: widget.conversation!),
           if (showPlayer) ...[
             Expanded(child: KeyedSubtree(key: const ValueKey('detail_audio_player'), child: _buildPlayer())),
             const SizedBox(width: 10),
@@ -998,11 +998,12 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       child: Material(
         key: const ValueKey('detail_ask_omi'),
         color: Colors.transparent,
-        child: FooterGlass.enabled
+        child: ExperimentalDesign.of(context)
             ? InkWell(
                 borderRadius: OmiRadius.pillAll,
                 onTap: _askOmi,
-                child: FooterGlassSurface(height: 56, onTap: _askOmi, child: Text(label, style: OmiType.headline)),
+                child: FooterGlassSurface(
+                    height: 56, raised: true, onTap: _askOmi, child: Text(label, style: OmiType.headline)),
               )
             : Ink(
                 height: 56,
@@ -1029,16 +1030,17 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
         excludeSemantics: true,
         child: Material(
           key: const ValueKey('detail_ask_omi_round'),
-          color: FooterGlass.enabled ? Colors.transparent : OmiColors.accent,
+          color: ExperimentalDesign.of(context) ? Colors.transparent : OmiColors.accent,
           shape: const CircleBorder(),
-          clipBehavior: FooterGlass.enabled ? Clip.none : Clip.antiAlias,
+          clipBehavior: ExperimentalDesign.of(context) ? Clip.none : Clip.antiAlias,
           child: InkWell(
             customBorder: const CircleBorder(),
             onTap: _askOmi,
-            child: FooterGlass.enabled
+            child: ExperimentalDesign.of(context)
                 ? FooterGlassSurface(
                     height: 56,
                     circle: true,
+                    raised: true,
                     onTap: _askOmi,
                     child: FaIcon(kAskOmiGlyph, size: 20, color: OmiColors.textPrimary),
                   )
@@ -1065,8 +1067,8 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
         Expanded(child: _buildWaveform()),
       ],
     );
-    final Widget player = FooterGlass.enabled
-        ? FooterGlassSurface(height: 56, padding: playerPadding, child: controls)
+    final Widget player = ExperimentalDesign.of(context)
+        ? FooterGlassSurface(height: 56, raised: true, padding: playerPadding, child: controls)
         : Container(height: 56, padding: playerPadding, decoration: _barDecoration, child: controls);
     if (controller == null && _failure == null) return player;
     return Column(

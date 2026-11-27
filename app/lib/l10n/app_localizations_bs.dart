@@ -15870,4 +15870,13 @@ class AppLocalizationsBs extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Neki snimci su još uvijek na vašem uređaju. Sačekajte da se sinhronizuju s telefonom, a zatim pokrenite ažuriranje.';
+
+  @override
+  String get experimentalDesign => 'Eksperimentalni dizajn';
+
+  @override
+  String get experimentalDesignDescription => 'Isprobajte novi izgled početnog ekrana i razgovora prije objave.';
+
+  @override
+  String get endConversationShort => 'Završi';
 }

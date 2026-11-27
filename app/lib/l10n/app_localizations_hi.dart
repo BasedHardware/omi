@@ -15824,4 +15824,13 @@ class AppLocalizationsHi extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'कुछ रिकॉर्डिंग अभी भी आपके डिवाइस पर हैं। उन्हें आपके फ़ोन पर सिंक होने दें, फिर अपडेट शुरू करें।';
+
+  @override
+  String get experimentalDesign => 'प्रायोगिक डिज़ाइन';
+
+  @override
+  String get experimentalDesignDescription => 'रिलीज़ से पहले होम और बातचीत का नया रूप आज़माएँ।';
+
+  @override
+  String get endConversationShort => 'समाप्त';
 }

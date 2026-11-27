@@ -15950,4 +15950,14 @@ class AppLocalizationsTa extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'சில பதிவுகள் இன்னும் உங்கள் சாதனத்தில் உள்ளன. அவை உங்கள் தொலைபேசிக்கு ஒத்திசைவை முடிக்க அனுமதித்து, பிறகு புதுப்பிப்பைத் தொடங்கவும்.';
+
+  @override
+  String get experimentalDesign => 'சோதனை வடிவமைப்பு';
+
+  @override
+  String get experimentalDesignDescription =>
+      'வெளியீட்டுக்கு முன் முகப்பு மற்றும் உரையாடல்களின் புதிய தோற்றத்தை முயற்சிக்கவும்.';
+
+  @override
+  String get endConversationShort => 'முடி';
 }

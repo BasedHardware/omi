@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/services/experiments/experimental_design.dart';
 import 'package:omi/models/local_recording.dart';
 import 'package:omi/pages/on_device/on_device_queue_banner.dart';
 import 'package:omi/pages/conversations/recording_detail/recording_detail_sheet.dart';
@@ -43,10 +44,12 @@ class RecordingListItem extends StatelessWidget {
         final timeStr = OmiDateFormat.of(context).time(recording.startedAt);
 
         return Padding(
-          padding: const EdgeInsets.only(top: 12, left: 16, right: 16),
+          padding: EdgeInsets.only(top: ExperimentalDesign.of(context) ? 8 : 12, left: 16, right: 16),
           child: Container(
             width: double.maxFinite,
-            decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.xlAll),
+            decoration: BoxDecoration(
+                color: ExperimentalDesign.of(context) ? Colors.transparent : OmiColors.surface1,
+                borderRadius: OmiRadius.xlAll),
             child: ClipRRect(
               borderRadius: OmiRadius.xlAll,
               child: Dismissible(
@@ -72,7 +75,9 @@ class RecordingListItem extends StatelessWidget {
                   behavior: HitTestBehavior.opaque,
                   onTap: () => showRecordingDetailSheet(context, recording),
                   child: Padding(
-                    padding: const EdgeInsetsDirectional.symmetric(horizontal: 16, vertical: 18),
+                    padding: ExperimentalDesign.of(context)
+                        ? const EdgeInsetsDirectional.symmetric(horizontal: 4, vertical: 6)
+                        : const EdgeInsetsDirectional.symmetric(horizontal: 16, vertical: 18),
                     child: Row(
                       children: [
                         Container(

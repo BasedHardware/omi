@@ -15837,4 +15837,13 @@ class AppLocalizationsSk extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Niektoré nahrávky sa stále nachádzajú na zariadení. Počkajte, kým sa dokončí ich synchronizácia s telefónom, a potom spustite aktualizáciu.';
+
+  @override
+  String get experimentalDesign => 'Experimentálny dizajn';
+
+  @override
+  String get experimentalDesignDescription => 'Vyskúšajte nový vzhľad domovskej obrazovky a konverzácií pred vydaním.';
+
+  @override
+  String get endConversationShort => 'Ukončiť';
 }

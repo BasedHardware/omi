@@ -12325,5 +12325,8 @@
     "playStripePlanPaused": "Ваш {plan} план је паузиран.",
     "firmwareNewestSupportedForDevice": "Ваш уређај већ користи најновију подржану верзију фирмвера",
     "firmwareSyncRecordingsFirstTitle": "Прво синхронизујте снимке",
-    "firmwareSyncRecordingsFirstMessage": "Неки снимци се још увек налазе на вашем уређају. Сачекајте да заврше синхронизовање са телефоном, а затим покрените ажурирање."
+    "firmwareSyncRecordingsFirstMessage": "Неки снимци се још увек налазе на вашем уређају. Сачекајте да заврше синхронизовање са телефоном, а затим покрените ажурирање.",
+    "experimentalDesign": "Експериментални дизајн",
+    "experimentalDesignDescription": "Испробајте нови изглед почетног екрана и разговора пре објављивања.",
+    "endConversationShort": "Заврши"
 }

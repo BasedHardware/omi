@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
+import 'package:omi/services/experiments/experimental_design.dart';
 import 'package:omi/ui/omi_tokens.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/footer_glass.dart';
@@ -59,7 +60,7 @@ class HomeChatBarBackdrop extends StatelessWidget {
     // Glass needs the list behind it; a solid block would leave it nothing to refract. Still a
     // Positioned: an unpositioned child would size Home's footer Stack to itself (nothing), and the
     // row of controls is laid out against that Stack.
-    if (FooterGlass.enabled) return const Positioned.fill(child: SizedBox.shrink());
+    if (ExperimentalDesign.of(context)) return const Positioned.fill(child: SizedBox.shrink());
     final solid = homeChatBarOffset(context) + kHomeChatBarHeight;
     final height = solid + kHomeBottomFadeHeight;
     return Positioned(
@@ -109,7 +110,7 @@ class HomeAskAnythingButton extends StatelessWidget {
         key: const ValueKey('home_ask_omi_bar'),
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
-        child: FooterGlass.enabled
+        child: ExperimentalDesign.of(context)
             ? FooterGlassSurface(height: kHomeChatBarHeight, onTap: onTap, child: text)
             : Container(
                 height: kHomeChatBarHeight,

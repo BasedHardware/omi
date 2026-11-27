@@ -4768,5 +4768,8 @@
     "playStripePlanPaused": "{plan} 플랜이 일시 중지되었습니다.",
     "firmwareNewestSupportedForDevice": "기기가 이미 지원되는 최신 펌웨어 버전을 사용하고 있습니다",
     "firmwareSyncRecordingsFirstTitle": "먼저 녹음을 동기화하세요",
-    "firmwareSyncRecordingsFirstMessage": "일부 녹음이 아직 기기에 남아 있습니다. 휴대폰으로의 동기화가 완료되면 업데이트를 시작해 주세요."
+    "firmwareSyncRecordingsFirstMessage": "일부 녹음이 아직 기기에 남아 있습니다. 휴대폰으로의 동기화가 완료되면 업데이트를 시작해 주세요.",
+    "experimentalDesign": "실험적 디자인",
+    "experimentalDesignDescription": "홈과 대화의 새로운 디자인을 출시 전에 사용해 보세요.",
+    "endConversationShort": "종료"
 }

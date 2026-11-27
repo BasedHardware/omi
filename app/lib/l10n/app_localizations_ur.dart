@@ -15854,4 +15854,13 @@ class AppLocalizationsUr extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'کچھ ریکارڈنگز ابھی آپ کے ڈیوائس پر ہیں۔ انہیں فون پر سنک ہونے دیں، پھر اپڈیٹ شروع کریں۔';
+
+  @override
+  String get experimentalDesign => 'تجرباتی ڈیزائن';
+
+  @override
+  String get experimentalDesignDescription => 'ریلیز سے پہلے ہوم اور گفتگو کی نئی شکل آزمائیں۔';
+
+  @override
+  String get endConversationShort => 'ختم';
 }

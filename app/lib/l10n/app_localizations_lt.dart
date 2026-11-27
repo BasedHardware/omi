@@ -15867,4 +15867,14 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Kai kurie įrašai dar yra jūsų įrenginyje. Leiskite jiems užbaigti sinchronizavimą į telefoną, tada pradėkite atnaujinimą.';
+
+  @override
+  String get experimentalDesign => 'Eksperimentinis dizainas';
+
+  @override
+  String get experimentalDesignDescription =>
+      'Išbandykite naują pagrindinio ekrano ir pokalbių išvaizdą prieš ją išleidžiant.';
+
+  @override
+  String get endConversationShort => 'Baigti';
 }

@@ -143,7 +143,6 @@ dependencies:
   in_app_review: ^2.0.12
   cryptography: ^2.9.0
   qr_flutter: ^4.1.0
-  liquid_glass_widgets: 1.21.0
 
 dependency_overrides:
   js: ^0.7.1

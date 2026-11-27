@@ -15837,4 +15837,13 @@ class AppLocalizationsBn extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'কিছু রেকর্ডিং এখনও আপনার ডিভাইসে রয়েছে। সেগুলিকে আপনার ফোনে সিঙ্ক শেষ হতে দিন, তারপর আপডেট শুরু করুন।';
+
+  @override
+  String get experimentalDesign => 'পরীক্ষামূলক ডিজাইন';
+
+  @override
+  String get experimentalDesignDescription => 'প্রকাশের আগেই হোম ও কথোপকথনের নতুন চেহারা ব্যবহার করে দেখুন।';
+
+  @override
+  String get endConversationShort => 'শেষ';
 }

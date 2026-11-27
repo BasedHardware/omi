@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 
+import 'package:omi/services/experiments/experimental_design.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/pages/conversations/capture_state_labels.dart';
 import 'package:omi/pages/conversations/widgets/conversation_state_tile.dart';
@@ -67,13 +68,17 @@ class V3LivePlaceholderRow extends StatelessWidget {
               context, LiveEpisodePage(topConversationId: context.read<CaptureProvider>().topConversationId)),
           child: Container(
             width: double.maxFinite,
-            decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.xlAll),
-            padding: const EdgeInsetsDirectional.symmetric(horizontal: 14, vertical: 14),
+            decoration: BoxDecoration(
+                color: ExperimentalDesign.of(context) ? Colors.transparent : OmiColors.surface1,
+                borderRadius: OmiRadius.xlAll),
+            padding: ExperimentalDesign.of(context)
+                ? const EdgeInsetsDirectional.symmetric(horizontal: 4, vertical: 6)
+                : const EdgeInsetsDirectional.symmetric(horizontal: 14, vertical: 14),
             child: Row(
               children: [
                 Container(
-                  width: ConversationStateTile.extent,
-                  height: ConversationStateTile.extent,
+                  width: ConversationStateTile.extentOf(context),
+                  height: ConversationStateTile.extentOf(context),
                   decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
                   alignment: Alignment.center,
                   child: const OmiBreathingDot(),
@@ -84,7 +89,7 @@ class V3LivePlaceholderRow extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(title,
-                          style: Theme.of(context).textTheme.titleMedium, maxLines: 1, overflow: TextOverflow.ellipsis),
+                          style: experimentalRowTitleStyle(context), maxLines: 1, overflow: TextOverflow.ellipsis),
                       const SizedBox(height: 3),
                       ListenableBuilder(
                         // Listen while an admitted socket is resolving its verdict: the controller's
@@ -96,7 +101,8 @@ class V3LivePlaceholderRow extends StatelessWidget {
                           return Text(
                             latest == null || latest.isEmpty ? l10n.live : latest,
                             key: const Key('v3_live_placeholder_preview'),
-                            style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                            style: (ExperimentalDesign.of(context) ? OmiType.subhead : OmiType.footnote)
+                                .copyWith(color: OmiColors.textSecondary),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           );

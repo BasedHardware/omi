@@ -15847,4 +15847,13 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Osaa nauhoituksista on vielä laitteella. Anna niiden synkronoitua puhelimeen loppuun ja käynnistä sitten päivitys.';
+
+  @override
+  String get experimentalDesign => 'Kokeellinen ulkoasu';
+
+  @override
+  String get experimentalDesignDescription => 'Kokeile Kodin ja keskustelujen uutta ulkoasua ennen julkaisua.';
+
+  @override
+  String get endConversationShort => 'Lopeta';
 }

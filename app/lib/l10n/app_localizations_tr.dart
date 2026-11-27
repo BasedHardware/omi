@@ -15852,4 +15852,13 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Bazı kayıtlar hâlâ cihazınızda. Telefonunuza senkronize edilmelerini bekleyin, ardından güncellemeyi başlatın.';
+
+  @override
+  String get experimentalDesign => 'Deneysel tasarım';
+
+  @override
+  String get experimentalDesignDescription => 'Ana sayfa ve konuşmaların yeni görünümünü yayınlanmadan önce deneyin.';
+
+  @override
+  String get endConversationShort => 'Bitir';
 }

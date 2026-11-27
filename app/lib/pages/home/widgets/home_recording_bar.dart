@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/services/experiments/experimental_design.dart';
 import 'package:omi/pages/conversations/widgets/live_capture_card.dart';
 import 'package:omi/pages/episodes/live_episode_page.dart';
 import 'package:omi/pages/episodes/finish_capture.dart';
@@ -216,7 +217,7 @@ class _HomeRecordingBarState extends State<HomeRecordingBar> {
       ],
     );
     const padding = EdgeInsetsDirectional.only(start: OmiSpacing.lg, end: OmiSpacing.sm);
-    if (FooterGlass.enabled) {
+    if (ExperimentalDesign.of(context)) {
       return FooterGlassSurface(
           key: const ValueKey('home_recording_bar'), height: kHomeChatBarHeight, padding: padding, child: row);
     }

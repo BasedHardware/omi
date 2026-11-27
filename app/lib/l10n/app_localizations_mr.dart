@@ -15850,4 +15850,13 @@ class AppLocalizationsMr extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'काही रेकॉर्डिंग अजून तुमच्या डिव्हाइसवर आहेत. त्या तुमच्या फोनवर पूर्णपणे सिंक होऊ द्या, नंतर अपडेट सुरू करा.';
+
+  @override
+  String get experimentalDesign => 'प्रायोगिक डिझाइन';
+
+  @override
+  String get experimentalDesignDescription => 'प्रकाशनापूर्वी होम आणि संभाषणांचे नवीन रूप वापरून पहा.';
+
+  @override
+  String get endConversationShort => 'समाप्त';
 }

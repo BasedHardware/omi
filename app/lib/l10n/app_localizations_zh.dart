@@ -15584,4 +15584,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get firmwareSyncRecordingsFirstMessage => '部分录音仍存储在您的设备上。请等待它们同步到手机完成后，再开始更新。';
+
+  @override
+  String get experimentalDesign => '实验性设计';
+
+  @override
+  String get experimentalDesignDescription => '在正式发布前试用主页和对话的新外观。';
+
+  @override
+  String get endConversationShort => '结束';
 }

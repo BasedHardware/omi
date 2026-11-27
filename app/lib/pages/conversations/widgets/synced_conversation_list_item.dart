@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 
+import 'package:omi/services/experiments/experimental_design.dart';
 import 'package:omi/utils/conversations/conversation_title.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -73,7 +74,9 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
         padding: const EdgeInsets.only(top: 12, left: 16, right: 16),
         child: Container(
           width: double.maxFinite,
-          decoration: BoxDecoration(color: OmiColors.conversationCard, borderRadius: BorderRadius.circular(24.0)),
+          decoration: BoxDecoration(
+              color: ExperimentalDesign.of(context) ? Colors.transparent : OmiColors.conversationCard,
+              borderRadius: BorderRadius.circular(24.0)),
           child: Padding(
             padding: const EdgeInsetsDirectional.all(16),
             child: Row(

@@ -4768,5 +4768,8 @@
     "playStripePlanPaused": "你的 {plan} 方案已暂停。",
     "firmwareNewestSupportedForDevice": "您的设备已处于所支持的最新固件版本",
     "firmwareSyncRecordingsFirstTitle": "请先同步录音",
-    "firmwareSyncRecordingsFirstMessage": "部分录音仍存储在您的设备上。请等待它们同步到手机完成后，再开始更新。"
+    "firmwareSyncRecordingsFirstMessage": "部分录音仍存储在您的设备上。请等待它们同步到手机完成后，再开始更新。",
+    "experimentalDesign": "实验性设计",
+    "experimentalDesignDescription": "在正式发布前试用主页和对话的新外观。",
+    "endConversationShort": "结束"
 }

@@ -15843,4 +15843,14 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Một số bản ghi âm vẫn còn trên thiết bị của bạn. Hãy đợi chúng đồng bộ xong lên điện thoại, sau đó bắt đầu cập nhật.';
+
+  @override
+  String get experimentalDesign => 'Thiết kế thử nghiệm';
+
+  @override
+  String get experimentalDesignDescription =>
+      'Dùng thử giao diện mới của Trang chủ và các cuộc trò chuyện trước khi phát hành.';
+
+  @override
+  String get endConversationShort => 'Kết thúc';
 }

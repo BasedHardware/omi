@@ -15894,4 +15894,13 @@ class AppLocalizationsKn extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'ಕೆಲವು ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಇನ್ನೂ ನಿಮ್ಮ ಸಾಧನದಲ್ಲಿವೆ. ಅವುಗಳು ನಿಮ್ಮ ಫೋನ್‌ಗೆ ಸಿಂಕ್ ಆಗಲು ಬಿಡಿ, ನಂತರ ನವೀಕರಣ ಪ್ರಾರಂಭಿಸಿ.';
+
+  @override
+  String get experimentalDesign => 'ಪ್ರಾಯೋಗಿಕ ವಿನ್ಯಾಸ';
+
+  @override
+  String get experimentalDesignDescription => 'ಬಿಡುಗಡೆಗೆ ಮೊದಲು ಹೋಮ್ ಮತ್ತು ಸಂಭಾಷಣೆಗಳ ಹೊಸ ನೋಟವನ್ನು ಪ್ರಯತ್ನಿಸಿ.';
+
+  @override
+  String get endConversationShort => 'ಮುಗಿಸಿ';
 }

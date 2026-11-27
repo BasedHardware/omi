@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import 'package:provider/provider.dart';
 
+import 'package:omi/services/experiments/experimental_design.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/home/home_navigation.dart';
 import 'package:omi/pages/episodes/episode_presentation.dart';
@@ -127,9 +128,12 @@ class _LiveConversationEndButtonState extends State<LiveConversationEndButton> {
     }
     if (!mine) return const SizedBox.shrink();
     final label = context.l10n.endConversation;
+    // Experimental design: the bar also holds Pause, so the button reads End; a screen reader still
+    // hears the full name.
+    final shown = ExperimentalDesign.of(context) ? context.l10n.endConversationShort : label;
     final text = FittedBox(
       fit: BoxFit.scaleDown,
-      child: Text(label,
+      child: Text(shown,
           maxLines: 1, overflow: TextOverflow.ellipsis, style: OmiType.headline.copyWith(color: OmiColors.danger)),
     );
     Future<void> end() async {
@@ -185,7 +189,7 @@ class _LiveConversationEndButtonState extends State<LiveConversationEndButton> {
           color: Colors.transparent,
           child: Ink(
             height: 56,
-            decoration: FooterGlass.enabled
+            decoration: ExperimentalDesign.of(context)
                 ? null
                 : BoxDecoration(
                     color: OmiColors.surface1,
@@ -199,9 +203,16 @@ class _LiveConversationEndButtonState extends State<LiveConversationEndButton> {
               // line, then ellipsizes, rather than overflowing a 320pt screen.
               child: ConstrainedBox(
                 constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.45),
-                child: FooterGlass.enabled
-                    ? FooterGlassSurface(
-                        height: 56, padding: const EdgeInsets.symmetric(horizontal: 16), onTap: end, child: text)
+                child: ExperimentalDesign.of(context)
+                    // As wide as its short label needs, so Ask Omi keeps the middle of the bar.
+                    ? IntrinsicWidth(
+                        child: FooterGlassSurface(
+                            height: 56,
+                            raised: true,
+                            padding: const EdgeInsets.symmetric(horizontal: 22),
+                            onTap: end,
+                            child: text),
+                      )
                     : Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: Center(child: text)),
               ),
             ),

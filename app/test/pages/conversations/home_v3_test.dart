@@ -5,7 +5,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart' show GlassButton;
+import 'package:omi/services/experiments/experimental_design.dart';
 import 'package:omi/widgets/footer_glass.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -261,6 +261,10 @@ class _LiveCapture extends CaptureProvider {
 
   /// Taps on End: the pendant double-tap's action, without draining a real capture.
   int endCalls = 0;
+  int pauseCalls = 0;
+
+  @override
+  Future<void> pauseCapture() async => pauseCalls++;
   String? endedLiveId;
 
   int finishCalls = 0;
@@ -1626,10 +1630,10 @@ void main() {
     });
   });
 
-  testWidgets('glass footer (iPhone): End is a glass button that fits a 320pt bar and ends the capture',
+  testWidgets('experimental design: End is a frosted button that fits a 320pt bar and ends the capture',
       (tester) async {
-    FooterGlass.debugOverride = true;
-    addTearDown(() => FooterGlass.debugOverride = null);
+    ExperimentalDesign.debugOverride = true;
+    addTearDown(() => ExperimentalDesign.debugOverride = null);
     await withClock(Clock.fixed(_now), () async {
       final home = await _pumpHome(tester, v3: true, size: const Size(320, 640));
       home.publishManualEnds();
@@ -1639,8 +1643,20 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
       expect(tester.takeException(), isNull, reason: 'no overflow in the bar');
       final end = find.byKey(const Key('live_conversation_end'));
-      expect(find.descendant(of: end, matching: find.byType(GlassButton)), findsOneWidget);
-      expect(find.descendant(of: end, matching: find.text('End Conversation')), findsOneWidget);
+      expect(find.descendant(of: end, matching: find.byType(FooterGlassSurface)), findsOneWidget);
+      expect(find.descendant(of: end, matching: find.text('End')), findsOneWidget, reason: 'short label');
+      expect(find.bySemanticsLabel('End Conversation'), findsOneWidget, reason: 'full name for a screen reader');
+      // Pause at the start, Ask Omi between, End at the end.
+      final pause = find.byKey(const Key('live_conversation_pause'));
+      final ask = find.byKey(const ValueKey('detail_ask_omi'));
+      expect(tester.getSize(pause), const Size(56, 56));
+      expect(find.bySemanticsLabel('Pause'), findsOneWidget);
+      expect(tester.getRect(pause).right, lessThan(tester.getRect(ask).left));
+      expect(tester.getRect(ask).right, lessThan(tester.getRect(end).left));
+      expect(tester.getSize(ask).width, greaterThan(100), reason: 'Ask Omi keeps the middle');
+      await tester.tap(pause);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(home.capture.pauseCalls, 1);
       expect(tester.getSize(end).width, lessThanOrEqualTo(320 * 0.45 + 2));
       expect(tester.getSize(end).height, 56);
       // Filtered Home cannot show Processing, so a successful End stays on detail.

@@ -15895,4 +15895,13 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Некоторые записи всё ещё находятся на устройстве. Дождитесь завершения их синхронизации с телефоном, а затем начните обновление.';
+
+  @override
+  String get experimentalDesign => 'Экспериментальный дизайн';
+
+  @override
+  String get experimentalDesignDescription => 'Попробуйте новый вид главного экрана и разговоров до выпуска.';
+
+  @override
+  String get endConversationShort => 'Завершить';
 }

@@ -15825,4 +15825,13 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Some recordings are still on your device. Let them finish syncing to your phone, then start the update.';
+
+  @override
+  String get experimentalDesign => 'Experimental Design';
+
+  @override
+  String get experimentalDesignDescription => 'Try the new look for Home and conversations before it is released.';
+
+  @override
+  String get endConversationShort => 'End';
 }

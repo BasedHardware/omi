@@ -15767,4 +15767,13 @@ class AppLocalizationsTh extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'ไฟล์บันทึกเสียงบางส่วนยังอยู่ในอุปกรณ์ของคุณ รอให้ซิงค์ไปยังโทรศัพท์เสร็จก่อน แล้วจึงเริ่มการอัปเดต';
+
+  @override
+  String get experimentalDesign => 'ดีไซน์ทดลอง';
+
+  @override
+  String get experimentalDesignDescription => 'ลองใช้หน้าตาใหม่ของหน้าหลักและบทสนทนาก่อนเปิดตัว';
+
+  @override
+  String get endConversationShort => 'จบ';
 }

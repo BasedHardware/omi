@@ -15969,4 +15969,13 @@ class AppLocalizationsTl extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'May mga recording pa na nasa iyong device. Hayaang matapos munang i-sync ang mga ito sa iyong phone, pagkatapos ay simulan ang pag-update.';
+
+  @override
+  String get experimentalDesign => 'Eksperimental na disenyo';
+
+  @override
+  String get experimentalDesignDescription => 'Subukan ang bagong itsura ng Home at mga pag-uusap bago ito ilabas.';
+
+  @override
+  String get endConversationShort => 'Tapusin';
 }

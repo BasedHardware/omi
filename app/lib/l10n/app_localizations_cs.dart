@@ -15841,4 +15841,13 @@ class AppLocalizationsCs extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Některé nahrávky jsou stále ve vašem zařízení. Počkejte, až se synchronizují do telefonu, a potom spusťte aktualizaci.';
+
+  @override
+  String get experimentalDesign => 'Experimentální design';
+
+  @override
+  String get experimentalDesignDescription => 'Vyzkoušejte nový vzhled domovské obrazovky a konverzací před vydáním.';
+
+  @override
+  String get endConversationShort => 'Ukončit';
 }

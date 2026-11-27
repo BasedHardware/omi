@@ -15922,4 +15922,13 @@ class AppLocalizationsCa extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Alguns enregistraments encara són al vostre dispositiu. Deixeu que acabin de sincronitzar-se al telèfon i, després, inicieu l\'actualització.';
+
+  @override
+  String get experimentalDesign => 'Disseny experimental';
+
+  @override
+  String get experimentalDesignDescription => 'Prova el nou aspecte d\'Inici i de les converses abans que es publiqui.';
+
+  @override
+  String get endConversationShort => 'Finalitza';
 }

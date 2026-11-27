@@ -4803,5 +4803,8 @@
     "playStripePlanPaused": "Paket {plan} kamu sedang dijeda.",
     "firmwareNewestSupportedForDevice": "Perangkat Anda sudah menggunakan versi firmware terbaru yang didukung",
     "firmwareSyncRecordingsFirstTitle": "Sinkronkan rekaman Anda terlebih dahulu",
-    "firmwareSyncRecordingsFirstMessage": "Beberapa rekaman masih berada di perangkat Anda. Biarkan rekaman tersebut selesai disinkronkan ke ponsel Anda, lalu mulai pembaruan."
+    "firmwareSyncRecordingsFirstMessage": "Beberapa rekaman masih berada di perangkat Anda. Biarkan rekaman tersebut selesai disinkronkan ke ponsel Anda, lalu mulai pembaruan.",
+    "experimentalDesign": "Desain eksperimental",
+    "experimentalDesignDescription": "Coba tampilan baru Beranda dan percakapan sebelum dirilis.",
+    "endConversationShort": "Akhiri"
 }

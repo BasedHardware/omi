@@ -15907,4 +15907,14 @@ class AppLocalizationsMk extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Некои записи се уште се на вашиот уред. Оставете ги да ја завршат синхронизацијата со телефонот, а потоа започнете со ажурирањето.';
+
+  @override
+  String get experimentalDesign => 'Експериментален дизајн';
+
+  @override
+  String get experimentalDesignDescription =>
+      'Испробајте го новиот изглед на почетниот екран и разговорите пред објавување.';
+
+  @override
+  String get endConversationShort => 'Заврши';
 }

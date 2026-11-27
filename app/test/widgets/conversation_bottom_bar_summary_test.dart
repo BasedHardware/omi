@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart' show FaIcon;
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart' show GlassButton, GlassContainer;
 import 'package:provider/provider.dart';
 
+import 'package:omi/services/experiments/experimental_design.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
@@ -125,10 +125,9 @@ void main() {
     expect(find.byKey(const ValueKey('detail_ask_omi')), findsOneWidget);
   });
 
-  testWidgets('glass footer (iPhone): same bar, keys, sizes and taps on glass, and no page backdrop', (tester) async {
-    FooterGlass.debugOverride = true;
-    addTearDown(() => FooterGlass.debugOverride = null);
-    expect(ConversationBottomBar.needsBackdrop, isFalse, reason: 'glass needs the content behind it');
+  testWidgets('experimental design: same bar, keys, sizes and taps on frosted surfaces', (tester) async {
+    ExperimentalDesign.debugOverride = true;
+    addTearDown(() => ExperimentalDesign.debugOverride = null);
     final provider = _provider(_conversation(appResults: [], withAudio: true));
     addTearDown(provider.dispose);
     var asked = 0;
@@ -136,8 +135,7 @@ void main() {
     await _pumpBar(tester, provider, selectedTab: ConversationTab.transcript, onAskOmi: () => asked++);
     final player = find.byKey(const ValueKey('detail_audio_player'));
     final ask = find.byKey(const ValueKey('detail_ask_omi_round'));
-    expect(find.byType(GlassContainer), findsOneWidget, reason: 'the player is a static surface');
-    expect(find.byType(GlassButton), findsOneWidget, reason: 'the round Ask button answers a press');
+    expect(find.byType(FooterGlassSurface), findsNWidgets(2), reason: 'the player and the round Ask button');
     expect(find.bySemanticsLabel('Play'), findsOneWidget);
     expect(tester.getSize(player).height, 56);
     expect(tester.getSize(ask), const Size(56, 56));
@@ -146,15 +144,12 @@ void main() {
 
     await _pumpBar(tester, provider, onAskOmi: () => asked++);
     final bar = find.byKey(const ValueKey('detail_ask_omi'));
-    expect(find.byType(GlassButton), findsOneWidget);
+    expect(find.byType(FooterGlassSurface), findsOneWidget);
     expect(find.text('Ask Omi'), findsOneWidget);
     expect(tester.getSize(bar).height, 56);
     await tester.tap(bar);
     expect(asked, 2);
     expect(tester.takeException(), isNull);
-
-    FooterGlass.debugOverride = false;
-    expect(ConversationBottomBar.needsBackdrop, isTrue);
   });
 
   test('the waveform rises where people spoke and drops through silence', () {

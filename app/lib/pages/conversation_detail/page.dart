@@ -12,6 +12,7 @@ import 'package:pull_down_button/pull_down_button.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:uuid/uuid.dart';
 
+import 'package:omi/services/experiments/experimental_design.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/messages.dart' show ChatPageContext;
 import 'package:omi/backend/preferences.dart';
@@ -1773,8 +1774,10 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
 
               // Floating bottom bar — hidden while keyboard is up (e.g. inline summary edit). The page
               // colour fades in behind it so text never runs under the bar.
-              if (MediaQuery.of(context).viewInsets.bottom == 0 && hasBar && ConversationBottomBar.needsBackdrop)
-                _DetailBarBackdrop(barBottom: detailFloatingBarBottom(MediaQuery.viewPaddingOf(context).bottom)),
+              if (MediaQuery.of(context).viewInsets.bottom == 0 && hasBar)
+                _DetailBarBackdrop(
+                    barBottom: detailFloatingBarBottom(MediaQuery.viewPaddingOf(context).bottom),
+                    soft: ExperimentalDesign.of(context)),
               if (MediaQuery.of(context).viewInsets.bottom == 0)
                 Positioned(
                   // Stable key so the body Stack's collection-`if` diff matches
@@ -1865,7 +1868,11 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
 /// Solid page colour from the screen edge up through the floating bar, fading out above it. Paint
 /// only; a [Stack] child placed before the bar.
 class _DetailBarBackdrop extends StatelessWidget {
-  const _DetailBarBackdrop({required this.barBottom});
+  const _DetailBarBackdrop({required this.barBottom, this.soft = false});
+
+  /// Under a glass bar: the text fades out towards the bar over a longer run and is never fully
+  /// covered, so the bar has something behind it and no sharp line of text at its edge.
+  final bool soft;
 
   /// Distance from the screen edge to the bar's bottom.
   final double barBottom;
@@ -1875,7 +1882,8 @@ class _DetailBarBackdrop extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final height = barBottom + _barHeight + _fade;
+    final fade = soft ? 72.0 : _fade;
+    final height = barBottom + _barHeight + fade;
     final page = OmiColors.surface0;
     return Positioned(
       key: const ValueKey('detail_bar_backdrop'),
@@ -1889,8 +1897,10 @@ class _DetailBarBackdrop extends StatelessWidget {
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              stops: [0, _fade / height, 1],
-              colors: [page.withValues(alpha: 0), page, page],
+              stops: [0, fade / height, 1],
+              colors: soft
+                  ? [page.withValues(alpha: 0), page.withValues(alpha: 0.7), page.withValues(alpha: 0.9)]
+                  : [page.withValues(alpha: 0), page, page],
             ),
           ),
         ),

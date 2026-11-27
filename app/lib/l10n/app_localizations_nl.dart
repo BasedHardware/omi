@@ -15883,4 +15883,14 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Sommige opnames staan nog op je apparaat. Laat ze eerst volledig synchroniseren naar je telefoon en start daarna de update.';
+
+  @override
+  String get experimentalDesign => 'Experimenteel ontwerp';
+
+  @override
+  String get experimentalDesignDescription =>
+      'Probeer het nieuwe uiterlijk van Home en gesprekken voordat het wordt uitgebracht.';
+
+  @override
+  String get endConversationShort => 'Beëindig';
 }

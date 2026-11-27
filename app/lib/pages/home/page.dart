@@ -970,7 +970,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                 bottom: homeChatBarOffset(context),
                                 // While this phone records, the row is the recording bar: the
                                 // confirmation, Undo for the first seconds, then Wrap Up.
-                                child: Builder(
+                                // One backdrop read for the blurred controls in the row.
+                                child: BackdropGroup(
+                                    child: Builder(
                                   builder: (context) => context.select<CaptureProvider, bool>(HomeRecordingBar.showsFor)
                                       ? const HomeRecordingBar()
                                       : Row(
@@ -980,7 +982,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                             const HomeRecordButton(),
                                           ],
                                         ),
-                                ),
+                                )),
                               ),
                             ],
                           ),

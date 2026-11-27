@@ -15834,4 +15834,13 @@ class AppLocalizationsEt extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Mõned salvestised on veel teie seadmes. Oodake, kuni need on telefonisse sünkroonitud, ja seejärel alustage uuendust.';
+
+  @override
+  String get experimentalDesign => 'Eksperimentaalne kujundus';
+
+  @override
+  String get experimentalDesignDescription => 'Proovi avakuva ja vestluste uut välimust enne selle avaldamist.';
+
+  @override
+  String get endConversationShort => 'Lõpeta';
 }

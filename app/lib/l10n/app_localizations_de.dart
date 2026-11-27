@@ -15959,4 +15959,14 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Einige Aufnahmen sind noch auf Ihrem Gerät. Warten Sie, bis sie vollständig mit Ihrem Telefon synchronisiert wurden, und starten Sie dann die Aktualisierung.';
+
+  @override
+  String get experimentalDesign => 'Experimentelles Design';
+
+  @override
+  String get experimentalDesignDescription =>
+      'Teste das neue Aussehen von Home und Unterhaltungen vor der Veröffentlichung.';
+
+  @override
+  String get endConversationShort => 'Beenden';
 }

@@ -4864,5 +4864,8 @@
     "playStripePlanPaused": "A(z) {plan} csomagod szünetel.",
     "firmwareNewestSupportedForDevice": "Az eszközödön már a legújabb támogatott firmware-verzió fut",
     "firmwareSyncRecordingsFirstTitle": "Először szinkronizáld a felvételeidet",
-    "firmwareSyncRecordingsFirstMessage": "Néhány felvétel még az eszközödön van. Várd meg, amíg a telefonodra szinkronizálásuk befejeződik, majd indítsd el a frissítést."
+    "firmwareSyncRecordingsFirstMessage": "Néhány felvétel még az eszközödön van. Várd meg, amíg a telefonodra szinkronizálásuk befejeződik, majd indítsd el a frissítést.",
+    "experimentalDesign": "Kísérleti dizájn",
+    "experimentalDesignDescription": "Próbáld ki a Kezdőlap és a beszélgetések új megjelenését a kiadás előtt.",
+    "endConversationShort": "Befejezés"
 }

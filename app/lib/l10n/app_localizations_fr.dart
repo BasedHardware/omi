@@ -15974,4 +15974,14 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Certains enregistrements sont encore sur votre appareil. Laissez-les terminer leur synchronisation vers votre téléphone, puis lancez la mise à jour.';
+
+  @override
+  String get experimentalDesign => 'Design expérimental';
+
+  @override
+  String get experimentalDesignDescription =>
+      'Essayez le nouveau look de l\'accueil et des conversations avant sa sortie.';
+
+  @override
+  String get endConversationShort => 'Terminer';
 }

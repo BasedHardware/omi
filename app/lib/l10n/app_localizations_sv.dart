@@ -15850,4 +15850,13 @@ class AppLocalizationsSv extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Vissa inspelningar finns fortfarande på din enhet. Låt dem slutföra synkroniseringen till telefonen och starta sedan uppdateringen.';
+
+  @override
+  String get experimentalDesign => 'Experimentell design';
+
+  @override
+  String get experimentalDesignDescription => 'Testa det nya utseendet för Hem och konversationer innan det släpps.';
+
+  @override
+  String get endConversationShort => 'Avsluta';
 }

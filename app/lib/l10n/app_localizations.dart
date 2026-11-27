@@ -27800,6 +27800,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Some recordings are still on your device. Let them finish syncing to your phone, then start the update.'**
   String get firmwareSyncRecordingsFirstMessage;
+
+  /// Developer Settings toggle title: turn on the experimental look of Home and conversations
+  ///
+  /// In en, this message translates to:
+  /// **'Experimental Design'**
+  String get experimentalDesign;
+
+  /// Subtitle for the Experimental Design toggle in Developer Settings
+  ///
+  /// In en, this message translates to:
+  /// **'Try the new look for Home and conversations before it is released.'**
+  String get experimentalDesignDescription;
+
+  /// Short label of the button that ends the conversation in progress, in a bar beside Pause and Ask Omi; keep it to one short word
+  ///
+  /// In en, this message translates to:
+  /// **'End'**
+  String get endConversationShort;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

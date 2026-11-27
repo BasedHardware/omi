@@ -15754,4 +15754,13 @@ class AppLocalizationsAr extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'لا تزال بعض التسجيلات على جهازك. دعها تكمل المزامنة إلى هاتفك، ثم ابدأ التحديث.';
+
+  @override
+  String get experimentalDesign => 'التصميم التجريبي';
+
+  @override
+  String get experimentalDesignDescription => 'جرّب المظهر الجديد للصفحة الرئيسية والمحادثات قبل إصداره.';
+
+  @override
+  String get endConversationShort => 'إنهاء';
 }

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
+import 'package:omi/services/experiments/experimental_design.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/pages/conversations/home_rows.dart';
+import 'package:omi/pages/conversations/widgets/conversation_state_tile.dart';
 import 'package:omi/pages/episodes/episode_page.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -82,18 +84,20 @@ class ProcessingConversationRow extends StatelessWidget {
         onTap: onTap,
         child: Material(
           key: const Key('home_processing_row'),
-          color: OmiColors.surface1,
+          color: ExperimentalDesign.of(context) ? Colors.transparent : OmiColors.surface1,
           shape: const RoundedRectangleBorder(borderRadius: OmiRadius.xlAll),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: onTap,
             child: Padding(
-              padding: const EdgeInsetsDirectional.fromSTEB(14, 14, 10, 14),
+              padding: ExperimentalDesign.of(context)
+                  ? const EdgeInsetsDirectional.fromSTEB(4, 6, 4, 6)
+                  : const EdgeInsetsDirectional.fromSTEB(14, 14, 10, 14),
               child: Row(
                 children: [
                   Container(
-                    width: 36,
-                    height: 36,
+                    width: ConversationStateTile.extentOf(context),
+                    height: ConversationStateTile.extentOf(context),
                     alignment: Alignment.center,
                     decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
                     child: const OmiActivityRing(active: true, diameter: 18, child: SizedBox.shrink()),
@@ -105,7 +109,7 @@ class ProcessingConversationRow extends StatelessWidget {
                       children: [
                         Text(
                           shownTitle,
-                          style: Theme.of(context).textTheme.titleMedium,
+                          style: experimentalRowTitleStyle(context),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),

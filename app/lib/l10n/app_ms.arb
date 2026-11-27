@@ -4768,5 +4768,8 @@
     "playStripePlanPaused": "Pelan {plan} anda dijeda.",
     "firmwareNewestSupportedForDevice": "Peranti anda sudah menggunakan versi firmware terbaharu yang disokong",
     "firmwareSyncRecordingsFirstTitle": "Segerakkan rakaman anda terlebih dahulu",
-    "firmwareSyncRecordingsFirstMessage": "Sebahagian rakaman masih berada pada peranti anda. Biarkan ia selesai disegerakkan ke telefon anda, kemudian mulakan kemas kini."
+    "firmwareSyncRecordingsFirstMessage": "Sebahagian rakaman masih berada pada peranti anda. Biarkan ia selesai disegerakkan ke telefon anda, kemudian mulakan kemas kini.",
+    "experimentalDesign": "Reka bentuk percubaan",
+    "experimentalDesignDescription": "Cuba rupa baharu Laman Utama dan perbualan sebelum ia dikeluarkan.",
+    "endConversationShort": "Tamat"
 }

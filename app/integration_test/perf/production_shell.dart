@@ -1,5 +1,5 @@
 // Derived by python3 tool/perf_shell.py from main.dart. Do not hand edit.
-// Extracted shell SHA256 (imports, telemetry field, builder chain): d1d6d6293429332c0c8a88082084086428912212f6745af4d71a218b9ddf4237
+// Extracted shell SHA256 (imports, telemetry field, builder chain): a933381ca3e18cd6131d2be49e9b82e145df056a38e281babb17d3a1619cca61
 // ignore_for_file: unused_import, unnecessary_import
 import 'package:omi/services/on_device/on_device_background.dart';
 import 'package:omi/services/onboarding_sync_runtime.dart';
@@ -122,7 +122,7 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/notification_channel_strings.dart';
-import 'package:omi/widgets/footer_glass.dart';
+import 'package:omi/services/experiments/experimental_design.dart';
 import 'package:omi/main.dart' show MyApp, CustomErrorWidget;
 
 /// The exact production builder chain, with an inert seeded page boundary.
@@ -195,8 +195,10 @@ class _PerfProductionShellState extends State<PerfProductionShell> {
                   child: KeyedSubtree(key: ValueKey(brightness), child: child!),
                 );
                 final guidedContent = BluetoothGuidanceListener(child: content);
-                return SessionReplayScope(
-                  child: widget.iosAnalytics ? RageClickContextTracker(child: guidedContent) : guidedContent,
+                return ExperimentalDesignScope(
+                  child: SessionReplayScope(
+                    child: widget.iosAnalytics ? RageClickContextTracker(child: guidedContent) : guidedContent,
+                  ),
                 );
               },
               home: TalkerWrapper(

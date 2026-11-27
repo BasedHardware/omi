@@ -4768,5 +4768,8 @@
     "playStripePlanPaused": "{plan}-abonnementet ditt er satt på pause.",
     "firmwareNewestSupportedForDevice": "Enheten din har allerede den nyeste støttede fastvareversjonen",
     "firmwareSyncRecordingsFirstTitle": "Synkroniser opptakene dine først",
-    "firmwareSyncRecordingsFirstMessage": "Noen opptak ligger fortsatt på enheten din. La dem fullføre synkroniseringen til telefonen din, og start deretter oppdateringen."
+    "firmwareSyncRecordingsFirstMessage": "Noen opptak ligger fortsatt på enheten din. La dem fullføre synkroniseringen til telefonen din, og start deretter oppdateringen.",
+    "experimentalDesign": "Eksperimentelt design",
+    "experimentalDesignDescription": "Prøv det nye utseendet for Hjem og samtaler før det lanseres.",
+    "endConversationShort": "Avslutt"
 }

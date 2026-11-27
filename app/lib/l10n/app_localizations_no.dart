@@ -15847,4 +15847,13 @@ class AppLocalizationsNo extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Noen opptak ligger fortsatt på enheten din. La dem fullføre synkroniseringen til telefonen din, og start deretter oppdateringen.';
+
+  @override
+  String get experimentalDesign => 'Eksperimentelt design';
+
+  @override
+  String get experimentalDesignDescription => 'Prøv det nye utseendet for Hjem og samtaler før det lanseres.';
+
+  @override
+  String get endConversationShort => 'Avslutt';
 }

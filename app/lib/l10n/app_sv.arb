@@ -4768,5 +4768,8 @@
     "playStripePlanPaused": "Din {plan}-plan är pausad.",
     "firmwareNewestSupportedForDevice": "Din enhet har redan den senaste firmwareversionen som stöds",
     "firmwareSyncRecordingsFirstTitle": "Synkronisera dina inspelningar först",
-    "firmwareSyncRecordingsFirstMessage": "Vissa inspelningar finns fortfarande på din enhet. Låt dem slutföra synkroniseringen till telefonen och starta sedan uppdateringen."
+    "firmwareSyncRecordingsFirstMessage": "Vissa inspelningar finns fortfarande på din enhet. Låt dem slutföra synkroniseringen till telefonen och starta sedan uppdateringen.",
+    "experimentalDesign": "Experimentell design",
+    "experimentalDesignDescription": "Testa det nya utseendet för Hem och konversationer innan det släpps.",
+    "endConversationShort": "Avsluta"
 }

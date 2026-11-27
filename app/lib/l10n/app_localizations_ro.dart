@@ -15908,4 +15908,14 @@ class AppLocalizationsRo extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Unele înregistrări sunt încă pe dispozitivul tău. Lasă-le să termine de sincronizat cu telefonul tău, apoi pornește actualizarea.';
+
+  @override
+  String get experimentalDesign => 'Design experimental';
+
+  @override
+  String get experimentalDesignDescription =>
+      'Încearcă noul aspect al ecranului principal și al conversațiilor înainte de lansare.';
+
+  @override
+  String get endConversationShort => 'Încheie';
 }

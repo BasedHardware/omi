@@ -4768,5 +4768,8 @@
     "playStripePlanPaused": "Il tuo piano {plan} è in pausa.",
     "firmwareNewestSupportedForDevice": "Il tuo dispositivo è già sull'ultima versione firmware supportata",
     "firmwareSyncRecordingsFirstTitle": "Sincronizza prima le tue registrazioni",
-    "firmwareSyncRecordingsFirstMessage": "Alcune registrazioni sono ancora sul tuo dispositivo. Aspetta che terminino la sincronizzazione con il telefono, poi avvia l'aggiornamento."
+    "firmwareSyncRecordingsFirstMessage": "Alcune registrazioni sono ancora sul tuo dispositivo. Aspetta che terminino la sincronizzazione con il telefono, poi avvia l'aggiornamento.",
+    "experimentalDesign": "Design sperimentale",
+    "experimentalDesignDescription": "Prova il nuovo aspetto di Home e delle conversazioni prima del rilascio.",
+    "endConversationShort": "Termina"
 }

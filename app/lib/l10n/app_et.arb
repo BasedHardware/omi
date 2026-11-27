@@ -4768,5 +4768,8 @@
     "playStripePlanPaused": "Sinu {plan} pakett on peatatud.",
     "firmwareNewestSupportedForDevice": "Teie seadmes on juba uusim toetatud püsivaraversioon",
     "firmwareSyncRecordingsFirstTitle": "Sünkroonige oma salvestised esmalt",
-    "firmwareSyncRecordingsFirstMessage": "Mõned salvestised on veel teie seadmes. Oodake, kuni need on telefonisse sünkroonitud, ja seejärel alustage uuendust."
+    "firmwareSyncRecordingsFirstMessage": "Mõned salvestised on veel teie seadmes. Oodake, kuni need on telefonisse sünkroonitud, ja seejärel alustage uuendust.",
+    "experimentalDesign": "Eksperimentaalne kujundus",
+    "experimentalDesignDescription": "Proovi avakuva ja vestluste uut välimust enne selle avaldamist.",
+    "endConversationShort": "Lõpeta"
 }
