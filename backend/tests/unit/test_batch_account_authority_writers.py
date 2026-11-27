@@ -77,7 +77,7 @@ KNOWN_RAW = {
         1,
         'Feedback can provision a profile. Existing observer records the upsert.',
     ),
-    ('database/users.py', 'update_user_subscription', 'users', 'update'): (
+    ('database/users.py', 'update_user_subscription.apply_paid_subscription', 'users', 'update'): (
         1,
         'Subscription updates may also write the top-level first-paid epoch when the first-week flag is enabled; '
         'with the flag off the existing subscription-only update remains. The real writer regression is covered.',

@@ -43,6 +43,12 @@ SCAN_TIME_BUDGET_SECONDS = 15
 OUTCOME_FIELD = 'first_week_outcome'
 OUTCOME_AT_FIELD = 'first_week_outcome_at'
 WINDOW_END_PATH = 'first_week_summary.window_end_at'
+OUTCOMES = frozenset({'summarized', 'attempt_failed', 'no_attempt'})
+
+
+def _bounded_outcome(value: object) -> str:
+    """Keep metric outcomes inside the durable classifier vocabulary."""
+    return value if isinstance(value, str) and value in OUTCOMES else 'unknown'
 
 
 def _counter() -> Counter:
@@ -236,7 +242,7 @@ def tick(*, now: float | None = None, limit: int = SCAN_LIMIT, client: Any | Non
             if closed is None:
                 continue
             outcome, interval = closed
-            CLOSED.labels(outcome=outcome, interval=interval).inc()
+            CLOSED.labels(outcome=_bounded_outcome(outcome), interval=interval).inc()
             counts['closed'] += 1
     finally:
         _release(lease, owner, bound)
