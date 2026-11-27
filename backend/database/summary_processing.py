@@ -112,6 +112,17 @@ def record_empty_failure(
             'summary_empty_outcome': 'empty_output',
             'summary_empty_version': old.get('version'),
         }
+        first_week = old.get('first_week_summary')
+        conversation_updates: dict[str, Any] = {}
+        if isinstance(first_week, dict):
+            attempts = old.get('first_week_attempts')
+            attempts = attempts if type(attempts) is int and attempts > 0 else 0
+            updates.update(first_week_attempts=attempts + 1, first_week_last_class='attempt_failed')
+            conversation_updates.update(
+                first_week_summary=first_week,
+                first_week_attempts=attempts + 1,
+                first_week_last_class='attempt_failed',
+            )
         if blocked:
             blocked_reason = (
                 EMPTY_LIFETIME_BLOCKED_REASON
@@ -119,8 +130,7 @@ def record_empty_failure(
                 else EMPTY_BLOCKED_REASON
             )
             if not enriched:
-                transaction.update(
-                    reference,
+                conversation_updates.update(
                     {
                         'summary_empty_failures': failures,
                         'summary_blocked_reason': blocked_reason,
@@ -134,6 +144,8 @@ def record_empty_failure(
                 summary_seen=enriched,
                 summary_blocked_reason=None if enriched else blocked_reason,
             )
+        if conversation_updates:
+            transaction.update(reference, conversation_updates)
         transaction.update(outbox, updates)
         return EmptyFailureOutcome.BLOCKED if blocked else EmptyFailureOutcome.RETRY
 

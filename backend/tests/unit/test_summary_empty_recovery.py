@@ -18,6 +18,11 @@ KEY = outbox.key('u', 'c')
 OUTBOX = (outbox.COLLECTION, KEY)
 
 
+@pytest.fixture(autouse=True)
+def disable_first_week_for_empty_recovery_contracts(monkeypatch):
+    monkeypatch.setenv('FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED', 'false')
+
+
 @pytest.fixture(scope='module', autouse=True)
 def load_live_writer():
     # Import failures still fail the suite, while per-call CPU guards measure
@@ -182,6 +187,31 @@ def test_strike_records_the_version_it_was_charged_against(store):
         is summary_processing.EmptyFailureOutcome.RETRY
     )
     assert store.rows[OUTBOX]['summary_empty_version'] == 4
+
+
+def test_first_week_empty_failure_persists_durable_attempt_receipt(store, monkeypatch):
+    monkeypatch.setenv('FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED', 'true')
+    stamp = {
+        'policy_id': 'first_week_summary.v1',
+        'paid_since': 100,
+        'window_end_at': 100 + 7 * 24 * 60 * 60,
+        'interval': 'monthly',
+    }
+    store.rows[OUTBOX].update(
+        dormant=False,
+        summary_empty_failures=0,
+        first_week_summary=stamp,
+    )
+    store.rows[CONVERSATION].update(summary_empty_failures=0, summary_blocked_reason=None, summary_due_at=220)
+
+    result = summary_processing.record_empty_failure(store, outbox.COLLECTION, KEY, 'worker', 'old-token')
+
+    assert result is summary_processing.EmptyFailureOutcome.RETRY
+    assert store.rows[OUTBOX]['first_week_attempts'] == 1
+    assert store.rows[OUTBOX]['first_week_last_class'] == 'attempt_failed'
+    assert store.rows[CONVERSATION]['first_week_summary'] == stamp
+    assert store.rows[CONVERSATION]['first_week_attempts'] == 1
+    assert store.rows[CONVERSATION]['first_week_last_class'] == 'attempt_failed'
 
 
 def test_three_owned_empty_outputs_exhaust_once_and_preserve_structured_content(store):

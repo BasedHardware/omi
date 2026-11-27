@@ -21,6 +21,7 @@ retroactively.
 from __future__ import annotations
 
 import logging
+import hashlib
 import math
 import time
 from datetime import datetime, timezone
@@ -42,9 +43,6 @@ SCAN_TIME_BUDGET_SECONDS = 15
 OUTCOME_FIELD = 'first_week_outcome'
 OUTCOME_AT_FIELD = 'first_week_outcome_at'
 WINDOW_END_PATH = 'first_week_summary.window_end_at'
-ATTEMPT_FAILED_REASONS = frozenset(
-    {'empty_output_exhausted', 'empty_output_lifetime_exhausted', 'blocked_byok', 'empty_output'}
-)
 
 
 def _counter() -> Counter:
@@ -84,12 +82,8 @@ def classify(row: Mapping[str, Any]) -> tuple[str, str]:
     completed = _epoch(row.get('summary_completed_at'))
     if row.get('summary_output_present') and (completed is None or end is None or completed <= end):
         return 'summarized', interval
-    if isinstance(row.get('summary_empty_failures'), (int, float)) and not isinstance(
-        row.get('summary_empty_failures'), bool
-    ):
-        if row['summary_empty_failures'] > 0:
-            return 'attempt_failed', interval
-    if row.get('summary_blocked_reason') in ATTEMPT_FAILED_REASONS:
+    attempts = row.get('first_week_attempts')
+    if type(attempts) is int and attempts > 0 and row.get('first_week_last_class') == 'attempt_failed':
         return 'attempt_failed', interval
     return 'no_attempt', interval
 
@@ -119,6 +113,16 @@ def close_one(ref: Any, *, now: float, client: Any) -> tuple[str, str] | None:
         if not snapshot.exists:
             return
         row = snapshot.to_dict() or {}
+        uid = row.get('uid')
+        conversation_id = getattr(ref, 'id', None) or str(getattr(ref, 'path', '')).rsplit('/', 1)[-1]
+        if isinstance(uid, str) and uid and conversation_id:
+            outbox_id = hashlib.sha256(f'{uid}\0{conversation_id}'.encode()).hexdigest()
+            outbox_ref = client.collection('sync_reprocess_outbox').document(outbox_id)
+            outbox_snapshot = outbox_ref.get(transaction=transaction)
+            outbox_row = outbox_snapshot.to_dict() or {} if outbox_snapshot.exists else {}
+            for field_name in ('first_week_attempts', 'first_week_last_class'):
+                if field_name in outbox_row:
+                    row[field_name] = outbox_row[field_name]
         patch = outcome_patch(row, now=now)
         if patch is None:
             return

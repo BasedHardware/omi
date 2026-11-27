@@ -24,6 +24,7 @@ from typing import Any
 from prometheus_client import REGISTRY, Counter
 
 from config import enrichment as enrichment_config
+from config.summary_guarantee import first_week_open
 from utils.enrichment import outbox
 from utils.enrichment.age_gate import timestamp
 from utils.enrichment.outbox import first_summary_pending, valid_dispatch_binding
@@ -60,8 +61,6 @@ def stale_fresh(row: dict[str, Any] | None, *, now: float) -> bool:
     fresh = enrichment_config.fresh_queue()
     if not row or after <= 0 or not fresh:
         return False
-    from config.summary_guarantee import first_week_open
-
     # An open first-week obligation keeps its reserved lane for the whole stored
     # window, so the 30-minute demotion cannot strand it for the remaining days
     # even when no dedicated first-week queue is configured (SCA-4790).

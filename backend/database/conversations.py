@@ -17,13 +17,13 @@ from utils.conversations import summary_delivery, lifecycle_clocks, terminal_set
 from utils.observability.delivery import summary_terminal_outcome
 from utils.sync import processing_hold, bridge_pending
 from config.refactor_modes import serving_for, shadow_or_serve
+from config.summary_guarantee import first_week_enabled, first_week_open
 import copy
 import hashlib
 import json
 import logging
 import math
 import os
-import time
 import uuid
 import zlib
 from collections.abc import Mapping
@@ -31,6 +31,7 @@ from functools import partial, wraps
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Any, Callable, Literal, Tuple, overload
 from database import chat_edits
+from database import users as users_db
 from database.dream_dirty import after_write
 from database.account_deletion_policy import account_deletion_marker_blocks_access
 from google.api_core.exceptions import AlreadyExists, Conflict, FailedPrecondition, NotFound
@@ -403,8 +404,6 @@ def _first_week_for_write(
         conversation_state is not None and conversation_state.get('processing_tier') == 'historical'
     ):
         return None
-    from config.summary_guarantee import first_week_enabled
-
     if not first_week_enabled():
         return None
     if conversation_state is not None:
@@ -417,12 +416,10 @@ def _first_week_for_write(
     created_at = _first_week_created_epoch(created_from)
     if created_at is None:
         return None
-    from database import users as users_db
-
-    try:
-        return users_db.first_week_stamp_for(uid, created_at)
-    except Exception:
+    stamp = users_db.first_week_stamp_for(uid, created_at)
+    if stamp and not first_week_open(stamp, now=datetime.now(timezone.utc).timestamp()):
         return None
+    return stamp
 
 
 def _prepare_conversation_for_write(

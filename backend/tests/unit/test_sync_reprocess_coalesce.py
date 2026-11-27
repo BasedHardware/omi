@@ -22,6 +22,7 @@ def state(monkeypatch):
     # Relative epoch clocks exercise coalescing independently of wall-clock
     # history. The age-gate behavior suite explicitly enables its 72h policy.
     monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '0')
+    monkeypatch.setenv('FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED', 'false')
 
     def mutate(key, operation):
         new, result = operation(deepcopy(rows.get(key)))

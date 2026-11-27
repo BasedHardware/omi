@@ -16,6 +16,7 @@ from google.cloud import firestore
 from database._client import get_customer_firestore_client, get_data_plane_firestore_client, run_transactional
 from database.account_deletion_policy import account_deletion_marker_blocks_access
 from database.fsr_read_cache import writing
+from database.users import paid_since_patch
 from utils.referral_campaign import (
     CampaignPolicy,
     GRANT_FIELD,
@@ -359,7 +360,9 @@ def claim_months(uid: str, *, client=None, policy=None, now=None) -> tuple[dict,
         return run_transactional(client, apply, transient=True)
 
 
-def write_commercial_subscription(uid: str, subscription: dict, *, client=None, policy=None, now=None):
+def write_commercial_subscription(
+    uid: str, subscription: dict, *, client=None, policy=None, now=None, paid_since_context: dict | None = None
+):
     """Serialize billing installation with claims and preserve paid-overlap promo time."""
     client = _client(client)
     policy = policy or current_policy()
@@ -375,11 +378,9 @@ def write_commercial_subscription(uid: str, subscription: dict, *, client=None, 
         requeued = requeue_grant_for_paid_period(grant, subscription, now=now)
         # Commercial first-paid epoch: set once on the free->paid transition in
         # the same write that installs the paid subscription (SCA-4790).
-        from database.users import paid_since_patch
-
         paid_patch = paid_since_patch(
             user.get('subscription'),
-            subscription,
+            paid_since_context or subscription,
             stored_user_paid_since=user.get('paid_since'),
             now=now.timestamp(),
         )

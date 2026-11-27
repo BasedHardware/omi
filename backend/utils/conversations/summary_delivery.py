@@ -196,6 +196,15 @@ def prepare(data: Row, uid: str, *, now: float | None = None, first_week: Mappin
 
 FIRST_WEEK_OUTCOME_FIELD = 'first_week_outcome'
 FIRST_WEEK_FIELD = 'first_week_summary'
+FIRST_WEEK_ATTEMPTS_FIELD = 'first_week_attempts'
+FIRST_WEEK_LAST_CLASS_FIELD = 'first_week_last_class'
+FIRST_WEEK_RECEIPT_FIELDS = (
+    FIRST_WEEK_FIELD,
+    FIRST_WEEK_OUTCOME_FIELD,
+    'first_week_outcome_at',
+    FIRST_WEEK_ATTEMPTS_FIELD,
+    FIRST_WEEK_LAST_CLASS_FIELD,
+)
 
 
 def summary_deadline_seconds(row: Row) -> float:
@@ -524,6 +533,12 @@ def merge_result(existing: Row, write: Row, uid: str, *, now: float | None = Non
     """Inside the existing revision-fenced transaction, before its write."""
     if 'summary_output_present' not in write:
         return None
+    # Codec callers may not have loaded these scheduling receipts. Preserve
+    # their transactionally-read values so a late processing write cannot
+    # reopen a closed first-week outcome or reset its attempt evidence.
+    for field_name in FIRST_WEEK_RECEIPT_FIELDS:
+        if field_name in existing:
+            write[field_name] = existing[field_name]
     current = time.time() if now is None else now
     for name in ('summary_first_pending_at', 'summary_title_provenance', 'summary_completed_at', 'summary_due_at'):
         if name in existing:

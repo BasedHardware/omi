@@ -15,12 +15,15 @@ first_week_outcome = null        # the close-out counting key
 ```
 
 `paid_since` is the commercial first-paid epoch stored at the user document's
-top level beside `subscription`, set once on the free->paid transition and never
-moved by a renewal. `current_period_start` moves on every renewal, so it is never used for this. A row that predates
-`paid_since` has no epoch and is never covered: the guarantee starts with paid
-starts after the deploy. `interval` is `monthly`/`yearly`/`unknown` from the paid
-period length. Referral promotions never stamp a window; the read is the
-commercial subscription.
+top level beside `subscription`, set once on a confirmed free-to-paid transition
+and never moved by a renewal. It comes from the provider's paid-period start,
+not webhook processing time. Trials and prepaid subscriptions do not set it;
+trial conversion uses the paid-period start. A row that predates `paid_since`
+has no epoch and is never covered. Production has no preactivation backfill, so
+the first-week conversation cohort begins when the runtime flag is enabled;
+existing paid users without `paid_since` remain outside it. `interval` is
+`monthly`/`yearly`/`unknown` from the paid period length. Referral promotions
+never stamp a window; the read is the commercial subscription.
 
 ## Keys
 
@@ -66,14 +69,20 @@ Prometheus counter is the live operational signal and can miss the final update
 if a process exits after the Firestore transaction.
 
 - `summarized`: a usable summary was durable by the window end.
-- `attempt_failed`: an attempt landed but produced no usable summary
-  (empty-output budget, BYOK block).
+- `attempt_failed`: an admitted generation attempt produced no usable summary
+  (for example, the empty-output budget was exhausted).
 - `no_attempt`: none at the window end.
+
+`blocked_byok` is `no_attempt`: no generation attempt was admitted. Attempt
+failure classification uses the durable `first_week_attempts` and
+`first_week_last_class` receipts written with the consumer's lease outcome,
+not inferred from the summary-empty counter.
 
 A summary that lands after the close is not counted retroactively. The counter
 documents are the mechanism number; `infra/metrics/churn/first_month.py` remains
-the acceptance number. Read at least 14 days after serving (the first complete
-cohort closes between +7d and +14d) and name the cohort.
+the acceptance number. Read at least 14 days after activation (the first
+complete post-activation cohort closes between +7d and +14d), and name the
+activation-bounded cohort.
 
 ## Read and generation budget before activation
 
@@ -84,6 +93,14 @@ record the census-backed expected extra summaries/day and reads/day, including:
 
 - one conversation scheduling-metadata read per first-week-enabled outbox mark
   (`finished_at`, `created_at`, `started_at`, the processing tier, and the stored window);
+- at most one `created_at` point read per inspected due row in each enrichment
+  sweep, capped by its 100-row scan limit. Rows whose pending clock already
+  proves age and rows with an open first-week window use no conversation read;
+- at most one conversation scheduling-metadata read when a producer creates a
+  new first-summary outbox row without a copied stamp. Existing rows and payloads
+  that carry the stored stamp use no such read;
+- one `sync_reprocess_outbox` point read for each first-week window closed, to
+  copy its durable attempt receipt into the closeout classification transaction;
 - the commercial subscription read when an existing conversation stamp is
   absent: at most one Firestore user read per cache miss, with same-user reads
   shared for up to 60 seconds when the subscription cache is available (a cold

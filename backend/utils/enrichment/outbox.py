@@ -46,6 +46,7 @@ from utils.sync import processing_hold
 from config.record_latency import record_notes_eager_enabled
 from database import record_notes_hold
 from database._client import get_firestore_client
+from database import users as users_db
 from database.summary_processing import record_empty_failure, EmptyFailureOutcome
 from models.finalization_owner import REFUSAL as FINALIZATION_OWNER_REFUSAL, python_owns_finalization
 
@@ -451,9 +452,16 @@ def mark(
     if not effects_only and first_week_enabled():
         try:
             metadata = _conversation_scheduling_metadata(uid, conversation_id)
-        except Exception:
-            # Avoid a second metadata read from inside the outbox CAS.
-            initial_recent = False
+        except Exception as error:
+            record_fallback(
+                component='other',
+                from_mode='first_week_metadata',
+                to_mode='retry',
+                reason='unavailable',
+                outcome='exhausted',
+                log=logger,
+            )
+            raise RuntimeError('first-week conversation metadata read failed; retry the outbox mark') from error
         else:
             first_week = _first_week_for_obligation(uid, metadata=metadata)
             initial_recent = _recent_conversation(uid, conversation_id, current, metadata=metadata)
@@ -694,12 +702,7 @@ def _first_week_for_obligation(uid: str, *, metadata: dict[str, Any]) -> dict[st
     created_at = metadata.get('created_at') or metadata.get('started_at')
     if created_at is None:
         return None
-    from database import users as users_db
-
-    try:
-        return users_db.first_week_stamp_for(uid, created_at)
-    except Exception:
-        return None
+    return users_db.first_week_stamp_for(uid, created_at)
 
 
 def summary_policy_for(row: Row) -> bool:
@@ -1026,6 +1029,15 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
         if old is None or old.get('owner') != owner:
             return old, None
         old = {key: value for key, value in old.items() if key != 'deferred_since'}  # A completed callback ends it.
+        if (
+            process_context is not None
+            and summary_policy
+            and summary_seen
+            and isinstance(old.get('first_week_summary'), dict)
+        ):
+            attempts = old.get('first_week_attempts')
+            attempts = attempts if type(attempts) is int and attempts > 0 else 0
+            old.update(first_week_attempts=attempts + 1, first_week_last_class='summarized')
 
         if superseded and retry_revision is not None:
             # An append may precede the repair claim without another outbox

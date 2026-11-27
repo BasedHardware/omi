@@ -2,6 +2,8 @@ from database.people_generation import bump_people_generation, write_person
 from database.person_speech_samples import add_sample_transaction
 from database.people_projection import project_people
 from config.refactor_modes import serving_for
+from config.plan_catalog import PAID_PLAN_IDS
+from config.summary_guarantee import first_week_enabled
 from utils.speakers.person_pool import (
     pool_profile,
     retract_profile,
@@ -18,7 +20,7 @@ from typing import Any, Literal, NotRequired, Optional, TypedDict
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter, transactional
 from ._client import db, delete_collection_recursive, document_id_from_seed, get_firestore_client
-from ._client import get_data_plane_firestore_client
+from ._client import get_data_plane_firestore_client, run_transactional
 from database.go_queue_erase import ARMED_AT, PROTECTED_ATTEMPT, mark_wipe_running, running_stale_window
 from database.account_deletion_marker import (
     account_deletion_collection,
@@ -27,6 +29,7 @@ from database.account_deletion_marker import (
     get_user_deletion_wipe_status as get_user_deletion_wipe_status,
 )
 import database.account_deletion_grace as account_deletion_grace_db
+from utils.observability.fallback import record_fallback
 from database.batch_account_authority import (
     account_authority_writer_enabled,
     merge_account_authority,
@@ -1714,7 +1717,8 @@ def get_user_by_stripe_customer_id(customer_id: str):
     return None
 
 
-PAID_START_STATUSES = frozenset({'active', 'past_due'})
+PAID_START_STATUSES = frozenset({'active'})
+FIRST_WEEK_PAID_PLAN_IDS = PAID_PLAN_IDS - {'operator'}
 
 
 def _plan_value(subscription: Any) -> str:
@@ -1735,7 +1739,9 @@ def _status_value(subscription: Any) -> str:
 
 def _is_paid_plan(subscription: Any) -> bool:
     plan = _plan_value(subscription)
-    return bool(plan) and plan not in {'basic', 'free'}
+    return bool(
+        plan in FIRST_WEEK_PAID_PLAN_IDS and isinstance(subscription, dict) and subscription.get('prepaid') is not True
+    )
 
 
 def paid_since_patch(
@@ -1752,24 +1758,25 @@ def paid_since_patch(
     if isinstance(stored_user_paid_since, int) and not isinstance(stored_user_paid_since, bool):
         if stored_user_paid_since > 0:
             return {'paid_since': stored_user_paid_since}
+    status = incoming.get('_first_week_payment_status')
+    status = status if isinstance(status, str) else _status_value(incoming)
+    prior_trial = isinstance(stored, dict) and stored.get('_first_week_trialing') is True
+    trial_conversion = incoming.get('_first_week_trial_conversion') is True
+    if status == 'trialing' or not _is_paid_plan(incoming):
+        return {}
     carried = incoming.get('paid_since')
     if isinstance(carried, int) and not isinstance(carried, bool) and carried > 0:
         return {'paid_since': carried}
-    if _is_paid_plan(stored) or not _is_paid_plan(incoming):
-        return {}
-    status = _status_value(incoming)
     if status and status not in PAID_START_STATUSES:
         return {}
-    return {'paid_since': int(now if now is not None else datetime.now(timezone.utc).timestamp())}
-
-
-def _stored_subscription_fields(user_ref: Any) -> tuple[Any, Any]:
-    """The stored commercial subscription and the durable first-paid epoch, in one read."""
-    snapshot = user_ref.get(['subscription', 'paid_since'])
-    if not snapshot.exists:
-        return None, None
-    data = snapshot.to_dict() or {}
-    return data.get('subscription'), data.get('paid_since')
+    if _is_paid_plan(stored) and not (prior_trial and trial_conversion):
+        return {}
+    paid_at = incoming.get('_first_week_paid_since')
+    if not isinstance(paid_at, (int, float)) or isinstance(paid_at, bool) or paid_at <= 0:
+        paid_at = incoming.get('current_period_start')
+    if not isinstance(paid_at, (int, float)) or isinstance(paid_at, bool) or paid_at <= 0:
+        return {}
+    return {'paid_since': int(paid_at)}
 
 
 @cache_writer('subscription_cache')
@@ -1778,6 +1785,17 @@ def update_user_subscription(uid: str, subscription_data: dict):
     subscription_data_to_store = subscription_data.copy()
     subscription_data_to_store.pop('features', None)
     subscription_data_to_store.pop('limits', None)
+    payment_status = subscription_data_to_store.pop('_first_week_payment_status', None)
+    trial_conversion = subscription_data_to_store.pop('_first_week_trial_conversion', None)
+    paid_since_at = subscription_data_to_store.pop('_first_week_paid_since', None)
+    if isinstance(payment_status, str):
+        subscription_data_to_store['_first_week_trialing'] = payment_status == 'trialing'
+    paid_since_input = {
+        **subscription_data_to_store,
+        **({'_first_week_payment_status': payment_status} if isinstance(payment_status, str) else {}),
+        **({'_first_week_trial_conversion': True} if trial_conversion is True else {}),
+        **({'_first_week_paid_since': paid_since_at} if paid_since_at is not None else {}),
+    }
 
     user_ref = db.collection('users').document(uid)
     invalidate_subscription(uid)
@@ -1787,18 +1805,27 @@ def update_user_subscription(uid: str, subscription_data: dict):
         if campaign_enabled():
             from database.referral_campaign import write_commercial_subscription
 
-            write_commercial_subscription(uid, subscription_data_to_store, client=db)
+            write_commercial_subscription(
+                uid,
+                subscription_data_to_store,
+                client=db,
+                paid_since_context=paid_since_input,
+            )
         else:
-            from config.summary_guarantee import first_week_enabled
-
             if first_week_enabled():
-                stored_subscription, stored_paid_since = _stored_subscription_fields(user_ref)
-                paid_patch = paid_since_patch(
-                    stored_subscription,
-                    subscription_data_to_store,
-                    stored_user_paid_since=stored_paid_since,
-                )
-                user_ref.update({'subscription': subscription_data_to_store, **paid_patch})
+
+                @transactional
+                def apply_paid_subscription(transaction):
+                    snapshot = user_ref.get(field_paths=['subscription', 'paid_since'], transaction=transaction)
+                    data = snapshot.to_dict() or {}
+                    paid_patch = paid_since_patch(
+                        data.get('subscription'),
+                        paid_since_input,
+                        stored_user_paid_since=data.get('paid_since'),
+                    )
+                    transaction.update(user_ref, {'subscription': subscription_data_to_store, **paid_patch})
+
+                run_transactional(db, apply_paid_subscription, transient=True)
             else:
                 user_ref.update({'subscription': subscription_data_to_store})
     finally:
@@ -2382,9 +2409,20 @@ def first_week_stamp_for(uid: str, created_at: Any, *, interval_from: tuple[Any,
         return None
     try:
         subscription, fields = get_existing_user_subscription_and_fields_cached(uid, ('paid_since',))
-    except Exception:
-        return None
+    except Exception as error:
+        record_fallback(
+            component='other',
+            from_mode='first_week_subscription_read',
+            to_mode='retry',
+            reason='unavailable',
+            outcome='exhausted',
+            log=logger,
+        )
+        raise RuntimeError('first-week subscription eligibility read failed') from error
     if subscription is None:
+        return None
+    subscription_data = subscription.model_dump() if hasattr(subscription, 'model_dump') else subscription
+    if not _is_paid_plan(subscription_data) or _status_value(subscription_data) != 'active':
         return None
     period = interval_from or (subscription.current_period_start, subscription.current_period_end)
     return first_week_stamp(fields.get('paid_since'), created_at, interval=first_week_interval(*period))

@@ -47,11 +47,13 @@ def arm_projection_summary(uid, client, transaction, payload, current):
     if candidate.get('client_processing') is firestore.DELETE_FIELD:
         candidate.pop('client_processing')
     delivery.stamp_projection_debt(candidate)
-    # Literal sites keep these writes in the reviewed lifecycle inventory.
+    # Keep the two debt clocks as explicit payload sites for the lifecycle inventory.
+    if 'summary_due_at' in candidate:
+        payload['summary_due_at'] = candidate['summary_due_at']
+    if 'summary_first_pending_at' in candidate:
+        payload['summary_first_pending_at'] = candidate['summary_first_pending_at']
     for field in (
         'summary_title_provenance',
-        'summary_first_pending_at',
-        'summary_due_at',
         'summary_lane',
         'first_week_summary',
         'first_week_outcome',

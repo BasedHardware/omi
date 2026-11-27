@@ -8,6 +8,7 @@ from collections.abc import Mapping
 import math
 import os
 import time
+from datetime import datetime, timezone
 
 from typing import Any
 
@@ -113,6 +114,9 @@ def first_week_window_seconds(*, environ: Mapping[str, str] | None = None) -> in
 
 
 def _epoch(value: Any) -> float | None:
+    if isinstance(value, datetime):
+        value = value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+        value = value.timestamp()
     if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
         return None
     return float(value)

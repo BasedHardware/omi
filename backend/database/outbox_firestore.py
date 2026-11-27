@@ -28,7 +28,10 @@ import logging
 
 from database.outbox import Claim, EnqueueResult, Outbox, OutboxKind, Outcome, SweepCounts
 from config.record_latency import record_notes_eager_enabled
+from config.summary_guarantee import first_week_enabled
 from database import record_notes_hold
+from database import users as users_db
+from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +58,37 @@ _PAYLOAD_FIELDS = (
     'first_summary_policy',  # E1 snapshot; the consumer decides first summary from it
     'first_week_summary',  # SCA-4790 stored paid-start window; deadline/lane/age-gate readers
 )
+
+
+def _first_week_for_enqueue(client: Any, owner_id: str, conversation_id: str, tx: Any = None) -> dict | None:
+    """Resolve a new producer row's window from the conversation's durable metadata."""
+    transaction = getattr(tx, 'transaction', tx)
+    reference = client.collection('users').document(owner_id).collection('conversations').document(conversation_id)
+    try:
+        snapshot = reference.get(
+            field_paths=['created_at', 'started_at', 'first_week_summary', 'processing_tier'],
+            **({'transaction': transaction} if transaction is not None else {}),
+        )
+    except Exception as error:
+        record_fallback(
+            component='other',
+            from_mode='first_week_metadata',
+            to_mode='retry',
+            reason='unavailable',
+            outcome='exhausted',
+            log=logger,
+        )
+        raise RuntimeError('first-week producer metadata read failed; retry the outbox enqueue') from error
+    metadata = snapshot.to_dict() or {} if snapshot.exists else {}
+    if metadata.get('processing_tier') == 'historical':
+        return None
+    stored = metadata.get('first_week_summary')
+    if isinstance(stored, dict):
+        return dict(stored)
+    created_at = metadata.get('created_at') or metadata.get('started_at')
+    if created_at is None:
+        return None
+    return users_db.first_week_stamp_for(owner_id, created_at)
 
 
 def _outbox():
@@ -215,6 +249,10 @@ class FirestoreEnrichmentOutbox:
         stamps: list[tuple[str, str]] = []
 
         def update(old):
+            first_week = payload.get('first_week_summary')
+            if old is None and snapshot_summary and not effects_only and first_week is None and first_week_enabled():
+                read_client = getattr(tx, 'client', None) or self._client()
+                first_week = _first_week_for_enqueue(read_client, owner_id, conversation_id, tx=tx)
             # Reuse the outbox CAS read: an earlier producer's processing hold
             # cannot be shortened by a complete recording's eager wake.
             held = (
@@ -239,6 +277,7 @@ class FirestoreEnrichmentOutbox:
                 policy_id=policy_id,
                 new_dispatch=new_dispatch,
                 snapshot_summary=snapshot_summary,
+                first_week=first_week if isinstance(first_week, dict) else None,
                 stamps=stamps,
             )(old)
             producer = payload.get('record_notes_producer') if record_notes_eager_enabled() else None
@@ -428,6 +467,10 @@ class FirestoreEnrichmentOutbox:
             else:
                 old.pop(SUPERSEDE_STREAK_FIELD, None)
             summary_seen = old.get('summary_seen_by') == claim.lease_token
+            if summary_seen and isinstance(old.get('first_week_summary'), dict):
+                attempts = old.get('first_week_attempts')
+                attempts = attempts if type(attempts) is int and attempts > 0 else 0
+                old.update(first_week_attempts=attempts + 1, first_week_last_class='summarized')
             if old['version'] == version:
                 if custody_conflict:
                     # Retain the obligation and its reason without waking it again.

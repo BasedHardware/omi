@@ -5,9 +5,12 @@ Hermetic: no Firestore, no task client, no LLM.
 
 from __future__ import annotations
 
+import hashlib
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 
@@ -64,6 +67,13 @@ def test_stamp_covers_a_conversation_created_inside_the_paid_week(monkeypatch):
     }
 
 
+def test_stamp_epoch_accepts_firestore_datetimes():
+    naive = datetime.fromtimestamp(PAID, timezone.utc).replace(tzinfo=None)
+    aware = datetime.fromtimestamp(PAID, timezone.utc)
+    assert guarantee.first_week_stamp(PAID, naive)['paid_since'] == PAID
+    assert guarantee.first_week_stamp(PAID, aware)['paid_since'] == PAID
+
+
 def test_kill_switch_off_and_zero_hours_disable_the_stamp(monkeypatch):
     _clear(monkeypatch)
     monkeypatch.setenv(guarantee.FIRST_WEEK_ENABLED_ENV, 'false')
@@ -94,7 +104,7 @@ def test_interval_comes_from_the_period_length_not_a_catalog():
 
 def test_paid_since_is_set_once_on_a_free_to_paid_transition():
     stored = {'plan': 'basic', 'status': 'active'}
-    incoming = {'plan': 'unlimited', 'status': 'active'}
+    incoming = {'plan': 'unlimited', 'status': 'active', 'current_period_start': PAID}
     patch = users_db.paid_since_patch(stored, incoming, now=PAID)
     assert patch == {'paid_since': PAID}
     # The user-level epoch is authoritative and a renewal never moves it.
@@ -103,15 +113,36 @@ def test_paid_since_is_set_once_on_a_free_to_paid_transition():
     }
     # A legacy paid row without the epoch is never covered.
     assert users_db.paid_since_patch({'plan': 'unlimited', 'status': 'active'}, incoming, now=PAID) == {}
+    assert (
+        users_db.paid_since_patch(stored, {'plan': 'operator', 'status': 'active', 'current_period_start': PAID}) == {}
+    )
+    assert (
+        users_db.paid_since_patch(
+            stored, {'plan': 'unlimited', 'status': 'active', 'prepaid': True, 'current_period_start': PAID}
+        )
+        == {}
+    )
+    assert users_db.paid_since_patch(stored, {'plan': 'unlimited', 'status': 'active'}, now=PAID) == {}
 
 
 def test_paid_since_ignores_a_trial_that_was_never_charged():
     stored = {'plan': 'basic', 'status': 'active'}
     assert users_db.paid_since_patch(stored, {'plan': 'unlimited', 'status': 'trialing'}, now=PAID) == {}
     # A carried epoch from the caller is authoritative and never moved.
-    assert users_db.paid_since_patch(stored, {'plan': 'unlimited', 'status': 'active', 'paid_since': 5}, now=PAID) == {
-        'paid_since': 5
+    assert users_db.paid_since_patch(
+        stored,
+        {'plan': 'unlimited', 'status': 'active', 'paid_since': 5, 'current_period_start': PAID},
+        now=PAID,
+    ) == {'paid_since': 5}
+    trial = {'plan': 'unlimited', 'status': 'active', '_first_week_trialing': True}
+    converted = {
+        'plan': 'unlimited',
+        'status': 'active',
+        '_first_week_payment_status': 'active',
+        '_first_week_trial_conversion': True,
+        '_first_week_paid_since': PAID + 24 * HOUR,
     }
+    assert users_db.paid_since_patch(trial, converted) == {'paid_since': PAID + 24 * HOUR}
 
 
 # --- the deadline readers --------------------------------------------------
@@ -204,8 +235,11 @@ def test_closeout_classifies_summarized_failed_and_no_attempt():
         'summarized',
         'unknown',
     )
-    assert closeout.classify({**base, 'summary_empty_failures': 1})[0] == 'attempt_failed'
-    assert closeout.classify({**base, 'summary_blocked_reason': 'blocked_byok'})[0] == 'attempt_failed'
+    assert closeout.classify({**base, 'summary_empty_failures': 1})[0] == 'no_attempt'
+    assert closeout.classify({**base, 'summary_blocked_reason': 'blocked_byok'})[0] == 'no_attempt'
+    assert closeout.classify({**base, 'first_week_attempts': 1, 'first_week_last_class': 'attempt_failed'})[0] == (
+        'attempt_failed'
+    )
     assert closeout.classify(base)[0] == 'no_attempt'
 
 
@@ -252,9 +286,11 @@ def test_campaign_off_subscription_writer_round_trips_paid_since_at_user_level(m
             self.writes = []
             self.reads = []
 
-        def get(self, fields=None, transaction=None):
+        def get(self, fields=None, transaction=None, field_paths=None):
+            fields = field_paths or fields
             self.reads.append(tuple(fields or ()))
-            return Snapshot({key: self.data[key] for key in fields if key in self.data})
+            selected = self.data if fields is None else {key: self.data[key] for key in fields if key in self.data}
+            return Snapshot(selected)
 
         def update(self, patch):
             self.writes.append(dict(patch))
@@ -270,6 +306,13 @@ def test_campaign_off_subscription_writer_round_trips_paid_since_at_user_level(m
         def collection(self, name):
             assert name == 'users'
             return Collection()
+
+    class Transaction:
+        def update(self, reference, patch):
+            reference.update(patch)
+
+    monkeypatch.setattr(users_db, 'transactional', lambda function: function)
+    monkeypatch.setattr(users_db, 'run_transactional', lambda _client, function, **_kwargs: function(Transaction()))
 
     monkeypatch.setattr(users_db, 'db', Client())
     monkeypatch.setattr(users_db, 'invalidate_subscription', lambda _uid: None)
@@ -327,6 +370,7 @@ def test_campaign_off_subscription_writer_round_trips_paid_since_at_user_level(m
 def test_conversation_codec_uses_stored_creation_time_for_the_window(monkeypatch):
     _clear(monkeypatch)
     monkeypatch.setenv(guarantee.FIRST_WEEK_ENABLED_ENV, 'true')
+    monkeypatch.setattr(conversations_db, 'first_week_open', lambda _row, now=None: True)
     monkeypatch.setattr(
         users_db,
         'first_week_stamp_for',
@@ -369,6 +413,36 @@ def test_conversation_codec_uses_stored_creation_time_for_the_window(monkeypatch
     assert conversations_db._first_week_created_epoch({}) is None
 
 
+def test_conversation_codec_does_not_create_a_closed_window_stamp(monkeypatch):
+    _clear(monkeypatch)
+    monkeypatch.setenv(guarantee.FIRST_WEEK_ENABLED_ENV, 'true')
+    monkeypatch.setattr(
+        users_db,
+        'first_week_stamp_for',
+        lambda _uid, created_at, **kwargs: guarantee.first_week_stamp(PAID, created_at, interval='monthly'),
+    )
+    write = conversations_db.encode_conversation_for_write(
+        'uid', {'id': 'closed-window', 'structured': {}, 'created_at': PAID + HOUR}
+    )
+    assert 'first_week_summary' not in write
+
+
+def test_processing_merge_preserves_closed_first_week_receipts():
+    stamp = guarantee.first_week_stamp(PAID, PAID + HOUR)
+    existing = {
+        'first_week_summary': stamp,
+        'first_week_outcome': 'no_attempt',
+        'first_week_outcome_at': PAID + 8 * 24 * HOUR,
+        'first_week_attempts': 0,
+        'first_week_last_class': 'no_attempt',
+    }
+    write = {'summary_output_present': True, 'structured': {'overview': 'usable'}}
+    summary_delivery.merge_result(existing, write, 'uid', now=PAID + 9 * 24 * HOUR)
+    assert write['first_week_summary'] == stamp
+    assert write['first_week_outcome'] == 'no_attempt'
+    assert write['first_week_outcome_at'] == PAID + 8 * 24 * HOUR
+
+
 def test_outbox_mark_uses_the_stored_stamp_or_original_creation_time(monkeypatch):
     _clear(monkeypatch)
     monkeypatch.setenv(guarantee.FIRST_WEEK_ENABLED_ENV, 'true')
@@ -406,6 +480,50 @@ def test_outbox_mark_uses_the_stored_stamp_or_original_creation_time(monkeypatch
     assert rows[outbox.key('uid', 'new')]['first_week_summary']['paid_since'] == PAID
     assert 'first_week_summary' not in rows[outbox.key('uid', 'old')]
     assert 'first_week_summary' not in rows[outbox.key('uid', 'historical')]
+
+
+def test_outbox_mark_retries_when_required_metadata_is_unavailable(monkeypatch):
+    _clear(monkeypatch)
+    monkeypatch.setenv(guarantee.FIRST_WEEK_ENABLED_ENV, 'true')
+    monkeypatch.setattr(outbox, '_conversation_scheduling_metadata', Mock(side_effect=OSError('offline')))
+    fallback = Mock()
+    monkeypatch.setattr(outbox, 'record_fallback', fallback)
+    with pytest.raises(RuntimeError, match='retry the outbox mark'):
+        outbox.mark('uid', 'conversation', 'en', now=PAID)
+    fallback.assert_called_once()
+
+
+def test_subscription_stamp_read_errors_are_retryable_and_observable(monkeypatch):
+    _clear(monkeypatch)
+    monkeypatch.setenv(guarantee.FIRST_WEEK_ENABLED_ENV, 'true')
+    monkeypatch.setattr(
+        users_db,
+        'get_existing_user_subscription_and_fields_cached',
+        Mock(side_effect=OSError('offline')),
+    )
+    fallback = Mock()
+    monkeypatch.setattr(users_db, 'record_fallback', fallback)
+    with pytest.raises(RuntimeError, match='eligibility read failed'):
+        users_db.first_week_stamp_for('uid', PAID)
+    fallback.assert_called_once()
+
+
+def test_open_first_week_sweep_skips_the_conversation_point_read(monkeypatch):
+    _clear(monkeypatch)
+    monkeypatch.setenv(guarantee.FIRST_WEEK_ENABLED_ENV, 'true')
+    monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '72')
+    now = PAID + 4 * 24 * HOUR
+    row = {
+        'uid': 'uid',
+        'conversation_id': 'conversation',
+        'first_pending_at': PAID + HOUR,
+        'first_week_summary': guarantee.first_week_stamp(PAID, PAID + HOUR),
+    }
+    monkeypatch.setattr(outbox, 'mutate_row', lambda _row_id, operation, client=None: operation(row)[1])
+    created_read = Mock(side_effect=AssertionError('open first-week rows need no conversation read'))
+    monkeypatch.setattr(age_gate, 'conversation_created_at', created_read)
+    assert not age_gate.park_if_expired('row', 'token', now=now, client=object())
+    created_read.assert_not_called()
 
 
 def test_first_week_keeps_existing_dispatch_and_repair_deadlines(monkeypatch):
@@ -469,6 +587,27 @@ def test_projection_repair_deadline_is_not_extended_to_week_end(monkeypatch):
     }
 
     assert summary_delivery.stamp_projection_debt(write, now=accepted + HOUR)
+    assert write['summary_due_at'] == accepted + guarantee.deadline_seconds()
+
+
+def test_projection_debt_survives_the_72_hour_gate_inside_an_open_week(monkeypatch):
+    _clear(monkeypatch)
+    monkeypatch.setenv(guarantee.FIRST_WEEK_ENABLED_ENV, 'true')
+    monkeypatch.setattr(summary_delivery, 'projection_debt_enabled', lambda: True)
+    accepted = PAID + HOUR
+    stamp = guarantee.first_week_stamp(PAID, accepted)
+    write = {
+        'status': 'completed',
+        'created_at': accepted,
+        'summary_first_pending_at': accepted,
+        'summary_due_at': None,
+        'data_protection_level': 'standard',
+        'structured': {},
+        'first_week_summary': stamp,
+    }
+    now = PAID + 4 * 24 * HOUR
+    assert now - accepted > 72 * HOUR
+    assert summary_delivery.stamp_projection_debt(write, now=now)
     assert write['summary_due_at'] == accepted + guarantee.deadline_seconds()
 
 
@@ -572,6 +711,73 @@ def test_closeout_writes_the_durable_aggregate_with_the_outcome(monkeypatch):
     assert result == ('summarized', 'monthly')
     assert conversation.data['first_week_outcome'] == 'summarized'
     assert closeout.durable_outcome_counts(client=client) == {('summarized', 'monthly'): 1}
+
+
+def test_closeout_classifies_from_the_outbox_attempt_receipt(monkeypatch):
+    class Snapshot:
+        exists = True
+
+        def __init__(self, data):
+            self.data = data
+
+        def to_dict(self):
+            return dict(self.data)
+
+    class Ref:
+        def __init__(self, path, data=None):
+            self.path = path
+            self.data = dict(data or {})
+
+        def get(self, transaction=None):
+            return Snapshot(self.data)
+
+    class Transaction:
+        def update(self, ref, patch):
+            ref.data.update(patch)
+
+        def set(self, ref, value, merge=False):
+            ref.data.update(value)
+
+    class Collection:
+        def __init__(self, client, path):
+            self.client = client
+            self.path = path
+
+        def document(self, doc_id):
+            path = f'{self.path}/{doc_id}'
+            return self.client.refs.setdefault(path, Ref(path))
+
+    class Client:
+        def __init__(self):
+            self.refs = {}
+            self.tx = Transaction()
+
+        def collection(self, path):
+            return Collection(self, path)
+
+        def transaction(self):
+            return self.tx
+
+    monkeypatch.setattr(closeout.firestore, 'transactional', lambda fn: fn)
+    client = Client()
+    conversation = Ref(
+        'users/uid/conversations/c',
+        {
+            'uid': 'uid',
+            'first_week_summary': guarantee.first_week_stamp(PAID, PAID, interval='monthly'),
+            'first_week_outcome': None,
+        },
+    )
+    outbox_id = hashlib.sha256(b'uid\0c').hexdigest()
+    client.collection('sync_reprocess_outbox').document(outbox_id).data.update(
+        first_week_attempts=1,
+        first_week_last_class='attempt_failed',
+    )
+
+    result = closeout.close_one(conversation, now=PAID + 8 * 24 * HOUR, client=client)
+
+    assert result == ('attempt_failed', 'monthly')
+    assert conversation.data['first_week_outcome'] == 'attempt_failed'
 
 
 def test_closeout_clears_callback_results_on_transaction_retry(monkeypatch):

@@ -3484,7 +3484,7 @@ FIELD_SITES = {
         (
             'stamp_projection_debt',
             'summary_due_at',
-            'accepted + first_week_deadline(write, accepted)',
+            'accepted + summary_deadline_seconds(write)',
             ('summary_due_at',),
         ),
         ('stamp_projection_debt', 'summary_first_pending_at', 'accepted', ('summary_first_pending_at',)),
