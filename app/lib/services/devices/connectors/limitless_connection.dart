@@ -54,6 +54,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
   bool _closed = false;
   Future<void>? _disconnectOperation;
   bool _isBatchMode = false;
+  bool _batchDrainActive = false;
   int? _batchModeEpoch;
   final Duration _streamHealthWindow;
   final Duration _storageStatusTimeout;
@@ -164,6 +165,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
     await _flashPageController.close();
     await _buttonController.close();
     _isBatchMode = false;
+    _batchDrainActive = false;
     _batchModeEpoch = null;
     await super.disconnect();
   }
@@ -287,12 +289,13 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
   Future<void> _reinitializeAfterReconnect(int epoch) async {
     _realtimeSuppressed = realtimeSuppressionPolicy?.call() ?? _realtimeSuppressed;
-    // The native drain engine owns the control characteristic during a flash drain.
-    if (_isBatchMode && _batchModeEpoch != epoch) {
+    // A drain owns the control mode across reconnects. A failed exit has no
+    // drain owner, so discard its stale latch and resume the requested mode.
+    if (_isBatchMode && !_batchDrainActive) {
       _isBatchMode = false;
       _batchModeEpoch = null;
     }
-    if (_isBatchMode || !_isCurrentSession(epoch)) return;
+    if (!_isCurrentSession(epoch)) return;
     try {
       _resetProtocolSessionForReconnect();
 
@@ -303,7 +306,22 @@ class LimitlessDeviceConnection extends DeviceConnection {
       await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, timeSyncCmd);
       if (!_isCurrentSession(epoch)) return;
       await Future.delayed(_reconnectSettleDelay);
-      if (!_isCurrentSession(epoch) || _isBatchMode) return;
+      if (!_isCurrentSession(epoch)) return;
+
+      if (_batchDrainActive) {
+        final batchModeCmd = _encodeDownloadFlashPages(batchMode: true, realTime: false);
+        await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, batchModeCmd);
+        if (!_isCurrentSession(epoch)) return;
+        if (_batchDrainActive) {
+          _isBatchMode = true;
+          _batchModeEpoch = epoch;
+        }
+        return;
+      }
+
+      // A drain may have been explicitly cancelled while time sync was in flight.
+      _isBatchMode = false;
+      _batchModeEpoch = null;
 
       if (!_realtimeSuppressed) {
         final dataStreamCmd = _encodeEnableDataStream();
@@ -1456,6 +1474,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
       _rawDataBuffer.clear();
       _fragmentBuffer.clear();
       _completedFlashPages.clear();
+      _batchDrainActive = true;
       _isBatchMode = true;
       _batchModeEpoch = epoch;
       final cmd = _encodeDownloadFlashPages(batchMode: true, realTime: false);
@@ -1463,11 +1482,12 @@ class LimitlessDeviceConnection extends DeviceConnection {
       if (!_isCurrentSession(epoch)) return;
       DebugLogManager.logInfo('Limitless batch mode enabled');
     } catch (e) {
+      if (!_isCurrentSession(epoch)) return;
       if (_batchModeEpoch == epoch) {
         _isBatchMode = false;
         _batchModeEpoch = null;
       }
-      if (!_isCurrentSession(epoch)) return;
+      _batchDrainActive = false;
       if (!_realtimeSuppressed) _armStreamHealthWatch(reason: 'batch_mode_enable_failed');
       Logger.debug('Limitless: Error enabling batch mode: $e');
       DebugLogManager.logError(e, null, 'Limitless failed to enable batch mode');
@@ -1478,6 +1498,9 @@ class LimitlessDeviceConnection extends DeviceConnection {
   Future<void> disableBatchMode() async {
     if (!_isInitialized) return;
     final epoch = connectionEpoch;
+    // An explicit exit request relinquishes drain ownership; failed writes
+    // keep a mode latch until reconnect or a later confirmed exit.
+    _batchDrainActive = false;
 
     try {
       final pendingPages = _completedFlashPages.length;

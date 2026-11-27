@@ -1314,6 +1314,44 @@ void main() {
     expect(reconnectMessages, [6, 8]);
   });
 
+  test('an active flash drain reenters batch mode after a BLE reconnect', () async {
+    final transport = FakeDeviceTransport();
+    final connection = LimitlessDeviceConnection(
+      BtDevice(name: 'Limitless Pendant', id: 'fake-limitless', type: DeviceType.limitless, rssi: -50),
+      transport,
+      setupSettleDelay: Duration.zero,
+      reconnectSettleDelay: Duration.zero,
+    );
+    addTearDown(connection.disconnect);
+    await connection.connect();
+    await connection.enableBatchMode();
+    expect(connection.isBatchMode, isTrue);
+
+    final reenteredBatchMode = Completer<List<int>>();
+    transport.onWrite = (data) {
+      final command = decodeWrapperCommand(data);
+      if (command['messageNumber'] == 8 && !reenteredBatchMode.isCompleted) {
+        reenteredBatchMode.complete(List<int>.from(data));
+      }
+    };
+    transport.emitState(DeviceTransportState.disconnected);
+    await Future<void>.delayed(Duration.zero);
+    transport.emitState(DeviceTransportState.connected);
+    final command = await reenteredBatchMode.future.timeout(const Duration(seconds: 2));
+
+    expect(connection.isBatchMode, isTrue);
+    final decoded = decodeWrapperCommand(command);
+    expect(
+      command,
+      equals(mirrorDownloadFlashPages(
+        decoded['index'] as int,
+        decoded['requestId'] as int,
+        true,
+        false,
+      )),
+    );
+  });
+
   test('a stale failed reconciliation cannot relatch batch mode after reconnect', () async {
     final transport = FakeDeviceTransport();
     final connection = LimitlessDeviceConnection(
