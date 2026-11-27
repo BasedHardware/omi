@@ -998,7 +998,8 @@ def _run(uid, conversation, receipt, load_prints, apply, failure_context: UnitFa
         'changed_segments': len(updates),
         'speaker_count': len(voice_ids),
         'covered_segments': len(covered),
-        **split_details,
+        'split_segments': len(splits),
+        'split_refusals': dict(split_refusals),
     }
     if partial_resolution is not None:
         # Complete coverage with manual or other-lane segments left alone.

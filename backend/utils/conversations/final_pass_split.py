@@ -89,12 +89,13 @@ def plan_runs(words: list[dict]) -> Optional[list[Run]]:
         if not shorts:
             break
         i = min(shorts, key=lambda k: runs[k].last - runs[k].first)
-        left = runs[i - 1] if i > 0 else None
-        right = runs[i + 1] if i + 1 < len(runs) else None
-        size = lambda r: -1 if r is None else r.last - r.first  # noqa: E731
-        if size(left) >= size(right):
+        left_size = runs[i - 1].last - runs[i - 1].first if i > 0 else -1
+        right_size = runs[i + 1].last - runs[i + 1].first if i + 1 < len(runs) else -1
+        if left_size >= right_size:
+            left = runs[i - 1]
             runs[i - 1] = Run(left.voice, left.first, runs[i].last)
         else:
+            right = runs[i + 1]
             runs[i + 1] = Run(right.voice, runs[i].first, right.last)
         del runs[i]
         merged = []
@@ -224,7 +225,7 @@ def unsplit_lines(segments) -> list[dict]:
     def get(segment, key):
         return segment.get(key) if isinstance(segment, dict) else getattr(segment, key, None)
 
-    by_id = {get(s, 'id'): s for s in segments if get(s, 'id')}
+    by_id = {str(get(s, 'id')): s for s in segments if get(s, 'id')}
     lines = []
     for segment_id, segment in by_id.items():
         chain = expand_split(segment_id, by_id)
