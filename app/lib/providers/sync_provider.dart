@@ -1067,12 +1067,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
         _updateSyncState(_syncState.toError(message: _pendantFullMessage()), generation);
       } else if (checkFlashStall && _walService.getSyncs().flashStallReason == FlashSyncStallReason.unknown) {
         DebugLogManager.logWarning('SyncProvider: $context stalled — could not confirm all pendant audio');
-        _updateSyncState(
-          _syncState.toError(
-            message: 'The Pendant\'s stored audio could not be fully confirmed. Keep the app connected and retry sync.',
-          ),
-          generation,
-        );
+        _updateSyncState(_syncState.toError(message: _pendantAudioUnconfirmedMessage()), generation);
       } else if ((result?.localUploadFailures ?? 0) == 0) {
         DebugLogManager.logInfo('SyncProvider: $context completed with no new conversations');
         _updateSyncState(_syncState.toCompleted(conversations: []), generation);
@@ -1172,6 +1167,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
         'Your Pendant\'s storage is full and it\'s still in recording mode, so its stored audio '
             'can\'t be transferred. Press the Pendant\'s button to stop recording, then sync again.';
   }
+
+  String _pendantAudioUnconfirmedMessage() => globalNavigatorKey.currentContext?.l10n.syncFailed ?? 'Sync failed';
 
   String _formatSyncError(dynamic error, Wal? wal) {
     var baseMessage = error.toString().replaceAll('Exception: ', '');

@@ -119,7 +119,7 @@ void main() {
     await provider.syncWals();
 
     expect(provider.syncState.hasError, isTrue);
-    expect(provider.syncError, contains('could not be fully confirmed'));
+    expect(provider.syncError, 'Sync failed');
     provider.dispose();
   });
 }

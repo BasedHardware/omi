@@ -56,6 +56,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
   Future<void>? _disconnectOperation;
   bool _isBatchMode = false;
   bool _batchDrainActive = false;
+  bool _batchModeUnconfirmed = false;
   int? _batchModeEpoch;
   final Duration _streamHealthWindow;
   final Duration _storageStatusTimeout;
@@ -167,6 +168,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
     await _buttonController.close();
     _isBatchMode = false;
     _batchDrainActive = false;
+    _batchModeUnconfirmed = false;
     _batchModeEpoch = null;
     _unconfirmedStoredPageIndices.clear();
     _lastAcknowledgedIndex = -1;
@@ -213,6 +215,8 @@ class LimitlessDeviceConnection extends DeviceConnection {
       _resetStreamActivationCounters();
       _customLiveHealth = LimitlessRealtimeHealth(
         window: _streamHealthWindow,
+        reactivationTimeout:
+            _storageStatusTimeout + NativeBleTransport.operationTimeout * 2 + const Duration(seconds: 1),
         isCurrent: isCurrent,
         reactivate: () async {
           if (!canReactivate()) return false;
@@ -230,6 +234,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
           });
           if (!canReactivate() || _audioFramesSinceStreamActivation != framesBeforeProbe) return false;
           await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, _encodeEnableDataStream());
+          if (isCurrent()) _batchModeUnconfirmed = false;
           return true;
         },
         report: report,
@@ -301,8 +306,9 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
   Future<void> _reinitializeAfterReconnect(int epoch) async {
     _realtimeSuppressed = realtimeSuppressionPolicy?.call() ?? _realtimeSuppressed;
-    // A reconnect leaves the pendant's control mode unknown. Keep parsing the
-    // live path until an active drain's batch-mode write is confirmed.
+    // A reconnect leaves the pendant's control mode unknown. Do not publish
+    // stored pages as live audio until a mode-selection write is confirmed.
+    _batchModeUnconfirmed = true;
     if (_batchDrainActive || _isBatchMode) {
       _isBatchMode = false;
       _batchModeEpoch = null;
@@ -328,6 +334,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
         if (!_isCurrentSession(epoch)) return;
         if (_batchDrainActive) {
           _isBatchMode = true;
+          _batchModeUnconfirmed = false;
           _batchModeEpoch = epoch;
         }
         return;
@@ -341,7 +348,10 @@ class LimitlessDeviceConnection extends DeviceConnection {
         final dataStreamCmd = _encodeEnableDataStream();
         await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, dataStreamCmd);
         if (!_isCurrentSession(epoch)) return;
-        if (!_realtimeSuppressed) _armStreamHealthWatch(reason: 'bluetooth_reconnect');
+        if (!_realtimeSuppressed) {
+          _batchModeUnconfirmed = false;
+          _armStreamHealthWatch(reason: 'bluetooth_reconnect');
+        }
       }
       DebugLogManager.logInfo('Limitless device re-initialized after reconnect', {
         'timeSynced': true,
@@ -373,7 +383,10 @@ class LimitlessDeviceConnection extends DeviceConnection {
       final cmd = _encodeEnableDataStream(enable: !suppressed);
       await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, cmd);
       if (!_isCurrentSession(epoch)) return;
-      if (!suppressed && !_realtimeSuppressed) _armStreamHealthWatch(reason: 'realtime_resumed');
+      if (!suppressed && !_realtimeSuppressed) {
+        _batchModeUnconfirmed = false;
+        _armStreamHealthWatch(reason: 'realtime_resumed');
+      }
       DebugLogManager.logInfo('Limitless realtime ${suppressed ? 'suppressed' : 'resumed'} (Transcribe Later)');
     } catch (e) {
       Logger.debug('Limitless: setRealtimeAudioSuppressed($suppressed) failed: $e');
@@ -483,6 +496,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
               limitlessServiceUuid, limitlessTxCharUuid, _encodeEnableDataStream(enable: !appliedSuppression));
           if (!_isCurrentSession(epoch)) return;
         }
+        _batchModeUnconfirmed = false;
       }
 
       _isInitialized = true;
@@ -608,13 +622,20 @@ class LimitlessDeviceConnection extends DeviceConnection {
               final flashPage = _extractStorageBufferFlashPage(storageBuffer);
               final pageFrames = _extractOpusFramesFromFlashPage(flashPage ?? storageBuffer);
               final pageIndex = pageFrames.isEmpty ? null : _extractStorageBufferPageIndex(storageBuffer);
+              final withheldByUnconfirmedMode = _batchModeUnconfirmed;
               final withheldByActiveDrain = _batchDrainActive && !_isBatchMode;
               final withheldByExistingBarrier = pageIndex != null && _unconfirmedStoredPageIndices.contains(pageIndex);
-              if (pageFrames.isNotEmpty && (withheldByActiveDrain || withheldByExistingBarrier)) {
+              if (pageFrames.isNotEmpty &&
+                  (withheldByUnconfirmedMode || withheldByActiveDrain || withheldByExistingBarrier)) {
                 if (pageIndex == null) {
-                  // Without an index there is no safe ACK barrier to protect
-                  // this page, so preserve its frames in the live delivery path.
-                  audioBatches.add((pageFrames, !(_batchDrainActive && !_isBatchMode)));
+                  // Without an index there is no safe ACK barrier. While mode
+                  // is uncertain, withhold the page and let a later flash drain
+                  // retrieve it instead of duplicating it into live audio.
+                  if (withheldByUnconfirmedMode) {
+                    withheldStoredFrames = true;
+                  } else {
+                    audioBatches.add((pageFrames, !(_batchDrainActive && !_isBatchMode)));
+                  }
                 } else {
                   withheldStoredFrames = true;
                   if (_unconfirmedStoredPageIndices.add(pageIndex)) {
@@ -675,6 +696,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
   }
 
   void _resetProtocolSessionForReconnect() {
+    _batchModeUnconfirmed = true;
     _rawDataBuffer.clear();
     _fragmentBuffer.clear();
     _storageState = null;
@@ -758,6 +780,9 @@ class LimitlessDeviceConnection extends DeviceConnection {
         _streamReactivationAttempts = 1;
         final dataStreamCmd = _encodeEnableDataStream();
         await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, dataStreamCmd);
+        if (generation == _streamHealthGeneration && !_isBatchMode && !_batchDrainActive && !_realtimeSuppressed) {
+          _batchModeUnconfirmed = false;
+        }
         DebugLogManager.logInfo('Limitless realtime stream reactivation sent after silent start');
         _armStreamHealthWatch(reason: 'silent_start_retry', resetAttempts: false);
       }
@@ -1715,10 +1740,12 @@ class LimitlessDeviceConnection extends DeviceConnection {
       _completedFlashPages.clear();
       _batchDrainActive = true;
       _isBatchMode = true;
+      _batchModeUnconfirmed = true;
       _batchModeEpoch = epoch;
       final cmd = _encodeDownloadFlashPages(batchMode: true, realTime: false);
       await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, cmd);
       if (!_isCurrentSession(epoch)) return;
+      _batchModeUnconfirmed = false;
       DebugLogManager.logInfo('Limitless batch mode enabled');
     } catch (e) {
       if (!_isCurrentSession(epoch)) return;
@@ -1726,6 +1753,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
         _isBatchMode = false;
         _batchModeEpoch = null;
       }
+      _batchModeUnconfirmed = true;
       _batchDrainActive = false;
       if (!_realtimeSuppressed) _armStreamHealthWatch(reason: 'batch_mode_enable_failed');
       Logger.debug('Limitless: Error enabling batch mode: $e');
@@ -1739,6 +1767,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
   /// proves those pages have left the pendant's flash ring.
   void releaseBatchDrainAfterSyncFailure() {
     if (!_batchDrainActive && !_isBatchMode) return;
+    _batchModeUnconfirmed = true;
     _batchDrainActive = false;
     _isBatchMode = false;
     _batchModeEpoch = null;
@@ -1755,6 +1784,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
     // An explicit exit request relinquishes drain ownership; failed writes
     // keep a mode latch until reconnect or a later confirmed exit.
     _batchDrainActive = false;
+    _batchModeUnconfirmed = true;
 
     try {
       final pendingPages = _completedFlashPages.length;
@@ -1780,6 +1810,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
       }
 
       _isBatchMode = false;
+      _batchModeUnconfirmed = false;
       _batchModeEpoch = null;
       if (!_realtimeSuppressed) _armStreamHealthWatch(reason: 'batch_mode_disabled');
       DebugLogManager.logInfo('Limitless batch mode disabled', {
@@ -1801,14 +1832,15 @@ class LimitlessDeviceConnection extends DeviceConnection {
         await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, reconcileCommand);
         if (!_isCurrentSession(epoch)) return;
         _isBatchMode = false;
+        _batchModeUnconfirmed = false;
         _batchModeEpoch = null;
         if (!_realtimeSuppressed) _armStreamHealthWatch(reason: 'batch_mode_disable_reconciled');
       } catch (reconcileError) {
         if (_isCurrentSession(epoch)) {
-          // The pendant's mode is unknown. Keep the parser on the live path so
-          // an arriving audio frame is not discarded as a flash-page message;
-          // reconnect initialization will explicitly select real-time mode.
+          // The pendant's mode is unknown. Suppress stored-page delivery until
+          // reconnect or a later mode write confirms the parser's mode.
           _isBatchMode = false;
+          _batchModeUnconfirmed = true;
           _batchModeEpoch = null;
           if (!_realtimeSuppressed) _armStreamHealthWatch(reason: 'batch_mode_disable_unreconciled');
         } else if (_batchModeEpoch == epoch) {

@@ -164,6 +164,34 @@ void main() {
         reason: 'the older shared fetch cannot replace the retry snapshot');
   });
 
+  test('an older successful refresh commits while a newer retry is still pending', () async {
+    final pendingFirst = Completer<Map<String, OmiFlag>?>();
+    final pendingRetry = Completer<Map<String, OmiFlag>?>();
+    var calls = 0;
+    final adapter = PostHogAnalyticsAdapter(
+      apiKey: 'test',
+      omiFlags: () {
+        calls++;
+        return calls == 1 ? pendingFirst.future : pendingRetry.future;
+      },
+    )..identify(userId: 'u');
+
+    final existingWaiter = adapter.reloadFeatureFlags();
+    expect(await adapter.reloadFeatureFlagsWithTimeout(const Duration(milliseconds: 5)), isFalse);
+    final retry = adapter.reloadFeatureFlags();
+    expect(calls, 2);
+
+    pendingFirst.complete({'kill': (enabled: true, variant: null, payloadJson: null)});
+    expect(await existingWaiter, isTrue);
+    expect(await adapter.resolvedFeatureEnabled('kill'), isTrue,
+        reason: 'a successful in-flight snapshot remains available while its retry is pending');
+
+    pendingRetry.complete({'kill': (enabled: false, variant: null, payloadJson: null)});
+    expect(await retry, isTrue);
+    expect(await adapter.resolvedFeatureEnabled('kill'), isFalse,
+        reason: 'a later successful snapshot still replaces the older committed snapshot');
+  });
+
   test('a timed out refresh releases the slot and ignores its late answer', () async {
     final pendingFirst = Completer<Map<String, OmiFlag>?>();
     var calls = 0;

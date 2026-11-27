@@ -39,6 +39,7 @@ class PostHogAnalyticsAdapter
   /// cannot land after B takes over.
   int _identityGeneration = 0;
   int _omiFlagsReloadGeneration = 0;
+  int _omiFlagsReloadCommittedGeneration = 0;
   Future<bool>? _omiFlagsReloadInFlight;
   int? _omiFlagsReloadInFlightIdentityGeneration;
   String? _flagIdentity;
@@ -218,7 +219,8 @@ class PostHogAnalyticsAdapter
     } on TimeoutException {
       // The underlying GET cannot be cancelled. Release the slot so a scheduled
       // retry starts a fresh request. Existing waiters still receive this fetch's
-      // result, but only the newest reload generation may update the cache.
+      // result, and the newest successful snapshot wins even if an older fetch
+      // completes while that retry is still pending.
       if (identical(_omiFlagsReloadInFlight, reload)) {
         _omiFlagsReloadInFlight = null;
         _omiFlagsReloadInFlightIdentityGeneration = null;
@@ -240,7 +242,10 @@ class PostHogAnalyticsAdapter
       try {
         final flags = await fetch();
         if (flags == null || identityGeneration != _identityGeneration) return false;
-        if (reloadGeneration == _omiFlagsReloadGeneration) _omi = Map.unmodifiable(flags);
+        if (reloadGeneration > _omiFlagsReloadCommittedGeneration) {
+          _omi = Map.unmodifiable(flags);
+          _omiFlagsReloadCommittedGeneration = reloadGeneration;
+        }
         return true;
       } catch (_) {
         return false;

@@ -1174,7 +1174,7 @@ void main() {
     expect(decoded, [liveFrame, storedFrame]);
   });
 
-  test('unindexed stored frames stay live when batch-mode re-entry is unconfirmed', () async {
+  test('unindexed stored frames are withheld when batch-mode re-entry is unconfirmed', () async {
     final transport = FakeDeviceTransport();
     final connection = LimitlessDeviceConnection(
       BtDevice(name: 'Limitless Pendant', id: 'fake-limitless', type: DeviceType.limitless, rssi: -50),
@@ -1197,11 +1197,9 @@ void main() {
     await reentryAttempted.future.timeout(const Duration(seconds: 2));
 
     final frame = opusFrame(0xb8, 51, 40);
-    final received = Completer<void>();
+    final decoded = <List<int>>[];
     final subscription = await connection.performGetBleAudioBytesListener(
-      onAudioBytesReceived: (_) {
-        if (!received.isCompleted) received.complete();
-      },
+      onAudioBytesReceived: decoded.add,
     );
     addTearDown(() => subscription?.cancel());
     final malformedStorageBuffer = [
@@ -1215,13 +1213,8 @@ void main() {
           ])),
     ];
     transport.emit(limitlessRxCharUuid, bleWrapper(11, 0, 1, pendantMessage(malformedStorageBuffer)));
-    await received.future.timeout(const Duration(seconds: 2));
-
-    final acknowledged = await connection.acknowledgeProcessedData(150);
-    expect(acknowledged, 150, reason: 'live delivery consumed the frame, so no unknown-page barrier is needed');
-    final ack = transport.writes.lastWhere((data) => decodeWrapperCommand(data)['messageNumber'] == 7);
-    final ackBody = decodeWrapperCommand(ack)['messageBytes'] as List<int>;
-    expect(decodeVarint(ackBody, 1)[0], 150);
+    await pumpEventQueue();
+    expect(decoded, isEmpty, reason: 'the unindexed stored page must not be duplicated into live audio');
   });
 
   test('unavailable withheld pages release the ACK barrier and capped reads stay capped', () async {
@@ -1677,7 +1670,7 @@ void main() {
     expect(transport.writes, hasLength(5), reason: 'one failed mode write is followed by one reconciliation write');
   });
 
-  test('failed batch-mode exit keeps the live parser when reconciliation also fails', () async {
+  test('failed batch-mode exit withholds stored pages but delivers live frames', () async {
     final transport = FakeDeviceTransport();
     final connection = LimitlessDeviceConnection(
       BtDevice(name: 'Limitless Pendant', id: 'fake-limitless', type: DeviceType.limitless, rssi: -50),
@@ -1685,6 +1678,15 @@ void main() {
       setupSettleDelay: Duration.zero,
     );
     addTearDown(connection.disconnect);
+    final decoded = <List<int>>[];
+    final liveFrameReceived = Completer<void>();
+    final subscription = await connection.performGetBleAudioBytesListener(
+      onAudioBytesReceived: (frame) {
+        decoded.add(frame);
+        if (!liveFrameReceived.isCompleted) liveFrameReceived.complete();
+      },
+    );
+    addTearDown(() => subscription?.cancel());
     await connection.connect();
     var activations = 0;
     final restored = Completer<void>();
@@ -1707,6 +1709,32 @@ void main() {
         reason: 'unknown device mode must not route live audio into the flash parser');
     await restored.future.timeout(const Duration(seconds: 2));
     expect(activations, 2, reason: 'the retained Custom Live binding is restored after both writes fail');
+
+    final storedFrame = opusFrame(0xb8, 81, 40);
+    final liveFrame = opusFrame(0xb8, 82, 40);
+    transport.emit(
+      limitlessRxCharUuid,
+      bleWrapper(
+        11,
+        0,
+        1,
+        [
+          ...pendantMessage(
+            storageBufferBytes(
+              session: 7,
+              seq: 26,
+              index: 100,
+              page: flashPageBytes(1750000000000, [
+                audioWrapper(audioBlobOfFrames([storedFrame]))
+              ]),
+            ),
+          ),
+          ...realtimeAudioBytes([liveFrame]),
+        ],
+      ),
+    );
+    await liveFrameReceived.future.timeout(const Duration(seconds: 2));
+    expect(decoded, [liveFrame], reason: 'stored field-2 audio is withheld while field-4 live audio remains available');
   });
 
   test('stale batch mode clears and reconnect resumes realtime after disable failure', () async {
