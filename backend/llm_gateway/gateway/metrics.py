@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import re
 import threading
@@ -263,6 +264,91 @@ def observe_error(
     )
 
 
+_IMAGE_ERROR_CODES = frozenset(
+    {
+        'billing_hard_limit_reached',
+        'content_policy_violation',
+        'insufficient_quota',
+        'invalid_api_key',
+        'invalid_parameter',
+        'invalid_type',
+        'invalid_value',
+        'missing_required_parameter',
+        'model_not_found',
+        'organization_verification_required',
+        'rate_limit_exceeded',
+        'unknown_parameter',
+        'unsupported_parameter',
+    }
+)
+_IMAGE_ERROR_TYPES = frozenset({'api_error', 'invalid_request_error', 'rate_limit_error', 'server_error'})
+_IMAGE_ERROR_PARAMS = frozenset(
+    {
+        'model',
+        'n',
+        'prompt',
+        'quality',
+        'size',
+        'response_format',
+        'output_format',
+        'background',
+        'user',
+    }
+)
+
+
+def _image_rejection_details(body: object) -> tuple[str, dict[str, str]]:
+    # Provider errors can echo input in any field. Keep only known wire values
+    # and recognize fixed provider message prefixes without copying their text.
+    if not isinstance(body, dict) or not isinstance(error := body.get('error'), dict):
+        return 'unknown', {}
+    fields = {}
+    for field, allowed in (('code', _IMAGE_ERROR_CODES), ('type', _IMAGE_ERROR_TYPES), ('param', _IMAGE_ERROR_PARAMS)):
+        value = error.get(field)
+        if isinstance(value, str) and value in allowed:
+            fields[field] = value
+    message = error.get('message')
+    if isinstance(message, str) and message.startswith('Your organization must be verified'):
+        fields['message'] = 'organization_verification_required'
+    reason = fields.get('message') or fields.get('code') or fields.get('type') or 'unknown'
+    return reason, fields
+
+
+def observe_image_generation(
+    started_at: float,
+    *,
+    request_id: str,
+    model: str,
+    outcome: str,
+    error_class: str,
+    upstream_http_status: int | None,
+    rejection_body: object,
+) -> None:
+    observe_route_result(
+        started_at,
+        lane_id='unknown',
+        route_artifact_id='unknown',
+        provider='openai',
+        model='gpt-image-1' if model == 'gpt-image-1' else 'unknown',
+        credential_source='omi_managed',
+        used_lkg=False,
+        fallback_used=False,
+        fallback_reason=None,
+        outcome=outcome,
+        error_class=error_class,
+        request_id=request_id,
+        api_surface='openai_images_generations',
+        streaming=False,
+        phase='terminal',
+        upstream_http_status=upstream_http_status,
+        image_rejection=(
+            _image_rejection_details(rejection_body)
+            if upstream_http_status is not None and upstream_http_status >= 400
+            else None
+        ),
+    )
+
+
 def observe_route_result(
     started_at: float,
     *,
@@ -291,6 +377,7 @@ def observe_route_result(
     finish_reason: str = 'unknown',
     rejection_reason: str = 'none',
     upstream_http_status: int | None = None,
+    image_rejection: tuple[str, dict[str, str]] | None = None,
 ) -> None:
     labels = {
         'lane_id': _bounded(lane_id),
@@ -324,13 +411,19 @@ def observe_route_result(
             credential_source=labels['credential_source'],
         ).observe(ttfb_seconds)
     terminal_log = logger.warning if outcome == 'error' else logger.info
+    if image_rejection is not None:
+        safe_reason, error_fields = image_rejection
+        rejection_suffix = f' upstream_error={json.dumps(error_fields, separators=(",", ":"))}'
+    else:
+        safe_reason = _safe_rejection_reason(rejection_reason) if error_class == 'invalid_request' else 'none'
+        rejection_suffix = ''
     terminal_log(
         'llm_gateway_terminal request_id=%s surface=%s streaming=%s phase=%s lane=%s route=%s provider=%s '
         'model=%s credential_source=%s outcome=%s error_class=%s route_serving_class=%s failure_class=%s '
         'fallback_used=%s fallback_from=%s fallback_to=%s '
         'provider_rejection=%s '
         'budget_source=%s output_budget=%s completion_size=%s finish_reason=%s ttfb_seconds=%s rejection_reason=%s '
-        'upstream_http_status=%s',
+        'upstream_http_status=%s%s',
         request_id,
         _bounded(api_surface),
         _bool_label(streaming),
@@ -353,8 +446,9 @@ def observe_route_result(
         labels['completion_size'],
         labels['finish_reason'],
         f'{ttfb_seconds:.6f}' if ttfb_seconds is not None else 'none',
-        _safe_rejection_reason(rejection_reason) if error_class == 'invalid_request' else 'none',
+        safe_reason,
         (upstream_http_status if type(upstream_http_status) is int and 100 <= upstream_http_status <= 599 else 'none'),
+        rejection_suffix,
     )
 
 

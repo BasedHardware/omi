@@ -55,6 +55,11 @@
       "review_by": "2026-12-06",
       "reason": "shadow readout pending; ramp or retire decision on SCA-3850"
     },
+    "BATCH_MULTILINGUAL_PROFILE_ROUTING_ENABLED": {
+      "owner": "Goal: Pipeline",
+      "review_by": "2026-12-10",
+      "reason": "ship-on kill switch for multilingual-profile routing; retire after the production readback"
+    },
     "BATCH_ADMISSION_PARALLEL_CALLS": {
       "owner": "planscost",
       "review_by": "2026-11-30"
