@@ -133,15 +133,25 @@ widen the tool to get past it.
 
 `backend/scripts/proof-llm-gateway-ownership-handoff.sh` runs the real deploy script and handoff tool
 against a kwokctl cluster on this machine: a real API server and controllers whose Nodes are
-simulated. It refuses any other API server address. It asserts that a conflicting owner fails the
-deploy before any write, that the handoff leaves the serving image and the other owners intact, that
-a different tag and a digest then roll through ordinary Helm, and that an entry owning more than the
-image is refused:
+simulated. It asserts that a conflicting owner fails the deploy before any write, that the handoff
+leaves the serving image and the other owners intact, that a different tag and a digest then roll
+through ordinary Helm, and that an entry owning more than the image is refused. With `kwokctl`, Helm
+4, `kubectl`, `jq` and `python3` on `PATH`, from the repository root:
 
 ```bash
-kwokctl create cluster --name sca4959 --runtime=binary --kubeconfig="$PWD/sca4959.kubeconfig"
-KUBECONFIG="$PWD/sca4959.kubeconfig" bash backend/scripts/proof-llm-gateway-ownership-handoff.sh
-kwokctl delete cluster --name sca4959 --kubeconfig="$PWD/sca4959.kubeconfig"
+bash backend/scripts/proof-llm-gateway-ownership-handoff.sh
 ```
 
-The explicit `--kubeconfig` keeps the scratch cluster out of your default kubeconfig.
+The proof creates its own cluster, under a name unique to that run, and deletes it when it finishes.
+`--keep` leaves the cluster and its kubeconfig in place to inspect a failure.
+
+The proof never reads your kubeconfig. Before its first write it establishes, by reads only, that
+the cluster is the one it just created, and refuses otherwise:
+
+- `kwokctl` lists the cluster under that name.
+- The kubeconfig in use is the one `kwokctl` wrote for it and names no other cluster.
+- Its API server is on loopback and reports an upstream Kubernetes build.
+- The cluster holds nothing: no Nodes, Pods or CRDs, and only the four default namespaces.
+
+A remote cluster that a local port-forward or proxy serves on loopback is refused: its kubeconfig is
+not the one `kwokctl` wrote for the run, and it is not empty.
