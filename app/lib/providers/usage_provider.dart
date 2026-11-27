@@ -81,6 +81,9 @@ class UsageProvider with ChangeNotifier {
 
   bool get isProcessingBacklog => _isProcessingBacklog;
 
+  /// Fences a confirmation across account changes while allowing plan refreshes.
+  int get backlogDecisionSession => _sessionGeneration;
+
   /// A cancelled choice ends its retry identity. An in-flight request owns its
   /// identity until it answers, even if another surface is postponed.
   void cancelBacklogDecision() {

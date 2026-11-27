@@ -1708,7 +1708,18 @@ void main() {
         await settleDetailTab(tester);
         expect(calls, 0);
 
-        // If Home refreshes the plan while the dialog is open, use the newly rendered estimate.
+        // An identical offer in a replacement account cannot reuse the confirmation.
+        await tester.tap(process);
+        await settleDetailTab(tester);
+        usage.clearUserData();
+        setBacklog('waiting_choice');
+        await tester.pump();
+        await tester.tap(confirm);
+        await settleDetailTab(tester);
+        expect(calls, 0);
+        expect(confirm, findsNothing);
+
+        // A changed estimate requires another confirmation without reopening by hand.
         await tester.tap(process);
         await settleDetailTab(tester);
         setBacklog('waiting_choice', hours: 0.5);
@@ -1716,9 +1727,12 @@ void main() {
         await tester.tap(confirm);
         await settleDetailTab(tester);
         expect(calls, 0);
+        expect(confirm, findsOneWidget);
+        expect(find.textContaining('0.5'), findsOneWidget);
 
-        await tester.tap(process);
-        await settleDetailTab(tester);
+        // Refreshing the same displayed offer does not discard the confirmed tap.
+        setBacklog('waiting_choice', hours: 0.5);
+        await tester.pump();
         await tester.tap(confirm);
         await settleDetailTab(tester);
         expect(calls, 1);
