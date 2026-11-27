@@ -3318,9 +3318,6 @@ environments:
           BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
           BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
           BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
-          FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
-            value: 'false'
-            category: ops_kill
           CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED: {value: 'off', category: rollout}
           STT_CAP_DISPATCH_ENFORCEMENT:
             secret:
@@ -3689,9 +3686,6 @@ environments:
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             category: ops_kill
             value: '100'
-          FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
-            value: 'false'
-            category: ops_kill
           CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED: {value: 'off', category: rollout}
           SYNC_TASKS_PROJECT:
             value: based-hardware

@@ -245,11 +245,10 @@ def test_production_overlay_keeps_every_first_week_service_disabled_until_census
         entry = env.get(name)
         return entry.get('value') if isinstance(entry, dict) else entry
 
-    # Both GKE writers have direct overrides and the shared envFrom ConfigMap
-    # carries the same explicit off value for workload replicas without one.
-    for service in ('backend-listen', 'pusher'):
-        assert value(overlay['gke'][service]['env']) == 'false'
-        assert value(prod['gke'][service]['env']) == 'false'
+    # Both GKE writers consume the shared ConfigMap, which carries the explicit
+    # flag-off value without introducing chart env entries outside its contract.
+    assert {'backend-listen', 'pusher'} <= set(overlay['gke'])
+    assert {'backend-listen', 'pusher'} <= set(prod['gke'])
     assert overlay['gke']['config_map']['entries'][key] == {'source': 'literal', 'value': 'false'}
     assert prod['gke']['config_map']['entries'][key] == {'source': 'literal', 'value': 'false'}
     assert value(overlay['desktop_backend']['env']) == 'false'

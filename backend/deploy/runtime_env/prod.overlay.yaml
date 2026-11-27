@@ -48,7 +48,6 @@ overlay:
       values_file: backend/charts/parakeet/prod_omi_parakeet_lid_values.yaml
     backend-listen:
       env:
-        FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED: {value: 'false', category: ops_kill}
         CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED:
           value: 'off'
           category: rollout
@@ -337,7 +336,6 @@ overlay:
           category: rollout
     pusher:
       env:
-        FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED: {value: 'false', category: ops_kill}
         CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED:
           value: 'off'
           category: rollout
