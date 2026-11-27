@@ -353,6 +353,20 @@ def admit_processing(uid: str, conversation_id: str, *, extra_updates: dict[str,
     )
 
 
+def reclaim_stale_processing(
+    uid: str, conversation_id: str, *, expected_fields: dict[str, Any], extra_updates: dict[str, Any]
+) -> bool:
+    """Take over a stale synchronous claim only if its observed lease still matches."""
+    return conversations_db.claim_conversation_status(
+        uid,
+        conversation_id,
+        ConversationStatus.processing,
+        ConversationStatus.processing,
+        extra_updates={**extra_updates, 'processing_admitted_at': datetime.now(timezone.utc)},
+        expected_fields=expected_fields,
+    )
+
+
 def ensure_processing(uid: str, conversation_id: str) -> bool:
     """Make a claimed finalizer's expected state explicit without reopening terminals."""
     conversation = conversations_db.get_conversation(uid, conversation_id)

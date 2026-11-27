@@ -344,7 +344,7 @@ def _prepare_routed(
 
     Cassettes of every engine are recorded beforehand (one ``record-*`` pass per engine, each pinned); only
     the LID answers (vendor probe, local self-gate stand-in) are recorded here, on a ``record-vendor`` run.
-    A legacy upload whose files went to different engines plays each engine's words inside its own files."""
+    A legacy upload plays each file's selected provider, model, and language cassette inside its time range."""
     from testing.pipeline_lab.lanes.audio import load_pcm16
     from testing.pipeline_lab.stt_routing import routing
 
@@ -412,16 +412,33 @@ def _prepare_routed(
     misses: list[str] = []
     for rec in recordings:
         pcm16, route = pcms[rec.label], routes[rec.label]
-        engines = sorted({r for _, _, r in route.pieces}) if route.route == routing.MIXED else [route.route]
-        found = {}
-        for engine in engines:
-            if engine != route.route and not mapping.get(engine):
+        piece_details = route.piece_details
+        if piece_details is None and route.pieces:
+            piece_details = tuple(
+                (start, end, engine, route.provider, route.model, route.language) for start, end, engine in route.pieces
+            )
+        if not piece_details:
+            piece_details = ((0.0, len(pcm16) / 32000, route.route, route.provider, route.model, route.language),)
+        signatures = [(engine, provider, model, language) for _, _, engine, provider, model, language in piece_details]
+        found: dict[tuple[str, str, str, str], tuple[Cassette, str]] = {}
+        for engine, provider, model, language in dict.fromkeys(signatures):
+            if route.route == routing.MIXED and not mapping.get(engine):
                 misses.append(
                     f'recording {rec.label}: a mixed legacy upload needs {routing.CASSETTES_ENV} to map {engine} '
                     f'({route.reason}); the scenario pin would replay the other engine for its files'
                 )
                 break
-            pin = {**dict(scenario.stt), **routing.cassette_pin(route, mapping, engine)}
+            pin = {
+                **dict(scenario.stt),
+                **routing.cassette_pin(
+                    route,
+                    mapping,
+                    engine,
+                    provider=provider,
+                    model=model,
+                    language=language,
+                ),
+            }
             if not pin.get('provider') or not pin.get('model'):
                 misses.append(
                     f'recording {rec.label}: routed to {engine}, which has no cassette pin; map it in '
@@ -437,14 +454,14 @@ def _prepare_routed(
                     f'{routing.ROUTING_ENV} unset (one record-vendor or record-local pass per engine), then rerun'
                 )
                 break
-            found[engine] = hit
-        if len(found) != len(engines):
+            found[(engine, provider, model, language)] = hit
+        if len(found) != len(set(signatures)):
             if not record:
                 break
             continue
-        cassette, origin = found[engines[0]]
-        if len(engines) > 1:
-            cassette = _spliced(found, route.pieces)
+        cassette, origin = found[signatures[0]]
+        if len(set(signatures)) > 1:
+            cassette = _spliced(found, piece_details)
         summary = {**route.summary(), 'audio_sha256': audio_sha256(pcm16)[:16]}
         out[rec.label] = PreparedAudio(rec.label, pcm16, cassette, origin, mode, route=summary)
     if misses:
@@ -454,13 +471,17 @@ def _prepare_routed(
     return out
 
 
-def _spliced(found: dict[str, tuple[Cassette, str]], pieces: Sequence[tuple[float, float, str]]) -> Cassette:
-    """One cassette for a legacy upload whose files went to different engines: each engine's words that
-    start inside its own files (the multilingual engine's key names it)."""
+def _spliced(
+    found: dict[tuple[str, str, str, str], tuple[Cassette, str]],
+    pieces: Sequence[tuple[float, float, str, str, str, str]],
+) -> Cassette:
+    """Splice words from the cassette selected for each legacy file's exact engine and language."""
     words = []
-    for start, end, engine in pieces:
-        words.extend(w for w in found[engine][0].words if start <= w.start < end)
-    base = found.get('multilingual', next(iter(found.values())))[0]
+    for start, end, engine, provider, model, language in pieces:
+        cassette = found[(engine, provider, model, language)][0]
+        words.extend(w for w in cassette.words if start <= w.start < end)
+    base_key = next((key for key in found if key[0] == 'multilingual'), next(iter(found)))
+    base = found[base_key][0]
     return replace(base, words=sorted(words, key=lambda w: (w.start, w.end)), segments=[])
 
 

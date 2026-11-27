@@ -20,7 +20,7 @@ from __future__ import annotations
 import json
 import re
 import uuid
-from typing import Any, Callable, Literal, Mapping
+from typing import TYPE_CHECKING, Any, Callable, Literal, Mapping
 
 import dataclasses
 import functools
@@ -32,6 +32,9 @@ from config.summary_guarantee import first_week_enabled
 from database import record_notes_hold
 from database import users as users_db
 from utils.observability.fallback import record_fallback
+
+if TYPE_CHECKING:
+    from database.outbox_provider_stt import FirestoreProviderSttOutbox
 
 logger = logging.getLogger(__name__)
 
@@ -694,7 +697,7 @@ def FirestoreOutbox(  # noqa: N802 (the conformance suite's factory name, contra
 
 
 @functools.cache
-def _provider_stt_outbox() -> Outbox:
+def provider_stt_outbox() -> FirestoreProviderSttOutbox:
     # Lazy so the selector stays import-light; cached so every caller shares one instance, like enrichment.
     from database.outbox_provider_stt import FirestoreProviderSttOutbox
 
@@ -706,5 +709,5 @@ def firestore_outbox(kind: OutboxKind) -> Outbox:
     if OutboxKind(kind) is OutboxKind.ENRICHMENT:
         return ENRICHMENT_OUTBOX
     if OutboxKind(kind) is OutboxKind.PROVIDER_STT:  # lane 8 (lead ruling 10-19)
-        return _provider_stt_outbox()
+        return provider_stt_outbox()
     raise NotImplementedError(f'no Firestore outbox for {OutboxKind(kind).value} in this window')

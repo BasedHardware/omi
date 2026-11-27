@@ -169,6 +169,11 @@ export BLIS_NUM_THREADS="${BLIS_NUM_THREADS:-1}"
 # process before collection; file isolation pays this cost hundreds of times.
 # Keep the other plugins active.
 pytest_args=(-p no:langsmith_plugin -v)
+if [[ "${BACKEND_UNIT_SHARD_SUMMARY:-0}" == "1" ]]; then
+  pytest_args+=(-p testing.shard_failure_summary)
+  # Tests that launch their own runner must not publish into this summary.
+  unset BACKEND_UNIT_SHARD_SUMMARY
+fi
 
 marker_expr="${BACKEND_PYTEST_MARK_EXPR:-not integration and not slow}"
 if [[ -n "$marker_expr" ]]; then

@@ -68,7 +68,7 @@ class BatchPlane:
         self.client, self.on_page, self.row_cost, self.sleep = client, on_page, row_cost, sleep
         self.reads, self.objects, self.erased = [], [], []
         monkeypatch.setattr(purge, 'get_data_plane_firestore_client', lambda: client)
-        monkeypatch.setattr(purge, '_cursor', lambda _client, _ns, _table, after: after)
+        monkeypatch.setattr(purge, 'purge_cursor', lambda _client, _ns, _table, after: after)
         monkeypatch.setattr(purge.queries, 'owner_documents', self.owner_documents)
         monkeypatch.setattr(purge.queries, 'artifacts_by_owner_id', self.parked)
         monkeypatch.setattr(purge, '_erase_artifact', self.erase_artifact)

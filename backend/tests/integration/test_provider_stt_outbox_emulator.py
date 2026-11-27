@@ -121,3 +121,46 @@ def test_provider_running_intent_may_register_its_one_result(emulator):
         jobs.document(segment).delete()
         for doc in client.collection(f'{namespace}_artifacts').stream():
             doc.reference.delete()
+
+
+def test_job_side_sweep_reaches_ancient_open_missing_and_closed_wakes(emulator):
+    from config.batch_pipeline_retention import LIFECYCLE_SECONDS
+
+    client, collection = emulator
+    owner = f'provider-repair-{uuid.uuid4().hex[:8]}'
+    ClientCustomerData(client).add_user(owner)
+    wakes: list = []
+    outbox = _outbox(client, collection, wakes)
+    jobs = client.collection(f"{collection.removesuffix('_provider_stt_outbox')}_jobs")
+    now = LIFECYCLE_SECONDS + 10_000
+    segments = {label: _segment(label) for label in ('ancient', 'missing', 'closed', 'live', 'recent', 'settled')}
+    for label, segment in segments.items():
+        jobs.document(segment).set(
+            {
+                'state': 'result_ready' if label == 'settled' else 'provider_running',
+                'enqueued_at': now - 1 if label == 'recent' else 100.0,
+                'owner_id': owner,
+            }
+        )
+
+    ancient = segments['ancient']
+    initial = outbox.enqueue(ancient, owner, {'segment_id': ancient}, 100.0, now=100.0)
+    assert outbox.sweep(now=now).rewoken == 0
+
+    closed = segments['closed']
+    initial_closed = outbox.enqueue(closed, owner, {'segment_id': closed}, 100.0, now=100.0)
+    claim = outbox.claim_key(closed, initial_closed.wake_token, 1800, now=101.0)
+    assert isinstance(claim, Claim) and outbox.ack(claim, 'processed', now=110.0)
+
+    live = segments['live']
+    active = outbox.enqueue(live, owner, {'segment_id': live}, now - 1, now=now - 1)
+    assert isinstance(outbox.claim_key(live, active.wake_token, 1800, now=now - 1), Claim)
+    wakes.clear()
+
+    # Four matching jobs share the same timestamp. A two-row page must reach both pages,
+    # including past the live lease, and a subsequent pass must respect the new tokens.
+    assert sum(outbox.sweep_running(now=now, limit=2)[0] for _ in range(3)) == 3
+    assert {segment for segment, _, _ in wakes} == {segments[key] for key in ('ancient', 'missing', 'closed')}
+    assert outbox.claim_key(ancient, initial.wake_token, 1800, now=now) is Outcome.STALE
+    assert all(outbox.sweep_running(now=now, limit=2) == (0, 0) for _ in range(3))
+    assert outbox.claim_key(live, active.wake_token, 1800, now=now) is Outcome.BUSY

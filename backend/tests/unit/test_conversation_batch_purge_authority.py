@@ -11,7 +11,6 @@
 from __future__ import annotations
 
 import contextvars
-from types import SimpleNamespace
 
 import pytest
 import requests
@@ -111,7 +110,10 @@ def test_remote_erasure_is_not_sent_once_the_gate_is_lost(gate_client, fast_cloc
     assert sent == []
 
 
-def test_unknown_remote_outcome_fails_closed_then_the_next_run_settles_it(gate_client, fast_clock):
+@pytest.mark.parametrize('post_window', [False, True])
+def test_unknown_remote_outcome_fails_closed_then_the_next_run_settles_it(
+    gate_client, fast_clock, monkeypatch, post_window
+):
     attempts = []
 
     def no_response():
@@ -137,9 +139,21 @@ def test_unknown_remote_outcome_fails_closed_then_the_next_run_settles_it(gate_c
     gate['remote_inflight_at'] = gate['remote_inflight_at'] - legal_holds.timedelta(
         seconds=legal_holds.UNIT_REMOTE_STUCK_SECONDS + 1
     )
-    progress = SimpleNamespace(uid=UID)
+    progress = purge_jobs.RunProgress(gate_client, 'job', 1, 'token', UID, None, post_window=post_window)
     resolved = []
-    purge_jobs.RunProgress.settle_stuck(progress, lambda target: resolved.append(target) or True)
+
+    def resolve(target):
+        resolved.append(target)
+        return True
+
+    if post_window:
+        monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{}')
+        with pytest.raises(purge_jobs.RunSuperseded):
+            progress.settle_stuck(resolve)
+        assert resolved == []
+        assert gate_client.docs[GATE_PATH]['state'] == 'running'
+        monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"bpp_late_erasure_execute":100}')
+    progress.settle_stuck(resolve)
     assert resolved == ['gs://bucket/owners/a#7']
     assert gate_client.docs[GATE_PATH]['state'] == 'failed'
     assert _foreground_acquires(gate_client) is True
@@ -152,7 +166,8 @@ def test_stuck_gate_is_not_settled_without_a_definitive_answer(gate_client, fast
     gate = gate_client.docs[GATE_PATH]
     gate['remote_target'] = 'gs://bucket/owners/a'
     gate['remote_inflight_at'] -= legal_holds.timedelta(seconds=legal_holds.UNIT_REMOTE_STUCK_SECONDS + 1)
-    purge_jobs.RunProgress.settle_stuck(SimpleNamespace(uid=UID), lambda target: False)
+    progress = purge_jobs.RunProgress(gate_client, 'job', 1, 'token', UID, None)
+    progress.settle_stuck(lambda target: False)
     assert gate_client.docs[GATE_PATH]['state'] == 'running'
 
 

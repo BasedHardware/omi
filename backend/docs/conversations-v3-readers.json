@@ -31,6 +31,10 @@
     "policy": "storage",
     "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
   },
+  "backend/database/batch_privacy_late_sweeps.py:document_path": {
+    "policy": "storage",
+    "reason": "Reads the owner-scoped recording policy fields at the policy commit to verify authorization for delayed artifact erasure."
+  },
   "backend/database/batch_ramp.py:collection": {
     "policy": "storage",
     "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."

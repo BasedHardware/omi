@@ -34,6 +34,8 @@ on:
       - 'backend/scripts/firebase_release_probe_token.py'
       - 'backend/testing/release_fixtures/transcription-release-probe.json'
       - 'backend/testing/release_fixtures/transcription-release-probe.wav'
+      - '.github/scripts/pusher_canary_inverse.py'
+      - '.github/scripts/pusher_image_rehearsal.py'
       - '.github/workflows/gcp_backend_pusher_auto_deploy.yml'
       - '.github/workflows/gcp_backend_pusher.yml'
 

@@ -178,6 +178,7 @@ def _build_fakes() -> dict[str, ModuleType]:
         'get_app_result',
         'should_discard_conversation',
         'get_conversation_notes',
+        'conversation_notes_steps',
         'validate_structured_source_segment_ids',
         'generate_summary_with_prompt',
         'SummaryProviderError',

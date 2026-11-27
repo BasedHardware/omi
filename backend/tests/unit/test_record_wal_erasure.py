@@ -1,5 +1,6 @@
 """New originals participate in existing account/conversation privacy erasure."""
 
+from contextlib import nullcontext
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -39,6 +40,7 @@ def test_conversation_wal_erasure_still_aborts_on_a_stale_generation(monkeypatch
     monkeypatch.setattr(storage, '_get_storage_client', lambda: _Client({'private': bucket}))
     monkeypatch.setattr(storage, '_uses_real_gcs_bucket', lambda _: True)
     monkeypatch.setattr(storage, 'private_cloud_sync_bucket', 'private')
+    monkeypatch.setattr(storage, 'destructive_operation_gate', lambda *_a, **_kw: nullcontext())
     monkeypatch.delenv('BUCKET_AUDIO_DERIVED', raising=False)
     monkeypatch.delenv('BUCKET_CANONICAL_AUDIO', raising=False)
 

@@ -42,9 +42,9 @@ def test_flags_off_helpers_and_noop_wrappers_do_not_import_compute_dependencies(
         response = object()
 
         @generated.generated_compute_scoped
-        @funded.scoped
         def unchanged(uid):
-            return response
+            with funded.processing_usage_scope(uid):
+                return response
 
         with generated.generated_compute_scope('synthetic'):
             assert unchanged('synthetic') is response

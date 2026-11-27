@@ -28,6 +28,9 @@ stage: prod
 dataPlaneProject: ""
 bucket: ""
 secretName: ""
+# Optional existing namespace-scoped decision-cache credentials. Leave empty
+# until the worker's Redis route and scoped credentials have been verified.
+privacyDecisionRedisSecret: ""
 replicaCount: 1
 # Worker rolls replace pods in place with maxSurge 0 (no surge GPU). This is the
 # share of replicas that may be draining or starting at once; Kubernetes rounds

@@ -265,7 +265,9 @@ async def test_desktop_record_origin_uses_the_escape_language(
         intake, 'provider_config', lambda: SimpleNamespace(pool_kind='dedicated_batch', max_unit_seconds=600)
     )
     monkeypatch.setattr(intake, 'decode_units', decode_units)
-    monkeypatch.setattr(intake, 'artifacts_for', lambda store_: SimpleNamespace(stage_audio=lambda w, b: 'uri'))
+    monkeypatch.setattr(
+        intake, 'artifacts_for', lambda store_: SimpleNamespace(stage_audio=lambda w, b, *, record_origin: 'uri')
+    )
     monkeypatch.setattr(intake, 'admit', capture_admit)
     outcome = await intake.accept_upload(
         uid='synthetic-owner',
