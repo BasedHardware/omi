@@ -15,16 +15,24 @@ overlapped another pass lost up to 60 s before its window was planned and its no
 ## What changed
 
 Only for a recording the owner finished in the last three minutes, a moved or raced pass also
-schedules one wake about 3 s later. It is named by a 10 s slot, so one slot holds one follow-up per
-owner. The next-minute wake is unchanged and stays the backstop. Live speech that moves a pass
-behaves as before.
+schedules a wake about 3 s after it releases its builder lease, so the follow-up does not answer
+`busy` against that pass. Recency is read from the Finish stamp (`v3_finish_requested.at`) when one
+is stored, else from `finished_at`. Each Finish recording gets at most two re-wakes: the task name
+is the owner, the recording and an ordinal (1 or 2), with no clock in it, and Cloud Tasks refuses a
+name it already holds. A Finish whose passes keep racing, for example on a deterministic commit
+guard that also answers `source_changed`, stops after two and falls back to the minute wake. The
+next-minute wake is unchanged and stays the backstop. Live speech that moves a pass behaves as
+before.
 
 ## Cost
 
-- A moved pass whose loaded rows show no Finish reads at most 8 documents, Finish marker fields only.
-  That is one read for a typical pass.
-- A Finish that overlapped a pass adds one extra Cloud Task and one builder pass.
-- There are no new writes, and no new model calls unless the earlier pass's outline was stale anyway.
+- A moved pass whose loaded rows show no Finish reads at most 8 documents, Finish marker fields
+  only, newest moved recordings first. That is one read for a typical pass.
+- At most two extra Cloud Tasks and two builder passes per Finish, plus at most two refused
+  task creates per later racing pass inside the 3-minute window.
+- No new writes. Outline calls: none when the Finish's input did not change, because a raced pass
+  keeps its paid outline on the lease (`save_outline`) and the follow-up reuses it; at most one per
+  re-wake when the input did change, which the minute pass would otherwise have paid.
 
 ## Rollback
 
@@ -32,5 +40,6 @@ Set `CONVERSATIONS_V3_FINISH_FAST_REWAKE=off` on backend-sync. The off path neit
 
 ## Readback
 
-- Watch `omi_conversations_v3_finish_rewakes_total{reason}` after serving.
+- Watch `omi_conversations_v3_finish_rewakes_total{reason,outcome}` after serving; `capped` should stay
+  a small share of `scheduled`.
 - The Finish-to-Home SLI (SCA-4489 readback) should show fewer Finishes in the 60 to 120 s band.

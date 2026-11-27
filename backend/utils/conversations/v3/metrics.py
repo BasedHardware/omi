@@ -154,8 +154,9 @@ FINISH_HELD = Counter(
 
 FINISH_REWAKES = Counter(
     'omi_conversations_v3_finish_rewakes_total',
-    'Seconds-scale owner wakes after a pass committed (moved) or raced while a recent Finish recording changed',
-    ['reason'],
+    'Seconds-scale Finish re-wakes after a pass committed (moved) or raced while a recent Finish recording changed;'
+    ' outcome capped: that Finish had used its re-wakes',
+    ['reason', 'outcome'],
 )
 
 SUMMARY_LATENCY = Histogram('omi_conversations_v3_end_to_summary_seconds', 'End to stored summary')
