@@ -762,11 +762,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     final reason = batteryHideReason;
     if (reason != null) _batteryDisplay.rememberIfStuck(batteryLevel, charging: isCharging);
     if (reason != null && _reportedHideReasons.add(reason)) {
-      try {
-        const TypedEvents().emit(BatteryReadingHidden(reason: _hiddenReasonWire(reason)));
-      } catch (e) {
-        Logger.debug('Battery Reading Hidden not reported: $e');
-      }
+      const TypedEvents().emit(BatteryReadingHidden(reason: _hiddenReasonWire(reason)));
     }
     _batteryDisplayTimer?.cancel();
     _batteryDisplayTimer = null;
