@@ -252,9 +252,12 @@ void main() {
     await world.settle();
 
     expect(connection.captureIsCurrent, isNull, reason: 'a failed refresh cannot trust cached false');
+    final readsBeforeRetry = adapter.reloadCount;
     await world.elapse(const Duration(seconds: 5));
     await world.settle();
     expect(connection.captureIsCurrent, isNull, reason: 'the successful retry observes the enabled kill switch');
+    expect(adapter.reloadCount, greaterThan(readsBeforeRetry), reason: 'the bounded retry must actually fetch flags');
+    expect(adapter.cachedFlags[flag], isTrue, reason: 'the retry must cache the enabled kill switch');
   });
 
   test('two failed kill-switch fetches restore the watch and a later gate pass retries', () async {

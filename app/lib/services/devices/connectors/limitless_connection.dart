@@ -626,7 +626,9 @@ class LimitlessDeviceConnection extends DeviceConnection {
                   }
                 }
               } else {
-                audioBatches.add((pageFrames, !(_batchDrainActive && !_isBatchMode)));
+                if (pageFrames.isNotEmpty) {
+                  audioBatches.add((pageFrames, !(_batchDrainActive && !_isBatchMode)));
+                }
               }
             } else if (fieldNumber == 4) {
               final encodedLiveField = payload.sublist(fieldStart, pos);

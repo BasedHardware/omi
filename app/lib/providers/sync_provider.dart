@@ -895,9 +895,23 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     final generation = _sessionGeneration;
     final syncs = _walService.getSyncs();
     try {
-      await syncs.deleteAllSyncedWals();
-      await syncs.deleteAllPendingWals();
-      await syncs.deleteAllCorruptedWals();
+      Object? firstError;
+      StackTrace? firstStackTrace;
+
+      Future<void> attempt(Future<void> Function() operation) async {
+        try {
+          await operation();
+        } catch (error, stackTrace) {
+          firstError ??= error;
+          firstStackTrace ??= stackTrace;
+        }
+      }
+
+      await attempt(syncs.deleteAllSyncedWals);
+      await attempt(syncs.deleteAllPendingWals);
+      await attempt(syncs.deleteAllCorruptedWals);
+
+      if (firstError != null) Error.throwWithStackTrace(firstError!, firstStackTrace!);
     } finally {
       await _refreshWals(generation);
     }
@@ -1051,6 +1065,14 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
         // recording via the hardware button is what unfreezes the firmware.
         DebugLogManager.logWarning('SyncProvider: $context stalled — pendant storage is full');
         _updateSyncState(_syncState.toError(message: _pendantFullMessage()), generation);
+      } else if (checkFlashStall && _walService.getSyncs().flashStallReason == FlashSyncStallReason.unknown) {
+        DebugLogManager.logWarning('SyncProvider: $context stalled — could not confirm all pendant audio');
+        _updateSyncState(
+          _syncState.toError(
+            message: 'The Pendant\'s stored audio could not be fully confirmed. Keep the app connected and retry sync.',
+          ),
+          generation,
+        );
       } else if ((result?.localUploadFailures ?? 0) == 0) {
         DebugLogManager.logInfo('SyncProvider: $context completed with no new conversations');
         _updateSyncState(_syncState.toCompleted(conversations: []), generation);

@@ -929,7 +929,7 @@ void main() {
     await sync.stop();
   });
 
-  test('Limitless: a withheld ACK keeps the WAL pending at the acknowledged resume page', () async {
+  test('Limitless: a withheld ACK keeps the WAL pending after durable pages', () async {
     const ts = 1700000000000;
     final card = _FakeLimitless(
       pages: [
@@ -964,8 +964,7 @@ void main() {
     await expectLater(sync.syncWal(wal: wal), throwsException);
 
     expect(wal.status, WalStatus.miss, reason: 'a partial device ACK cannot complete the transfer');
-    expect(wal.storageOffset, 2,
-        reason: 'resume after the acknowledged prefix, not the durable but unacknowledged page');
+    expect(wal.storageOffset, 3, reason: 'resume after durable pages to avoid persisting the same audio twice');
     expect(card.acks, [1]);
   });
 

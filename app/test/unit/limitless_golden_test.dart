@@ -1374,6 +1374,7 @@ void main() {
     transport.emit(
       limitlessRxCharUuid,
       bleWrapper(10, 0, 1, [
+        ...bytesField(2, const []),
         ...bytesField(4, const []),
         ...bytesField(9, realtimeAudioBytes([frame])),
       ]),

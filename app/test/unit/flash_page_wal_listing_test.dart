@@ -100,6 +100,17 @@ void main() {
     expect(rest.seconds, 70);
   });
 
+  test('partial drain resumes after durable pages even when their ACK is withheld', () {
+    expect(
+      FlashPageWalSyncImpl.resumePageAfterDurablePage(startPage: 100, lastDurablePageIndex: 149),
+      150,
+    );
+    expect(
+      FlashPageWalSyncImpl.resumePageAfterDurablePage(startPage: 100, lastDurablePageIndex: 99),
+      100,
+    );
+  });
+
   test('bulk synced deletion continues after a flash page ACK refusal', () async {
     final attempted = <int>[];
     final pendant = _FakePendant(

@@ -102,6 +102,10 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
     return FlashSyncStallReason.unknown;
   }
 
+  @visibleForTesting
+  static int resumePageAfterDurablePage({required int startPage, required int lastDurablePageIndex}) =>
+      lastDurablePageIndex < startPage ? startPage : lastDurablePageIndex + 1;
+
   Future<Map<String, int>?> _getStorageStatus(String deviceId) async {
     var connection = _testConnection ?? await ServiceManager.instance().device.ensureConnection(deviceId);
     if (connection == null) return null;
@@ -603,9 +607,10 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
               }
 
               // Update WAL to reflect remaining pages (for next sync attempt)
-              final resumePage = lastAcknowledgedIndex == null || lastAcknowledgedIndex! < startPage
-                  ? startPage
-                  : lastAcknowledgedIndex! + 1;
+              final resumePage = resumePageAfterDurablePage(
+                startPage: startPage,
+                lastDurablePageIndex: lastDurablePageIndex!,
+              );
               wal.storageOffset = resumePage;
               final remainingPages = endPage >= resumePage ? endPage - resumePage + 1 : 0;
               wal.seconds = (remainingPages * secondsPerFlashPage).round();
@@ -721,9 +726,10 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
       // synced after only a partial download. refreshWalsFromDevice() re-reads
       // the device's advanced pointer on the next Sync.
       if (lastDurablePageIndex != null) {
-        final resumePage = lastAcknowledgedIndex == null || lastAcknowledgedIndex! < startPage
-            ? startPage
-            : lastAcknowledgedIndex! + 1;
+        final resumePage = resumePageAfterDurablePage(
+          startPage: startPage,
+          lastDurablePageIndex: lastDurablePageIndex,
+        );
         wal.storageOffset = resumePage;
         final remainingPages = endPage >= resumePage ? endPage - resumePage + 1 : 0;
         wal.seconds = (remainingPages * secondsPerFlashPage).round();

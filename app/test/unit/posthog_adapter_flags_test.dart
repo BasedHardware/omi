@@ -141,6 +141,29 @@ void main() {
     expect(await adapter.resolvedFeatureEnabled('kill'), isTrue);
   });
 
+  test('a retry does not invalidate another caller waiting on the timed out refresh', () async {
+    final pendingFirst = Completer<Map<String, OmiFlag>?>();
+    var calls = 0;
+    final adapter = PostHogAnalyticsAdapter(
+      apiKey: 'test',
+      omiFlags: () {
+        calls++;
+        if (calls == 1) return pendingFirst.future;
+        return Future.value({'kill': (enabled: false, variant: null, payloadJson: null)});
+      },
+    )..identify(userId: 'u');
+
+    final existingWaiter = adapter.reloadFeatureFlags();
+    expect(await adapter.reloadFeatureFlagsWithTimeout(const Duration(milliseconds: 5)), isFalse);
+    expect(await adapter.reloadFeatureFlagsWithTimeout(const Duration(seconds: 1)), isTrue);
+    expect(calls, 2);
+
+    pendingFirst.complete({'kill': (enabled: true, variant: null, payloadJson: null)});
+    expect(await existingWaiter, isTrue);
+    expect(await adapter.resolvedFeatureEnabled('kill'), isFalse,
+        reason: 'the older shared fetch cannot replace the retry snapshot');
+  });
+
   test('a timed out refresh releases the slot and ignores its late answer', () async {
     final pendingFirst = Completer<Map<String, OmiFlag>?>();
     var calls = 0;

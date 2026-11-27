@@ -24,17 +24,29 @@ class _Listener implements IWalSyncListener {
 }
 
 class _LocalSyncs {
-  _LocalSyncs(this.phone);
+  _LocalSyncs(this.phone, {this.failSyncedDelete = false});
 
   final LocalWalSyncImpl phone;
+  final bool failSyncedDelete;
+  final List<String> deleteCalls = [];
 
   Future<List<Wal>> getAllWals() => phone.getAllWals();
 
-  Future<void> deleteAllSyncedWals() => phone.deleteAllSyncedWals();
+  Future<void> deleteAllSyncedWals() {
+    deleteCalls.add('synced');
+    if (failSyncedDelete) throw StateError('simulated flash ACK refusal');
+    return phone.deleteAllSyncedWals();
+  }
 
-  Future<void> deleteAllPendingWals() => phone.deleteAllPendingWals();
+  Future<void> deleteAllPendingWals() {
+    deleteCalls.add('pending');
+    return phone.deleteAllPendingWals();
+  }
 
-  Future<void> deleteAllCorruptedWals() => phone.deleteAllCorruptedWals();
+  Future<void> deleteAllCorruptedWals() {
+    deleteCalls.add('corrupted');
+    return phone.deleteAllCorruptedWals();
+  }
 }
 
 class _WalService implements IWalService {
@@ -209,5 +221,20 @@ void main() {
     await syncProvider.deleteAllClearableWals();
 
     expect(syncProvider.allWals, isEmpty, reason: 'Clear All must still be able to remove it');
+  });
+
+  test('Clear All continues pending and corrupted deletes after synced deletion fails', () async {
+    final syncs = _LocalSyncs(localSync, failSyncedDelete: true);
+    final syncProvider = SyncProvider(
+      walService: _WalService(syncs),
+      uploadGate: _offlineGate(),
+      startBackgroundSync: false,
+    );
+    provider = syncProvider;
+    await syncProvider.initialized;
+
+    await expectLater(syncProvider.deleteAllClearableWals(), throwsStateError);
+
+    expect(syncs.deleteCalls, ['synced', 'pending', 'corrupted']);
   });
 }

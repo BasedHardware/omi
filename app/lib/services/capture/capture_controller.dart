@@ -2996,7 +2996,7 @@ class CaptureController extends ChangeNotifier
   void _scheduleCustomLiveAudioFlagRetry(
     int generation,
     int identityEpoch, {
-    Duration delay = const Duration(seconds: 5),
+    required Duration delay,
     bool resetFetchRetries = false,
   }) {
     if (_customLiveAudioRecoveryFlagRetryTimer != null) return;

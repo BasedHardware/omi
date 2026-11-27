@@ -16,7 +16,9 @@ class _Sync extends ChangeNotifier implements SyncProvider {
   final requests = <Completer<List<double>?>>[];
   final played = <Wal>[];
   final shared = <Wal>[];
+  final deleted = <Wal>[];
   final transferDone = Completer<void>();
+  bool failDelete = false;
   Wal? transferring;
   @override
   double get walsSyncedProgress => 0.87;
@@ -39,6 +41,12 @@ class _Sync extends ChangeNotifier implements SyncProvider {
   Future<void> toggleWalPlayback(Wal wal) async => played.add(wal);
   @override
   Future<void> shareWalAsWav(Wal wal) async => shared.add(wal);
+  @override
+  Future<void> deleteWal(Wal wal) async {
+    deleted.add(wal);
+    if (failDelete) throw StateError('simulated device delete failure');
+  }
+
   @override
   Wal? getWalById(String id) => null;
   @override
@@ -87,6 +95,47 @@ Future<_Sync> _open(WidgetTester tester, {WalStorage storage = WalStorage.disk})
       )),
     ),
   ));
+  return sync;
+}
+
+Future<_Sync> _openDeleteFlow(WidgetTester tester, {required bool failDelete}) async {
+  final sync = _Sync()..failDelete = failDelete;
+  final wal = Wal(
+    timerStart: 1700000000,
+    codec: BleAudioCodec.opus,
+    seconds: 30,
+    status: WalStatus.miss,
+    storage: WalStorage.sdcard,
+    device: 'synthetic-pendant',
+  );
+  tester.view.physicalSize = const Size(1170, 2532);
+  tester.view.devicePixelRatio = 3;
+  addTearDown(tester.view.reset);
+  await tester.pumpWidget(ChangeNotifierProvider<SyncProvider>.value(
+    value: sync,
+    child: MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Builder(
+        builder: (context) => Scaffold(
+          body: Column(
+            children: [
+              const Text('Previous screen'),
+              TextButton(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(builder: (_) => WalItemDetailPage(wal: wal)),
+                ),
+                child: const Text('Open recording'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  ));
+  await tester.tap(find.text('Open recording'));
+  await tester.pumpAndSettle();
+  expect(tester.takeException(), isNull);
   return sync;
 }
 
@@ -162,6 +211,44 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(tester.widget<WaveformSection>(find.byType(WaveformSection)).waveformData, [0.1, 0.4]);
     await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('failed recording deletion keeps the detail page open and reports the failure', (tester) async {
+    final sync = await _openDeleteFlow(tester, failDelete: true);
+    final l10n = AppLocalizations.of(tester.element(find.byType(WalItemDetailPage)))!;
+
+    await tester.tap(find.byIcon(Icons.more_horiz));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.text(l10n.deleteRecording));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.text(l10n.delete));
+    await tester.pumpAndSettle();
+
+    expect(sync.deleted, hasLength(1));
+    expect(find.byType(WalItemDetailPage), findsOneWidget);
+    expect(find.text(l10n.failedToDeleteSomeItems), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('successful recording deletion returns to the previous screen', (tester) async {
+    final sync = await _openDeleteFlow(tester, failDelete: false);
+    final l10n = AppLocalizations.of(tester.element(find.byType(WalItemDetailPage)))!;
+
+    await tester.tap(find.byIcon(Icons.more_horiz));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.text(l10n.deleteRecording));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.text(l10n.delete));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+
+    expect(sync.deleted, hasLength(1));
+    expect(find.byType(WalItemDetailPage), findsNothing);
+    expect(find.text('Previous screen'), findsOneWidget);
   });
 
   testWidgets('unavailable audio shows retry and repeated failures remain retryable', (tester) async {

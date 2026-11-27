@@ -217,8 +217,8 @@ class PostHogAnalyticsAdapter
       return await reload.timeout(timeout);
     } on TimeoutException {
       // The underlying GET cannot be cancelled. Release the slot so a scheduled
-      // retry starts a fresh request. A caller still awaiting this shared future
-      // can use its result unless a newer refresh starts first.
+      // retry starts a fresh request. Existing waiters still receive this fetch's
+      // result, but only the newest reload generation may update the cache.
       if (identical(_omiFlagsReloadInFlight, reload)) {
         _omiFlagsReloadInFlight = null;
         _omiFlagsReloadInFlightIdentityGeneration = null;
@@ -239,9 +239,8 @@ class PostHogAnalyticsAdapter
     reload = () async {
       try {
         final flags = await fetch();
-        if (flags == null || identityGeneration != _identityGeneration || reloadGeneration != _omiFlagsReloadGeneration)
-          return false;
-        _omi = Map.unmodifiable(flags);
+        if (flags == null || identityGeneration != _identityGeneration) return false;
+        if (reloadGeneration == _omiFlagsReloadGeneration) _omi = Map.unmodifiable(flags);
         return true;
       } catch (_) {
         return false;

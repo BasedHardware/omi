@@ -109,7 +109,7 @@ void main() {
     provider.dispose();
   });
 
-  test('an unknown stall (no recording evidence) keeps the existing completed behavior', () async {
+  test('an unknown flash stall surfaces an error instead of silent success', () async {
     final walService = _FakeWalService();
     walService.syncs.flashStallReason = FlashSyncStallReason.unknown;
 
@@ -118,8 +118,8 @@ void main() {
 
     await provider.syncWals();
 
-    expect(provider.syncState.isCompleted, isTrue);
-    expect(provider.syncState.hasError, isFalse);
+    expect(provider.syncState.hasError, isTrue);
+    expect(provider.syncError, contains('could not be fully confirmed'));
     provider.dispose();
   });
 }
