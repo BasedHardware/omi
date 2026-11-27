@@ -11,6 +11,7 @@ from utils.conversations.v3 import Conflict, UnlockedPage, planner, service, tri
 from tests.unit.test_conversations_v3_claim_growth import T0, UID, path, strict  # noqa: F401
 from tests.unit.test_conversations_v3_lock_timing import _locked_pair
 from tests.unit.test_conversations_v3_review import AT, MemoryQuery, builder, source  # noqa: F401
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 
 C = '/users/u/conversations/'
 
@@ -1755,16 +1756,6 @@ def two_fragmented(n):
     return rows
 
 
-class ChargeTransaction:
-    """The charge's transaction on the in-memory client: reads go through ``get(transaction=...)``."""
-
-    def __init__(self, rows):
-        self.rows = rows
-
-    def update(self, ref, patch):
-        self.rows[ref.path].update(patch)
-
-
 def capped_once(builder, monkeypatch):
     """A cap retry whose first commit hits the locked-closure batch cap and whose retry commits."""
     loads, _, parks = batch_cap_pass(builder, monkeypatch, fits_at=None, pending=2)
@@ -1784,20 +1775,32 @@ def capped_once(builder, monkeypatch):
 @pytest.mark.asyncio
 async def test_the_cap_retrys_real_load_charges_the_owners_day_again(builder, monkeypatch):
     # The retry is a new load, and a new load is a new allowance attempt: both are charged on the held builder lease.
+    # The charge runs for real on StrictFirestore (backend/AGENTS.md), so a read after its write would fail; the load
+    # keeps the in-memory query client, which StrictFirestore does not model.
     _, commits, parks = capped_once(builder, monkeypatch)
-    rows = two_fragmented(8)
-    lease_path = '/users/u/conversation_v3_leases/builder'
-    rows[lease_path] = {'token': 'token', 'until': datetime.now(timezone.utc) + timedelta(minutes=4)}
-    client = MemoryQuery(rows)
-    real_get = MemoryQuery.get
-    monkeypatch.setattr(MemoryQuery, 'get', lambda self, transaction=None: real_get(self))
-    monkeypatch.setattr(store.firestore, 'transactional', lambda body: body)
-    monkeypatch.setattr(
-        store, 'run_preloaded_transaction_with_contention_retry', lambda c, op, *a: op(ChargeTransaction(c.rows), *a)
+    lease_key = ('users', 'u', 'conversation_v3_leases', 'builder')
+    lease_store = StrictFirestore(
+        {lease_key: {'token': 'token', 'until': datetime.now(timezone.utc) + timedelta(minutes=4)}}
     )
+
+    def transactional(body):
+        def run(tx, *args, **kwargs):
+            with lease_store.lock:
+                return body(tx, *args, **kwargs)
+
+        return run
+
+    charges = []
+
+    def charge(client, uid, token, now=None):
+        charges.append(token)
+        return CHARGE(lease_store, uid, token, now)
+
+    monkeypatch.setattr(store.firestore, 'transactional', transactional)
+    client = MemoryQuery(two_fragmented(8))
     monkeypatch.setattr(store, 'get_firestore_client', lambda: client)
     monkeypatch.setattr(store, 'load', REAL_LOAD)
-    monkeypatch.setattr(store, '_charge_locked_attempt', CHARGE)
+    monkeypatch.setattr(store, '_charge_locked_attempt', charge)
     monkeypatch.setenv('CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS', '*')
     monkeypatch.setattr(store, 'DERIVED_LIMIT', 10)  # two seeds load 16 locked rows: past the origin bound
     monkeypatch.setattr(store, 'LOCKED_DERIVED_ALLOWANCE', 20)
@@ -1810,7 +1813,9 @@ async def test_the_cap_retrys_real_load_charges_the_owners_day_again(builder, mo
     monkeypatch.setattr(service, '_plan_projection', plan)
     assert await service.reconcile('u') == 'committed'
     assert planned == [['r0', 'r1'], ['r0']] and commits == [32, 1] and parks == []
-    lease = rows[lease_path]
+    assert charges == ['token', 'token']  # each load charged the pass's own lease
+    assert [tx.has_written for tx in lease_store.transactions] == [True, True]  # two real transactions, each wrote
+    lease = lease_store.rows[lease_key]
     assert lease['v3_locked_day'] == datetime.now(timezone.utc).date().isoformat()
     assert lease['v3_locked_passes'] == 2  # the capped attempt and the retry's load
 
@@ -1840,3 +1845,51 @@ async def test_the_cap_retry_replans_its_smaller_page(builder, monkeypatch):
     assert loads == [(2, 0), (1, 0)] and commits == [32, 1] and parks == []
     assert [recordings for recordings, _ in planned] == [['r0', 'r1'], ['r0']]
     assert planned[1][1] and set(planned[1][1]) == {'r0'}  # the retry's plan covers only its own seed
+
+
+# ---- panel review-20261127t053936-a927 F1: an on-open allowance load reads at most SOURCE_LIMIT seeds -------------
+
+
+def on_open(n):
+    """An open window whose v3_recording_ids name n recordings (the planner appends them uncapped), one repeated."""
+    ids = [f'r{i}' for i in range(n)]
+    rows = {C + 'open': derived('open', AT, 10, [*ids, ids[0]])}
+    for k, rid in enumerate(ids):
+        rows[C + rid] = source(rid, started_at=AT + timedelta(minutes=k))
+    return rows
+
+
+def seed_gets(monkeypatch):
+    gets = []
+    real = MemoryQuery.get
+
+    def get(self, *a, **kw):
+        name = self.path.rsplit('/', 1)[-1]
+        if name.startswith('r'):
+            gets.append(name)
+        return real(self)
+
+    monkeypatch.setattr(MemoryQuery, 'get', get)
+    return gets
+
+
+@pytest.mark.parametrize('listed', [True, False])
+def test_an_on_open_load_past_the_source_limit_parks(monkeypatch, listed):
+    allowance(monkeypatch, 20, owners='*' if listed else '')
+    monkeypatch.setattr(store, 'SOURCE_LIMIT', 3)
+    gets = seed_gets(monkeypatch)
+    with pytest.raises(Conflict, match='v3_source_closure_budget'):
+        store.load('u', conversation_id='open', firestore_client=MemoryQuery(on_open(4)))
+    if listed:
+        assert gets == []  # parked on the seed ids alone, before reading any
+    else:
+        assert gets == ['r0', 'r1', 'r2', 'r3', 'r0']  # main's read: every entry, repeats included, then the same park
+
+
+def test_an_on_open_allowance_load_at_the_source_limit_reads_each_seed_once(monkeypatch):
+    allowance(monkeypatch, 20)
+    monkeypatch.setattr(store, 'SOURCE_LIMIT', 3)
+    gets = seed_gets(monkeypatch)
+    recordings, existing, _ = store.load('u', conversation_id='open', firestore_client=MemoryQuery(on_open(3)))
+    assert sorted(recordings) == ['r0', 'r1', 'r2'] and 'open' in existing
+    assert gets == ['r0', 'r1', 'r2']  # the repeated id is read once, and no seed past the bound

@@ -48,18 +48,24 @@ The ceiling is derived from that counter as attempts x the most one attempt can 
 - the charge: 1 read and 1 write, at most three tries;
 - the load: at most about 5.9k reads. It admits at most 6 x (449 - sources) rows, what six batches can commit
   (2,694 with no sources), and fetches at most twice that many derived documents plus one sentinel (5,389) across the unlocked
-  page, the claim reads and every interval query, counting repeats; plus up to 400 sources and the seeds;
+  page, the claim reads and every interval query, counting repeats; plus up to 400 sources and the seeds. An on-open
+  load reads at most 400 of the open window's recording ids, each once, and parks on `v3_source_closure_budget`
+  before reading any when there are more (follow-up panel F1 on #26490);
 - the commit: up to about 24k reads; each batch runs its body at most three times, contention retries and transcript
   pointer replays alike. The commit loads a batch's pointers from the lake (no Firestore read, no upload) before its
   transaction, so on a lake-admitted runtime a cold pointer never replays the body, and a fourth run parks before it
-  reads. So up to about 72k (3 x 24k);
+  reads. So up to about 72k (3 x 24k). The preload and the three-run cap apply to every listed owner's builder
+  commit with pointer rows, inside the origin bound too (follow-up panel F2): such a commit keeps main's batches, so
+  it reads what main's pass of the same closure reads, with at most three runs per batch. An inline-only commit inside
+  the bound is main's path unchanged;
 - the load's own lake reads: decoding a fetched row or source whose transcript is a lake pointer costs about one
   object GET, repeats included, because the decoded memo holds only 32 entries. At most 5,388 decoded derived
   documents (the sentinel is never decoded), 400 sources and the open window: about 5.8k GETs;
-- the pointer preload: at most 32 lake object reads per batch (192 per attempt), and no Firestore reads;
+- the pointer preload: at most 32 lake object reads per batch (192 per attempt past the origin bound; inside it, one
+  per pointer row committed, which main's transaction loads anyway), and no Firestore reads;
 - renewals: a few reads.
 
-That is about 78k Firestore reads and about 6k lake object GETs per attempt: per listed owner per day, **about 1.6M
+That is about 78k Firestore reads and about 6k lake object GETs per attempt past the origin bound: per listed owner per day, **about 1.6M
 Firestore reads and about 0.12M lake GETs**. The lake term is zero while rows stay inline, as in prod today (no
 lake writes are admitted there); admitting lake writes would add the upload-candidate protocol's reads per
 offloaded row, so the ceiling is restated before that. The measured attempts read
