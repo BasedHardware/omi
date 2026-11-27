@@ -6,6 +6,22 @@ import 'package:omi/services/telemetry/client_telemetry_outbox.dart';
 import 'package:omi/services/telemetry/client_telemetry_schema.dart';
 import 'package:uuid/uuid.dart';
 
+/// What the user acted on to ask for a Finish. A cut's `source` comes from this, never from
+/// whether the request names a live conversation.
+enum FinishCutSource {
+  /// The phone: the live page, Home Wrap Up, record stop, the live conversation's End button, or
+  /// a Live Activity.
+  app('app'),
+
+  /// The pendant's own button (double tap).
+  pendant('pendant');
+
+  const FinishCutSource(this.wire);
+
+  /// The value sent as the cut's `source` and in `X-Omi-Finish-Cut`.
+  final String wire;
+}
+
 /// Durable, content-free Finish cuts used by the v3 TestFlight Home SLI.
 class FinishHomeSliTelemetry {
   FinishHomeSliTelemetry({

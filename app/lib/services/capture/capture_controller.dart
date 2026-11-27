@@ -2339,7 +2339,7 @@ class CaptureController extends ChangeNotifier
         PlatformManager.instance.analytics.omiDoubleTap(feature: 'process_conversation');
         HapticFeedback.lightImpact(); // The tap's only feedback on the phone until the processing row.
         unawaited(
-          forceProcessingCurrentConversation(manualFinish: true).catchError(
+          forceProcessingCurrentConversation(manualFinish: true, finishSource: FinishCutSource.pendant).catchError(
             (Object error, StackTrace stack) => _reportDetachedCaptureError(
               'capture_process_now',
               error,
@@ -4441,12 +4441,11 @@ class CaptureController extends ChangeNotifier
     }
   }
 
-  /// [manualFinish] is the pendant double tap: it shows the manual Finish row and records the SLI cut.
-  /// [deliberateFinish] is a user's Finish through the coordinator: it records the cut only, since
-  /// that path already owns its own Finish feedback.
+  /// [manualFinish] shows the manual Finish row. [finishSource] is what the user acted on to ask
+  /// for this Finish; it records the SLI cut with that source. Null (the capture's own Process Now): no cut.
   Future<void> forceProcessingCurrentConversation({
     bool manualFinish = false,
-    bool deliberateFinish = false,
+    FinishCutSource? finishSource,
     String? liveConversationId,
   }) async {
     // Reliability experiment end_open_conversation: the End happened now, not when the request leaves
@@ -4459,17 +4458,17 @@ class CaptureController extends ChangeNotifier
     final liveTail = endedAt == null ? null : liveWordsOnEnd?.call(endedAt);
     final recordingSessionId = activeRecordingId;
     final conversationRevision = _systemSurfaceConversationRevision;
-    // The app's deliberate Finish names the live window. Pendant Finish uses
-    // the current recording. Capture the cut before awaiting the WAL snapshot.
-    final finishSource = liveConversationId == null ? 'pendant' : 'app';
+    // Source is the asking action, not whether a live window is named (a Live Activity Finish names
+    // none). Capture the cut before awaiting the WAL snapshot.
     final finishCutAt = DateTime.now();
     final finishCutId =
-        (manualFinish || deliberateFinish) && Env.isTestFlight && !Env.hasApiBaseUrlOverride ? const Uuid().v4() : null;
-    final finishCut = finishCutId == null ? null : '$finishSource,$finishCutId,${finishCutAt.millisecondsSinceEpoch}';
+        finishSource != null && Env.isTestFlight && !Env.hasApiBaseUrlOverride ? const Uuid().v4() : null;
+    final finishCut =
+        finishCutId == null ? null : '${finishSource!.wire},$finishCutId,${finishCutAt.millisecondsSinceEpoch}';
     if (finishCutId != null) {
       await FinishHomeSliTelemetry.instance.recordCut(
         operationId: finishCutId,
-        source: finishSource,
+        source: finishSource!.wire,
         occurredAt: finishCutAt,
       );
     }
@@ -5165,7 +5164,8 @@ class CaptureController extends ChangeNotifier
   Future<void> _processConversationBody(ProcessConversationStage stage) async {
     await forceProcessingCurrentConversation(
       liveConversationId: stage.liveConversationId,
-      deliberateFinish: stage.deliberateFinish,
+      // Coordinator Finishes are all asked for on the phone; the pendant double tap comes in directly.
+      finishSource: stage.deliberateFinish ? FinishCutSource.app : null,
     );
     await _processInFlight;
   }

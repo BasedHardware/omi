@@ -13,6 +13,7 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/episodes/live_episode_page.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/services/telemetry/finish_home_sli_telemetry.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
@@ -83,7 +84,7 @@ class _TrackingCaptureProvider extends CaptureProvider {
 
   @override
   Future<void> forceProcessingCurrentConversation(
-      {bool manualFinish = false, bool deliberateFinish = false, String? liveConversationId}) async {
+      {bool manualFinish = false, FinishCutSource? finishSource, String? liveConversationId}) async {
     forceProcessingCalls++;
   }
 }
