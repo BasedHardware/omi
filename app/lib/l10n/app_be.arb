@@ -12325,5 +12325,6 @@
     "playStripePlanPaused": "Ваш план {plan} прыпынены.",
     "firmwareNewestSupportedForDevice": "Ваша прылада ўжо працуе на найноўшай падтрыманай версіі прашыўкі",
     "firmwareSyncRecordingsFirstTitle": "Спачатку сінхранізуйце свае запісы",
-    "firmwareSyncRecordingsFirstMessage": "Некаторыя запісы ўсё яшчэ на вашай прыладзе. Дайце ім завяршыць сінхранізацыю на тэлефон, а потым пачніце абнаўленне."
+    "firmwareSyncRecordingsFirstMessage": "Некаторыя запісы ўсё яшчэ на вашай прыладзе. Дайце ім завяршыць сінхранізацыю на тэлефон, а потым пачніце абнаўленне.",
+    "pendantAudioUnconfirmedSyncBlocked": "Не ўдалося пацвердзіць аўдыя, захаванае на вашым Pendant. Пакіньце Pendant падключаным і паспрабуйце сінхранізаваць яшчэ раз."
 }

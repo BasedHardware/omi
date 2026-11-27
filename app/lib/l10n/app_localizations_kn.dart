@@ -15894,4 +15894,8 @@ class AppLocalizationsKn extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'ಕೆಲವು ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಇನ್ನೂ ನಿಮ್ಮ ಸಾಧನದಲ್ಲಿವೆ. ಅವುಗಳು ನಿಮ್ಮ ಫೋನ್‌ಗೆ ಸಿಂಕ್ ಆಗಲು ಬಿಡಿ, ನಂತರ ನವೀಕರಣ ಪ್ರಾರಂಭಿಸಿ.';
+
+  @override
+  String get pendantAudioUnconfirmedSyncBlocked =>
+      'ನಿಮ್ಮ Pendant‌ನಲ್ಲಿ ಸಂಗ್ರಹಿಸಿದ ಆಡಿಯೊವನ್ನು ದೃಢೀಕರಿಸಲಾಗಲಿಲ್ಲ. Pendant ಅನ್ನು ಸಂಪರ್ಕದಲ್ಲಿರಿಸಿ ಮತ್ತು ಮತ್ತೆ ಸಿಂಕ್ ಮಾಡಲು ಪ್ರಯತ್ನಿಸಿ.';
 }

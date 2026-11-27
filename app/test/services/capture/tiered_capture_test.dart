@@ -219,10 +219,14 @@ void main() {
 
     await world.controller.stopStreamDeviceRecording();
     await world.settle();
+    final readsBeforeSecondCapture = adapter.reloadCount;
     adapter.flags['android-custom-live-audio-recovery-kill'] = true;
     await world.controller.streamDeviceRecording(device: device);
     await world.settle();
 
+    expect(adapter.reloadCount, greaterThan(readsBeforeSecondCapture),
+        reason: 'each new Custom Live capture must refresh the kill switch for the same identity');
+    expect(adapter.cachedFlags['android-custom-live-audio-recovery-kill'], isTrue);
     expect(connection.captureIsCurrent, isNull);
     expect(connection.stopCalls, greaterThan(0));
   });

@@ -4768,5 +4768,6 @@
     "playStripePlanPaused": "Jūsų {plan} planas pristabdytas.",
     "firmwareNewestSupportedForDevice": "Jūsų įrenginyje jau yra naujausia palaikoma aparatinės programinės įrangos versija",
     "firmwareSyncRecordingsFirstTitle": "Pirmiausia sinchronizuokite savo įrašus",
-    "firmwareSyncRecordingsFirstMessage": "Kai kurie įrašai dar yra jūsų įrenginyje. Leiskite jiems užbaigti sinchronizavimą į telefoną, tada pradėkite atnaujinimą."
+    "firmwareSyncRecordingsFirstMessage": "Kai kurie įrašai dar yra jūsų įrenginyje. Leiskite jiems užbaigti sinchronizavimą į telefoną, tada pradėkite atnaujinimą.",
+    "pendantAudioUnconfirmedSyncBlocked": "Nepavyko patvirtinti „Pendant“ saugomo garso. Palikite „Pendant“ prijungtą ir bandykite sinchronizuoti dar kartą."
 }

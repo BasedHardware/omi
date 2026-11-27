@@ -8,8 +8,10 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversations/wal_item_detail/wal_item_detail_page.dart';
+import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/wals/wal.dart';
+import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/widgets/waveform_section.dart';
 
 class _Sync extends ChangeNotifier implements SyncProvider {
@@ -17,8 +19,10 @@ class _Sync extends ChangeNotifier implements SyncProvider {
   final played = <Wal>[];
   final shared = <Wal>[];
   final deleted = <Wal>[];
+  final wals = <Wal>[];
   final transferDone = Completer<void>();
   bool failDelete = false;
+  bool retainOnDelete = false;
   Wal? transferring;
   @override
   double get walsSyncedProgress => 0.87;
@@ -45,7 +49,14 @@ class _Sync extends ChangeNotifier implements SyncProvider {
   Future<void> deleteWal(Wal wal) async {
     deleted.add(wal);
     if (failDelete) throw StateError('simulated device delete failure');
+    if (!retainOnDelete) wals.removeWhere((item) => item.id == wal.id && item.storage == wal.storage);
   }
+
+  @override
+  List<Wal> get allWals => wals;
+
+  @override
+  Future<void> discoverDeviceWals({String? firmwareVersion}) async {}
 
   @override
   Wal? getWalById(String id) => null;
@@ -70,6 +81,19 @@ class _Sync extends ChangeNotifier implements SyncProvider {
   Duration get totalDuration => const Duration(seconds: 30);
   @override
   double get playbackProgress => 0;
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _Device extends ChangeNotifier implements DeviceProvider {
+  @override
+  String currentFirmwareVersion = 'Unknown';
+  @override
+  bool isConnected = false;
+  @override
+  RingStatus? get ringStatus => null;
+  @override
+  Future<void> refreshRingStorageStatus() async {}
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
@@ -108,11 +132,18 @@ Future<_Sync> _openDeleteFlow(WidgetTester tester, {required bool failDelete}) a
     storage: WalStorage.sdcard,
     device: 'synthetic-pendant',
   );
+  sync.wals.add(wal);
+  final device = _Device();
+  addTearDown(sync.dispose);
+  addTearDown(device.dispose);
   tester.view.physicalSize = const Size(1170, 2532);
   tester.view.devicePixelRatio = 3;
   addTearDown(tester.view.reset);
-  await tester.pumpWidget(ChangeNotifierProvider<SyncProvider>.value(
-    value: sync,
+  await tester.pumpWidget(MultiProvider(
+    providers: [
+      ChangeNotifierProvider<SyncProvider>.value(value: sync),
+      ChangeNotifierProvider<DeviceProvider>.value(value: device),
+    ],
     child: MaterialApp(
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
@@ -249,6 +280,25 @@ void main() {
     expect(sync.deleted, hasLength(1));
     expect(find.byType(WalItemDetailPage), findsNothing);
     expect(find.text('Previous screen'), findsOneWidget);
+  });
+
+  testWidgets('recording detail stays open when deletion returns but retains the WAL', (tester) async {
+    final sync = await _openDeleteFlow(tester, failDelete: false);
+    sync.retainOnDelete = true;
+    final l10n = AppLocalizations.of(tester.element(find.byType(WalItemDetailPage)))!;
+
+    await tester.tap(find.byIcon(Icons.more_horiz));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(l10n.deleteRecording));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(l10n.delete));
+    await tester.pumpAndSettle();
+
+    expect(sync.deleted, hasLength(1));
+    expect(sync.allWals, hasLength(1));
+    expect(find.byType(WalItemDetailPage), findsOneWidget);
+    expect(find.text(l10n.failedToDeleteSomeItems), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('unavailable audio shows retry and repeated failures remain retryable', (tester) async {

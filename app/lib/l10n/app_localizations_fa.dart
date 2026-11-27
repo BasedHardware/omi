@@ -15835,4 +15835,8 @@ class AppLocalizationsFa extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'برخی ضبط‌ها هنوز روی دستگاه شما هستند. اجازه دهید همگام‌سازی آن‌ها به گوشی شما کامل شود، سپس بروزرسانی را شروع کنید.';
+
+  @override
+  String get pendantAudioUnconfirmedSyncBlocked =>
+      'تأیید صدای ذخیره‌شده در Pendant شما ممکن نشد. Pendant را متصل نگه دارید و دوباره همگام‌سازی را امتحان کنید.';
 }

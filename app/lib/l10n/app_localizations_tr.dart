@@ -15852,4 +15852,8 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Bazı kayıtlar hâlâ cihazınızda. Telefonunuza senkronize edilmelerini bekleyin, ardından güncellemeyi başlatın.';
+
+  @override
+  String get pendantAudioUnconfirmedSyncBlocked =>
+      'Pendant\'ınızda saklanan ses doğrulanamadı. Pendant\'ınızı bağlı tutun ve yeniden eşitlemeyi deneyin.';
 }

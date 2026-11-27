@@ -4768,5 +4768,6 @@
     "playStripePlanPaused": "Gói {plan} của bạn đang tạm dừng.",
     "firmwareNewestSupportedForDevice": "Thiết bị của bạn đã dùng phiên bản firmware mới nhất được hỗ trợ",
     "firmwareSyncRecordingsFirstTitle": "Hãy đồng bộ bản ghi âm của bạn trước",
-    "firmwareSyncRecordingsFirstMessage": "Một số bản ghi âm vẫn còn trên thiết bị của bạn. Hãy đợi chúng đồng bộ xong lên điện thoại, sau đó bắt đầu cập nhật."
+    "firmwareSyncRecordingsFirstMessage": "Một số bản ghi âm vẫn còn trên thiết bị của bạn. Hãy đợi chúng đồng bộ xong lên điện thoại, sau đó bắt đầu cập nhật.",
+    "pendantAudioUnconfirmedSyncBlocked": "Không thể xác nhận âm thanh được lưu trên Pendant. Hãy giữ Pendant kết nối và thử đồng bộ lại."
 }

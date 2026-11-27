@@ -15608,4 +15608,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get firmwareSyncRecordingsFirstMessage => '一部の録音はまだデバイスに残っています。スマートフォンへの同期が完了してから、更新を開始してください。';
+
+  @override
+  String get pendantAudioUnconfirmedSyncBlocked => 'Pendant に保存された音声を確認できませんでした。Pendant を接続したまま、もう一度同期してください。';
 }

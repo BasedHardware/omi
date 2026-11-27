@@ -1174,6 +1174,42 @@ void main() {
     expect(decoded, [liveFrame, storedFrame]);
   });
 
+  test('real-time mode parses a bare flash-page payload', () async {
+    final transport = FakeDeviceTransport();
+    final connection = LimitlessDeviceConnection(
+      BtDevice(name: 'Limitless Pendant', id: 'fake-limitless', type: DeviceType.limitless, rssi: -50),
+      transport,
+      setupSettleDelay: Duration.zero,
+    );
+    addTearDown(connection.disconnect);
+    final frame = opusFrame(0xb8, 43, 40);
+    final decoded = <List<int>>[];
+    final received = Completer<void>();
+    final subscription = await connection.performGetBleAudioBytesListener(
+      onAudioBytesReceived: (audio) {
+        decoded.add(audio);
+        if (!received.isCompleted) received.complete();
+      },
+    );
+    addTearDown(() => subscription?.cancel());
+    await connection.connect();
+
+    transport.emit(
+      limitlessRxCharUuid,
+      bleWrapper(
+        10,
+        0,
+        1,
+        flashPageBytes(1750000000000, [
+          audioWrapper(audioBlobOfFrames([frame]))
+        ]),
+      ),
+    );
+
+    await received.future.timeout(const Duration(seconds: 2));
+    expect(decoded, [frame]);
+  });
+
   test('unindexed stored frames are withheld when batch-mode re-entry is unconfirmed', () async {
     final transport = FakeDeviceTransport();
     final connection = LimitlessDeviceConnection(
@@ -1256,7 +1292,7 @@ void main() {
             storageBufferBytes(
               session: 7,
               seq: 26,
-              index: 100,
+              index: 160,
               page: flashPageBytes(1750000000000, [
                 audioWrapper(audioBlobOfFrames([withheldFrame]))
               ]),
@@ -1279,7 +1315,7 @@ void main() {
           storageBufferBytes(
             session: 7,
             seq: 1,
-            index: 100,
+            index: 160,
             page: flashPageBytes(1750000000000, [
               audioWrapper(audioBlobOfFrames([withheldFrame]))
             ]),
@@ -1290,11 +1326,11 @@ void main() {
     await pumpEventQueue();
     expect(realtimeFrames, isEmpty, reason: 'an unconfirmed page stays withheld after drain ownership is released');
 
-    expect(await connection.acknowledgeProcessedData(150), 99,
-        reason: 'the capped frontier, not the older stored ACK maximum, is returned');
+    expect(await connection.acknowledgeProcessedData(200), 159,
+        reason: 'the capped frontier is returned and acknowledged');
 
     final statusStorage = [
-      ...intField(1, 101),
+      ...intField(1, 161),
       ...intField(2, 2500),
       ...intField(3, 3),
       ...intField(4, 120000),
@@ -1307,9 +1343,57 @@ void main() {
       limitlessRxCharUuid,
       bleWrapper(11, 0, 1, [...intField(1, 85), ...bytesField(5, statusStruct)]),
     );
-    expect((await statusFuture)?['oldest_flash_page'], 101);
+    expect((await statusFuture)?['oldest_flash_page'], 161);
     expect(await connection.acknowledgeProcessedData(200), 200,
-        reason: 'status proves page 100 left the flash ring, releasing its barrier');
+        reason: 'status proves page 160 left the flash ring, releasing its barrier');
+  });
+
+  test('a late copy of an acknowledged page does not block later ACKs', () async {
+    final transport = FakeDeviceTransport();
+    final connection = LimitlessDeviceConnection(
+      BtDevice(name: 'Limitless Pendant', id: 'fake-limitless', type: DeviceType.limitless, rssi: -50),
+      transport,
+      setupSettleDelay: Duration.zero,
+      reconnectSettleDelay: Duration.zero,
+    );
+    addTearDown(connection.disconnect);
+    final realtimeFrames = <List<int>>[];
+    final subscription = await connection.performGetBleAudioBytesListener(
+      onAudioBytesReceived: realtimeFrames.add,
+    );
+    addTearDown(() => subscription?.cancel());
+    await connection.connect();
+    await connection.acknowledgeProcessedData(150);
+    await connection.enableBatchMode();
+
+    transport.onWrite = (_) => throw StateError('batch mode exit and reconciliation failed');
+    await connection.disableBatchMode();
+    transport.onWrite = null;
+
+    final lateFrame = opusFrame(0xb8, 62, 40);
+    transport.emit(
+      limitlessRxCharUuid,
+      bleWrapper(
+        10,
+        0,
+        1,
+        pendantMessage(
+          storageBufferBytes(
+            session: 7,
+            seq: 27,
+            index: 100,
+            page: flashPageBytes(1750000000000, [
+              audioWrapper(audioBlobOfFrames([lateFrame]))
+            ]),
+          ),
+        ),
+      ),
+    );
+    await pumpEventQueue();
+
+    expect(realtimeFrames, isEmpty, reason: 'a page already acknowledged must not be replayed as live audio');
+    expect(await connection.acknowledgeProcessedData(200), 200,
+        reason: 'a late acknowledged page must not install an ACK barrier');
   });
 
   test('terminal batch failure releases drain ownership before reconnect', () async {

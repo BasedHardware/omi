@@ -539,12 +539,43 @@ class _SyncPageState extends State<SyncPage> {
             destructive: true,
           );
           if (confirmed && context.mounted) {
+            (WalStorage, bool, String) identity(Wal wal) {
+              final ring = wal.storage == WalStorage.sdcard && wal.fileNum == -1;
+              return (wal.storage, ring, ring ? wal.device : wal.id);
+            }
+
+            final clearable = [
+              ...provider.syncedWals,
+              ...provider.pendingDeletableWals,
+              ...provider.corruptedWals,
+              ...provider.refusedWals,
+            ];
+            final targets = clearable.map(identity).toSet();
+            if (targets.isEmpty) return;
+            final uid = SharedPreferencesUtil().uid;
+            final hasDeviceRows = targets.any((row) => row.$1 != WalStorage.disk && row.$1 != WalStorage.mem);
+            final firmware = hasDeviceRows ? context.read<DeviceProvider>().currentFirmwareVersion : null;
+            var failed = false;
             try {
               await provider.deleteAllClearableWals();
-              if (context.mounted) OmiFeedback.confirm(context, context.l10n.allFilesDeleted);
             } catch (error) {
+              failed = true;
               Logger.debug('Sync clear all failed: ${error.runtimeType}');
-              if (context.mounted) OmiFeedback.error(context, context.l10n.failedToDeleteSomeItems);
+            }
+            if (hasDeviceRows && uid == SharedPreferencesUtil().uid) {
+              try {
+                await provider.discoverDeviceWals(firmwareVersion: firmware);
+              } catch (error) {
+                failed = true;
+                Logger.debug('Sync clear all discovery failed: ${error.runtimeType}');
+              }
+            }
+            if (!context.mounted || uid != SharedPreferencesUtil().uid) return;
+            final retained = provider.allWals.any((wal) => targets.contains(identity(wal)));
+            if (failed || retained) {
+              OmiFeedback.error(context, context.l10n.failedToDeleteSomeItems);
+            } else {
+              OmiFeedback.confirm(context, context.l10n.allFilesDeleted);
             }
           }
         },

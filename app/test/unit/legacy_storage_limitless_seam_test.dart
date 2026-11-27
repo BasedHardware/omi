@@ -168,6 +168,9 @@ class _FakeLimitless implements LimitlessDeviceConnection {
 
   final List<Map<String, Object?>?> pages;
   int _extractIdx = 0;
+  int _storageStatusCalls = 0;
+  int? nullStorageStatusCall;
+  Map<String, int>? flashStatus;
   final acks = <int>[];
   int? ackLimit;
   int drainReleaseCalls = 0;
@@ -199,6 +202,16 @@ class _FakeLimitless implements LimitlessDeviceConnection {
   int? get clockDriftOffsetMs => null;
 
   @override
+  Future<Map<String, int>?> getStorageStatus() async {
+    _storageStatusCalls++;
+    if (_storageStatusCalls == nullStorageStatusCall) return null;
+    return flashStatus;
+  }
+
+  @override
+  Future<Map<String, String>> getDeviceInfo() async => {'modelNumber': 'Limitless Pendant'};
+
+  @override
   Map<String, Object?>? extractFramesWithSessionInfo() {
     if (_extractIdx >= pages.length) return null;
     return pages[_extractIdx++];
@@ -208,6 +221,10 @@ class _FakeLimitless implements LimitlessDeviceConnection {
   Future<int?> acknowledgeProcessedData(int index) async {
     final acknowledged = ackLimit == null || index <= ackLimit! ? index : ackLimit!;
     if (acks.isEmpty || acknowledged > acks.last) acks.add(acknowledged);
+    final status = flashStatus;
+    if (status != null && acknowledged >= (status['oldest_flash_page'] ?? 0)) {
+      status['oldest_flash_page'] = acknowledged + 1;
+    }
     return acknowledged;
   }
 
@@ -965,7 +982,53 @@ void main() {
 
     expect(wal.status, WalStatus.miss, reason: 'a partial device ACK cannot complete the transfer');
     expect(wal.storageOffset, 3, reason: 'resume after durable pages to avoid persisting the same audio twice');
+    expect(wal.seconds, 5, reason: 'all durable pages keep the original recording duration while ACK is pending');
     expect(card.acks, [1]);
+  });
+
+  test('FlashPage: a drained retry clears an unknown stall from the previous pass', () async {
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final card = _FakeLimitless(
+      pages: [
+        {
+          'opus_frames': [
+            [1, 2, 3]
+          ],
+          'timestamp_ms': nowMs,
+          'max_index': 100
+        },
+        null,
+        for (var index = 101; index <= 131; index++)
+          {
+            'opus_frames': [
+              [index & 0xff, 2, 3]
+            ],
+            'timestamp_ms': nowMs,
+            'max_index': index
+          },
+      ],
+    )
+      ..flashStatus = {
+        'oldest_flash_page': 100,
+        'newest_flash_page': 131,
+        'current_storage_session': 1,
+      }
+      ..nullStorageStatusCall = 2;
+    final sync = FlashPageWalSyncImpl(_Listener())
+      ..testDevice = BtDevice(id: 'limitless-1', name: 'Limitless', type: DeviceType.limitless, rssi: -40)
+      ..testConnection = card
+      ..testPollInterval = Duration.zero
+      ..testMaxEmptyExtractions = 1;
+    sync.setLocalSync(_FakeLocalSync());
+    addTearDown(sync.stop);
+
+    await sync.refreshWalsFromDevice();
+    await sync.syncAll();
+
+    expect(card.acks, [100, 131]);
+    expect(sync.testWals, isEmpty, reason: 'the second pass drained the remaining flash range');
+    expect(sync.lastStallReason, FlashSyncStallReason.none,
+        reason: 'a completed retry must not report the first pass\'s transient unknown stall');
   });
 
   test('Limitless: a failed durable save fails the transfer — no ACK, wal stays miss', () async {

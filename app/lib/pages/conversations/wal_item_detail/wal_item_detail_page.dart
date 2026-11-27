@@ -7,6 +7,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/models/playback_state.dart';
+import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/device.dart';
@@ -584,8 +585,26 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
 
     if (confirmed && context.mounted) {
       try {
-        await context.read<SyncProvider>().deleteWal(widget.wal);
-        if (context.mounted) Navigator.of(context).pop(); // Go back to previous screen
+        final provider = context.read<SyncProvider>();
+        final target = widget.wal;
+        final ring = target.storage == WalStorage.sdcard && target.fileNum == -1;
+        final identity = (target.storage, ring, ring ? target.device : target.id);
+        await provider.deleteWal(target);
+        if (target.storage != WalStorage.disk && target.storage != WalStorage.mem && context.mounted) {
+          await provider.discoverDeviceWals(
+            firmwareVersion: context.read<DeviceProvider>().currentFirmwareVersion,
+          );
+        }
+        if (!context.mounted) return;
+        final retained = provider.allWals.any((wal) {
+          final currentRing = wal.storage == WalStorage.sdcard && wal.fileNum == -1;
+          return (wal.storage, currentRing, currentRing ? wal.device : wal.id) == identity;
+        });
+        if (retained) {
+          OmiFeedback.error(context, context.l10n.failedToDeleteSomeItems);
+        } else {
+          Navigator.of(context).pop(); // Go back to previous screen
+        }
       } catch (error) {
         Logger.debug('WAL detail delete failed: ${error.runtimeType}');
         if (context.mounted) OmiFeedback.error(context, context.l10n.failedToDeleteSomeItems);

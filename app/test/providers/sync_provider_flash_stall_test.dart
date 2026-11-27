@@ -119,7 +119,8 @@ void main() {
     await provider.syncWals();
 
     expect(provider.syncState.hasError, isTrue);
-    expect(provider.syncError, 'Sync failed');
+    expect(provider.syncError,
+        "Your Pendant's stored audio could not be confirmed. Keep your Pendant connected and try syncing again.");
     provider.dispose();
   });
 }

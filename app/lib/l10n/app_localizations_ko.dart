@@ -15614,4 +15614,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get firmwareSyncRecordingsFirstMessage => '일부 녹음이 아직 기기에 남아 있습니다. 휴대폰으로의 동기화가 완료되면 업데이트를 시작해 주세요.';
+
+  @override
+  String get pendantAudioUnconfirmedSyncBlocked => 'Pendant에 저장된 오디오를 확인할 수 없습니다. Pendant를 연결된 상태로 유지하고 다시 동기화해 보세요.';
 }

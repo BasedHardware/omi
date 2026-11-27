@@ -576,11 +576,10 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
   /// Handle reassembled payload in real-time mode
   void _handleRealTimePayload(List<int> payload) {
-    if (!_publishAudioFramesFromPendantEnvelope(payload)) {
-      final result = _extractOpusFrames(payload);
-      final frames = result[0] as List<List<int>>;
-      if (frames.isNotEmpty) _publishAudioFrames(frames, fromRealtimeStream: true);
-    }
+    if (_publishAudioFramesFromPendantEnvelope(payload) || _batchModeUnconfirmed) return;
+    var frames = _extractOpusFrames(payload)[0] as List<List<int>>;
+    if (frames.isEmpty) frames = _extractOpusFramesFromFlashPage(payload);
+    if (frames.isNotEmpty) _publishAudioFrames(frames, fromRealtimeStream: true);
   }
 
   /// Handles protobuf fields in any order. Field 2 contains stored pages;
@@ -636,6 +635,12 @@ class LimitlessDeviceConnection extends DeviceConnection {
                   } else {
                     audioBatches.add((pageFrames, !(_batchDrainActive && !_isBatchMode)));
                   }
+                } else if (pageIndex <= _lastAcknowledgedIndex) {
+                  // The pendant has already been told to consume this page.
+                  // Suppress a late copy without creating an ACK barrier behind
+                  // the acknowledged frontier.
+                  _unconfirmedStoredPageIndices.remove(pageIndex);
+                  withheldStoredFrames = true;
                 } else {
                   withheldStoredFrames = true;
                   if (_unconfirmedStoredPageIndices.add(pageIndex)) {

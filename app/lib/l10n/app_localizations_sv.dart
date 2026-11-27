@@ -15850,4 +15850,8 @@ class AppLocalizationsSv extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Vissa inspelningar finns fortfarande på din enhet. Låt dem slutföra synkroniseringen till telefonen och starta sedan uppdateringen.';
+
+  @override
+  String get pendantAudioUnconfirmedSyncBlocked =>
+      'Det gick inte att bekräfta det lagrade ljudet på din Pendant. Håll din Pendant ansluten och försök synkronisera igen.';
 }

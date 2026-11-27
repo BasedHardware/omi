@@ -100,6 +100,25 @@ void main() {
     expect(rest.seconds, 70);
   });
 
+  test('refresh preserves the locally durable cursor while the pendant holds its ACK', () async {
+    final pendant = _FakePendant(_flash(oldest: 1000, newest: 1099));
+    final sync = _syncFor(pendant);
+
+    await sync.refreshWalsFromDevice();
+    final listed = (await sync.getMissingWals()).single;
+    listed.storageOffset = 1050;
+
+    // A held ACK leaves the device's oldest pointer behind the pages already
+    // persisted locally. Refresh must not reset the next read to page 1000.
+    await sync.refreshWalsFromDevice();
+    final resumed = (await sync.getMissingWals()).single;
+
+    expect(resumed.id, listed.id);
+    expect(resumed.storageOffset, 1050);
+    expect(resumed.storageTotalBytes, 1099);
+    expect(resumed.seconds, 70);
+  });
+
   test('partial drain resumes after durable pages even when their ACK is withheld', () {
     expect(
       FlashPageWalSyncImpl.resumePageAfterDurablePage(startPage: 100, lastDurablePageIndex: 149),

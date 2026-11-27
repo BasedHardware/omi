@@ -1172,7 +1172,9 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
             'can\'t be transferred. Press the Pendant\'s button to stop recording, then sync again.';
   }
 
-  String _pendantAudioUnconfirmedMessage() => globalNavigatorKey.currentContext?.l10n.syncFailed ?? 'Sync failed';
+  String _pendantAudioUnconfirmedMessage() =>
+      globalNavigatorKey.currentContext?.l10n.pendantAudioUnconfirmedSyncBlocked ??
+      "Your Pendant's stored audio could not be confirmed. Keep your Pendant connected and try syncing again.";
 
   String _formatSyncError(dynamic error, Wal? wal) {
     var baseMessage = error.toString().replaceAll('Exception: ', '');

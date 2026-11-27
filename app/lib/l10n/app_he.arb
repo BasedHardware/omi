@@ -12325,5 +12325,6 @@
     "playStripePlanPaused": "התוכנית {plan} שלך מושהית.",
     "firmwareNewestSupportedForDevice": "המכשיר שלך כבר נמצא בגרסת הקושחה החדשה ביותר הנתמכת עבורו",
     "firmwareSyncRecordingsFirstTitle": "סנכרן תחילה את ההקלטות שלך",
-    "firmwareSyncRecordingsFirstMessage": "חלק מההקלטות עדיין נמצאות במכשיר שלך. תן להן להשלים את הסינכרון לטלפון, ואז התחל את העדכון."
+    "firmwareSyncRecordingsFirstMessage": "חלק מההקלטות עדיין נמצאות במכשיר שלך. תן להן להשלים את הסינכרון לטלפון, ואז התחל את העדכון.",
+    "pendantAudioUnconfirmedSyncBlocked": "לא ניתן לאמת את האודיו השמור ב־Pendant שלך. השאר את ה־Pendant מחובר ונסה לסנכרן שוב."
 }

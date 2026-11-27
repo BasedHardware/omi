@@ -67,6 +67,16 @@ class _Sync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvi
   @override
   List<Wal> get syncedWals => wals.where((wal) => wal.status == WalStatus.synced).toList();
   @override
+  List<Wal> get corruptedWals => wals
+      .where((wal) => {
+            WalStatus.corrupted,
+            WalStatus.outsideRecoveryWindow,
+            WalStatus.unsupportedAudio,
+          }.contains(wal.status))
+      .toList();
+  @override
+  List<Wal> get refusedWals => wals.where((wal) => wal.status == WalStatus.uploadRejected).toList();
+  @override
   List<Wal> get pendingDeletableWals => missingWals;
 
   @override
@@ -563,6 +573,25 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text(l.failedToDeleteSomeItems), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Classic Clear All reports a WAL retained after a normal return', (tester) async {
+    final sync = await _pump(tester, const SyncPage(), WalStatus.synced);
+    final retained = sync.allWals.single;
+    final l = AppLocalizations.of(tester.element(find.byType(SyncPage)));
+
+    await tester.tap(find.byTooltip(l.manageStorage));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(l.clearAll));
+    await tester.pumpAndSettle();
+    expect(find.text(l.deleteAllFiles), findsOneWidget);
+    await tester.tap(find.text(l.clearAll));
+    await tester.pumpAndSettle();
+
+    expect(sync.allWals, [retained]);
+    expect(find.text(l.failedToDeleteSomeItems), findsOneWidget);
+    expect(find.text(l.allFilesDeleted), findsNothing);
     expect(tester.takeException(), isNull);
   });
 

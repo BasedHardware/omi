@@ -45,6 +45,12 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
 
   final DateTime Function() _clock;
 
+  @visibleForTesting
+  Duration testPollInterval = const Duration(milliseconds: 500);
+
+  @visibleForTesting
+  int testMaxEmptyExtractions = 60;
+
   FlashPageWalSyncImpl(this.listener, {DateTime Function()? clock}) : _clock = clock ?? DateTime.now;
 
   @visibleForTesting
@@ -179,15 +185,27 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
     int pageCount = _newestPage - _oldestPage + 1;
     if (pageCount <= 0) return [];
 
+    // Preserve the durable cursor across a device refresh. The pendant's
+    // oldest-page pointer can lag it when an ACK is held, and rebuilding from
+    // that pointer would persist the same audio again on auto-resume.
+    final listed = _wals
+        .where((w) =>
+            w.device == deviceId &&
+            w.storage == WalStorage.flashPage &&
+            w.status == WalStatus.miss &&
+            w.storageOffset <= _newestPage &&
+            w.storageTotalBytes >= _oldestPage)
+        .fold<Wal?>(null, (best, wal) => best == null || wal.storageOffset > best.storageOffset ? wal : best);
+    final startPage = listed != null && listed.storageOffset > _oldestPage ? listed.storageOffset : _oldestPage;
+
     // Each flash page contains ~1.4 seconds of audio
+    pageCount = _newestPage - startPage + 1;
+    if (pageCount <= 0) return [];
     int estimatedSeconds = (pageCount * secondsPerFlashPage).round();
 
     if (pageCount > 30) {
-      // Wal.id is device_timerStart, and this list is rebuilt on connect, on every
-      // discovery and after every sync pass. Keep the start estimated when this
-      // backlog (same pendant, same first page) was listed, so the recording keeps
-      // its id; a fresh estimate from the clock gave it a new id on every rebuild.
-      final listed = _wals.where((w) => w.device == deviceId && w.storageOffset == _oldestPage).firstOrNull;
+      // Wal.id is device_timerStart. Reuse the previous recording identity when
+      // the refreshed device range overlaps its locally pending page range.
       int timerStart = listed?.timerStart ?? DateTime.now().millisecondsSinceEpoch ~/ 1000 - estimatedSeconds;
 
       var connection = _testConnection ?? await ServiceManager.instance().device.ensureConnection(deviceId);
@@ -202,7 +220,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
           status: WalStatus.miss,
           storage: WalStorage.flashPage,
           seconds: estimatedSeconds,
-          storageOffset: _oldestPage,
+          storageOffset: startPage,
           storageTotalBytes: _newestPage,
           fileNum: _currentSession,
           device: device.id,
@@ -260,9 +278,11 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
       if (wals.isEmpty) {
         Logger.debug("FlashPageSync: All downloaded!");
         drained = globalStartPage != null;
+        _lastStallReason = FlashSyncStallReason.none;
         break;
       }
 
+      _lastStallReason = FlashSyncStallReason.none;
       final int passStartPage = wals.map((w) => w.storageOffset).reduce((a, b) => a < b ? a : b);
       globalStartPage ??= passStartPage;
       for (final w in wals) {
@@ -302,6 +322,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
       final resumeWals = _wals.where((w) => w.status == WalStatus.miss && w.storage == WalStorage.flashPage).toList();
       if (resumeWals.isEmpty) {
         drained = true;
+        _lastStallReason = FlashSyncStallReason.none;
         break;
       }
 
@@ -394,7 +415,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
         'totalPages': totalPages,
       });
       int emptyExtractions = 0;
-      const maxEmptyExtractions = 60;
+      final maxEmptyExtractions = testMaxEmptyExtractions;
       int? lastProcessedIndex;
       int? lastDurablePageIndex;
       int? lastAcknowledgedIndex;
@@ -613,7 +634,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
               );
               wal.storageOffset = resumePage;
               final remainingPages = endPage >= resumePage ? endPage - resumePage + 1 : 0;
-              wal.seconds = (remainingPages * secondsPerFlashPage).round();
+              if (remainingPages > 0) wal.seconds = (remainingPages * secondsPerFlashPage).round();
               Logger.debug(
                 "FlashPageSync: Updated WAL - new start page: ${wal.storageOffset}, remaining: $remainingPages pages",
               );
@@ -638,7 +659,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
           return false; // Cancelled, not completed
         }
 
-        await Future.delayed(const Duration(milliseconds: 500));
+        await Future.delayed(testPollInterval);
       }
 
       if (accumulatedFrames.isNotEmpty) {
@@ -732,7 +753,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
         );
         wal.storageOffset = resumePage;
         final remainingPages = endPage >= resumePage ? endPage - resumePage + 1 : 0;
-        wal.seconds = (remainingPages * secondsPerFlashPage).round();
+        if (remainingPages > 0) wal.seconds = (remainingPages * secondsPerFlashPage).round();
         Logger.debug(
           "FlashPageSync: Partial download — resume start page ${wal.storageOffset}, $remainingPages pages remaining",
         );

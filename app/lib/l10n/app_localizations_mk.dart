@@ -15907,4 +15907,8 @@ class AppLocalizationsMk extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Некои записи се уште се на вашиот уред. Оставете ги да ја завршат синхронизацијата со телефонот, а потоа започнете со ажурирањето.';
+
+  @override
+  String get pendantAudioUnconfirmedSyncBlocked =>
+      'Не можеше да се потврди звукот зачуван на вашиот Pendant. Оставете го Pendant поврзан и обидете се повторно да синхронизирате.';
 }

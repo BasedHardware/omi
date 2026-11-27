@@ -15922,4 +15922,8 @@ class AppLocalizationsCa extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Alguns enregistraments encara són al vostre dispositiu. Deixeu que acabin de sincronitzar-se al telèfon i, després, inicieu l\'actualització.';
+
+  @override
+  String get pendantAudioUnconfirmedSyncBlocked =>
+      'No s’ha pogut confirmar l’àudio emmagatzemat al teu Pendant. Mantén el Pendant connectat i torna-ho a provar.';
 }

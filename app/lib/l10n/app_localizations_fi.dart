@@ -15847,4 +15847,8 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Osaa nauhoituksista on vielä laitteella. Anna niiden synkronoitua puhelimeen loppuun ja käynnistä sitten päivitys.';
+
+  @override
+  String get pendantAudioUnconfirmedSyncBlocked =>
+      'Pendantiin tallennettua ääntä ei voitu vahvistaa. Pidä Pendant yhdistettynä ja yritä synkronointia uudelleen.';
 }

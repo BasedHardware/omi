@@ -4803,5 +4803,6 @@
     "playStripePlanPaused": "Seu plano {plan} está pausado.",
     "firmwareNewestSupportedForDevice": "Seu dispositivo já está na versão de firmware mais recente suportada",
     "firmwareSyncRecordingsFirstTitle": "Sincronize suas gravações primeiro",
-    "firmwareSyncRecordingsFirstMessage": "Algumas gravações ainda estão no seu dispositivo. Deixe-as concluir a sincronização com seu telefone e, em seguida, inicie a atualização."
+    "firmwareSyncRecordingsFirstMessage": "Algumas gravações ainda estão no seu dispositivo. Deixe-as concluir a sincronização com seu telefone e, em seguida, inicie a atualização.",
+    "pendantAudioUnconfirmedSyncBlocked": "Não foi possível confirmar o áudio armazenado no seu Pendant. Mantenha o Pendant conectado e tente sincronizar novamente."
 }

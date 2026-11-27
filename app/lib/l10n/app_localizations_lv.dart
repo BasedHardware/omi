@@ -15877,4 +15877,8 @@ class AppLocalizationsLv extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Daži ieraksti vēl atrodas jūsu ierīcē. Ļaujiet tiem pabeigt sinhronizēšanu ar tālruni, pēc tam sāciet atjaunināšanu.';
+
+  @override
+  String get pendantAudioUnconfirmedSyncBlocked =>
+      'Neizdevās apstiprināt Pendant saglabāto audio. Atstājiet Pendant savienotu un mēģiniet sinhronizēt vēlreiz.';
 }

@@ -15850,4 +15850,8 @@ class AppLocalizationsMr extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'काही रेकॉर्डिंग अजून तुमच्या डिव्हाइसवर आहेत. त्या तुमच्या फोनवर पूर्णपणे सिंक होऊ द्या, नंतर अपडेट सुरू करा.';
+
+  @override
+  String get pendantAudioUnconfirmedSyncBlocked =>
+      'तुमच्या Pendant मधील साठवलेला ऑडिओ निश्चित करता आला नाही. Pendant कनेक्ट ठेवा आणि पुन्हा सिंक करण्याचा प्रयत्न करा.';
 }

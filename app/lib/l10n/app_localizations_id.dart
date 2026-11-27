@@ -15857,4 +15857,8 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Beberapa rekaman masih berada di perangkat Anda. Biarkan rekaman tersebut selesai disinkronkan ke ponsel Anda, lalu mulai pembaruan.';
+
+  @override
+  String get pendantAudioUnconfirmedSyncBlocked =>
+      'Audio yang tersimpan di Pendant Anda tidak dapat dikonfirmasi. Biarkan Pendant tetap terhubung dan coba sinkronkan lagi.';
 }

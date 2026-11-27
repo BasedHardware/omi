@@ -27800,6 +27800,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Some recordings are still on your device. Let them finish syncing to your phone, then start the update.'**
   String get firmwareSyncRecordingsFirstMessage;
+
+  /// Shown when offline sync stalls and the app cannot confirm that all stored Pendant audio has transferred.
+  ///
+  /// In en, this message translates to:
+  /// **'Your Pendant\'s stored audio could not be confirmed. Keep your Pendant connected and try syncing again.'**
+  String get pendantAudioUnconfirmedSyncBlocked;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -12325,5 +12325,6 @@
     "playStripePlanPaused": "Vaš {plan} plan je pauziran.",
     "firmwareNewestSupportedForDevice": "Vaš uređaj već koristi najnoviju podržanu verziju firmvera",
     "firmwareSyncRecordingsFirstTitle": "Prvo sinhronizujte svoje snimke",
-    "firmwareSyncRecordingsFirstMessage": "Neki snimci su još uvijek na vašem uređaju. Sačekajte da se sinhronizuju s telefonom, a zatim pokrenite ažuriranje."
+    "firmwareSyncRecordingsFirstMessage": "Neki snimci su još uvijek na vašem uređaju. Sačekajte da se sinhronizuju s telefonom, a zatim pokrenite ažuriranje.",
+    "pendantAudioUnconfirmedSyncBlocked": "Nije moguće potvrditi zvuk sačuvan na vašem Pendantu. Ostavite Pendant povezan i pokušajte ponovo sinhronizirati."
 }
