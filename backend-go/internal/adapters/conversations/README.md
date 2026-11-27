@@ -17,6 +17,9 @@ The transaction rechecks those values and the account deletion marker before the
 | Legacy rows can acquire structured fields. The v3 summary title lock preserves the stored title | `TestApplyFinalizationAddsStructuredFieldsToLegacyRows` |
 | A stale input, lock or deletion fences a late result. A writer cannot recreate a missing document | `TestApplyFinalizationRefusesStaleMissingAndProtectedRows` |
 | Private rows fail with `ErrRestricted` and `queue.Fail(CauseRestricted)` on load and update | `TestLoadRefusesPrivateRows`, `TestApplyFinalizationRefusesStaleMissingAndProtectedRows` |
+| A bounded payload can hold the transcript and structured notes. A notes update replaces the generation and writes its Home receipts in the same commit | `TestLoadPythonPayloadAndWriteNotes`, `TestApplyFinalizationRepacksSpilledStructured` |
+| A payload update over the atomic budget holds finalization without changing the current generation or its receipts | `TestApplyFinalizationHoldsOverBudgetPayloadWithoutChangingIt` |
+| An active account deletion marker prevents repacking an existing payload | `TestApplyFinalizationFencesSpilledNotesDuringAccountDeletion` |
 | Reopening a dead-letter row requires an explicit restore path. This port refuses queued, leased and BYOK transitions | `TestApplyFinalizationRefusesDeadLetterReopen` |
 | If terminal lifecycle fields are refused, content fields and their Home receipts still commit | `TestApplyFinalizationCommitsContentWhileRefusingLifecycle` |
 | Only the guarded owner can read and update. An active deletion marker holds that owner | `TestDeletionMarkerAndGuardFenceReadsAndWrites` |

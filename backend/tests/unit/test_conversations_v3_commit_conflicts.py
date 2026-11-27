@@ -248,7 +248,7 @@ def test_closure_follows_a_six_hop_link_chain(monkeypatch):
         }
     monkeypatch.setattr(store, 'account_deletion_blocks_user_work', lambda *a: False)
     monkeypatch.setattr(
-        store, 'decode_row', lambda uid, snap: {**snap.to_dict(), '_v3_revision': 1} if snap.exists else None
+        store, 'decode_row', lambda uid, snap, **_kwargs: {**snap.to_dict(), '_v3_revision': 1} if snap.exists else None
     )
     recordings, existing, _ = store.load('u', firestore_client=MemoryQuery(rows))
     assert set(recordings) == {f'r{i}' for i in range(6)}
@@ -277,7 +277,7 @@ def test_adoptable_skips_deleted_tombstoned_and_recording_rows(monkeypatch):
         '/users/u/conversations/rec': {'id': 'rec', 'v3_derived': True, 'recording': True},
         '/users/u/conversations/legacy': {'id': 'legacy'},
     }
-    monkeypatch.setattr(store, 'decode_row', lambda uid, snap: {**snap.to_dict(), '_v3_revision': 1})
+    monkeypatch.setattr(store, 'decode_row', lambda uid, snap, **_kwargs: {**snap.to_dict(), '_v3_revision': 1})
     found = store.adoptable(
         'u', ['live', 'deleted', 'tomb', 'rec', 'legacy', 'missing'], firestore_client=MemoryQuery(rows)
     )

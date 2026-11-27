@@ -30,6 +30,7 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Any, Callable, Literal, Tuple, overload
 from database import chat_edits
 from database.dream_dirty import after_write
+from database.account_deletion_marker import account_deletion_document
 from database.account_deletion_policy import account_deletion_marker_blocks_access
 from google.api_core.exceptions import AlreadyExists, Conflict, FailedPrecondition, NotFound
 from google.cloud import firestore
@@ -42,6 +43,15 @@ from models.structured import Structured
 from utils.summary_quality import clean_structured, stable_title, content_units, title_basis, valid_title
 from utils.conversations.llm_input_dedupe import NOTES_OUTPUT_HASH, output_fingerprint
 from database.audio_file_projection import finalize_audio_file_group as _finalize_audio_file_group
+from database.conversation_payload import (
+    get_conversation_with_payload,
+    integration_payload_writes_enabled,
+    read_conversation_payload,
+    read_list_conversation_payload,
+    stage_conversation_notes_patch,
+    stage_conversation_payload_patch,
+    v3_payload_writes_enabled,
+)
 from models.note_claims import claim_references_segment
 from models.client_processing import PROJECTION_FAMILY_FIELDS
 from models.finalization_owner import REFUSAL as FINALIZATION_OWNER_REFUSAL, python_owns_finalization
@@ -50,6 +60,7 @@ from models.conversation_photo import ConversationPhoto
 from models.capture_window_proof import CaptureWindowProof
 from models.transcript_segment import TranscriptSegment, legacy_conversation_segment_id
 from utils import encryption
+from utils.conversation_payload import PAYLOAD_FIELD, InvalidConversationPayload
 from utils.conversation_page_cursor import BookmarkDict, decode_cursor, encode_cursor, query_scope
 from config.firestore_read_levers import lever_enabled
 from config.recording_speakers import stamp_scope_index, with_creation_scope_index
@@ -157,6 +168,7 @@ _LIFECYCLE_FIELDS = frozenset({'status', 'discarded'})
 # never reach Typesense, so they must not pay for it.
 _SEARCH_INDEXED_FIELD_ROOTS = frozenset({'structured', 'created_at', 'started_at', 'finished_at', 'geolocation'})
 _PUBLIC_TRANSCRIPT_MAX_STORED_BYTES = 256 * 1024
+_PUBLIC_TRANSCRIPT_MAX_ENCRYPTED_CHARS = (((_PUBLIC_TRANSCRIPT_MAX_STORED_BYTES * 2) + 28 + 2) // 3) * 4
 _PUBLIC_TRANSCRIPT_MAX_DECODED_BYTES = 512 * 1024
 _PUBLIC_TRANSCRIPT_MAX_SEGMENTS = 4096
 _PUBLIC_TRANSCRIPT_MAX_SEGMENT_TEXT_CHARS = 24_000
@@ -779,7 +791,10 @@ def prepare_conversation_for_read(
 
 def document_data_with_revision(document) -> Optional[Dict[str, Any]]:
     """Return Firestore document data with its canonical server revision."""
-    data = document.to_dict()
+    return _stamp_conversation_revision(document.to_dict(), document)
+
+
+def _stamp_conversation_revision(data, document):
     if data is None:
         return None
     revision = firestore_revision_datetime(getattr(document, 'update_time', None))
@@ -1082,11 +1097,12 @@ class _PageFill:
     would charge every full page one more read to save that rare request.
     """
 
-    def __init__(self, conversations_ref, *, limit, budget, visible, scout=None, consume=None):
+    def __init__(self, conversations_ref, *, limit, budget, visible, read_row, scout=None, consume=None):
         self.conversations_ref = conversations_ref
         self.limit = limit
         self.budget = budget
         self.visible = visible
+        self.read_row = read_row
         self.consume = consume
         # Lean refills (see :class:`_Scout`); None keeps full-document refills.
         self.scout = scout if scout is not None and hasattr(conversations_ref, 'select') else None
@@ -1117,16 +1133,16 @@ class _PageFill:
             fetched = 0
             for doc in budgeted_stream_iter(query, self.budget):
                 fetched += 1
-                conversation = document_data_with_revision(doc)
-                visible = conversation is not None and self.visible(conversation)
-                if self.consume is not None:
-                    try:
+                try:
+                    conversation = self.read_row(doc)
+                    visible = conversation is not None and self.visible(conversation)
+                    if self.consume is not None:
                         self.budget.check()
                         if visible:
                             self.consume(conversation, doc, self.consumed + 1, self.skipped)
-                    except ListReadBudgetExhausted:
-                        self._unconsumed_row_pending = True
-                        raise
+                except ListReadBudgetExhausted:
+                    self._unconsumed_row_pending = True
+                    raise
                 self.consumed += 1
                 self.last_doc = doc
                 if not visible:
@@ -1197,8 +1213,8 @@ class _PageFill:
                             break
                         continue
                     if rewind is None:
-                        rewind = (self.consumed, self.last_doc)
-                    pending.append((doc, self.consumed, self.last_doc))
+                        rewind = (self.consumed, self.last_doc, self.skipped)
+                    pending.append((doc, self.consumed, self.last_doc, self.skipped))
                     self.consumed += 1
                     self.last_doc = doc
                     if len(self.rows) + len(pending) >= self.limit:
@@ -1206,7 +1222,7 @@ class _PageFill:
                         break
             except ListReadBudgetExhausted:
                 if rewind is not None:
-                    self.consumed, self.last_doc = rewind
+                    self.consumed, self.last_doc, self.skipped = rewind
                 raise
             self._hydrate(pending)
             if len(self.rows) >= self.limit or self.skipped >= self.cap:
@@ -1225,31 +1241,44 @@ class _PageFill:
             snapshots = {
                 snapshot.id: snapshot
                 for snapshot in budgeted_get_all(
-                    db, [doc.reference for doc, _, _ in pending], self.budget, field_paths=self.scout.hydrate_fields
+                    db, [doc.reference for doc, _, _, _ in pending], self.budget, field_paths=self.scout.hydrate_fields
                 )
             }
         except ListReadBudgetExhausted:
-            _, self.consumed, self.last_doc = pending[0]
+            _, self.consumed, self.last_doc, self.skipped = pending[0]
+            self._unconsumed_row_pending = True
             raise
         self.hydrated += len(pending)
-        for doc, preceding_count, preceding_doc in pending:
+        hydrated_skipped = 0
+        for doc, preceding_count, preceding_doc, preceding_skipped in pending:
             try:
                 if self.consume is not None:
                     self.budget.check()
                 snapshot = snapshots.get(doc.id)
-                conversation = document_data_with_revision(snapshot) if snapshot is not None else None
+                conversation = self.read_row(snapshot) if snapshot is not None else None
                 visible = conversation is not None and self.visible(conversation)
                 if self.consume is not None:
                     self.budget.check()
                     if visible:
-                        self.consume(conversation, doc, preceding_count + 1, self.skipped)
+                        self.consume(conversation, doc, preceding_count + 1, preceding_skipped + hydrated_skipped)
             except ListReadBudgetExhausted:
                 self.consumed, self.last_doc = preceding_count, preceding_doc
+                self.skipped = preceding_skipped + hydrated_skipped
+                self._unconsumed_row_pending = True
                 raise
             if not visible:
-                self.skipped += 1
+                hydrated_skipped += 1
                 continue
             self.rows.append(conversation)
+        self.skipped += hydrated_skipped
+
+
+def _list_conversation_row(snapshot, *, budget, field_paths, hidden):
+    row = document_data_with_revision(snapshot)
+    if row is None or PAYLOAD_FIELD not in row or hidden(row):
+        return row
+    stored = read_list_conversation_payload(db, snapshot, budget, field_paths=field_paths)
+    return _stamp_conversation_revision(stored, snapshot)
 
 
 def _visibility(**options):
@@ -1292,6 +1321,7 @@ def _collect_cursor_conversation_page(
     include_discarded,
     budget,
     bookmark,
+    read_row,
     presentation=False,
     include_recordings=False,
     hide_home=False,
@@ -1309,6 +1339,7 @@ def _collect_cursor_conversation_page(
         conversations_ref,
         limit=limit,
         budget=budget,
+        read_row=read_row,
         visible=_visibility(
             include_discarded=include_discarded,
             presentation=presentation,
@@ -1376,18 +1407,15 @@ def _collect_visible_conversation_page(
         capture_only=capture_only,
         show_held=show_held,
     )
-
-    # Only budgeted list routes refill lean; internal full-document callers keep their reads.
-    scout = (
-        _Scout(
-            sort_field=sort_field,
-            include_recordings=include_recordings,
-            hide_home=hide_home,
-            hydrate_fields=hydrate_fields,
-        )
-        if budget is not None and not include_discarded and _lean_skip_enabled()
-        else None
+    scout_policy = _Scout(
+        sort_field=sort_field,
+        include_recordings=include_recordings,
+        hide_home=hide_home,
+        hydrate_fields=hydrate_fields,
     )
+    read_row = partial(_list_conversation_row, budget=budget, field_paths=hydrate_fields, hidden=scout_policy.hidden)
+    # Only budgeted list routes refill lean; internal full-document callers keep their reads.
+    scout = scout_policy if budget is not None and not include_discarded and _lean_skip_enabled() else None
 
     def finish(rows, last_doc, *, storage_rows, has_more, hidden_rows=0):
         if cursor_page is not None:
@@ -1445,6 +1473,7 @@ def _collect_visible_conversation_page(
                 limit=limit,
                 include_discarded=include_discarded,
                 budget=budget,
+                read_row=read_row,
                 presentation=presentation,
                 include_recordings=include_recordings,
                 hide_home=hide_home,
@@ -1465,7 +1494,7 @@ def _collect_visible_conversation_page(
         try:
             for doc in budgeted_stream_iter(conversations_ref, budget):
                 try:
-                    conversation = document_data_with_revision(doc)
+                    conversation = read_row(doc)
                     is_visible = conversation is not None and visible(conversation)
                     if consume_row is not None:
                         budget.check()
@@ -1505,7 +1534,13 @@ def _collect_visible_conversation_page(
             # would pay the same charge and stop here again.
             return finish([], None, storage_rows=0, has_more=False)
     fill = _PageFill(
-        conversations_ref, limit=limit, budget=budget, visible=visible, scout=scout, consume=consume_row
+        conversations_ref,
+        limit=limit,
+        budget=budget,
+        visible=visible,
+        read_row=read_row,
+        scout=scout,
+        consume=consume_row,
     ).run(conversations_ref.limit(limit).offset(offset), limit)
     return finish(
         fill.rows, fill.last_doc, storage_rows=fill.consumed, has_more=fill.has_more, hidden_rows=fill.skipped
@@ -1797,9 +1832,20 @@ def persist_processing_result_with_lifecycle(
             # back what they removed and emit derived side effects from it.
             return declined('missing')
 
-        existing = existing_snapshot.to_dict() or {}
-        if not python_owns_finalization(existing):
+        raw = existing_snapshot.to_dict() or {}
+        if not python_owns_finalization(raw):
             return declined('foreign_owner')
+        allow_promotion = integration_payload_writes_enabled(raw) or (
+            raw.get('v3_derived') and v3_payload_writes_enabled()
+        )
+        payload_write = allow_promotion or PAYLOAD_FIELD in raw
+        if payload_write:
+            deletion = account_deletion_document(uid, firestore_client=db).get(transaction=transaction)
+            if account_deletion_marker_blocks_access(
+                marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('wipe_status')
+            ):
+                return 'fenced'
+        existing = read_conversation_payload(db, transaction, existing_snapshot) if PAYLOAD_FIELD in raw else raw
         if existing.get('arrival_at'):
             write_data['arrival_at'] = existing['arrival_at']
         if expected_capture_group is not None:
@@ -2029,7 +2075,16 @@ def persist_processing_result_with_lifecycle(
         )
         if any(flag in write_data for flag in home_visibility_index.FLAGS):
             home_visibility_index.stamp(write_data, existing)
-        if family_enabled:
+        if payload_write:
+            stage_conversation_payload_patch(
+                transaction,
+                existing_snapshot,
+                existing,
+                _processing_result_payload_patch(existing, write_data),
+                overflow_fields={'transcript_segments'},
+                allow_promotion=allow_promotion,
+            )
+        elif family_enabled:
             transaction.update(conversation_ref, update_fields(write_data))
         else:
             transaction.set(conversation_ref, write_data, merge=True)
@@ -2167,7 +2222,8 @@ def get_conversation(
     client = firestore_client if firestore_client is not None else db
     user_ref = client.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-    conversation_data = document_data_with_revision(conversation_ref.get())
+    stored, snapshot = get_conversation_with_payload(client, conversation_ref)
+    conversation_data = _stamp_conversation_revision(stored, snapshot)
     record_document_read(
         read_site, FirestoreReadOutcome.HIT if conversation_data is not None else FirestoreReadOutcome.MISS
     )
@@ -2201,6 +2257,24 @@ def get_conversation_raw_snapshot(
     if not getattr(snapshot, 'exists', False):
         return None
     return snapshot.to_dict()
+
+
+def read_authorized_conversation_payload(
+    uid, conversation_id, *, payload_allowed, field_paths=None, firestore_client=None
+):
+    """Recheck the parent and read the current generation in one read-only snapshot."""
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    ref = client.collection('users').document(uid).collection('conversations').document(conversation_id)
+
+    @firestore.transactional
+    def read(tx):
+        snapshot = ref.get(field_paths=field_paths, transaction=tx)
+        row = snapshot.to_dict()
+        if not row or not payload_allowed(row):
+            raise InvalidConversationPayload('conversation payload unavailable')
+        return read_conversation_payload(client, tx, snapshot, field_paths=field_paths)
+
+    return read(client.transaction(read_only=True))
 
 
 def resolve_sync_conversation_redirect(
@@ -2341,16 +2415,16 @@ def get_public_shared_conversation_bounded(
     client = firestore_client if firestore_client is not None else get_firestore_client()
     user_ref = client.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-    snapshot = conversation_ref.get(
-        field_paths=[
-            'visibility',
-            'deleted',
-            'is_locked',
-            'transcript_segments_compressed',
-            'transcript_segments',
-            'has_transcript_corrections',
-        ]
-    )
+    fields = [
+        'visibility',
+        'deleted',
+        'is_locked',
+        'transcript_segments_compressed',
+        'transcript_segments',
+        'has_transcript_corrections',
+        PAYLOAD_FIELD,
+    ]
+    snapshot = conversation_ref.get(field_paths=fields)
     record_document_read(
         FirestoreReadSite.PUBLIC_SHARED_CHAT,
         FirestoreReadOutcome.HIT if snapshot.exists else FirestoreReadOutcome.MISS,
@@ -2374,6 +2448,33 @@ def get_public_shared_conversation_bounded(
         return public_conversation
 
     try:
+        if PAYLOAD_FIELD in raw and 'transcript_segments' not in raw:
+
+            @firestore.transactional
+            def read_shared_payload(transaction):
+                current = conversation_ref.get(field_paths=fields, transaction=transaction)
+                parent = current.to_dict() or {}
+                if (
+                    not current.exists
+                    or is_soft_deleted(parent)
+                    or parent.get('is_locked')
+                    or parent.get('visibility') not in ('shared', 'public')
+                ):
+                    return None
+                # Allow the encoded transcript's existing limit plus the
+                # protobuf map envelope. Reject larger payloads before BatchGet.
+                return read_conversation_payload(
+                    client,
+                    transaction,
+                    current,
+                    field_paths=fields,
+                    max_wire_bytes=_PUBLIC_TRANSCRIPT_MAX_ENCRYPTED_CHARS + 1024,
+                )
+
+            raw = read_shared_payload(client.transaction(read_only=True))
+            if raw is None:
+                return None
+            public_conversation['visibility'] = raw['visibility']
         public_conversation['transcript_segments'] = _decode_public_transcript_segments_bounded(
             uid,
             raw.get('transcript_segments'),
@@ -2633,6 +2734,7 @@ def get_conversations_without_photos(
         fields.update(
             {
                 'data_protection_level',
+                PAYLOAD_FIELD,
                 'user_title',
                 'user_corrections_compressed',
                 'deleted',
@@ -2744,7 +2846,8 @@ def get_mcp_conversations_by_id(
         field_paths.extend(transcribing_hold.READ_FIELDS)
     if extra_field_paths:
         field_paths.extend(extra_field_paths)
-    docs = client.get_all(doc_refs, field_paths=list(dict.fromkeys(field_paths)))
+    field_paths = list(dict.fromkeys([*field_paths, PAYLOAD_FIELD]))
+    docs = client.get_all(doc_refs, field_paths=field_paths)
     conversations_by_id: Dict[str, Dict[str, Any]] = {}
     for doc in docs:
         if not doc.exists:
@@ -2754,6 +2857,12 @@ def get_mcp_conversations_by_id(
             continue
         if not is_visible_conversation(data, include_discarded=include_discarded, presentation=True):
             continue
+        if PAYLOAD_FIELD in data:
+            if data.get('is_locked'):
+                data.pop(PAYLOAD_FIELD)
+            else:
+                data = read_conversation_payload(client, None, doc, field_paths=field_paths)
+                data = _stamp_conversation_revision(data, doc)
         data.setdefault('id', doc.id)
         conversations_by_id[str(data['id'])] = data
     return [
@@ -2781,6 +2890,13 @@ def iter_all_conversations(
         for doc in snapshots:
             check_portability_read()
             conv = doc.to_dict()
+            if PAYLOAD_FIELD in conv:
+                if not is_visible_conversation(
+                    conv, include_discarded=include_discarded, include_recordings=include_recordings
+                ):
+                    continue
+                conv = read_conversation_payload(db, None, doc)
+                check_portability_read()
             conv = prepare_conversation_for_read(conv, uid)
             if conv is None:
                 continue
@@ -3012,17 +3128,35 @@ def create_audio_files_from_chunks(
     return audio_files
 
 
+def _stage_manual_notes_edit(transaction, ref, snapshot, uid, patch):
+    raw = snapshot.to_dict() or {}
+    if PAYLOAD_FIELD not in raw:
+        transaction.update(ref, patch)
+        return True
+
+    deletion = account_deletion_document(uid, firestore_client=db).get(transaction=transaction)
+    if account_deletion_marker_blocks_access(
+        marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('wipe_status')
+    ):
+        return False
+    current = read_conversation_payload(db, transaction, snapshot)
+    stage_conversation_notes_patch(transaction, snapshot, current, patch)
+    return True
+
+
 @after_write('conversations')
 def update_conversation_title(uid: str, conversation_id: str, title: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    patch = {'structured.title': title, 'user_title': title, 'summary_due_at': None}
 
-    doc_snapshot = conversation_ref.get()
-    if not doc_snapshot.exists:
-        return
+    @firestore.transactional
+    def _update(transaction):
+        snapshot = conversation_ref.get(transaction=transaction)
+        return snapshot.exists and _stage_manual_notes_edit(transaction, conversation_ref, snapshot, uid, patch)
 
-    conversation_ref.update({'structured.title': title, 'user_title': title, 'summary_due_at': None})
-    _sync_conversation_search_index(uid, conversation_id)
+    if run_transactional(db, _update):
+        _sync_conversation_search_index(uid, conversation_id)
 
 
 @after_write('conversations')
@@ -3059,8 +3193,11 @@ def update_conversation_summary(uid: str, conversation_id: str, app_id: Optional
 
         updated_at = datetime.now(timezone.utc)
         if app_id is None:
-            transaction.update(
+            updated = _stage_manual_notes_edit(
+                transaction,
                 conversation_ref,
+                doc_snapshot,
+                uid,
                 {
                     'structured.overview': content,
                     'structured.sections': firestore.DELETE_FIELD,
@@ -3068,7 +3205,7 @@ def update_conversation_summary(uid: str, conversation_id: str, app_id: Optional
                     **cleared_native_visibility(doc_snapshot.to_dict() or {}, has_notes=bool(content.strip())),
                 },
             )
-            return 'ok'
+            return 'ok' if updated else 'not_found'
 
         raw = doc_snapshot.to_dict() or {}
         stored_results = raw.get('apps_results') or []
@@ -3261,6 +3398,8 @@ def _get_conversations_by_id(
                 data, include_discarded=include_discarded, include_recordings=include_recordings
             ):
                 continue
+            if PAYLOAD_FIELD in data:
+                data = read_conversation_payload(db, None, doc, read_budget=read_budget)
             data.setdefault('id', doc.id)
             conversations_by_id[str(data['id'])] = data
         else:
@@ -3332,9 +3471,19 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
 
         @firestore.transactional
         def _migrate(transaction):
-            current = doc_snapshot.reference.get(transaction=transaction).to_dict()
+            snapshot = doc_snapshot.reference.get(transaction=transaction)
+            current = snapshot.to_dict()
             if not current or current.get('deleted') or current.get('visibility') in ('public', 'shared'):
                 return False
+            hydrated = None
+            if PAYLOAD_FIELD in current:
+                deletion = account_deletion_document(uid, firestore_client=db).get(transaction=transaction)
+                if account_deletion_marker_blocks_access(
+                    marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('wipe_status')
+                ):
+                    return False
+                hydrated = read_conversation_payload(db, transaction, snapshot)
+                current = dict(hydrated)
             # Priors can exist before a repair stamps the row. Collect IDs even on a same-target retry.
             prior_ids.add(doc_snapshot.id)
             prior_ids.update(current.get('sync_merged_from') or [])
@@ -3368,6 +3517,7 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
                 target_level,
                 preserve_transcript_identity=bool(current.get('has_transcript_corrections')),
                 conversation_id=doc_snapshot.reference.id,
+                allow_offload=hydrated is None,
             )
             guard_match_score_size(prepared, current, getattr(doc_snapshot.reference, 'path', None))
             if had_match_scores and match_scores.FIELD not in prepared:
@@ -3377,7 +3527,12 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
             if 'manual_speaker_assignments' in payload and not payload['manual_speaker_assignments']:
                 prepared['manual_speaker_assignments'] = firestore.DELETE_FIELD
                 prepared['manual_speaker_assignments_compressed'] = firestore.DELETE_FIELD
-            transaction.update(doc_snapshot.reference, prepared)
+            if hydrated is not None:
+                stage_conversation_payload_patch(
+                    transaction, snapshot, hydrated, prepared, overflow_fields={'transcript_segments'}
+                )
+            else:
+                transaction.update(doc_snapshot.reference, prepared)
             return True
 
         if not run_preloaded_transactional(db, _migrate):
@@ -3651,6 +3806,23 @@ def claim_conversation_status_in_txn(
             updates['terminal_family_at'] = terminal_family_at
         _settle_discarded_finalization_projection(current, updates)
     return updates
+
+
+def _processing_result_payload_patch(current: Mapping[str, Any], updates: Mapping[str, Any]) -> dict:
+    """Resolve the recursive merge mask into whole top-level field values for repacking."""
+
+    def merge(existing, changes):
+        if not isinstance(changes, dict) or not changes:
+            return changes
+        merged = dict(existing) if isinstance(existing, dict) else {}
+        for key, value in changes.items():
+            if value is firestore.DELETE_FIELD:
+                merged.pop(key, None)
+            else:
+                merged[key] = merge(merged.get(key), value)
+        return merged
+
+    return {key: merge(current.get(key), value) for key, value in updates.items()}
 
 
 def claim_conversation_status(
@@ -4527,6 +4699,16 @@ def update_conversation_segments(
         if not getattr(doc_snapshot, 'exists', False):
             return False
         current = doc_snapshot.to_dict() or {}
+        has_payload = PAYLOAD_FIELD in current
+        if has_payload:
+            if current.get('deleted') or current.get('is_locked'):
+                return False
+            deletion = account_deletion_document(uid, firestore_client=client).get(transaction=transaction)
+            if account_deletion_marker_blocks_access(
+                marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('wipe_status')
+            ):
+                return False
+            current = read_conversation_payload(client, transaction, doc_snapshot)
         v3_recording[0] = bool(current.get('recording'))
         if current.get('record_projection_revision') and segment_update_fields is None:
             # The durable record owns the finalized capture. A delayed socket
@@ -4730,7 +4912,12 @@ def update_conversation_segments(
             clear_client_processing(prepared_payload)
         guard_match_score_size(prepared_payload, current, getattr(doc_ref, 'path', None))
         _merge_owner_diagnostics(prepared_payload, current, getattr(doc_ref, 'path', None))
-        transaction.update(doc_ref, prepared_payload)
+        if has_payload:
+            stage_conversation_payload_patch(
+                transaction, doc_snapshot, current, prepared_payload, overflow_fields={'transcript_segments'}
+            )
+        else:
+            transaction.update(doc_ref, prepared_payload)
         if planned is not None:
             return planned.with_segments(accepted)
         return accepted if return_segments else True
@@ -4822,6 +5009,14 @@ def materialize_translation(
         current = snapshot.to_dict() or {}
         if is_soft_deleted(current) or current.get('is_locked'):
             return None
+        has_payload = PAYLOAD_FIELD in current
+        if has_payload:
+            deletion = account_deletion_document(uid, firestore_client=client).get(transaction=transaction)
+            if account_deletion_marker_blocks_access(
+                marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('wipe_status')
+            ):
+                return None
+            current = read_conversation_payload(client, transaction, snapshot)
         segments = _decode_transcript_segments_strict(
             uid, current.get('transcript_segments', []), bool(current.get('transcript_segments_compressed'))
         )
@@ -4893,7 +5088,12 @@ def materialize_translation(
         if reservation is not None and not reservation_is_current(reservation):
             return None
         guard_match_score_size(payload, current, getattr(doc_ref, 'path', None))
-        transaction.update(doc_ref, payload)
+        if has_payload:
+            stage_conversation_payload_patch(
+                transaction, snapshot, current, payload, overflow_fields={'transcript_segments'}
+            )
+        else:
+            transaction.update(doc_ref, payload)
         return {
             **selected,
             'text': source_text,

@@ -445,7 +445,7 @@ class Client:
 def loader(monkeypatch):
     monkeypatch.setattr(store, 'account_deletion_blocks_user_work', lambda *a, **kw: False)
 
-    def decode(uid, snapshot):
+    def decode(uid, snapshot, **_kwargs):
         return {**snapshot.to_dict(), 'id': snapshot.id, '_v3_revision': snapshot.update_time}
 
     monkeypatch.setattr(store, 'decode_row', decode)
@@ -512,7 +512,7 @@ def test_an_unreadable_converted_donor_blocks_instead_of_retiring_its_copy(loade
             'status': 'completed',
         },
     }
-    monkeypatch.setattr(store, 'recording_input', lambda uid, snapshot: {'_v3_unreadable': True})
+    monkeypatch.setattr(store, 'recording_input', lambda uid, snapshot, **_kwargs: {'_v3_unreadable': True})
     window = {'since': AT - timedelta(hours=1), 'until': AT + timedelta(hours=1)}
     for rederive in (False, True):
         with pytest.raises(store.Conflict, match='backfill_source_unreadable'):
@@ -709,9 +709,10 @@ async def test_drain_reaches_python_notes_behind_saturated_foreign_page(direct, 
     seek = query.order_by.return_value.start_after
     seek.return_value.limit.return_value.stream.side_effect = lambda **_: [tail] if tail.id in pending else []
 
-    monkeypatch.setattr(store, 'get_firestore_client', lambda: object())
+    client = object()
+    monkeypatch.setattr(store, 'get_firestore_client', lambda: client)
     monkeypatch.setattr(store, 'user_conversations', lambda *_: collection)
-    decode = Mock(side_effect=lambda _, doc, *, data: {'id': doc.id, **data})
+    decode = Mock(side_effect=lambda _, doc, *, data, **_kwargs: {'id': doc.id, **data})
     monkeypatch.setattr(store, 'decode_row', decode)
     monkeypatch.setattr(leases, 'acquire', lambda *args: 'token')
     monkeypatch.setattr(leases, 'release', lambda *args: None)
@@ -735,7 +736,7 @@ async def test_drain_reaches_python_notes_behind_saturated_foreign_page(direct, 
         assert counts['remaining'] == counts['ownership_blocked'] == 128
         assert seek.call_args_list == [(({'__name__': collection.document.return_value},), {})] * 2
         assert collection.document.call_args_list == [((first[-1].id,), {})] * 2
-        decode.assert_called_once_with('u', tail, data={})
+        decode.assert_called_once_with('u', tail, data={}, firestore_client=client)
         assert pending == {doc.id for doc in first}
 
 

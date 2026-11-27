@@ -894,6 +894,7 @@ and an explicit empty literal renders as `''`.
 | `OMI_IMESSAGE_ENABLED` | Default-off registration of the iMessage provider adapter. | backend | env | closed | — | — | on | — | keep | keep | — | auditfix |
 | `OMI_IMESSAGE_MAX_SEND_RECEIVE_RATIO` | Durable iMessage send/receive ratio ceiling; default 3, bounded 1 through 5. | backend | env | closed | — | — | 3 | — | keep | keep | — | auditfix |
 | `OMI_IMESSAGE_PROVIDER` | Installed iMessage provider selection: linq or keiki. | backend | env | closed | — | — | keiki | — | keep | keep | — | auditfix |
+| `OMI_INTEGRATION_CONVERSATION_PAYLOAD_WRITES` | Default off. Set on to let integration lifecycle writes and summary claims move an oversized transcript into bounded Firestore chunks. | backend | env | closed | — | — | — | — | keep | keep | — | Goal: Pipeline / SCA-2520 |
 | `OMI_LLM_CHAT_AGENT_ROUTE` | Select managed chat-agent gateway route | backend | env | closed | gateway | gateway (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | gateway (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, pusher (chart)) | — | keep | keep | — | unowned |
 | `OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION` | Permit direct-model gateway exception | backend | env | closed | false | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, pusher (chart)) | — | keep | keep | — | auditfix |
 | `OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE` | Allow production gateway feature mode | backend | env | closed | — | — | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, pusher (chart)) | — | keep | keep | — | auditfix |
@@ -913,6 +914,7 @@ and an explicit empty literal renders as `''`.
 | `OMI_TELEGRAM_SHARED_PACING` | Runtime Telegram Redis server-clock pacing defaults on; Redis errors fall back to per-process pacing with a recorded fallback. | backend | env | closed | — | — | on | — | keep | keep | — | auditfix |
 | `OMI_TELEGRAM_STREAMING` | Telegram preview mode draft, edit or none; code default draft, prod explicitly none for all-paid launch. | backend | env | closed | — | — | none | — | keep | keep | — | review-desk |
 | `OMI_USAGE_MONTH_TOTAL_SHADOW_RATE` | Fraction of monthly usage reads selected for snapshot comparison, default 0.01 | backend | env | closed | — | — | — | — | keep | keep | — | margin-lead |
+| `OMI_V3_CONVERSATION_PAYLOAD_WRITES` | Default off. Set on to let live v3 builder and notes writes move an oversized transcript into bounded Firestore chunks. | backend | env | closed | — | — | — | — | keep | keep | — | Goal: Pipeline / SCA-2520 |
 | `OMI_VERTEX_LEGACY_TASK_MIN_CAPABLE_MACOS_BUILD` | First released macOS build containing #20374; positive integer read per request; unset/invalid serves all and counts candidate would-refuse volume in bounded build buckets | backend | env | open | env_var | env_var | 12435 | — | keep | keep | — | auditfix |
 | `OMI_VERTEX_LEGACY_TASK_MODE` | enforce (default) refuses positively identified macOS task loops below the configured capable build after confirmed inactivity; unset/invalid threshold or observe only counts | backend | env | closed | env_var | env_var | env_var | — | keep | keep | — | auditfix |
 | `OMI_VERTEX_PT_TARGET_LOCATION` | Moved Vertex order location; default us; global explicitly widens residency | backend | env | closed | — | — | — | — | keep | keep | — | auditfix |
@@ -1548,6 +1550,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `OMI_HOME_VISIBILITY_INDEX_OWNERS` — Default empty. Admit named, reconciled v3 owners to the indexed default Home read. (fail: closed)
 - `OMI_IMESSAGE_CONTACT_CARD` — Default-off sharing of a preconfigured Linq contact card. (fail: closed)
 - `OMI_INDEXED_LIST_READS_ENABLED` — Default off; indexed canonical list candidates and slim main conversation lists preserve released row authority (fail: closed)
+- `OMI_INTEGRATION_CONVERSATION_PAYLOAD_WRITES` — Default off. Set on to let integration lifecycle writes and summary claims move an oversized transcript into bounded Firestore chunks. (fail: closed)
 - `OMI_LIST_LEAN_SKIP_ENABLED` — Default on; conversation list page refills through a run of hidden rows stream only visibility fields and read in full only rows that may be visible. Off restores full-document refills. (fail: open)
 - `OMI_LIST_PAGE_WALL_BUDGET_ENABLED` — Default on; bound the conversations list read phase by wall clock and return its prepared prefix before the edge deadline. (fail: open)
 - `OMI_LLM_GATEWAY_OBSERVABILITY_LOGS_ENABLED` — Enable gateway observability logs (fail: closed)
@@ -1567,6 +1570,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `OMI_TV_ROLLUP_ENABLED` — Default off; 1 prefers complete BigQuery daily rollup windows for TV history; missing coverage falls back to HogQL (fail: closed)
 - `OMI_USAGE_MONTH_TOTAL_SHADOW_ENABLED` — Default on; sample served monthly usage against hourly Firestore at the serving snapshot (fail: open)
 - `OMI_USAGE_MONTH_TOTAL_SHADOW_RATE` — Fraction of monthly usage reads selected for snapshot comparison, default 0.01 (fail: closed)
+- `OMI_V3_CONVERSATION_PAYLOAD_WRITES` — Default off. Set on to let live v3 builder and notes writes move an oversized transcript into bounded Firestore chunks. (fail: closed)
 - `OMI_VERTEX_PT_TARGET_LOCATION` — Moved Vertex order location; default us; global explicitly widens residency (fail: closed)
 - `OPEN_LOOPS_CARD_POLISH_ENABLED` — Default off; allow the single cheap-model polish call for open-loop review cards (deterministic template is the default) (fail: closed)
 - `OPEN_LOOPS_ENABLED` — Default on; extract open-loop fields in the notes call, persist them server-only, and run the once-per-day open-loop daily pass (fail: open)

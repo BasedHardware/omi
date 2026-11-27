@@ -371,7 +371,7 @@ def test_backlog_over_128_advances_pages_and_extends_prior_window(monkeypatch):
     client = MemoryQuery(rows)
     monkeypatch.setattr(store, 'account_deletion_blocks_user_work', lambda *a: False)
     monkeypatch.setattr(
-        store, 'decode_row', lambda uid, snap: {**snap.to_dict(), '_v3_revision': 1} if snap.exists else None
+        store, 'decode_row', lambda uid, snap, **_kwargs: {**snap.to_dict(), '_v3_revision': 1} if snap.exists else None
     )
     existing_id = None
     processed = set()
@@ -786,7 +786,7 @@ def test_hour_long_continuous_talk_crosses_anchor_and_pending_page(monkeypatch, 
     client = MemoryQuery(rows)
     monkeypatch.setattr(store, 'account_deletion_blocks_user_work', lambda *a: False)
     monkeypatch.setattr(
-        store, 'decode_row', lambda uid, snap: {**snap.to_dict(), '_v3_revision': 1} if snap.exists else None
+        store, 'decode_row', lambda uid, snap, **_kwargs: {**snap.to_dict(), '_v3_revision': 1} if snap.exists else None
     )
     existing_id = None
     processed = set()
@@ -827,7 +827,7 @@ def test_page_continuation_uses_capture_chronology_not_pending_order(monkeypatch
         )
     monkeypatch.setattr(store, 'account_deletion_blocks_user_work', lambda *a: False)
     monkeypatch.setattr(
-        store, 'decode_row', lambda uid, snap: dict(snap.to_dict(), _v3_revision=1) if snap.exists else None
+        store, 'decode_row', lambda uid, snap, **_kwargs: dict(snap.to_dict(), _v3_revision=1) if snap.exists else None
     )
     recordings, _, _ = store.load('u', firestore_client=MemoryQuery(rows))
     assert recordings['0']['_v3_page_continues']
@@ -937,7 +937,7 @@ def _assert_successor(monkeypatch, rows, now_after, continues):
     now = AT + timedelta(seconds=now_after)
     monkeypatch.setattr(store, 'account_deletion_blocks_user_work', lambda *a: False)
     monkeypatch.setattr(
-        store, 'decode_row', lambda uid, snap: dict(snap.to_dict(), _v3_revision=1) if snap.exists else None
+        store, 'decode_row', lambda uid, snap, **_kwargs: dict(snap.to_dict(), _v3_revision=1) if snap.exists else None
     )
     monkeypatch.setattr(store, 'datetime', type('Clock', (datetime,), {'now': staticmethod(lambda tz=None: now)}))
     recordings = {'a': store.recording_input('u', MemoryQuery(rows).document('users/u/conversations/a').get())}
@@ -1068,8 +1068,8 @@ def test_builder_loads_indexed_provisional_card_without_pending_audio(monkeypatc
         prefix + 'conversations/r': source(v3_pending=False),
     }
     monkeypatch.setattr(store, 'account_deletion_blocks_user_work', lambda *a, **kw: False)
-    monkeypatch.setattr(store, 'decode_row', lambda uid, snap: snap.to_dict() if snap.exists else None)
-    monkeypatch.setattr(store, 'recording_input', lambda uid, snap, **kw: snap.to_dict() if snap.exists else None)
+    monkeypatch.setattr(store, 'decode_row', lambda uid, snap, **_kwargs: snap.to_dict() if snap.exists else None)
+    monkeypatch.setattr(store, 'recording_input', lambda uid, snap, **_kwargs: snap.to_dict() if snap.exists else None)
     recordings, existing, _ = store.load('synthetic', firestore_client=MemoryQuery(rows))
     assert set(existing) == {'older'} and set(recordings) == {'r'}
 
@@ -1221,7 +1221,7 @@ async def test_configured_builder_wakes_at_outline_then_lock(builder, monkeypatc
 def test_pending_page_continuation_uses_configured_silence(monkeypatch, gap, continues):
     monkeypatch.setenv('CONVERSATIONS_V3_SILENCE_GAP_SECONDS', '900')
     monkeypatch.setattr(store, 'account_deletion_blocks_user_work', lambda *a, **kw: False)
-    monkeypatch.setattr(store, 'recording_input', lambda uid, snap, **kw: snap.to_dict() if snap.exists else None)
+    monkeypatch.setattr(store, 'recording_input', lambda uid, snap, **_kwargs: snap.to_dict() if snap.exists else None)
     prefix = '/users/synthetic/conversations/'
     rows = {}
     for index in range(32):
@@ -1320,7 +1320,7 @@ def test_indexed_preview_with_unreadable_transcript_keeps_its_custody(monkeypatc
     }
     monkeypatch.setattr(store, 'account_deletion_blocks_user_work', lambda *a, **kw: False)
 
-    def decode(*args):
+    def decode(*args, **_kwargs):
         raise store.TranscriptBlobAbsent('synthetic unavailable blob')
 
     monkeypatch.setattr(store, 'decode_row', decode)
@@ -1343,7 +1343,7 @@ def test_indexed_preview_with_unreadable_source_keeps_its_wake(monkeypatch):
     }
     monkeypatch.setattr(store, 'account_deletion_blocks_user_work', lambda *a, **kw: False)
 
-    def decode(uid, snapshot):
+    def decode(uid, snapshot, **_kwargs):
         if snapshot.id == 'r':
             raise store.TranscriptBlobAbsent('synthetic unavailable source')
         return snapshot.to_dict() if snapshot.exists else None

@@ -764,7 +764,7 @@ def catchup(strict, monkeypatch):
     monkeypatch.setattr(routes, 'run_blocking', blocking)
     monkeypatch.setattr(summary, 'run_blocking', blocking)
     monkeypatch.setattr(summary.store, 'get_firestore_client', lambda: strict)
-    monkeypatch.setattr(summary.store, 'decode_row', lambda uid, snapshot: snapshot.to_dict())
+    monkeypatch.setattr(summary.store, 'decode_row', lambda uid, snapshot, **_kwargs: snapshot.to_dict())
     monkeypatch.setattr(routes, '_get_valid_conversation_by_id', exact_row)
     monkeypatch.setattr(routes, 'require_generated_compute', lambda *a: None)
     monkeypatch.setattr(service, 'reconcile', lambda *a, **kw: pytest.fail('catch-up ran the paid outline path'))

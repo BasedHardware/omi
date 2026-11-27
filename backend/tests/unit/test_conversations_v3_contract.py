@@ -738,6 +738,7 @@ def test_cursor_refills_after_recording_and_hidden_rows(include_recordings, hide
         include_discarded=False,
         budget=None,
         bookmark=anchor,
+        read_row=db.document_data_with_revision,
         include_recordings=include_recordings,
         hide_home=hide_home,
     )

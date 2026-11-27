@@ -364,6 +364,7 @@ def test_public_conversation_read_uses_a_field_mask_and_returns_only_bounded_saf
         'transcript_segments_compressed',
         'transcript_segments',
         'has_transcript_corrections',
+        '_conversation_payload',
     ]
     assert conversation == {
         'visibility': 'shared',

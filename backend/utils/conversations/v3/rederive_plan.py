@@ -179,9 +179,11 @@ def live_outcome(rows, existing, recordings, *, since, until, run_id):
             entry['created'] = True
         else:
             entry['raw'] = prior['_v3_raw']
+            if prior.get('_v3_prior_run'):
+                entry['source_revision'] = prior['_v3_revision']
         if cid in retire:
             entry['retired_into'] = retire[cid]['sync_merged_into']
-        if _stored_bytes(entry) > rederive_store.SOURCE_MAX_BYTES:
+        if 'source_revision' not in entry and _stored_bytes(entry) > rederive_store.SOURCE_MAX_BYTES:
             # The prior holds the whole stored row; one that cannot be written leaves no exact undo.
             raise Conflict('document_too_large')
         priors.append(entry)

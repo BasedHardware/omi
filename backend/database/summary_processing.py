@@ -1,7 +1,8 @@
 """First-summary worker fence using the conversation snapshot already loaded.
 
-One conditional claim write, zero extra reads. The request heartbeats its
-outbox lease; only a replacement owner fences the lifecycle writer.
+The request heartbeats its outbox lease; only a replacement owner fences the
+lifecycle writer. Bounded claims re-read the authoritative stored size under
+the same revision fence before deciding whether to spill.
 """
 
 import logging
@@ -13,13 +14,24 @@ from google.api_core.exceptions import FailedPrecondition, NotFound
 from google.cloud import firestore
 
 from database._client import firestore_failure_reason, is_retryable_firestore_transaction_error, run_transactional
+from database.account_deletion_marker import account_deletion_document
+from database.account_deletion_policy import account_deletion_marker_blocks_access
+from database.conversation_payload import (
+    integration_payload_promotion_enabled,
+    read_conversation_payload,
+    stage_conversation_payload_patch,
+)
+from database.conversation_revisions import firestore_revision_datetime
+from database.conversation_tombstones import COLLECTION as TOMBSTONES
 from models.finalization_owner import python_owns_finalization
+from utils.conversation_payload import PAYLOAD_FIELD, PROJECTION_BYTES
 from utils.conversations.summary_delivery import (
     PROCESS_CONTEXT,
     MAX_EMPTY_REARMS,
     EMPTY_BLOCKED_REASON,
     EMPTY_LIFETIME_BLOCKED_REASON,
 )
+from utils.firestore_document_size import estimate_firestore_document_bytes
 
 MAX_EMPTY_FAILURES = 3
 
@@ -52,14 +64,45 @@ def claim_from_snapshot(client: Any, uid: str, conversation_id: str, row: dict[s
     revision = row.get('updated_at')
     if revision is None:
         return False
-    reference = client.collection('users').document(uid).collection('conversations').document(conversation_id)
-    try:
-        reference.update(
-            {'summary_processing_owner': context['owner'], 'summary_processing_lease_until': context['lease_until']},
-            option=firestore.LastUpdateOption(revision),
-        )
-    except (FailedPrecondition, NotFound):
-        return False
+    user = client.collection('users').document(uid)
+    reference = user.collection('conversations').document(conversation_id)
+    patch = {'summary_processing_owner': context['owner'], 'summary_processing_lease_until': context['lease_until']}
+    if integration_payload_promotion_enabled():
+
+        @firestore.transactional
+        def claim(transaction):
+            snapshot = reference.get(transaction=transaction)
+            if not snapshot.exists or firestore_revision_datetime(snapshot.update_time) != revision:
+                return False
+            raw = snapshot.to_dict() or {}
+            if raw.get('deleted') or not python_owns_finalization(raw) or context['lease_until'] <= time.time():
+                return False
+            if estimate_firestore_document_bytes({**raw, **patch}, reference.path) <= PROJECTION_BYTES:
+                transaction.update(reference, patch)
+                return True
+            if raw.get('is_locked') or raw.get('data_protection_level') == 'private':
+                return False
+            deletion = account_deletion_document(uid, firestore_client=client).get(transaction=transaction)
+            if (
+                account_deletion_marker_blocks_access(
+                    marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('wipe_status')
+                )
+                or user.collection(TOMBSTONES).document(conversation_id).get(transaction=transaction).exists
+            ):
+                return False
+            stored = read_conversation_payload(client, transaction, snapshot) if PAYLOAD_FIELD in raw else raw
+            stage_conversation_payload_patch(
+                transaction, snapshot, stored, patch, overflow_fields={'transcript_segments'}, allow_promotion=True
+            )
+            return True
+
+        if not run_transactional(client, claim):
+            return False
+    else:
+        try:
+            reference.update(patch, option=firestore.LastUpdateOption(revision))
+        except (FailedPrecondition, NotFound):
+            return False
     context['claimed'] = True
     return True
 

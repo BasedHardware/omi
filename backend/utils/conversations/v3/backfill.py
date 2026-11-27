@@ -830,9 +830,14 @@ def undo_live_run(uid, run_id, *, firestore_client=None):
         priors = runs.list_priors(uid, run_id, firestore_client=firestore_client)
         if any(leases.held(uid, 'summary-' + e['id'], firestore_client=firestore_client) for e in priors):
             return _undo_refused(uid, run_id, 'notes_in_flight', firestore_client)
-        blocker = rederive_store.live_undo_blocker(uid, run_id, priors, firestore_client=firestore_client)
+        payload_costs = {}
+        blocker = rederive_store.live_undo_blocker(
+            uid, run_id, priors, firestore_client=firestore_client, payload_costs=payload_costs
+        )
         groups = _undo_groups(priors)
-        if not blocker and not all(rederive_store.undo_group_fits(group) for group in groups):
+        if not blocker and not all(
+            rederive_store.undo_group_fits(group, payload_costs=payload_costs) for group in groups
+        ):
             # Each group restores in one transaction; one too large would fail midway on every retry.
             blocker = 'undo_group_too_large'
         if blocker:
@@ -859,6 +864,9 @@ def undo_live_run(uid, run_id, *, firestore_client=None):
             'account_deletion',
             'undo_source_missing',
             'undo_created_row_has_tasks',
+            'undo_group_too_large',
+            'undo_payload_unavailable',
+            'undo_source_changed',
             'lease_lost',
         }:
             raise

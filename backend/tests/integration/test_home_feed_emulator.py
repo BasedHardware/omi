@@ -14,6 +14,13 @@ from google.auth.credentials import AnonymousCredentials
 from google.cloud import firestore
 
 from database import home_feed
+from database.conversation_payload import (
+    PAYLOAD_CHUNKS,
+    read_conversation_payload,
+    stage_conversation_notes_patch,
+    stage_conversation_payload,
+)
+from utils.conversation_payload import PAYLOAD_FIELD
 
 pytestmark = pytest.mark.integration
 AT = datetime(2026, 11, 15, 8, tzinfo=timezone.utc)
@@ -171,3 +178,90 @@ def test_ready_member_cards_replace_with_composed_owner_across_real_transactions
     after = home_feed.feed(uid, firestore_client=client)
     assert after['generation'] != before['generation']
     assert [(card['id'], card['member_count']) for card in after['items']] == [('episode:episode', 2)]
+
+
+def seed_payload_notes(client, ref, title, *, section_bytes=1_100_000):
+    prepared = source(title)
+    prepared['structured']['sections'] = [{'title': 'Synthetic section', 'content': 'a' * section_bytes}]
+    prepared['structured']['action_items'] = [{'description': 'Synthetic task'}]
+
+    @firestore.transactional
+    def publish(tx):
+        stage_conversation_payload(
+            tx, ref.get(transaction=tx), prepared, spill_fields={'structured'}, allow_promotion=True
+        )
+
+    publish(client.transaction())
+    parent = ref.get().to_dict()
+    assert PAYLOAD_FIELD in parent and 'structured' not in parent
+
+
+def test_prepare_hydrates_chunked_notes_for_episodes_and_dirty_updates(world, monkeypatch):
+    client, uid, user = world
+    monkeypatch.delenv('OMI_V3_CONVERSATION_PAYLOAD_WRITES', raising=False)
+    ref = user.collection('conversations').document('member')
+    seed_payload_notes(client, ref, 'Initial title', section_bytes=2_200_000)
+    member_link = user.collection('episode_links').document(ref.id)
+    member_link.set({'episode_id': 'episode'}, merge=True)
+    user.collection('episodes').document('episode').set(
+        {'started_at': AT, 'status': 'closed', 'conversation_ids': [ref.id], 'composed_at': AT}
+    )
+    drain(client, uid)
+
+    @firestore.transactional
+    def rename(tx):
+        snapshot = ref.get(transaction=tx)
+        row = read_conversation_payload(client, tx, snapshot)
+        stage_conversation_notes_patch(tx, snapshot, row, {'structured.title': 'Updated title'})
+
+    for title in ('Initial title', 'Updated title'):
+        [episode] = home_feed.feed(uid, firestore_client=client)['items']
+        assert episode['kind'] == 'episode'
+        assert episode['title'] == title and episode['preview'] == 'Synthetic saved notes'
+        assert episode['has_tasks'] is True
+        [member] = home_feed.feed(uid, episodes_admitted=False, firestore_client=client)['items']
+        assert member['title'] == title
+        assert member['has_tasks'] is True
+        if title == 'Initial title':
+            rename(client.transaction())
+            with pytest.raises(home_feed.PreparationRequired):
+                home_feed.feed(uid, firestore_client=client)
+            drain(client, uid)
+
+
+@pytest.mark.parametrize('tight_document_budget', [False, True])
+def test_prepare_defers_payloads_under_budget_and_skips_locked_chunks(world, monkeypatch, tight_document_budget):
+    client, uid, user = world
+    if tight_document_budget:
+        monkeypatch.setattr(home_feed, 'MAX_PREPARE_READS', 68)
+    coll = user.collection('conversations')
+    for index in range(5):
+        seed_payload_notes(client, coll.document(f'row-{index}'), f'Synthetic title {index}')
+    locked = coll.document('locked')
+    seed_payload_notes(client, locked, 'Locked content')
+    locked.update({'is_locked': True, 'v3_derived': True})
+    # Missing chunks would fail validation if preparation read this locked row.
+    for chunk in locked.collection(PAYLOAD_CHUNKS).list_documents():
+        chunk.delete()
+
+    first = home_feed.prepare(uid, firestore_client=client)
+    assert first['ready'] is False
+    assert user.collection('episode_links').document('row-4').get().to_dict()['home_dirty'] is True
+    drain(client, uid)
+    cards = home_feed.feed(uid, firestore_client=client)['items']
+    assert {item['title'] for item in cards if not item['is_locked']} == {
+        f'Synthetic title {index}' for index in range(5)
+    }
+    [locked_card] = [item for item in cards if item['is_locked']]
+    assert locked_card['title'] == locked_card['preview'] == ''
+
+
+def test_prepare_leaves_corrupt_visible_payload_unprepared(world):
+    client, uid, user = world
+    ref = user.collection('conversations').document('corrupt')
+    seed_payload_notes(client, ref, 'Synthetic title')
+    next(ref.collection(PAYLOAD_CHUNKS).list_documents()).delete()
+    with pytest.raises(home_feed.PreparationRequired, match='home_feed_payload_unavailable'):
+        home_feed.prepare(uid, firestore_client=client)
+    assert ref.get().to_dict().get('home_prepared') is not True
+    assert user.collection('episode_links').document(ref.id).get().to_dict()['home_dirty'] is True

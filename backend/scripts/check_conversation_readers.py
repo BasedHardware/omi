@@ -17,6 +17,7 @@ OPERATIONS = {
     'collection_group',
     'get_conversation',
     'get_conversation_raw_snapshot',
+    'read_authorized_conversation_payload',
     'get_conversations_by_id',
     '_get_conversations_by_id',
     'iter_all_conversations',

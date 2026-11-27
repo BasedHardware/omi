@@ -160,7 +160,7 @@ def owner(strict, monkeypatch):
     monkeypatch.setattr(
         store,
         'decode_row',
-        lambda uid, snapshot: (
+        lambda uid, snapshot, **_kwargs: (
             {**snapshot.to_dict(), 'id': snapshot.id, '_v3_revision': snapshot.update_time} if snapshot.exists else None
         ),
     )
@@ -2037,7 +2037,7 @@ async def test_undo_renews_both_leases_during_long_preflight(owner, strict, ledg
     monkeypatch.setattr(leases, 'keepalive', keepalive)
     original_blocker = rederive_store.live_undo_blocker
 
-    def slow_preflight(uid, run_id, entries, *, firestore_client):
+    def slow_preflight(uid, run_id, entries, *, firestore_client, payload_costs):
         # Tick the enrolled heartbeats on a fake clock, then finish beyond the initial TTL.
         for _ in range(4):
             Clock.now_value += timedelta(seconds=leases.LEASE_SECONDS / 3)
@@ -2045,7 +2045,7 @@ async def test_undo_renews_both_leases_during_long_preflight(owner, strict, ledg
                 leases.renew(uid, key, token, firestore_client=firestore_client)
         if lost_lease:
             strict.rows[leases.lease_ref(strict, uid, lost_lease).path]['token'] = 'new-owner'
-        return original_blocker(uid, run_id, entries, firestore_client=firestore_client)
+        return original_blocker(uid, run_id, entries, firestore_client=firestore_client, payload_costs=payload_costs)
 
     monkeypatch.setattr(rederive_store, 'live_undo_blocker', slow_preflight)
     if lost_lease:

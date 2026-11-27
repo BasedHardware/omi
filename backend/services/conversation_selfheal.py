@@ -28,6 +28,7 @@ import database.conversation_finalization_jobs as jobs_db
 import database.conversations as conversations_db
 from database.account_deletion_marker import account_deletion_blocks_user_work
 from services.capture_wedge import run_capture_wedge_check
+from utils.conversation_payload import PAYLOAD_FIELD
 from utils.conversations import lifecycle
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.recovery import (
@@ -122,7 +123,7 @@ def _verify_pending_attempts(
     pending: list[dict[str, Any]],
     *,
     firestore_client: Any,
-    conversation_reader: Callable[[str, str], dict[str, Any] | None],
+    conversation_reader: Callable[[str, str], dict[str, Any] | None] | None,
     job_reader: Callable[..., dict[str, Any] | None] = jobs_db.get_finalization_job,
     counters: dict[str, Any],
     now: datetime,
@@ -188,7 +189,30 @@ def _verify_pending_attempts(
             _refuse_verification(entry, 'dead_letter', counters, verification_refusals)
             continue
         try:
-            conversation = conversation_reader(uid, conversation_id)
+            if conversation_reader is not None:
+                conversation = conversation_reader(uid, conversation_id)
+            else:
+                conversation = conversations_db.get_conversation_raw_snapshot(
+                    uid, conversation_id, firestore_client=firestore_client
+                )
+                if conversation and PAYLOAD_FIELD in conversation:
+
+                    def eligible(row):
+                        return (
+                            not row.get('deleted')
+                            and row.get('status') == 'completed'
+                            and str(row.get('finalization_job_id') or '') == job_id
+                        )
+
+                    def payload_allowed(row):
+                        return (
+                            eligible(row) and not row.get('is_locked') and row.get('data_protection_level') != 'private'
+                        )
+
+                    if eligible(conversation):
+                        conversation = conversations_db.read_authorized_conversation_payload(
+                            uid, conversation_id, payload_allowed=payload_allowed, firestore_client=firestore_client
+                        )
         except Exception as error:
             counters['errors'] += 1
             _keep_or_expire_pending(entry, job, now, remaining, counters, 'verify_conversation_read_timeout')
@@ -362,9 +386,6 @@ def run_selfheal_tick(
     dry_run = selfheal_dry_run() if dry_run is None else dry_run
     allowlist = selfheal_uid_allowlist() if uid_allowlist is None and use_configured_uid_allowlist else uid_allowlist
     wedge = wedge_runner or run_capture_wedge_check
-    reader = conversation_reader or (
-        lambda uid, cid: conversations_db.get_conversation_raw_snapshot(uid, cid, firestore_client=firestore_client)
-    )
     counters: dict[str, Any] = {
         'scanned': 0,
         'content_holding': 0,
@@ -391,7 +412,7 @@ def run_selfheal_tick(
             pending = _verify_pending_attempts(
                 list(cursor.get('pending_verifications') or []),
                 firestore_client=firestore_client,
-                conversation_reader=reader,
+                conversation_reader=conversation_reader,
                 job_reader=job_reader,
                 counters=counters,
                 now=now,

@@ -165,7 +165,7 @@ BODY_DIGEST = {
     'utils.support.retention._select_conversations': 'f36920350f4e3a557e0e474e8801ae414c21ce67203e0627f7a39ba820243d16',
     'database.conversations_v3_live._recent_window_query': '6f2c323bfa8df890362c6bdc4796182a70e4c704376bcb4944358560b12edc75',
     'database.conversations_v3._oldest_pending': 'e2da208a3dcbae7d7c7c59335883b422e27dc71c9cfae51568883aa452bcfc57',
-    'database.conversations_v3.commit_projection': 'f6f6c894b77c617cd877358fc70396033bde60277f1c47af8e2adaf22fe24ae9',
+    'database.conversations_v3.commit_projection': '1b3da2fda495a62d0f0f2dae840dcb656a1c9582c4c17f0b8a1c34d9330daf34',
     'database.batch_pipeline_conversation_purge_scans._claim': '662c759fc79795f0851e0b18082b7dcb006e109253e45ba1fde2190d542bddf8',
     'database.batch_privacy_late_sweeps.reconcile_batch_privacy_late_sweeps': 'bd0c62aeb7bab5e86e3fdbb73bc9b6cb395a1218923110590d0a8fcaacabd5f6',
     'database.batch_pipeline_conversation_purge_scans.run_job': 'fe5d30b77da198a7e0dc188115c8906fb6446925079a4e96339d36675a55faeb',
@@ -175,7 +175,7 @@ BODY_DIGEST = {
     'database.batch_census_export._scope': '239ed05dc6fef88f4ed8a88b870867f37623329cb96d8b1131278a52a3652dc8',
     'database.batch_pipeline_allowance_migration.candidates': '04c9beae56ec6091544a2ec69a8ba170032dbe3670697b704db2f88d513bc5cb',
     'database.conversation_batch_purge_jobs.RunProgress.pending_segments': '86b3d882fe3c575b3a540bb00d1845c941c5256d99848c4dc89917eb707ff3cc',
-    'database.conversations._PageFill._run_lean': 'ce3f5086213a795ae6cd49bee70e7dd62587aa4fe61a0375fa65fece8c048c5c',
+    'database.conversations._PageFill._run_lean': 'd30391bc12f505ccfa134ec24d53f8a5bc7e3f95e913ad710690ce60d08b344b',
     'database.conversation_batch_purge_jobs.RunProgress.segments': '8abb8d7ed330ab91cc91af8b792809121c06605ff0180e0c90da4b66d6e3ef45',
     'database.conversation_batch_purge_jobs._drop_segment_records': '2db3123e6e11d177d434326668969249a7fd4e0aade9788d045056fbdefe8c9d',
     'database.conversation_batch_purge_jobs._owes_segments': '5945da3db3e539efafe6dbc95560280683ea863b77a8e7e720ee3c2902b59c68',
@@ -414,6 +414,15 @@ _add(
     )
 )
 _add(DriverEntry('database._client.get_users_uid'))
+_add(
+    DriverEntry(
+        'database.conversation_payload.read_payload_children_for_delete',
+        base={
+            'transaction': ref_transaction(),
+            'ref': ref_document(f'users/{UID}/conversations/conv-1'),
+        },
+    )
+)
 # Conversation batch-purge reconciler: one single-field ``due_at`` range, oldest first, over the
 # purge obligations or the accepted-delete erasure obligations.
 _add(
@@ -3764,11 +3773,16 @@ for entry in (
     ),
     CoveredByEntry(
         'database.conversations_v3.commit_projection',
-        covered_by=('database.conversations_v3.merge_donors_have_tasks', 'database.memories.linked_conversation_ids'),
+        covered_by=(
+            'database.conversations_v3.merge_donors_have_tasks',
+            'database.conversation_payload.read_payload_children_for_delete',
+            'database.memories.linked_conversation_ids',
+        ),
         reason='Refinement and live repair use the same bounded donor-task query and write point markers with donor redirects. '
         'Backfill uses that task query and scans projected memory links before writing a removal marker and deleting. '
         'The WAL custody guard uses the existing observation rows before donor-task queries or projection writes. '
         'The Home index bit is derived from the flags already present in those writes. '
+        'Backfill removal enumerates the bounded payload children before deletion. '
         'Native settlement only updates existing documents and their recording claims. '
         'Write elision uses only the projection snapshots already read under revision fences. '
         'The collision record and commit meter add no query: on a lock failure the record re-reads by reference '
@@ -3784,7 +3798,8 @@ for entry in (
         'batch cap is decided before any lake upload (no Firestore read); no new query. Re-reviewed 2026-11-27 (Codex r4715443730): a locked-closure batch preloads its transcript '
         'pointers from the lake before its transaction and runs its body at most three times; no new Firestore query. '
         'The locked-closure cap is now decided on one preparation pass with uploads deferred '
-        '(transcript_pointer.deferred_offloads); no new Firestore query.',
+        '(transcript_pointer.deferred_offloads); no new Firestore query.'
+        'Payload replacement budgets the staged parent and its chunks using the same transaction reads and writes.',
         expect_observed=False,
         body_digest=BODY_DIGEST['database.conversations_v3.commit_projection'],
     ),

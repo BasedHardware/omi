@@ -10,6 +10,9 @@ from typing import Any, Dict, Optional
 from google.cloud import firestore
 
 from ._client import get_firestore_client, run_transactional
+from .account_deletion_marker import account_deletion_document
+from .account_deletion_policy import account_deletion_marker_blocks_access
+from .conversation_payload import PAYLOAD_FIELD, read_conversation_payload, stage_conversation_notes_patch
 from .conversation_revisions import ensure_timezone_aware, firestore_revision_datetime
 from .conversations import conversations_collection
 
@@ -160,6 +163,14 @@ def apply_conversation_sync_mutation(
         current = conversation_snapshot.to_dict() or {}
         if current.get('is_locked', False):
             raise ConversationMutationLockedError(conversation_id)
+        has_payload = PAYLOAD_FIELD in current
+        if has_payload:
+            deletion = account_deletion_document(uid, firestore_client=client).get(transaction=transaction)
+            if account_deletion_marker_blocks_access(
+                marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('wipe_status')
+            ):
+                raise ConversationMutationNotFoundError(conversation_id)
+            current = read_conversation_payload(client, transaction, conversation_snapshot)
         current_revision = _normalized_revision(getattr(conversation_snapshot, 'update_time', None))
         requested_revision = ensure_timezone_aware(base_revision).astimezone(timezone.utc)
 
@@ -216,7 +227,10 @@ def apply_conversation_sync_mutation(
             'conversation': response_state,
         }
         if patch:
-            transaction.update(conversation_ref, patch)
+            if has_payload and operation.get('type') == 'set_title':
+                stage_conversation_notes_patch(transaction, conversation_snapshot, current, patch)
+            else:
+                transaction.update(conversation_ref, patch)
         transaction.create(
             receipt_ref,
             {

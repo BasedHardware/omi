@@ -25,6 +25,13 @@ from database.conversations_v3_projection_budget import (
     partition_rows,
 )
 from database._client import firestore_failure_reason, get_firestore_client
+from database.conversation_payload import (
+    read_conversation_payload,
+    read_payload_children_for_delete,
+    stage_conversation_payload,
+    stage_conversation_payload_patch,
+    v3_payload_writes_enabled,
+)
 from database import transcript_pointer
 from database.transcript_pointer import (
     MAX_PRELOAD_DOCUMENTS,
@@ -65,6 +72,13 @@ from utils.conversations import terminal_settled
 from utils.conversations.v3 import Conflict, UnlockedPage, metrics, policy, preview_wakes, request_log_trace_id
 from utils.observability.fallback import record_fallback
 from utils.open_loops.extraction import OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD, OPEN_LOOP_EXTRACTIONS_FIELD
+from utils.conversation_payload import (
+    PAYLOAD_FIELD,
+    PROJECTION_BYTES,
+    ConversationProjectionTooLarge,
+    InvalidConversationPayload,
+)
+from utils.firestore_document_size import estimate_firestore_document_bytes
 
 logger = logging.getLogger(__name__)
 
@@ -169,13 +183,28 @@ def merge_donors_have_tasks(uid, donor_ids, *, firestore_client=None, transactio
     return False
 
 
-def decode_row(uid, snapshot, *, data=None) -> dict[str, Any] | None:
-    data = (snapshot.to_dict() or {}) if data is None else data
+def read_projection_snapshot(snapshot, *, data=None, firestore_client=None, transaction=None):
+    """Use the exact payload generation from the snapshot that owns the revision."""
+    raw = (snapshot.to_dict() or {}) if data is None else data
+    if PAYLOAD_FIELD not in raw:
+        return raw
+    if raw.get('data_protection_level') == 'private' or raw.get('is_locked'):
+        raise Conflict('recording_decode_unavailable')
+    try:
+        return read_conversation_payload(firestore_client or get_firestore_client(), transaction, snapshot)
+    except (ConversationProjectionTooLarge, InvalidConversationPayload) as error:
+        # A query snapshot may race retirement of its generation. The whole
+        # pass must reload rather than accepting absent speech or claims.
+        raise Conflict('recording_decode_unavailable') from error
+
+
+def decode_row(uid, snapshot, *, data=None, firestore_client=None, transaction=None) -> dict[str, Any] | None:
     if not snapshot.exists:
         return None
+    data = read_projection_snapshot(snapshot, data=data, firestore_client=firestore_client, transaction=transaction)
     data.setdefault('id', snapshot.id)
-    # One token per stored field, taken before decoding: a lost commit names the fields that changed.
-    loaded_fields = collisions.fingerprint(data)
+    # Compare the physical parent in collision reports, including the chunk descriptor.
+    loaded_fields = collisions.fingerprint(snapshot.to_dict())
     segments = conversations.decode_transcript_segments_verified(
         uid, data.get('transcript_segments') or [], bool(data.get('transcript_segments_compressed'))
     )
@@ -220,7 +249,7 @@ def terminal_recording(row):
     return row.get('deleted') or row.get('discarded') or row.get('sync_merged_into')
 
 
-def recording_input(uid, snapshot, *, skip_terminal=False):
+def recording_input(uid, snapshot, *, skip_terminal=False, firestore_client=None):
     if not snapshot.exists:
         return None
     raw = snapshot.to_dict() or {}
@@ -229,8 +258,10 @@ def recording_input(uid, snapshot, *, skip_terminal=False):
         and raw.get('data_protection_level') != 'private'
         and raw.get('started_at')
     ):
+        # A missing chunk must never fall back to an inline-only source with incomplete custody data.
+        raw = read_projection_snapshot(snapshot, data=raw, firestore_client=firestore_client)
         try:
-            row = decode_row(uid, snapshot)
+            row = decode_row(uid, snapshot, data=raw)
         except (ValueError, TypeError, FileNotFoundError, TranscriptBlobAbsent, TranscriptShredded, Conflict):
             row = None
         if row is not None:
@@ -242,7 +273,7 @@ def recording_input(uid, snapshot, *, skip_terminal=False):
         '_v3_revision': snapshot.update_time,
         '_v3_unreadable': True,
         '_v3_fence': source_fence(raw),
-        collisions.FIELDS_KEY: collisions.fingerprint(raw),
+        collisions.FIELDS_KEY: collisions.fingerprint(snapshot.to_dict()),
     }
 
 
@@ -295,7 +326,7 @@ def adoptable(uid, ids, *, firestore_client=None):
         tombstone = client.collection('users').document(uid).collection('deleted_conversations').document(cid).get()
         if tombstone.exists:
             continue
-        row = decode_row(uid, snapshot)
+        row = decode_row(uid, snapshot, firestore_client=client)
         if row:
             found[cid] = row
     return found
@@ -762,7 +793,7 @@ def load(
     coll = user_conversations(client, uid)
     silence_gap = timedelta(seconds=boundary_seconds(cohesion=stretch_cohesion_enabled())[0])
     margin = max(timedelta(minutes=20), silence_gap)
-    opened = decode_row(uid, coll.document(conversation_id).get()) if conversation_id else None
+    opened = decode_row(uid, coll.document(conversation_id).get(), firestore_client=client) if conversation_id else None
     skip_terminal = not conversation_id and bounded_pending_enabled()
     state = leases.lease_ref(client, uid, 'builder').get().to_dict() or {}
     quarantined = (
@@ -788,7 +819,7 @@ def load(
         pending = [doc for doc in pending if doc.id not in quarantined][:pending_limit]
     recordings, unreadable = {}, {}
     for doc in pending:
-        row = recording_input(uid, doc, skip_terminal=skip_terminal)
+        row = recording_input(uid, doc, skip_terminal=skip_terminal, firestore_client=client)
         if row and row.get('_v3_unreadable'):
             unreadable[doc.id] = row
         elif row:
@@ -828,7 +859,7 @@ def load(
     if opened:
         existing[opened['id']] = opened
     elif state.get('open_id') and not conversation_id:
-        opened = decode_row(uid, coll.document(state['open_id']).get())
+        opened = decode_row(uid, coll.document(state['open_id']).get(), firestore_client=client)
         if opened:
             existing[opened['id']] = opened
             if unlocked_page is not None:
@@ -901,7 +932,7 @@ def load(
                 if not raw.get('v3_unlocked') or raw.get('deleted'):
                     continue
                 try:
-                    row = decode_row(uid, snapshot)
+                    row = decode_row(uid, snapshot, firestore_client=client)
                 except (TranscriptBlobAbsent, TranscriptShredded) as error:
                     # Keep the published owner in place when its transcript is unavailable.
                     raise Conflict('recording_decode_unavailable') from error
@@ -927,7 +958,7 @@ def load(
         if len(recordings) + len(unreadable) + len(missing) + len(unseen) > SOURCE_LIMIT:
             raise Conflict('v3_source_closure_budget')
         for rid in sorted(unseen):
-            row = recording_input(uid, coll.document(rid).get(), skip_terminal=skip_terminal)
+            row = recording_input(uid, coll.document(rid).get(), skip_terminal=skip_terminal, firestore_client=client)
             if not row:
                 missing.add(rid)
             elif row.get('_v3_unreadable'):
@@ -954,7 +985,7 @@ def load(
             for snapshot in client.get_all([coll.document(cid) for cid in chunk]):
                 raw = snapshot.to_dict() or {} if snapshot.exists else {}
                 if raw.get('v3_derived'):
-                    row = decode_row(uid, snapshot)
+                    row = decode_row(uid, snapshot, firestore_client=client)
                     if row:
                         add(row)
         # Only a recording that can still be replanned needs its neighbours by time: a pending one (new
@@ -993,7 +1024,7 @@ def load(
                 if count > row_limit:
                     raise Conflict('v3_derived_budget')
                 fetch(1)
-                row = decode_row(uid, doc)
+                row = decode_row(uid, doc, firestore_client=client)
                 if row:
                     add(row)
                     if unlocked_page is not None:
@@ -1273,6 +1304,8 @@ def commit_projection(
     """
     client = firestore_client or get_firestore_client()
     retire = dict(retire or {})
+    live_builder = key == 'builder' and not remove and not retire
+    allow_promotion = live_builder and v3_payload_writes_enabled()
     settle = dict(settle or {})
     if any(
         existing.get(cid, {}).get(field)
@@ -1368,6 +1401,9 @@ def commit_projection(
                 raise Conflict('v3_derived_budget')
         watch.begin()  # Counts the try: the retry runs this body again after a lock abort.
         observed = {}
+        snapshots = {}
+        replacements = {row['id'] for row in batch_rows if not row.get('deleted')}
+        hard_removals = set(remove) if final else set()
         batch_moved = set()
         staged.clear()
         staged.update(
@@ -1390,11 +1426,32 @@ def commit_projection(
         watch.phase('documents')
         for rid, snapshot in _projection_snapshots(client, coll, tx, list(inputs), batch_reads=batch_reads):
             row = inputs[rid]
-            current = snapshot.to_dict() or {} if snapshot.exists else None
-            watch.saw(rid, snapshot, current)
+            snapshots[rid] = snapshot
+            raw = (snapshot.to_dict() or {}) if snapshot.exists else None
+            watch.saw(rid, snapshot, raw)
+            current = None
+            if raw is not None:
+                if rid in hard_removals:
+                    # Hard deletion needs the revision fence but can erase
+                    # unreadable payloads without attempting to decode them.
+                    current = raw
+                elif PAYLOAD_FIELD in raw and rid in replacements and not live_builder:
+                    from database import conversations_v3_backfill_runs as runs
+
+                    run_id = row.get('_v3_prior_run')
+                    if key != BACKFILL_LEASE or not run_id or not v3_payload_writes_enabled():
+                        raise Conflict('document_too_large')
+                    prior = runs.run_ref(client, uid, run_id).collection(runs.PRIORS).document(rid).get(transaction=tx)
+                    if not (prior.to_dict() or {}).get('payload_fields'):
+                        raise Conflict('document_too_large')
+                    current = read_projection_snapshot(snapshot, data=raw, firestore_client=client, transaction=tx)
+                else:
+                    current = read_projection_snapshot(snapshot, data=raw, firestore_client=client, transaction=tx)
+                if rid in recordings and 'claims' in current and 'claims' not in raw:
+                    raise Conflict('document_too_large')
             if not snapshot.exists or snapshot.update_time != row['_v3_revision']:
                 if rid in existing or rid not in recordings or not speech_moved(row, current):
-                    watch.raced(rid, row, snapshot, current)
+                    watch.raced(rid, row, snapshot, raw)
                     raise Conflict('source_changed')
                 batch_moved.add(rid)
             observed[rid] = current or {}
@@ -1428,10 +1485,10 @@ def commit_projection(
         ):
             raise Conflict('target_deleted')
         new_ids = sorted({r['id'] for r in batch_rows} - existing.keys())
-        if any(
-            snapshot.exists for _, snapshot in _projection_snapshots(client, coll, tx, new_ids, batch_reads=batch_reads)
-        ):
-            raise Conflict('target_exists')
+        for cid, snapshot in _projection_snapshots(client, coll, tx, new_ids, batch_reads=batch_reads):
+            if snapshot.exists:
+                raise Conflict('target_exists')
+            snapshots[cid] = snapshot
         deleting = set()
         user = client.collection('users').document(uid)
         if final and remove:
@@ -1452,6 +1509,16 @@ def commit_projection(
                 )
             if replacing_claimants - deleting:
                 raise Conflict('backfill_rederive_linked_claims')
+        removed_payloads = {}
+        for cid in sorted(deleting):
+            if PAYLOAD_FIELD in observed[cid]:
+                try:
+                    ref = snapshots[cid].reference
+                    children, payload_bytes = read_payload_children_for_delete(tx, ref)
+                    parent_bytes = estimate_firestore_document_bytes(observed[cid], ref.path)
+                    removed_payloads[cid] = (children, payload_bytes + parent_bytes)
+                except ConversationProjectionTooLarge as error:
+                    raise Conflict('document_too_large') from error
         watch.phase('privacy')
         # Filtering can mutate the encoded payload; every attempt needs its original input.
         batch_prepared = [dict(row) for row in batch_prepared]
@@ -1470,13 +1537,57 @@ def commit_projection(
             if count_row:
                 written.add(ref.id)
 
-        for raw, row in zip(batch_rows, batch_prepared):
+        extra_writes = 0
+        extra_bytes = 0
+        row_bytes = None
+
+        def charge_payload(writes, size, *, parent_bytes_delta=0):
+            nonlocal extra_writes, extra_bytes, row_bytes
+            if not writes:
+                return
+            extra_writes += writes
+            extra_bytes += size + 1024 * writes + parent_bytes_delta
+            if row_bytes is None:
+                row_bytes = sum(_encoded_bytes(item) for item in batch_prepared)
+            if fixed_writes + len(batch_rows) + extra_writes > BATCH_MAX_WRITES or (
+                fixed + row_bytes + extra_bytes > BATCH_WRITE_BYTES
+            ):
+                raise Conflict('request_too_large')
+
+        def update_recording(rid, patch):
+            if skip_unchanged and write_equality.or_write(write_equality.same_patch, observed[rid], patch):
+                skipped_patches.add(rid)
+                return
+            written.add(rid)
+            snapshot = snapshots[rid]
+            raw = snapshot.to_dict() or {}
+            if PAYLOAD_FIELD not in raw and not allow_promotion:
+                tx.update(coll.document(rid), patch)
+                return
+            try:
+                # Keep claims inline so every source release and purge predicate
+                # continues to observe the exact ownership array.
+                charge_payload(
+                    *stage_conversation_payload_patch(
+                        tx,
+                        snapshot,
+                        observed[rid],
+                        patch,
+                        overflow_fields={'transcript_segments'},
+                        allow_promotion=allow_promotion,
+                    )
+                )
+            except ConversationProjectionTooLarge as error:
+                raise Conflict('document_too_large') from error
+
+        for raw, encoded in zip(batch_rows, batch_prepared):
             if raw.get('deleted'):
                 continue
+            row = encoded
             if final and row['id'] in retire:
                 # A live re-derive survivor's bridge list lands with the bridges it names.
                 row = {**row, **retire[row['id']]}
-            # Planned settles (failure patch, unavailable preview) close here; the planner row keeps any prior stamp.
+            # Planned settles close here. The stamp must be included in the size check.
             row = terminal_settled.stamp(observed.get(row['id']) or {}, dict(row), now=now, enabled=settle_enabled)
             cid = row['id']
             if (
@@ -1486,8 +1597,23 @@ def commit_projection(
             ):
                 skipped_ids.add(cid)
                 continue
-            tx.set(coll.document(cid), row)
             written.add(cid)
+            snapshot = snapshots[cid]
+            ref = coll.document(cid)
+            if PAYLOAD_FIELD not in (snapshot.to_dict() or {}) and (
+                not allow_promotion or estimate_firestore_document_bytes(row, ref.path) <= PROJECTION_BYTES
+            ):
+                tx.set(ref, row)
+                continue
+            try:
+                writes, size, parent = stage_conversation_payload(
+                    tx, snapshot, row, spill_fields={'transcript_segments'}, allow_promotion=allow_promotion
+                )
+                # Row bytes already include the logical payload. Charge its staged projection instead.
+                parent_bytes_delta = estimate_firestore_document_bytes(parent, ref.path) - _encoded_bytes(encoded)
+                charge_payload(writes, size, parent_bytes_delta=parent_bytes_delta)
+            except ConversationProjectionTooLarge as error:
+                raise Conflict('document_too_large') from error
         for cid, survivor in absorbed.items():
             tx.update(
                 coll.document(cid),
@@ -1510,6 +1636,10 @@ def commit_projection(
                 tx.update(coll.document(cid), home_visibility_index.stamp(patch, observed[cid]))
             for cid in sorted(deleting):
                 tx.set(removal_ref(user, cid), {'removed_by_backfill_rederive': True})
+                children, payload_bytes = removed_payloads.get(cid, ((), 0))
+                charge_payload(len(children), payload_bytes)
+                for ref in children:
+                    tx.delete(ref)
                 tx.delete(coll.document(cid))
                 written.add(cid)
             planned_ids = {r['id'] for r in batch_rows}
@@ -1550,7 +1680,7 @@ def commit_projection(
                     or datetime.now(timezone.utc),
                 }
                 staged['recordings'][rid] = (observed[rid], update)
-                update_if_changed(coll.document(rid), observed[rid], update)
+                update_recording(rid, update)
                 continue
             claims = [c for c in recording.get('claims') or [] if c['conversation_id'] not in replaced]
             for row in batch_rows:
@@ -1596,7 +1726,7 @@ def commit_projection(
                 # claims: it never arms or cancels an audio purge, so undo can restore every row it touched.
                 update = {'claims': claims}
             staged['recordings'][rid] = (observed.get(rid) or {}, update)
-            update_if_changed(coll.document(rid), observed[rid], update)
+            update_recording(rid, update)
         lease_update = {
             **({'v3_blocked_count': 0, 'v3_backoff_until': None, 'v3_blocked_reason': None} if final else {}),
             'outline_cache': encrypted_cache,
@@ -1731,7 +1861,7 @@ def commit_projection(
             # set until the final batch, so an interrupted prefix self-heals.
             for rid in recordings:
                 snapshot = coll.document(rid).get()
-                current = snapshot.to_dict() or {}
+                current = read_projection_snapshot(snapshot, firestore_client=client)
                 # The Home feed hook stamps every conversation write at Commit (COMMIT_STAMPED_FIELDS); those
                 # stamps are our own write, not an external change.
                 owned = {
@@ -1778,7 +1908,7 @@ def commit_projection(
                     **recordings[rid],
                     'claims': current.get('claims') or [],
                     '_v3_revision': snapshot.update_time,
-                    collisions.FIELDS_KEY: collisions.fingerprint(current),
+                    collisions.FIELDS_KEY: collisions.fingerprint(snapshot.to_dict()),
                     **({'_v3_fence': source_fence(current)} if recordings[rid].get('_v3_fence') is not None else {}),
                 }
             for (raw, _), encoded in zip(batch, committed_prepared):
@@ -1786,7 +1916,7 @@ def commit_projection(
                     continue  # The next batch fences this row at its original revision.
                 snapshot = coll.document(raw['id']).get()
                 if snapshot.exists:
-                    current = snapshot.to_dict() or {}
+                    current = read_projection_snapshot(snapshot, firestore_client=client)
                     changed = sorted(
                         k for k, value in encoded.items() if k not in COMMIT_STAMPED_FIELDS and current.get(k) != value
                     )
@@ -1810,7 +1940,7 @@ def commit_projection(
                     existing[raw['id']] = {
                         **raw,
                         '_v3_revision': snapshot.update_time,
-                        collisions.FIELDS_KEY: collisions.fingerprint(current),
+                        collisions.FIELDS_KEY: collisions.fingerprint(snapshot.to_dict()),
                     }
     metrics.projection_writes('commit_projection', len(written_rows), len(skipped_rows - written_rows))
     return moved
@@ -2021,7 +2151,7 @@ def load_derive(uid, *, since, until, run_id, rederive=False, firestore_client=N
         if raw.get('deleted'):
             continue
         if backfill_legacy_source(raw) and not rederive:
-            row = recording_input(uid, snapshot)
+            row = recording_input(uid, snapshot, firestore_client=client)
             if row is None or row.get('_v3_unreadable'):
                 continue
             recordings[snapshot.id] = {
@@ -2034,7 +2164,7 @@ def load_derive(uid, *, since, until, run_id, rederive=False, firestore_client=N
             }
         elif raw.get('recording') and not raw.get('v3_derived') and ours(raw):
             # A donor this run (or, re-deriving, any run) already converted: resume or rebuild it.
-            row = recording_input(uid, snapshot)
+            row = recording_input(uid, snapshot, firestore_client=client)
             if row is None or row.get('_v3_unreadable'):
                 # Its copies are loaded below; planning without it would retire them and leave the
                 # donor hidden with nothing on Home. Block until it reads again.
@@ -2046,7 +2176,7 @@ def load_derive(uid, *, since, until, run_id, rederive=False, firestore_client=N
                 **({'v3_manual_end': True} if legacy_manual_end(raw) else {}),
             }
         elif raw.get('v3_derived') and raw.get('backfilled') and ours(raw):
-            row = decode_row(uid, snapshot)
+            row = decode_row(uid, snapshot, firestore_client=client)
             if row:
                 existing[row['id']] = _rederive_prior(row) if rederive else row
     state = leases.lease_ref(client, uid, BACKFILL_LEASE).get().to_dict() or {}
@@ -2111,7 +2241,7 @@ def pending_backfill_processing(uid, *, after=None, deadline=float('inf'), fires
                 return None
             raw = snapshot.to_dict() or {}
             if python_owns_finalization(raw):
-                row = decode_row(uid, snapshot, data=raw)
+                row = decode_row(uid, snapshot, data=raw, firestore_client=client)
             else:
                 # Foreign debt only needs an ownership marker for discovery.
                 row = {key: raw[key] for key in (ENGINE_FIELD, EPOCH_FIELD) if key in raw}
@@ -2234,6 +2364,25 @@ def undo_backfill_group(uid, token, donor_ids, row_ids, *, run_id, firestore_cli
                 elif gone and row.get('v3_process_pending'):
                     tx.update(coll.document(cid), {'v3_process_pending': False})
             return ('kept' if owner_deleted else 'kept_live'), len(converted), 0
+        removed, chunk_refs = [], []
+        delete_bytes = 0
+        for cid, row in copies:
+            # Only this backfill's copies; never a live row and no tombstone.
+            if row.get('v3_derived') and row.get('backfilled') and row.get('v3_backfill_run') == run_id:
+                removed.append(cid)
+                if PAYLOAD_FIELD in row:
+                    ref = coll.document(cid)
+                    try:
+                        children, payload_bytes = read_payload_children_for_delete(tx, ref)
+                    except ConversationProjectionTooLarge as error:
+                        raise Conflict('document_too_large') from error
+                    chunk_refs.extend(children)
+                    delete_bytes += payload_bytes + estimate_firestore_document_bytes(row, ref.path)
+        if chunk_refs and (
+            len(chunk_refs) + len(removed) + len(converted) + int(run.exists) > BATCH_MAX_WRITES
+            or delete_bytes + 1024 * len(chunk_refs) > BATCH_WRITE_BYTES
+        ):
+            raise Conflict('undo_group_too_large')
         for cid, row in converted:
             prior = row.get('v3_backfill_prior')
             if not isinstance(prior, dict):
@@ -2241,12 +2390,10 @@ def undo_backfill_group(uid, token, donor_ids, row_ids, *, run_id, firestore_cli
             patch = {k: prior[k] if k in prior else firestore.DELETE_FIELD for k in BACKFILL_TRACKED}
             patch.update(v3_backfill_run=firestore.DELETE_FIELD, v3_backfill_prior=firestore.DELETE_FIELD)
             tx.update(coll.document(cid), home_visibility_index.stamp(patch, row))
-        removed = []
-        for cid, row in copies:
-            # Only this backfill's copies; never a live row and no tombstone (they were never the owner's).
-            if row.get('v3_derived') and row.get('backfilled') and row.get('v3_backfill_run') == run_id:
-                tx.delete(coll.document(cid))
-                removed.append(cid)
+        for ref in chunk_refs:
+            tx.delete(ref)
+        for cid in removed:
+            tx.delete(coll.document(cid))
         if run.exists:
             progress = (run.to_dict() or {}).get('undo_progress') or {}
             tx.update(

@@ -7,7 +7,16 @@ from google.cloud import firestore
 from config.recording_speakers import with_creation_scope_index
 from database import home_visibility_index
 from database._client import run_transactional
+from database.account_deletion_marker import account_deletion_document
+from database.account_deletion_policy import account_deletion_marker_blocks_access
+from database.conversation_payload import integration_payload_writes_enabled, stage_conversation_payload
+from utils.conversation_payload import PROJECTION_BYTES
 from utils.conversations.recorded_time import SPAN_FIELDS, span_fields, write_span
+from utils.firestore_document_size import estimate_firestore_document_bytes
+
+
+class IntegrationAccountDeleting(Exception):
+    """Integration creation lost to the account deletion fence."""
 
 
 def hydrate(data):
@@ -26,11 +35,19 @@ def create_if_absent(uid, payload, *, firestore_client, stage_identity=None):
 
     root = firestore_client.collection('users').document(uid)
     ref = root.collection('conversations').document(payload['id'])
+    allow_promotion = integration_payload_writes_enabled(payload)
 
     @firestore.transactional
     def create(transaction):
-        if ref.get(transaction=transaction).exists:
+        snapshot = ref.get(transaction=transaction)
+        if snapshot.exists:
             return False, False
+        if allow_promotion:
+            marker = account_deletion_document(uid, firestore_client=firestore_client).get(transaction=transaction)
+            if account_deletion_marker_blocks_access(
+                marker_exists=marker.exists, raw_status=(marker.to_dict() or {}).get('wipe_status')
+            ):
+                raise IntegrationAccountDeleting()
         data = with_creation_scope_index(payload)
         # Adopt first: it only reads, and the identity staging below writes, so
         # keeping every read ahead of the first write keeps the transaction
@@ -47,7 +64,13 @@ def create_if_absent(uid, payload, *, firestore_client, stage_identity=None):
             changed = processing_backlog.stage_transition(
                 transaction, uid, data['id'], {}, data, firestore_client=firestore_client
             )
-        transaction.create(ref, home_visibility_index.stamp(data))
+        home_visibility_index.stamp(data)
+        if allow_promotion and estimate_firestore_document_bytes(data, ref.path) > PROJECTION_BYTES:
+            stage_conversation_payload(
+                transaction, snapshot, data, spill_fields={'transcript_segments'}, allow_promotion=True
+            )
+        else:
+            transaction.create(ref, data)
         return True, changed
 
     return run_transactional(firestore_client, create)

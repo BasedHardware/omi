@@ -7361,6 +7361,18 @@
       "indexes": []
     },
     {
+      "collectionGroup": "conversations",
+      "fieldPath": "_conversation_payload",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "conversation_payload_chunks",
+      "fieldPath": "data",
+      "ttl": false,
+      "indexes": []
+    },
+    {
       "collectionGroup": "batch_pipeline_prod_jobs",
       "fieldPath": "packing_observation",
       "ttl": false,

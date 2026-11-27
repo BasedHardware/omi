@@ -17,11 +17,13 @@ from database.conversations_v3_fence import PersistenceDecline
 from database.transcript_pointer import run_preloaded_transaction_with_contention_retry
 from database.account_deletion_marker import account_deletion_document
 from database.account_deletion_policy import account_deletion_marker_blocks_access
+from database.conversation_payload import stage_conversation_payload_patch, v3_payload_writes_enabled
 from database.conversation_processing_result import cleared_native_visibility
 from models.finalization_owner import python_owns_finalization
 from utils.conversations.v3 import Conflict, policy
 from utils.conversations import summary_delivery, terminal_settled
 from utils.conversations.summary_delivery import present
+from utils.conversation_payload import PAYLOAD_FIELD, ConversationProjectionTooLarge
 from utils.conversations.fragment_visibility import is_relevance_discarded
 from utils.encryption import encrypt, decrypt
 
@@ -136,6 +138,25 @@ def _strict_live_append(frozen, current):
     return True
 
 
+def _stage_summary_patch(tx, ref, snapshot, raw, current, patch):
+    has_payload = PAYLOAD_FIELD in raw
+    allow_promotion = bool(raw.get('v3_derived')) and v3_payload_writes_enabled()
+    if not has_payload and not allow_promotion:
+        tx.update(ref, patch)
+        return
+    try:
+        stage_conversation_payload_patch(
+            tx,
+            snapshot,
+            current,
+            patch,
+            overflow_fields={'structured'} if has_payload else {'transcript_segments'},
+            allow_promotion=allow_promotion,
+        )
+    except ConversationProjectionTooLarge as error:
+        raise Conflict('document_too_large') from error
+
+
 _STALE_NATIVE_SOURCE = object()
 
 
@@ -204,32 +225,34 @@ def store_summary(uid, cid, token, revision, structured, covers, *, live_input=N
         ):
             raise Conflict('account_deletion')
         lease = held.get(transaction=tx).to_dict() or {}
-        current = snapshot.to_dict() or {}
+        raw = snapshot.to_dict() or {}
         if (
             not snapshot.exists
-            or not python_owns_finalization(current)
-            or current.get('deleted')
-            or current.get('is_locked')
+            or not python_owns_finalization(raw)
+            or raw.get('deleted')
+            or raw.get('is_locked')
             or lease.get('token') != token
             or not lease.get('until')
             or lease['until'] <= datetime.now(timezone.utc)
         ):
             raise Conflict('summary_source_changed')
+        current = store.read_projection_snapshot(snapshot, data=raw, firestore_client=client, transaction=tx)
         if live_input is not None:
             if not policy.live_summary_target(current) or (
                 snapshot.update_time != revision
-                and not _strict_live_append(live_input, store.decode_row(uid, snapshot))
+                and not _strict_live_append(live_input, store.decode_row(uid, snapshot, data=current))
             ):
                 raise Conflict('summary_source_changed')
-            tx.update(ref, {policy.LIVE_SUMMARY_FIELD: live_cache})
+            _stage_summary_patch(tx, ref, snapshot, raw, current, {policy.LIVE_SUMMARY_FIELD: live_cache})
             return False
         if snapshot.update_time != revision:
             raise Conflict('summary_source_changed')
         if not permits_native_source(tx, client, uid, current, repairs=repairs):
             return _STALE_NATIVE_SOURCE
+        notes = dict(patch['structured'])
         if current.get('title_locked'):
-            patch['structured']['title'] = (current.get('structured') or {}).get('title', '')
-            patch['structured']['emoji'] = (current.get('structured') or {}).get('emoji', '')
+            notes['title'] = (current.get('structured') or {}).get('title', '')
+            notes['emoji'] = (current.get('structured') or {}).get('emoji', '')
         # The scoped reconcile may time out while its outline is still running.
         # A successful scoped reconcile can also have locked the card before notes are written.
         # Finish either explicit Open path here while retaining any other owed processing.
@@ -261,16 +284,21 @@ def store_summary(uid, cid, token, revision, structured, covers, *, live_input=N
                 {**current, **open_lock, 'v3_notes_written': True, 'v3_process_failed': False, 'tile_state': 'done'}
             )
         )
-        tx.update(
+        _stage_summary_patch(
+            tx,
             ref,
+            snapshot,
+            raw,
+            current,
             {
                 **patch,
+                'structured': notes,
                 **open_lock,
                 'summary_covers_through': covers,
                 **({'tile_state': 'done', 'v3_process_failed': False, 'summary_retryable': False} if settled else {}),
                 **(
                     {'title_locked': True}
-                    if current.get('v3_derived') and not current.get('home_hidden') and patch['structured'].get('title')
+                    if current.get('v3_derived') and not current.get('home_hidden') and notes.get('title')
                     else {}
                 ),
                 **({'v3_notes_written': True} if settled else {}),
@@ -357,8 +385,10 @@ def settle_processing(
         if not skipped and not row.get('deleted') and not permits_native_source(tx, client, uid, row, repairs=repairs):
             return _STALE_NATIVE_SOURCE
         absorbed_landing = False
+        if not row.get('deleted') and not row.get('is_locked'):
+            row = store.read_projection_snapshot(snapshot, data=row, firestore_client=client, transaction=tx)
         if not skipped and not row.get('deleted') and row.get('sync_content_revision') != revision:
-            decoded = store.decode_row(uid, snapshot)
+            decoded = store.decode_row(uid, snapshot, data=row, firestore_client=client, transaction=tx)
             if not content_hash or processing_hash(decoded) != content_hash:
                 if tail_words is None or not tail_absorbed(row, revision):
                     raise Conflict('processing_source_changed')
@@ -814,7 +844,11 @@ def fail_processing(uid, cid, token, revision, *, content_hash=None, retryable=T
         if not permits_native_source(tx, client, uid, row, repairs=repairs):
             return _STALE_NATIVE_SOURCE
         if row.get('sync_content_revision') != revision:
-            if not content_hash or processing_hash(store.decode_row(uid, snapshot)) != content_hash:
+            if (
+                not content_hash
+                or processing_hash(store.decode_row(uid, snapshot, firestore_client=client, transaction=tx))
+                != content_hash
+            ):
                 raise Conflict('processing_source_changed')
         tx.update(
             ref,

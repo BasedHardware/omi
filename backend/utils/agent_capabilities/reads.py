@@ -6,6 +6,7 @@ import copy
 import zlib
 
 from fastapi import HTTPException
+from google.api_core.exceptions import GoogleAPICallError, RetryError
 from database import conversations, action_items, users, candidates
 from utils.entity_pages import _facts, resolve_entity  # pyright: ignore[reportPrivateUsage]
 from utils.memory.canonical_memory_adapter import read_canonical_memory_item, memory_item_to_memorydb
@@ -16,6 +17,7 @@ from utils.memory.canonical_visibility_filter import filter_canonical_default_vi
 from utils import dream_required_intake
 from database.task_intelligence_control import get_task_workflow_control
 from utils.agent_capabilities.errors import AgentRecordUnavailable
+from utils.conversation_payload import PAYLOAD_FIELD
 
 
 def read_required_intake_candidate(uid, ref, context):
@@ -37,12 +39,14 @@ READ_COLLECTIONS = {
 # unless a speaker filter needs person ids or the capture has no title to show.
 _CONVERSATION_PREVIEW_FIELDS = (
     'id',
+    PAYLOAD_FIELD,
     'created_at',
     'status',
     'discarded',
     'deleted',
     'dream_duplicate_of',
     'is_locked',
+    'data_protection_level',
     'structured.title',
     'structured.overview',
     'user_title',
@@ -56,6 +60,28 @@ _CONVERSATION_PREVIEW_FIELDS = (
 
 class AgentTranscriptReadError(RuntimeError):
     """A stored speech blob cannot be verified; never mistake it for empty speech."""
+
+
+def _hydrate_payload(uid, key, raw, *, field_paths=None):
+    if PAYLOAD_FIELD not in raw:
+        return raw
+
+    def allowed(row):
+        return (
+            not row.get('recording')
+            and conversations.is_visible_conversation(row)
+            and not row.get('is_locked')
+            and row.get('data_protection_level') != 'private'
+        )
+
+    try:
+        if not allowed(raw):
+            raise ValueError('conversation payload unavailable')
+        return conversations.read_authorized_conversation_payload(
+            uid, key, payload_allowed=allowed, field_paths=field_paths
+        )
+    except (TypeError, ValueError, GoogleAPICallError, RetryError) as error:
+        raise AgentTranscriptReadError('Dream conversation payload unavailable') from error
 
 
 def unavailable_is_transient(error=None):
@@ -85,8 +111,7 @@ def read_record(uid, ref, *, control_cache=None, diagnostics=None, require_avail
     if not separator or '/' in key or not key or collection not in READ_COLLECTIONS:
         raise ValueError('Invalid dream read reference')
     if collection == 'conversations':
-        # One full owner-scoped document read, no photo subcollection and no
-        # metadata projection. Verify the blob before the tolerant product
+        # Verify the owner-scoped blob before the tolerant product
         # decoder can silently replace corrupt/wrong-key speech with [].
         raw = read_product_conversation(conversations.get_conversation_raw_snapshot, uid, key)
         if not raw or not conversations.is_visible_conversation(raw):
@@ -95,6 +120,7 @@ def read_record(uid, ref, *, control_cache=None, diagnostics=None, require_avail
             return None
         if raw.get('is_locked'):
             raise HTTPException(423, 'Dream record locked')
+        raw = _hydrate_payload(uid, key, raw)
         try:
             conversations.decode_transcript_segments_verified(
                 uid,
@@ -190,6 +216,7 @@ def preview_record(uid, ref, *, need_speakers=False):
         )
         if not raw or not conversations.is_visible_conversation(raw) or raw.get('is_locked'):
             return None
+        raw = _hydrate_payload(uid, key, raw, field_paths=[*_CONVERSATION_PREVIEW_FIELDS, 'recording'])
         stored = raw.get('structured')
         structured = stored if isinstance(stored, dict) else {}
         title = structured.get('title') or ''

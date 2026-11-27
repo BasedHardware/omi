@@ -997,7 +997,7 @@ def test_metadata_revision_change_does_not_rebill_unchanged_content(strict, monk
     cid = ('users', 'synthetic', 'conversations', 'c')
     original = {'id': 'c', 'transcript_segments': [{'text': 'same real content'}], 'sync_content_revision': 1}
     strict.rows[cid] = dict(original, v3_process_pending=True, sync_content_revision=2)
-    monkeypatch.setattr(store, 'decode_row', lambda uid, snap: snap.to_dict())
+    monkeypatch.setattr(store, 'decode_row', lambda uid, snap, **_kwargs: snap.to_dict())
     token = leases.acquire('synthetic', 'summary-c', firestore_client=strict)
     writers.settle_processing(
         'synthetic', 'c', token, 1, AT, content_hash=writers.processing_hash(original), firestore_client=strict
@@ -1018,7 +1018,7 @@ async def test_summary_holder_stores_before_releasing_lease_and_detail_sees_resu
     row = {'id': 'c', 'created_at': AT, 'started_at': AT, 'finished_at': AT, 'structured': {'title': 'Stable'}}
     strict.rows[cid] = row
     monkeypatch.setattr(store, 'get_firestore_client', lambda: strict)
-    monkeypatch.setattr(store, 'decode_row', lambda uid, snap: snap.to_dict())
+    monkeypatch.setattr(store, 'decode_row', lambda uid, snap, **_kwargs: snap.to_dict())
 
     async def blocking(pool, fn, *args, **kwargs):
         return fn(*args, **kwargs)
@@ -1330,7 +1330,7 @@ async def test_open_notes_failure_keeps_an_older_preview_live(strict, monkeypatc
     }
     strict.rows[card] = row
     monkeypatch.setattr(store, 'get_firestore_client', lambda: strict)
-    monkeypatch.setattr(store, 'decode_row', lambda uid, snap: snap.to_dict())
+    monkeypatch.setattr(store, 'decode_row', lambda uid, snap, **_kwargs: snap.to_dict())
     monkeypatch.setattr(writers, 'fail_processing', lambda *a, **kw: pytest.fail('unlocked card marked terminal'))
 
     async def blocking(pool, fn, *args, **kwargs):

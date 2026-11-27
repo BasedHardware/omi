@@ -27,7 +27,7 @@ def origin_bound(monkeypatch):
 def plain_rows(monkeypatch):
     monkeypatch.setattr(store, 'account_deletion_blocks_user_work', lambda *a: False)
     monkeypatch.setattr(
-        store, 'decode_row', lambda uid, snap: {**snap.to_dict(), '_v3_revision': 1} if snap.exists else None
+        store, 'decode_row', lambda uid, snap, **_kwargs: {**snap.to_dict(), '_v3_revision': 1} if snap.exists else None
     )
 
 
@@ -238,7 +238,8 @@ def test_an_overflowing_closure_stops_decoding_at_the_bound(monkeypatch):
     monkeypatch.setattr(
         store,
         'decode_row',
-        lambda uid, snap: decoded.append(snap.id) or ({**snap.to_dict(), '_v3_revision': 1} if snap.exists else None),
+        lambda uid, snap, **_kwargs: decoded.append(snap.id)
+        or ({**snap.to_dict(), '_v3_revision': 1} if snap.exists else None),
     )
     rows = fragmented(30)
     rows[C + 'r']['claims'] = []  # only the time query finds the 30 windows
@@ -262,7 +263,7 @@ def test_missing_sources_count_and_the_source_bound_holds_before_reading(monkeyp
     reads = []
     real = store.recording_input
     monkeypatch.setattr(
-        store, 'recording_input', lambda uid, snap, **kw: reads.append(snap.id) or real(uid, snap, **kw)
+        store, 'recording_input', lambda uid, snap, **_kwargs: reads.append(snap.id) or real(uid, snap, **_kwargs)
     )
     rows = {C + 'p': source('p', claims=[claim('d', AT, 10)], v3_pending_since=AT)}
     rows[C + 'd'] = derived('d', AT, 10, ['p', 'gone1', 'gone2', 'gone3'])
@@ -331,9 +332,9 @@ def test_terminal_pending_avoids_transcript_decode_and_claim_closure(monkeypatch
     decode = store.decode_row
     decoded = []
 
-    def track(uid, doc):
+    def track(uid, doc, **kwargs):
         decoded.append(doc.id)
-        return decode(uid, doc)
+        return decode(uid, doc, **kwargs)
 
     monkeypatch.setattr(store, 'decode_row', track)
     monkeypatch.setattr(store, 'DERIVED_LIMIT', 1)

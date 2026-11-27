@@ -10,6 +10,8 @@ MANIFEST_PATH = Path(__file__).resolve().parents[3] / 'firestore.indexes.json'
 EXPECTED_FIELD_KEYS = (
     ('batch_pipeline_dev_jobs', 'packing_observation'),
     ('batch_pipeline_prod_jobs', 'packing_observation'),
+    ('conversation_payload_chunks', 'data'),
+    ('conversations', '_conversation_payload'),
     ('conversations', 'live_transcript_replay_receipt'),
     ('conversations', 'owner_recognition_diagnostics'),
     ('screen_activity', 'ocrText'),
