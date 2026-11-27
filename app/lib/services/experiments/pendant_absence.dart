@@ -10,7 +10,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/utils/logger.dart';
 
-/// Shared by the pendant-stop question (SCA-4815) and reconnect nudge (SCA-4816).
+/// Shared by the pendant-stop question (SCA-4815) and reconnect nudge (SCA-4889).
 class PendantAbsence {
   PendantAbsence({DateTime Function()? now}) : _now = now ?? DateTime.now;
 
