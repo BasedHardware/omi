@@ -254,6 +254,12 @@ def entries():
         # Owner-level End instants (flag end_open_conversation): single-field range reads on the cut time.
         DriverEntry('database.conversations_v3_manual_cuts.around', base={'uid': SHAPE_UID, 'at': FROZEN_NOW}),
         DriverEntry('database.conversations_v3_manual_cuts.load', base={'uid': SHAPE_UID, 'since': FROZEN_NOW}),
+        # The live tail kept with an End (flag live_words_cascade): single-field reads on the cut time.
+        DriverEntry('database.conversations_v3_manual_cuts.tail', base={'uid': SHAPE_UID, 'at': FROZEN_NOW}),
+        DriverEntry('database.conversations_v3_manual_cuts.clear_tail', base={'uid': SHAPE_UID, 'at': FROZEN_NOW}),
+        DriverEntry(
+            'database.conversations_v3_manual_cuts.clear_tails_before', base={'uid': SHAPE_UID, 'before': FROZEN_NOW}
+        ),
         DriverEntry(
             'utils.conversations.v3.service.has_pending',
             base={'uid': SHAPE_UID},
