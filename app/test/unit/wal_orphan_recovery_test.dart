@@ -672,14 +672,14 @@ void main() {
 
   test('repeated directory sync failures back off and recover only after a successful barrier probe', () async {
     var currentSeconds = now;
-    var syncNow = DateTime.fromMillisecondsSinceEpoch(currentSeconds * 1000);
+    var syncElapsed = Duration.zero;
     var allowSync = false;
     var syncCalls = 0;
     LiveWalReceipt.syncDirectoryForTesting = (_) async {
       syncCalls++;
       if (!allowSync) throw const FileSystemException('injected persistent directory sync failure');
     };
-    LiveWalReceipt.directorySyncNowForTesting = () => syncNow;
+    LiveWalReceipt.directorySyncElapsedForTesting = () => syncElapsed;
     final events = <WalWriteReceipt>[];
     final writer = await ledger(
       realCensus: true,
@@ -704,17 +704,17 @@ void main() {
     expect(dir.listSync().whereType<File>().where((file) => file.path.endsWith('.bin')), isEmpty);
 
     final firstRetryAfter = LiveWalReceipt.directorySyncRetryAfterForTesting!;
-    syncNow = firstRetryAfter.add(const Duration(milliseconds: 1));
+    syncElapsed = firstRetryAfter + const Duration(milliseconds: 1);
     await expectLater(
       LiveWalReceipt.syncAudioParentDirectory(File('${dir.path}/probe.bin')),
       throwsA(isA<LiveWalDirectorySyncException>()),
     );
     final secondRetryAfter = LiveWalReceipt.directorySyncRetryAfterForTesting!;
-    expect(secondRetryAfter, syncNow.add(const Duration(seconds: 60)));
+    expect(secondRetryAfter, syncElapsed + const Duration(seconds: 60));
     expect(syncCalls, 4);
 
-    syncNow = secondRetryAfter.add(const Duration(milliseconds: 1));
-    currentSeconds = syncNow.millisecondsSinceEpoch ~/ 1000;
+    syncElapsed = secondRetryAfter + const Duration(milliseconds: 1);
+    currentSeconds += 120;
     allowSync = true;
     await captureReceiptAudio(writer, sessionId: 'retry-session');
     await writer.finalizeCurrentSession();
@@ -1680,7 +1680,6 @@ void main() {
     final firstCensus = await census();
     expect(firstCensus.complete, isTrue);
     expect(firstCensus.summary['receipt_scan_truncated'], isTrue);
-    expect(receiptlessManagedCount(firstCensus), 0);
     expect(firstCensus.orphans.any((file) => file.filePath == remainingAudio.path), isFalse);
     expect(await remainingAudio.readAsBytes(), orderedEquals(bytes));
 

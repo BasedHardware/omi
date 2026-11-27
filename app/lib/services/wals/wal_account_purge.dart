@@ -25,6 +25,8 @@ extension _WalAccountPurge on LocalWalSyncImpl {
   Future<bool> _purgeDeletedAccountWalsAtLoad(int generation) async {
     final deleted = (await readDeletedAccountUids()).toSet();
     final receiptPurgeOwners = LiveWalReceipt.purgeEnabled ? deleted : const <String>{};
+    // Keep backup-generation references before the purge below can rewrite the
+    // index; moving this snapshot after `_walReady` would lose those references.
     final startupReferences =
         receiptPurgeOwners.isEmpty ? null : await WalFileManager.captureLiveWalPurgeSnapshotForPendingReceipts();
     // Receipt-only files are drained in small batches after `_walReady` opens.

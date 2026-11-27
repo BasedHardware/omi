@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
+import '../test_helpers/loopback_http_overrides_scope.dart';
 
 class _Listener implements IPureSocketListener {
   int connected = 0;
@@ -38,6 +39,7 @@ class _Listener implements IPureSocketListener {
 }
 
 void main() {
+  final loopbackHttp = LoopbackHttpOverridesScope();
   late HttpServer server;
   late List<WebSocket> peers;
   late List<Completer<void>> peerClosed;
@@ -48,6 +50,7 @@ void main() {
   late bool rejectHandshake;
 
   setUp(() async {
+    loopbackHttp.enable();
     peers = [];
     peerClosed = [];
     upgrades = 0;
@@ -79,6 +82,7 @@ void main() {
       unawaited(peer.close());
     }
     await server.close(force: true);
+    loopbackHttp.restore();
   });
 
   test('stop during auth opens no connection after credentials arrive', () async {

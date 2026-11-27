@@ -109,6 +109,24 @@ class LiveWalReceiptDurabilityChannelTest {
     }
 
     @Test
+    fun `native directory barrier opens and fsyncs a real documents directory`() {
+        val nested = File(
+            LiveWalReceiptDurabilityChannel.documentsDirectory(context),
+            "native-fsync-test",
+        ).apply { mkdirs() }
+        val marker = File(nested, "entry").apply { writeText("directory entry") }
+        val previousOverride = LiveWalReceiptDurabilityChannel.directoryFsyncForTesting
+        LiveWalReceiptDurabilityChannel.directoryFsyncForTesting = null
+
+        try {
+            LiveWalReceiptDurabilityChannel.syncDirectory(context, nested.path)
+            assertTrue(marker.isFile)
+        } finally {
+            LiveWalReceiptDurabilityChannel.directoryFsyncForTesting = previousOverride
+        }
+    }
+
+    @Test
     fun `registered handler rejects paths outside documents`() {
         val outside = File(context.cacheDir.parentFile, "outside-live-wal-sync").apply { mkdirs() }
 

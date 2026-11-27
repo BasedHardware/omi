@@ -17,6 +17,7 @@ import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/sockets.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+import '../../test_helpers/loopback_http_overrides_scope.dart';
 
 const _root = '11111111-2222-4333-8444-555555555555';
 const _recording = 'cccccccc-dddd-4eee-8fff-000000000000';
@@ -99,6 +100,9 @@ class _ReceiptListener implements ITransctiptSegmentSocketServiceListener, Liste
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  final loopbackHttp = LoopbackHttpOverridesScope();
+  setUpAll(loopbackHttp.enable);
+  tearDownAll(loopbackHttp.restore);
 
   test('conversation entry and reconnect bind both receipt types to the opening session', () async {
     SharedPreferences.setMockInitialValues({'uid': 'alice'});

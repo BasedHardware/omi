@@ -12,6 +12,7 @@ import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+import '../test_helpers/loopback_http_overrides_scope.dart';
 
 const _empty = {'nodes': <dynamic>[], 'edges': <dynamic>[]};
 const _populated = {
@@ -22,10 +23,12 @@ const _populated = {
 };
 
 void main() {
+  final loopbackHttp = LoopbackHttpOverridesScope();
   late HttpServer server;
   late List<String> requests;
 
   setUpAll(() async {
+    loopbackHttp.enable();
     Env.init(_Env());
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
@@ -38,6 +41,8 @@ void main() {
     );
     await PlatformManager.initializeServices();
   });
+
+  tearDownAll(loopbackHttp.restore);
 
   setUp(() async {
     AuthService.installLocalHarnessTokenGateway(_TokenGateway('onboarding-user'));

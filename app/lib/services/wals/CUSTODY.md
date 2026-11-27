@@ -328,7 +328,11 @@ reserves its basename only after validation and an unchanged-file check.
 Receipt publication syncs its containing directories before audio bytes are
 written; every audio file is flushed before index admission, and receiptless
 audio also syncs the documents directory. A failed barrier leaves that WAL in
-memory and emits `WAL Write Receipt` with `directory_sync_failed`. After three
+memory and emits `WAL Write Receipt` with `directory_sync_failed`. If a
+receiptless audio write completed but its directory barrier failed, the file is
+removed and the WAL remains unindexed: without a durable owner-bound receipt,
+that file cannot be safely retained or admitted. Storage-blocked pendant intake
+is bounded at 2,000 buffered frames and reports subsequent drops. After three
 consecutive native directory-sync failures, the process opens a fail-fast
 circuit. Later custody writes stay in memory while native barrier probes retry
 with exponential backoff from 30 seconds up to 30 minutes; disk admission

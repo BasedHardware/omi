@@ -9,6 +9,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/providers/developer_mode_provider.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+import '../test_helpers/loopback_http_overrides_scope.dart';
 
 class _TestEnv implements EnvFields {
   @override
@@ -19,14 +20,18 @@ class _TestEnv implements EnvFields {
 }
 
 void main() {
+  final loopbackHttp = LoopbackHttpOverridesScope();
   late HttpServer server;
   late List<String> requests;
   late Future<void> answer;
 
   setUpAll(() {
+    loopbackHttp.enable();
     Env.init(_TestEnv());
     PlatformManager.initializeForLocalHarness();
   });
+
+  tearDownAll(loopbackHttp.restore);
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});

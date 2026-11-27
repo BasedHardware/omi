@@ -67,8 +67,9 @@ class LiveWalReceipt {
   static int _directorySyncBackoffSeconds = _initialDirectorySyncBackoffSeconds;
   static bool _directorySyncCircuitOpen = false;
   static bool _directorySyncCircuitTripUnreported = false;
-  static DateTime? _directorySyncRetryAfter;
-  static DateTime Function()? directorySyncNowForTesting;
+  static final Stopwatch _directorySyncClock = Stopwatch()..start();
+  static Duration? _directorySyncRetryAfter;
+  static Duration Function()? directorySyncElapsedForTesting;
   static Future<void> Function(Directory directory)? syncDirectoryForTesting;
   static const directoryName = '.wal-live-receipts';
   static const writeEnabled = !bool.fromEnvironment('OMI_LIVE_WAL_RECEIPT_OFF');
@@ -136,11 +137,11 @@ class LiveWalReceipt {
 
   static File _receipt(Directory documents, String name) => File(path.join(directory(documents).path, name + _pending));
 
-  static DateTime _directorySyncNow() => directorySyncNowForTesting?.call() ?? DateTime.now();
+  static Duration _directorySyncElapsed() => directorySyncElapsedForTesting?.call() ?? _directorySyncClock.elapsed;
 
   static bool get _directorySyncBackoffActive {
     final retryAfter = _directorySyncRetryAfter;
-    return _directorySyncCircuitOpen && retryAfter != null && _directorySyncNow().isBefore(retryAfter);
+    return _directorySyncCircuitOpen && retryAfter != null && _directorySyncElapsed() < retryAfter;
   }
 
   static Future<void> _invokeDirectorySync(Directory directory) async {
@@ -153,7 +154,7 @@ class LiveWalReceipt {
   }
 
   static void _scheduleDirectorySyncRetry() {
-    _directorySyncRetryAfter = _directorySyncNow().add(Duration(seconds: _directorySyncBackoffSeconds));
+    _directorySyncRetryAfter = _directorySyncElapsed() + Duration(seconds: _directorySyncBackoffSeconds);
     _directorySyncBackoffSeconds = (_directorySyncBackoffSeconds * 2)
         .clamp(
           _initialDirectorySyncBackoffSeconds,
@@ -203,7 +204,7 @@ class LiveWalReceipt {
   }
 
   static bool get directorySyncCircuitOpenForTesting => _directorySyncCircuitOpen;
-  static DateTime? get directorySyncRetryAfterForTesting => _directorySyncRetryAfter;
+  static Duration? get directorySyncRetryAfterForTesting => _directorySyncRetryAfter;
 
   static bool consumeDirectorySyncCircuitTrip() {
     final pending = _directorySyncCircuitTripUnreported;
@@ -213,7 +214,7 @@ class LiveWalReceipt {
 
   static void resetDirectorySyncCircuitForTesting() {
     _resetDirectorySyncCircuit();
-    directorySyncNowForTesting = null;
+    directorySyncElapsedForTesting = null;
   }
 
   static Future<void> _syncConfirmedDirectory(Directory directory) async {

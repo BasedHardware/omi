@@ -66,8 +66,11 @@ Future<String> _captureLogs(Future<void> Function() body) async {
 
 void main() {
   late HttpServer server;
+  late HttpOverrides? previousHttpOverrides;
 
   setUpAll(() async {
+    previousHttpOverrides = HttpOverrides.current;
+    HttpOverrides.global = null;
     Env.init(_LocalEnv());
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
@@ -94,6 +97,7 @@ void main() {
   tearDownAll(() async {
     Env.clearApiBaseUrlOverrideForTesting();
     await server.close(force: true);
+    HttpOverrides.global = previousHttpOverrides;
   });
 
   test('a created app API key reaches the caller but never the logs', () async {
