@@ -1567,6 +1567,36 @@ void main() {
     expect(await file.readAsBytes(), orderedEquals(bytes));
   }, skip: LiveWalReceipt.writeEnabled ? 'Run with --dart-define=OMI_LIVE_WAL_RECEIPT_OFF=true' : false);
 
+  test('receipt retirement keeps its journal until index directory sync succeeds', () async {
+    final writer = await ledger(realCensus: true);
+    await captureReceiptAudio(writer);
+    await writer.finalizeCurrentSession();
+    final written = writer.testWals.singleWhere((wal) => wal.liveFileWriteId != null);
+    final fileName = written.filePath!;
+    final receipt = receiptFor(fileName);
+    expect(await receipt.exists(), isTrue);
+
+    // Put the committed row in both restart generations before attempting
+    // retirement; the receipt must remain if the rename directory barrier fails.
+    expect(await WalFileManager.saveWals(await WalFileManager.loadIndexedWals()), isTrue);
+    var allowDirectorySync = false;
+    var directorySyncCalls = 0;
+    LiveWalReceipt.syncDirectoryForTesting = (directory) async {
+      expect(directory.path, dir.path);
+      directorySyncCalls++;
+      if (!allowDirectorySync) throw const FileSystemException('injected index directory sync failure');
+    };
+
+    await WalFileManager.retireCommittedLiveWalReceipts();
+    expect(directorySyncCalls, 1);
+    expect(await receipt.exists(), isTrue, reason: 'failed index directory sync keeps replay proof');
+
+    allowDirectorySync = true;
+    await WalFileManager.retireCommittedLiveWalReceipts();
+    expect(directorySyncCalls, 2);
+    expect(await receipt.exists(), isFalse, reason: 'durable main and backup names permit retirement');
+  });
+
   for (final delta in [false, true]) {
     test('retire only after both restart indexes cover the transaction (delta $delta)', () async {
       final writer = await ledger(realCensus: true, realPersistence: delta);

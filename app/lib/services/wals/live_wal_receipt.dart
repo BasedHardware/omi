@@ -728,7 +728,7 @@ class LiveWalReceipt {
         size: content.length, threshold: 0, debugName: 'live_wal_receipt_index');
   }
 
-  static Future<void> _flushBackupCopy(File file) async {
+  static Future<void> _flushIndexCopy(File file) async {
     final handle = await file.open(mode: FileMode.append);
     try {
       await handle.flush();
@@ -741,13 +741,14 @@ class LiveWalReceipt {
   /// matching record. Best effort: a later startup can try again.
   static Future<void> retireCommitted(File primaryFile, File backupFile) async {
     try {
+      if (path.normalize(primaryFile.parent.path) != path.normalize(backupFile.parent.path)) return;
       final pending = directory(backupFile.parent);
       if (!await pending.exists() || !await primaryFile.exists() || !await backupFile.exists()) return;
       final main = await _readIndexBindings(primaryFile);
       final backup = await _readIndexBindings(backupFile);
       if (main.isEmpty || backup.isEmpty) return;
       var visited = 0;
-      var backupFlushed = false;
+      var indexesDurable = false;
       await for (final entry in pending.list(followLinks: false)) {
         final name = _receiptBasename(entry.path);
         if (entry is! File || name == null) continue;
@@ -758,11 +759,14 @@ class LiveWalReceipt {
           decodeWalIndexRow(primary.row);
           decodeWalIndexRow(previous.row);
           if ((await _read(entry, name))?.binding != primary.binding) continue;
-          if (!backupFlushed) {
-            // The existing writer copies its backup without a durability
-            // barrier. Pay a sync only when a receipt can actually retire.
-            await _flushBackupCopy(backupFile);
-            backupFlushed = true;
+          if (!indexesDurable) {
+            // A file flush alone does not make the index renames durable.
+            // Keep the receipt until both index files and their shared parent
+            // directory have crossed the native durability barrier.
+            await _flushIndexCopy(primaryFile);
+            await _flushIndexCopy(backupFile);
+            await syncAudioParentDirectory(primaryFile);
+            indexesDurable = true;
           }
           await entry.delete();
         } catch (_) {/* Keep uncertain receipts for a later retry. */}
