@@ -1,8 +1,9 @@
 # Commit-triggered batch projection
 
-`BATCH_PROJECTION_OUTBOX` defaults on. Normal merge and source-alias fallback
-atomically stamp a due obligation on the existing result document. The segment
-ID and immutable owner log sequence identify a commit. Release and privacy
+`BATCH_PROJECTION_OUTBOX` resolves to `true` when unset in Python, including
+when `CAPTURE_COVERAGE_MODE=serve`. With the switch enabled, normal merge and
+source-alias fallback atomically stamp a due obligation on the existing result
+document. The segment ID and immutable owner log sequence identify a commit. Release and privacy
 resume can rearm that slot in their existing transactions and invalidate a
 previous claim. The scheduling fields contain no transcript, audio reference,
 conversation identifier, or billing state.
@@ -49,6 +50,25 @@ mutations and replays.
 
 ## Compatibility and release
 
+| Deployment role | Dev | Staging | Prod |
+| --- | --- | --- | --- |
+| Cloud Run backend and backend-sync | `true` | `true` | `true` |
+| Cloud Run backend-integration and backend-sync-backfill | `true` | `false` | `false` |
+| Dedicated Cloud Run projection pump | — | — | `false`, inherited from integration |
+| GPU batch worker | `true` | — | `false` on main and T4 |
+| GKE backend-listen | `false` | — | `false` |
+
+These are source settings. Check the running image source and resolved
+environment before assessing a production pin’s effect. The dedicated pump is
+dark and has its own activation order under SCA-3318. Its pump selector and the
+outbox switch control different behavior.
+
+Listen runs the shared backend app. Its batch recovery and commit-wake routes,
+and the provider STT settlement hook, can enter the shared ordered merge path.
+That path can stamp obligations and invoke request-driven legacy projection.
+The elected outbox scanner needs batch serving or the dedicated pump enabled.
+Listen’s chart leaves batch serving off and the pump selector defaults off.
+
 - A live lease and a due query that succeeded recently and is keeping up
   certify the backstop. The mark expires within 30 seconds of a stalled scan.
   A row needs its own valid obligation before a compatibility page skips
@@ -64,9 +84,17 @@ mutations and replays.
   continues to count every returned legacy follow-up row, including those
   subsequently skipped. #25555's keyset parity holds on the raw page and
   #25623's refused-head disposition stays with the canonical projector.
-- Verify both stage-specific Firestore composite indexes are READY and queryable
-  before a fleet rollout. The doc-mode Postgres adapter mirrors due selection
-  for qualification. Firestore remains the serving effect store.
+- Before enabling any participating writer or reader, verify both
+  stage-specific Firestore composite indexes are READY and confirm the due
+  query. For each writer, verify eligible commits stamp obligations and a
+  qualified reader covers them in the same namespace. For each reader, verify
+  claim and settlement and compare matched completions, partial latency,
+  oldest obligation age, failures, and read and write telemetry across the
+  actual serving roster. Exercise legacy discovery with older and off writers.
+  Apply both checks to roles that write and read. The doc-mode Postgres adapter
+  mirrors due selection for qualification. Firestore remains the serving effect store.
+- Production changes require a separate Release order naming roles, settings,
+  canary and rollback. Read back the effective settings on the serving roles.
 - Rollback sets `BATCH_PROJECTION_OUTBOX=false` on the relevant readers and
   writers. Assignment, finish and follow-up discovery proceed on the original
   result and receipt state. Keep the scheduling metadata and result retention.

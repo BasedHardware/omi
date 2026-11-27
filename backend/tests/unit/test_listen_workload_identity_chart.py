@@ -34,6 +34,17 @@ def _render(environment, release, *arguments):
     )
 
 
+@pytest.mark.parametrize("stage", ["dev", "prod"])
+def test_listen_renders_projection_outbox_off(stage):
+    result = _render(stage, f"{stage}-omi-backend-listen")
+    assert result.returncode == 0, result.stderr
+    deployment = next(doc for doc in yaml.safe_load_all(result.stdout) if doc and doc["kind"] == "Deployment")
+    for container in deployment["spec"]["template"]["spec"]["containers"]:
+        assert [entry for entry in container["env"] if entry["name"] == "BATCH_PROJECTION_OUTBOX"] == [
+            {"name": "BATCH_PROJECTION_OUTBOX", "value": "false"}
+        ]
+
+
 @pytest.fixture(
     scope="module",
     params=(
