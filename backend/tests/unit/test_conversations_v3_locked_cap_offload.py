@@ -338,3 +338,80 @@ def test_the_write_codec_runs_once_per_row_so_the_estimate_adds_no_side_effects(
         commit([shared_row(i) for i in range(4)] + [shared_row(i, small=True) for i in range(4)])
     assert len(calls) == 8 and len(set(calls)) == 8
     assert partitions == [1, 1] and len(lake_objects(lake_world)) == 4
+
+
+# ---- deferred panel minors (review-20261127t050745-babe F2) ------------------------------------------------------
+
+
+def test_a_failed_batch_preload_releases_the_decoded_plaintext_and_re_raises(monkeypatch):
+    # The first pointer loads (decoded plaintext enters the memo), the second fails: nothing decoded may stay behind.
+    loaded = []
+
+    def preload(uid, pointer):
+        if pointer['n'] == 2:
+            raise transcript_pointer.TranscriptPointerFetchError('lake unavailable')
+        transcript_pointer._memo().decoded[(uid, pointer['n'])] = [{'text': 'decoded speech'}]
+        loaded.append(pointer['n'])
+
+    monkeypatch.setattr(transcript_pointer, 'preload_pointer', preload)
+    batch = [{'transcript_segments': {'n': n}} for n in (1, 2, 3)] + [{'transcript_segments': 'inline'}]
+    with pytest.raises(transcript_pointer.TranscriptPointerFetchError):
+        store._preload_batch_pointers(UID, batch)
+    assert loaded == [1]
+    assert transcript_pointer._MEMO.get() is None  # cleared before the error propagated
+
+
+def test_a_successful_batch_preload_keeps_every_pointer_warm(monkeypatch):
+    monkeypatch.setattr(
+        transcript_pointer,
+        'preload_pointer',
+        lambda uid, pointer: transcript_pointer._memo().decoded.__setitem__((uid, pointer['n']), [{'text': 'x'}]),
+    )
+    store._preload_batch_pointers(UID, [{'transcript_segments': {'n': n}} for n in (1, 2)])
+    assert set(transcript_pointer._MEMO.get().decoded) == {(UID, 1), (UID, 2)}
+    transcript_pointer.clear_memo()
+
+
+# ---- panel review-20261127t053936-a927 F2: every charged attempt's pointer batches are preloaded and capped -------
+
+
+@pytest.mark.parametrize('listed', [True, False])
+def test_a_listed_owners_commit_inside_the_origin_bound_is_preloaded_too(
+    lake_world, lake_commit, monkeypatch, listed
+):  # noqa: F811
+    commit, executions, closure_reads, client = lake_commit
+    monkeypatch.setattr(store, 'DERIVED_LIMIT', 10)  # the three loaded rows fit the origin bound: not heavy
+    monkeypatch.setenv('CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS', '*' if listed else '')
+    commit([shared_row(i) for i in range(8)])
+    written = sorted(
+        p[3] for p in client.rows if len(p) == 4 and p[2] == 'conversations' and p[3].startswith('shared-')
+    )
+    assert written == sorted(f'shared-{i}' for i in range(8))
+    if listed:
+        assert executions == [4, 4] and closure_reads == [CLOSURE, CLOSURE + 4]
+    else:
+        assert executions == [4] + [4] * 5 and closure_reads == [CLOSURE] + [CLOSURE + 4] * 5
+
+
+def test_a_listed_owners_charged_commit_inside_the_bound_also_caps_its_runs(
+    lake_world, lake_commit, monkeypatch  # noqa: F811
+):
+    commit, executions, closure_reads, client = lake_commit
+    monkeypatch.setattr(store, 'DERIVED_LIMIT', 10)
+    monkeypatch.setenv('CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS', '*')
+    monkeypatch.setattr(store, '_preload_batch_pointers', lambda uid, batch: store.transcript_pointer.clear_memo())
+    with pytest.raises(Conflict, match='v3_derived_budget'):
+        commit([shared_row(i) for i in range(8)])
+    assert executions == [4] * 4 and closure_reads == [CLOSURE] * 3
+
+
+def test_a_listed_owners_inline_commit_inside_the_bound_keeps_mains_path(
+    lake_world, lake_commit, monkeypatch  # noqa: F811
+):
+    commit, executions, _, client = lake_commit
+    monkeypatch.setattr(store, 'DERIVED_LIMIT', 10)
+    monkeypatch.setenv('CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS', '*')
+    preloads = []
+    monkeypatch.setattr(store, '_preload_batch_pointers', lambda uid, batch: preloads.append(len(batch)))
+    commit([shared_row(i, small=True) for i in range(8)])
+    assert preloads == [] and executions == [8]  # no pointer rows: no preload, one batch, main's path
