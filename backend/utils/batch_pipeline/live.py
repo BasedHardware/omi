@@ -451,11 +451,16 @@ async def _manual_finish_admitted(
     from config.server_batch import manual_end_marker_enabled
     from database import conversations as conversations_db, conversations_v3
     from utils.conversations.v3 import fast_finish, metrics as v3_metrics, triggers as v3_triggers
+    from utils.conversations.v3.policy import NATIVE_MANUAL_STOP
 
     # One end-to-end budget for the pass, from here: slot wait and every provider request count.
     deadline = time.monotonic() + fast_finish.PASS_DEADLINE_SECONDS
     try:
-        if not current.get('recording') or not current.get('v3_manual_end_requested'):
+        if (
+            not current.get('recording')
+            or not current.get('v3_manual_end_requested')
+            or current.get(NATIVE_MANUAL_STOP)
+        ):
             return
         if not manual_end_marker_enabled():
             return

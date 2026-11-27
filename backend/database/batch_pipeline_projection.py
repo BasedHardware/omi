@@ -8,9 +8,8 @@ from database.batch_coalescing_capabilities import advertise
 from database.batch_pipeline_upload_metrics import observe_completion
 
 from contextlib import nullcontext
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 import logging
-import re
 from typing import Any
 
 from google.cloud import firestore
@@ -21,7 +20,7 @@ from config.reliability_experiments import enabled as experiment
 from utils.enrichment import outbox as reprocess
 from database.outbox_firestore import FirestoreEnrichmentOutbox
 from config.sync_reprocess import settle_seconds
-from utils.batch_pipeline.held_terminal import OPERATOR_INTENTS, held_without_recovery
+from utils.batch_pipeline.held_terminal import assignment_held_without_recovery, held_without_recovery
 from config.record_audio import record_identity, require_record_audio_barrier
 from config.server_batch import manual_end_marker_enabled
 from utils.conversations.v3 import metrics as v3_metrics, triggers as v3_triggers
@@ -65,6 +64,8 @@ from utils.batch_pipeline.projection_hold_observability import log_projection_ho
 from utils.batch_pipeline.scheduler import owner_key
 from utils.sync.processing_hold import MAX_HOLD_SECONDS
 from utils.sync import capture_end, processing_hold
+from database import batch_pipeline_native_finish as native_finish
+from database.batch_pipeline_projection_usage import charge_chain, extend_chain, usage_stamp
 from database.batch_pipeline_projection_protocol import (
     PROJECTION_HEAD_BLOCK_TYPE,
     PROJECTION_HEAD_BLOCKED_SINCE,
@@ -75,24 +76,6 @@ from database.batch_pipeline_projection_protocol import (
 from database.batch_pipeline_projection_session import ProjectionSession as ProjectionSession, SOURCE_DELETED_JOBS
 
 logger = logging.getLogger(__name__)
-
-_USAGE_PERIOD = re.compile(r'(\d{4})-(\d{2})')
-
-
-def usage_stamp(now: datetime, usage_period: Any) -> datetime:
-    """Hour stamp for projection usage: ``now``, backdated into ``usage_period`` only across a rollover.
-
-    A cap-hold unit admitted under the owner's funded choice in month M is billed to M even when
-    projection completes in M+1 (lane 6, Subscription ruling B(a)). The stamp moves only backwards, to
-    the period's last second, and the hourly doc id/year/month/day/hour all derive from it, so the
-    month query reads it as M (transcription has no day rollup). Missing or malformed periods keep now.
-    """
-    match = _USAGE_PERIOD.fullmatch(usage_period) if isinstance(usage_period, str) else None
-    if match is None or not 1 <= int(match.group(2)) <= 12:
-        return now
-    start = datetime(int(match.group(1)), int(match.group(2)), 1, tzinfo=timezone.utc)
-    end = (start + timedelta(days=32)).replace(day=1)
-    return end - timedelta(seconds=1) if now >= end else now
 
 
 class ProjectionStore:
@@ -831,6 +814,7 @@ class ProjectionStore:
         coalescing_receipts: list[tuple[str, str]] = []
         notes_wakes = []
         sealed_proofs: list[str] = []
+        native_manual_wakes: list[tuple[str, int]] = []
         delivered_uploads = []
         completion_upload = {}
         finish_resolution: list[tuple[str, str]] = []
@@ -843,6 +827,7 @@ class ProjectionStore:
             zero_speech = accounting is None
             notes_wakes.clear()
             sealed_proofs.clear()
+            native_manual_wakes.clear()
             delivered_uploads.clear()
             session = self.session(segment_id, binding, now, policy=policy)
             session.prepare(transaction, replay=False)
@@ -884,6 +869,18 @@ class ProjectionStore:
             erased_count = 0
             captured_seconds = 0.0
             terminal_empty_count = 0
+            target = binding.target_conversation_id
+            upload_revision = native_finish.upload_revision(session.job)
+            sealed_at = session.job.get('record_sealed_at')
+            native_manual_candidate = bool(
+                target
+                and binding.native_record
+                and binding.record_origin
+                and not binding.partial_record
+                and upload_revision is not None
+                and sealed_at
+                and session.ledger.get('status') != BATCH_PARTIAL_STATUS
+            )
             silent_count = 0
             for sibling in binding.segment_ids:
                 if zero_speech and sibling == segment_id:
@@ -926,6 +923,10 @@ class ProjectionStore:
                     receipts.append({'state': 'ready', 'conversation_id': None, 'created': False})
                     erased_count += 1
                     continue
+                if native_manual_candidate:
+                    native_manual_candidate = native_finish.unit_matches(
+                        job, entry, binding, sibling, upload_revision, sealed_at
+                    )
                 if entry.get('result', {}).get('outcome') in EMPTY_OUTCOMES:
                     silent_count += 1
                 if entry.get('result', {}).get('outcome') == 'no_recoverable_speech':
@@ -945,6 +946,11 @@ class ProjectionStore:
             # This is a job-wide decision after collecting every sibling/part.
             # A no-text receipt must suppress IDs from parts assigned earlier.
             source_deleted = any(receipt.get('disposition') == 'source_deleted' for receipt in receipts)
+            native_manual_candidate = (
+                native_manual_candidate
+                and not (source_deleted or erased_count or terminal_empty_count)
+                and native_finish.receipts_match(target, receipts)
+            )
             conversation_rows = {}
             new, updated = (
                 ([], []) if zero_speech else self._visible(transaction, binding, receipts, rows_out=conversation_rows)
@@ -1179,6 +1185,25 @@ class ProjectionStore:
                             notes_wakes.append((outbox, row_id, token))
                 for ref, data in writes:
                     transaction.set(ref, data)
+            if (
+                native_manual_candidate
+                and target
+                and upload_revision is not None
+                and set(new + updated) == {target}
+                and seconds > 0
+            ):
+                ready_patch = native_finish.ready_patch(
+                    conversation_rows.get(target) or {}, upload_revision, sealed_at, now
+                )
+                if ready_patch:
+                    ready_ref = (
+                        self.client.collection('users')
+                        .document(binding.owner_id)
+                        .collection('conversations')
+                        .document(target)
+                    )
+                    transaction.update(ready_ref, ready_patch)
+                    native_manual_wakes.append((target, upload_revision))
             if finish_update and recording_ref is not None:
                 transaction.update(recording_ref, finish_update)
                 finish_resolution.append((recording_ref.id, finish_outcome))
@@ -1243,6 +1268,11 @@ class ProjectionStore:
         if changed:
             # Before any notes wake: the woken callback's seal proof reads this stage.
             self._observe_transcription(binding, now, completion_accounting, result)
+        if changed and native_manual_wakes:
+            from utils.conversations.v3.triggers import wake_native_manual_ready
+
+            for cid, revision in native_manual_wakes:
+                wake_native_manual_ready(binding.owner_id, cid, revision)
         for _ in sealed_proofs:
             capture_end.record_proof('sealed')  # Once per committed proof, never per retry.
         for outbox, row_id, token in notes_wakes:
@@ -1261,7 +1291,8 @@ class ProjectionStore:
         window_id = row.get(FINISH_WINDOW_FIELD)
         upload_revision = session.job.get('record_input_upload_revision')
         if (
-            not (window_id or row.get(FINISH_RECORDING_FIELD))
+            (not silent and row.get(native_finish.NATIVE_MANUAL_STOP))
+            or not (window_id or row.get(FINISH_RECORDING_FIELD))
             or not row.get('v3_manual_end_requested')
             or row.get('v3_manual_end')
             or any(row.get(k) for k in ('record_audio_partial', 'record_upload_failed', 'is_locked'))
@@ -1520,46 +1551,6 @@ class ProjectionStore:
         if changed:
             logger.info('event=batch_held_partial outcome=completed held=%d', outcome[0]['held_segments'])
         return outcome
-
-
-def charge_chain(ledger: dict) -> tuple[list[float], list[float | None]]:
-    """A partial ledger's charge boundaries (from 0.0) and each step's commit time.
-
-    A step without a recorded time (an unknown age) is never re-issued: its
-    fair-use once-key may already have expired.
-    """
-    steps = ledger.get('usage_steps')
-    if not (isinstance(steps, list) and steps and steps[0] == 0.0):
-        committed = ledger.get('usage_committed_seconds', 0.0)
-        steps = [0.0, committed] if committed else [0.0]
-    times = ledger.get('usage_step_times')
-    if not (isinstance(times, list) and len(times) == len(steps) - 1):
-        times = [None] * (len(steps) - 1)
-    return list(steps), list(times)
-
-
-def extend_chain(steps, times, seconds: float, now: float) -> tuple[list[float], list[float | None]]:
-    if seconds > steps[-1]:
-        return [*steps, seconds], [*times, now]
-    return list(steps), list(times)
-
-
-def assignment_held_without_recovery(job: dict, entry: dict) -> bool:
-    """An assignment-quarantined unit that nothing automatic will change.
-
-    The quarantined receipt is replay-fenced and the job is recovery-held: no
-    sweep reassigns the row and no worker redrive is pending. Only a reviewed
-    operator redrive (for example after a discarded record is restored) can
-    move it; until then its committed result and encrypted audio stay put.
-    """
-    if (entry.get('projection') or {}).get('state') != 'quarantined':
-        return False
-    if job.get('recovery_state') != 'held':
-        return False
-    return not any(
-        isinstance(job.get(key), dict) and job[key].get('state') not in {'completed', 'failed_held'}
-        for key in OPERATOR_INTENTS
-    )
 
 
 class _ClientTransaction:

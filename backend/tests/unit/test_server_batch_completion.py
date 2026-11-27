@@ -93,6 +93,37 @@ def test_atomic_terminal_preserves_relevance_and_replay_does_not_repeat_delta(mo
     assert not db.transactions[-1].has_written
 
 
+@pytest.mark.parametrize(
+    'recording,trigger,manual',
+    [
+        (True, 'client_finalize', True),
+        (True, 'capture_end', False),
+        (True, None, False),
+        (False, 'client_finalize', False),
+    ],
+)
+def test_zero_preview_terminal_preserves_explicit_v3_end_as_inert_provenance(recording, trigger, manual):
+    row = {**capture(), 'recording': recording, 'finished_at': NOW, 'record_audio_closed': True}
+    leased = {**job(), 'force_process': True}
+    if trigger is not None:
+        leased['processing_trigger'] = trigger
+    db = StrictFirestore({ROW: row, JOB_ROW: leased})
+
+    from config.record_audio import require_record_audio_barrier
+
+    with pytest.raises(ValueError, match='barrier not closed'):
+        require_record_audio_barrier(db.rows[ROW])
+    assert complete(db, row) == 'completed'
+    assert require_record_audio_barrier(db.rows[ROW])['finished_at'] == NOW
+    assert db.rows[ROW].get('v3_native_manual_stop') == (
+        {'job_id': JOB, 'revision': 3, 'finished_at': NOW} if manual else None
+    )
+    assert 'v3_manual_end' not in db.rows[ROW]
+    assert 'v3_pending' not in db.rows[ROW]
+    assert complete(db, row) == 'completed'
+    assert not db.transactions[-1].has_written
+
+
 def test_terminal_stamps_relevance_from_current_snapshot():
     db = StrictFirestore({ROW: capture(), JOB_ROW: job()})
     assert complete(db) == 'completed'
@@ -230,6 +261,73 @@ def test_failed_transaction_publishes_no_effects(monkeypatch, failure):
     effects.assert_not_called()
 
 
+def test_full_native_manual_promotion_is_bound_to_raw_receipts_and_the_current_seal():
+    from database import batch_pipeline_native_finish as native_finish
+
+    row = {
+        **capture(),
+        'status': 'completed',
+        'recording': True,
+        'finished_at': NOW,
+        'record_audio_closed': True,
+        'record_upload_revision': 7,
+        'record_sealed_at': NOW.timestamp(),
+        'record_projection_revision': 2,
+        'v3_native_manual_stop': {'job_id': JOB, 'revision': 3, 'finished_at': NOW},
+    }
+    receipt = {'state': 'ready', 'conversation_id': CID}
+    assert native_finish.receipts_match(CID, [receipt, receipt])
+    for change in (
+        {'conversation_id': 'redirected'},
+        {'state': 'persisted'},
+        {'state': 'quarantined'},
+        {'disposition': 'superseded'},
+        {'privacy_reason': 'conversation_deleted'},
+        {'size_rollover_outputs': [{'conversation_id': CID}]},
+    ):
+        assert not native_finish.receipts_match(CID, [receipt, {**receipt, **change}])
+
+    ready = native_finish.ready_patch(row, 7, NOW.timestamp(), NOW.timestamp())
+    assert ready == {
+        'v3_manual_end': True,
+        'v3_native_manual_ready_revision': 7,
+        'v3_native_manual_ready_proof': {'seal': NOW.timestamp(), 'intent': row['v3_native_manual_stop']},
+        'v3_pending': True,
+        'v3_pending_since': NOW,
+    }
+    for change in (
+        ready,
+        {'deleted': True},
+        {'sync_merged_into': 'another'},
+        {'data_protection_level': 'private'},
+        {'uses_custom_stt': True},
+        {'record_upload_revision': 8},
+        {'record_sealed_at': NOW.timestamp() + 1},
+        {'record_upload_sessions': {'pending': True}},
+        {'record_audio_partial': {'generation': 1}},
+        {'record_upload_failed': True},
+        {'finished_at': NOW + timedelta(seconds=1)},
+        {'finalization_revision': 4},
+        {'v3_native_manual_stop': None},
+    ):
+        assert native_finish.ready_patch({**row, **change}, 7, NOW.timestamp(), NOW.timestamp()) is None
+
+
+def test_native_manual_upload_proof_uses_admission_fields_not_current_row():
+    from database import batch_pipeline_native_finish as native_finish
+
+    assert native_finish.upload_revision({'v3_native_manual_input_revision': 7}) == 7
+    assert native_finish.upload_revision({'record_input_upload_revision': 7}) is None
+    assert (
+        native_finish.upload_revision({'v3_native_manual_input_revision': 1, 'record_input_upload_revision': True})
+        is None
+    )
+    assert native_finish.upload_revision({'record_upload_revision': 7}) is None
+    assert (
+        native_finish.upload_revision({'record_input_upload_revision': 7, 'v3_native_manual_input_revision': 8}) is None
+    )
+
+
 def _v3_finish(trigger, **row):
     db = StrictFirestore(
         {ROW: {**capture(), 'recording': True, **row}, JOB_ROW: {**job(), 'processing_trigger': trigger}}
@@ -276,6 +374,15 @@ def test_manual_end_kill_switch(monkeypatch):
         # The cut is materialised from finished_at; without it the marker would be inert.
         ({'recording': True, 'v3_manual_end_requested': True}, False),
         ({'recording': True, 'finished_at': NOW}, False),
+        (
+            {
+                'recording': True,
+                'v3_manual_end_requested': True,
+                'finished_at': NOW,
+                'v3_native_manual_stop': {'job_id': JOB, 'revision': 3, 'finished_at': NOW},
+            },
+            False,
+        ),
         ({'recording': True, 'v3_manual_end_requested': True, 'finished_at': NOW, 'v3_manual_end': True}, False),
         ({'recording': True, 'v3_manual_end_requested': True, 'finished_at': NOW, 'deleted': True}, False),
         ({'recording': True, 'v3_manual_end_requested': True, 'finished_at': NOW, 'discarded': True}, False),
