@@ -1748,3 +1748,114 @@ def test_manual_segment_is_untouched_and_the_rest_keeps_resolved(lane, monkeypat
     # The receipt reserves the owner (joint naming), so the final voice is no_match; it still reuses voice 7.
     assert other.speaker_id == 7 and other.speaker_identity_status == 'no_match'
     assert lane.conversation.speaker_resolution.status == 'resolved'
+
+
+# ---- mixed segments split at the voice change (BATCH_FINAL_PASS_SPLIT_MIXED_SEGMENTS_ENABLED) --------------------
+
+from utils.conversations import final_pass_split as splitting  # noqa: E402
+
+SIX = 'one two three four five six.'
+
+
+def _six_words(lane):
+    """Each unit says six one-second words; stored offsets stay unrelated to the audio clock."""
+    lane.payload['words'] = [
+        {'word': word, 'timestamp': [i * 1.2 + 0.1, i * 1.2 + 1.0]} for i, word in enumerate(SIX.split())
+    ]
+    segments = [s for item in lane.items.values() for s in projection_segments(item, lane.binding, lane.payload)]
+    for i, segment in enumerate(segments):
+        segment.start, segment.end = 900 + i * 8, 906 + i * 8
+    lane.conversation.transcript_segments = segments
+    return segments
+
+
+def test_a_segment_with_two_voices_splits_at_the_voice_change(lane, monkeypatch, results):
+    original = _six_words(lane)
+    _turns(monkeypatch, (0, 3.65, 'A'), (3.65, 16, 'B'))  # unit-a: three owner words, then the other voice
+    first, second, third = resolve(lane)
+    assert results[-1]['outcome'] == 'success' and results[-1]['split_segments'] == 1
+    assert first.id == original[0].id and second.id == splitting.split_segment_id(original[0].id, 1)
+    assert (first.text, second.text, third.text) == ('One two three', 'four five six.', 'One two three four five six.')
+    assert (first.start, first.end, second.start, second.end) == (900, pytest.approx(903.6), pytest.approx(903.6), 906)
+    assert first.is_user and not second.is_user and not third.is_user
+    assert first.speaker_id != second.speaker_id == third.speaker_id
+    assert lane.conversation.speaker_resolution.status == 'resolved'
+
+
+def test_a_later_pass_reads_the_pieces_back(lane, monkeypatch, results):
+    _six_words(lane)
+    _turns(monkeypatch, (0, 3.65, 'A'), (3.65, 16, 'B'))
+    before = [(s.id, s.text, s.start, s.end) for s in resolve(lane)]
+    after = resolve(lane)
+    assert results[-1]['outcome'] == 'success', results[-1]
+    assert results[-1]['split_segments'] == 0 and results[-1]['coverage']['unplaced'] == 0
+    assert [(s.id, s.text, s.start, s.end) for s in after] == before
+    assert after[0].is_user and not after[1].is_user
+
+
+def test_kill_switch_restores_whole_segment_relabeling(lane, monkeypatch, results):
+    monkeypatch.setenv('BATCH_FINAL_PASS_SPLIT_MIXED_SEGMENTS_ENABLED', 'false')
+    original = _six_words(lane)
+    _turns(monkeypatch, (0, 3.65, 'A'), (3.65, 16, 'B'))
+    segments = resolve(lane)
+    assert results[-1]['outcome'] == 'failed_unassigned_words'
+    assert [s.id for s in segments] == [s.id for s in original]
+
+
+def test_a_one_word_reply_is_its_own_piece(lane, monkeypatch, results):
+    original = _six_words(lane)
+    _turns(monkeypatch, (0, 1.05, 'B'), (1.05, 16, 'A'))  # the other voice says one word first
+    first, second, third = resolve(lane)
+    assert results[-1]['outcome'] == 'success' and results[-1]['split_segments'] == 1
+    assert (first.text, second.text) == ('One', 'two three four five six.')
+    assert (
+        not first.is_user
+        and second.is_user
+        and third.is_user
+        and second.id == splitting.split_segment_id(original[0].id, 1)
+    )
+
+
+def test_runs_beyond_the_piece_cap_keep_the_segment_whole(lane, monkeypatch, results):
+    monkeypatch.setattr(splitting, 'MAX_PIECES', 2)
+    original = _six_words(lane)
+    _turns(monkeypatch, (0, 1.05, 'A'), (1.05, 2.35, 'B'), (2.35, 16, 'A'))
+    segments = resolve(lane)
+    assert results[-1]['split_refusals'] == {'too_many_voices': 1}
+    assert [s.id for s in segments] == [s.id for s in original]
+
+
+def test_manual_and_translated_segments_never_split(lane, monkeypatch, results):
+    from models.transcript_segment import Translation
+
+    original = _six_words(lane)
+    lane.receipts['segments'] = {
+        original[0].id: {'is_user': True, 'person_id': None, 'source': 'manual', 'generation': 1}
+    }
+    original[1].translations = [Translation(lang='de', text='eins zwei drei vier fünf sechs.')]
+    _turns(monkeypatch, (0, 3.65, 'A'), (3.65, 11.25, 'B'), (11.25, 16, 'A'))
+    segments = resolve(lane)
+    assert results[-1]['split_segments'] == 0
+    assert results[-1]['split_refusals'] == {'manual': 1, 'translated': 1}
+    assert [s.id for s in segments] == [s.id for s in original]
+
+
+def test_plan_runs_fills_gaps_and_absorbs_short_runs(monkeypatch):
+    monkeypatch.setattr(splitting, 'MIN_RUN_WORDS', 3)
+    word = lambda voice, start, end=None: {'speaker': voice, 'timestamp': [start, end or start + 0.9]}  # noqa: E731
+    words = [word(None, 0), word('A', 1), word('A', 2), word('A', 3), word('B', 4), word('B', 5), word('B', 6)]
+    assert [(r.voice, r.first, r.last) for r in splitting.plan_runs(words)] == [('A', 0, 3), ('B', 4, 6)]
+    brief = [word('A', 0), word('A', 1), word('A', 2), word('B', 3), word('A', 4), word('A', 5)]
+    assert [(r.voice, r.first, r.last) for r in splitting.plan_runs(brief)] == [('A', 0, 5)]
+    assert splitting.plan_runs([word(None, 0)]) is None
+
+
+def test_words_that_do_not_spell_the_text_never_split():
+    from models.transcript_segment import TranscriptSegment
+
+    segment = TranscriptSegment(id='s', text='one two three four five six', start=0, end=6, is_user=False)
+    words = [
+        {'text': t, 'speaker': v, 'timestamp': [i, i + 0.9]}
+        for i, (t, v) in enumerate(zip('a b c d e f'.split(), 'AAABBB'))
+    ]
+    assert splitting.split_segment(segment, words, splitting.plan_runs(words)) is None

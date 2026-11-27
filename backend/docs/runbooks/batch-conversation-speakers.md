@@ -120,9 +120,22 @@ updates; unplaced segments keep their labels. This reports `partial_coverage`,
 includes `coverage` and `coverage_reasons`, leaves conversation-wide speaker
 resolution unavailable (unless the resolved-voice mapping below applies), and
 performs no recurring learning. No reconstructable
-words means no updates. Mixed-speaker segments and diarizer gap words also abstain
-individually, with `failed_unassigned_words` if any remain; covered segments may
-already have changed, and recurring learning is suppressed.
+words means no updates. A segment whose words the pass gives to two to eight voices
+splits at each voice change (`utils/conversations/final_pass_split.py`): the first
+piece keeps the segment id and later pieces take `uuid5('<id>:split:<k>')`, so
+references to the segment still resolve and a later pass reads the pieces back
+(their text must spell the projection segment). Words in a diarizer gap join the
+neighbouring voice while they are at most a quarter of the segment's words.
+Manual, corrected (`original_text`) and translated segments, already-split pieces,
+segments of more than eight runs, and segments whose words do not spell their text
+never split; they and segments mostly in a gap abstain, with
+`failed_unassigned_words` if any remain; covered segments may already have changed,
+and recurring learning is suppressed. The result carries `split_segments` and
+`split_refusals`, logged as `batch_final_pass_split`. The conversations-v3 planner
+recognises a split segment as published (its pieces span the original timing), so a
+replan does not re-add it. Kill switch: `BATCH_FINAL_PASS_SPLIT_MIXED_SEGMENTS_ENABLED=false`
+(default on, read per call) stops new splits; already-split pieces then read back as
+text mismatches and abstain.
 
 A partial pass on a conversation the resolver already marked `resolved` keeps it
 resolved. Each final-pass voice maps to the resolver voice holding more than half of

@@ -24,6 +24,7 @@ from datetime import datetime, timezone
 from config.batch_conversation_speakers import (
     append_conflicting_units_enabled,
     keep_resolved_on_partial_enabled,
+    split_mixed_segments_enabled,
     v3_sources_enabled,
     BATCH_CONVERSATION_SCOPE,
     batch_unit_scope,
@@ -45,6 +46,7 @@ from utils.batch_pipeline.projection_parts import split_result, bounded_projecti
 from utils.batch_pipeline.projection_segments import projection_segments
 from utils.conversations.final_pass_assignment import assign_words
 from utils.conversations.final_pass_errors import error_details
+from utils.conversations import final_pass_split as splitting
 from utils.conversations.final_pass_dependencies import transient_cause
 from utils.conversations.final_pass_pyannote import run_final_pass, OUTCOMES, OWNER_DELTA
 from utils.manual_speaker_assignments import manual_owner_reserved
@@ -155,6 +157,8 @@ class FinalPassResult(TypedDict, total=False):
     speaker_count: int
     covered_segments: int
     partial_resolution: str
+    split_segments: int
+    split_refusals: dict[str, int]
 
 
 def record_final_pass_failure(outcome: str, **details) -> FinalPassResult:
@@ -506,8 +510,32 @@ def decode_unit_evidence(
                 for s in conversation.transcript_segments
                 if (scope := batch_unit_scope(s)) and scope.removeprefix('final:batch:') == unit
             }
+            # A segment an earlier pass split is a run of stored pieces (the first keeps the projection id): its
+            # words move to the pieces by token position, and the pieces must spell the projection text exactly.
+            pieces_of = {}
+            if split_mixed_segments_enabled():
+                for sid, source in reconstructed.items():
+                    chain = splitting.expand_split(sid, stored)
+                    if len(chain) < 2:
+                        continue
+                    pieces_of.update((piece.id, sid) for piece in chain)
+                    mine = [word for word in words if word['segment_id'] == sid]
+                    owners = (
+                        splitting.assign_words_to_pieces(mine, chain)
+                        if source.end > source.start and ' '.join(p.text for p in chain).split() == source.text.split()
+                        else None
+                    )
+                    if owners is None:
+                        diagnostics.update((piece.id, 'projection_text_mismatch') for piece in chain)
+                        continue
+                    for word, owner in zip(mine, owners):
+                        word['segment_id'] = owner
             placed = {word['segment_id'] for word in words}
             for sid, segment in stored.items():
+                if sid in pieces_of:
+                    if sid not in diagnostics and sid not in placed:
+                        diagnostics[sid] = 'projection_unassigned_words'
+                    continue
                 source = reconstructed.get(sid)
                 reason = (
                     'projection_segment_missing'
@@ -736,7 +764,7 @@ def _run(uid, conversation, receipt, load_prints, apply, failure_context: UnitFa
     labels_by_voice = {s.speaker: s for s in passed if s.speaker is not None}
     by_segment = {}
     for word in outcome['assignments']:
-        by_segment.setdefault(word['segment_id'], []).append(word['speaker'])
+        by_segment.setdefault(word['segment_id'], []).append(word)
     original_owner = sum(w['timestamp'][1] - w['timestamp'][0] for w in words if stored[w['segment_id']].is_user)
     final_owner = sum(
         w['timestamp'][1] - w['timestamp'][0]
@@ -749,15 +777,15 @@ def _run(uid, conversation, receipt, load_prints, apply, failure_context: UnitFa
     voice_ids = {}
     segment_voices = {}
     unassigned = False
-    for segment_id, labels in by_segment.items():
-        if None in labels:
-            unassigned = True
-            continue
-        voices = set(labels)
-        if len(voices) != 1:
-            unassigned = True
-            continue
-        voice = voices.pop()
+    splits, origin, word_piece = {}, {}, {}
+    split_refusals = Counts()
+    can_split = split_mixed_segments_enabled()
+    split_members = {piece.id for sid in stored for piece in splitting.expand_split(sid, stored)[1:]} | {
+        sid for sid in stored if splitting.split_segment_id(sid, 1) in stored
+    }
+
+    def assign(segment_id, voice):
+        nonlocal next_id
         segment_voices[segment_id] = voice
         if voice not in voice_ids:
             voice_ids[voice] = next_id
@@ -768,19 +796,61 @@ def _run(uid, conversation, receipt, load_prints, apply, failure_context: UnitFa
         if label.is_user or label.person_id:
             identities[new_id] = Identity(is_user=label.is_user, person_id=label.person_id)
         statuses[new_id] = label.speaker_identity_status
+
+    for segment_id, segment_words in by_segment.items():
+        labels = [word['speaker'] for word in segment_words]
+        if None not in labels and len(set(labels)) == 1:
+            assign(segment_id, labels[0])
+            continue
+        runs = splitting.plan_runs(segment_words) if can_split else None
+        if runs is None:
+            unassigned = True
+            continue
+        if len(runs) == 1:  # a gap or a short aside inside one voice's segment: the voice holding the rest
+            assign(segment_id, runs[0].voice)
+            continue
+        reason = (
+            'too_many_voices'
+            if len(runs) > splitting.MAX_PIECES
+            else 'already_split' if segment_id in split_members else splitting.refusal(stored[segment_id])
+        )
+        pieces = None if reason else splitting.split_segment(stored[segment_id], segment_words, runs)
+        if pieces is None:
+            split_refusals[reason or 'text_mismatch'] += 1
+            unassigned = True
+            continue
+        splits[segment_id] = pieces
+        for piece, run in zip(pieces, runs):
+            origin[piece.id] = segment_id
+            assign(piece.id, run.voice)
+            for word in segment_words[run.first : run.last + 1]:
+                word_piece[id(word)] = piece.id
     # Apply atomically after reference revalidation. Manual segments keep their groups.
     updates = {
         sid: value
         for sid, value in updates.items()
-        if any(s.id == sid and s.speaker_label_source != 'manual' for s in conversation.transcript_segments)
+        if (segment := stored.get(origin.get(sid, sid))) is not None and segment.speaker_label_source != 'manual'
     }
+    split_details = {'split_segments': len(splits), 'split_refusals': dict(split_refusals)}
+    if splits or split_refusals:
+        logger.info(
+            'event=batch_final_pass_split segments=%d refusals=%s', len(splits), dict(sorted(split_refusals.items()))
+        )
     if not updates:
-        return record_final_pass_failure('failed_unassigned_words' if unassigned else 'skipped_no_changes')
+        return record_final_pass_failure(
+            'failed_unassigned_words' if unassigned else 'skipped_no_changes', **split_details
+        )
     scope = BATCH_CONVERSATION_SCOPE + conversation.id
-    complete = len(updates) == len(conversation.transcript_segments)
+    complete = len(updates) == len(conversation.transcript_segments) + sum(len(p) - 1 for p in splits.values())
 
     def applied(plan):
         copy = conversation.model_copy(deep=True)
+        if splits:
+            copy.transcript_segments = [
+                piece.model_copy(deep=True)
+                for segment in copy.transcript_segments
+                for piece in (splits.get(segment.id) or [segment])
+            ]
         apply(copy, *plan, owner_voiceprint_available=bool(cache and 'user' in cache), scope=scope)
         return copy
 
@@ -874,7 +944,7 @@ def _run(uid, conversation, receipt, load_prints, apply, failure_context: UnitFa
     projected = {s.id: s for s in candidate.transcript_segments}
     speech_mix = dict(owner=0.0, person=0.0, recurring=0.0, unnamed=0.0)
     for word in outcome['assignments']:
-        segment = projected.get(word['segment_id'])
+        segment = projected.get(word_piece.get(id(word), word['segment_id']))
         if segment is not None:
             kind = (
                 'owner'
@@ -899,6 +969,7 @@ def _run(uid, conversation, receipt, load_prints, apply, failure_context: UnitFa
     if unassigned:
         return record_final_pass_failure(
             'failed_unassigned_words',
+            **split_details,
             changed_segments=len(updates),
             speaker_count=len(voice_ids),
             coverage=coverage,
@@ -909,6 +980,7 @@ def _run(uid, conversation, receipt, load_prints, apply, failure_context: UnitFa
         return record_final_pass_failure(
             'partial_coverage',
             reason='projection_coverage_partial',
+            **split_details,
             coverage=coverage,
             coverage_reasons=coverage_reasons,
             changed_segments=len(updates),
@@ -924,6 +996,7 @@ def _run(uid, conversation, receipt, load_prints, apply, failure_context: UnitFa
         'changed_segments': len(updates),
         'speaker_count': len(voice_ids),
         'covered_segments': len(covered),
+        **split_details,
     }
     if partial_resolution is not None:
         # Complete coverage with manual or other-lane segments left alone.
