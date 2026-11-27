@@ -41,6 +41,27 @@ def test_typescript_operation_response_map_is_generated():
     assert '"200": GoalSuggestionResponse;' in generated
 
 
+def test_generators_repeat_exploded_query_array_values():
+    from scripts import generate_swift_openapi_types
+
+    spec = json.loads(SPEC_PATH.read_text(encoding='utf-8'))
+    route = '/v1/conversations/{conversation_id}/reprocess'
+    operation = spec['paths'][route]['post']
+    param = next(item for item in operation['parameters'] if item['name'] == 'app_ids')
+    assert param['style'] == 'form'
+    assert param['explode'] is True
+    spec['paths'] = {route: {'post': operation}}
+
+    ts = generate_ts_openapi_types.generate_client_methods(spec)
+    assert 'app_ids?: Array<string> | null' in ts
+    assert '["app_ids"].includes(k) && Array.isArray(v) ? v : [v]' in ts
+    assert '.map(item => `${k}=${encodeURIComponent(String(item))}`)' in ts
+
+    swift = generate_swift_openapi_types.generate_swift_client_methods(spec)
+    assert 'appIds: [String]? = nil' in swift
+    assert 'queryItems.append(contentsOf: appIds.map { URLQueryItem(name: "app_ids", value: String($0)) })' in swift
+
+
 def test_typescript_generator_emits_required_operation_headers():
     spec = {
         'components': {'schemas': {}},

@@ -17,6 +17,7 @@ from database import processing_attention as attention_db
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_staging import artifact_id
 from routers import conversations as conversations_router
+from routers import developer as developer_router
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.batch_pipeline import live
 from utils.batch_pipeline.record_seal_repair import seal_refusal
@@ -76,6 +77,40 @@ def test_restored_sealed_capture_registers_exactly_once_even_after_terminal_fenc
         'status': 'completed',
         'fanout_status': 'fenced',
     }
+
+
+@pytest.mark.parametrize('registration_refused', [False, True])
+def test_developer_patch_restore_registers_before_changing_metadata(restore_store, monkeypatch, registration_refused):
+    row = restore_store.rows[ROW_PATH]
+    row['private_cloud_sync_enabled'] = not registration_refused
+    before = deepcopy(row)
+    request = developer_router.UpdateConversationRequest(discarded=False, title='Restored title')
+    monkeypatch.setattr(developer_router, 'populate_folder_names', lambda *_: None)
+
+    if registration_refused:
+        with pytest.raises(lifecycle.RestoredRecordingRegistrationUnavailable, match='retry restore'):
+            developer_router.update_conversation_endpoint(CID, request, UID)
+        assert restore_store.rows[ROW_PATH] == before
+        assert JOB_PATH not in restore_store.rows
+    else:
+        result = developer_router.update_conversation_endpoint(CID, request, UID)
+        assert result['discarded'] is False
+        assert restore_store.rows[JOB_PATH]['state'] == 'record_pending'
+        assert restore_store.rows[JOB_PATH]['conversation_id'] == CID
+
+
+def test_developer_patch_rename_clears_summary_delivery(restore_store, monkeypatch):
+    restore_store.rows[ROW_PATH].update(
+        {'discarded': False, 'structured': {'title': 'Original'}, 'summary_due_at': datetime.now(timezone.utc)}
+    )
+    monkeypatch.setattr(developer_router, 'populate_folder_names', lambda *_: None)
+    request = developer_router.UpdateConversationRequest(title='New title')
+
+    result = developer_router.update_conversation_endpoint(CID, request, UID)
+
+    assert result['structured']['title'] == 'New title'
+    assert restore_store.rows[ROW_PATH]['user_title'] == 'New title'
+    assert restore_store.rows[ROW_PATH]['summary_due_at'] is None
 
 
 @pytest.mark.parametrize('privacy_scope', ['user', 'row'])

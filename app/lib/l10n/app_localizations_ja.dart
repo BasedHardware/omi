@@ -15608,4 +15608,9 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get firmwareSyncRecordingsFirstMessage => '一部の録音はまだデバイスに残っています。スマートフォンへの同期が完了してから、更新を開始してください。';
+
+  @override
+  String summaryTemplateSelectionLimit(int count) {
+    return '要約テンプレートは最大$count件まで選択できます。';
+  }
 }

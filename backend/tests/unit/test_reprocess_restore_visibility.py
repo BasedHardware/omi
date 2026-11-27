@@ -5,6 +5,7 @@ the external model and app boundaries are controlled.
 """
 
 from copy import deepcopy
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -18,12 +19,15 @@ from database import conversations as conversations_db
 from database import dream_dirty
 from database import processing_attention as attention_db
 from models.structured import Structured
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreSnapshot
 from tests.unit.test_restore_recording_obligation import CID, JOB_PATH, ROW_PATH, UID, restore_store  # noqa: F401
 from utils import apps as utils_apps
 from utils.batch_pipeline import live
 from utils.conversations import process_conversation as processor
 
 APP_ID = 'summary-app'
+# A user reprocess fences on the row's committed revision, which a real snapshot reports as update_time.
+REVISION = datetime(2026, 11, 6, tzinfo=timezone.utc)
 
 
 @pytest.fixture
@@ -42,8 +46,11 @@ def reprocess(restore_store, monkeypatch):
             'photos': [],
         }
     )
+    monkeypatch.setattr(StrictFirestoreSnapshot, 'update_time', REVISION, raising=False)
     monkeypatch.setattr(
-        conv_router, '_get_valid_conversation_by_id', lambda uid, cid: deepcopy(restore_store.rows[ROW_PATH])
+        conv_router,
+        '_get_valid_conversation_by_id',
+        lambda uid, cid: {**deepcopy(restore_store.rows[ROW_PATH]), 'updated_at': REVISION},
     )
     monkeypatch.setattr(conv_router, 'schedule_reprocessed_learning', lambda uid, processed, *a, **k: processed)
     monkeypatch.setattr(

@@ -15947,4 +15947,9 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Μερικές ηχογραφήσεις βρίσκονται ακόμη στη συσκευή σας. Περιμένετε να ολοκληρωθεί ο συγχρονισμός τους στο τηλέφωνό σας και, στη συνέχεια, ξεκινήστε την ενημέρωση.';
+
+  @override
+  String summaryTemplateSelectionLimit(int count) {
+    return 'Μπορείς να επιλέξεις έως $count πρότυπα σύνοψης.';
+  }
 }

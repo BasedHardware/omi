@@ -4768,5 +4768,6 @@
     "playStripePlanPaused": "你的 {plan} 方案已暂停。",
     "firmwareNewestSupportedForDevice": "您的设备已处于所支持的最新固件版本",
     "firmwareSyncRecordingsFirstTitle": "请先同步录音",
-    "firmwareSyncRecordingsFirstMessage": "部分录音仍存储在您的设备上。请等待它们同步到手机完成后，再开始更新。"
+    "firmwareSyncRecordingsFirstMessage": "部分录音仍存储在您的设备上。请等待它们同步到手机完成后，再开始更新。",
+    "summaryTemplateSelectionLimit": "最多可选择 {count} 个摘要模板。"
 }

@@ -15854,4 +15854,9 @@ class AppLocalizationsUr extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'کچھ ریکارڈنگز ابھی آپ کے ڈیوائس پر ہیں۔ انہیں فون پر سنک ہونے دیں، پھر اپڈیٹ شروع کریں۔';
+
+  @override
+  String summaryTemplateSelectionLimit(int count) {
+    return 'آپ خلاصے کے لیے زیادہ سے زیادہ $count ٹیمپلیٹس منتخب کر سکتے ہیں۔';
+  }
 }

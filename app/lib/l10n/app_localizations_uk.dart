@@ -15875,4 +15875,9 @@ class AppLocalizationsUk extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Деякі записи ще зберігаються на вашому пристрої. Дочекайтеся завершення синхронізації з телефоном, а потім почніть оновлення.';
+
+  @override
+  String summaryTemplateSelectionLimit(int count) {
+    return 'Можна вибрати щонайбільше $count шаблонів підсумку.';
+  }
 }

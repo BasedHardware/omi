@@ -15880,4 +15880,9 @@ class AppLocalizationsMs extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Sebahagian rakaman masih berada pada peranti anda. Biarkan ia selesai disegerakkan ke telefon anda, kemudian mulakan kemas kini.';
+
+  @override
+  String summaryTemplateSelectionLimit(int count) {
+    return 'Anda boleh memilih sehingga $count templat ringkasan.';
+  }
 }

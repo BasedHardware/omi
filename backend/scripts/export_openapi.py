@@ -1090,6 +1090,12 @@ def build_openapi(app, surface: str) -> dict[str, Any]:
     _normalize_component_names(schema)
     if surface == 'app-client':
         _publish_negotiated_plan_identity(schema)
+        # FastAPI parses this list from repeated keys. Declare the wire format
+        # explicitly so client generation does not coerce the array to CSV.
+        reprocess = schema['paths'].get('/v1/conversations/{conversation_id}/reprocess', {}).get('post', {})
+        for parameter in reprocess.get('parameters', []):
+            if parameter['in'] == 'query' and parameter['name'] == 'app_ids':
+                parameter.update(style='form', explode=True)
     validate_contract(app, schema, surface)
     return schema
 

@@ -4768,5 +4768,6 @@
     "playStripePlanPaused": "Ваш план {plan} призупинено.",
     "firmwareNewestSupportedForDevice": "Ваш пристрій уже працює на найновішій підтримуваній версії прошивки",
     "firmwareSyncRecordingsFirstTitle": "Спочатку синхронізуйте свої записи",
-    "firmwareSyncRecordingsFirstMessage": "Деякі записи ще зберігаються на вашому пристрої. Дочекайтеся завершення синхронізації з телефоном, а потім почніть оновлення."
+    "firmwareSyncRecordingsFirstMessage": "Деякі записи ще зберігаються на вашому пристрої. Дочекайтеся завершення синхронізації з телефоном, а потім почніть оновлення.",
+    "summaryTemplateSelectionLimit": "Можна вибрати щонайбільше {count} шаблонів підсумку."
 }

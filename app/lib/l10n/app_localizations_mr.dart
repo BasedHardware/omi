@@ -15850,4 +15850,9 @@ class AppLocalizationsMr extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'काही रेकॉर्डिंग अजून तुमच्या डिव्हाइसवर आहेत. त्या तुमच्या फोनवर पूर्णपणे सिंक होऊ द्या, नंतर अपडेट सुरू करा.';
+
+  @override
+  String summaryTemplateSelectionLimit(int count) {
+    return 'तुम्ही जास्तीत जास्त $count सारांश साचे निवडू शकता.';
+  }
 }

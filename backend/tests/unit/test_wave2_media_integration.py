@@ -87,6 +87,9 @@ def test_classification_persists_minimum_and_restore_clears_marker(monkeypatch, 
     monkeypatch.setattr(pc, 'notes_agent_inputs', lambda *a: {})
     monkeypatch.setattr(llm_input_dedupe, 'notes', lambda *a, **k: pc.Structured(title='Restored', overview='w0 w1 w2'))
     conversation.sync_relevance = 'review'
+    # A user reprocess answers with the stored row; the captured persists never reach a store.
+    monkeypatch.setattr(pc, '_current_user_reprocess_conversation', lambda *_: {})
+    monkeypatch.setattr(pc, 'deserialize_conversation', lambda _row: conversation)
     if post_persist_failure:
         monkeypatch.setattr(pc, 'record_final', MagicMock(side_effect=RuntimeError('controlled post-persist failure')))
     outcome = (

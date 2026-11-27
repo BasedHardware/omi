@@ -15833,4 +15833,9 @@ class AppLocalizationsDa extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Nogle optagelser er stadig på din enhed. Lad dem blive færdige med at synkronisere til din telefon, og start derefter opdateringen.';
+
+  @override
+  String summaryTemplateSelectionLimit(int count) {
+    return 'Du kan vælge op til $count resuméskabeloner.';
+  }
 }

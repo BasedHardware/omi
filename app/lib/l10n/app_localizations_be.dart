@@ -15877,4 +15877,9 @@ class AppLocalizationsBe extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Некаторыя запісы ўсё яшчэ на вашай прыладзе. Дайце ім завяршыць сінхранізацыю на тэлефон, а потым пачніце абнаўленне.';
+
+  @override
+  String summaryTemplateSelectionLimit(int count) {
+    return 'Можна выбраць не больш за $count шаблонаў рэзюмэ.';
+  }
 }

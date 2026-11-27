@@ -15835,4 +15835,9 @@ class AppLocalizationsFa extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'برخی ضبط‌ها هنوز روی دستگاه شما هستند. اجازه دهید همگام‌سازی آن‌ها به گوشی شما کامل شود، سپس بروزرسانی را شروع کنید.';
+
+  @override
+  String summaryTemplateSelectionLimit(int count) {
+    return 'می‌توانید تا $count الگوی خلاصه انتخاب کنید.';
+  }
 }

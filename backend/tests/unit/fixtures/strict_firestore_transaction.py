@@ -445,6 +445,13 @@ class StrictFirestoreTransaction:
                 value = prior.get('generation', 0)
                 prior['generation'] = (value if type(value) in (int, float) else 0) + data['generation'].value
                 self._database.rows[ref.path] = prior
+            elif data.get('effects_only') is True and isinstance(data.get('version'), Increment):
+                # Lazy effects additionally require merge semantics so concurrent
+                # worker leases survive the app-result transaction.
+                prior = dict(self._database.rows.get(ref.path) or {})
+                prior.update({key: value for key, value in payload.items() if key != 'version'})
+                prior['version'] = prior.get('version', 0) + data['version'].value
+                self._database.rows[ref.path] = prior
             else:
                 raise UnsupportedFirestoreOperationError('unsupported merge set path for the strict Firestore fixture')
         else:

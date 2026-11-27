@@ -15857,4 +15857,9 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Beberapa rekaman masih berada di perangkat Anda. Biarkan rekaman tersebut selesai disinkronkan ke ponsel Anda, lalu mulai pembaruan.';
+
+  @override
+  String summaryTemplateSelectionLimit(int count) {
+    return 'Kamu dapat memilih hingga $count templat ringkasan.';
+  }
 }

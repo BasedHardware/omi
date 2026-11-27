@@ -15852,4 +15852,9 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Bazı kayıtlar hâlâ cihazınızda. Telefonunuza senkronize edilmelerini bekleyin, ardından güncellemeyi başlatın.';
+
+  @override
+  String summaryTemplateSelectionLimit(int count) {
+    return 'En fazla $count özet şablonu seçebilirsiniz.';
+  }
 }

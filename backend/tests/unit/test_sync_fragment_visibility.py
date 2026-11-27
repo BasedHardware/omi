@@ -14,7 +14,11 @@ from unittest.mock import MagicMock
 import pytest
 from utils.conversations.relevance_rules import RULES_VERSION
 from tests.unit.test_sync_donor_tombstone_visibility import _install_listing
-from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreTransaction
+from tests.unit.fixtures.strict_firestore_transaction import (
+    StrictFirestore,
+    StrictFirestoreDocument,
+    StrictFirestoreTransaction,
+)
 
 
 class _MergeCapableTransaction(StrictFirestoreTransaction):
@@ -173,6 +177,7 @@ def test_restore_promotes_legacy_review_and_persists_user_choice(monkeypatch):
                 'discarded': False,
                 'sync_relevance': 'keep',
                 'sync_relevance_user_kept': True,
+                conversations.USER_LIFECYCLE_REVISION_FIELD: 1,
                 'relevance_decision': dict(
                     verdict='keep',
                     decided_by='user',
@@ -244,18 +249,103 @@ def test_stale_processor_result_cannot_rehide_restored_review(monkeypatch):
     assert ref.written['sync_relevance_user_kept'] is True
 
 
-def test_explicit_discard_clears_restore_marker(monkeypatch):
+def test_explicit_discard_clears_restore_marker_and_advances_lifecycle_revision(monkeypatch):
     from database import conversations
 
-    ref = MagicMock()
-    db = MagicMock()
-    db.collection.return_value.document.return_value.collection.return_value.document.return_value = ref
+    row = _review(id='restored', discarded=False, sync_relevance_user_kept=True)
+    db = StrictFirestore({('users', 'u', 'conversations', 'restored'): row})
     monkeypatch.setattr(conversations, 'db', db)
+    monkeypatch.setattr(conversations, 'stop_quiet_check_for_conversation', lambda *args, **kwargs: None)
+    monkeypatch.setattr(conversations, 'invalidate_people_stats_cache', lambda *_: None)
     monkeypatch.setattr(conversations, '_sync_conversation_search_index', lambda *args: None)
 
     conversations.set_conversation_as_discarded('u', 'restored')
 
-    ref.update.assert_called_once_with({'discarded': True, 'sync_relevance_user_kept': False})
+    stored = db.rows[('users', 'u', 'conversations', 'restored')]
+    assert stored['discarded'] is True
+    assert stored['sync_relevance_user_kept'] is False
+    assert stored[conversations.USER_LIFECYCLE_REVISION_FIELD] == 1
+
+
+def test_atomic_user_patch_leaves_combined_fields_unchanged_when_lock_wins(monkeypatch):
+    from database import conversations
+    from utils.conversations import lifecycle
+
+    path = ('users', 'u', 'conversations', 'patch')
+    row = {
+        'id': 'patch',
+        'status': 'completed',
+        'is_locked': False,
+        'discarded': True,
+        'sync_relevance_user_kept': False,
+        conversations.USER_LIFECYCLE_REVISION_FIELD: 3,
+        'structured': {'title': 'Original title'},
+    }
+    db = StrictFirestore({path: row})
+    monkeypatch.setattr(conversations, 'db', db)
+    get = StrictFirestoreDocument.get
+
+    def lock_wins(document, *args, **kwargs):
+        if document.path == path and kwargs.get('transaction') is not None:
+            db.rows[path]['is_locked'] = True
+        return get(document, *args, **kwargs)
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', lock_wins)
+
+    with pytest.raises(lifecycle.ConversationLockedError):
+        lifecycle.apply_user_conversation_patch('u', 'patch', title='Changed title', discarded=False)
+
+    assert db.rows[path]['is_locked'] is True
+    assert db.rows[path]['structured']['title'] == 'Original title'
+    assert db.rows[path]['discarded'] is True
+    assert db.rows[path]['sync_relevance_user_kept'] is False
+    assert db.rows[path][conversations.USER_LIFECYCLE_REVISION_FIELD] == 3
+    assert db.transactions[-1].updates == []
+
+
+@pytest.mark.parametrize(('discarded', 'initial_discarded'), [(True, False), (False, True)])
+def test_atomic_user_patch_commits_title_and_discard_together(monkeypatch, discarded, initial_discarded):
+    from database import conversations
+    from utils.conversations import lifecycle
+
+    path = ('users', 'u', 'conversations', 'patch')
+    row = {
+        'id': 'patch',
+        'status': 'completed',
+        'is_locked': False,
+        'discarded': initial_discarded,
+        'sync_relevance': 'review',
+        'sync_relevance_user_kept': False,
+        conversations.USER_LIFECYCLE_REVISION_FIELD: 4,
+        'structured': {'title': 'Original title'},
+    }
+    db = StrictFirestore({path: row})
+    invalidations = []
+    quiet_stops = []
+    index_syncs = []
+    from database import dream_dirty
+
+    monkeypatch.setattr(dream_dirty, 'notify', lambda *_: None)
+    monkeypatch.setattr(conversations, 'db', db)
+    monkeypatch.setattr(conversations, 'invalidate_people_stats_cache', invalidations.append)
+    monkeypatch.setattr(
+        conversations, 'stop_quiet_check_for_conversation', lambda uid, cid, **_: quiet_stops.append((uid, cid))
+    )
+    monkeypatch.setattr(conversations, '_sync_conversation_search_index', lambda uid, cid: index_syncs.append((uid, cid)))
+
+    assert lifecycle.apply_user_conversation_patch(
+        'u', 'patch', title='Updated title', discarded=discarded
+    ) is True
+
+    stored = db.rows[path]
+    assert stored['structured']['title'] == 'Updated title'
+    assert stored['user_title'] == 'Updated title'
+    assert stored['discarded'] is discarded
+    assert stored[conversations.USER_LIFECYCLE_REVISION_FIELD] == 5
+    assert invalidations == ['u']
+    assert index_syncs == [('u', 'patch')]
+    assert quiet_stops == ([('u', 'patch')] if discarded else [])
+    assert len(db.transactions[0].updates) == 1
 
 
 def test_typesense_indexes_the_stored_flag_only():
@@ -293,6 +383,7 @@ def test_restore_of_any_row_persists_the_user_choice(monkeypatch):
             {
                 'discarded': False,
                 'sync_relevance_user_kept': True,
+                conversations.USER_LIFECYCLE_REVISION_FIELD: 1,
                 'relevance_decision': dict(
                     verdict='keep',
                     decided_by='user',
@@ -333,6 +424,7 @@ def test_restore_of_jev_discard_stamps_the_marker(monkeypatch):
             {
                 'discarded': False,
                 'sync_relevance_user_kept': True,
+                conversations.USER_LIFECYCLE_REVISION_FIELD: 1,
                 'jev_discard_restored': True,
                 'relevance_decision': dict(
                     verdict='keep',

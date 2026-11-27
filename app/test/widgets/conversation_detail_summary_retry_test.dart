@@ -82,7 +82,7 @@ void main() {
     final calls = <String>[];
     final detail = _detail(
       _conversation(),
-      reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false, forceOmi = false}) {
+      reprocess: conversationReprocess((id, {appId, appIds, requireSpeakerReceipt = false, forceOmi = false}) {
         calls.add(id);
         return gate.future;
       }),
@@ -215,7 +215,7 @@ void main() {
     addTearDown(() => SummaryGenerationV2Gate.debugOverride = null);
     var fetched = _conversation(summaryRetryable: false);
     final detail = ConversationDetailProvider(
-      reprocess: (id, {appId, requireSpeakerReceipt = false, forceOmi = false}) async => const ReprocessBusy(),
+      reprocess: (id, {appId, appIds, requireSpeakerReceipt = false, forceOmi = false}) async => const ReprocessBusy(),
       fetchConversation: (_) async => fetched,
     )
       ..selectedDate = conversationLocalDayKey(fetched.createdAt)

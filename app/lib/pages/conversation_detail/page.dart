@@ -871,8 +871,9 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
       case 'rename':
         final controller = provider.titleController;
         provider.titleFocusNode?.requestFocus();
-        if (controller != null)
+        if (controller != null) {
           controller.selection = TextSelection(baseOffset: 0, extentOffset: controller.text.length);
+        }
         break;
       case 'move_to_folder':
         await showConversationFolderSheet(context, provider.conversation, source: 'detail_page_menu');
@@ -1631,6 +1632,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
             final failedId = detailProvider.lastFailedReprocessConversationId;
             if (failedId == null || failedId != detailProvider.conversationOrNull?.id) break;
             final appId = detailProvider.lastFailedReprocessAppId;
+            final appIds = detailProvider.lastFailedReprocessAppIds;
             OmiFeedback.error(
               context,
               context.l10n.errorProcessingConversation,
@@ -1639,7 +1641,11 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
                 if (detailProvider.conversationOrNull?.id == failedId) {
                   // The failure card explaining the retry lives on the Summary tab.
                   _openSummaryTab();
-                  detailProvider.reprocessConversation(appId: appId);
+                  if (appIds.isNotEmpty) {
+                    detailProvider.reprocessConversation(appIds: appIds);
+                  } else {
+                    detailProvider.reprocessConversation(appId: appId);
+                  }
                 }
               },
             );

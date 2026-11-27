@@ -19360,5 +19360,14 @@
     "firmwareSyncRecordingsFirstMessage": "Some recordings are still on your device. Let them finish syncing to your phone, then start the update.",
     "@firmwareSyncRecordingsFirstMessage": {
         "description": "Dialog body explaining that recordings must finish syncing from the pendant to the phone before the firmware update can start."
+    },
+    "summaryTemplateSelectionLimit": "You can select up to {count} summary templates.",
+    "@summaryTemplateSelectionLimit": {
+        "description": "Toast when the user tries to select too many summary templates to run together.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
     }
 }

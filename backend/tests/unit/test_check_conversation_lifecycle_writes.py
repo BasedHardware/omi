@@ -3,6 +3,7 @@
 from scripts.check_conversation_lifecycle_writes import violations
 
 
+
 def test_tripwire_rejects_a_pasted_back_direct_status_write():
     errors = violations(
         "conversations_db.transition_conversation_status(uid, conversation_id, ConversationStatus.processing)\n",
@@ -114,6 +115,24 @@ def test_transcript_inventory_requires_overlay_on_both_processors():
             '    _reapply_current_manual_assignments(uid, conversation_data, current)\n    transaction.set',
         )
         assert not violations(guarded, 'backend/database/conversations.py')
+
+
+def test_result_writer_inventory_requires_current_speaker_receipt_application():
+    for name, policy in (
+        ('persist_user_reprocess_app_results', '_effective_user_reprocess_app_source'),
+        ('persist_template_batch_results', 'apply_manual_assignments'),
+    ):
+        source = (
+            f"def {name}():\n"
+            "    current.get('transcript_segments')\n"
+            "    transaction.update(conversation_ref, {'apps_results': results})\n"
+        )
+        assert 'lacks current receipt policy' in violations(source, 'backend/database/conversations.py')[0]
+        guarded = source.replace(
+            '    transaction.update',
+            f'    {policy}(uid, conversation_id, current, transaction)\n    transaction.update',
+        )
+        assert violations(guarded, 'backend/database/conversations.py') == []
 
 
 def test_stuck_noise_storage_is_callable_only_through_lifecycle():

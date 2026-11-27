@@ -427,6 +427,10 @@ def test_selected_summary_app_bypasses_floor_and_reaches_full_notes(pc, monkeypa
 def test_explicit_app_request_is_passed_from_processing_to_floor_admission(pc, monkeypatch):
     spies = _spy_managed_effects(monkeypatch, pc)
     _stub_completed_for_normal_path(monkeypatch, pc)
+    # A user reprocess commits its app result against the stored row's current snapshot.
+    monkeypatch.setattr(pc.conversations_db, 'get_user_reprocess_app_snapshot', lambda *_: ([], {}, None, 0))
+    monkeypatch.setattr(pc.lifecycle_service, 'commit_user_reprocess_app_results', lambda *_a, **_k: True)
+    monkeypatch.setattr(pc, '_current_user_reprocess_conversation', lambda *_: {})
     pc.process_conversation(
         'synthetic-account', 'en', _omi_create(), app_id='chosen-app', trigger=pc.ProcessingTrigger.USER_REPROCESS
     )

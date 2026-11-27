@@ -93,11 +93,12 @@ void initHeldWireEnv() => Env.init(HomeFixtureEnv());
 /// The detail page's reprocess call through the real [reProcessConversationServer], with the
 /// transport answering [status] and [body]. Records each conversation id in [calls].
 ConversationReprocessCall heldWireReprocess(int status, Object body, {List<String>? calls}) {
-  return (id, {appId, requireSpeakerReceipt = false, forceOmi = false}) {
+  return (id, {appId, appIds, requireSpeakerReceipt = false, forceOmi = false}) {
     calls?.add(id);
     return reProcessConversationServer(
       id,
       appId: appId,
+      appIds: appIds,
       requireSpeakerReceipt: requireSpeakerReceipt,
       forceOmi: forceOmi,
       send: (_) async => heldJsonResponse(status, body),

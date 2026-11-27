@@ -15825,4 +15825,9 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Some recordings are still on your device. Let them finish syncing to your phone, then start the update.';
+
+  @override
+  String summaryTemplateSelectionLimit(int count) {
+    return 'You can select up to $count summary templates.';
+  }
 }

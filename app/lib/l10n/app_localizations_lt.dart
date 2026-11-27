@@ -15867,4 +15867,9 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Kai kurie įrašai dar yra jūsų įrenginyje. Leiskite jiems užbaigti sinchronizavimą į telefoną, tada pradėkite atnaujinimą.';
+
+  @override
+  String summaryTemplateSelectionLimit(int count) {
+    return 'Galite pasirinkti iki $count santraukos šablonų.';
+  }
 }

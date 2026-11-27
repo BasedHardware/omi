@@ -12,6 +12,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from fastapi import HTTPException
 
 from database import conversations as conversations_db
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
@@ -312,15 +313,28 @@ def test_sync_processor_links_only_after_successful_completion(harness, monkeypa
 
     monkeypatch.setattr(processor.conversations_db, 'update_conversation', update_conversation)
 
-    def persist(uid, payload):
+    def persist(uid, payload, **_guard):
         if persisted:
             harness.rows[path(payload['id'], uid)].update(payload)
         return persisted
 
     monkeypatch.setattr(processor.lifecycle_service, 'persist_processed_conversation', persist)
-    processor.process_conversation(
-        UID, 'en', conversation, trigger=processor.ProcessingTrigger.USER_REPROCESS, defer_memory_extraction=True
-    )
+    # A user reprocess commits its app results against the stored row's current snapshot.
+    monkeypatch.setattr(processor.conversations_db, 'get_user_reprocess_app_snapshot', lambda *a: ([], {}, None, 0))
+    monkeypatch.setattr(processor.lifecycle_service, 'commit_user_reprocess_app_results', lambda *a, **kw: True)
+
+    def reprocess():
+        processor.process_conversation(
+            UID, 'en', conversation, trigger=processor.ProcessingTrigger.USER_REPROCESS, defer_memory_extraction=True
+        )
+
+    if persisted:
+        reprocess()
+    else:
+        # A fenced write is a failed reprocess the caller must see, and nothing links.
+        with pytest.raises(HTTPException) as fenced:
+            reprocess()
+        assert fenced.value.status_code == 409
     assert ('duplicate_capture_of' in harness.rows[path('desktop')]['external_data']) is persisted
 
 

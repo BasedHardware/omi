@@ -495,6 +495,12 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
         # so these two land here. Reviewed 2026-09-04 — neither dump can carry
         # `client_processing`, because neither subject is a `Conversation`.
         DumpSite('utils/llm/external_integrations.py', '_basic_daily_summary', 'model_dump'),
+        # User-reprocess app-result and notes-snapshot writes. Reviewed with the multi-template
+        # reprocess: they serialize app results and first-party notes sections for the atomic
+        # commit and its stale-write fence, never the display-only client projection.
+        DumpSite('database/conversations.py', '_persist', 'model_dump'),
+        DumpSite('utils/conversations/process_conversation.py', 'process_conversation', 'dict'),
+        DumpSite('utils/conversations/process_conversation.py', 'process_conversation', 'model_dump'),
         DumpSite('utils/llm/external_integrations.py', 'generate_comprehensive_daily_summary', 'model_dump'),
         DumpSite('models/conversation.py', 'project_shared_conversation', 'model_dump'),
         DumpSite('models/conversation.py', 'as_dict_cleaned_dates', 'model_dump'),

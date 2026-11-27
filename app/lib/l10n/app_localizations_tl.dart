@@ -15969,4 +15969,9 @@ class AppLocalizationsTl extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'May mga recording pa na nasa iyong device. Hayaang matapos munang i-sync ang mga ito sa iyong phone, pagkatapos ay simulan ang pag-update.';
+
+  @override
+  String summaryTemplateSelectionLimit(int count) {
+    return 'Maaari kang pumili ng hanggang $count template ng buod.';
+  }
 }

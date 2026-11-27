@@ -32,6 +32,7 @@ class _FakeDocumentReference:
     def __init__(self, client: '_FakeFirestoreClient', document_id: str):
         self._client = client
         self.id = document_id
+        self.path = f'users/fake-user/conversations/{document_id}'
 
     def get(self, transaction=None) -> _FakeSnapshot:
         # Every reference reads through the shared doc_ref, so tests that patch

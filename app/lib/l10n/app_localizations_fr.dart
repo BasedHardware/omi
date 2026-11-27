@@ -15974,4 +15974,9 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Certains enregistrements sont encore sur votre appareil. Laissez-les terminer leur synchronisation vers votre téléphone, puis lancez la mise à jour.';
+
+  @override
+  String summaryTemplateSelectionLimit(int count) {
+    return 'Vous pouvez sélectionner jusqu’à $count modèles de résumé.';
+  }
 }

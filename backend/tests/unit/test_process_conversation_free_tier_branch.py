@@ -17,7 +17,7 @@ from types import ModuleType, SimpleNamespace
 
 from typing import Any
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -687,16 +687,22 @@ def _capture_all_persists(monkeypatch, pc, *, store: Any = None, path: Any = Non
 
 def _drive_reprocess(pc, conversation: Any, uid: str = 'paid-uid') -> Any:
     """Exact kwargs the reprocess route passes (routers/conversations.py:495);
-    the derived bundle is captured, never run."""
-    return pc.process_conversation(
-        uid,
-        'en',
-        conversation,
-        trigger=pc.ProcessingTrigger.USER_REPROCESS,
-        persistence_observer=lambda _owned: None,
-        defer_derived_effects=True,
-        derived_effects_observer=lambda _runner: None,
-    )
+    the derived bundle is captured, never run. The route's re-read of the stored row is
+    answered from the conversation under test; persists here never reach a real store."""
+    with patch.multiple(
+        pc,
+        _current_user_reprocess_conversation=lambda _uid, _conversation_id: {},
+        deserialize_conversation=lambda _row: conversation,
+    ):
+        return pc.process_conversation(
+            uid,
+            'en',
+            conversation,
+            trigger=pc.ProcessingTrigger.USER_REPROCESS,
+            persistence_observer=lambda _owned: None,
+            defer_derived_effects=True,
+            derived_effects_observer=lambda _runner: None,
+        )
 
 
 def _omi_create() -> CreateConversation:

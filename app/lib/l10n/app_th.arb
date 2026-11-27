@@ -4768,5 +4768,6 @@
     "playStripePlanPaused": "แพ็กเกจ {plan} ของคุณหยุดชั่วคราวอยู่",
     "firmwareNewestSupportedForDevice": "อุปกรณ์ของคุณใช้เฟิร์มแวร์เวอร์ชันล่าสุดที่รองรับอยู่แล้ว",
     "firmwareSyncRecordingsFirstTitle": "ซิงค์ไฟล์บันทึกเสียงของคุณก่อน",
-    "firmwareSyncRecordingsFirstMessage": "ไฟล์บันทึกเสียงบางส่วนยังอยู่ในอุปกรณ์ของคุณ รอให้ซิงค์ไปยังโทรศัพท์เสร็จก่อน แล้วจึงเริ่มการอัปเดต"
+    "firmwareSyncRecordingsFirstMessage": "ไฟล์บันทึกเสียงบางส่วนยังอยู่ในอุปกรณ์ของคุณ รอให้ซิงค์ไปยังโทรศัพท์เสร็จก่อน แล้วจึงเริ่มการอัปเดต",
+    "summaryTemplateSelectionLimit": "คุณเลือกเทมเพลตสรุปได้สูงสุด {count} แบบ"
 }
