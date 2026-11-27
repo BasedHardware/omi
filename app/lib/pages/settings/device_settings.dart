@@ -32,6 +32,7 @@ import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/devices.dart';
+import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/connectors/rayban_meta_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/sync_health_watchdog.dart';
@@ -330,9 +331,14 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 
   // Forget and unpair. Neither can be undone, so both confirm every time (ux-contract §4).
 
-  Future<void> _clearStoredDevice() async {
-    await SharedPreferencesUtil().btDeviceSet(BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0));
-    SharedPreferencesUtil().deviceName = '';
+  /// Forgets the active device and [deviceId] (the connected one, should it differ), in the saved
+  /// list as well: the pairing screen builds its rows from that list.
+  Future<void> _clearStoredDevice(String? deviceId) async {
+    final preferences = SharedPreferencesUtil();
+    for (final id in {preferences.btDevice.id, deviceId ?? ''}) {
+      await preferences.btDeviceForget(id);
+    }
+    preferences.deviceName = '';
   }
 
   void _leavePage() {
@@ -353,7 +359,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     // Read the id before the stored device is cleared.
     final deviceId = provider.connectedDevice?.id ?? SharedPreferencesUtil().btDevice.id;
     if (deviceId.isNotEmpty) provider.markDisconnectIntentional(deviceId);
-    await _clearStoredDevice();
+    await _clearStoredDevice(deviceId);
     // Fully tear down the connection, transport and native service.
     if (deviceId.isNotEmpty) {
       await ServiceManager.instance().device.forgetDevice(deviceId);
@@ -381,8 +387,8 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     );
     if (!confirmed) return;
 
-    await _clearStoredDevice();
     final device = provider.connectedDevice;
+    await _clearStoredDevice(device?.id);
     if (device != null) {
       provider.markDisconnectIntentional(device.id);
       final connection = await ServiceManager.instance().device.ensureConnection(device.id);
@@ -615,6 +621,9 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     );
     final paired = provider.pairedDevice;
     final connected = provider.connectedDevice;
+    final showUnknownBattery = provider.isConnected &&
+        connected != null &&
+        DeviceConnectionFactory.resolveDeviceType(paired?.id == connected.id ? paired! : connected) == DeviceType.omi;
     const gap = SizedBox(height: OmiSpacing.xxl);
 
     final deviceStreaming = capture != null && deviceSource != null && deviceSource != 'phone';
@@ -634,8 +643,13 @@ class _DeviceSettingsState extends State<DeviceSettings> {
           const SizedBox(height: OmiSpacing.xl),
           _liveSections(
             connected: connected != null,
-            batteryLevel: connected == null ? 0 : provider.batteryLevel,
+            batteryLevel: connected == null
+                ? -1
+                : showUnknownBattery
+                    ? provider.settingsBatteryLevel
+                    : provider.batteryLevel,
             isCharging: connected != null && provider.isCharging,
+            showUnknownBattery: showUnknownBattery,
           ),
           if (deviceStreaming && canPause) ...[
             DeviceControlsGroup(paused: devicePaused, onToggle: () => _togglePause(capture)),
@@ -676,7 +690,12 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 }
 
 extension _DeviceLiveSections on _DeviceSettingsState {
-  Widget _liveSections({required bool connected, required int batteryLevel, required bool isCharging}) {
+  Widget _liveSections({
+    required bool connected,
+    required int batteryLevel,
+    required bool isCharging,
+    required bool showUnknownBattery,
+  }) {
     const gap = SizedBox(height: OmiSpacing.xxl);
     return Builder(builder: (context) {
       // One WAL pass per sync notification, shared by the stat row's tiles.
@@ -717,8 +736,9 @@ extension _DeviceLiveSections on _DeviceSettingsState {
               return Column(children: [
                 Builder(
                     builder: (context) => DeviceStatsRow(
-                          batteryLevel: connected ? batteryLevel : 0,
+                          batteryLevel: batteryLevel,
                           isCharging: isCharging,
+                          showUnknownBattery: showUnknownBattery,
                           heardTodaySeconds: _heardTodaySeconds(context),
                           onDeviceSeconds: local.onDeviceSeconds,
                           phoneQueueSeconds: local.onPhoneSeconds,

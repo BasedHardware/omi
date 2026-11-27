@@ -55,11 +55,12 @@ for armeabi-v7a or x86_64. `:app:testDevDebugUnitTest` runs in a parallel
 `android-unit-tests` job, not after the APK. Gradle cache writes only from
 `android-unit-tests` on `main` (`cache-read-only: ${{ github.ref != 'refs/heads/main' }}`);
 the compile-smoke job is restore-only on every ref so its POST save is not on
-the workflow wall. A parallel `Dart Tests (Pacific/Kiritimati)` job runs the
-harness Z1 contract `TZ=Pacific/Kiritimati bash app/test.sh` and
-`TZ=Pacific/Pago_Pago bash app/test.sh`; it is not on the critical path and is
-expected red until that Z1 PR merges. These jobs do not change
-`journeys-hermetic` behavior.
+the workflow wall. Two parallel jobs, `Dart Tests (Pacific/Kiritimati)` and
+`Dart Tests (Pacific/Pago_Pago)`, each run one far-timezone pass
+(`TZ=Pacific/Kiritimati bash app/test.sh` and
+`TZ=Pacific/Pago_Pago bash app/test.sh`) under their own 60-minute ceiling;
+they are not on the critical path and are expected red until that Z1 PR
+merges. These jobs do not change `journeys-hermetic` behavior.
 
 ## Receipts
 

@@ -22,6 +22,9 @@ from ulid import ULID
 from fastapi import APIRouter, Body, Depends, Form, UploadFile, File, HTTPException, Header, Query, Request
 from fastapi.responses import HTMLResponse
 
+from config import play_billing as play_billing_config
+from config.refactor_modes import default_off
+
 from langchain_core.messages import SystemMessage, HumanMessage
 from utils.apps import _clamp_review_score, fetch_app_chat_tools_from_manifest
 from utils.executors import (
@@ -528,10 +531,25 @@ def _get_categories():
 # ******************************************************
 
 
+def _project_payment_links(items: list[dict], http_request: Optional[Request], uid: Optional[str]) -> list[dict]:
+    """A Google Play build gets no Stripe payment link for any app; every other client gets today's bytes."""
+    if http_request and play_billing_config.hide_payment_links(http_request.headers, uid):
+        for item in items:
+            if item.get('payment_link'):
+                item['payment_link'] = None
+    return items
+
+
 @router.get('/v1/apps', tags=['v1'], response_model=List[AppBaseModel])
-def get_apps(uid: str = Depends(auth.get_current_user_uid), include_reviews: bool = True):
+def get_apps(
+    uid: str = Depends(auth.get_current_user_uid),
+    include_reviews: bool = True,
+    http_request: Request = None,  # pyright: ignore[reportArgumentType]  # FastAPI injects Request; direct callers omit it
+):
     apps = get_available_apps(uid, include_reviews=include_reviews)
-    return [normalize_app_numeric_fields(app.to_reduced_dict()) for app in apps]
+    return _project_payment_links(
+        [normalize_app_numeric_fields(app.to_reduced_dict()) for app in apps], http_request, uid
+    )
 
 
 @router.get('/v1/apps/enabled', tags=['v1'], response_model=List[str])
@@ -828,19 +846,29 @@ def search_apps(
 
 
 @router.get('/v1/approved-apps', tags=['v1'], response_model=List[AppBaseModel])
-def get_approved_apps(include_reviews: bool = False):
+def get_approved_apps(
+    include_reviews: bool = False,
+    http_request: Request = None,  # pyright: ignore[reportArgumentType]  # FastAPI injects Request; direct callers omit it
+):
     apps = get_approved_available_apps(include_reviews=include_reviews)
     # Always exclude persona type apps
     filtered_apps = [app for app in apps if not app.is_a_persona()]
-    return [normalize_app_numeric_fields(app.to_reduced_dict()) for app in filtered_apps]
+    return _project_payment_links(
+        [normalize_app_numeric_fields(app.to_reduced_dict()) for app in filtered_apps], http_request, None
+    )
 
 
 @router.get('/v1/apps/popular', tags=['v1'], response_model=List[AppBaseModel])
-def get_popular_apps_endpoint(uid: str = Depends(auth.get_current_user_uid)):
+def get_popular_apps_endpoint(
+    uid: str = Depends(auth.get_current_user_uid),
+    http_request: Request = None,  # pyright: ignore[reportArgumentType]  # FastAPI injects Request; direct callers omit it
+):
     apps = get_popular_apps()
     # Always exclude persona type apps
     filtered_apps = [app for app in apps if not app.is_a_persona()]
-    return [normalize_app_numeric_fields(app.to_reduced_dict()) for app in filtered_apps]
+    return _project_payment_links(
+        [normalize_app_numeric_fields(app.to_reduced_dict()) for app in filtered_apps], http_request, uid
+    )
 
 
 @router.post('/v1/apps', tags=['v1'], response_model=AppCreateResponse)
@@ -1268,7 +1296,11 @@ def delete_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
 
 
 @router.get('/v1/apps/{app_id}', tags=['v1'], response_model=App)
-def get_app_details(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def get_app_details(
+    app_id: str,
+    uid: str = Depends(auth.get_current_user_uid),
+    http_request: Request = None,  # pyright: ignore[reportArgumentType]  # FastAPI injects Request; direct callers omit it
+):
     app = get_available_app_by_id_with_reviews(app_id, uid)
     app = _safe_app_from_dict(app)
     if not app:
@@ -1282,8 +1314,11 @@ def get_app_details(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     # is user paid
     app.is_user_paid = get_is_user_paid_app(app.id, uid)
 
-    # payment link
-    if app.payment_link:
+    # payment link. A Google Play build never gets one: its Stripe link would be an outside digital purchase.
+    # The app change that shows such a paid app as unavailable ships in the companion app PR.
+    if app.payment_link and http_request and play_billing_config.hide_payment_links(http_request.headers, uid):
+        app.payment_link = None
+    elif app.payment_link:
         app.payment_link = f'{app.payment_link}?client_reference_id=uid_{uid}'
 
     # Generate thumbnail URLs if thumbnails exist
@@ -1725,9 +1760,6 @@ async def generate_app_icon_endpoint(
     """
     if generated_compute_configured():
         await run_blocking(db_executor, require_generated_compute, uid, 'app_generator', allow_byok=False)
-    from utils.llm.app_generator import generate_app_icon
-    import base64
-
     # User-initiated LLM generation — same free-tier gate as chat (402 past cap).
     await run_blocking(db_executor, enforce_chat_quota, uid, platform=x_app_platform)
 
@@ -1741,8 +1773,18 @@ async def generate_app_icon_endpoint(
     if not app_description:
         raise HTTPException(status_code=422, detail='App description is required')
 
+    # The provider retired the only image model in the gateway rate card.
+    if not default_off('APP_ICON_GENERATION_ENABLED'):
+        raise HTTPException(
+            status_code=424,
+            detail={'code': 'icon_generation_disabled', 'retryable': False},
+        )
+
+    from utils.llm.app_generator import generate_app_icon
+    from utils.llm.gateway_client import ImageGatewayError
+    import base64
+
     try:
-        # Generate icon using DALL-E
         with track_usage(uid, Features.APP_GENERATOR):
             icon_bytes = await generate_app_icon(app_name, app_description, category)
 
@@ -1752,8 +1794,11 @@ async def generate_app_icon_endpoint(
         return {'status': 'ok', 'icon_base64': icon_base64, 'mime_type': 'image/png'}
     except HTTPException:
         raise
+    except ImageGatewayError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail, headers=exc.headers) from exc
     except Exception as e:
-        logger.error(f"Error generating icon: {e}")
+        gateway_status = e.response.status_code if isinstance(e, httpx.HTTPStatusError) else None
+        logger.error('Error generating icon: %s gateway_http_status=%s', type(e).__name__, gateway_status)
         raise HTTPException(status_code=500, detail='Failed to generate icon')
 
 

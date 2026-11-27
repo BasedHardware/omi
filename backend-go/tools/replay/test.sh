@@ -22,6 +22,8 @@ scratch=$(mktemp -d "${TMPDIR:-/tmp}/finalization-replay.XXXXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 go build -o "$scratch/jobd" ./cmd/jobd
 go build -o "$scratch/replay" ./tools/replay
+PYTHONPATH="$go_root/../backend" REPLAY_TEST_BINARY="$scratch/replay" \
+    "$python_bin" -m unittest testing.finalization_replay.test_firestore_proxy -v
 commit=$(git -C "$go_root/.." rev-parse HEAD)
 
 ./scripts/with-postgres.sh ./scripts/with-firestore.sh bash -euc '
@@ -36,6 +38,33 @@ commit=$(git -C "$go_root/.." rev-parse HEAD)
 
     parity_status=0
     run -corpus "$repo_go"/tools/replay/corpus/admission-parity.json -output "$scratch/parity.json" || parity_status=$?
+    if [[ $parity_status == 1 && -f "$scratch/parity.json" ]]; then
+        echo "Admission parity unexplained rows (case, path, kind):" >&2
+        "$python_bin" - "$scratch/parity.json" <<\PY
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as report_file:
+    report = json.load(report_file)
+
+printed = 0
+for case in report.get("cases", []):
+    for difference in case.get("differences", []):
+        if difference.get("reason"):
+            continue
+        print(
+            "{}: {} [{}]".format(
+                case.get("name", "<unknown>"),
+                difference.get("path", "<unknown>"),
+                difference.get("kind", "<unknown>"),
+            ),
+            file=sys.stderr,
+        )
+        printed += 1
+if printed == 0:
+    print("none", file=sys.stderr)
+PY
+    fi
     if [[ -n "${REPLAY_TASK_OUTPUT_DIR:-}" ]]; then
         if [[ $parity_status != 0 && $parity_status != 1 ]]; then
             echo "Parity replay failed to produce a classifiable report (exit $parity_status)" >&2
@@ -63,4 +92,5 @@ commit=$(git -C "$go_root/.." rev-parse HEAD)
 
         "$python_bin" -O "$repo_go/tools/replay/verify.py" "$scratch/parity.json" "$scratch/gaps.json"
     fi
+    "$python_bin" -O "$repo_go/tools/replay/verify.py" --mutation-check "$scratch/gaps.json"
 ' bash "$scratch" "$python_bin" "$commit"

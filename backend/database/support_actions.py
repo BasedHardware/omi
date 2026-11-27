@@ -1,11 +1,13 @@
 """Audit trail for support operator commands: ``support_actions/{action_id}``.
 
-Every ``scripts/support/ops.py`` command, read or write, records one document
+Hold, retention, export and account summary commands record one document
 before it touches customer data and finishes it afterwards. The document holds
 the ticket, the human who asked (``actor``), the agent or operator identity
 that ran it, the command, a digest of its arguments, digests of the state it
 changed, and the outcome. It never holds customer content: results are stored
 as a digest plus a short content-free summary supplied by the command.
+The plan correction records its dry run in the private receipt and creates
+one content-free audit document atomically with each subscription change.
 """
 
 from __future__ import annotations

@@ -21,6 +21,15 @@ class DirectBackendProductionAdmissionTests(unittest.TestCase):
     def test_inventory_is_admitted_and_uses_checked_out_source_identity(self) -> None:
         self.assertEqual(CHECKER.validate(ROOT), [])
 
+    def test_image_only_control_checkout_cannot_use_candidate_source(self):
+        text = (ROOT / CHECKER.PUSHER_WORKFLOW).read_text(encoding="utf-8")
+        legacy, separator, image_only = text.partition("\n  pusher-image-only:\n")
+        self.assertTrue(CHECKER.pusher_image_only_checkout_is_bound(text))
+        for ref in ("main", "${{ inputs.branch }}"):
+            with self.subTest(ref=ref):
+                mutated = image_only.replace("ref: ${{ github.workflow_sha }}", f"ref: {ref}", 1)
+                self.assertFalse(CHECKER.pusher_image_only_checkout_is_bound(legacy + separator + mutated))
+
     def test_listen_exporter_job_checks_out_exact_admitted_source(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -40,17 +49,244 @@ class DirectBackendProductionAdmissionTests(unittest.TestCase):
             )
 
     def test_evidence_source_cannot_use_mutable_or_candidate_controls(self):
-        for old, new in ((CHECKER.LISTEN_PINNED_CHECKOUT, CHECKER.LISTEN_PINNED_CHECKOUT.replace('inputs.expected_sha', 'inputs.branch')),
-                         (CHECKER.LISTEN_EVIDENCE_CONTROL, CHECKER.LISTEN_EVIDENCE_CONTROL.replace('github.workflow_sha', 'inputs.expected_sha')),
-                         (CHECKER.LISTEN_EVIDENCE_CONTROL, CHECKER.LISTEN_EVIDENCE_CONTROL.replace('.github/listen-evidence-control', '.'))):
+        # Mutate the actual checked-in pin/comment spelling, not an obsolete alias fixture.
+        source = (ROOT / CHECKER.LISTEN_WORKFLOW).read_text()
+        control = next(
+            block
+            for block in (
+                CHECKER.LISTEN_EVIDENCE_CONTROL,
+                CHECKER.LISTEN_EVIDENCE_CONTROL.replace('@v7', '@' + CHECKER.CHECKOUT_PIN),
+                CHECKER.LISTEN_EVIDENCE_CONTROL.replace('@v7', '@' + CHECKER.CHECKOUT_PIN + ' # v7'),
+            )
+            if block in source
+        )
+        mutations = (
+            (
+                CHECKER.LISTEN_PINNED_CHECKOUT,
+                CHECKER.LISTEN_PINNED_CHECKOUT.replace('inputs.expected_sha', 'inputs.branch'),
+            ),
+            (control, control.replace('github.workflow_sha', 'inputs.expected_sha')),
+            (control, control.replace('.github/listen-evidence-control', '.')),
+            (control, control.replace('persist-credentials: false', 'persist-credentials: true')),
+        )
+        for old, new in mutations:
             with self.subTest(new=new), tempfile.TemporaryDirectory() as directory:
-                root=Path(directory)
+                root = Path(directory)
                 for relative in CHECKER.WORKFLOWS:
-                    target=root/relative; target.parent.mkdir(parents=True,exist_ok=True)
-                    shutil.copy2(ROOT/relative,target)
-                target=root/CHECKER.LISTEN_WORKFLOW
-                text=target.read_text(); self.assertIn(old,text)
-                target.write_text(text.replace(old,new,1))
+                    target = root / relative
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(ROOT / relative, target)
+                target = root / CHECKER.LISTEN_WORKFLOW
+                text = target.read_text()
+                self.assertIn(old, text)
+                target.write_text(text.replace(old, new, 1))
+                self.assertTrue(CHECKER.validate(root))
+
+    def test_exact_pin_and_existing_alias_are_both_admitted(self):
+        for spelling in ('v7', CHECKER.CHECKOUT_PIN):
+            with self.subTest(spelling=spelling), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                for relative in CHECKER.WORKFLOWS:
+                    target = root / relative
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    text = (ROOT / relative).read_text().replace('@' + CHECKER.CHECKOUT_PIN + ' # v7', '@v7')
+                    text = text.replace('@' + CHECKER.CHECKOUT_PIN, '@v7')
+                    target.write_text(text.replace('actions/checkout@v7', 'actions/checkout@' + spelling))
+                self.assertEqual(CHECKER.validate(root), [])
+
+    def test_unknown_checkout_and_additional_sources_refuse(self):
+        for relative in CHECKER.WORKFLOWS:
+            for value in (
+                'actions/checkout@' + '0' * 40,
+                'actions/checkout@v6',
+                'actions/checkout@main',
+                'other/checkout@v7',
+            ):
+                with self.subTest(relative=relative, value=value), tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    for fixture in CHECKER.WORKFLOWS:
+                        target = root / fixture
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(ROOT / fixture, target)
+                    target = root / relative
+                    target.write_text(target.read_text() + '\n      - uses: ' + value + '\n')
+                    self.assertIn(f"{relative} has an unapproved checkout action or version", CHECKER.validate(root))
+                    self.assertIn(
+                        f"{relative} must not check out a second source after production admission",
+                        CHECKER.validate(root),
+                    )
+            for spelling in ('v7', CHECKER.CHECKOUT_PIN):
+                with self.subTest(relative=relative, spelling=spelling), tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    for fixture in CHECKER.WORKFLOWS:
+                        target = root / fixture
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(ROOT / fixture, target)
+                    target = root / relative
+                    target.write_text(
+                        target.read_text()
+                        + '\n      - uses: actions/checkout@'
+                        + spelling
+                        + '\n        with:\n          ref: main\n'
+                    )
+                    self.assertIn(
+                        f"{relative} must not check out a second source after production admission",
+                        CHECKER.validate(root),
+                    )
+
+    def test_control_shaped_comment_cannot_mask_an_additional_checkout(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for relative in CHECKER.WORKFLOWS:
+                target = root / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(ROOT / relative, target)
+            target = root / CHECKER.LISTEN_WORKFLOW
+            text = target.read_text()
+            # A valid multiline job name is data, not an isolated checkout step.
+            fake = '    name: |\n      # ' + CHECKER.CONTROL_CHECKOUT + '\n'
+            text = text.replace('  helm-upgrade:\n', '  helm-upgrade:\n' + fake, 1)
+            text += (
+                '\n      - uses: actions/checkout@' + CHECKER.CHECKOUT_PIN + '\n        with:\n          ref: main\n'
+            )
+            target.write_text(text)
+            self.assertIn(
+                f"{CHECKER.LISTEN_WORKFLOW} must not check out a second source after production admission",
+                CHECKER.validate(root),
+            )
+
+    def test_scalar_contract_cannot_replace_real_control_checkout(self):
+        for style in ('|', '>'):
+            with self.subTest(style=style), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                for relative in CHECKER.WORKFLOWS:
+                    target = root / relative
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(ROOT / relative, target)
+                target = root / CHECKER.LISTEN_WORKFLOW
+                text = target.read_text()
+                start = text.index('      - name: Checkout trusted overlay evidence controls')
+                end = text.index('      - name: Reconstruct evidence runtime', start)
+                text = text[:start] + text[end:]
+                fake = '    name: ' + style + '\n      ' + CHECKER.LISTEN_EVIDENCE_CONTROL + '\n'
+                text = text.replace('  helm-upgrade:\n', '  helm-upgrade:\n' + fake, 1)
+                target.write_text(text)
+                self.assertIn(
+                    f"{CHECKER.LISTEN_WORKFLOW} evidence controls must use immutable workflow source in their isolated path",
+                    CHECKER.validate(root),
+                )
+
+    def test_evidence_commands_require_real_trusted_steps(self):
+        source = (ROOT / CHECKER.LISTEN_WORKFLOW).read_text()
+        mutations = (
+            ('.github/listen-evidence-control/.github/scripts/listen_runtime.py', '.github/scripts/listen_runtime.py'),
+            (
+                '.github/listen-evidence-control/.github/scripts/listen_overlay_evidence.py job',
+                '.github/scripts/listen_overlay_evidence.py job',
+            ),
+            (
+                '      - name: Reconstruct evidence runtime before credentials',
+                '      - working-directory: candidate\n        name: Reconstruct evidence runtime before credentials',
+            ),
+            (
+                '      - name: Reconstruct evidence runtime before credentials',
+                '      - env:\n          PYTHONPATH: candidate\n        name: Reconstruct evidence runtime before credentials',
+            ),
+            (
+                '      - name: Produce private-overlay effect receipt without mutation',
+                '      - shell: bash -c \"candidate\"\n        name: Produce private-overlay effect receipt without mutation',
+            ),
+        )
+        for old, new in mutations:
+            with self.subTest(new=new), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                for relative in CHECKER.WORKFLOWS:
+                    target = root / relative
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(ROOT / relative, target)
+                self.assertIn(old, source)
+                (root / CHECKER.LISTEN_WORKFLOW).write_text(source.replace(old, new, 1))
+                self.assertIn(
+                    f"{CHECKER.LISTEN_WORKFLOW} evidence commands must execute isolated immutable controls in order",
+                    CHECKER.validate(root),
+                )
+
+    def test_required_evidence_steps_cannot_continue_after_failure(self):
+        source = (ROOT / CHECKER.LISTEN_WORKFLOW).read_text()
+        for name in (
+            'Reconstruct evidence runtime before credentials',
+            'Produce private-overlay effect receipt without mutation',
+        ):
+            for value in ('true', 'false', '${{ always() }}'):
+                with self.subTest(name=name, value=value), tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    for relative in CHECKER.WORKFLOWS:
+                        target = root / relative
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(ROOT / relative, target)
+                    old = '      - name: ' + name + '\n'
+                    self.assertEqual(source.count(old), 1)
+                    text = source.replace(old, old + '        continue-on-error: ' + value + '\n', 1)
+                    (root / CHECKER.LISTEN_WORKFLOW).write_text(text)
+                    self.assertIn(
+                        f"{CHECKER.LISTEN_WORKFLOW} evidence commands must execute isolated immutable controls in order",
+                        CHECKER.validate(root),
+                    )
+
+    def test_controls_must_precede_real_bootstrap_and_duplicate_keys_refuse(self):
+        source = (ROOT / CHECKER.LISTEN_WORKFLOW).read_text()
+        start = source.index('      - name: Checkout trusted overlay evidence controls')
+        middle = source.index('      - name: Reconstruct evidence runtime', start)
+        end = source.index('      - name: Install Helm', middle)
+        reordered = source[:start] + source[middle:end] + source[start:middle] + source[end:]
+        duplicate = source.replace(
+            '          path: .github/listen-evidence-control',
+            '          path: candidate\n          path: .github/listen-evidence-control',
+            1,
+        )
+        for text in (reordered, duplicate):
+            with self.subTest(text=text[start : start + 80]), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                for relative in CHECKER.WORKFLOWS:
+                    target = root / relative
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(ROOT / relative, target)
+                (root / CHECKER.LISTEN_WORKFLOW).write_text(text)
+                self.assertIn(
+                    f"{CHECKER.LISTEN_WORKFLOW} evidence commands must execute isolated immutable controls in order",
+                    CHECKER.validate(root),
+                )
+
+    def test_wrong_pin_and_firestore_control_contracts_refuse(self):
+        for replacement in ('actions/checkout@' + 'f' * 40, 'actions/checkout@v7x'):
+            with self.subTest(replacement=replacement), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                for relative in CHECKER.WORKFLOWS:
+                    target = root / relative
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(ROOT / relative, target)
+                target = root / CHECKER.LISTEN_WORKFLOW
+                text = target.read_text()
+                self.assertIn('actions/checkout@' + CHECKER.CHECKOUT_PIN, text)
+                target.write_text(text.replace('actions/checkout@' + CHECKER.CHECKOUT_PIN, replacement, 1))
+                self.assertIn(
+                    f"{CHECKER.LISTEN_WORKFLOW} has an unapproved checkout action or version", CHECKER.validate(root)
+                )
+        for old, new in (
+            ('github.workflow_sha', 'inputs.expected_sha'),
+            ('.github/firestore-workflow', '.'),
+            ('persist-credentials: false', 'persist-credentials: true'),
+        ):
+            with self.subTest(new=new), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                for relative in CHECKER.WORKFLOWS:
+                    target = root / relative
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(ROOT / relative, target)
+                target = root / CHECKER.LISTEN_WORKFLOW
+                text = target.read_text()
+                self.assertIn(CHECKER.CONTROL_CHECKOUT, text)
+                target.write_text(text.replace(CHECKER.CONTROL_CHECKOUT, CHECKER.CONTROL_CHECKOUT.replace(old, new), 1))
                 self.assertTrue(CHECKER.validate(root))
 
     def test_listen_rejects_missing_or_weakened_exact_control_guard(self) -> None:

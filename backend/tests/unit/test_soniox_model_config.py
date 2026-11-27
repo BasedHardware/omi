@@ -1,4 +1,4 @@
-"""V6 is the default model; the ordered finalize clock stays gated to the v5 rollback."""
+"""Soniox v6 defaults and reported-clock selection."""
 
 import asyncio
 import importlib
@@ -8,27 +8,23 @@ from unittest.mock import AsyncMock
 import pytest
 
 from utils.stt import soniox, soniox_batch
-from utils.stt.soniox_wire_ledger import OrderedSonioxProviderClock, SonioxProviderClock
+from utils.stt.soniox_wire_ledger import SonioxProviderClock
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    'model,ledger,ordered,rate,url,clock_type',
+    'model,ledger,rate,url,clock_type',
     [
-        (None, True, True, 16000, None, SonioxProviderClock),
-        ('stt-rt-v6', True, True, 16000, None, SonioxProviderClock),
-        ('stt-rt-v5', True, True, 16000, None, OrderedSonioxProviderClock),
-        ('stt-rt-v6', True, False, 16000, None, SonioxProviderClock),
-        ('stt-rt-v5', True, False, 16000, None, SonioxProviderClock),
-        ('stt-rt-v6', False, True, 16000, None, type(None)),
-        ('stt-rt-v6', True, True, 8000, None, SonioxProviderClock),
-        ('stt-rt-v6', True, True, 16000, 'wss://example.invalid', SonioxProviderClock),
-        ('custom-model', True, True, 16000, None, SonioxProviderClock),
+        (None, True, 16000, None, SonioxProviderClock),
+        ('stt-rt-v6', True, 16000, None, SonioxProviderClock),
+        ('stt-rt-v5', True, 16000, None, SonioxProviderClock),
+        ('stt-rt-v6', False, 16000, None, type(None)),
+        ('stt-rt-v6', True, 8000, None, SonioxProviderClock),
+        ('stt-rt-v6', True, 16000, 'wss://example.invalid', SonioxProviderClock),
+        ('custom-model', True, 16000, None, SonioxProviderClock),
     ],
 )
-async def test_model_env_selects_wire_config_and_preserves_clock_gates(
-    monkeypatch, model, ledger, ordered, rate, url, clock_type
-):
+async def test_model_env_selects_wire_config_and_reported_clock(monkeypatch, model, ledger, rate, url, clock_type):
     sock = None
     try:
         with monkeypatch.context() as patch:
@@ -40,7 +36,6 @@ async def test_model_env_selects_wire_config_and_preserves_clock_gates(
                 patch.setenv('SONIOX_WS_URL', url)
             patch.setenv('SONIOX_API_KEY', 'test-key')
             patch.setenv('SONIOX_WIRE_LEDGER', str(ledger).lower())
-            patch.setenv('SONIOX_ORDERED_FINALIZE', str(ordered).lower())
             patch.setenv('SONIOX_IDLE_CLOSE_SECONDS', '0')
             importlib.reload(soniox)
             ws = AsyncMock()
@@ -59,18 +54,6 @@ async def test_model_env_selects_wire_config_and_preserves_clock_gates(
             }
             assert connect.await_args.args[0] == (url or 'wss://stt-rt.soniox.com/transcribe-websocket')
             assert type(sock._provider_clock) is clock_type
-            if clock_type is OrderedSonioxProviderClock:
-                clock = sock._provider_clock
-                clock.begin_finalize()
-                clock.response(
-                    {
-                        'tokens': [{'text': '<fin>', 'is_final': True}],
-                        'final_audio_proc_ms': 121,
-                        'total_audio_proc_ms': 121,
-                    }
-                )
-                assert clock.invalid_from == 0
-                assert not clock.placeable  # A different v6 quantum cannot authorize capture.
             sock._send_task.cancel()
             await asyncio.gather(sock._send_task, sock._recv_task, return_exceptions=True)
     finally:

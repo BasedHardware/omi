@@ -40,11 +40,18 @@ void main() {
     final file = _PendingFile();
     client.beforeFailure = file.started.future;
     var callerCompleted = false;
+    var headersBuilt = 0;
 
     final uncaught = await _captureUncaught(() async {
       final upload = makeMultipartApiCall(
         url: 'https://upload.invalid/audio',
         files: [file],
+        headersAtSend: () {
+          expect(file.lengthRead, isTrue);
+          expect(client.requests, 0);
+          headersBuilt++;
+          return {'X-Test-Send-Time': 'now'};
+        },
         onUploadProgress: (_, __, ___) {},
       );
       final handled = expectLater(
@@ -66,6 +73,7 @@ void main() {
     });
 
     expect(client.requests, 1);
+    expect(headersBuilt, 1);
     expect(callerCompleted, isTrue);
     expect(uncaught, isEmpty);
   });
@@ -138,12 +146,16 @@ class _PendingFile implements File {
   final cancelling = Completer<void>();
   final allowCancellation = Completer<void>();
   bool cancelled = false;
+  bool lengthRead = false;
 
   @override
   String get path => '/synthetic/audio.bin';
 
   @override
-  Future<int> length() async => 1;
+  Future<int> length() async {
+    lengthRead = true;
+    return 1;
+  }
 
   @override
   Stream<List<int>> openRead([int? start, int? end]) {

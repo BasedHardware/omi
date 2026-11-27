@@ -175,9 +175,14 @@ def test_account_purge_erases_cohort_membership_and_retries_failures(monkeypatch
     data_plane = MagicMock(name='data_plane_client')
     monkeypatch.setattr('database.user_data_deletion.get_data_plane_firestore_client', lambda: data_plane)
     client.collection.return_value.document.return_value.get.return_value.exists = False
+    audit = MagicMock(name='go_finalization_audit')
+    cohort_doc = data_plane.collection.return_value.document.return_value
+    cohort_doc.collections.return_value = [audit]
     assert purge_user_subtree('synthetic', client, recursive)['status'] == 'ok'
     data_plane.collection.assert_any_call('rollout_cohorts')
-    data_plane.collection.return_value.document.return_value.delete.assert_called_once_with()
+    # Child audit rows are erased on the data-plane client before the parent document.
+    recursive.assert_any_call(audit, client=data_plane)
+    cohort_doc.delete.assert_called_once_with()
     client.collection.assert_any_call('users')
     data_plane.collection.return_value.document.return_value.delete.side_effect = RuntimeError('retry')
     with pytest.raises(RuntimeError, match='retry'):
@@ -212,7 +217,7 @@ def test_account_purge_removes_creator_owned_public_apps_and_nested_data(monkeyp
     monkeypatch.setattr('database.user_data_deletion.get_data_plane_firestore_client', lambda: data_plane)
     monkeypatch.setattr('database.user_data_deletion.delete_generic_cache', delete_generic_cache)
     monkeypatch.setattr('database.user_data_deletion.delete_app_cache_by_id', delete_app_cache)
-    monkeypatch.setattr('database.user_data_deletion.stop_quiet_checks_for_account', lambda *_a, **_kw: None)
+    monkeypatch.setattr('database.user_data_deletion.purge_finalization_jobs', lambda *_a, **_kw: None)
 
     assert purge_user_subtree('creator', client, recursive)['status'] == 'ok'
 

@@ -12,10 +12,15 @@ enum EmptyRecordingReason { emptyDeleted, discarded, nullResult }
 enum ProcessAbsence { notFound, transport, emptyBody }
 
 class InProgressProcessOutcome {
-  const InProgressProcessOutcome({this.response, this.absence});
+  const InProgressProcessOutcome({this.response, this.absence, this.endStoredAt});
 
   final CreateConversationResponse? response;
   final ProcessAbsence? absence;
+
+  /// Reliability experiment `end_open_conversation`: the End time the server stored when it answered
+  /// "End stored, its conversation has not landed yet". The conversation that End closes will carry
+  /// the same instant (`v3_manual_cut_at`), which is how Home finds it. Null for every other answer.
+  final DateTime? endStoredAt;
 }
 
 class RecordingCompletionFacts {

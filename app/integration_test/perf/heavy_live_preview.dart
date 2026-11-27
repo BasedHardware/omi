@@ -79,6 +79,8 @@ class HeavyLiveCapture extends CaptureProvider {
 
   @override
   bool get localPreviewAdmitted => true;
+  @override
+  bool get liveWordsShown => true;
 }
 
 class _NoBle implements CaptureBleListeners {
@@ -220,6 +222,8 @@ class HeavyConnectedDevice extends ChangeNotifier implements DeviceProvider {
   bool isCharging = false;
   @override
   int batteryLevel = 80;
+  @override
+  int get settingsBatteryLevel => batteryLevel;
   @override
   OfflineStorageCapability get offlineStorageCapability => OfflineStorageCapability.unsupported;
   @override

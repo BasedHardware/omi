@@ -7,6 +7,13 @@ utils/cloud_tasks.py, and the structural contract of the /v2/sync-jobs/run
 handler in routers/sync.py.
 """
 
+from types import SimpleNamespace
+
+from routers import (
+    enrichment as real_enrichment_adapter,
+)  # noqa: F401 - retain the canonical adapter across package stubs
+from utils.batch_pipeline import upload_entitlement as real_upload_entitlement  # noqa: F401 - CPU boundary dependency
+
 from utils.sync import size_telemetry  # noqa: F401 - retain real scoped telemetry across legacy package stubs
 from utils.other import owned_paths  # noqa: F401 - retain real scratch guard across legacy package stubs
 from models import conversation_continuity  # noqa: F401 - retain pure policy across legacy package stubs
@@ -1561,6 +1568,7 @@ def _load_sync_router_for_fast_path():
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    module.upload_entitlement = SimpleNamespace(classify=lambda _uid: 'unknown')
     module.sync_redrive = types.SimpleNamespace(
         enabled=lambda: os.getenv('SYNC_DURABLE_REDRIVE_GUARD') == 'true',
         legacy_convergence_enabled=lambda: os.getenv('SYNC_LEGACY_COMPLETION_CONVERGENCE') == 'true',
@@ -2386,6 +2394,50 @@ async def test_sync_task_persistence_fence_terminalizes_backfill_and_releases_it
         module._finalize_sync_job_failure.assert_not_awaited()
         module.fenced_mark_job_queued_for_retry.assert_not_called()
         module.release_job_run_lock.assert_called_once_with('job-1', '1:lock-token')
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_sync_task_superseded_assignment_is_terminal_and_consumes_the_delivery():
+    """A user-managed sync anchor answers the Cloud Tasks delivery, never a retry."""
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module,
+        pipeline_error=module.SyncAssignmentSuperseded('sync anchor is user managed'),
+        latest_job={
+            'job_id': 'job-1',
+            'status': 'processing',
+            'stt_provider': 'deepgram',
+            'stt_model': 'nova-3',
+        },
+    )
+    request.json.return_value['lane'] = 'backfill'
+    setattr(module, 'finalize_sync_job_superseded', AsyncMock())
+    module.uid_sequencer.enabled = MagicMock(return_value=False)
+
+    try:
+        response = await module.run_sync_job(request, task_retry_count=0)
+
+        assert response.status_code == 200
+        assert json.loads(response.body) == {'status': 'superseded'}
+        module.finalize_sync_job_superseded.assert_awaited_once_with(
+            job_id='job-1',
+            run_lock_token='1:lock-token',
+            lane='backfill',
+            provider='deepgram',
+            model='nova-3',
+        )
+        module._finalize_sync_job_failure.assert_not_awaited()
+        module.fenced_mark_job_queued_for_retry.assert_not_called()
+        module.release_sync_content_claim_after_job_retired.assert_called_once_with('test-uid', 'content-1', 'job-1')
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)

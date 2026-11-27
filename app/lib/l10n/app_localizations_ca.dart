@@ -7096,6 +7096,26 @@ class AppLocalizationsCa extends AppLocalizations {
   String get authUnexpectedError => 'Error inesperat en iniciar sessió, si us plau torneu-ho a provar';
 
   @override
+  String get accountSignInMethods => 'Mètodes d’inici de sessió';
+
+  @override
+  String get accountAddSignInMethod => 'Afegeix un mètode d’inici de sessió';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Afegeix una manera d’iniciar sessió en aquest compte d’Omi. El teu pla, les gravacions i les integracions es mantenen en aquest compte.';
+
+  @override
+  String get accountSignInConflictTitle => 'Aquest mètode d’inici de sessió està vinculat a un altre compte';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'La sessió d’aquest compte continua oberta. Cada compte d’Omi conserva el seu pla, les seves gravacions i les seves integracions.';
+
+  @override
+  String get accountSignInMethodAdded => 'S’ha afegit el mètode d’inici de sessió';
+
+  @override
   String get authFailedToLinkGoogle => 'No s\'ha pogut vincular amb Google, si us plau torneu-ho a provar.';
 
   @override
@@ -14433,6 +14453,9 @@ class AppLocalizationsCa extends AppLocalizations {
   String get processingProgress => 'S\'estan processant les gravacions pendents…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'S\'està esperant que hi hagi quota de transcripció disponible';
+
+  @override
   String get processingDeferred => 'En espera de processament';
 
   @override
@@ -15390,9 +15413,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get stopThese => 'Atura aquests';
 
   @override
-  String get meetingActionItemsTitle => 'Elements d\'acció';
-
-  @override
   String get addToTasks => 'Afegeix a Tasques';
 
   @override
@@ -15800,6 +15820,9 @@ class AppLocalizationsCa extends AppLocalizations {
   String get stillWorkingOnIt => 'Encara hi estem treballant.';
 
   @override
+  String get deviceReadyToUse => 'Llest per utilitzar';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'El microprogramari del dispositiu és massa antic per a aquesta actualització. Contacta amb el servei d\'assistència perquè t\'ajudi a actualitzar el dispositiu.';
 
@@ -15815,4 +15838,88 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Comprova';
+
+  @override
+  String get playManageSubscription => 'Gestiona la subscripció';
+
+  @override
+  String get playBilledByGoogle => 'Facturat per Google Play';
+
+  @override
+  String get playPurchasePending => 'El pagament està pendent. Omi Pro començarà quan Google Play el confirmi.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Aquesta compra de Google Play pertany a un altre compte d\'Omi.';
+
+  @override
+  String get playPurchaseNotConfirmed =>
+      'Encara no hem pogut confirmar la compra. Ho tornarem a provar automàticament.';
+
+  @override
+  String get playRenewalTerms =>
+      'Es renova automàticament al preu indicat fins que el cancel·lis. Gestiona-ho o cancel·la-ho quan vulguis a Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'No disponible a Android';
+
+  @override
+  String get pageNotAvailableInApp => 'Aquesta pàgina no està disponible a l\'app.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Comanda feta. Consulta el correu per veure la confirmació.';
+
+  @override
+  String get prepaidCodeEntry => 'Tens un codi?';
+
+  @override
+  String get prepaidCodeTitle => 'Bescanvia un codi';
+
+  @override
+  String get prepaidCodeFieldHint => 'Introdueix el teu codi';
+
+  @override
+  String get prepaidCodeRedeem => 'Bescanvia';
+
+  @override
+  String get prepaidCodeRedeemed => 'Codi bescanviat';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Aquest codi no és vàlid. Comprova\'l i torna-ho a provar.',
+        'used': 'Aquest codi ja s\'ha utilitzat.',
+        'expired': 'Aquest codi ha caducat.',
+        'hasPlan': 'Ja tens un pla. El teu codi no s\'ha utilitzat. Bescanvia\'l quan acabi el teu pla.',
+        'notPrepaid': 'Aquest codi no es pot bescanviar aquí. Fes-lo servir quan triïs un pla.',
+        'notEligible': 'Aquest codi no es pot utilitzar en aquest compte.',
+        'rateLimited': 'Massa intents. Torna-ho a provar més tard.',
+        'other': 'Alguna cosa ha anat malament. Torna-ho a provar.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'Es factura a través d\'omi.me. Cancel·la-ho aquí quan vulguis.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Es factura a través d\'omi.me.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'El teu pla $plan està en pausa.';
+  }
+
+  @override
+  String get firmwareNewestSupportedForDevice =>
+      'El vostre dispositiu ja té la versió més recent de firmware compatible';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Primer sincronitzeu els enregistraments';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Alguns enregistraments encara són al vostre dispositiu. Deixeu que acabin de sincronitzar-se al telèfon i, després, inicieu l\'actualització.';
 }

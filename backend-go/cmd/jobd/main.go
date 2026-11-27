@@ -121,6 +121,8 @@ func serve(ctx context.Context, cfg config, store *queue.Store, kit *kitstore.St
 		return errors.New("invalid worker registration")
 	}
 	defer workers.Stop()
+	stopChecks := startEntitlementChecks(ctx, store, units.Entitlement)
+	defer stopChecks()
 
 	api := &api{store: store, workers: workers, client: client, final: final, units: units, kit: kit, metrics: m}
 	server := &http.Server{Handler: api.routes(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second,
@@ -161,4 +163,25 @@ func reportQueueError(err error) {
 		return
 	}
 	slog.Warn("queue operation failed", "cause", wire.CauseTransport)
+}
+
+func startEntitlementChecks(ctx context.Context, store *queue.Store, read queue.EntitlementReader) func() {
+	ctx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		tick := time.NewTicker(time.Minute)
+		defer tick.Stop()
+		for {
+			if err := store.CheckEntitlements(ctx, read); err != nil && ctx.Err() == nil {
+				reportQueueError(err)
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-tick.C:
+			}
+		}
+	}()
+	return func() { cancel(); <-done }
 }

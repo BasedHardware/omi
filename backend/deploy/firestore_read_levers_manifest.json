@@ -20,6 +20,9 @@
         "bpp_generation_memo": 0,
         "bpp_owner_memo": 100,
         "bpp_owner_memo_enforce": 0,
+        "bpp_shared_owner_cache": 0,
+        "bpp_shared_owner_shadow": 0,
+        "bpp_status_skip": 100,
         "bpp_token_mint": 0,
         "candidates_page": 0,
         "canonical_statuses_dedupe": 0,
@@ -77,6 +80,9 @@
         "bpp_generation_memo",
         "bpp_owner_memo",
         "bpp_owner_memo_enforce",
+        "bpp_shared_owner_cache",
+        "bpp_shared_owner_shadow",
+        "bpp_status_skip",
         "bpp_token_mint",
         "candidates_page",
         "canonical_statuses_dedupe",
@@ -227,6 +233,9 @@
         "bpp_generation_memo": 100,
         "bpp_owner_memo": 100,
         "bpp_owner_memo_enforce": 0,
+        "bpp_shared_owner_cache": 0,
+        "bpp_shared_owner_shadow": 0,
+        "bpp_status_skip": 100,
         "bpp_token_mint": 0,
         "candidates_page": 100,
         "canonical_statuses_dedupe": 100,
@@ -299,6 +308,9 @@
         "bpp_attempt_scope",
         "bpp_owner_memo",
         "bpp_owner_memo_enforce",
+        "bpp_shared_owner_cache",
+        "bpp_shared_owner_shadow",
+        "bpp_status_skip",
         "bpp_token_mint",
         "conversation_day_list_cursor",
         "conversation_page",
@@ -317,7 +329,7 @@
       ],
       "lever_expiry": {
         "lifecycle_record_pending_head": {
-          "expires": "2026-11-24",
+          "expires": "2026-12-01",
           "value": 5
         }
       }
@@ -335,6 +347,9 @@
         "bpp_generation_memo": 0,
         "bpp_owner_memo": 100,
         "bpp_owner_memo_enforce": 0,
+        "bpp_shared_owner_cache": 0,
+        "bpp_shared_owner_shadow": 0,
+        "bpp_status_skip": 100,
         "bpp_token_mint": 0,
         "candidates_page": 0,
         "canonical_statuses_dedupe": 0,
@@ -392,6 +407,9 @@
         "bpp_generation_memo",
         "bpp_owner_memo",
         "bpp_owner_memo_enforce",
+        "bpp_shared_owner_cache",
+        "bpp_shared_owner_shadow",
+        "bpp_status_skip",
         "bpp_token_mint",
         "candidates_page",
         "canonical_statuses_dedupe",
@@ -530,6 +548,9 @@
         "bpp_generation_memo": 100,
         "bpp_owner_memo": 100,
         "bpp_owner_memo_enforce": 0,
+        "bpp_shared_owner_cache": 0,
+        "bpp_shared_owner_shadow": 0,
+        "bpp_status_skip": 100,
         "bpp_token_mint": 0,
         "candidates_page": 100,
         "canonical_statuses_dedupe": 100,
@@ -602,6 +623,9 @@
         "bpp_attempt_scope",
         "bpp_owner_memo",
         "bpp_owner_memo_enforce",
+        "bpp_shared_owner_cache",
+        "bpp_shared_owner_shadow",
+        "bpp_status_skip",
         "bpp_token_mint",
         "conversation_day_list_cursor",
         "conversation_page",
@@ -620,7 +644,7 @@
       ],
       "lever_expiry": {
         "lifecycle_record_pending_head": {
-          "expires": "2026-11-24",
+          "expires": "2026-12-01",
           "value": 5
         }
       }
@@ -638,6 +662,9 @@
         "bpp_generation_memo": 100,
         "bpp_owner_memo": 100,
         "bpp_owner_memo_enforce": 0,
+        "bpp_shared_owner_cache": 0,
+        "bpp_shared_owner_shadow": 0,
+        "bpp_status_skip": 100,
         "bpp_token_mint": 0,
         "candidates_page": 100,
         "canonical_statuses_dedupe": 100,
@@ -710,6 +737,9 @@
         "bpp_attempt_scope",
         "bpp_owner_memo",
         "bpp_owner_memo_enforce",
+        "bpp_shared_owner_cache",
+        "bpp_shared_owner_shadow",
+        "bpp_status_skip",
         "bpp_token_mint",
         "conversation_day_list_cursor",
         "conversation_page",
@@ -728,7 +758,7 @@
       ],
       "lever_expiry": {
         "lifecycle_record_pending_head": {
-          "expires": "2026-11-24",
+          "expires": "2026-12-01",
           "value": 5
         }
       }
@@ -746,6 +776,9 @@
         "bpp_generation_memo": 100,
         "bpp_owner_memo": 100,
         "bpp_owner_memo_enforce": 0,
+        "bpp_shared_owner_cache": 0,
+        "bpp_shared_owner_shadow": 0,
+        "bpp_status_skip": 100,
         "bpp_token_mint": 0,
         "candidates_page": 100,
         "canonical_statuses_dedupe": 100,
@@ -819,6 +852,9 @@
         "batch_metrics_oldest_leader",
         "bpp_attempt_scope",
         "bpp_owner_memo",
+        "bpp_shared_owner_cache",
+        "bpp_shared_owner_shadow",
+        "bpp_status_skip",
         "bpp_token_mint",
         "conversation_day_list_cursor",
         "conversation_page",
@@ -849,6 +885,9 @@
         "bpp_generation_memo": 100,
         "bpp_owner_memo": 100,
         "bpp_owner_memo_enforce": 0,
+        "bpp_shared_owner_cache": 0,
+        "bpp_shared_owner_shadow": 0,
+        "bpp_status_skip": 100,
         "bpp_token_mint": 0,
         "candidates_page": 100,
         "canonical_statuses_dedupe": 100,
@@ -921,6 +960,9 @@
         "bpp_attempt_scope",
         "bpp_owner_memo",
         "bpp_owner_memo_enforce",
+        "bpp_shared_owner_cache",
+        "bpp_shared_owner_shadow",
+        "bpp_status_skip",
         "bpp_token_mint",
         "conversation_day_list_cursor",
         "conversation_page",
@@ -939,7 +981,7 @@
       ],
       "lever_expiry": {
         "lifecycle_record_pending_head": {
-          "expires": "2026-11-24",
+          "expires": "2026-12-01",
           "value": 5
         }
       }
@@ -957,6 +999,9 @@
         "bpp_generation_memo": 0,
         "bpp_owner_memo": 100,
         "bpp_owner_memo_enforce": 0,
+        "bpp_shared_owner_cache": 0,
+        "bpp_shared_owner_shadow": 0,
+        "bpp_status_skip": 100,
         "bpp_token_mint": 0,
         "candidates_page": 0,
         "canonical_statuses_dedupe": 0,
@@ -1000,6 +1045,8 @@
         "batch_timeliness_leader": 100,
         "bpp_owner_memo": 100,
         "bpp_owner_memo_enforce": 0,
+        "bpp_shared_owner_cache": 0,
+        "bpp_status_skip": 100,
         "episode_members_cache": 0,
         "episode_members_singleflight": 100,
         "sync_allowance_single_resolve": 100
@@ -1011,6 +1058,7 @@
         "bpp_attempt_scope",
         "bpp_decision_cache",
         "bpp_generation_memo",
+        "bpp_shared_owner_shadow",
         "bpp_token_mint",
         "candidates_page",
         "canonical_statuses_dedupe",
@@ -1060,6 +1108,9 @@
         "bpp_generation_memo": 100,
         "bpp_owner_memo": 100,
         "bpp_owner_memo_enforce": 0,
+        "bpp_shared_owner_cache": 0,
+        "bpp_shared_owner_shadow": 0,
+        "bpp_status_skip": 100,
         "bpp_token_mint": 0,
         "candidates_page": 100,
         "canonical_statuses_dedupe": 100,
@@ -1132,6 +1183,9 @@
         "bpp_attempt_scope",
         "bpp_owner_memo",
         "bpp_owner_memo_enforce",
+        "bpp_shared_owner_cache",
+        "bpp_shared_owner_shadow",
+        "bpp_status_skip",
         "bpp_token_mint",
         "conversation_day_list_cursor",
         "conversation_page",
@@ -1150,7 +1204,7 @@
       ],
       "lever_expiry": {
         "lifecycle_record_pending_head": {
-          "expires": "2026-11-24",
+          "expires": "2026-12-01",
           "value": 5
         }
       }
@@ -1168,6 +1222,9 @@
         "bpp_generation_memo": 100,
         "bpp_owner_memo": 100,
         "bpp_owner_memo_enforce": 0,
+        "bpp_shared_owner_cache": 0,
+        "bpp_shared_owner_shadow": 0,
+        "bpp_status_skip": 100,
         "bpp_token_mint": 0,
         "candidates_page": 100,
         "canonical_statuses_dedupe": 100,
@@ -1240,6 +1297,9 @@
         "bpp_attempt_scope",
         "bpp_owner_memo",
         "bpp_owner_memo_enforce",
+        "bpp_shared_owner_cache",
+        "bpp_shared_owner_shadow",
+        "bpp_status_skip",
         "bpp_token_mint",
         "conversation_day_list_cursor",
         "conversation_page",
@@ -1258,7 +1318,7 @@
       ],
       "lever_expiry": {
         "lifecycle_record_pending_head": {
-          "expires": "2026-11-24",
+          "expires": "2026-12-01",
           "value": 5
         }
       }
@@ -1276,6 +1336,9 @@
         "bpp_generation_memo": 100,
         "bpp_owner_memo": 100,
         "bpp_owner_memo_enforce": 0,
+        "bpp_shared_owner_cache": 0,
+        "bpp_shared_owner_shadow": 0,
+        "bpp_status_skip": 100,
         "bpp_token_mint": 0,
         "candidates_page": 100,
         "canonical_statuses_dedupe": 100,
@@ -1348,6 +1411,9 @@
         "bpp_attempt_scope",
         "bpp_owner_memo",
         "bpp_owner_memo_enforce",
+        "bpp_shared_owner_cache",
+        "bpp_shared_owner_shadow",
+        "bpp_status_skip",
         "bpp_token_mint",
         "conversation_day_list_cursor",
         "conversation_page",
@@ -1366,7 +1432,7 @@
       ],
       "lever_expiry": {
         "lifecycle_record_pending_head": {
-          "expires": "2026-11-24",
+          "expires": "2026-12-01",
           "value": 5
         }
       }
@@ -1384,6 +1450,9 @@
         "bpp_generation_memo": 100,
         "bpp_owner_memo": 100,
         "bpp_owner_memo_enforce": 0,
+        "bpp_shared_owner_cache": 0,
+        "bpp_shared_owner_shadow": 0,
+        "bpp_status_skip": 100,
         "bpp_token_mint": 0,
         "candidates_page": 100,
         "canonical_statuses_dedupe": 100,
@@ -1456,6 +1525,9 @@
         "bpp_attempt_scope",
         "bpp_owner_memo",
         "bpp_owner_memo_enforce",
+        "bpp_shared_owner_cache",
+        "bpp_shared_owner_shadow",
+        "bpp_status_skip",
         "bpp_token_mint",
         "conversation_day_list_cursor",
         "conversation_page",
@@ -1474,7 +1546,7 @@
       ],
       "lever_expiry": {
         "lifecycle_record_pending_head": {
-          "expires": "2026-11-24",
+          "expires": "2026-12-01",
           "value": 5
         }
       }
@@ -1492,6 +1564,9 @@
         "bpp_generation_memo": 100,
         "bpp_owner_memo": 100,
         "bpp_owner_memo_enforce": 0,
+        "bpp_shared_owner_cache": 0,
+        "bpp_shared_owner_shadow": 0,
+        "bpp_status_skip": 100,
         "bpp_token_mint": 0,
         "candidates_page": 100,
         "canonical_statuses_dedupe": 100,
@@ -1564,6 +1639,9 @@
         "bpp_attempt_scope",
         "bpp_owner_memo",
         "bpp_owner_memo_enforce",
+        "bpp_shared_owner_cache",
+        "bpp_shared_owner_shadow",
+        "bpp_status_skip",
         "bpp_token_mint",
         "conversation_day_list_cursor",
         "conversation_page",
@@ -1582,7 +1660,7 @@
       ],
       "lever_expiry": {
         "lifecycle_record_pending_head": {
-          "expires": "2026-11-24",
+          "expires": "2026-12-01",
           "value": 5
         }
       }
@@ -1600,6 +1678,9 @@
         "bpp_generation_memo": 100,
         "bpp_owner_memo": 100,
         "bpp_owner_memo_enforce": 0,
+        "bpp_shared_owner_cache": 0,
+        "bpp_shared_owner_shadow": 0,
+        "bpp_status_skip": 100,
         "bpp_token_mint": 0,
         "candidates_page": 100,
         "canonical_statuses_dedupe": 100,
@@ -1672,6 +1753,9 @@
         "bpp_attempt_scope",
         "bpp_owner_memo",
         "bpp_owner_memo_enforce",
+        "bpp_shared_owner_cache",
+        "bpp_shared_owner_shadow",
+        "bpp_status_skip",
         "bpp_token_mint",
         "conversation_day_list_cursor",
         "conversation_page",
@@ -1690,7 +1774,7 @@
       ],
       "lever_expiry": {
         "lifecycle_record_pending_head": {
-          "expires": "2026-11-24",
+          "expires": "2026-12-01",
           "value": 5
         }
       }
@@ -1708,6 +1792,9 @@
         "bpp_generation_memo": 100,
         "bpp_owner_memo": 100,
         "bpp_owner_memo_enforce": 0,
+        "bpp_shared_owner_cache": 0,
+        "bpp_shared_owner_shadow": 0,
+        "bpp_status_skip": 100,
         "bpp_token_mint": 0,
         "candidates_page": 100,
         "canonical_statuses_dedupe": 100,
@@ -1780,6 +1867,9 @@
         "bpp_attempt_scope",
         "bpp_owner_memo",
         "bpp_owner_memo_enforce",
+        "bpp_shared_owner_cache",
+        "bpp_shared_owner_shadow",
+        "bpp_status_skip",
         "bpp_token_mint",
         "conversation_day_list_cursor",
         "conversation_page",
@@ -1798,7 +1888,7 @@
       ],
       "lever_expiry": {
         "lifecycle_record_pending_head": {
-          "expires": "2026-11-24",
+          "expires": "2026-12-01",
           "value": 5
         }
       }
@@ -1816,6 +1906,9 @@
         "bpp_generation_memo": 100,
         "bpp_owner_memo": 100,
         "bpp_owner_memo_enforce": 0,
+        "bpp_shared_owner_cache": 0,
+        "bpp_shared_owner_shadow": 0,
+        "bpp_status_skip": 100,
         "bpp_token_mint": 0,
         "candidates_page": 100,
         "canonical_statuses_dedupe": 100,
@@ -1888,6 +1981,9 @@
         "bpp_attempt_scope",
         "bpp_owner_memo",
         "bpp_owner_memo_enforce",
+        "bpp_shared_owner_cache",
+        "bpp_shared_owner_shadow",
+        "bpp_status_skip",
         "bpp_token_mint",
         "conversation_day_list_cursor",
         "conversation_page",
@@ -1906,7 +2002,7 @@
       ],
       "lever_expiry": {
         "lifecycle_record_pending_head": {
-          "expires": "2026-11-24",
+          "expires": "2026-12-01",
           "value": 5
         }
       }
@@ -1924,6 +2020,9 @@
         "bpp_generation_memo": 100,
         "bpp_owner_memo": 100,
         "bpp_owner_memo_enforce": 0,
+        "bpp_shared_owner_cache": 0,
+        "bpp_shared_owner_shadow": 0,
+        "bpp_status_skip": 100,
         "bpp_token_mint": 0,
         "candidates_page": 100,
         "canonical_statuses_dedupe": 100,
@@ -1996,6 +2095,9 @@
         "bpp_attempt_scope",
         "bpp_owner_memo",
         "bpp_owner_memo_enforce",
+        "bpp_shared_owner_cache",
+        "bpp_shared_owner_shadow",
+        "bpp_status_skip",
         "bpp_token_mint",
         "conversation_day_list_cursor",
         "conversation_page",
@@ -2014,7 +2116,7 @@
       ],
       "lever_expiry": {
         "lifecycle_record_pending_head": {
-          "expires": "2026-11-24",
+          "expires": "2026-12-01",
           "value": 5
         }
       }
@@ -2032,6 +2134,9 @@
         "bpp_generation_memo": 100,
         "bpp_owner_memo": 100,
         "bpp_owner_memo_enforce": 0,
+        "bpp_shared_owner_cache": 0,
+        "bpp_shared_owner_shadow": 0,
+        "bpp_status_skip": 100,
         "bpp_token_mint": 0,
         "candidates_page": 100,
         "canonical_statuses_dedupe": 100,
@@ -2104,6 +2209,9 @@
         "bpp_attempt_scope",
         "bpp_owner_memo",
         "bpp_owner_memo_enforce",
+        "bpp_shared_owner_cache",
+        "bpp_shared_owner_shadow",
+        "bpp_status_skip",
         "bpp_token_mint",
         "conversation_day_list_cursor",
         "conversation_page",
@@ -2122,7 +2230,7 @@
       ],
       "lever_expiry": {
         "lifecycle_record_pending_head": {
-          "expires": "2026-11-24",
+          "expires": "2026-12-01",
           "value": 5
         }
       }
@@ -2140,6 +2248,9 @@
         "bpp_generation_memo": 100,
         "bpp_owner_memo": 100,
         "bpp_owner_memo_enforce": 0,
+        "bpp_shared_owner_cache": 0,
+        "bpp_shared_owner_shadow": 0,
+        "bpp_status_skip": 100,
         "bpp_token_mint": 0,
         "candidates_page": 100,
         "canonical_statuses_dedupe": 100,
@@ -2212,6 +2323,9 @@
         "bpp_attempt_scope",
         "bpp_owner_memo",
         "bpp_owner_memo_enforce",
+        "bpp_shared_owner_cache",
+        "bpp_shared_owner_shadow",
+        "bpp_status_skip",
         "bpp_token_mint",
         "conversation_day_list_cursor",
         "conversation_page",
@@ -2230,7 +2344,7 @@
       ],
       "lever_expiry": {
         "lifecycle_record_pending_head": {
-          "expires": "2026-11-24",
+          "expires": "2026-12-01",
           "value": 5
         }
       }
@@ -2248,6 +2362,9 @@
         "bpp_generation_memo": 100,
         "bpp_owner_memo": 100,
         "bpp_owner_memo_enforce": 0,
+        "bpp_shared_owner_cache": 0,
+        "bpp_shared_owner_shadow": 0,
+        "bpp_status_skip": 100,
         "bpp_token_mint": 0,
         "candidates_page": 100,
         "canonical_statuses_dedupe": 100,
@@ -2320,6 +2437,9 @@
         "bpp_attempt_scope",
         "bpp_owner_memo",
         "bpp_owner_memo_enforce",
+        "bpp_shared_owner_cache",
+        "bpp_shared_owner_shadow",
+        "bpp_status_skip",
         "bpp_token_mint",
         "conversation_day_list_cursor",
         "conversation_page",
@@ -2338,7 +2458,7 @@
       ],
       "lever_expiry": {
         "lifecycle_record_pending_head": {
-          "expires": "2026-11-24",
+          "expires": "2026-12-01",
           "value": 5
         }
       }
@@ -2356,6 +2476,9 @@
         "bpp_generation_memo": 100,
         "bpp_owner_memo": 100,
         "bpp_owner_memo_enforce": 0,
+        "bpp_shared_owner_cache": 0,
+        "bpp_shared_owner_shadow": 0,
+        "bpp_status_skip": 100,
         "bpp_token_mint": 0,
         "candidates_page": 100,
         "canonical_statuses_dedupe": 100,
@@ -2428,6 +2551,9 @@
         "bpp_attempt_scope",
         "bpp_owner_memo",
         "bpp_owner_memo_enforce",
+        "bpp_shared_owner_cache",
+        "bpp_shared_owner_shadow",
+        "bpp_status_skip",
         "bpp_token_mint",
         "conversation_day_list_cursor",
         "conversation_page",
@@ -2446,7 +2572,7 @@
       ],
       "lever_expiry": {
         "lifecycle_record_pending_head": {
-          "expires": "2026-11-24",
+          "expires": "2026-12-01",
           "value": 5
         }
       }
@@ -2464,6 +2590,9 @@
         "bpp_generation_memo": 100,
         "bpp_owner_memo": 100,
         "bpp_owner_memo_enforce": 0,
+        "bpp_shared_owner_cache": 0,
+        "bpp_shared_owner_shadow": 0,
+        "bpp_status_skip": 100,
         "bpp_token_mint": 0,
         "candidates_page": 100,
         "canonical_statuses_dedupe": 100,
@@ -2536,6 +2665,9 @@
         "bpp_attempt_scope",
         "bpp_owner_memo",
         "bpp_owner_memo_enforce",
+        "bpp_shared_owner_cache",
+        "bpp_shared_owner_shadow",
+        "bpp_status_skip",
         "bpp_token_mint",
         "conversation_day_list_cursor",
         "conversation_page",
@@ -2554,7 +2686,7 @@
       ],
       "lever_expiry": {
         "lifecycle_record_pending_head": {
-          "expires": "2026-11-24",
+          "expires": "2026-12-01",
           "value": 5
         }
       }
@@ -2572,6 +2704,9 @@
         "bpp_generation_memo": 100,
         "bpp_owner_memo": 100,
         "bpp_owner_memo_enforce": 0,
+        "bpp_shared_owner_cache": 0,
+        "bpp_shared_owner_shadow": 0,
+        "bpp_status_skip": 100,
         "bpp_token_mint": 0,
         "candidates_page": 100,
         "canonical_statuses_dedupe": 100,
@@ -2644,6 +2779,9 @@
         "bpp_attempt_scope",
         "bpp_owner_memo",
         "bpp_owner_memo_enforce",
+        "bpp_shared_owner_cache",
+        "bpp_shared_owner_shadow",
+        "bpp_status_skip",
         "bpp_token_mint",
         "conversation_day_list_cursor",
         "conversation_page",
@@ -2662,7 +2800,7 @@
       ],
       "lever_expiry": {
         "lifecycle_record_pending_head": {
-          "expires": "2026-11-24",
+          "expires": "2026-12-01",
           "value": 5
         }
       }
@@ -2680,6 +2818,9 @@
         "bpp_generation_memo": 100,
         "bpp_owner_memo": 100,
         "bpp_owner_memo_enforce": 100,
+        "bpp_shared_owner_cache": 0,
+        "bpp_shared_owner_shadow": 0,
+        "bpp_status_skip": 100,
         "bpp_token_mint": 0,
         "candidates_page": 100,
         "canonical_statuses_dedupe": 100,
@@ -2753,6 +2894,9 @@
         "batch_metrics_oldest_leader",
         "bpp_attempt_scope",
         "bpp_owner_memo",
+        "bpp_shared_owner_cache",
+        "bpp_shared_owner_shadow",
+        "bpp_status_skip",
         "bpp_token_mint",
         "conversation_day_list_cursor",
         "conversation_page",
@@ -2783,6 +2927,9 @@
         "bpp_generation_memo": 100,
         "bpp_owner_memo": 100,
         "bpp_owner_memo_enforce": 100,
+        "bpp_shared_owner_cache": 0,
+        "bpp_shared_owner_shadow": 0,
+        "bpp_status_skip": 100,
         "bpp_token_mint": 0,
         "candidates_page": 100,
         "canonical_statuses_dedupe": 100,
@@ -2856,6 +3003,9 @@
         "batch_metrics_oldest_leader",
         "bpp_attempt_scope",
         "bpp_owner_memo",
+        "bpp_shared_owner_cache",
+        "bpp_shared_owner_shadow",
+        "bpp_status_skip",
         "bpp_token_mint",
         "conversation_day_list_cursor",
         "conversation_page",
@@ -2886,6 +3036,9 @@
         "bpp_generation_memo": 100,
         "bpp_owner_memo": 100,
         "bpp_owner_memo_enforce": 100,
+        "bpp_shared_owner_cache": 0,
+        "bpp_shared_owner_shadow": 0,
+        "bpp_status_skip": 100,
         "bpp_token_mint": 0,
         "candidates_page": 100,
         "canonical_statuses_dedupe": 100,
@@ -2959,6 +3112,9 @@
         "batch_metrics_oldest_leader",
         "bpp_attempt_scope",
         "bpp_owner_memo",
+        "bpp_shared_owner_cache",
+        "bpp_shared_owner_shadow",
+        "bpp_status_skip",
         "bpp_token_mint",
         "conversation_day_list_cursor",
         "conversation_page",
@@ -2989,6 +3145,9 @@
         "bpp_generation_memo": 100,
         "bpp_owner_memo": 100,
         "bpp_owner_memo_enforce": 100,
+        "bpp_shared_owner_cache": 0,
+        "bpp_shared_owner_shadow": 0,
+        "bpp_status_skip": 100,
         "bpp_token_mint": 0,
         "candidates_page": 100,
         "canonical_statuses_dedupe": 100,
@@ -3062,6 +3221,9 @@
         "batch_metrics_oldest_leader",
         "bpp_attempt_scope",
         "bpp_owner_memo",
+        "bpp_shared_owner_cache",
+        "bpp_shared_owner_shadow",
+        "bpp_status_skip",
         "bpp_token_mint",
         "conversation_day_list_cursor",
         "conversation_page",
@@ -3092,6 +3254,9 @@
         "bpp_generation_memo": 100,
         "bpp_owner_memo": 100,
         "bpp_owner_memo_enforce": 0,
+        "bpp_shared_owner_cache": 0,
+        "bpp_shared_owner_shadow": 0,
+        "bpp_status_skip": 100,
         "bpp_token_mint": 0,
         "candidates_page": 100,
         "canonical_statuses_dedupe": 100,
@@ -3165,6 +3330,9 @@
         "batch_metrics_oldest_leader",
         "bpp_attempt_scope",
         "bpp_owner_memo",
+        "bpp_shared_owner_cache",
+        "bpp_shared_owner_shadow",
+        "bpp_status_skip",
         "bpp_token_mint",
         "conversation_day_list_cursor",
         "conversation_page",
@@ -3182,11 +3350,11 @@
       ],
       "lever_expiry": {
         "lifecycle_record_pending_head": {
-          "expires": "2026-11-24",
+          "expires": "2026-12-01",
           "value": 5
         },
         "privacy_checks_shadow": {
-          "expires": "2026-11-24",
+          "expires": "2026-12-01",
           "value": 10
         }
       }
@@ -3204,6 +3372,9 @@
         "bpp_generation_memo": 100,
         "bpp_owner_memo": 100,
         "bpp_owner_memo_enforce": 0,
+        "bpp_shared_owner_cache": 0,
+        "bpp_shared_owner_shadow": 0,
+        "bpp_status_skip": 100,
         "bpp_token_mint": 0,
         "candidates_page": 100,
         "canonical_statuses_dedupe": 100,
@@ -3276,6 +3447,9 @@
         "bpp_attempt_scope",
         "bpp_owner_memo",
         "bpp_owner_memo_enforce",
+        "bpp_shared_owner_cache",
+        "bpp_shared_owner_shadow",
+        "bpp_status_skip",
         "bpp_token_mint",
         "conversation_day_list_cursor",
         "conversation_page",
@@ -3294,7 +3468,7 @@
       ],
       "lever_expiry": {
         "lifecycle_record_pending_head": {
-          "expires": "2026-11-24",
+          "expires": "2026-12-01",
           "value": 5
         }
       }
@@ -3312,6 +3486,9 @@
         "bpp_generation_memo": 100,
         "bpp_owner_memo": 100,
         "bpp_owner_memo_enforce": 0,
+        "bpp_shared_owner_cache": 0,
+        "bpp_shared_owner_shadow": 0,
+        "bpp_status_skip": 100,
         "bpp_token_mint": 0,
         "candidates_page": 100,
         "canonical_statuses_dedupe": 100,
@@ -3384,6 +3561,9 @@
         "bpp_attempt_scope",
         "bpp_owner_memo",
         "bpp_owner_memo_enforce",
+        "bpp_shared_owner_cache",
+        "bpp_shared_owner_shadow",
+        "bpp_status_skip",
         "bpp_token_mint",
         "conversation_day_list_cursor",
         "conversation_page",
@@ -3402,7 +3582,7 @@
       ],
       "lever_expiry": {
         "lifecycle_record_pending_head": {
-          "expires": "2026-11-24",
+          "expires": "2026-12-01",
           "value": 5
         }
       }
@@ -3420,6 +3600,9 @@
         "bpp_generation_memo": 100,
         "bpp_owner_memo": 100,
         "bpp_owner_memo_enforce": 0,
+        "bpp_shared_owner_cache": 0,
+        "bpp_shared_owner_shadow": 0,
+        "bpp_status_skip": 100,
         "bpp_token_mint": 0,
         "candidates_page": 100,
         "canonical_statuses_dedupe": 100,
@@ -3492,6 +3675,9 @@
         "bpp_attempt_scope",
         "bpp_owner_memo",
         "bpp_owner_memo_enforce",
+        "bpp_shared_owner_cache",
+        "bpp_shared_owner_shadow",
+        "bpp_status_skip",
         "bpp_token_mint",
         "conversation_day_list_cursor",
         "conversation_page",
@@ -3510,7 +3696,7 @@
       ],
       "lever_expiry": {
         "lifecycle_record_pending_head": {
-          "expires": "2026-11-24",
+          "expires": "2026-12-01",
           "value": 5
         }
       }

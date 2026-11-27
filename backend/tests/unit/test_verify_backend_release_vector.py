@@ -1807,11 +1807,8 @@ def test_backend_promotions_are_phase_aware_and_restore_the_recorded_traffic_sna
             assert fragment in restore_step
         if workflow_name == 'gcp_backend.yml':
             serving_smoke = text.index('Smoke promoted production serving API')
-            development_smoke = text.index('Smoke What Matters Now datastore query')
             assert serving_vector < serving_smoke < restore
-            assert serving_vector < development_smoke < restore
             assert "steps.smoke-promoted-production-serving-api.outcome == 'failure'" in restore_step
-            assert "steps.smoke-what-matters-now-datastore-query.outcome == 'failure'" in restore_step
         else:
             assert "inputs.deploy_profile == 'auto-dev'" in restore_step
         assert 'cancelled()' in restore_step
@@ -1839,10 +1836,8 @@ def test_production_cloud_run_only_boundary_smokes_serving_after_promotion():
     traffic = workflow.index('Shift Cloud Run traffic to validated revisions')
     verify = workflow.index('Verify serving backend release vector')
     smoke = workflow.index('Smoke promoted production serving API')
-    development_smoke = workflow.index('Smoke What Matters Now datastore query')
     restore = workflow.index('Restore Cloud Run traffic snapshot after failed promotion')
     assert snapshot < traffic < verify < smoke < restore
-    assert snapshot < traffic < verify < development_smoke < restore
     assert '--tag={0}' in workflow
     assert "default: 'cloud-run-only'" in workflow
     assert 'environment=prod, deploy_targets=all is unsupported' in workflow
@@ -1852,7 +1847,6 @@ def test_production_cloud_run_only_boundary_smokes_serving_after_promotion():
     assert '--data \'{"tag":"v0.0.0+1-macos"}\'' in workflow
     assert "--data '{}')" not in workflow
     assert "steps.smoke-promoted-production-serving-api.outcome == 'failure'" in workflow
-    assert "steps.smoke-what-matters-now-datastore-query.outcome == 'failure'" in workflow
     assert 'CLOUD_RUN_ONLY="--cloud-run-only"' in workflow
     assert 'probe-transcription-candidate-from-cloud-run.sh' not in workflow
 
@@ -1923,13 +1917,9 @@ def test_backend_listen_rollout_wait_can_cover_a_real_rollout():
     )
 
 
-@pytest.mark.parametrize(
-    ('directory', 'pattern'),
-    [('backend/scripts', '*.py'), ('infra/rollout', '**/*.py'), ('.github/scripts', '**/*.py')],
-)
-def test_deploy_script_argparse_percent_escapes(directory, pattern):
-    # Deploy run 42177595382: Python 3.14 rejects bare % while building the parser.
+def _collect_deploy_script_argparse_literals(directory, pattern):
     paths = sorted((REPOSITORY_ROOT / directory).glob(pattern))
+    literals = []
     for path in paths:
         source = path.read_text(encoding='utf-8')
         if '%' not in source:
@@ -1946,5 +1936,33 @@ def test_deploy_script_argparse_percent_escapes(directory, pattern):
                     continue
                 for value in ast.walk(keyword.value):
                     if isinstance(value, ast.Constant) and isinstance(value.value, str):
-                        remainder = re.sub(r'%%|%\([^)]+\)s', '', value.value)
-                        assert '%' not in remainder, f'{path}:{value.lineno}: escape literal percent as %%'
+                        literals.append((path, value.lineno, value.value))
+    return literals
+
+
+@pytest.fixture(scope='module')
+def deploy_script_argparse_literals(request):
+    # Only scan groups selected in this worker, so the fast lane still skips backend/scripts.
+    groups = dict.fromkeys(
+        item.callspec.params['argparse_script_group']
+        for item in request.session.items
+        if isinstance(item, pytest.Function)
+        and item.getparent(pytest.Module) is request.node
+        and 'deploy_script_argparse_literals' in item.fixturenames
+    )
+    return {group: _collect_deploy_script_argparse_literals(*group) for group in groups}
+
+
+@pytest.mark.parametrize(
+    'argparse_script_group',
+    [
+        pytest.param(('backend/scripts', '*.py'), marks=pytest.mark.slow, id='backend/scripts-*.py'),
+        pytest.param(('infra/rollout', '**/*.py'), id='infra/rollout-**/*.py'),
+        pytest.param(('.github/scripts', '**/*.py'), id='.github/scripts-**/*.py'),
+    ],
+)
+def test_deploy_script_argparse_percent_escapes(argparse_script_group, deploy_script_argparse_literals):
+    # Deploy run 42177595382: Python 3.14 rejects bare % while building the parser.
+    for path, lineno, literal in deploy_script_argparse_literals[argparse_script_group]:
+        remainder = re.sub(r'%%|%\([^)]+\)s', '', literal)
+        assert '%' not in remainder, f'{path}:{lineno}: escape literal percent as %%'

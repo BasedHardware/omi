@@ -18,12 +18,29 @@ class MobileBatchBuffer {
   MobileBatchBuffer(
       {required this.directory,
       required this.publish,
+      this.onSealed,
+      this.onPublishFailed,
       this.maxBytes = 256 * 1024 * 1024,
       this.maxFiles = 4096,
       RandomAccessFile Function(File)? openWriter})
       : _openWriter = openWriter ?? _openAppend;
 
   static RandomAccessFile _openAppend(File file) => file.openSync(mode: FileMode.append);
+
+  static const defaultMaxFileSeconds = 60;
+
+  /// Longest file this buffer writes before sealing it. Applies from the next
+  /// frame, so an open file longer than a newly lowered cap seals at once.
+  int get maxFileSeconds => _maxFileSeconds;
+  int _maxFileSeconds = defaultMaxFileSeconds;
+  set maxFileSeconds(int seconds) {
+    if (seconds > 0 && seconds <= defaultMaxFileSeconds) _maxFileSeconds = seconds;
+  }
+
+  /// [maxFiles] counts files at the default length. A shorter cap writes
+  /// proportionally more files for the same audio, so the limit scales with it
+  /// and the buffer admits the same span of capture either way.
+  int get _fileLimit => maxFiles * defaultMaxFileSeconds ~/ _maxFileSeconds;
 
   // One process-wide revision also covers observers recreated for the same
   // directory. It invalidates disk snapshots, never supplies custody proof.
@@ -32,6 +49,8 @@ class MobileBatchBuffer {
 
   final Directory directory;
   final Future<void> Function(Wal) publish;
+  final void Function(Wal)? onSealed;
+  final void Function(Wal)? onPublishFailed;
   final int maxBytes;
   final int maxFiles;
   final RandomAccessFile Function(File) _openWriter;
@@ -120,7 +139,7 @@ class MobileBatchBuffer {
     int? Function()? observeLiveOrdinal,
   }) {
     if (failed ||
-        (_writer == null && _files >= maxFiles) ||
+        (_writer == null && _files >= _fileLimit) ||
         uid.isEmpty ||
         !codec.isOpusSupported() ||
         _bytes + payload.length + 4 > maxBytes) {
@@ -139,7 +158,7 @@ class MobileBatchBuffer {
       }
       if (_writer == null) {
         // A codec/origin change can seal an existing writer above.
-        if (_files >= maxFiles) return false;
+        if (_files >= _fileLimit) return false;
         final token = const Uuid().v4().replaceAll('-', '');
         final start = now.microsecondsSinceEpoch / 1000000;
         final name = 'audio_omimobilebatch${token}_${codec}_16000_1_fs${codec.getFrameSize()}_$start.bin';
@@ -200,7 +219,7 @@ class MobileBatchBuffer {
         _writer!.flushSync();
         if (liveContext != null) _checkpointJournal();
       }
-      if (_chunkFrames >= codec.getFramesPerSecond() * 60) seal();
+      if (_chunkFrames >= codec.getFramesPerSecond() * _maxFileSeconds) seal();
       return true;
     } on FileSystemException {
       failed = true;
@@ -253,14 +272,28 @@ class MobileBatchBuffer {
     _writer = null;
     _wal = null;
     _journal = null;
+    onSealed?.call(wal);
+    var published = false;
     _pending = _pending.then((_) async {
       wal.fileSha256 = (await sha256.bind(File('${directory.path}/${wal.filePath}').openRead()).first).toString();
+      if (wal.mobileBatchHold != null) {
+        try {
+          final tmp = File('${journal.path}.tmp');
+          await tmp.writeAsString(jsonEncode(wal.toJson()), flush: true);
+          await tmp.rename(journal.path);
+        } on FileSystemException {
+          // The existing journal still protects the audio. The index can
+          // carry the hold stamp even if this optional checkpoint failed.
+        }
+      }
       await publish(wal);
+      published = true;
       // publish persists the shared WAL index before removing the journal.
       if (await journal.exists()) await journal.delete();
     }).catchError((Object _) {
       // Keep journal + bytes for recovery, and return to the live path.
       failed = true;
+      if (!published) onPublishFailed?.call(wal);
     });
   }
 

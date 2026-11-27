@@ -17,6 +17,7 @@ from google.cloud.firestore_v1 import FieldFilter
 from database import conversations_v3 as store
 from database import conversations_v3_backfill_runs as runs
 from database import conversations_v3_leases as leases
+from database import home_visibility_index
 from database.account_deletion_marker import account_deletion_document
 from database.account_deletion_policy import account_deletion_marker_blocks_access
 from database.conversations import ACTION_ITEMS_EDIT_REVISION, EVENTS_EDIT_REVISION, has_created_calendar_events
@@ -120,6 +121,8 @@ def live_source_block(raw):
     """Why a source recording must not be replanned now (None: it is sealed and settled)."""
     if raw.get('deleted') or raw.get('sync_merged_into'):
         return 'deleted'
+    if raw.get('discarded'):
+        return 'discarded'
     if raw.get('data_protection_level') == 'private':
         return 'private'
     if raw.get('v3_backfill_run'):
@@ -354,7 +357,7 @@ def already_undone(row, entry, run_id):
     """This run's undo already handled the row: restored to its prior, or hidden awaiting erasure.
 
     The Firestore commit hook stamps home feed versions onto every conversation write, so a restored
-    row equals its prior apart from those fields.
+    row equals its prior apart from those fields and the derived Home index bit.
     """
     if row is None:
         return True
@@ -364,7 +367,7 @@ def already_undone(row, entry, run_id):
 
 
 def _unstamped(row):
-    return {k: v for k, v in row.items() if k not in COMMIT_STAMPED_FIELDS}
+    return {k: v for k, v in row.items() if k not in COMMIT_STAMPED_FIELDS and k != home_visibility_index.FIELD}
 
 
 # A prior the owner's deletion or protection change emptied: the run can no longer be undone exactly.
@@ -530,7 +533,7 @@ def undo_live_rederive(uid, held_leases, run_id, entries, *, firestore_client=No
     def undo(tx):
         deletion = account_deletion_document(uid, firestore_client=client).get(transaction=tx)
         if account_deletion_marker_blocks_access(
-            marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('status')
+            marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('wipe_status')
         ):
             raise Conflict('account_deletion')
         docs = {cid: coll.document(cid).get(transaction=tx) for cid in ids}
@@ -590,11 +593,12 @@ def undo_live_rederive(uid, held_leases, run_id, entries, *, firestore_client=No
                         'discarded': True,
                         'v3_derived': False,
                         'home_hidden': True,
+                        home_visibility_index.FIELD: False,
                         'v3_rederive_live_undone': run_id,
                     },
                 )
             else:
-                tx.set(coll.document(entry['id']), restore[entry['id']])
+                tx.set(coll.document(entry['id']), home_visibility_index.stamp(restore[entry['id']]))
                 restored += 1
         repaired = 0
         for rid, snapshot in sources.items():

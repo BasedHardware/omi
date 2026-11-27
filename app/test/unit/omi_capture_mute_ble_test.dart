@@ -9,6 +9,7 @@ import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/connectors/omi_connection.dart';
 import 'package:omi/services/devices/transports/device_transport.dart';
 import 'package:omi/services/devices/transports/native_ble_transport.dart';
+import 'package:omi/services/wals/ring_custody_diagnostics.dart';
 
 class _MuteTransport extends DeviceTransport {
   _MuteTransport({this.features = OmiFeatures.captureMute, this.muteValue = const [1]});
@@ -149,6 +150,24 @@ void main() {
     transport.acceptWrite = true;
     await _connection(transport).setCaptureMuted(false);
     expect(transport.muteValue, [0]);
+  });
+
+  test('device diagnostics distinguish a mute readback mismatch from an acknowledgement', () async {
+    final transport = _MuteTransport(muteValue: [0])..acceptWrite = false;
+    final connection = _connection(transport);
+    await expectLater(connection.setCaptureMuted(true), throwsStateError);
+    transport.acceptWrite = true;
+    await connection.setCaptureMuted(true);
+
+    final diagnostic = RingCustodyDiagnostics.shared.build(transport.deviceId, device: {});
+    final events = (diagnostic['events']! as List).cast<Map<String, Object?>>();
+    final readbacks = events.where((event) => event['event'] == 'captureMuteReadback').toList();
+    expect(readbacks, hasLength(greaterThanOrEqualTo(2)));
+    expect(readbacks[readbacks.length - 2], containsPair('requested_muted', true));
+    expect(readbacks[readbacks.length - 2], containsPair('observed_muted', false));
+    expect(readbacks.last, containsPair('requested_muted', true));
+    expect(readbacks.last, containsPair('observed_muted', true));
+    expect(readbacks.last['at_ms'], isA<int>());
   });
 
   test('failed or malformed feature reads are not mistaken for legacy firmware', () async {

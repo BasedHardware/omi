@@ -44,7 +44,11 @@ from database.batch_pipeline_privacy import assert_batch_write_allowed
 from database.batch_privacy_attempt import batch_transaction_reads, transaction_snapshot
 from database.batch_pipeline_transaction_attempt import note_direct_reads as _note_direct_reads, prepare_transaction
 from database.batch_pipeline_recovery import defer_privacy_blocked_record, quarantine_fenced
-from database.firestore_transaction_retry import FirestoreContentionExhausted, run_with_transaction_contention_retry
+from database.firestore_transaction_retry import (
+    FirestoreContentionExhausted,
+    run_with_transaction_contention_retry,
+    transaction_with_safe_rollback,
+)
 from database.batch_pipeline_transaction_labels import (
     current_operation,
     pull_operation as pull_operation,
@@ -175,7 +179,8 @@ class FirestoreTransaction:
         if address not in self.cache:
             options = {}
             if self.read_budget is not None:
-                options = dict(timeout=self.read_budget.timeout(10), retry=None)
+                deadline = getattr(self.read_budget, 'point', self.read_budget.timeout)
+                options = dict(timeout=deadline(10), retry=None)
             ref = self._ref(table, key)
             snapshot = transaction_snapshot(
                 ref, self.transaction, lambda: ref.get(transaction=self.transaction, **options)
@@ -263,6 +268,7 @@ class FirestoreTransaction:
             uid,
             conversation_ids=conversation_ids,
             expected_generation=expected_generation,
+            shared_owner_cache=True,
             **options,
         )
 
@@ -400,7 +406,7 @@ class FirestoreStore:
 
     def _run_committed(self, client, commit, last_view, *, before_attempt=None):
         if not contention_retry_enabled():
-            return commit(prepare_transaction(client, before_attempt))
+            return commit(transaction_with_safe_rollback(prepare_transaction(client, before_attempt)))
         # The outer budget owns fresh transaction IDs and all retries. The
         # SDK's same-ID commit loop would multiply the contention window.
         operation = current_operation()

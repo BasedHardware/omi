@@ -1,9 +1,10 @@
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from types import SimpleNamespace
 import struct
 from unittest.mock import MagicMock
 
 import pytest
+from google.api_core.exceptions import Forbidden
 
 from utils.other import storage as storage_mod
 from database import account_deletion_operational_holds
@@ -281,6 +282,34 @@ def test_merge_cleanup_preserves_canonical_and_explicit_privacy_calls_erase(monk
     erased.assert_not_called()
     storage_mod.delete_privacy_conversation_audio('u', 'merged')
     erased.assert_called_once_with(private, 'u', 'merged')
+
+
+def test_conversation_purge_attempts_other_prefixes_when_some_generations_are_protected(monkeypatch):
+    protected = {'chunks/u/c/held', 'raw-live/u/c/held'}
+    other = 'playback/u/c/deletable'
+    wal = 'record-wal/u/c/original'
+    private = _Bucket(protected | {other, wal})
+    private.name = 'private'
+    delete = _Blob.delete
+
+    def delete_with_hold(blob):
+        if blob.name in protected:
+            raise Forbidden('protected', errors=[{'reason': 'objectUnderActiveHold'}])
+        delete(blob)
+
+    monkeypatch.setattr(storage_mod, '_get_storage_client', lambda: _Client({'private': private}))
+    monkeypatch.setattr(storage_mod, 'private_cloud_sync_bucket', 'private')
+    monkeypatch.setattr(storage_mod, 'destructive_operation_gate', lambda *_a, **_kw: nullcontext())
+    monkeypatch.delenv('BUCKET_AUDIO_DERIVED', raising=False)
+    monkeypatch.delenv('BUCKET_CANONICAL_AUDIO', raising=False)
+    monkeypatch.setattr(_Blob, 'generation', 1, raising=False)
+    monkeypatch.setattr(_Blob, 'delete', delete_with_hold)
+
+    for _ in range(2):
+        with pytest.raises(account_deletion_operational_holds.StoragePrefixPurgeBlocked) as error:
+            storage_mod.delete_privacy_conversation_audio('u', 'c')
+        assert error.value.objects == {('private', name, 1): 'objectUnderActiveHold' for name in protected}
+        assert private.names == protected | {wal}
 
 
 def _prepare_playback(monkeypatch):

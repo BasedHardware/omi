@@ -297,7 +297,7 @@ def _failed_create_store(monkeypatch, stray_updates=None):
     monkeypatch.setattr(recording_sessions, 'stop_quiet_check_for_conversation', lambda *a, **kw: None)
     monkeypatch.setattr(conversations, 'get_conversation', lambda uid, cid, **kw: db.documents.get(_key(cid)))
     monkeypatch.setattr(conversations, 'delete_conversation_photos', lambda *a: None)
-    monkeypatch.setattr(lifecycle, 'delete_conversation_audio_files', Mock())
+    monkeypatch.setattr(lifecycle, 'count_retained_raw_conversation_objects', Mock(return_value=0))
     monkeypatch.setattr(redis_db, 'set_in_progress_conversation_id', lambda *a: None)
     return db, stray
 

@@ -22,6 +22,9 @@ from utils.conversations import (
     processing_metrics as _retry_metrics,  # pyright: ignore[reportUnusedImport]  # noqa: F401
 )
 from utils.episodes import metrics as _episode_metrics  # pyright: ignore[reportUnusedImport]  # noqa: F401
+from utils.observability import (
+    speaker_evidence_erasure as _evidence_erasure,  # pyright: ignore[reportUnusedImport]  # noqa: F401
+)
 from utils.sync import absorption_metrics as _absorption_metrics  # pyright: ignore[reportUnusedImport]  # noqa: F401
 
 if TYPE_CHECKING:
@@ -1689,22 +1692,6 @@ PUSHER_DRAIN_IN_PROGRESS.set(0)
 OMI_SYNC_JOB_POLL_REQUESTS_TOTAL = Counter(
     'omi_sync_job_poll_requests_total',
     'Authenticated GET /v2/sync-local-files/{job_id} requests, including rejected polls',
-)
-OMI_SYNC_JOB_POLL_COHORT_REQUESTS_TOTAL = Counter(
-    'omi_sync_job_poll_cohort_requests_total',
-    'Sync job-status polls by stable backoff cohort; cohort is limited to in or out',
-    ['cohort'],
-)
-OMI_SYNC_JOB_POLL_ACTIVE_UPLOADERS = Gauge(
-    'omi_sync_job_poll_active_uploaders',
-    'Distinct authenticated UIDs with a nonterminal sync job poll in the last five minutes on this process',
-    ['cohort'],
-)
-OMI_SYNC_JOB_COMPLETION_TO_FIRST_TERMINAL_READ_SECONDS = Histogram(
-    'omi_sync_job_completion_to_first_terminal_read_seconds',
-    'Seconds from sync job completion to its first terminal status read observed by this process',
-    ['cohort'],
-    buckets=(1, 5, 10, 20, 30, 60, 120, 300, 600, 1800, 3600, 7200),
 )
 OMI_SYNC_JOB_POLL_THROTTLED_TOTAL = Counter(
     'omi_sync_job_poll_throttled_total',

@@ -23,8 +23,8 @@ def expression(rule):
             expanded[node["refId"]] = re.sub(r"\$([A-Z])", lambda match: "(" + expanded[match[1]] + ")", math)
         else:
             threshold = model["conditions"][0]["evaluator"]
-            assert threshold["type"] == "gt"
-            expanded[node["refId"]] = f'({expanded[model["expression"]]}) > {threshold["params"][0]}'
+            operator = {"gt": ">", "lt": "<"}[threshold["type"]]
+            expanded[node["refId"]] = f'({expanded[model["expression"]]}) {operator} {threshold["params"][0]}'
     return expanded[rule["condition"]]
 
 
@@ -67,6 +67,28 @@ def step_case(name, elevated, expected):
         ],
         "alert_rule_test": [
             {"eval_time": "7d16h30m", "alertname": "FirestoreBilledReadsStep", "exp_alerts": [{}] if expected else []}
+        ],
+    }
+
+
+def unattributed_case(name, ratio, blind, absolute, excess, *, native_query="1800000x300", expect_blind=False):
+    # 30,000 billed reads/s makes even a 600 reads/s gap only 2%.
+    attributed = (30_000 - excess) * 60
+    fires = excess > 579 and not expect_blind
+    return {
+        "name": name,
+        "interval": "1m",
+        "input_series": [
+            counter("omi_firestore_billed_reads_by_caller_total", attributed),
+            {"series": 'firestore_googleapis_com:document_read_count{type="LOOKUP"}', "values": "0x300"},
+            {"series": 'firestore_googleapis_com:document_read_count{type="NOT_FOUND"}', "values": "0x300"},
+            {"series": 'firestore_googleapis_com:document_read_count{type="QUERY"}', "values": native_query},
+        ],
+        "alert_rule_test": [
+            {"eval_time": "115m", "alertname": absolute["title"], "exp_alerts": []},
+            {"eval_time": "190m", "alertname": absolute["title"], "exp_alerts": [{}] if fires else []},
+            {"eval_time": "190m", "alertname": ratio["title"], "exp_alerts": []},
+            {"eval_time": "190m", "alertname": blind["title"], "exp_alerts": [{}] if expect_blind else []},
         ],
     }
 
@@ -161,7 +183,19 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--promtool", required=True, type=Path)
     args = parser.parse_args()
-    rules = json.loads((MONITORING / "alerts/firestore.json").read_text())[-3:]
+    rules_by_uid = {rule["uid"]: rule for rule in json.loads((MONITORING / "alerts/firestore.json").read_text())}
+    step = rules_by_uid["omi-firestore-billed-reads-step"]
+    ratio = rules_by_uid["omi-firestore-unattributed-reads"]
+    blind = rules_by_uid["omi-firestore-unattributed-reads-blind"]
+    absolute = rules_by_uid["omi-firestore-unattributed-absolute"]
+    rules = [
+        rules_by_uid["omi-firestore-batch-reads-audio-hour"],
+        rules_by_uid["omi-firestore-batch-reads-no-output"],
+        step,
+        ratio,
+        blind,
+        absolute,
+    ]
     tests = [
         batch_case("high ratio", 7800000, 100, {"FirestoreBatchReadsPerAudioHourHigh"}),
         batch_case("exact ratio boundary", 6000000, 100, set()),
@@ -172,6 +206,27 @@ def main():
         batch_case("exact read boundary", 10000000, 0, set()),
         step_case("diurnal same hour stays quiet", False, False),
         step_case("full hour step sustained", True, True),
+        unattributed_case("absolute fires at a 2% gap after two hours", ratio, blind, absolute, 600),
+        unattributed_case("absolute stays quiet at 579 reads/s", ratio, blind, absolute, 579),
+        unattributed_case("absolute stays quiet below threshold", ratio, blind, absolute, 578),
+        unattributed_case(
+            "missing native QUERY leaves coverage to blind",
+            ratio,
+            blind,
+            absolute,
+            600,
+            native_query="_x300",
+            expect_blind=True,
+        ),
+        unattributed_case(
+            "stale native QUERY leaves coverage to blind",
+            ratio,
+            blind,
+            absolute,
+            600,
+            native_query="1800000x15 _x285",
+            expect_blind=True,
+        ),
         recording_case("recorded ratio and disjoint groups", breakouts=True),
         recording_case("raw counter resets preserve the recorded ratio", reset=True),
         recording_case("recorded ratio retains an observed true zero", reads=0),
@@ -186,8 +241,8 @@ def main():
         ),
         coverage_case("native coverage rejects a second series with 57 samples", "100x55 _ _ _ _ 100", []),
     ]
-    median = rules[-1]["data"][1]["model"]["expr"]
-    hourly = rules[-1]["data"][0]["model"]["expr"]
+    median = step["data"][1]["model"]["expr"]
+    hourly = step["data"][0]["model"]["expr"]
     # GMP rejected offsets on the raw selectors inside these hourly subqueries.
     # Execute the committed outer-offset form and all seven daily offsets here;
     # production compatibility still requires the exact-head GMP readback.

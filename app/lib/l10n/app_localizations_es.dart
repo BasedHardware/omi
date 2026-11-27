@@ -7072,6 +7072,26 @@ class AppLocalizationsEs extends AppLocalizations {
   String get authUnexpectedError => 'Error inesperado al iniciar sesión, por favor inténtalo de nuevo';
 
   @override
+  String get accountSignInMethods => 'Métodos de inicio de sesión';
+
+  @override
+  String get accountAddSignInMethod => 'Añadir método de inicio de sesión';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Añade un método para iniciar sesión en esta cuenta de Omi. Tu plan, tus grabaciones y tus integraciones se conservan en esta cuenta.';
+
+  @override
+  String get accountSignInConflictTitle => 'Este método de inicio de sesión está vinculado a otra cuenta';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Sigues con la sesión iniciada en esta cuenta. Cada cuenta de Omi conserva su plan, sus grabaciones y sus integraciones.';
+
+  @override
+  String get accountSignInMethodAdded => 'Método de inicio de sesión añadido';
+
+  @override
   String get authFailedToLinkGoogle => 'Error al vincular con Google, por favor inténtalo de nuevo.';
 
   @override
@@ -14404,6 +14424,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get processingProgress => 'Procesando tus grabaciones pendientes…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'En espera de cuota de transcripción disponible';
+
+  @override
   String get processingDeferred => 'En espera de procesamiento';
 
   @override
@@ -15357,9 +15380,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get stopThese => 'Dejar de recibir esto';
 
   @override
-  String get meetingActionItemsTitle => 'Acciones pendientes';
-
-  @override
   String get addToTasks => 'Añadir a Tareas';
 
   @override
@@ -15767,6 +15787,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get stillWorkingOnIt => 'Sigue trabajando en ello.';
 
   @override
+  String get deviceReadyToUse => 'Listo para usar';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'El firmware de tu dispositivo es demasiado antiguo para esta actualización. Contacta con el soporte para que te ayude a actualizar el dispositivo.';
 
@@ -15782,4 +15805,88 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Revisar';
+
+  @override
+  String get playManageSubscription => 'Gestionar suscripción';
+
+  @override
+  String get playBilledByGoogle => 'Facturado por Google Play';
+
+  @override
+  String get playPurchasePending => 'Tu pago está pendiente. Omi Pro empezará cuando Google Play lo confirme.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Esta compra de Google Play pertenece a otra cuenta de Omi.';
+
+  @override
+  String get playPurchaseNotConfirmed =>
+      'Aún no pudimos confirmar tu compra. Lo intentaremos de nuevo automáticamente.';
+
+  @override
+  String get playRenewalTerms =>
+      'Se renueva automáticamente al precio indicado hasta que lo canceles. Gestiónalo o cancélalo cuando quieras en Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'No disponible en Android';
+
+  @override
+  String get pageNotAvailableInApp => 'Esta página no está disponible en la app.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Pedido realizado. Revisa tu correo para ver la confirmación.';
+
+  @override
+  String get prepaidCodeEntry => '¿Tienes un código?';
+
+  @override
+  String get prepaidCodeTitle => 'Canjear un código';
+
+  @override
+  String get prepaidCodeFieldHint => 'Introduce tu código';
+
+  @override
+  String get prepaidCodeRedeem => 'Canjear';
+
+  @override
+  String get prepaidCodeRedeemed => 'Código canjeado';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Este código no es válido. Revísalo e inténtalo de nuevo.',
+        'used': 'Este código ya se ha usado.',
+        'expired': 'Este código ha caducado.',
+        'hasPlan': 'Ya tienes un plan. Tu código no se ha usado. Canjéalo cuando termine tu plan.',
+        'notPrepaid': 'Este código no se puede canjear aquí. Úsalo cuando elijas un plan.',
+        'notEligible': 'Este código no se puede usar en esta cuenta.',
+        'rateLimited': 'Demasiados intentos. Inténtalo más tarde.',
+        'other': 'Algo salió mal. Inténtalo de nuevo.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'Se factura a través de omi.me. Cancélalo aquí cuando quieras.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Se factura a través de omi.me.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'Tu plan $plan está en pausa.';
+  }
+
+  @override
+  String get firmwareNewestSupportedForDevice =>
+      'Tu dispositivo ya está en la versión de firmware compatible más reciente';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Sincroniza tus grabaciones primero';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Algunas grabaciones siguen en tu dispositivo. Deja que terminen de sincronizarse con tu teléfono y luego inicia la actualización.';
 }

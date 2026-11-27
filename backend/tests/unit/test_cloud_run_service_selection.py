@@ -221,6 +221,18 @@ def test_step_census_refuses_an_unclassified_new_step():
     # its shell is exercised in test_cloud_run_live_caps.py.
     # `Resolve production backend memory` reads local ops config and writes only
     # step outputs. It runs for the production backend/sync deploy paths.
+    # SCA-3681 removes the manual development datastore smoke from the census.
+    # The split-plan parser reads local input only. Candidate staging writes
+    # Backend only, and its subsequent donor-continuity verification is read-only.
+    for name in (
+        'Stage image-only Backend candidate from the admitted split donor',
+        'Verify the split candidate preserves the admitted donor configuration',
+    ):
+        assert step(name)['if'].startswith("${{ inputs.cloud_run_service == 'backend' &&")
+    # Only a completed bound promotion publishes a receipt for its selected service.
+    receipt = step('Persist completed bound promotion receipt')
+    assert "inputs.selected_split_binding != ''" in receipt['if']
+    assert "steps.shift-cloud-run-traffic.outputs.promoted == 'true'" in receipt['if']
     memory = step('Resolve production backend memory')
     assert memory['if'] == (
         "${{ inputs.runtime_env == 'prod' && inputs.integration_only != 'true' && "
@@ -229,7 +241,7 @@ def test_step_census_refuses_an_unclassified_new_step():
     )
     assert (
         hashlib.sha256(json.dumps([s['name'] for s in STEPS]).encode()).hexdigest()
-        == "36ae1be07abee676dfe48c15a93fe687f228fbb9d14c90f4804cfa187878f34a"
+        == "7df1aedf4b09b55f07b21fe4e16e2766692e2848a7be6ec19aa29fb602d3ed18"
     )
 
 
@@ -259,7 +271,8 @@ def test_custody_artifact_is_bound_to_the_native_serving_gate_and_contains_no_en
     )
     assert upload['uses'] == 'actions/upload-artifact@v7'
     assert upload['with']['path'] == 'artifacts/cloud-run-selection.json'
-    assert set(record['env']) == {'ADMITTED_SOURCE', 'WORKFLOW_CONTROL', 'CLOUD_RUN_SELECTION'}
+    assert set(record['env']) == {'ADMITTED_SOURCE', 'WORKFLOW_CONTROL', 'CLOUD_RUN_SELECTION', 'SPLIT_BINDING'}
+    assert record['env']['SPLIT_BINDING'] == '${{ inputs.selected_split_binding }}'
     assert record['env']['WORKFLOW_CONTROL'] == '${{ github.workflow_sha }}'
 
 

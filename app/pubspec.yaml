@@ -57,6 +57,9 @@ dependencies:
   pool: ^1.5.1
   collection: ^1.19.1
   http: ^1.4.0
+  # Android-only Google Play Billing (official in_app_purchase federation); no iOS StoreKit plugin.
+  in_app_purchase_android: 0.5.5
+  in_app_purchase_platform_interface: ^1.4.0
   intl: ^0.20.2
   permission_handler: ^12.0.0+1
   # Must stay >=2.0.0 — 1.x's iOS registration force-unwraps

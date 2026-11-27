@@ -132,19 +132,20 @@ class RingCommandAck {
 }
 
 class DeviceConnectionFactory {
+  static DeviceType resolveDeviceType(BtDevice device) {
+    // Some OmiGlass devices advertise as Omi.
+    if (device.type == DeviceType.omi && device.name.toLowerCase().contains('glass')) {
+      return DeviceType.openglass;
+    }
+    return device.type;
+  }
+
   static DeviceConnection? create(BtDevice device) {
     DeviceTransport transport;
 
     // Create transport based on device locator
     final locator = device.locator;
     if (locator == null) return null;
-
-    // Use name-based detection as fallback for OmiGlass devices (some advertise as DeviceType.omi).
-    final deviceName = device.name.toLowerCase();
-    final isOmiGlass = device.type == DeviceType.openglass ||
-        deviceName.contains('openglass') ||
-        deviceName.contains('omiglass') ||
-        deviceName.contains('glass');
 
     switch (locator.kind) {
       case TransportKind.bluetooth:
@@ -163,13 +164,8 @@ class DeviceConnectionFactory {
         break;
     }
 
-    switch (device.type) {
+    switch (resolveDeviceType(device)) {
       case DeviceType.omi:
-        // Check if this is actually an OmiGlass device by name
-        if (isOmiGlass) {
-          Logger.debug('DeviceConnectionFactory: Device name suggests OmiGlass, creating OmiGlassConnection');
-          return OmiGlassConnection(device, transport);
-        }
         return OmiDeviceConnection(device, transport);
       case DeviceType.openglass:
         return OmiGlassConnection(device, transport);
@@ -529,8 +525,8 @@ abstract class DeviceConnection {
   }
 
   /// Send CMD_RING_READ. If [packetCount] is null or 0, firmware streams everything from [startSeq].
-  Future<bool> readRingFromSeq(int startSeq, {int? packetCount}) async {
-    if (await isConnected()) {
+  Future<bool> readRingFromSeq(int startSeq, {int? packetCount, bool Function()? canStart}) async {
+    if (await isConnected() && (canStart?.call() ?? true)) {
       return await performReadRingFromSeq(startSeq, packetCount: packetCount);
     }
     return false;

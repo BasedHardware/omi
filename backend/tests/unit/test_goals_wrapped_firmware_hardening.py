@@ -37,6 +37,9 @@ def _parse_kv(body):
 
 @pytest.fixture(scope="module")
 def modules():
+    # The goal writer uses the real fence exception even with a stub database.
+    import database.conversation_effect_fence  # noqa: F401
+
     # The suggestion tests assert the real sanitize_suggestion_dict coercion, so the
     # canonical contract module must be loaded before the empty-path `models` stub
     # takes over sys.modules; otherwise the fresh goals.py exec cannot import it in

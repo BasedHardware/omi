@@ -6,6 +6,7 @@ import uuid
 from google.cloud import firestore
 
 from config.record_latency import record_notes_eager_enabled
+from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from database.record_notes_hold import merge_producers
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyReason, assert_batch_write_allowed
 from models.finalization_owner import python_owns_finalization
@@ -40,7 +41,9 @@ def discard_blocked(document_id: str) -> bool:
             return True
         return False
 
-    return discard(client.transaction())
+    return run_with_transaction_contention_retry(
+        lambda: client.transaction(max_attempts=1), discard, operation_name='enrichment_custody_discard', max_attempts=3
+    )
 
 
 def transfer_redirect(document_id: str, token: str, owner: str, canonical: str, *, now: float) -> dict | None:
@@ -173,4 +176,9 @@ def transfer_redirect(document_id: str, token: str, owner: str, canonical: str, 
         transaction.delete(source)
         return None if pending.get('dormant') else pending
 
-    return transfer(client.transaction())
+    return run_with_transaction_contention_retry(
+        lambda: client.transaction(max_attempts=1),
+        transfer,
+        operation_name='enrichment_custody_transfer',
+        max_attempts=3,
+    )

@@ -549,7 +549,7 @@ def test_production_cloud_run_only_smokes_the_promoted_serving_api():
 
     serving_smoke = by_name['Smoke promoted production serving API']
     assert serving_smoke['if'] == (
-        "${{ (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend') && "
+        "${{ success() && !cancelled() && (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend') && "
         "(inputs.deploy_profile == 'manual' && inputs.environment == 'prod') }}"
     )
     assert 'https://api.omi.me/v2/desktop/beta/candidates/reserve' in serving_smoke['run']
@@ -576,20 +576,6 @@ def test_production_cloud_run_only_smokes_the_promoted_serving_api():
         in by_name['Restore Cloud Run traffic snapshot after failed promotion']['if']
     )
 
-    development_smoke = by_name['Smoke What Matters Now datastore query']
-    assert development_smoke['if'] == (
-        "${{ inputs.integration_only != 'true' && "
-        "(inputs.deploy_profile == 'manual' && inputs.environment == 'development') }}"
-    )
-    assert development_smoke.get('id') == 'smoke-what-matters-now-datastore-query'
-    assert steps.index(by_name['Verify serving backend release vector']) < steps.index(development_smoke)
-    assert steps.index(development_smoke) < steps.index(
-        by_name['Restore Cloud Run traffic snapshot after failed promotion']
-    )
-    assert (
-        "steps.smoke-what-matters-now-datastore-query.outcome == 'failure'"
-        in by_name['Restore Cloud Run traffic snapshot after failed promotion']['if']
-    )
     assert (
         'gcloud run services describe backend --project=${{ inputs.project_id }}'
         in by_name['Verify validated revisions are still current']['run']

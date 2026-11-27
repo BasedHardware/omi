@@ -42,6 +42,7 @@ class SyncTransferKeepAlive {
   final Future<void> Function()? _stop;
 
   int _refs = 0;
+  int _leaseGeneration = 0;
 
   /// Visible to tests and diagnostics.
   int get refCount => _refs;
@@ -50,6 +51,7 @@ class SyncTransferKeepAlive {
 
   Future<dynamic> _handleNativeCall(MethodCall call) async {
     if (call.method != 'expired') return null;
+    _leaseGeneration++;
     _refs = 0;
     final arguments = call.arguments;
     final reason = arguments is Map ? arguments['reason'] : null;
@@ -57,22 +59,26 @@ class SyncTransferKeepAlive {
     return null;
   }
 
-  Future<void> acquire() async {
+  /// Acquires one lease and returns its idempotent release. Resetting the
+  /// native service retires every earlier lease, including in-flight owners.
+  Future<Future<void> Function()> acquireScoped() async {
+    final generation = _leaseGeneration;
     _refs++;
-    if (_refs != 1) return;
-    await _invokeStart();
-  }
+    if (_refs == 1) await _invokeStart();
 
-  Future<void> release() async {
-    if (_refs == 0) return;
-    _refs--;
-    if (_refs != 0) return;
-    await _invokeStop();
+    var released = false;
+    return () async {
+      if (released || generation != _leaseGeneration) return;
+      released = true;
+      _refs--;
+      if (_refs == 0) await _invokeStop();
+    };
   }
 
   /// Drop every ref and stop the native service. Used by cancel and dispose so
   /// the notification cannot outlive the transfer the user just stopped.
   Future<void> releaseAll() async {
+    _leaseGeneration++;
     if (_refs == 0) return;
     _refs = 0;
     await _invokeStop();

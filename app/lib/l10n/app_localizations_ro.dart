@@ -7091,6 +7091,26 @@ class AppLocalizationsRo extends AppLocalizations {
   String get authUnexpectedError => 'Eroare neașteptată la autentificare, vă rugăm încercați din nou';
 
   @override
+  String get accountSignInMethods => 'Metode de conectare';
+
+  @override
+  String get accountAddSignInMethod => 'Adaugă o metodă de conectare';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Adaugă o modalitate de conectare la acest cont Omi. Planul, înregistrările și integrările tale rămân în acest cont.';
+
+  @override
+  String get accountSignInConflictTitle => 'Această metodă de conectare aparține altui cont';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Ești încă în acest cont. Fiecare cont Omi își păstrează propriul plan, propriile înregistrări și integrări.';
+
+  @override
+  String get accountSignInMethodAdded => 'Metoda de conectare a fost adăugată';
+
+  @override
   String get authFailedToLinkGoogle => 'Nu s-a putut conecta cu Google, vă rugăm încercați din nou.';
 
   @override
@@ -14423,6 +14443,9 @@ class AppLocalizationsRo extends AppLocalizations {
   String get processingProgress => 'Se procesează înregistrările în așteptare…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'În așteptarea cotei disponibile pentru transcriere';
+
+  @override
   String get processingDeferred => 'În așteptarea procesării';
 
   @override
@@ -15378,9 +15401,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get stopThese => 'Oprește acestea';
 
   @override
-  String get meetingActionItemsTitle => 'Elemente de acțiune';
-
-  @override
   String get addToTasks => 'Adaugă la Sarcini';
 
   @override
@@ -15787,6 +15807,9 @@ class AppLocalizationsRo extends AppLocalizations {
   String get stillWorkingOnIt => 'Încă lucrăm la asta.';
 
   @override
+  String get deviceReadyToUse => 'Pregătit pentru utilizare';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Firmware-ul dispozitivului tău este prea vechi pentru această actualizare. Contactează echipa de asistență pentru ajutor la actualizarea dispozitivului.';
 
@@ -15802,4 +15825,87 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Verifică';
+
+  @override
+  String get playManageSubscription => 'Gestionează abonamentul';
+
+  @override
+  String get playBilledByGoogle => 'Facturat prin Google Play';
+
+  @override
+  String get playPurchasePending => 'Plata este în așteptare. Omi Pro începe imediat ce Google Play o confirmă.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Această achiziție Google Play aparține altui cont Omi.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Nu am putut confirma încă achiziția. Vom reîncerca automat.';
+
+  @override
+  String get playRenewalTerms =>
+      'Se reînnoiește automat la prețul afișat până când anulezi. Gestionează sau anulează oricând din Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Indisponibil pe Android';
+
+  @override
+  String get pageNotAvailableInApp => 'Această pagină nu este disponibilă în aplicație.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Comanda a fost plasată. Verifică e-mailul pentru confirmare.';
+
+  @override
+  String get prepaidCodeEntry => 'Ai un cod?';
+
+  @override
+  String get prepaidCodeTitle => 'Folosește un cod';
+
+  @override
+  String get prepaidCodeFieldHint => 'Introdu codul tău';
+
+  @override
+  String get prepaidCodeRedeem => 'Folosește';
+
+  @override
+  String get prepaidCodeRedeemed => 'Cod folosit';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Acest cod nu este valid. Verifică-l și încearcă din nou.',
+        'used': 'Acest cod a fost deja folosit.',
+        'expired': 'Acest cod a expirat.',
+        'hasPlan': 'Ai deja un plan. Codul tău nu a fost folosit. Folosește-l după ce planul tău se încheie.',
+        'notPrepaid': 'Acest cod nu poate fi folosit aici. Folosește-l când alegi un plan.',
+        'notEligible': 'Acest cod nu poate fi folosit în acest cont.',
+        'rateLimited': 'Prea multe încercări. Încearcă mai târziu.',
+        'other': 'Ceva nu a funcționat. Încearcă din nou.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'Facturat prin omi.me. Anulează aici oricând.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Facturat prin omi.me.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'Planul tău $plan este întrerupt.';
+  }
+
+  @override
+  String get firmwareNewestSupportedForDevice =>
+      'Dispozitivul tău are deja cea mai recentă versiune de firmware acceptată';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Sincronizează mai întâi înregistrările';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Unele înregistrări sunt încă pe dispozitivul tău. Lasă-le să termine de sincronizat cu telefonul tău, apoi pornește actualizarea.';
 }

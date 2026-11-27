@@ -19,6 +19,7 @@ import pytest
 
 from config import conversation_smart_merge as config
 from config import merge_ancestry
+from config.record_wal_duplicate import SETTLED_FIELD
 from database import conversations as conversations_db
 from database.legal_holds import DestructiveOperationInProgress
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreDocument
@@ -446,6 +447,15 @@ def test_absorb_writes_ancestor_updates_in_the_same_transaction(world):
     assert next(patch for path, patch in absorb.updates if path[-1] == 'g1')['sync_merged_into'] == 'p'
 
 
+def test_smart_merge_refuses_to_repoint_a_settled_wal_donor(world):
+    _setup_pair(world)
+    world.raw('g1')[SETTLED_FIELD] = True
+    before = _rows_without_decision(world)
+    assert world.finish('n') is False
+    assert _rows_without_decision(world) == before
+    assert not world.retracted
+
+
 def test_flatten_replay_does_not_duplicate_cleanup(world):
     _setup_pair(world)
     assert world.finish('n') is True
@@ -787,6 +797,18 @@ def test_sync_absorb_then_smart_merge_flattens_one_hop(world):
     expected = start_ids | {'wal-7-seg'}
     assert set(ids) == expected
     assert len(ids) == len(expected)
+
+
+def test_sync_absorb_refuses_to_reassign_a_settled_wal_donor(world):
+    world.add('n', 15, 10, sync_content_revision=2)
+    world.add('g', 14, 2, sync_content_revision=1, structured={})
+    _seed_index(world, 'n', 'g')
+    world.raw('g')[SETTLED_FIELD] = True
+    before = deepcopy(world.store.rows)
+    with pytest.raises(SyncAssignmentConflict) as denied:
+        _assign(world, _sync_chunk('wal-protected', 15, minutes=2), target_id='n')
+    assert denied.value.subtype == 'ancestry_flatten_rejected'
+    assert world.store.rows == before
 
 
 def test_smart_merge_then_sync_absorb_flattens_new_donor_ancestry(world, monkeypatch):
@@ -1173,6 +1195,7 @@ def test_default_caps_refuse_a_flatten_eligible_pair(capped_pair, monkeypatch):
 
 
 def test_flattened_lineage_delete_purges_every_source(world, monkeypatch):
+    from database import batch_pipeline_purge
     from tests.unit.test_delete_conversation_cascade import _FakeFirestore
     from utils.conversations import merge_conversations
     from utils.other import storage
@@ -1222,12 +1245,19 @@ def test_flattened_lineage_delete_purges_every_source(world, monkeypatch):
             for key in [key for key, row in memory_map.items() if row['conversation_id'] == cid]:
                 del memory_map[key]
 
-    calls = {'vector': [], 'index': [], 'survivor': []}
+    calls = {'vector': [], 'index': [], 'survivor': [], 'batch_purge': []}
     monkeypatch.setattr(merge_conversations, 'firestore_db', store)
     monkeypatch.setattr(merge_conversations, '_purge_rederive_priors', lambda *a: None)
     # Merge-source tombstone writes go through their own module-level client;
     # bind it to the same fake store or the write hits real Firestore.
     monkeypatch.setattr(merge_conversations.conversation_tombstones, 'db', store)
+
+    def purge_batch(uid, *, conversation_id):
+        owner = store.collection('users').document(uid)
+        assert owner.collection('deleted_conversations').document(conversation_id).exists
+        calls['batch_purge'].append(conversation_id)
+
+    monkeypatch.setattr(batch_pipeline_purge, 'purge_batch_owner', purge_batch)
     monkeypatch.setattr(merge_conversations, 'MemoryService', FakeMemoryService)
     monkeypatch.setattr(merge_conversations, 'retraction_can_be_skipped', lambda *a, **k: False)
     monkeypatch.setattr(merge_conversations, 'delete_vector', lambda uid, cid: calls['vector'].append(cid))
@@ -1272,6 +1302,7 @@ def test_flattened_lineage_delete_purges_every_source(world, monkeypatch):
         assert f'users/{UID}/conversations/{cid}/photos/ph' in deleted
         assert f'users/{UID}/conversations/{cid}/deepgram_streaming/seg' in deleted
         assert cid in calls['vector']
+    assert sorted(calls['batch_purge']) == ['g1', 'g2', 'n']
     assert calls['survivor'] == ['p']
     assert not memory_map
     assert not task_map

@@ -9,6 +9,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from utils.sync import processing_hold, bridge_pending
+from config.record_wal_duplicate import has_retained_custody
 from config.recorded_time import late_audio_intake_enabled
 from config.conversations_v3 import SPEECH_LANDED_FIELD
 from config.episodes import episodes_enabled, episode_compose_transcript_ready_enabled
@@ -35,6 +36,7 @@ from utils.conversations.size_limit import (
 )
 from utils.conversations.summary_delivery import rearm_on_revision_change
 from utils.conversations.v3 import sync_custody
+from utils.conversations.v3.end_sides import ATTACH_KEY as END_CUTS_KEY, separated_by_end
 from utils.observability.fallback import record_fallback
 from utils.sync.size_telemetry import (
     finish_size_attempt,
@@ -282,6 +284,8 @@ def assign_in_transaction(
     require_live_target = incoming.pop('_batch_require_live_target', False)
     redrive_target = incoming.pop('_batch_redrive_target', False)
     record_span = incoming.pop('_batch_replace_live', None)
+    # Reliability experiment end_open_conversation: the Ends around this unit's first speech (None when off).
+    end_cuts = incoming.pop(END_CUTS_KEY, None)
     collection = user_ref.collection('conversations')
     read: dict[str, dict | None] = {}
 
@@ -640,6 +644,14 @@ def assign_in_transaction(
                 ):
                     # Live and user-managed rows can only be explicit targets.
                     if not auto_mergeable(raw) and cid != plan_target_id:
+                        continue
+                    # Reliability experiment end_open_conversation: a recording row stays on one side of
+                    # every End. A row found by time or hint that began on the other side of an End from
+                    # this unit is left alone, so the unit starts (or joins) a row on its own side. The
+                    # unit's own row and an explicit target keep their place.
+                    if cid not in (own_id, plan_target_id, target_hint) and separated_by_end(
+                        raw.get('started_at'), end_cuts
+                    ):
                         continue
                     if plan_target and not batch_target_contains(plan_target, decode(raw)):
                         continue
@@ -1487,6 +1499,12 @@ def assign_in_transaction(
         for accepted in [chosen, *extra_plans]
     ):
         raise SyncAssignmentConflict('record target discarded', subtype=Reason.RECORD_TARGET_DISCARDED)
+    for accepted in [chosen, *extra_plans]:
+        lineage_updates = set(accepted.donor_updates) | set(accepted.ancestor_updates)
+        if lineage_updates and any(has_retained_custody(load(cid)) for cid in {*lineage_updates, accepted.canonical}):
+            raise SyncAssignmentConflict(
+                'retained WAL lineage requires merge authority', subtype=Reason.ANCESTRY_FLATTEN_REJECTED
+            )
     remember_size_payload(canonical, result)
     for accepted in [chosen, *extra_plans]:
         remember_size_payload(accepted.canonical, accepted.result)
