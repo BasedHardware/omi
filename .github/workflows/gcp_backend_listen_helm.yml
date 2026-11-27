@@ -298,7 +298,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          reviewed_scripts_tree=2bd0e72ce5455ff3d213c64782a6e1a8bf5adcc8
+          reviewed_scripts_tree=686d4a44e3041439050d65e39c2aca271f562386
           test "$(git rev-parse HEAD)" = "$GITHUB_WORKFLOW_SHA"
           test "$(git rev-parse HEAD:.github/scripts)" = "$reviewed_scripts_tree"
           changed=$(git status --porcelain=v1 --untracked-files=all --ignored -- .github/scripts)

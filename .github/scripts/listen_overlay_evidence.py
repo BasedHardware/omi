@@ -975,13 +975,18 @@ def produce(request, reader, environ, root, private_file, overrides, now):
     image_tag = request['image_tag']
     attestation = request.get('image_only')
     if attestation is not None:
-        admit_image_only_digest(reader, request['image'], attestation, request['candidate_sha'], root)
         if chart_baseline(request):
             require(not overrides and not raw, 'reference_overlay_injected')
+            # The installed chart may predate the forward image. Both must be
+            # on the reviewed control history, with their own exact bindings.
+            reader.run(['git', '-C', str(root), 'merge-base', '--is-ancestor',
+                        request['candidate_sha'], request['control_sha']])
+            admit_image_only_digest(reader, request['image'], attestation, request['control_sha'], root)
             changes = reader.run(['git', '-C', str(root), 'status', '--porcelain=v1',
                                   '--untracked-files=all', '--ignored', '--', 'backend/charts/backend-listen'])
             require(not changes, 'image_only_chart_moved')
             return produce_chart_baseline(request, reader, environ, root, private_spec, now)
+        admit_image_only_digest(reader, request['image'], attestation, request['candidate_sha'], root)
     else:
         require(re.fullmatch(r'[0-9a-f]{7,40}', image_tag), 'image_invalid')
         image_source = reader.run(['git', '-C', str(root), 'rev-parse', '--verify', image_tag + '^{commit}']).decode().strip()
