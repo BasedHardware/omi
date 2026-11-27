@@ -1811,6 +1811,17 @@ def pending_paid_start_patch(
     }
 
 
+def first_week_trialing_patch(stored_user_first_week_trialing: Any, payment_status: Any) -> dict[str, bool]:
+    """Keep a trial-origin marker through payment retries, clearing it on payment or termination."""
+    if not isinstance(payment_status, str):
+        return {}
+    if payment_status == 'trialing':
+        return {FIRST_WEEK_TRIALING_FIELD: True}
+    if payment_status in PENDING_PAID_START_STATUSES and stored_user_first_week_trialing is True:
+        return {}
+    return {FIRST_WEEK_TRIALING_FIELD: False}
+
+
 def paid_since_patch(
     stored: Any,
     incoming: dict,
@@ -1849,9 +1860,21 @@ def paid_since_patch(
     if status and status not in PAID_START_STATUSES:
         return {}
     pending_start = _pending_paid_start_matches(stored_user_pending_paid_start, incoming)
-    if _is_paid_plan(stored) and not (prior_trial and trial_conversion) and not pending_start:
+    if _is_paid_plan(stored) and not (prior_trial or trial_conversion) and not pending_start:
         return {}
-    paid_at = incoming.get('_first_week_paid_since')
+    paid_at = None
+    provider = incoming.get('provider')
+    provider = getattr(provider, 'value', provider)
+    if prior_trial and provider == 'play':
+        # Play reports the original grant time on a trial subscription. The prior
+        # period end is the confirmed trial-to-paid boundary when the first paid
+        # period replaces that trial.
+        trial_end = stored.get('current_period_end') if isinstance(stored, dict) else None
+        if not isinstance(trial_end, (int, float)) or isinstance(trial_end, bool) or trial_end <= 0:
+            return {}
+        paid_at = trial_end
+    else:
+        paid_at = incoming.get('_first_week_paid_since')
     if not isinstance(paid_at, (int, float)) or isinstance(paid_at, bool) or paid_at <= 0:
         paid_at = incoming.get('current_period_start')
     if not isinstance(paid_at, (int, float)) or isinstance(paid_at, bool) or paid_at <= 0:
@@ -1870,11 +1893,6 @@ def update_user_subscription(uid: str, subscription_data: dict):
     paid_since_at = subscription_data_to_store.pop('_first_week_paid_since', None)
     subscription_data_to_store.pop('_first_week_trialing', None)
     feature_enabled = first_week_enabled()
-    trialing_patch = (
-        {FIRST_WEEK_TRIALING_FIELD: payment_status == 'trialing'}
-        if feature_enabled and isinstance(payment_status, str)
-        else {}
-    )
     paid_since_input = {
         **subscription_data_to_store,
         **({'_first_week_payment_status': payment_status} if isinstance(payment_status, str) else {}),
@@ -1924,6 +1942,7 @@ def update_user_subscription(uid: str, subscription_data: dict):
                         stored_user_paid_since=data.get('paid_since'),
                         stored_user_pending_paid_start=data.get(FIRST_WEEK_PENDING_PAID_START_FIELD),
                     )
+                    trialing_patch = first_week_trialing_patch(data.get(FIRST_WEEK_TRIALING_FIELD), payment_status)
                     transaction.update(
                         user_ref,
                         {'subscription': subscription_data_to_store, **paid_patch, **trialing_patch, **pending_patch},

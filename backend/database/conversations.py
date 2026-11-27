@@ -434,6 +434,9 @@ def _prepare_conversation_for_write(
     data = copy.deepcopy(data)
     data.pop(home_visibility_index.FIELD, None)
     data.pop('transcription_admission', None)  # Current authenticated read evidence, never persisted.
+    carried_first_week_stamp = isinstance(data.get('first_week_summary'), Mapping) or (
+        conversation_state is not None and isinstance(conversation_state.get('first_week_summary'), Mapping)
+    )
 
     # Partial writes cannot certify an entire legacy row. Explicit prepare
     # reconciles them; full creates/processing results get compact content now.
@@ -450,10 +453,20 @@ def _prepare_conversation_for_write(
             stored_value = conversation_state.get(field)
             if stored_value is not None:
                 data[field] = stored_value
+            elif carried_first_week_stamp:
+                # Close-out owns these fields. A stale processing snapshot with
+                # null cannot clear a result committed after that snapshot.
+                data.pop(field, None)
         if 'created_at' not in data and 'created_at' in conversation_state:
             data['created_at'] = conversation_state['created_at']
     if isinstance(data.get('first_week_summary'), Mapping):
-        data.setdefault('first_week_outcome', None)
+        if not carried_first_week_stamp:
+            data.setdefault('first_week_outcome', None)
+        else:
+            if data.get('first_week_outcome') is None:
+                data.pop('first_week_outcome', None)
+            if data.get('first_week_outcome_at') is None:
+                data.pop('first_week_outcome_at', None)
     summary_delivery.prepare(data, uid, first_week=first_week)
     if owner_diagnostics.FIELD in data:
         try:

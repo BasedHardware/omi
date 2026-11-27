@@ -227,7 +227,7 @@ def test_active_purchase_acknowledges_binds_and_grants_omi_pro(env):
     assert row.current_period_end == NOW + 30 * DAY and row.cancel_at_period_end is False
     assert row.stripe_subscription_id is None
     # The configured trial offer is an active entitlement, not proof of a first charge.
-    assert '_first_week_payment_status' not in env.users.writes[-1][1]
+    assert env.users.writes[-1][1]['_first_week_payment_status'] == 'trialing'
     # Same side effects as a Stripe Omi Pro upgrade.
     assert env.effects == [
         'credits',
@@ -251,6 +251,26 @@ def test_confirmed_nontrial_play_purchase_passes_paid_start_context(env):
     written = env.users.writes[-1][1]
     assert written['_first_week_payment_status'] == 'active'
     assert written['_first_week_paid_since'] == NOW - DAY
+
+
+def test_play_trial_conversion_requires_a_successful_paid_phase(env):
+    trial_resource = resource(expiry=NOW + 7 * DAY)
+    trial_resource['lineItems'][0]['offerPhase'] = {'freeTrial': {}}
+    trial = play_billing.read_state(trial_resource)
+    play_billing._grant(UID, trial, play_db.token_key(TOKEN))
+    assert env.users.writes[-1][1]['_first_week_payment_status'] == 'trialing'
+
+    converted_resource = resource(expiry=NOW + 37 * DAY)
+    converted_resource['lineItems'][0]['offerPhase'] = {'basePrice': {}}
+    converted_resource['lineItems'][0]['latestSuccessfulOrderId'] = 'GPA.1234-5678-9012-34567'
+    converted = play_billing.read_state(converted_resource)
+    play_billing._grant(UID, converted, play_db.token_key(TOKEN))
+    written = env.users.writes[-1][1]
+    assert written['_first_week_payment_status'] == 'active'
+    # With no paid phase/order, the still-trialing marker is not cleared into a false payment.
+    converted_resource['lineItems'][0]['latestSuccessfulOrderId'] = None
+    unconfirmed = play_billing._first_week_payment_context(play_billing.read_state(converted_resource))
+    assert unconfirmed == {}
 
 
 def test_token_replay_by_the_same_user_is_idempotent(env):

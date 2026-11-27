@@ -20,6 +20,7 @@ from config.summary_guarantee import first_week_enabled
 from database.users import (
     FIRST_WEEK_PENDING_PAID_START_FIELD,
     FIRST_WEEK_TRIALING_FIELD,
+    first_week_trialing_patch,
     paid_since_patch,
     pending_paid_start_patch,
 )
@@ -405,8 +406,7 @@ def write_commercial_subscription(
                 )
             )
             payment_status = context.get('_first_week_payment_status')
-            if isinstance(payment_status, str):
-                paid_patch[FIRST_WEEK_TRIALING_FIELD] = payment_status == 'trialing'
+            paid_patch.update(first_week_trialing_patch(user.get(FIRST_WEEK_TRIALING_FIELD), payment_status))
         patch: dict[str, Any] = {'subscription': subscription}
         patch.update(paid_patch)
         if requeued is not None and requeued != grant:

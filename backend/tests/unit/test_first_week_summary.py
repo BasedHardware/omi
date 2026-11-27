@@ -183,6 +183,54 @@ def test_paid_since_ignores_a_trial_that_was_never_charged():
     )
 
 
+def test_stripe_trial_origin_survives_failed_payment_until_conversion():
+    assert users_db.first_week_trialing_patch(False, 'trialing') == {users_db.FIRST_WEEK_TRIALING_FIELD: True}
+    assert users_db.first_week_trialing_patch(True, 'past_due') == {}
+    assert users_db.first_week_trialing_patch(True, 'unpaid') == {}
+
+    # Stripe can report trialing -> past_due -> active, so the active event's
+    # previous status is no longer trialing. The persisted origin is sufficient.
+    stored = {'plan': 'unlimited', 'status': 'active', 'provider': 'stripe'}
+    converted = {
+        'plan': 'unlimited',
+        'status': 'active',
+        'provider': 'stripe',
+        'current_period_start': PAID + 7 * 24 * HOUR,
+        '_first_week_payment_status': 'active',
+        '_first_week_paid_since': PAID + 7 * 24 * HOUR,
+    }
+    assert users_db.paid_since_patch(
+        stored,
+        converted,
+        stored_user_first_week_trialing=True,
+    ) == {'paid_since': PAID + 7 * 24 * HOUR}
+    assert users_db.first_week_trialing_patch(True, 'active') == {users_db.FIRST_WEEK_TRIALING_FIELD: False}
+    assert users_db.first_week_trialing_patch(True, 'canceled') == {users_db.FIRST_WEEK_TRIALING_FIELD: False}
+
+
+def test_play_trial_conversion_uses_the_saved_trial_end_as_paid_start():
+    trial_end = PAID + 7 * 24 * HOUR
+    stored = {
+        'plan': 'unlimited_v2',
+        'status': 'active',
+        'provider': 'play',
+        'current_period_end': trial_end,
+    }
+    converted = {
+        'plan': 'unlimited_v2',
+        'status': 'active',
+        'provider': 'play',
+        'current_period_start': PAID,
+        '_first_week_payment_status': 'active',
+        '_first_week_paid_since': PAID,
+    }
+    assert users_db.paid_since_patch(
+        stored,
+        converted,
+        stored_user_first_week_trialing=True,
+    ) == {'paid_since': trial_end}
+
+
 def test_pending_new_paid_plan_gets_epoch_on_first_active_payment_only():
     basic = {'plan': 'basic', 'status': 'active'}
     pending = {
@@ -468,6 +516,79 @@ def test_campaign_off_subscription_writer_round_trips_paid_since_at_user_level(m
     assert ref.data['paid_since'] == paid_since
 
 
+def test_subscription_writer_preserves_trial_origin_through_past_due(monkeypatch):
+    class Snapshot:
+        exists = True
+
+        def __init__(self, data):
+            self.data = data
+
+        def to_dict(self):
+            return dict(self.data)
+
+    class UserRef:
+        def __init__(self):
+            self.data = {'subscription': {'plan': 'basic', 'status': 'active'}}
+
+        def get(self, field_paths=None, transaction=None):
+            return Snapshot({key: self.data[key] for key in field_paths if key in self.data})
+
+        def update(self, patch):
+            self.data.update(patch)
+
+    ref = UserRef()
+
+    class Collection:
+        def document(self, _uid):
+            return ref
+
+    class Client:
+        def collection(self, name):
+            assert name == 'users'
+            return Collection()
+
+    class Transaction:
+        def update(self, reference, patch):
+            reference.update(patch)
+
+    monkeypatch.setattr(users_db, 'transactional', lambda function: function)
+    monkeypatch.setattr(users_db, 'run_transactional', lambda _client, function, **_kwargs: function(Transaction()))
+    monkeypatch.setattr(users_db, 'db', Client())
+    monkeypatch.setattr(users_db, 'invalidate_subscription', lambda _uid: None)
+    monkeypatch.setattr('config.referral_campaign.campaign_enabled', lambda: False)
+    monkeypatch.setenv(guarantee.FIRST_WEEK_ENABLED_ENV, 'true')
+
+    def write(payment_status, *, paid_since=None, period_start=PAID):
+        incoming = {
+            'plan': 'unlimited',
+            'status': 'active',
+            'provider': 'stripe',
+            'current_period_start': period_start,
+            'current_period_end': period_start + 30 * 24 * HOUR,
+            '_first_week_payment_status': payment_status,
+        }
+        if paid_since is not None:
+            incoming['_first_week_paid_since'] = paid_since
+        users_db.update_user_subscription.__wrapped__('uid', incoming)
+
+    write('trialing')
+    assert ref.data[users_db.FIRST_WEEK_TRIALING_FIELD] is True
+    assert 'paid_since' not in ref.data
+
+    write('past_due')
+    assert ref.data[users_db.FIRST_WEEK_TRIALING_FIELD] is True
+    assert 'paid_since' not in ref.data
+
+    paid_at = PAID + 7 * 24 * HOUR
+    write('active', paid_since=paid_at, period_start=paid_at)
+    assert ref.data['paid_since'] == paid_at
+    assert ref.data[users_db.FIRST_WEEK_TRIALING_FIELD] is False
+
+    renewal_at = paid_at + 30 * 24 * HOUR
+    write('active', paid_since=renewal_at, period_start=renewal_at)
+    assert ref.data['paid_since'] == paid_at
+
+
 def test_campaign_off_flag_off_writer_keeps_subscription_payload_unchanged(monkeypatch):
     class UserRef:
         def __init__(self):
@@ -563,7 +684,7 @@ def test_conversation_codec_uses_stored_creation_time_for_the_window(monkeypatch
 
     assert valid['first_week_summary']['paid_since'] == PAID
     assert valid['first_week_outcome'] is None
-    assert carried_without_outcome['first_week_outcome'] is None
+    assert 'first_week_outcome' not in carried_without_outcome
     assert 'first_week_summary' not in old_delta
     assert 'first_week_summary' not in missing_time
     assert 'first_week_summary' not in historical
@@ -606,6 +727,38 @@ def test_processing_merge_preserves_closed_first_week_receipts():
     assert write['first_week_summary'] == stamp
     assert write['first_week_outcome'] == 'no_attempt'
     assert write['first_week_outcome_at'] == PAID + 8 * 24 * HOUR
+
+
+def test_stale_processing_snapshot_cannot_clear_a_committed_first_week_outcome():
+    stamp = guarantee.first_week_stamp(PAID, PAID + HOUR)
+    stale_state = {
+        'created_at': PAID + HOUR,
+        'first_week_summary': stamp,
+        'first_week_outcome': None,
+        'first_week_outcome_at': None,
+    }
+    write = conversations_db.encode_conversation_for_write(
+        'uid',
+        {
+            'id': 'counted',
+            'structured': {'overview': 'updated'},
+            'first_week_summary': stamp,
+            'first_week_outcome': None,
+            'first_week_outcome_at': None,
+        },
+        conversation_state=stale_state,
+    )
+    assert 'first_week_outcome' not in write
+    assert 'first_week_outcome_at' not in write
+
+    committed = {
+        'first_week_summary': stamp,
+        'first_week_outcome': 'no_attempt',
+        'first_week_outcome_at': PAID + 8 * 24 * HOUR,
+    }
+    committed.update(write)
+    assert committed['first_week_outcome'] == 'no_attempt'
+    assert committed['first_week_outcome_at'] == PAID + 8 * 24 * HOUR
 
 
 def test_outbox_mark_uses_the_stored_stamp_or_original_creation_time(monkeypatch):

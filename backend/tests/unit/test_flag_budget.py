@@ -256,6 +256,11 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
         FEATURE_FLAGS_PATH.read_text(encoding='utf-8'), Loader=getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
     )
     flags = {flag['key']: flag for flag in registry['flags']}
+    first_week = flags['FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED']
+    assert first_week['kind'] == 'env'
+    assert first_week['lifecycle'] == 'ops_kill'
+    assert first_week['fail'] == 'open'
+    assert first_week['summary'].startswith('Code default on')
     # Registry lanes are assigned independently of the budget exception owners.
     # The ad1268 sweep replaces account ownership; don't freeze the former account
     # or require a test edit whenever a lane takes ownership of a registry row.
@@ -409,10 +414,6 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
             assert flag['ramp']['cohorts'][-1] == 'fleet only after clean owner and small-cohort windows'
             assert 'stranded live-producer tokens' in flag['ramp']['clean_metric']
             assert 'quality lead' in flag['ramp']['expander']
-        elif name == 'FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED':
-            assert flag['lifecycle'] == 'config_switch'
-            assert flag['fail'] == 'closed'
-            assert flag['summary'].startswith('Code default off')
         else:
             assert flag['lifecycle'] == 'ops_kill'
             assert flag['fail'] == 'open'
