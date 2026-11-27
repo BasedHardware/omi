@@ -486,7 +486,6 @@ class SpeakerMatcher:
             getattr(self.host.request, 'include_speech_profile', True)
             and not getattr(self.host.request, 'onboarding_mode', False)
             and not getattr(self.host, 'is_multi_channel', False)
-            and not getattr(self.host, 'use_custom_stt', False)
         )
         self._owner_load_failed = False
         may_load = self._owner_failed_loads < MAX_OWNER_FAILED_LOADS and (

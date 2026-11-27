@@ -5,6 +5,7 @@ from typing import Any, Mapping, Optional, Sequence
 
 from models.conversation_enums import ConversationSource
 from models import conversation_continuity
+from models.transcript_segment import SpeakerIdentityStatus
 
 MAX_CONVERSATION_TIMEOUT_SECONDS = conversation_continuity.MAX_CONVERSATION_TIMEOUT_SECONDS
 MIN_CONVERSATION_TIMEOUT_SECONDS = conversation_continuity.DEFAULT_GAP_SECONDS
@@ -167,17 +168,16 @@ def effective_conversation_timeout(conversation_timeout: int, is_multi_channel: 
     return timeout
 
 
-def should_load_speech_profile(*, use_custom_stt: bool, is_multi_channel: bool, include_speech_profile: bool) -> bool:
-    return not use_custom_stt and not is_multi_channel and include_speech_profile
+def should_load_speech_profile(*, is_multi_channel: bool, include_speech_profile: bool) -> bool:
+    return not is_multi_channel and include_speech_profile
 
 
 def should_enable_speaker_identification(
     *,
-    use_custom_stt: bool,
     private_cloud_sync_enabled: bool,
     has_speech_profile: bool,
 ) -> bool:
-    return not use_custom_stt and (private_cloud_sync_enabled or has_speech_profile)
+    return private_cloud_sync_enabled or has_speech_profile
 
 
 def decide_existing_conversation_action(
@@ -453,3 +453,27 @@ def decide_text_speaker_assignment(
 
 def is_user_self_match(person_id: Optional[str]) -> bool:
     return person_id == USER_SELF_PERSON_ID
+
+
+def custom_stt_without_raw_audio(*, use_custom_stt: bool, ring_buffer: Any) -> bool:
+    return bool(use_custom_stt) and (ring_buffer is None or ring_buffer.get_time_range() is None)
+
+
+def has_upstream_speaker_identity(segment: Any, *, segment_assignments: Any = ()) -> bool:
+    if not (getattr(segment, 'is_user', False) or bool(getattr(segment, 'person_id', None))):
+        return False
+    if getattr(segment, 'id', None) in segment_assignments:
+        return False
+    return (
+        getattr(segment, 'speaker_label_source', None) is None
+        and getattr(segment, 'speaker_match_source', None) is None
+    )
+
+
+def mark_upstream_speaker_identity(segment: Any) -> None:
+    if not has_upstream_speaker_identity(segment):
+        return
+    if getattr(segment, 'speaker_identity_status', None) == SpeakerIdentityStatus.unknown:
+        segment.speaker_identity_status = (
+            SpeakerIdentityStatus.user if getattr(segment, 'is_user', False) else SpeakerIdentityStatus.not_user
+        )

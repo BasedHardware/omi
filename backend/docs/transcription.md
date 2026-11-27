@@ -422,8 +422,15 @@ flowchart LR
 |-------|------|----------|-------------|
 | `text` | `string` | Yes | Transcribed text |
 | `speaker` | `string` | No | Speaker label (`SPEAKER_00`, `SPEAKER_01`, etc.) |
+| `speaker_id` | `integer` | No | Numeric speaker ID (`0`, `1`, `2`, ...) |
 | `start` | `float` | No | Start time in seconds |
 | `end` | `float` | No | End time in seconds |
+| `is_user` | `boolean` | No | `true` when spoken by the device owner (preserved per segment) |
+| `person_id` | `string?` | No | Known Omi `Person` UUID when already identified upstream (preserved per segment) |
+
+<Note>
+When **Send raw audio to Omi** is enabled alongside Custom STT, Omi still loads the user's voice profile and People voice profiles and runs speaker identification on unlabeled segments, while preserving any `is_user` or `person_id` values supplied directly by your Custom STT service.
+</Note>
 
 ### Requirements
 

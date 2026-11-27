@@ -61,7 +61,10 @@ from utils.speaker_identification import detect_speaker_introduction
 from utils.stt.streaming import sort_segments_by_start
 from utils.stt.speaker_identity import ConversationSpeakerIdAllocator
 from utils.transcribe_decisions import (
+    custom_stt_without_raw_audio,
+    has_upstream_speaker_identity,
     is_user_self_match,
+    mark_upstream_speaker_identity,
     person_id_for_client,
     resolve_photo_conversation_source,
     should_queue_speaker_embedding,
@@ -745,6 +748,9 @@ class TranscriptProcessor:
                 )
             except Exception:
                 match_scores.record_failure(logger, reason='malformed_doc')
+            if has_upstream_speaker_identity(segment, segment_assignments=speaker.segment_assignments):
+                mark_upstream_speaker_identity(segment)
+                continue
             person_id = speaker.segment_assignments.get(cast(str, segment.id))
             if person_id is None and segment.speaker_id in speaker.speaker_to_person:
                 person_id = speaker.speaker_to_person[cast(int, segment.speaker_id)][0]
@@ -1140,6 +1146,8 @@ class TranscriptProcessor:
                     if isinstance(proof, CaptureWindowProof) and proof.matches(segment.capture_window_bounds()):
                         segment.capture_merge_proof = proof
                     segment.capture_window_reason = capture_window_reason(attribution)
+                    if getattr(self.host, 'use_custom_stt', False):
+                        mark_upstream_speaker_identity(segment)
                     if (
                         self.host.onboarding_handler is not None
                         and raw.get('speaker_id') != self.host.onboarding_omi_speaker_id
@@ -1516,6 +1524,8 @@ class TranscriptProcessor:
                     if isinstance(proof, CaptureWindowProof) and proof.matches(segment.capture_window_bounds()):
                         segment.capture_merge_proof = proof
                     segment.capture_window_reason = capture_window_reason(attribution)
+                    if getattr(self.host, 'use_custom_stt', False):
+                        mark_upstream_speaker_identity(segment)
                     if (
                         self.host.onboarding_handler is not None
                         and raw.get('speaker_id') != self.host.onboarding_omi_speaker_id
@@ -1648,9 +1658,13 @@ class TranscriptProcessor:
                     observer(raw['speaker_id'], raw.get('speaker_id_scope') or '', raw.get('id') or '')
                     if ordinal_tracker is not None:
                         ordinal_tracker.observe(raw)
+        custom_stt_without_audio = custom_stt_without_raw_audio(
+            use_custom_stt=getattr(self.host, 'use_custom_stt', False),
+            ring_buffer=getattr(self.host.state, 'audio_ring_buffer', None),
+        )
         for segment in segments:
             segment_id = cast(str, segment.id)
-            if queue_from_raw is None:
+            if queue_from_raw is None and not custom_stt_without_audio:
                 _observe_embedding_admission(
                     speaker,
                     dict(
@@ -1682,13 +1696,17 @@ class TranscriptProcessor:
             # segments keep their own capture windows through the live merge);
             # introduction detection must run on these merged segments exactly
             # as it does without capture windows.
-            if queue_from_raw is None and should_queue_speaker_embedding(
-                speaker_id=segment.speaker_id,
-                person_id=segment.person_id,
-                is_user=segment.is_user,
-                speaker_id_enabled=self.host.state.speaker_id_enabled,
-                has_person_embeddings=bool(speaker.person_embeddings),
-                speaker_already_mapped=segment.speaker_id in speaker.speaker_to_person,
+            if (
+                queue_from_raw is None
+                and not custom_stt_without_audio
+                and should_queue_speaker_embedding(
+                    speaker_id=segment.speaker_id,
+                    person_id=segment.person_id,
+                    is_user=segment.is_user,
+                    speaker_id_enabled=self.host.state.speaker_id_enabled,
+                    has_person_embeddings=bool(speaker.person_embeddings),
+                    speaker_already_mapped=segment.speaker_id in speaker.speaker_to_person,
+                )
             ):
                 if segment.audio_alignment == 'unplaced':
                     _observe_refusal(speaker, 'unplaced', segment.speaker_id_scope)
@@ -1760,7 +1778,7 @@ class TranscriptProcessor:
                 self.host.state.speaker_map_dirty = True
                 self.host.state.speaker_map_version = getattr(self.host.state, 'speaker_map_version', 0) + 1
                 self.suggested_segments.add(segment_id)
-        if queue_from_raw is not None:
+        if queue_from_raw is not None and not custom_stt_without_audio:
             self._queue_raw_detections(queue_from_raw, capture_windows, abs_base)
 
     def _queue_raw_detections(

@@ -20,6 +20,8 @@ from utils.transcribe_decisions import (
     select_recording_session_id,
     select_translation_language,
     should_attach_to_existing_in_progress,
+    has_upstream_speaker_identity,
+    mark_upstream_speaker_identity,
     should_enable_speaker_identification,
     should_flush_final_multi_channel_mix,
     should_force_single_language,
@@ -146,12 +148,11 @@ def test_effective_conversation_timeout_pins_current_quirks():
 
 
 def test_speech_profile_and_speaker_id_gates():
-    assert should_load_speech_profile(use_custom_stt=False, is_multi_channel=False, include_speech_profile=True) is True
-    assert should_load_speech_profile(use_custom_stt=True, is_multi_channel=False, include_speech_profile=True) is False
-    assert should_load_speech_profile(use_custom_stt=False, is_multi_channel=True, include_speech_profile=True) is False
+    assert should_load_speech_profile(is_multi_channel=False, include_speech_profile=True) is True
+    assert should_load_speech_profile(is_multi_channel=False, include_speech_profile=False) is False
+    assert should_load_speech_profile(is_multi_channel=True, include_speech_profile=True) is False
     assert (
         should_enable_speaker_identification(
-            use_custom_stt=False,
             private_cloud_sync_enabled=False,
             has_speech_profile=True,
         )
@@ -159,7 +160,6 @@ def test_speech_profile_and_speaker_id_gates():
     )
     assert (
         should_enable_speaker_identification(
-            use_custom_stt=False,
             private_cloud_sync_enabled=True,
             has_speech_profile=False,
         )
@@ -167,12 +167,50 @@ def test_speech_profile_and_speaker_id_gates():
     )
     assert (
         should_enable_speaker_identification(
-            use_custom_stt=True,
             private_cloud_sync_enabled=True,
             has_speech_profile=True,
         )
+        is True
+    )
+    assert (
+        should_enable_speaker_identification(
+            private_cloud_sync_enabled=False,
+            has_speech_profile=False,
+        )
         is False
     )
+
+
+def test_upstream_speaker_identity_predicate_and_mutator_are_separated():
+    from types import SimpleNamespace
+    from models.transcript_segment import SpeakerIdentityStatus
+
+    seg = SimpleNamespace(
+        id='seg-1',
+        is_user=False,
+        person_id='person-alice',
+        speaker_label_source=None,
+        speaker_match_source=None,
+        speaker_identity_status=SpeakerIdentityStatus.unknown,
+    )
+    assert has_upstream_speaker_identity(seg) is True
+    assert seg.speaker_identity_status == SpeakerIdentityStatus.unknown
+    assert has_upstream_speaker_identity(seg, segment_assignments={'seg-1': 'person-bob'}) is False
+
+    mark_upstream_speaker_identity(seg)
+    assert seg.speaker_identity_status == SpeakerIdentityStatus.not_user
+
+    auto_seg = SimpleNamespace(
+        id='seg-2',
+        is_user=False,
+        person_id='person-alice',
+        speaker_label_source='auto',
+        speaker_match_source='live_embedding',
+        speaker_identity_status=SpeakerIdentityStatus.unknown,
+    )
+    assert has_upstream_speaker_identity(auto_seg) is False
+    mark_upstream_speaker_identity(auto_seg)
+    assert auto_seg.speaker_identity_status == SpeakerIdentityStatus.unknown
 
 
 def test_conversation_lifecycle_actions():

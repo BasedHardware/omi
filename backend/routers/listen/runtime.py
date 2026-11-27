@@ -684,7 +684,6 @@ class ListenSessionRuntime:
             request.include_speech_profile, self.is_multi_channel, request.onboarding_mode
         )
         profile_eligible = should_load_speech_profile(
-            use_custom_stt=self.use_custom_stt,
             is_multi_channel=self.is_multi_channel,
             include_speech_profile=include_profile,
         )
@@ -703,7 +702,6 @@ class ListenSessionRuntime:
             if not self.has_speech_profile:
                 logger.info('Speaker ID owner profile skipped reason=no_embedding_or_audio')
         self.state.speaker_id_enabled = should_enable_speaker_identification(
-            use_custom_stt=self.use_custom_stt,
             private_cloud_sync_enabled=self.private_cloud_sync_enabled,
             has_speech_profile=self.has_speech_profile or profile_eligible,
         )
