@@ -15843,4 +15843,13 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Một số bản ghi âm vẫn còn trên thiết bị của bạn. Hãy đợi chúng đồng bộ xong lên điện thoại, sau đó bắt đầu cập nhật.';
+
+  @override
+  String get pendantReconnectNudgeTitle => 'Omi của bạn đã 3 ngày không kết nối';
+
+  @override
+  String get pendantReconnectNudgeBody => 'Đeo lại và kết nối để Omi tiếp tục ghi âm.';
+
+  @override
+  String get pendantReconnectNudgeAction => 'Kết nối lại';
 }

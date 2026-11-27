@@ -12325,5 +12325,8 @@
     "playStripePlanPaused": "మీ {plan} ప్లాన్ పాజ్ చేయబడింది.",
     "firmwareNewestSupportedForDevice": "మీ డివైస్ ఇప్పటికే మద్దతు ఉన్న అత్యంత కొత్త ఫర్మ్‌వేర్ వెర్షన్‌లో ఉంది",
     "firmwareSyncRecordingsFirstTitle": "ముందుగా మీ రికార్డింగ్‌లను సమకాలీకరించండి",
-    "firmwareSyncRecordingsFirstMessage": "కొన్ని రికార్డింగ్‌లు ఇంకా మీ డివైస్‌లో ఉన్నాయి. అవి మీ ఫోన్‌కు పూర్తిగా సమకాలీకరించనివ్వండి, తర్వాత నవీకరణను ప్రారంభించండి."
+    "firmwareSyncRecordingsFirstMessage": "కొన్ని రికార్డింగ్‌లు ఇంకా మీ డివైస్‌లో ఉన్నాయి. అవి మీ ఫోన్‌కు పూర్తిగా సమకాలీకరించనివ్వండి, తర్వాత నవీకరణను ప్రారంభించండి.",
+    "pendantReconnectNudgeTitle": "మీ Omi 3 రోజులుగా కనెక్ట్ కాలేదు",
+    "pendantReconnectNudgeBody": "Omi రికార్డింగ్ కొనసాగించడానికి దాన్ని మళ్లీ ధరించి కనెక్ట్ చేయండి.",
+    "pendantReconnectNudgeAction": "మళ్లీ కనెక్ట్ చేయండి"
 }

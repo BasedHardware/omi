@@ -15857,4 +15857,13 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Beberapa rekaman masih berada di perangkat Anda. Biarkan rekaman tersebut selesai disinkronkan ke ponsel Anda, lalu mulai pembaruan.';
+
+  @override
+  String get pendantReconnectNudgeTitle => 'Omi kamu belum terhubung selama 3 hari';
+
+  @override
+  String get pendantReconnectNudgeBody => 'Pakai kembali dan hubungkan agar Omi terus merekam.';
+
+  @override
+  String get pendantReconnectNudgeAction => 'Hubungkan kembali';
 }

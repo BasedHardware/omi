@@ -15847,4 +15847,13 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Osaa nauhoituksista on vielä laitteella. Anna niiden synkronoitua puhelimeen loppuun ja käynnistä sitten päivitys.';
+
+  @override
+  String get pendantReconnectNudgeTitle => 'Omisi ei ole muodostanut yhteyttä 3 päivään';
+
+  @override
+  String get pendantReconnectNudgeBody => 'Pue se takaisin ja yhdistä se uudelleen, jotta Omi jatkaa tallentamista.';
+
+  @override
+  String get pendantReconnectNudgeAction => 'Yhdistä uudelleen';
 }

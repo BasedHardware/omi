@@ -4803,5 +4803,8 @@
     "playStripePlanPaused": "{plan} planın duraklatıldı.",
     "firmwareNewestSupportedForDevice": "Cihazınız zaten desteklenen en yeni firmware sürümünü kullanıyor",
     "firmwareSyncRecordingsFirstTitle": "Önce kayıtlarınızı senkronize edin",
-    "firmwareSyncRecordingsFirstMessage": "Bazı kayıtlar hâlâ cihazınızda. Telefonunuza senkronize edilmelerini bekleyin, ardından güncellemeyi başlatın."
+    "firmwareSyncRecordingsFirstMessage": "Bazı kayıtlar hâlâ cihazınızda. Telefonunuza senkronize edilmelerini bekleyin, ardından güncellemeyi başlatın.",
+    "pendantReconnectNudgeTitle": "Omi cihazın 3 gündür bağlanmadı",
+    "pendantReconnectNudgeBody": "Omi'nin kayda devam etmesi için cihazını yeniden tak ve bağla.",
+    "pendantReconnectNudgeAction": "Yeniden bağlan"
 }

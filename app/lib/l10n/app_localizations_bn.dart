@@ -15837,4 +15837,13 @@ class AppLocalizationsBn extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'কিছু রেকর্ডিং এখনও আপনার ডিভাইসে রয়েছে। সেগুলিকে আপনার ফোনে সিঙ্ক শেষ হতে দিন, তারপর আপডেট শুরু করুন।';
+
+  @override
+  String get pendantReconnectNudgeTitle => 'আপনার Omi ৩ দিন ধরে সংযুক্ত হয়নি';
+
+  @override
+  String get pendantReconnectNudgeBody => 'এটি আবার পরে সংযোগ করুন, যাতে Omi রেকর্ডিং চালিয়ে যায়।';
+
+  @override
+  String get pendantReconnectNudgeAction => 'আবার সংযোগ করুন';
 }

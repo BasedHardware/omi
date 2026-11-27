@@ -4768,5 +4768,8 @@
     "playStripePlanPaused": "Планът ви {plan} е на пауза.",
     "firmwareNewestSupportedForDevice": "Вашето устройство вече работи с най-новата поддържана версия на фърмуера",
     "firmwareSyncRecordingsFirstTitle": "Първо синхронизирайте записите си",
-    "firmwareSyncRecordingsFirstMessage": "Някои записи все още са на устройството. Оставете ги да приключат със синхронизирането към телефона, след което започнете актуализацията."
+    "firmwareSyncRecordingsFirstMessage": "Някои записи все още са на устройството. Оставете ги да приключат със синхронизирането към телефона, след което започнете актуализацията.",
+    "pendantReconnectNudgeTitle": "Твоят Omi не се е свързвал от 3 дни",
+    "pendantReconnectNudgeBody": "Сложи го отново и го свържи, за да продължи Omi да записва.",
+    "pendantReconnectNudgeAction": "Свържи отново"
 }

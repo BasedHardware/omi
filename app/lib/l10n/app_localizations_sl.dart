@@ -15870,4 +15870,13 @@ class AppLocalizationsSl extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Nekateri posnetki so še na vaši napravi. Počakajte, da se dokonča sinhroniziranje s telefonom, nato pa začnite posodobitev.';
+
+  @override
+  String get pendantReconnectNudgeTitle => 'Tvoj Omi se ni povezal že 3 dni';
+
+  @override
+  String get pendantReconnectNudgeBody => 'Znova si ga nadeni in poveži, da bo Omi še naprej snemal.';
+
+  @override
+  String get pendantReconnectNudgeAction => 'Znova poveži';
 }

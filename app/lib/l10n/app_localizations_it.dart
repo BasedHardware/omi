@@ -15921,4 +15921,13 @@ class AppLocalizationsIt extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Alcune registrazioni sono ancora sul tuo dispositivo. Aspetta che terminino la sincronizzazione con il telefono, poi avvia l\'aggiornamento.';
+
+  @override
+  String get pendantReconnectNudgeTitle => 'Il tuo Omi non si connette da 3 giorni';
+
+  @override
+  String get pendantReconnectNudgeBody => 'Indossalo di nuovo e riconnettilo perché Omi continui a registrare.';
+
+  @override
+  String get pendantReconnectNudgeAction => 'Riconnetti';
 }

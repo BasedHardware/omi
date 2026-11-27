@@ -4803,5 +4803,8 @@
     "playStripePlanPaused": "Seu plano {plan} está pausado.",
     "firmwareNewestSupportedForDevice": "Seu dispositivo já está na versão de firmware mais recente suportada",
     "firmwareSyncRecordingsFirstTitle": "Sincronize suas gravações primeiro",
-    "firmwareSyncRecordingsFirstMessage": "Algumas gravações ainda estão no seu dispositivo. Deixe-as concluir a sincronização com seu telefone e, em seguida, inicie a atualização."
+    "firmwareSyncRecordingsFirstMessage": "Algumas gravações ainda estão no seu dispositivo. Deixe-as concluir a sincronização com seu telefone e, em seguida, inicie a atualização.",
+    "pendantReconnectNudgeTitle": "O teu Omi não se liga há 3 dias",
+    "pendantReconnectNudgeBody": "Volta a usá-lo e liga-o novamente para que o Omi continue a gravar.",
+    "pendantReconnectNudgeAction": "Voltar a ligar"
 }

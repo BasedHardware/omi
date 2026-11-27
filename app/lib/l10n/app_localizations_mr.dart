@@ -15850,4 +15850,13 @@ class AppLocalizationsMr extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'काही रेकॉर्डिंग अजून तुमच्या डिव्हाइसवर आहेत. त्या तुमच्या फोनवर पूर्णपणे सिंक होऊ द्या, नंतर अपडेट सुरू करा.';
+
+  @override
+  String get pendantReconnectNudgeTitle => 'तुमचा Omi 3 दिवसांपासून कनेक्ट झालेला नाही';
+
+  @override
+  String get pendantReconnectNudgeBody => 'Omi ने रेकॉर्डिंग सुरू ठेवावे म्हणून तो पुन्हा घाला आणि कनेक्ट करा.';
+
+  @override
+  String get pendantReconnectNudgeAction => 'पुन्हा कनेक्ट करा';
 }

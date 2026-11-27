@@ -15895,4 +15895,13 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Некоторые записи всё ещё находятся на устройстве. Дождитесь завершения их синхронизации с телефоном, а затем начните обновление.';
+
+  @override
+  String get pendantReconnectNudgeTitle => 'Ваш Omi не подключался 3 дня';
+
+  @override
+  String get pendantReconnectNudgeBody => 'Наденьте его снова и подключите, чтобы Omi продолжил запись.';
+
+  @override
+  String get pendantReconnectNudgeAction => 'Подключить снова';
 }

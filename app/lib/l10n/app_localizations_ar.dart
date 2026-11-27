@@ -15754,4 +15754,13 @@ class AppLocalizationsAr extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'لا تزال بعض التسجيلات على جهازك. دعها تكمل المزامنة إلى هاتفك، ثم ابدأ التحديث.';
+
+  @override
+  String get pendantReconnectNudgeTitle => 'لم يتصل جهاز Omi منذ 3 أيام';
+
+  @override
+  String get pendantReconnectNudgeBody => 'ارتدِه مجددًا وأعد توصيله ليواصل Omi التسجيل.';
+
+  @override
+  String get pendantReconnectNudgeAction => 'إعادة الاتصال';
 }

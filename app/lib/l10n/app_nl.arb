@@ -4768,5 +4768,8 @@
     "playStripePlanPaused": "Je {plan}-abonnement is gepauzeerd.",
     "firmwareNewestSupportedForDevice": "Je apparaat heeft al de nieuwste ondersteunde firmwareversie",
     "firmwareSyncRecordingsFirstTitle": "Synchroniseer eerst je opnames",
-    "firmwareSyncRecordingsFirstMessage": "Sommige opnames staan nog op je apparaat. Laat ze eerst volledig synchroniseren naar je telefoon en start daarna de update."
+    "firmwareSyncRecordingsFirstMessage": "Sommige opnames staan nog op je apparaat. Laat ze eerst volledig synchroniseren naar je telefoon en start daarna de update.",
+    "pendantReconnectNudgeTitle": "Je Omi is al 3 dagen niet verbonden",
+    "pendantReconnectNudgeBody": "Draag hem weer en verbind hem opnieuw, zodat Omi blijft opnemen.",
+    "pendantReconnectNudgeAction": "Opnieuw verbinden"
 }

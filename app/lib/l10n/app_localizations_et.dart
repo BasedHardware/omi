@@ -15834,4 +15834,13 @@ class AppLocalizationsEt extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Mõned salvestised on veel teie seadmes. Oodake, kuni need on telefonisse sünkroonitud, ja seejärel alustage uuendust.';
+
+  @override
+  String get pendantReconnectNudgeTitle => 'Sinu Omi pole 3 päeva ühendust loonud';
+
+  @override
+  String get pendantReconnectNudgeBody => 'Pane see uuesti külge ja ühenda, et Omi saaks salvestamist jätkata.';
+
+  @override
+  String get pendantReconnectNudgeAction => 'Ühenda uuesti';
 }

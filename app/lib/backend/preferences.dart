@@ -766,6 +766,28 @@ class SharedPreferencesUtil {
 
   set lastSyncAlertTimestamp(int value) => saveInt('lastSyncAlertTimestamp', value);
 
+  // Per-account epoch millis from a successful pendant link or pairing.
+  int get lastPendantConnectedAt => uid.isEmpty ? 0 : getInt(_userScopedKey('lastPendantConnectedAt', uid));
+
+  set lastPendantConnectedAt(int value) {
+    if (uid.isNotEmpty) unawaited(saveInt(_userScopedKey('lastPendantConnectedAt', uid), value));
+  }
+
+  int get pendantReconnectNudgeLastShownAt =>
+      uid.isEmpty ? 0 : getInt(_userScopedKey('pendant_reconnect_nudge_last_shown_at', uid));
+
+  set pendantReconnectNudgeLastShownAt(int value) {
+    if (uid.isNotEmpty) unawaited(saveInt(_userScopedKey('pendant_reconnect_nudge_last_shown_at', uid), value));
+  }
+
+  // Shared with SCA-4815's drop-off question. Both surfaces check and claim
+  // this same local calendar day (yyyy-MM-dd) when showing, in one sync turn.
+  static const _pendantDropoffSurfaceLastDayKey = 'pendant_dropoff_surface_last_day';
+
+  String get pendantDropoffSurfaceLastDay => getString(_pendantDropoffSurfaceLastDayKey);
+
+  set pendantDropoffSurfaceLastDay(String value) => unawaited(saveString(_pendantDropoffSurfaceLastDayKey, value));
+
   // Per-provider config storage
   CustomSttConfig? getConfigForProvider(SttProvider provider) {
     final json = getString('sttConfig_${provider.name}');

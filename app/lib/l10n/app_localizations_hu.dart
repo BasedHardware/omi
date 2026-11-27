@@ -15900,4 +15900,13 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Néhány felvétel még az eszközödön van. Várd meg, amíg a telefonodra szinkronizálásuk befejeződik, majd indítsd el a frissítést.';
+
+  @override
+  String get pendantReconnectNudgeTitle => 'Az Omi 3 napja nem kapcsolódott';
+
+  @override
+  String get pendantReconnectNudgeBody => 'Vedd fel újra, és csatlakoztasd, hogy az Omi folytassa a rögzítést.';
+
+  @override
+  String get pendantReconnectNudgeAction => 'Újracsatlakozás';
 }

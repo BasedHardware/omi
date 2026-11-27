@@ -15841,4 +15841,13 @@ class AppLocalizationsCs extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Některé nahrávky jsou stále ve vašem zařízení. Počkejte, až se synchronizují do telefonu, a potom spusťte aktualizaci.';
+
+  @override
+  String get pendantReconnectNudgeTitle => 'Tvoje Omi se už 3 dny nepřipojilo';
+
+  @override
+  String get pendantReconnectNudgeBody => 'Znovu si ho nasaď a připoj, aby Omi dál nahrávalo.';
+
+  @override
+  String get pendantReconnectNudgeAction => 'Znovu připojit';
 }

@@ -15959,4 +15959,13 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Einige Aufnahmen sind noch auf Ihrem Gerät. Warten Sie, bis sie vollständig mit Ihrem Telefon synchronisiert wurden, und starten Sie dann die Aktualisierung.';
+
+  @override
+  String get pendantReconnectNudgeTitle => 'Dein Omi war seit 3 Tagen nicht verbunden';
+
+  @override
+  String get pendantReconnectNudgeBody => 'Trag es wieder und verbinde es, damit Omi weiter aufzeichnet.';
+
+  @override
+  String get pendantReconnectNudgeAction => 'Erneut verbinden';
 }

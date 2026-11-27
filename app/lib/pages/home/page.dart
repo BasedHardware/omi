@@ -38,9 +38,10 @@ import 'package:omi/pages/chat/page.dart';
 import 'package:omi/pages/action_items/widgets/task_selection_action_bar.dart';
 import 'package:omi/pages/conversations/widgets/merge_action_bar.dart';
 import 'package:omi/pages/home/home_content.dart';
-import 'package:omi/pages/home/widgets/home_tab_switcher.dart';
 import 'package:omi/pages/home/home_widgets_publisher.dart';
 import 'package:omi/pages/home/plan_refresh_on_resume.dart';
+import 'package:omi/pages/home/widgets/home_tab_switcher.dart';
+import 'package:omi/pages/home/widgets/pendant_reconnect_nudge_card.dart';
 import 'package:omi/pages/phone_calls/active_call_banner.dart';
 import 'package:omi/pages/settings/settings_drawer.dart';
 import 'package:omi/pages/search/global_search.dart';
@@ -946,6 +947,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                 );
                               },
                             ),
+                          HomePendantReconnectNudge(homeSelected: onHome),
                           // Home shows an active call in its capture row; Tasks gets the slim bar.
                           if (!onHome) const ActiveCallTopBar(),
                           Expanded(

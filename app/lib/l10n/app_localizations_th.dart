@@ -15767,4 +15767,13 @@ class AppLocalizationsTh extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'ไฟล์บันทึกเสียงบางส่วนยังอยู่ในอุปกรณ์ของคุณ รอให้ซิงค์ไปยังโทรศัพท์เสร็จก่อน แล้วจึงเริ่มการอัปเดต';
+
+  @override
+  String get pendantReconnectNudgeTitle => 'Omi ของคุณไม่ได้เชื่อมต่อมา 3 วันแล้ว';
+
+  @override
+  String get pendantReconnectNudgeBody => 'สวมอีกครั้งแล้วเชื่อมต่อใหม่เพื่อให้ Omi บันทึกต่อได้';
+
+  @override
+  String get pendantReconnectNudgeAction => 'เชื่อมต่ออีกครั้ง';
 }

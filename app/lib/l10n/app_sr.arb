@@ -12325,5 +12325,8 @@
     "playStripePlanPaused": "Ваш {plan} план је паузиран.",
     "firmwareNewestSupportedForDevice": "Ваш уређај већ користи најновију подржану верзију фирмвера",
     "firmwareSyncRecordingsFirstTitle": "Прво синхронизујте снимке",
-    "firmwareSyncRecordingsFirstMessage": "Неки снимци се још увек налазе на вашем уређају. Сачекајте да заврше синхронизовање са телефоном, а затим покрените ажурирање."
+    "firmwareSyncRecordingsFirstMessage": "Неки снимци се још увек налазе на вашем уређају. Сачекајте да заврше синхронизовање са телефоном, а затим покрените ажурирање.",
+    "pendantReconnectNudgeTitle": "Твој Omi није био повезан 3 дана",
+    "pendantReconnectNudgeBody": "Поново га стави и повежи да Omi настави са снимањем.",
+    "pendantReconnectNudgeAction": "Повежи поново"
 }

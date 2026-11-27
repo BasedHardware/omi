@@ -6,6 +6,186 @@ sealed class RegisteredEvent {
   Map<String, Object> get properties;
 }
 
+enum PendantReconnectNudgeEligibleArm {
+  treatment("treatment"),
+  holdout("holdout");
+  const PendantReconnectNudgeEligibleArm(this.wireName);
+  final String wireName;
+}
+
+enum PendantReconnectNudgeEligibleDaysSinceConnection {
+  days3To6("days_3_to_6"),
+  days7To13("days_7_to_13"),
+  days14To29("days_14_to_29"),
+  days30Plus("days_30_plus");
+  const PendantReconnectNudgeEligibleDaysSinceConnection(this.wireName);
+  final String wireName;
+}
+
+enum PendantReconnectNudgeEligibleTenureDays {
+  under14("under_14"),
+  days14To59("days_14_to_59"),
+  days60Plus("days_60_plus"),
+  unknown("unknown");
+  const PendantReconnectNudgeEligibleTenureDays(this.wireName);
+  final String wireName;
+}
+
+enum PendantReconnectNudgeEligiblePaying {
+  paying("paying"),
+  notPaying("not_paying"),
+  unknown("unknown");
+  const PendantReconnectNudgeEligiblePaying(this.wireName);
+  final String wireName;
+}
+
+final class PendantReconnectNudgeEligible extends RegisteredEvent {
+  const PendantReconnectNudgeEligible({required this.arm, required this.daysSinceConnection, required this.tenureDays, required this.paying});
+  final PendantReconnectNudgeEligibleArm arm;
+  final PendantReconnectNudgeEligibleDaysSinceConnection daysSinceConnection;
+  final PendantReconnectNudgeEligibleTenureDays tenureDays;
+  final PendantReconnectNudgeEligiblePaying paying;
+  @override
+  String get wireName => "Pendant Reconnect Nudge Eligible";
+  @override
+  Map<String, Object> get properties => {"arm": arm.wireName, "days_since_connection": daysSinceConnection.wireName, "tenure_days": tenureDays.wireName, "paying": paying.wireName};
+}
+
+enum PendantReconnectNudgeShownArm {
+  treatment("treatment"),
+  holdout("holdout");
+  const PendantReconnectNudgeShownArm(this.wireName);
+  final String wireName;
+}
+
+enum PendantReconnectNudgeShownDaysSinceConnection {
+  days3To6("days_3_to_6"),
+  days7To13("days_7_to_13"),
+  days14To29("days_14_to_29"),
+  days30Plus("days_30_plus");
+  const PendantReconnectNudgeShownDaysSinceConnection(this.wireName);
+  final String wireName;
+}
+
+enum PendantReconnectNudgeShownTenureDays {
+  under14("under_14"),
+  days14To59("days_14_to_59"),
+  days60Plus("days_60_plus"),
+  unknown("unknown");
+  const PendantReconnectNudgeShownTenureDays(this.wireName);
+  final String wireName;
+}
+
+enum PendantReconnectNudgeShownPaying {
+  paying("paying"),
+  notPaying("not_paying"),
+  unknown("unknown");
+  const PendantReconnectNudgeShownPaying(this.wireName);
+  final String wireName;
+}
+
+final class PendantReconnectNudgeShown extends RegisteredEvent {
+  const PendantReconnectNudgeShown({required this.arm, required this.daysSinceConnection, required this.tenureDays, required this.paying});
+  final PendantReconnectNudgeShownArm arm;
+  final PendantReconnectNudgeShownDaysSinceConnection daysSinceConnection;
+  final PendantReconnectNudgeShownTenureDays tenureDays;
+  final PendantReconnectNudgeShownPaying paying;
+  @override
+  String get wireName => "Pendant Reconnect Nudge Shown";
+  @override
+  Map<String, Object> get properties => {"arm": arm.wireName, "days_since_connection": daysSinceConnection.wireName, "tenure_days": tenureDays.wireName, "paying": paying.wireName};
+}
+
+enum PendantReconnectNudgeTappedArm {
+  treatment("treatment"),
+  holdout("holdout");
+  const PendantReconnectNudgeTappedArm(this.wireName);
+  final String wireName;
+}
+
+enum PendantReconnectNudgeTappedDaysSinceConnection {
+  days3To6("days_3_to_6"),
+  days7To13("days_7_to_13"),
+  days14To29("days_14_to_29"),
+  days30Plus("days_30_plus");
+  const PendantReconnectNudgeTappedDaysSinceConnection(this.wireName);
+  final String wireName;
+}
+
+enum PendantReconnectNudgeTappedTenureDays {
+  under14("under_14"),
+  days14To59("days_14_to_59"),
+  days60Plus("days_60_plus"),
+  unknown("unknown");
+  const PendantReconnectNudgeTappedTenureDays(this.wireName);
+  final String wireName;
+}
+
+enum PendantReconnectNudgeTappedPaying {
+  paying("paying"),
+  notPaying("not_paying"),
+  unknown("unknown");
+  const PendantReconnectNudgeTappedPaying(this.wireName);
+  final String wireName;
+}
+
+final class PendantReconnectNudgeTapped extends RegisteredEvent {
+  const PendantReconnectNudgeTapped({required this.arm, required this.daysSinceConnection, required this.tenureDays, required this.paying});
+  final PendantReconnectNudgeTappedArm arm;
+  final PendantReconnectNudgeTappedDaysSinceConnection daysSinceConnection;
+  final PendantReconnectNudgeTappedTenureDays tenureDays;
+  final PendantReconnectNudgeTappedPaying paying;
+  @override
+  String get wireName => "Pendant Reconnect Nudge Tapped";
+  @override
+  Map<String, Object> get properties => {"arm": arm.wireName, "days_since_connection": daysSinceConnection.wireName, "tenure_days": tenureDays.wireName, "paying": paying.wireName};
+}
+
+enum PendantReconnectNudgeDismissedArm {
+  treatment("treatment"),
+  holdout("holdout");
+  const PendantReconnectNudgeDismissedArm(this.wireName);
+  final String wireName;
+}
+
+enum PendantReconnectNudgeDismissedDaysSinceConnection {
+  days3To6("days_3_to_6"),
+  days7To13("days_7_to_13"),
+  days14To29("days_14_to_29"),
+  days30Plus("days_30_plus");
+  const PendantReconnectNudgeDismissedDaysSinceConnection(this.wireName);
+  final String wireName;
+}
+
+enum PendantReconnectNudgeDismissedTenureDays {
+  under14("under_14"),
+  days14To59("days_14_to_59"),
+  days60Plus("days_60_plus"),
+  unknown("unknown");
+  const PendantReconnectNudgeDismissedTenureDays(this.wireName);
+  final String wireName;
+}
+
+enum PendantReconnectNudgeDismissedPaying {
+  paying("paying"),
+  notPaying("not_paying"),
+  unknown("unknown");
+  const PendantReconnectNudgeDismissedPaying(this.wireName);
+  final String wireName;
+}
+
+final class PendantReconnectNudgeDismissed extends RegisteredEvent {
+  const PendantReconnectNudgeDismissed({required this.arm, required this.daysSinceConnection, required this.tenureDays, required this.paying});
+  final PendantReconnectNudgeDismissedArm arm;
+  final PendantReconnectNudgeDismissedDaysSinceConnection daysSinceConnection;
+  final PendantReconnectNudgeDismissedTenureDays tenureDays;
+  final PendantReconnectNudgeDismissedPaying paying;
+  @override
+  String get wireName => "Pendant Reconnect Nudge Dismissed";
+  @override
+  Map<String, Object> get properties => {"arm": arm.wireName, "days_since_connection": daysSinceConnection.wireName, "tenure_days": tenureDays.wireName, "paying": paying.wireName};
+}
+
 enum OnDeviceTranscriptionUsedRoute {
   allowance("allowance"),
   custom("custom"),

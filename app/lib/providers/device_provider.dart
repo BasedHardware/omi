@@ -1291,6 +1291,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     await refreshOfflineStorageCapability();
     if (!_isCurrentBatterySession(generation, batterySession, device.id)) return;
+    if (normalizedDevice.isPendant) {
+      SharedPreferencesUtil().lastPendantConnectedAt = DateTime.now().millisecondsSinceEpoch;
+    }
     setIsConnected(true);
     // A live link is sync-activity evidence for the stall watchdog: the
     // pendant (re)connecting means retrieval can proceed (#15501).

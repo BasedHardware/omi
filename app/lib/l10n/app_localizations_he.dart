@@ -15728,4 +15728,13 @@ class AppLocalizationsHe extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'חלק מההקלטות עדיין נמצאות במכשיר שלך. תן להן להשלים את הסינכרון לטלפון, ואז התחל את העדכון.';
+
+  @override
+  String get pendantReconnectNudgeTitle => 'ה־Omi שלך לא התחבר כבר 3 ימים';
+
+  @override
+  String get pendantReconnectNudgeBody => 'כדאי לענוד אותו שוב ולחבר אותו כדי ש־Omi ימשיך להקליט.';
+
+  @override
+  String get pendantReconnectNudgeAction => 'חיבור מחדש';
 }

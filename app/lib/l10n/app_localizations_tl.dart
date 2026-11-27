@@ -15969,4 +15969,13 @@ class AppLocalizationsTl extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'May mga recording pa na nasa iyong device. Hayaang matapos munang i-sync ang mga ito sa iyong phone, pagkatapos ay simulan ang pag-update.';
+
+  @override
+  String get pendantReconnectNudgeTitle => 'Hindi nakakonekta ang Omi mo sa loob ng 3 araw';
+
+  @override
+  String get pendantReconnectNudgeBody => 'Isuot at ikonekta itong muli para patuloy na makapag-record ang Omi.';
+
+  @override
+  String get pendantReconnectNudgeAction => 'Kumonekta muli';
 }

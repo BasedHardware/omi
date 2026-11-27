@@ -15847,4 +15847,13 @@ class AppLocalizationsNo extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Noen opptak ligger fortsatt på enheten din. La dem fullføre synkroniseringen til telefonen din, og start deretter oppdateringen.';
+
+  @override
+  String get pendantReconnectNudgeTitle => 'Omi-en din har ikke vært tilkoblet på 3 dager';
+
+  @override
+  String get pendantReconnectNudgeBody => 'Ta den på igjen og koble til, så Omi kan fortsette å ta opp.';
+
+  @override
+  String get pendantReconnectNudgeAction => 'Koble til på nytt';
 }

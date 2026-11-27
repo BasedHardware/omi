@@ -12325,5 +12325,8 @@
     "playStripePlanPaused": "உங்கள் {plan} திட்டம் இடைநிறுத்தப்பட்டுள்ளது.",
     "firmwareNewestSupportedForDevice": "உங்கள் சாதனம் ஏற்கனவே ஆதரிக்கப்படும் மிகச் சமீபத்திய ஃபார்ம்வேர் பதிப்பில் உள்ளது",
     "firmwareSyncRecordingsFirstTitle": "முதலில் உங்கள் பதிவுகளை ஒத்திசைக்கவும்",
-    "firmwareSyncRecordingsFirstMessage": "சில பதிவுகள் இன்னும் உங்கள் சாதனத்தில் உள்ளன. அவை உங்கள் தொலைபேசிக்கு ஒத்திசைவை முடிக்க அனுமதித்து, பிறகு புதுப்பிப்பைத் தொடங்கவும்."
+    "firmwareSyncRecordingsFirstMessage": "சில பதிவுகள் இன்னும் உங்கள் சாதனத்தில் உள்ளன. அவை உங்கள் தொலைபேசிக்கு ஒத்திசைவை முடிக்க அனுமதித்து, பிறகு புதுப்பிப்பைத் தொடங்கவும்.",
+    "pendantReconnectNudgeTitle": "உங்கள் Omi 3 நாட்களாக இணைக்கப்படவில்லை",
+    "pendantReconnectNudgeBody": "Omi தொடர்ந்து பதிவுசெய்ய, அதை மீண்டும் அணிந்து இணைக்கவும்.",
+    "pendantReconnectNudgeAction": "மீண்டும் இணைக்கவும்"
 }

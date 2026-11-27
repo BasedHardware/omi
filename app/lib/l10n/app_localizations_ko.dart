@@ -15614,4 +15614,13 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get firmwareSyncRecordingsFirstMessage => '일부 녹음이 아직 기기에 남아 있습니다. 휴대폰으로의 동기화가 완료되면 업데이트를 시작해 주세요.';
+
+  @override
+  String get pendantReconnectNudgeTitle => 'Omi가 3일 동안 연결되지 않았어요';
+
+  @override
+  String get pendantReconnectNudgeBody => 'Omi를 다시 착용하고 연결하면 녹음을 계속할 수 있어요.';
+
+  @override
+  String get pendantReconnectNudgeAction => '다시 연결';
 }

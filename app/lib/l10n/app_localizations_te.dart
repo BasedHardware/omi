@@ -15906,4 +15906,13 @@ class AppLocalizationsTe extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'కొన్ని రికార్డింగ్‌లు ఇంకా మీ డివైస్‌లో ఉన్నాయి. అవి మీ ఫోన్‌కు పూర్తిగా సమకాలీకరించనివ్వండి, తర్వాత నవీకరణను ప్రారంభించండి.';
+
+  @override
+  String get pendantReconnectNudgeTitle => 'మీ Omi 3 రోజులుగా కనెక్ట్ కాలేదు';
+
+  @override
+  String get pendantReconnectNudgeBody => 'Omi రికార్డింగ్ కొనసాగించడానికి దాన్ని మళ్లీ ధరించి కనెక్ట్ చేయండి.';
+
+  @override
+  String get pendantReconnectNudgeAction => 'మళ్లీ కనెక్ట్ చేయండి';
 }

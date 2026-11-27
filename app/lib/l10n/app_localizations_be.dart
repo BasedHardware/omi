@@ -15877,4 +15877,13 @@ class AppLocalizationsBe extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Некаторыя запісы ўсё яшчэ на вашай прыладзе. Дайце ім завяршыць сінхранізацыю на тэлефон, а потым пачніце абнаўленне.';
+
+  @override
+  String get pendantReconnectNudgeTitle => 'Ваша Omi не падключалася 3 дні';
+
+  @override
+  String get pendantReconnectNudgeBody => 'Надзеньце яе зноў і падключыце, каб Omi працягвала запісваць.';
+
+  @override
+  String get pendantReconnectNudgeAction => 'Падключыць зноў';
 }

@@ -15584,4 +15584,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get firmwareSyncRecordingsFirstMessage => '部分录音仍存储在您的设备上。请等待它们同步到手机完成后，再开始更新。';
+
+  @override
+  String get pendantReconnectNudgeTitle => '你的 Omi 已有 3 天未连接';
+
+  @override
+  String get pendantReconnectNudgeBody => '重新戴上并连接 Omi，让它继续录音。';
+
+  @override
+  String get pendantReconnectNudgeAction => '重新连接';
 }

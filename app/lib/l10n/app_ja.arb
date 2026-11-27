@@ -4768,5 +4768,8 @@
     "playStripePlanPaused": "{plan} プランは一時停止中です。",
     "firmwareNewestSupportedForDevice": "お使いのデバイスは、すでにサポートされている最新のファームウェアバージョンで動作しています",
     "firmwareSyncRecordingsFirstTitle": "まず録音を同期してください",
-    "firmwareSyncRecordingsFirstMessage": "一部の録音はまだデバイスに残っています。スマートフォンへの同期が完了してから、更新を開始してください。"
+    "firmwareSyncRecordingsFirstMessage": "一部の録音はまだデバイスに残っています。スマートフォンへの同期が完了してから、更新を開始してください。",
+    "pendantReconnectNudgeTitle": "Omi が 3 日間接続されていません",
+    "pendantReconnectNudgeBody": "Omi をもう一度身につけて再接続すると、録音を続けられます。",
+    "pendantReconnectNudgeAction": "再接続"
 }

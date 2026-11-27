@@ -19360,5 +19360,17 @@
     "firmwareSyncRecordingsFirstMessage": "Some recordings are still on your device. Let them finish syncing to your phone, then start the update.",
     "@firmwareSyncRecordingsFirstMessage": {
         "description": "Dialog body explaining that recordings must finish syncing from the pendant to the phone before the firmware update can start."
+    },
+    "pendantReconnectNudgeTitle": "Your Omi hasn't connected in 3 days",
+    "@pendantReconnectNudgeTitle": {
+        "description": "Title of a Home reminder after three days without a pendant connection."
+    },
+    "pendantReconnectNudgeBody": "Put it back on and reconnect so Omi keeps capturing.",
+    "@pendantReconnectNudgeBody": {
+        "description": "Home reminder to wear and reconnect the Omi pendant so it can keep recording."
+    },
+    "pendantReconnectNudgeAction": "Reconnect",
+    "@pendantReconnectNudgeAction": {
+        "description": "Button that opens device settings to reconnect the Omi pendant."
     }
 }

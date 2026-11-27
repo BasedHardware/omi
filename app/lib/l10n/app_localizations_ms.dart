@@ -15880,4 +15880,13 @@ class AppLocalizationsMs extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Sebahagian rakaman masih berada pada peranti anda. Biarkan ia selesai disegerakkan ke telefon anda, kemudian mulakan kemas kini.';
+
+  @override
+  String get pendantReconnectNudgeTitle => 'Omi anda belum bersambung selama 3 hari';
+
+  @override
+  String get pendantReconnectNudgeBody => 'Pakai semula dan sambungkan supaya Omi terus merakam.';
+
+  @override
+  String get pendantReconnectNudgeAction => 'Sambung semula';
 }

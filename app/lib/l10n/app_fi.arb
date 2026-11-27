@@ -4768,5 +4768,8 @@
     "playStripePlanPaused": "{plan}-tilauksesi on keskeytetty.",
     "firmwareNewestSupportedForDevice": "Laiteellasi on jo uusin tuettu laiteohjelmistoversio",
     "firmwareSyncRecordingsFirstTitle": "Synkronoi nauhoituksesi ensin",
-    "firmwareSyncRecordingsFirstMessage": "Osaa nauhoituksista on vielä laitteella. Anna niiden synkronoitua puhelimeen loppuun ja käynnistä sitten päivitys."
+    "firmwareSyncRecordingsFirstMessage": "Osaa nauhoituksista on vielä laitteella. Anna niiden synkronoitua puhelimeen loppuun ja käynnistä sitten päivitys.",
+    "pendantReconnectNudgeTitle": "Omisi ei ole muodostanut yhteyttä 3 päivään",
+    "pendantReconnectNudgeBody": "Pue se takaisin ja yhdistä se uudelleen, jotta Omi jatkaa tallentamista.",
+    "pendantReconnectNudgeAction": "Yhdistä uudelleen"
 }

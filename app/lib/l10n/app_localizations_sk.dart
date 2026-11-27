@@ -15837,4 +15837,13 @@ class AppLocalizationsSk extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Niektoré nahrávky sa stále nachádzajú na zariadení. Počkajte, kým sa dokončí ich synchronizácia s telefónom, a potom spustite aktualizáciu.';
+
+  @override
+  String get pendantReconnectNudgeTitle => 'Tvoje Omi sa už 3 dni nepripojilo';
+
+  @override
+  String get pendantReconnectNudgeBody => 'Znova si ho nasaď a pripoj, aby Omi ďalej nahrávalo.';
+
+  @override
+  String get pendantReconnectNudgeAction => 'Znova pripojiť';
 }

@@ -4768,5 +4768,8 @@
     "playStripePlanPaused": "Váš tarif {plan} je pozastaven.",
     "firmwareNewestSupportedForDevice": "Vaše zařízení už používá nejnovější podporovanou verzi firmwaru",
     "firmwareSyncRecordingsFirstTitle": "Nejprve synchronizujte své nahrávky",
-    "firmwareSyncRecordingsFirstMessage": "Některé nahrávky jsou stále ve vašem zařízení. Počkejte, až se synchronizují do telefonu, a potom spusťte aktualizaci."
+    "firmwareSyncRecordingsFirstMessage": "Některé nahrávky jsou stále ve vašem zařízení. Počkejte, až se synchronizují do telefonu, a potom spusťte aktualizaci.",
+    "pendantReconnectNudgeTitle": "Tvoje Omi se už 3 dny nepřipojilo",
+    "pendantReconnectNudgeBody": "Znovu si ho nasaď a připoj, aby Omi dál nahrávalo.",
+    "pendantReconnectNudgeAction": "Znovu připojit"
 }

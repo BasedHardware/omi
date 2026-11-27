@@ -4768,5 +4768,8 @@
     "playStripePlanPaused": "خطة {plan} الخاصة بك متوقفة مؤقتًا.",
     "firmwareNewestSupportedForDevice": "جهازك يعمل بالفعل بأحدث إصدار مدعوم من البرنامج الثابت",
     "firmwareSyncRecordingsFirstTitle": "مزامنة تسجيلاتك أولاً",
-    "firmwareSyncRecordingsFirstMessage": "لا تزال بعض التسجيلات على جهازك. دعها تكمل المزامنة إلى هاتفك، ثم ابدأ التحديث."
+    "firmwareSyncRecordingsFirstMessage": "لا تزال بعض التسجيلات على جهازك. دعها تكمل المزامنة إلى هاتفك، ثم ابدأ التحديث.",
+    "pendantReconnectNudgeTitle": "لم يتصل جهاز Omi منذ 3 أيام",
+    "pendantReconnectNudgeBody": "ارتدِه مجددًا وأعد توصيله ليواصل Omi التسجيل.",
+    "pendantReconnectNudgeAction": "إعادة الاتصال"
 }

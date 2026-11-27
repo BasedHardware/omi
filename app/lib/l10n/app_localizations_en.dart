@@ -15825,4 +15825,13 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Some recordings are still on your device. Let them finish syncing to your phone, then start the update.';
+
+  @override
+  String get pendantReconnectNudgeTitle => 'Your Omi hasn\'t connected in 3 days';
+
+  @override
+  String get pendantReconnectNudgeBody => 'Put it back on and reconnect so Omi keeps capturing.';
+
+  @override
+  String get pendantReconnectNudgeAction => 'Reconnect';
 }

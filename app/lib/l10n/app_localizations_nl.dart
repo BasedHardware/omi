@@ -15883,4 +15883,13 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Sommige opnames staan nog op je apparaat. Laat ze eerst volledig synchroniseren naar je telefoon en start daarna de update.';
+
+  @override
+  String get pendantReconnectNudgeTitle => 'Je Omi is al 3 dagen niet verbonden';
+
+  @override
+  String get pendantReconnectNudgeBody => 'Draag hem weer en verbind hem opnieuw, zodat Omi blijft opnemen.';
+
+  @override
+  String get pendantReconnectNudgeAction => 'Opnieuw verbinden';
 }

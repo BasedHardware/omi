@@ -15852,4 +15852,13 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Bazı kayıtlar hâlâ cihazınızda. Telefonunuza senkronize edilmelerini bekleyin, ardından güncellemeyi başlatın.';
+
+  @override
+  String get pendantReconnectNudgeTitle => 'Omi cihazın 3 gündür bağlanmadı';
+
+  @override
+  String get pendantReconnectNudgeBody => 'Omi\'nin kayda devam etmesi için cihazını yeniden tak ve bağla.';
+
+  @override
+  String get pendantReconnectNudgeAction => 'Yeniden bağlan';
 }

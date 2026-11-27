@@ -15833,4 +15833,13 @@ class AppLocalizationsDa extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Nogle optagelser er stadig på din enhed. Lad dem blive færdige med at synkronisere til din telefon, og start derefter opdateringen.';
+
+  @override
+  String get pendantReconnectNudgeTitle => 'Din Omi har ikke været forbundet i 3 dage';
+
+  @override
+  String get pendantReconnectNudgeBody => 'Tag den på igen, og opret forbindelse, så Omi kan fortsætte med at optage.';
+
+  @override
+  String get pendantReconnectNudgeAction => 'Opret forbindelse igen';
 }

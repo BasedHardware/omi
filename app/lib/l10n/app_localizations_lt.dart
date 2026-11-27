@@ -15867,4 +15867,13 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Kai kurie įrašai dar yra jūsų įrenginyje. Leiskite jiems užbaigti sinchronizavimą į telefoną, tada pradėkite atnaujinimą.';
+
+  @override
+  String get pendantReconnectNudgeTitle => 'Tavo „Omi“ neprisijungė jau 3 dienas';
+
+  @override
+  String get pendantReconnectNudgeBody => 'Vėl jį užsidėk ir prijunk, kad „Omi“ toliau įrašinėtų.';
+
+  @override
+  String get pendantReconnectNudgeAction => 'Prijungti iš naujo';
 }

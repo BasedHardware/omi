@@ -15894,4 +15894,13 @@ class AppLocalizationsKn extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'ಕೆಲವು ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಇನ್ನೂ ನಿಮ್ಮ ಸಾಧನದಲ್ಲಿವೆ. ಅವುಗಳು ನಿಮ್ಮ ಫೋನ್‌ಗೆ ಸಿಂಕ್ ಆಗಲು ಬಿಡಿ, ನಂತರ ನವೀಕರಣ ಪ್ರಾರಂಭಿಸಿ.';
+
+  @override
+  String get pendantReconnectNudgeTitle => 'ನಿಮ್ಮ Omi 3 ದಿನಗಳಿಂದ ಸಂಪರ್ಕಗೊಂಡಿಲ್ಲ';
+
+  @override
+  String get pendantReconnectNudgeBody => 'Omi ರೆಕಾರ್ಡಿಂಗ್ ಮುಂದುವರಿಸಲು ಅದನ್ನು ಮತ್ತೆ ಧರಿಸಿ ಮತ್ತು ಸಂಪರ್ಕಿಸಿ.';
+
+  @override
+  String get pendantReconnectNudgeAction => 'ಮತ್ತೆ ಸಂಪರ್ಕಿಸಿ';
 }

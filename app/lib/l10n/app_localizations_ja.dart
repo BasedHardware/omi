@@ -15608,4 +15608,13 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get firmwareSyncRecordingsFirstMessage => '一部の録音はまだデバイスに残っています。スマートフォンへの同期が完了してから、更新を開始してください。';
+
+  @override
+  String get pendantReconnectNudgeTitle => 'Omi が 3 日間接続されていません';
+
+  @override
+  String get pendantReconnectNudgeBody => 'Omi をもう一度身につけて再接続すると、録音を続けられます。';
+
+  @override
+  String get pendantReconnectNudgeAction => '再接続';
 }

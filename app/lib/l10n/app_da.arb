@@ -4810,5 +4810,8 @@
     "playStripePlanPaused": "Dit {plan}-abonnement er sat på pause.",
     "firmwareNewestSupportedForDevice": "Din enhed kører allerede den nyeste understøttede firmwareversion",
     "firmwareSyncRecordingsFirstTitle": "Synkroniser dine optagelser først",
-    "firmwareSyncRecordingsFirstMessage": "Nogle optagelser er stadig på din enhed. Lad dem blive færdige med at synkronisere til din telefon, og start derefter opdateringen."
+    "firmwareSyncRecordingsFirstMessage": "Nogle optagelser er stadig på din enhed. Lad dem blive færdige med at synkronisere til din telefon, og start derefter opdateringen.",
+    "pendantReconnectNudgeTitle": "Din Omi har ikke været forbundet i 3 dage",
+    "pendantReconnectNudgeBody": "Tag den på igen, og opret forbindelse, så Omi kan fortsætte med at optage.",
+    "pendantReconnectNudgeAction": "Opret forbindelse igen"
 }

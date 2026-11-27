@@ -15854,4 +15854,13 @@ class AppLocalizationsUr extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'کچھ ریکارڈنگز ابھی آپ کے ڈیوائس پر ہیں۔ انہیں فون پر سنک ہونے دیں، پھر اپڈیٹ شروع کریں۔';
+
+  @override
+  String get pendantReconnectNudgeTitle => 'آپ کا Omi 3 دن سے منسلک نہیں ہوا';
+
+  @override
+  String get pendantReconnectNudgeBody => 'اسے دوبارہ پہنیں اور جوڑیں تاکہ Omi ریکارڈنگ جاری رکھے۔';
+
+  @override
+  String get pendantReconnectNudgeAction => 'دوبارہ جوڑیں';
 }
