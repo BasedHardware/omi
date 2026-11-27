@@ -233,6 +233,33 @@ class _InventoryStorage extends StorageSyncImpl {
   }
 }
 
+class _UnconfirmedMultiFileStorage extends StorageSyncImpl {
+  _UnconfirmedMultiFileStorage() : super(_Listener());
+
+  int syncAllCalls = 0;
+  final pendingFromPreviousDevice = Wal(
+    timerStart: 1704067200,
+    codec: BleAudioCodec.opus,
+    seconds: 60,
+    status: WalStatus.miss,
+    storage: WalStorage.sdcard,
+    device: 'previous-pendant',
+    fileNum: 0,
+  );
+
+  @override
+  Future<bool> refreshWalsFromDevice() async => false;
+
+  @override
+  Future<List<Wal>> getMissingWals() async => [pendingFromPreviousDevice];
+
+  @override
+  Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress}) async {
+    syncAllCalls++;
+    return null;
+  }
+}
+
 class _PendingInventoryStorage extends StorageSyncImpl {
   _PendingInventoryStorage() : super(_Listener());
 
@@ -249,8 +276,13 @@ class _PendingInventoryStorage extends StorageSyncImpl {
 class _ReadyFlashPage extends FlashPageWalSyncImpl {
   _ReadyFlashPage() : super(_Listener());
 
+  int refreshCalls = 0;
+
   @override
-  Future<bool> refreshWalsFromDevice() async => true;
+  Future<bool> refreshWalsFromDevice() async {
+    refreshCalls++;
+    return true;
+  }
 }
 
 // Regression: background/auto-sync discovery read firmware off the raw connect
@@ -783,6 +815,45 @@ void main() {
       expect(await syncs.refreshWalsFromDevice(), isFalse);
       expect(storage.refreshCalls, 1);
       expect(sdcard.refreshCalls, 1);
+    });
+
+    test('Limitless delete confirmation uses the supported flash-page inventory', () async {
+      final sdcard = _SpySdcard();
+      final storage = _InventoryStorage(confirmed: false);
+      final flash = _ReadyFlashPage();
+      final syncs = WalSyncs(
+        _Listener(),
+        sdcardSync: sdcard,
+        storageSync: storage,
+        flashPageSync: flash,
+        phoneSync: _PhoneSync(),
+      )..setDevice(BtDevice(id: 'limitless', name: 'Limitless', type: DeviceType.limitless, rssi: -40));
+
+      expect(await syncs.refreshWalsFromDevice(), isTrue);
+      expect(flash.refreshCalls, 1);
+      expect(storage.refreshCalls, 0, reason: 'Limitless does not implement multi-file storage stats');
+      expect(sdcard.refreshCalls, 0, reason: 'Limitless deletion is confirmed by its flash-page protocol');
+    });
+
+    test('sync skips stale multi-file rows when current inventory is unconfirmed', () async {
+      final storage = _UnconfirmedMultiFileStorage();
+      final syncs = WalSyncs(
+        _Listener(),
+        sdcardSync: _SpySdcard(),
+        storageSync: storage,
+        flashPageSync: _ReadyFlashPage(),
+        phoneSync: _PhoneSync(),
+      )..setDevice(BtDevice(
+          id: 'current-pendant',
+          name: 'Omi',
+          type: DeviceType.omi,
+          rssi: -40,
+          firmwareRevision: '3.0.18',
+        ));
+
+      await syncs.syncAll();
+
+      expect(storage.syncAllCalls, 0, reason: 'a failed current inventory cannot authorize an old file index');
     });
   });
 }

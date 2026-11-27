@@ -143,6 +143,18 @@ class _FakeStorageDevice implements DeviceConnection {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+class _FakeStorageInventoryDevice extends _FakeStorageDevice {
+  _FakeStorageInventoryDevice() : super(script: const []);
+
+  StorageStatus? inventoryStatus;
+
+  @override
+  Future<StorageStatus?> getStorageFileStats() async => inventoryStatus;
+
+  @override
+  Future<BleAudioCodec> getAudioCodec() async => BleAudioCodec.opus;
+}
+
 /// Delivers [script] through the subscription it returns, as the BLE transports
 /// do: once that subscription is cancelled, no later packet reaches the sync.
 class _SubscribedStorageDevice extends _FakeStorageDevice {
@@ -724,6 +736,64 @@ void main() {
     await sync.stop();
   });
 
+  test('StorageSync: previous-device indexes stay fenced after current inventory fails', () async {
+    final previousDevice = BtDevice(id: 'devkit-a', name: 'Omi A', type: DeviceType.omi, rssi: -40);
+    final currentDevice = BtDevice(id: 'devkit-b', name: 'Omi B', type: DeviceType.omi, rssi: -40);
+    final previousWal = Wal(
+      timerStart: 1704067200,
+      codec: BleAudioCodec.opus,
+      seconds: 60,
+      status: WalStatus.miss,
+      storage: WalStorage.sdcard,
+      device: previousDevice.id,
+      fileNum: 0,
+    );
+    final connection = _FakeStorageInventoryDevice();
+    final sync = StorageSyncImpl(_Listener())
+      ..testDevice = previousDevice
+      ..testConnection = connection
+      ..testWals = [previousWal];
+
+    expect(await sync.getMissingWals(), [previousWal]);
+
+    sync.setDevice(currentDevice);
+    expect(await sync.refreshWalsFromDevice(), isFalse);
+    expect(await sync.getMissingWals(), isEmpty);
+    await sync.syncAll();
+    await expectLater(sync.deleteWal(previousWal), throwsStateError);
+
+    expect(connection.writes, isEmpty, reason: 'the old file index must never be read from the new pendant');
+    expect(connection.deletes, isEmpty, reason: 'the old file index must never be deleted from the new pendant');
+  });
+
+  test('StorageSync: failed refresh invalidates indexes from the same device', () async {
+    final device = BtDevice(id: 'devkit-b', name: 'Omi B', type: DeviceType.omi, rssi: -40);
+    final pending = Wal(
+      timerStart: 1704067200,
+      codec: BleAudioCodec.opus,
+      seconds: 60,
+      status: WalStatus.miss,
+      storage: WalStorage.sdcard,
+      device: device.id,
+      fileNum: 0,
+    );
+    final connection = _FakeStorageInventoryDevice();
+    final sync = StorageSyncImpl(_Listener())
+      ..testDevice = device
+      ..testConnection = connection
+      ..testWals = [pending];
+
+    expect(await sync.getMissingWals(), [pending]);
+    expect(await sync.refreshWalsFromDevice(), isFalse);
+
+    expect(await sync.getMissingWals(), [pending],
+        reason: 'the row stays visible, but its stale index is not actionable');
+    await sync.syncAll();
+    await expectLater(sync.deleteWal(pending), throwsStateError);
+    expect(connection.writes, isEmpty);
+    expect(connection.deletes, isEmpty);
+  });
+
   test('StorageSync: a packet ending in an orphan trailing size byte still completes', () async {
     final audio = <int>[];
     for (var i = 0; i < 10; i++) {
@@ -1045,6 +1115,32 @@ void main() {
     expect(sync.testWals, isEmpty, reason: 'the second pass drained the remaining flash range');
     expect(sync.lastStallReason, FlashSyncStallReason.none,
         reason: 'a completed retry must not report the first pass\'s transient unknown stall');
+  });
+
+  test('FlashPage: a same-range refresh preserves a pending stall without a new transfer', () async {
+    final card = _FakeLimitless(pages: [null])
+      ..flashStatus = {
+        'oldest_flash_page': 100,
+        'newest_flash_page': 131,
+        'current_storage_session': 1,
+      }
+      // Initial discovery succeeds; the post-stall read is unavailable; the
+      // refresh after the pass succeeds but confirms no cursor movement.
+      ..nullStorageStatusCall = 2;
+    final sync = FlashPageWalSyncImpl(_Listener())
+      ..testDevice = BtDevice(id: 'limitless-1', name: 'Limitless', type: DeviceType.limitless, rssi: -40)
+      ..testConnection = card
+      ..testPollInterval = Duration.zero
+      ..testMaxEmptyExtractions = 1;
+    sync.setLocalSync(_FakeLocalSync());
+    addTearDown(sync.stop);
+
+    await sync.refreshWalsFromDevice();
+    await sync.syncAll();
+
+    expect(sync.testWals, hasLength(1), reason: 'the page range is still pending');
+    expect(sync.lastStallReason, FlashSyncStallReason.unknown,
+        reason: 'a successful refresh of the unchanged range is not a drain or a new transfer');
   });
 
   test('FlashPage: an all-durable held-ACK retry keeps the cursor without saving audio twice', () async {

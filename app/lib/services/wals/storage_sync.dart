@@ -23,6 +23,7 @@ import 'package:omi/services/wals/wal_interfaces.dart';
 class StorageSyncImpl implements StorageSync {
   List<Wal> _wals = [];
   BtDevice? _device;
+  String? _confirmedInventoryDeviceId;
 
   StreamSubscription? _storageStream;
   Completer<bool>? _activeTransfer;
@@ -65,14 +66,18 @@ class StorageSyncImpl implements StorageSync {
         _clock = clock ?? DateTime.now;
 
   @visibleForTesting
-  set testWals(List<Wal> wals) => _wals = wals;
+  set testWals(List<Wal> wals) {
+    _wals = wals;
+    final deviceId = _device?.id;
+    _confirmedInventoryDeviceId = deviceId != null && wals.every((wal) => wal.device == deviceId) ? deviceId : null;
+  }
 
   /// Whether this sync still holds files for [deviceId] that need an
   /// authoritative multi-file inventory before deletion can be confirmed.
   bool hasCachedWalsForDevice(String deviceId) => _wals.any((wal) => wal.device == deviceId);
 
   @visibleForTesting
-  set testDevice(BtDevice? device) => _device = device;
+  set testDevice(BtDevice? device) => setDevice(device);
 
   DeviceConnection? _testConnection;
 
@@ -87,6 +92,9 @@ class StorageSyncImpl implements StorageSync {
   @override
   void setDevice(BtDevice? device) {
     _device = device;
+    // A cached index is usable only after this device's current inventory has
+    // been read. A device switch or reconnect must not reuse stale indexes.
+    _confirmedInventoryDeviceId = null;
   }
 
   @override
@@ -183,32 +191,40 @@ class StorageSyncImpl implements StorageSync {
   /// Call refreshWalsFromDevice() first to populate the list via BLE.
   @override
   Future<List<Wal>> getMissingWals() async {
-    return _wals.where((w) => w.status == WalStatus.miss && w.storage == WalStorage.sdcard).toList();
+    final deviceId = _device?.id;
+    if (deviceId == null) return const [];
+    return _wals
+        .where((w) => w.device == deviceId && w.status == WalStatus.miss && w.storage == WalStorage.sdcard)
+        .toList();
   }
 
   /// Whether [wal] is one of the device files this sync listed. Its recordings
   /// share [WalStorage.sdcard] with the legacy SD card sync, so per-recording
   /// actions use this to reach the right sync.
-  bool owns(Wal wal) => _wals.any((w) => identical(w, wal));
+  bool owns(Wal wal) =>
+      _device?.id == wal.device && _confirmedInventoryDeviceId == wal.device && _wals.any((w) => identical(w, wal));
 
   /// Discover files on device via BLE. Must be called BEFORE syncAll() to populate _wals.
   /// Sends STOP command and subscribes to data characteristic — never call during an active sync.
   Future<bool> refreshWalsFromDevice() async {
-    if (_device == null) return false;
+    final device = _device;
+    if (device == null) return false;
     if (_isSyncing) {
       Logger.debug('StorageSync.refreshWalsFromDevice: skipping — sync in progress');
       return false;
     }
+    _confirmedInventoryDeviceId = null;
 
     try {
-      var connection = await ServiceManager.instance().device.ensureConnection(_device!.id);
+      var connection = _testConnection ?? await ServiceManager.instance().device.ensureConnection(device.id);
       if (connection == null) return false;
 
       final status = await connection.getStorageFileStats();
       Logger.debug('StorageSync.refreshWalsFromDevice: status=$status');
-      if (status == null) return false;
+      if (status == null || _device?.id != device.id) return false;
       if (status.fileCount == 0) {
-        _wals = [];
+        _wals = _wals.where((wal) => wal.device != device.id).toList();
+        _confirmedInventoryDeviceId = device.id;
         return true;
       }
 
@@ -233,7 +249,8 @@ class StorageSyncImpl implements StorageSync {
       }
 
       BleAudioCodec codec = await connection.getAudioCodec();
-      var pd = await _device!.getDeviceInfo(connection);
+      var pd = await device.getDeviceInfo(connection);
+      if (_device?.id != device.id) return false;
       String deviceModel = pd.modelNumber.isNotEmpty ? pd.modelNumber : "Omi";
 
       List<Wal> wals = [];
@@ -255,7 +272,7 @@ class StorageSyncImpl implements StorageSync {
             storageOffset: 0,
             storageTotalBytes: file.sizeBytes,
             fileNum: file.index,
-            device: _device!.id,
+            device: device.id,
             deviceModel: deviceModel,
             totalFrames: seconds * fps,
             syncedFrameOffset: 0,
@@ -266,7 +283,8 @@ class StorageSyncImpl implements StorageSync {
       // Deterministic sync order: oldest -> newest (per PR #5905)
       wals.sort((a, b) => a.timerStart.compareTo(b.timerStart));
 
-      _wals = wals;
+      _wals = [..._wals.where((wal) => wal.device != device.id), ...wals];
+      _confirmedInventoryDeviceId = device.id;
       Logger.debug('StorageSync.refreshWalsFromDevice: Found ${wals.length} files to sync');
       return true;
     } catch (e) {
@@ -285,6 +303,9 @@ class StorageSyncImpl implements StorageSync {
       listener.onWalUpdated();
       if (wal.status != WalStatus.synced) throw StateError("Owning device is unavailable; only cached row removed");
       return;
+    }
+    if (_device == null || _confirmedInventoryDeviceId != _device!.id) {
+      throw StateError('Current device file indexes have not been confirmed');
     }
     if (_firmwareCannotDeleteMultiFileWals) {
       listener.onWalUpdated();
@@ -397,13 +418,17 @@ class StorageSyncImpl implements StorageSync {
   /// connection) attempts nothing and confirms nothing.
   Future<({Set<String> attempted, Set<String> confirmed})> _deleteWalsOnDevice(List<Wal> wals) async {
     final attempted = <String>{}, confirmed = <String>{};
-    if (wals.isEmpty || _device == null || _isSyncing) return (attempted: attempted, confirmed: confirmed);
-    final connection = _testConnection ?? await ServiceManager.instance().device.ensureConnection(_device!.id);
+    final device = _device;
+    if (wals.isEmpty || device == null || _confirmedInventoryDeviceId != device.id || _isSyncing) {
+      return (attempted: attempted, confirmed: confirmed);
+    }
+    final connection = _testConnection ?? await ServiceManager.instance().device.ensureConnection(device.id);
     if (connection == null) {
       Logger.debug('StorageSync._deleteWalsOnDevice: no connection, skipping firmware delete');
       return (attempted: attempted, confirmed: confirmed);
     }
-    final targets = wals.where((w) => w.fileNum >= 0).toList()..sort((a, b) => b.fileNum.compareTo(a.fileNum));
+    final targets = wals.where((w) => w.device == device.id && w.fileNum >= 0).toList()
+      ..sort((a, b) => b.fileNum.compareTo(a.fileNum));
     final deletedIds = targets.map((w) => w.id).toSet();
     for (final wal in targets) {
       attempted.add(wal.id);
@@ -424,6 +449,7 @@ class StorageSyncImpl implements StorageSync {
         Logger.debug('StorageSync._deleteWalsOnDevice: failed fileNum=${wal.fileNum}: $e');
       }
     }
+    if (!confirmed.containsAll(attempted)) _confirmedInventoryDeviceId = null;
     return (attempted: attempted, confirmed: confirmed);
   }
 
@@ -438,7 +464,8 @@ class StorageSyncImpl implements StorageSync {
 
   @override
   Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress}) async {
-    if (_device == null) {
+    final device = _device;
+    if (device == null || _confirmedInventoryDeviceId != device.id) {
       Logger.debug('StorageSync.syncAll: _device is null, returning');
       return null;
     }
@@ -446,7 +473,9 @@ class StorageSyncImpl implements StorageSync {
     // Use already-populated _wals from getMissingWals() called earlier by WalSyncs.
     // Do NOT call getMissingWals() here — it creates a BLE subscription on the same
     // characteristic used for data transfer, causing subscription conflicts.
-    var wals = _wals.where((w) => w.status == WalStatus.miss && w.storage == WalStorage.sdcard).toList();
+    var wals = _wals
+        .where((w) => w.device == device.id && w.status == WalStatus.miss && w.storage == WalStorage.sdcard)
+        .toList();
     wals.sort((a, b) => a.timerStart.compareTo(b.timerStart));
 
     Logger.debug('StorageSync.syncAll: ${wals.length} files to sync');
@@ -549,6 +578,10 @@ class StorageSyncImpl implements StorageSync {
   Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
     // Resetting the sync state here would hijack a drain that is still reading.
     if (_isSyncing) throw Exception('Device transfer already in progress');
+    final device = _device;
+    if (device == null || _confirmedInventoryDeviceId != device.id || wal.device != device.id) {
+      throw StateError('Current device file indexes have not been confirmed');
+    }
 
     _resetSyncState();
     _isSyncing = true;
@@ -604,12 +637,14 @@ class StorageSyncImpl implements StorageSync {
     Logger.debug(
       'StorageSync._syncSingleFile: fileNum=${wal.fileNum} size=${wal.storageTotalBytes} offset=${wal.storageOffset}',
     );
-    if (_device == null) return false;
+    final device = _device;
+    if (device == null || _confirmedInventoryDeviceId != device.id || wal.device != device.id) return false;
 
-    var connection = _testConnection ?? await ServiceManager.instance().device.ensureConnection(_device!.id);
+    var connection = _testConnection ?? await ServiceManager.instance().device.ensureConnection(device.id);
     if (connection == null) throw Exception('Device not connected');
+    if (_device?.id != device.id || _confirmedInventoryDeviceId != device.id) return false;
 
-    _activeSyncDeviceId = _device!.id;
+    _activeSyncDeviceId = device.id;
     _activeSyncConnection = connection;
     try {
       _activeSyncEpoch = connection.connectionEpoch;

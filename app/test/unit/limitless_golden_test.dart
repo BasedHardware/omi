@@ -1276,6 +1276,44 @@ void main() {
     expect(decoded, [frame]);
   });
 
+  test('structured flash-page parsing wins over marker bytes inside an Opus packet', () async {
+    final transport = FakeDeviceTransport();
+    final connection = LimitlessDeviceConnection(
+      BtDevice(name: 'Limitless Pendant', id: 'fake-limitless', type: DeviceType.limitless, rssi: -50),
+      transport,
+      setupSettleDelay: Duration.zero,
+    );
+    addTearDown(connection.disconnect);
+    // The inner bytes look like a valid bare 0x22 Opus wrapper. They are part
+    // of one valid packet, so a byte scanner must not split them into audio.
+    final frame = [0xb8, 0x55, 0x22, 10, 0x78, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+    final decoded = <List<int>>[];
+    final received = Completer<void>();
+    final subscription = await connection.performGetBleAudioBytesListener(
+      onAudioBytesReceived: (audio) {
+        decoded.add(audio);
+        if (!received.isCompleted) received.complete();
+      },
+    );
+    addTearDown(() => subscription?.cancel());
+    await connection.connect();
+
+    transport.emit(
+      limitlessRxCharUuid,
+      bleWrapper(
+        10,
+        0,
+        1,
+        flashPageBytes(1750000000000, [
+          audioWrapper(audioBlobOfFrames([frame]))
+        ]),
+      ),
+    );
+
+    await received.future.timeout(const Duration(seconds: 2));
+    expect(decoded, [frame], reason: 'the structured page parser preserves the complete Opus packet');
+  });
+
   test('unindexed stored frames are withheld when batch-mode re-entry is unconfirmed', () async {
     final logDirectory = await Directory.systemTemp.createTemp('limitless-stored-frame-log-');
     final previousDocuments = PathProviderPlatform.instance;

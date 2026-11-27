@@ -580,8 +580,11 @@ class LimitlessDeviceConnection extends DeviceConnection {
   /// Handle reassembled payload in real-time mode
   void _handleRealTimePayload(List<int> payload) {
     if (_publishAudioFramesFromPendantEnvelope(payload) || _batchModeUnconfirmed) return;
-    var frames = _extractOpusFrames(payload)[0] as List<List<int>>;
-    if (frames.isEmpty) frames = _extractOpusFramesFromFlashPage(payload);
+    // Parse structured flash pages before scanning for bare Opus wrappers. A
+    // valid packet may itself contain marker-like bytes that the fallback
+    // scanner would mistake for a nested frame.
+    var frames = _extractOpusFramesFromFlashPage(payload);
+    if (frames.isEmpty) frames = _extractOpusFrames(payload)[0] as List<List<int>>;
     if (frames.isNotEmpty) _publishAudioFrames(frames, fromRealtimeStream: true);
   }
 

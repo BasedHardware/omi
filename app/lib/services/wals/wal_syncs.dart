@@ -331,6 +331,12 @@ class WalSyncs implements IWalSync {
   Future<bool> refreshWalsFromDevice({String? firmwareVersion}) async {
     final device = _device;
     if (device == null) return false;
+    // Limitless confirms deletions through its flash-page status/ACK protocol;
+    // it does not implement the multi-file stats command.
+    if (device.type == DeviceType.limitless) {
+      final confirmed = await _flashPageSync.refreshWalsFromDevice();
+      return _device?.id == device.id && confirmed;
+    }
     // Prefer the caller-supplied firmware, then the enriched value stored at
     // setDevice — the raw connect object's firmwareRevision can still be
     // 'Unknown', which would misroute ring-buffer discovery.
@@ -577,14 +583,18 @@ class WalSyncs implements IWalSync {
         await _ringSync.syncAll(progress: progress);
       }
     } else {
-      await _storageSync.refreshWalsFromDevice();
-      final storageMissing = await _storageSync.getMissingWals();
-      if (_isCancelled) return;
-      if (storageMissing.isNotEmpty) {
-        Logger.debug("WalSyncs: Phase 0 - Downloading ${storageMissing.length} multi-file storage files to phone");
-        DebugLogManager.logInfo('Sync Phase 0: Multi-file storage sync', {'fw': fwVersion ?? ''});
-        progress?.onWalSyncedProgress(0.0, phase: SyncPhase.downloadingFromDevice);
-        await _storageSync.syncAll(progress: progress);
+      final inventoryConfirmed = await _storageSync.refreshWalsFromDevice();
+      if (inventoryConfirmed) {
+        final storageMissing = await _storageSync.getMissingWals();
+        if (_isCancelled) return;
+        if (storageMissing.isNotEmpty) {
+          Logger.debug("WalSyncs: Phase 0 - Downloading ${storageMissing.length} multi-file storage files to phone");
+          DebugLogManager.logInfo('Sync Phase 0: Multi-file storage sync', {'fw': fwVersion ?? ''});
+          progress?.onWalSyncedProgress(0.0, phase: SyncPhase.downloadingFromDevice);
+          await _storageSync.syncAll(progress: progress);
+        }
+      } else {
+        Logger.debug('WalSyncs: Skipping multi-file transfer because the current device inventory is unconfirmed');
       }
     }
 
