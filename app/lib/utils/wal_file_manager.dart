@@ -64,11 +64,12 @@ class WalFileManager {
     required Set<String> owners,
     required Set<String> reservedNames,
     required bool Function(String) mayDelete,
-    Set<String> protectedNames = const <String>{},
-    bool referenceSnapshotComplete = true,
+    LiveWalPurgeSnapshot? initialReferenceSnapshot,
+    bool initialReferenceScanComplete = true,
     bool Function()? shouldContinue,
   }) async {
-    if (!referenceSnapshotComplete) return (removed: 0, referenceScanIncomplete: true);
+    if (owners.isEmpty) return (removed: 0, referenceScanIncomplete: false);
+    if (!initialReferenceScanComplete) return (removed: 0, referenceScanIncomplete: true);
     File? primary;
     File? backup;
     await _saveLock.withResource(() async {
@@ -77,18 +78,12 @@ class WalFileManager {
     });
     if (primary == null || backup == null) return (removed: 0, referenceScanIncomplete: true);
 
-    LiveWalPurgeSnapshot? referenceSnapshot;
-    await _saveLock.withResource(() async {
-      try {
-        referenceSnapshot = await LiveWalReceipt.capturePurgeSnapshot(primary!, backup!, _indexRevision);
-      } catch (_) {
-        referenceSnapshot = null;
-      }
-    });
-    if (referenceSnapshot == null || referenceSnapshot!.documentsPath != primary!.parent.path) {
+    LiveWalPurgeSnapshot? referenceSnapshot = initialReferenceSnapshot;
+    var snapshotAttempted = referenceSnapshot != null;
+    var protectedNames = referenceSnapshot?.basenames ?? <String>{};
+    if (referenceSnapshot != null && referenceSnapshot.documentsPath != primary!.parent.path) {
       return (removed: 0, referenceScanIncomplete: true);
     }
-
     var removed = 0;
     var referenceScanIncomplete = false;
     try {
@@ -96,6 +91,21 @@ class WalFileManager {
         if (shouldContinue != null && !shouldContinue()) {
           referenceScanIncomplete = true;
           break;
+        }
+        if (!snapshotAttempted) {
+          snapshotAttempted = true;
+          await _saveLock.withResource(() async {
+            try {
+              referenceSnapshot = await LiveWalReceipt.capturePurgeSnapshot(primary!, backup!, _indexRevision);
+            } catch (_) {
+              referenceSnapshot = null;
+            }
+          });
+          if (referenceSnapshot == null || referenceSnapshot!.documentsPath != primary!.parent.path) {
+            referenceScanIncomplete = true;
+            break;
+          }
+          protectedNames = referenceSnapshot!.basenames;
         }
         final result = await _saveLock.withResource(() async {
           final snapshot = referenceSnapshot!;
@@ -145,6 +155,29 @@ class WalFileManager {
           return await LiveWalReceipt.capturePurgeSnapshot(primary, backup, _indexRevision);
         } catch (_) {
           return null;
+        }
+      });
+
+  static Future<
+      ({
+        LiveWalPurgeSnapshot? snapshot,
+        bool referenceScanIncomplete,
+      })> captureLiveWalPurgeSnapshotForPendingReceipts() => _saveLock.withResource(() async {
+        final primary = _walFile;
+        final backup = _walBackupFile;
+        if (primary == null || backup == null) {
+          return (snapshot: null, referenceScanIncomplete: true);
+        }
+        try {
+          if (!await LiveWalReceipt.hasPendingReceiptEntries(primary.parent)) {
+            return (snapshot: null, referenceScanIncomplete: false);
+          }
+          return (
+            snapshot: await LiveWalReceipt.capturePurgeSnapshot(primary, backup, _indexRevision),
+            referenceScanIncomplete: false,
+          );
+        } catch (_) {
+          return (snapshot: null, referenceScanIncomplete: true);
         }
       });
 

@@ -25,13 +25,17 @@ extension _WalAccountPurge on LocalWalSyncImpl {
   Future<bool> _purgeDeletedAccountWalsAtLoad(int generation) async {
     final deleted = (await readDeletedAccountUids()).toSet();
     final receiptPurgeOwners = LiveWalReceipt.purgeEnabled ? deleted : const <String>{};
-    final startupReferences = receiptPurgeOwners.isEmpty ? null : await WalFileManager.captureLiveWalPurgeSnapshot();
+    final startupReferences =
+        receiptPurgeOwners.isEmpty ? null : await WalFileManager.captureLiveWalPurgeSnapshotForPendingReceipts();
     // Receipt-only files are drained in small batches after `_walReady` opens.
     // This leaves index admission and the first recording view independent of
-    // the size of the receipt archive.
+    // the size of the receipt archive. Capture references only if pending
+    // receipts exist, then reuse that set after readiness so an index rewrite
+    // cannot erase references from the prior backup generation.
     _deletedAccountReceiptPurgeOwners = receiptPurgeOwners;
-    _deletedAccountReceiptPurgeProtectedNames = startupReferences?.basenames ?? <String>{};
-    _deletedAccountReceiptPurgeReferencesComplete = receiptPurgeOwners.isEmpty || startupReferences != null;
+    _deletedAccountReceiptPurgeSnapshot = startupReferences?.snapshot;
+    _deletedAccountReceiptPurgeReferencesComplete =
+        receiptPurgeOwners.isEmpty || startupReferences == null || !startupReferences.referenceScanIncomplete;
     final doomed = deleted.isEmpty ? const <Wal>[] : _foreignWals.where((w) => deleted.contains(w.ownerUid)).toList();
     final removed = <String, int>{};
     for (final wal in doomed) {
@@ -105,8 +109,8 @@ extension _WalAccountPurge on LocalWalSyncImpl {
   Future<LiveWalReceiptPurgeResult> _purgeUnindexedAccountWals(
     Set<String> owners,
     int generation, {
-    Set<String> protectedNames = const <String>{},
-    bool referenceSnapshotComplete = true,
+    LiveWalPurgeSnapshot? initialReferenceSnapshot,
+    bool initialReferenceScanComplete = true,
   }) async {
     if (!LiveWalReceipt.purgeEnabled || owners.isEmpty || !_isCurrent(generation)) {
       return (removed: 0, referenceScanIncomplete: false);
@@ -115,8 +119,8 @@ extension _WalAccountPurge on LocalWalSyncImpl {
       owners: owners,
       reservedNames: _liveWalReservedNames(),
       mayDelete: (name) => _isCurrent(generation) && !_liveWalReservedNames().contains(name.toLowerCase()),
-      protectedNames: protectedNames,
-      referenceSnapshotComplete: referenceSnapshotComplete,
+      initialReferenceSnapshot: initialReferenceSnapshot,
+      initialReferenceScanComplete: initialReferenceScanComplete,
       shouldContinue: () => _isCurrent(generation),
     );
   }
@@ -124,14 +128,14 @@ extension _WalAccountPurge on LocalWalSyncImpl {
   Future<void> _purgeDeletedAccountReceiptsAfterReady(
     Set<String> owners,
     int generation, {
-    required Set<String> protectedNames,
-    required bool referenceSnapshotComplete,
+    LiveWalPurgeSnapshot? initialReferenceSnapshot,
+    bool initialReferenceScanComplete = true,
   }) async {
     final result = await _purgeUnindexedAccountWals(
       owners,
       generation,
-      protectedNames: protectedNames,
-      referenceSnapshotComplete: referenceSnapshotComplete,
+      initialReferenceSnapshot: initialReferenceSnapshot,
+      initialReferenceScanComplete: initialReferenceScanComplete,
     );
     if (!_isCurrent(generation)) return;
     DebugLogManager.logEvent('wal_orphan_purge', {

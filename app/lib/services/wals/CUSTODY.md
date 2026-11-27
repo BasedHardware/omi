@@ -327,12 +327,14 @@ entries are diagnostic and do not invalidate unrelated census results; a sidecar
 reserves its basename only after validation and an unchanged-file check.
 Receipt publication flushes the audio file and syncs the documents directory
 before indexing a receiptless fallback. If that barrier fails, the WAL stays in
-memory. Native directory sync runs off the UI thread. Deleted-account receipt
-cleanup snapshots persisted index/quarantine references before any load-time
-index rewrite, then starts after WAL readiness. It reads at most 128 receipt
-entries per batch and releases the index-writer lock between batches. Pages reuse
-one index-reference snapshot, refreshing it under the lock only after an index
-revision change; incomplete reference checks retain the audio and are reported.
+memory. Native directory sync runs off the UI thread. When pending receipts
+exist, deleted-account cleanup captures persisted main, backup, temporary and
+quarantine index references before account-purge index rewrites, then reuses
+that snapshot after WAL readiness. It reads at most 128 receipt entries per
+batch and releases the index-writer lock between batches. Pages refresh the
+snapshot under the lock only after an index revision change, retaining earlier
+references across refreshes; incomplete reference checks retain the audio and
+are reported. Empty receipt directories do not trigger an index-reference scan.
 Unreadable, invalid, changed or unresolved index, journal, preference or consent
 sources prevent adoption. Wrong-typed or quarantined
 legacy preference inputs also make the census incomplete; recovery and support

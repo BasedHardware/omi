@@ -67,7 +67,7 @@ class LiveWalReceiptDurabilityChannelTest {
         documents.mkdirs()
         val nested = File(documents, "nested").apply { mkdirs() }
 
-        assertEquals(PathUtils.getDataDirectory(context).canonicalFile, documents)
+        assertEquals(File(PathUtils.getDataDirectory(context)).canonicalFile, documents)
         assertEquals(
             documents.canonicalFile,
             LiveWalReceiptDurabilityChannel.checkedDirectory(context, documents.path),
@@ -98,9 +98,14 @@ class LiveWalReceiptDurabilityChannelTest {
         val documents = LiveWalReceiptDurabilityChannel.documentsDirectory(context)
         val nested = File(documents, "durability-test").apply { mkdirs() }
 
-        val response = invokeDirectorySync(nested.path)
-        assertTrue(response.success)
-        assertEquals(null, response.errorCode)
+        LiveWalReceiptDurabilityChannel.directoryFsyncForTesting = { _ -> }
+        try {
+            val response = invokeDirectorySync(nested.path)
+            assertTrue(response.success)
+            assertEquals(null, response.errorCode)
+        } finally {
+            LiveWalReceiptDurabilityChannel.directoryFsyncForTesting = null
+        }
     }
 
     @Test
@@ -110,5 +115,22 @@ class LiveWalReceiptDurabilityChannelTest {
         val response = invokeDirectorySync(outside.path)
         assertEquals("invalid_path", response.errorCode)
         assertEquals(false, response.success)
+    }
+
+    @Test
+    fun `registered handler replies when directory sync throws an Error`() {
+        val documents = LiveWalReceiptDurabilityChannel.documentsDirectory(context)
+        val nested = File(documents, "durability-error-test").apply { mkdirs() }
+        LiveWalReceiptDurabilityChannel.directoryFsyncForTesting = {
+            throw LinkageError("injected native fsync error")
+        }
+
+        try {
+            val response = invokeDirectorySync(nested.path)
+            assertEquals("directory_sync_failed", response.errorCode)
+            assertEquals(false, response.success)
+        } finally {
+            LiveWalReceiptDurabilityChannel.directoryFsyncForTesting = null
+        }
     }
 }

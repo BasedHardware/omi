@@ -227,10 +227,12 @@ jobs:
 
       - name: Exercise live WAL receipt kill switch
         working-directory: app
-        run: >-
-          flutter test --no-pub --dart-define=OMI_LIVE_WAL_RECEIPT_OFF=true
-          --plain-name "receipt issuance kill switch still replays and retires existing receipts"
-          test/unit/wal_orphan_recovery_test.dart
+        run: |
+          set -o pipefail
+          flutter test --no-pub --reporter json --dart-define=OMI_LIVE_WAL_RECEIPT_OFF=true \
+            --plain-name "receipt issuance kill switch still replays and retires existing receipts" \
+            test/unit/wal_orphan_recovery_test.dart |
+            python3 -c "import json,sys; count=sum(json.loads(line).get('type') == 'testStart' for line in sys.stdin if line.strip()); print(f'matched {count} test(s)'); sys.exit(count < 1)"
 
       - name: Run analyzer ratchet
         working-directory: app

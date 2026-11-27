@@ -17,6 +17,7 @@ object LiveWalReceiptDurabilityChannel {
         Thread(task, "omi-live-wal-durability").apply { isDaemon = true }
     }
     private val mainHandler = Handler(Looper.getMainLooper())
+    internal var directoryFsyncForTesting: ((File) -> Unit)? = null
 
     internal fun documentsDirectory(context: Context): File =
         context.getDir("flutter", Context.MODE_PRIVATE).canonicalFile
@@ -34,6 +35,11 @@ object LiveWalReceiptDurabilityChannel {
 
     internal fun syncDirectory(context: Context, rawPath: String) {
         val directory = checkedDirectory(context, rawPath)
+        val override = directoryFsyncForTesting
+        if (override != null) {
+            override(directory)
+            return
+        }
         val fd = Os.open(directory.path, OsConstants.O_RDONLY or OsConstants.O_DIRECTORY, 0)
         try {
             Os.fsync(fd)
@@ -61,7 +67,7 @@ object LiveWalReceiptDurabilityChannel {
             val error = try {
                 syncDirectory(context, rawPath)
                 null
-            } catch (caught: Exception) {
+            } catch (caught: Throwable) {
                 caught
             }
             mainHandler.post {

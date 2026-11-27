@@ -44,6 +44,7 @@ class LiveWalReceipt {
   static const writeEnabled = !bool.fromEnvironment('OMI_LIVE_WAL_RECEIPT_OFF');
   static const purgeEnabled = !bool.fromEnvironment('OMI_LIVE_WAL_RECEIPT_PURGE_OFF');
   static Future<void> Function(File file, String body)? writeReceiptForTesting;
+  static Future<void> Function(File file, List<int> bytes)? writeAudioForTesting;
   static const _pending = '.json';
   static const _stagingDirectory = 'staging';
   static const _retiredDirectory = 'retired';
@@ -117,6 +118,46 @@ class LiveWalReceipt {
   }
 
   static Future<void> syncAudioParentDirectory(File audio) => _syncDirectory(audio.parent);
+
+  static Future<void> writeAudio(File audio, List<int> bytes) async {
+    final override = writeAudioForTesting;
+    if (override != null) {
+      await override(audio, bytes);
+      return;
+    }
+    await audio.writeAsBytes(bytes, flush: true);
+  }
+
+  static Future<bool> matchesPublishedAudio(File audio, int length, String digest) =>
+      _matchesPurgeAudio(audio, length, digest);
+
+  static Future<void> flushAudio(File audio) async {
+    final handle = await audio.open(mode: FileMode.append);
+    try {
+      await handle.flush();
+    } finally {
+      await handle.close();
+    }
+  }
+
+  /// Retire a partial post-publication write before its WAL is retried from RAM.
+  /// Both directory entries must be durable before the receipt stops reserving
+  /// the failed audio transaction.
+  static Future<void> retireIncompleteAudioWrite(File audio, LiveWalBinding expected) async {
+    final type = await FileSystemEntity.type(audio.path, followLinks: false);
+    if (type == FileSystemEntityType.file) {
+      await audio.delete();
+    } else if (type != FileSystemEntityType.notFound) {
+      throw const FileSystemException('invalid failed live WAL audio path');
+    }
+    await _syncDirectory(audio.parent);
+
+    final name = path.basename(audio.path);
+    final pending = _receipt(audio.parent, name);
+    if ((await _read(pending, name))?.binding != expected) return;
+    await pending.delete();
+    await _syncDirectory(pending.parent);
+  }
 
   static Future<bool> hasPendingReceipt(File audio) => _receipt(audio.parent, path.basename(audio.path)).exists();
 
@@ -289,6 +330,19 @@ class LiveWalReceipt {
   static Future<LiveWalPurgeSnapshot> capturePurgeSnapshot(File primary, File backup, int revision) async =>
       LiveWalPurgeSnapshot(await _indexedBasenames(primary, backup), revision, primary.parent.path);
 
+  static Future<bool> hasPendingReceiptEntries(Directory documents) async {
+    final pending = directory(documents);
+    final type = await FileSystemEntity.type(pending.path, followLinks: false);
+    if (type == FileSystemEntityType.notFound) return false;
+    if (type != FileSystemEntityType.directory) {
+      throw const FileSystemException('invalid live WAL receipt directory');
+    }
+    await for (final entry in pending.list(followLinks: false)) {
+      if (entry is File && _receiptBasename(entry.path) != null) return true;
+    }
+    return false;
+  }
+
   static Future<bool> matchesPendingPurgeInSnapshot(File audio, Wal wal, LiveWalPurgeSnapshot snapshot) async {
     if (!purgeEnabled || !isManagedBasename(path.basename(audio.path)) || audio.parent.path != snapshot.documentsPath) {
       return false;
@@ -320,7 +374,7 @@ class LiveWalReceipt {
 
   static Future<Set<String>> _indexedBasenames(File primary, File backup) async {
     final names = <String>{};
-    final indexes = [primary, backup];
+    final indexes = [primary, backup, File('${primary.path}.tmp'), File('${backup.path}.tmp')];
     // Index repair can discard a malformed row while retaining its file
     // reference in the quarantine copy. Missing canonical files alone do
     // not establish that the basename was unreferenced.
@@ -342,7 +396,7 @@ class LiveWalReceipt {
     var bytesRemaining = _maxPurgeIndexBytes;
     for (final index in indexes) {
       final type = await FileSystemEntity.type(index.path, followLinks: false);
-      if (type == FileSystemEntityType.notFound && (index == primary || index == backup)) continue;
+      if (type == FileSystemEntityType.notFound) continue;
       if (type != FileSystemEntityType.file) throw const FileSystemException('invalid WAL index path');
       final length = await index.length();
       if (length > bytesRemaining) throw const FileSystemException('WAL index reference scan exceeded byte limit');

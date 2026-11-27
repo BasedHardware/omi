@@ -200,7 +200,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   bool _initialIndexAdmissionPending = false;
   bool _headlessIndexLoad = false;
   Set<String> _deletedAccountReceiptPurgeOwners = <String>{};
-  Set<String> _deletedAccountReceiptPurgeProtectedNames = <String>{};
+  LiveWalPurgeSnapshot? _deletedAccountReceiptPurgeSnapshot;
   bool _deletedAccountReceiptPurgeReferencesComplete = true;
   Future<void>? _deletedAccountReceiptPurgeInFlight;
 
@@ -927,15 +927,15 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     final deletedOwners = _deletedAccountReceiptPurgeOwners;
     _deletedAccountReceiptPurgeOwners = <String>{};
     if (deletedOwners.isNotEmpty && _isCurrent(generation)) {
-      final protectedNames = _deletedAccountReceiptPurgeProtectedNames;
-      final referenceSnapshotComplete = _deletedAccountReceiptPurgeReferencesComplete;
-      _deletedAccountReceiptPurgeProtectedNames = <String>{};
+      final snapshot = _deletedAccountReceiptPurgeSnapshot;
+      final referenceScanComplete = _deletedAccountReceiptPurgeReferencesComplete;
+      _deletedAccountReceiptPurgeSnapshot = null;
       _deletedAccountReceiptPurgeReferencesComplete = true;
       final purge = _purgeDeletedAccountReceiptsAfterReady(
         deletedOwners,
         generation,
-        protectedNames: protectedNames,
-        referenceSnapshotComplete: referenceSnapshotComplete,
+        initialReferenceSnapshot: snapshot,
+        initialReferenceScanComplete: referenceScanComplete,
       );
       _deletedAccountReceiptPurgeInFlight = purge;
       unawaited(purge.then<void>((_) {
@@ -1559,7 +1559,30 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
               }
             }
           }
-          if (writeId == null || digest != null) await file.writeAsBytes(data, flush: true);
+          if (writeId == null || digest != null) {
+            try {
+              await LiveWalReceipt.writeAudio(file, data);
+            } catch (error, stackTrace) {
+              var completeAndFlushed = false;
+              if (digest != null && writeId != null && owner != null) {
+                final binding = (id: writeId, owner: owner, digest: digest);
+                try {
+                  if (await LiveWalReceipt.matchesPublishedAudio(file, data.length, digest)) {
+                    // A write can report a late close/flush error after all
+                    // bytes landed. Verify the receipt digest, then retry the
+                    // file barrier before admitting it to the index.
+                    await LiveWalReceipt.flushAudio(file);
+                    completeAndFlushed = true;
+                  } else {
+                    await LiveWalReceipt.retireIncompleteAudioWrite(file, binding);
+                  }
+                } catch (recoveryError) {
+                  Logger.debug('LocalWalSync: failed audio write cleanup deferred for ${wal.id}: $recoveryError');
+                }
+              }
+              if (!completeAndFlushed) Error.throwWithStackTrace(error, stackTrace);
+            }
+          }
           wal.fileSha256 = digest ?? (wal.liveRingId == null ? null : sha256.convert(data).toString());
           wal.liveFileWriteId = digest == null ? null : writeId;
           if (wal.liveRingId != null) wal.liveDeviceId = wal.device;
