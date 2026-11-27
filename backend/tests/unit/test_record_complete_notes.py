@@ -23,6 +23,9 @@ POLICY = ProjectionPolicy()
 @pytest.fixture
 def recording(monkeypatch, request):
     monkeypatch.setenv('OMI_ENV_STAGE', 'local')
+    # These tests cover generic recording notes, not first-week stamping. Its
+    # rollout now defaults on, so keep this fixture explicitly on the old path.
+    monkeypatch.setenv('FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED', 'false')
     monkeypatch.setenv('RECORD_NOTES_EAGER_ENABLED', 'true')
     monkeypatch.setenv('SYNC_TASKS_QUEUE', '')
     monkeypatch.setenv('ENRICHMENT_FRESH_TASKS_QUEUE', '')
