@@ -177,10 +177,11 @@ pass's own builder lease token; a stale pass charges nothing and gets the origin
 
 Rewritable rows keep the original bound. Such a closure may commit in at most
 `CONVERSATIONS_V3_LOCKED_MAX_BATCHES` (default 6) projection batches. Otherwise the commit raises
-`LockedBatchCap` (`v3_derived_budget`) before any transaction, and before preparation can offload a
-transcript to the object lake, so a capped attempt leaves no uploaded copy behind. The cap is decided from an
-inline estimate that counts every row that might offload as a pointer at least as large as either form, so the
-estimate never has fewer batches than the real commit. The builder then retries down the load
+`LockedBatchCap` (`v3_derived_budget`) before any transaction and before anything is uploaded to the object
+lake, so a capped attempt leaves no uploaded copy behind. Preparation runs once with uploads deferred: a row the
+real offload test would offload carries a stand-in pointer at least as large as the real one, so the cap (and the
+partition's settle refusal) is decided on the exact pointer count, and the uploads run only after it passes. The
+builder then retries down the load
 ladder below the seeds it read (pending + unlocked: 32 + 8, 8 + 8, 1 + 1, then one of either kind). It
 re-enters at most three times and parks only at one seed.
 
@@ -188,8 +189,9 @@ re-enters at most three times and parks only at one seed.
 Every builder load of a listed owner charges one in `v3_locked_day` and `v3_locked_passes` on the builder
 lease, under the held lease and before it reads, whatever the pass does next. A spent day, or a charge
 that cannot be written, loads with the origin bound. Ceiling: 20 attempts x about 78k reads (a load of at most
-5,389 fetched derived documents plus 400 sources and the seeds, plus a commit whose batches each run at most
-three transactions), about 1.6M reads per listed owner per day.
+5,389 fetched derived documents plus 400 sources and the seeds, plus a commit whose batches each run their body
+at most three times: contention retries and transcript-pointer replays alike, with each batch's pointers loaded
+from the lake before its transaction), about 1.6M reads per listed owner per day.
 
 An empty list, or `CONVERSATIONS_V3_LOCKED_DERIVED_ALLOWANCE`, `CONVERSATIONS_V3_LOCKED_DERIVED_BYTES`,
 `CONVERSATIONS_V3_LOCKED_MAX_BATCHES` or `CONVERSATIONS_V3_LOCKED_DAILY_PASSES` set to `0`, restores the origin

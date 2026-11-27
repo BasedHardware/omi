@@ -49,8 +49,11 @@ The ceiling is derived from that counter as attempts x the most one attempt can 
 - the load: at most about 5.9k reads. It admits at most 6 x (449 - sources) rows, what six batches can commit
   (2,694 with no sources), and fetches at most twice that many derived documents plus one sentinel (5,389) across the unlocked
   page, the claim reads and every interval query, counting repeats; plus up to 400 sources and the seeds;
-- the commit: up to about 24k reads; each batch runs at most three transactions under main's contention retry, so
-  up to about 72k;
+- the commit: up to about 24k reads; each batch runs its body at most three times, contention retries and transcript
+  pointer replays alike. The commit loads a batch's pointers from the lake (no Firestore read, no upload) before its
+  transaction, so on a lake-admitted runtime a cold pointer never replays the body, and a fourth run parks before it
+  reads. So up to about 72k (3 x 24k);
+- the pointer preload: at most 32 lake object reads per batch (192 per attempt), and no Firestore reads;
 - renewals: a few reads.
 
 That is about 78k per attempt, and 20 x 78k, **about 1.6M reads per listed owner per day**. The measured attempts read
@@ -81,12 +84,14 @@ daily cap apply wherever it does. Derive (`load_derive`, partition budget) and l
 `DERIVED_LIMIT`) keep today's bounds for a listed owner; a heavy derive is planned as its own run.
 
 **No stranded uploads.** Preparation offloads a changed shared or public transcript to the object lake before any
-transaction. So the cap is decided first, from an estimate that prepares every row inline (no upload) and counts
-every row whose visibility allows offload as a pointer at least as large as either form. Partitioning is next-fit,
-so heavier items and more pointers never give fewer batches: when the estimate fits the cap, the real partition
-fits too, and when it does not, the attempt parks with nothing uploaded. The estimate may park a closure whose
-offloaded rows would have fit, which only keeps the owner parked as before. It runs only for a closure past the
-origin bound, and costs one extra inline encryption of the closure's rows.
+transaction. For a closure past the origin bound, preparation now runs once with uploads deferred
+(`transcript_pointer.deferred_offloads`): `offload_or_inline` applies its exact admission test (visibility, cohort,
+4 KiB compressed threshold), and a row it would offload carries a stand-in pointer instead. The stand-in is
+structurally valid and at least as large as the real pointer, so the partition has exactly the real pointer count,
+and next-fit never gives fewer batches on larger items. The cap and the partition's own refusals (settle, replacing
+claimants) are decided on it; only then does `upload_deferred` upload, and the real partition follows, with the cap
+kept as a backstop. Small shared rows under the inline threshold stay inline and are not counted as pointers. The
+write codec still runs once per row.
 
 **Seed retry.** A pass whose commit would exceed the batch cap raises `LockedBatchCap` before any transaction. The
 builder re-enters down the same ladder a load-time overflow uses, pending and unlocked seeds alike: 32 pending + 8

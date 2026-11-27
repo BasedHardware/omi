@@ -439,8 +439,11 @@ The ceiling is attempts x the most one attempt can read:
   repeats included:
   a row that a claim read and a time query both return, or that spans several interval queries, counts each
   time. Add up to 400 sources and the seeds;
-- the commit: up to about 24k reads, and each batch runs at most three transactions under main's contention
-  retry, so up to about 72k;
+- the commit: up to about 24k reads, and each batch runs its body at most three times, whatever restarts it
+  (main's contention retry, or a cold transcript pointer). The commit loads each batch's pointers from the lake
+  before its transaction, so pointers never replay the body; a fourth run parks before it reads. So up to about
+  72k (3 x 24k);
+- the pointer preload: at most 32 lake object reads per batch (192 per attempt), and no Firestore reads;
 - renewals: a few reads.
 
 That is about 78k reads per attempt, and 20 x 78k, about **1.6M reads per listed owner per day**, as a
