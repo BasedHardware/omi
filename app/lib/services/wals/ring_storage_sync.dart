@@ -376,11 +376,11 @@ class RingStorageSyncImpl implements RingStorageSync {
   /// Constructs ONE virtual Wal covering the entire unread range (the ring is
   /// a single logical stream, not a list of files).
   @override
-  Future<void> refreshWalsFromDevice() async {
-    if (_device == null) return;
+  Future<bool> refreshWalsFromDevice() async {
+    if (_device == null) return false;
     if (_isSyncing) {
       Logger.debug('RingStorageSync.refreshWalsFromDevice: skipping — sync in progress');
-      return;
+      return false;
     }
 
     final device = _device!;
@@ -389,7 +389,7 @@ class RingStorageSyncImpl implements RingStorageSync {
     try {
       final connection = _testConnection ??
           await (_connectionResolver?.call(device.id) ?? ServiceManager.instance().device.ensureConnection(device.id));
-      if (connection == null || discovery != _discoveryGeneration) return;
+      if (connection == null || discovery != _discoveryGeneration) return false;
       final epoch = connection.ringCustodyEpoch;
       bool current() => discovery == _discoveryGeneration && connection.ringCustodyEpoch == epoch && !_isSyncing;
 
@@ -399,31 +399,36 @@ class RingStorageSyncImpl implements RingStorageSync {
         // The independent lane has already joined its previous reader through
         // STOP and write settlement. INFO is safe without a discovery STOP.
         info = await connection.getRingInfo();
-        if (!current()) return;
-        if (info == null) return; // Retain the previous observation until it expires.
+        if (!current()) return false;
+        if (info == null) return false; // Retain the previous observation until it expires.
         if (_custody.liveProofStartSeq(device.id, epoch) != null) {
           await Future<void>.delayed(_liveMarkSettle);
-          if (!current()) return;
+          if (!current()) return false;
         }
         unread = _packetsOutsideLiveTail(connection, device.id, info);
       } else {
         final status = await connection.getRingStatus();
-        if (!current()) return;
-        unread = status?.unreadPackets ?? 0;
-        if (unread == 0 || await _unreadIsLiveTail(connection)) {
-          if (current()) _wals = [];
-          return;
+        if (!current() || status == null) return false;
+        unread = status.unreadPackets;
+        if (unread == 0) {
+          _wals = [];
+          return true;
         }
-        if (!current()) return;
+        if (await _unreadIsLiveTail(connection)) {
+          if (!current()) return false;
+          _wals = [];
+          return true;
+        }
+        if (!current()) return false;
         await connection.stopStorageSync();
         await Future<void>.delayed(const Duration(milliseconds: 500));
-        if (!current()) return;
+        if (!current()) return false;
       }
 
       final cachedCodec = _discoveryCodec;
       final codec = independent && cachedCodec?.epoch == epoch ? cachedCodec!.codec : await connection.getAudioCodec();
       final pd = independent ? device : await device.getDeviceInfo(connection);
-      if (!current()) return;
+      if (!current()) return false;
       if (info != null) {
         _discoveryCodec = (epoch: epoch, codec: codec);
         _publishBacklog(connection, device.id, info, codec, reading: false);
@@ -444,7 +449,7 @@ class RingStorageSyncImpl implements RingStorageSync {
         final hadInventory = _wals.isNotEmpty;
         _wals = [];
         if (independent && hadInventory) listener.onWalUpdated();
-        return;
+        return true;
       }
 
       final displayTimerStart = DateTime.now().millisecondsSinceEpoch ~/ 1000 - estimatedSecs;
@@ -468,8 +473,10 @@ class RingStorageSyncImpl implements RingStorageSync {
       Logger.debug(
         'RingStorageSync.refreshWalsFromDevice: 1 virtual WAL ($unread pkts, ~${estimatedSecs}s)',
       );
+      return true;
     } catch (e) {
       Logger.debug('RingStorageSync.refreshWalsFromDevice: error: $e');
+      return false;
     }
   }
 

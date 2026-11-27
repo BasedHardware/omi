@@ -56,7 +56,7 @@ class _RingSync extends RingStorageSyncImpl {
   );
 
   @override
-  Future<void> refreshWalsFromDevice() async {}
+  Future<bool> refreshWalsFromDevice() async => true;
 
   @override
   Future<List<Wal>> getMissingWals() async => pending.status == WalStatus.miss ? [pending] : [];
@@ -79,7 +79,7 @@ class _SettlingStorage extends StorageSyncImpl {
   final pending = Wal(timerStart: 1704067200, codec: BleAudioCodec.opus, seconds: 60, status: WalStatus.miss);
 
   @override
-  Future<void> refreshWalsFromDevice() async {}
+  Future<bool> refreshWalsFromDevice() async => true;
 
   @override
   Future<List<Wal>> getMissingWals() async => [pending];

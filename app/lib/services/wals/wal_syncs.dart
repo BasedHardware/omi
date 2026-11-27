@@ -321,24 +321,25 @@ class WalSyncs implements IWalSync {
   /// enumerated on legacy-device connect via [setDevice], so they're not repeated here.
   /// Safe no-op when no device is set; each sub-sync guards against running
   /// while a sync is in progress.
-  Future<void> refreshWalsFromDevice({String? firmwareVersion}) async {
-    if (_device == null) return;
+  Future<bool> refreshWalsFromDevice({String? firmwareVersion}) async {
+    if (_device == null) return false;
     // Prefer the caller-supplied firmware, then the enriched value stored at
     // setDevice — the raw connect object's firmwareRevision can still be
     // 'Unknown', which would misroute ring-buffer discovery.
     final fw = (firmwareVersion != null && firmwareVersion.isNotEmpty && firmwareVersion != 'Unknown')
         ? firmwareVersion
         : _resolvedFirmware;
+    bool storageInventoryConfirmed;
     if (isRingBufferFirmware(fw)) {
-      if (usesIndependentRingDrain) {
-        if (_ringPass == null && !ring.isSyncing) await wakeRingDrain(discoveryOnly: true);
-        return;
-      }
-      await _ringSync.refreshWalsFromDevice();
+      if (usesIndependentRingDrain && (_ringPass != null || ring.isSyncing)) return false;
+      // The independent ring reader uses INFO without a discovery STOP and
+      // reports whether that authoritative read completed.
+      storageInventoryConfirmed = await _ringSync.refreshWalsFromDevice();
     } else {
-      await _storageSync.refreshWalsFromDevice();
+      storageInventoryConfirmed = await _storageSync.refreshWalsFromDevice();
     }
-    await _flashPageSync.refreshWalsFromDevice();
+    final flashInventoryConfirmed = await _flashPageSync.refreshWalsFromDevice();
+    return storageInventoryConfirmed && flashInventoryConfirmed;
   }
 
   Future<WalStats> getWalStats() async {

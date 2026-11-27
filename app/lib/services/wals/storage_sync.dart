@@ -185,22 +185,23 @@ class StorageSyncImpl implements StorageSync {
 
   /// Discover files on device via BLE. Must be called BEFORE syncAll() to populate _wals.
   /// Sends STOP command and subscribes to data characteristic — never call during an active sync.
-  Future<void> refreshWalsFromDevice() async {
-    if (_device == null) return;
+  Future<bool> refreshWalsFromDevice() async {
+    if (_device == null) return false;
     if (_isSyncing) {
       Logger.debug('StorageSync.refreshWalsFromDevice: skipping — sync in progress');
-      return;
+      return false;
     }
 
     try {
       var connection = await ServiceManager.instance().device.ensureConnection(_device!.id);
-      if (connection == null) return;
+      if (connection == null) return false;
 
       final status = await connection.getStorageFileStats();
       Logger.debug('StorageSync.refreshWalsFromDevice: status=$status');
-      if (status == null || status.fileCount == 0) {
+      if (status == null) return false;
+      if (status.fileCount == 0) {
         _wals = [];
-        return;
+        return true;
       }
 
       // Stop any active auto-sync before listing (per PR #5905 pattern)
@@ -220,8 +221,7 @@ class StorageSyncImpl implements StorageSync {
       }
 
       if (files.isEmpty) {
-        _wals = [];
-        return;
+        return false;
       }
 
       BleAudioCodec codec = await connection.getAudioCodec();
@@ -260,8 +260,10 @@ class StorageSyncImpl implements StorageSync {
 
       _wals = wals;
       Logger.debug('StorageSync.refreshWalsFromDevice: Found ${wals.length} files to sync');
+      return true;
     } catch (e) {
       Logger.debug('StorageSync: Error refreshing wals from device: $e');
+      return false;
     }
   }
 

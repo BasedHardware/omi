@@ -902,18 +902,26 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       firstStackTrace = stackTrace;
     }
 
-    var inventoryConfirmed = false;
+    var deviceInventoryConfirmed = deviceTargets.isEmpty;
+    var snapshotRefreshConfirmed = false;
     try {
       if (deviceTargets.isNotEmpty && refreshDevice) {
-        await _walService.getSyncs().refreshWalsFromDevice(firmwareVersion: firmwareVersion);
+        deviceInventoryConfirmed =
+            await _walService.getSyncs().refreshWalsFromDevice(firmwareVersion: firmwareVersion) == true;
       }
       await _refreshWals(generation);
-      inventoryConfirmed = deviceTargets.isEmpty || refreshDevice;
+      snapshotRefreshConfirmed = true;
     } catch (error, stackTrace) {
       firstError ??= error;
       firstStackTrace ??= stackTrace;
     }
 
+    final inventoryConfirmed =
+        deviceTargets.isEmpty || (refreshDevice && deviceInventoryConfirmed && snapshotRefreshConfirmed);
+    if (deviceTargets.isNotEmpty && refreshDevice && !inventoryConfirmed && firstError == null) {
+      firstError = StateError('Device WAL inventory could not be confirmed after deletion');
+      firstStackTrace = StackTrace.current;
+    }
     if (firstError != null && deviceTargets.isNotEmpty && !inventoryConfirmed && _isCurrent(generation)) {
       _retainUnconfirmedDeviceWals(deviceTargets);
     }

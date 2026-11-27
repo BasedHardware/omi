@@ -152,7 +152,7 @@ abstract class RingStorageSync implements IWalSync {
   bool get isSyncing;
   double get currentSpeedKBps;
   Future<bool> hasFilesToSync();
-  Future<void> refreshWalsFromDevice();
+  Future<bool> refreshWalsFromDevice();
 }
 
 /// Why the most recent flash-page drain pass stopped before reaching the
@@ -169,6 +169,6 @@ abstract class FlashPageWalSync implements IWalSync {
   Future<void> deleteAllSyncedWals();
   Future<void> deleteAllPendingWals();
   bool get isSyncing;
-  Future<void> refreshWalsFromDevice();
+  Future<bool> refreshWalsFromDevice();
   FlashSyncStallReason get lastStallReason;
 }

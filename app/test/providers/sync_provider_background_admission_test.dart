@@ -68,11 +68,12 @@ class _Syncs {
   bool get isSdCardSyncing => false;
   bool get isFlashPageSyncing => false;
   Future<List<Wal>> getAllWals() async => [...await phone.getAllWals(), ...deviceWals];
-  Future<void> refreshWalsFromDevice({String? firmwareVersion}) async {
+  Future<bool> refreshWalsFromDevice({String? firmwareVersion}) async {
     discoveries++;
     deviceWals
       ..clear()
       ..addAll(discoverable);
+    return true;
   }
 
   Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress}) async {

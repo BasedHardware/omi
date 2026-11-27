@@ -260,17 +260,22 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
   }
 
   @override
-  Future<void> refreshWalsFromDevice() async {
+  Future<bool> refreshWalsFromDevice() async {
     // Re-enumerate from the device's current flash-page pointers. ACKs sent
     // during a previous sync advance oldest_flash_page, so this re-reads the
     // remaining range. Without it, a second in-session Sync tap would reuse the
     // stale cached WAL (possibly already marked synced) and report "no data" —
     // forcing the user to relaunch the app to resume. Skip while a download is
     // in flight so we never swap the list out from under an active sync.
-    if (_isSyncing) return;
+    if (_isSyncing) return false;
+    final device = _device;
+    if (device == null) return false;
+    if (device.type != DeviceType.limitless) return true;
+    if (SharedPreferencesUtil().batchModeEnabled) return false;
     _wals = await _getMissingWals();
     if (_wals.isEmpty && !_storageStatusUnavailable) _lastStallReason = FlashSyncStallReason.none;
     listener.onWalUpdated();
+    return !_storageStatusUnavailable;
   }
 
   @override
