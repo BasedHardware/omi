@@ -4,63 +4,68 @@ on:
     types: [opened, synchronize, reopened, ready_for_review, edited, closed]
   issue_comment:
     types: [created, edited, deleted]
-permissions:
-  contents: read
-  pull-requests: write
-  issues: write
-  statuses: write
+  workflow_dispatch:
+    inputs:
+      pull_number:
+        type: string
+        required: true
+      head_sha:
+        type: string
+        required: true
+permissions: {}
 env:
   GIT_HTTP_LOW_SPEED_LIMIT: "1000"
   GIT_HTTP_LOW_SPEED_TIME: "60"
 jobs:
   resolve:
+    name: Request UI approval evaluation
     if: (github.event_name == 'pull_request_target' && (github.event.action != 'edited' || github.event.changes.base.ref)) || github.event.issue.pull_request
     permissions:
+      actions: write
+      contents: write
       pull-requests: read
+      statuses: write
     runs-on: ubuntu-latest
     timeout-minutes: 2
-    outputs:
-      heads: ${{ steps.head.outputs.heads }}
     steps:
-      - uses: actions/github-script@v9
-        id: head
-        with:
-          script: |
-            const event = context.payload;
-            let heads;
-            if (context.eventName === 'pull_request_target') {
-              heads = [event.pull_request.head.sha];
-              // A synchronized PR changes membership on both SHA groups.
-              if (event.action === 'synchronize') heads.push(event.before);
-            } else {
-              const pull_number = event.issue.number;
-              const {data: pr} = await github.rest.pulls.get({...context.repo, pull_number});
-              heads = [pr.head.sha];
-            }
-            if (heads.some(sha => !/^[a-f0-9]{40}$/.test(sha))) throw new Error('Invalid head SHA');
-            core.setOutput('heads', JSON.stringify([...new Set(heads)]));
-  guard:
-    needs: resolve
-    strategy:
-      fail-fast: false
-      matrix:
-        sha: ${{ fromJSON(needs.resolve.outputs.heads) }}
-    concurrency:
-      group: ui-author-approval-${{ matrix.sha }}
-      cancel-in-progress: false
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      # Both triggers use the trusted default-branch workflow revision.
+      # Both jobs need trusted code and write access to the per-head lock ref.
       - uses: actions/checkout@v6
         with:
           ref: ${{ github.workflow_sha }}
           persist-credentials: false
+          sparse-checkout: .github/scripts/ui-author-approval.cjs
+          sparse-checkout-cone-mode: false
       - uses: actions/github-script@v9
         with:
           script: |
-            await require('./.github/scripts/ui-author-approval.cjs')({
-              github, context, headSha: process.env.HEAD_SHA,
-            });
-        env:
-          HEAD_SHA: ${{ matrix.sha }}
+            const requested = await require('./.github/scripts/ui-author-approval.cjs').requestEvaluation({github, context});
+            core.notice(requested
+              ? 'Evaluation requested. See the UI author approval commit status for the decision.'
+              : 'No open pull request uses the affected heads.');
+  guard:
+    name: Evaluate UI author approval
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    concurrency:
+      # Only main dispatches enter the group. A newer pending worker can
+      # replace an older one because both read the same head's live evidence.
+      group: ui-author-approval-${{ inputs.head_sha }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      statuses: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Never check out or execute the PR head with these credentials.
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+          sparse-checkout: .github/scripts/ui-author-approval.cjs
+          sparse-checkout-cone-mode: false
+      - uses: actions/github-script@v9
+        with:
+          script: |
+            await require('./.github/scripts/ui-author-approval.cjs').evaluateDispatch({github, context});
