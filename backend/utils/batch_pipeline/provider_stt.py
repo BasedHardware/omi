@@ -114,8 +114,8 @@ ABANDON_SECONDS = 900.0
 # Same wait as batch compute admission's cap deferral (admission.authorize).
 FUNDING_RETRY_SECONDS = 60.0
 
-# Services this stage can actually call: Velma batch and Soniox async (failover capacity only;
-# the route table marks it failover_only). Deepgram is retired.
+# Services this stage can actually call: Velma batch and Soniox async (the route table decides which
+# starts a unit and which is failover). Deepgram is retired.
 _CALLABLE_SERVICES = frozenset(contracts.VENDOR_SERVICES)
 
 

@@ -242,8 +242,9 @@ Inside the cohort, selection reads `BATCH_VENDOR_ROUTE_TABLE` (schema in
 `vendor_route_contracts.RouteTable`), keeps the options code-owned capability admits
 (`config/stt_provider_policy.py`), skips unhealthy vendors, sends the GPU floor share
 (`gpu_floor_percent`, a stable owner bucket independent of the ramp) to GPU wherever GPU is
-capable, then takes the cheapest remaining route that is not failover-only. Soniox is
-failover-only. If no capable route is healthy, the unit still takes its first capable vendor
+capable, then takes the cheapest (or, for an ordered table, the first) remaining route that is not
+failover-only. `failover_only` is a per-table choice; since 2026-11-27 the prod table starts languages
+Parakeet cannot serve on Soniox. If no capable route is healthy, the unit still takes its first capable vendor
 route and the provider stage holds it with its audio. Selection never mints a vendor intent.
 
 | Lever | Effect |

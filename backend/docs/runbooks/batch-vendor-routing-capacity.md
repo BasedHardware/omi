@@ -325,8 +325,7 @@ While saturated:
 
 What never overflows: the GPU floor share (`gpu_floor_percent` owners),
 priorities outside `BATCH_VENDOR_OVERFLOW_PRIORITIES` (RECENT/DEEP by default),
-a language the row has no primary vendor for, and anything when the only other healthy route is failover-only (Soniox stays
-failover). Overflow is part of vendor routing: owners must be in the
+a language the row has no primary vendor for, and anything when the only other healthy route is failover-only. Overflow is part of vendor routing: owners must be in the
 vendor-routing cohort with legacy `draining` or `dark`, and every interlock
 above applies.
 
@@ -334,17 +333,21 @@ Modulate overflow is a supported failover path for GPU stockouts and outages
 (David 065da8, 2026-11-04), not an emergency step.
 
 Standing table: `backend/deploy/batch-pipeline/vendor_route_table.prod.json`,
+`soniox-unsupported-1127` (David 2026-11-27: languages Parakeet cannot serve start on Soniox, Modulate as
+failover; no Soniox daily cap, the `omi-batch-soniox-daily-hours` page instead). It succeeds
 `en-overflow-1116` (lead2 863cd6/fb423f; David 49b7e4: English-only overflow; David 2026-11-16:
 Modulate cap 3,000 -> 5,000 audio-h/day, and prod sets `BATCH_VENDOR_OVERFLOW_PRIORITIES=fresh,recent`
 so RECENT English overflows too while its own backlog is saturated).
 - `selection: ordered`, rows `en: [gpu, modulate, soniox]`, `gpu_supported: [gpu]`,
-  `gpu_unsupported: [modulate, soniox]`, `*: [gpu]`. Fresh English overflows to
+  `gpu_unsupported: [soniox, modulate]`, `*: [gpu]`. Fresh English overflows to
   Modulate once the ring is saturated. Other GPU-capable languages stay on
-  GPU. Languages Parakeet cannot serve start on Modulate (unchanged).
-- Soniox stays `failover_only` (cap 1,000 audio-h/day), exactly as in the earlier
-  prod-gpu-first-v1 table: a Modulate outage fails English and unsupported
-  languages over to Soniox, else holds them with their audio. Overflow never
-  starts on Soniox.
+  GPU. Languages Parakeet cannot serve start on Soniox ($0.12/h list), with Modulate as failover: on a
+  public eval (FLEURS, 12 languages, and ASCEND code-switch), Soniox beat Velma on every language except
+  English, where they tie.
+- Soniox is a primary (`failover_only: false`), with no daily cap or monthly budget. The
+  `omi-batch-soniox-daily-hours` page fires above 1,500 audio-h in 24 h. Because Soniox is a primary in the
+  English row too, a saturated ring with Modulate down overflows fresh English to Soniox instead of waiting.
+  A Soniox outage starts unsupported languages on Modulate.
 - Modulate carries a `daily_audio_hours_cap` of 5,000 (3,000 from lead2, Luna
   P1 on #24637; raised by David 2026-11-16 with RECENT overflow). Non-English
   traffic used about 1,000 audio-h/day in Nov 2026, which leaves about 4,000

@@ -52,9 +52,9 @@ MODULATE: Final = 'modulate'
 SONIOX: Final = 'soniox'
 ROUTES: Final[frozenset[str]] = frozenset({GPU, MODULATE, SONIOX})
 VENDOR_SERVICES: Final[frozenset[str]] = frozenset({MODULATE, SONIOX})
-# Lead requirement (11-01): Soniox async lists $0.10/h, so it is failover capacity only and
-# selection never picks it as cheapest. A table that clears the flag is malformed.
-FAILOVER_ONLY_SERVICES: Final[frozenset[str]] = frozenset({SONIOX})
+# Soniox may start a unit when a table lists it as a primary (David 2026-11-27: Soniox first for languages
+# Parakeet cannot serve, from a measured eval). This replaces the 11-01 lead rule that made it failover capacity
+# only. ``failover_only`` stays a per-table choice for any vendor.
 
 Selection = Literal['cheapest', 'ordered']
 SELECTIONS: Final[frozenset[str]] = frozenset({'cheapest', 'ordered'})
@@ -150,8 +150,6 @@ class RouteConfig:
             config.daily_audio_hours_cap is not None or config.monthly_budget_usd is not None or config.failover_only
         ):
             raise RouteTableInvalid('gpu takes no spend cap and is never failover-only')
-        if route in FAILOVER_ONLY_SERVICES and not config.failover_only:
-            raise RouteTableInvalid('this vendor is failover capacity only')
         return config
 
 
