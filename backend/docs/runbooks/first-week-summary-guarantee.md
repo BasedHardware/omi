@@ -95,10 +95,12 @@ activation-bounded cohort.
 
 ## Read and generation budget before activation
 
-The production overlay keeps `FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED=false` until
-the approved read-only census records the eligible workload. While disabled,
-the added production reads and summary attempts are zero. Before enabling,
-record the census-backed expected extra summaries/day and reads/day, including:
+The production overlay and production `batch-pipeline-worker` chart keep
+`FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED=false` until the approved read-only census
+records the eligible workload. The chart sets the flag on the GPU deployment and
+its record-seal worker, sweeper, and repair jobs. While disabled, the added
+production reads and summary attempts are zero. Before enabling, record the
+census-backed expected extra summaries/day and reads/day, including:
 
 - one conversation scheduling-metadata read per first-week-enabled outbox mark
   (`finished_at`, `created_at`, `started_at`, the processing tier, and the stored window);

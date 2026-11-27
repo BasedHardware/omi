@@ -252,6 +252,11 @@ class FirestoreEnrichmentOutbox:
             first_week = payload.get('first_week_summary')
             if old is None and snapshot_summary and not effects_only and first_week is None and first_week_enabled():
                 read_client = getattr(tx, 'client', None) or self._client()
+                # A transaction cannot read a conversation create staged by this
+                # producer. If no stamp arrived in the payload and the durable row
+                # has no creation time yet, leave it unstamped rather than inventing
+                # an epoch; production GPU workloads keep this flag off until their
+                # producer can supply the stamp before its write.
                 first_week = _first_week_for_enqueue(read_client, owner_id, conversation_id, tx=tx)
             # Reuse the outbox CAS read: an earlier producer's processing hold
             # cannot be shortened by a complete recording's eager wake.

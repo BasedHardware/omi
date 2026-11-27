@@ -1,4 +1,5 @@
 enabled: true
+firstWeekSummaryGuaranteeEnabled: false
 podLabels:
   service_name: batch-pipeline-worker
 image:
