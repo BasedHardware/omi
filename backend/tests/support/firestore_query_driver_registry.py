@@ -165,7 +165,7 @@ BODY_DIGEST = {
     'utils.support.retention._select_conversations': 'f36920350f4e3a557e0e474e8801ae414c21ce67203e0627f7a39ba820243d16',
     'database.conversations_v3_live._recent_window_query': '6f2c323bfa8df890362c6bdc4796182a70e4c704376bcb4944358560b12edc75',
     'database.conversations_v3._oldest_pending': 'e2da208a3dcbae7d7c7c59335883b422e27dc71c9cfae51568883aa452bcfc57',
-    'database.conversations_v3.commit_projection': '640139cd7426c52682b6d77ac8218e391d70eb62f31547a6387a19c58f158dec',
+    'database.conversations_v3.commit_projection': 'f6f6c894b77c617cd877358fc70396033bde60277f1c47af8e2adaf22fe24ae9',
     'database.batch_pipeline_conversation_purge_scans._claim': '662c759fc79795f0851e0b18082b7dcb006e109253e45ba1fde2190d542bddf8',
     'database.batch_privacy_late_sweeps.reconcile_batch_privacy_late_sweeps': 'bd0c62aeb7bab5e86e3fdbb73bc9b6cb395a1218923110590d0a8fcaacabd5f6',
     'database.batch_pipeline_conversation_purge_scans.run_job': 'fe5d30b77da198a7e0dc188115c8906fb6446925079a4e96339d36675a55faeb',
