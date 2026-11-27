@@ -53,10 +53,16 @@ The ceiling is derived from that counter as attempts x the most one attempt can 
   pointer replays alike. The commit loads a batch's pointers from the lake (no Firestore read, no upload) before its
   transaction, so on a lake-admitted runtime a cold pointer never replays the body, and a fourth run parks before it
   reads. So up to about 72k (3 x 24k);
+- the load's own lake reads: decoding a fetched row or source whose transcript is a lake pointer costs about one
+  object GET, repeats included, because the decoded memo holds only 32 entries. At most 5,388 decoded derived
+  documents (the sentinel is never decoded), 400 sources and the open window: about 5.8k GETs;
 - the pointer preload: at most 32 lake object reads per batch (192 per attempt), and no Firestore reads;
 - renewals: a few reads.
 
-That is about 78k per attempt, and 20 x 78k, **about 1.6M reads per listed owner per day**. The measured attempts read
+That is about 78k Firestore reads and about 6k lake object GETs per attempt: per listed owner per day, **about 1.6M
+Firestore reads and about 0.12M lake GETs**. The lake term is zero while rows stay inline, as in prod today (no
+lake writes are admitted there); admitting lake writes would add the upload-candidate protocol's reads per
+offloaded row, so the ceiling is restated before that. The measured attempts read
 6.5k to 22k. Parked retries after the budget is spent run at the origin bound, at today's cost for any parked owner.
 
 An owner can spend its 20 attempts early in the UTC day; it then runs at the origin bound, parking as before, until

@@ -843,6 +843,8 @@ def test_park_with_indexed_unlocked_windows_spends_the_paging_attempt(strict):
 CHARGE = store._charge_locked_attempt
 REAL_COMMIT = service._commit
 REAL_BACKOFF_STATE = store.backoff_state
+REAL_LOAD = store.load
+REAL_PLAN = service._plan_projection
 REAL_MARK_BOUNDED_ATTEMPT = store.mark_bounded_attempt
 
 
@@ -1719,3 +1721,122 @@ async def test_a_real_commit_over_the_batch_cap_at_two_seeds_retries_at_one_seed
     assert written_ids == [f'c-r0-{i}' for i in range(4)]
     assert strict.rows[path('r0')]['v3_pending'] is False
     assert strict.rows[path('r1')]['v3_pending'] is True  # the second seed stays owed for the next pass
+
+
+# ---- deferred panel minors (review-20261127t050745-babe F3): the cap retry with the real load and the real plan ----
+
+
+class EvenMinute(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        # The one-seed lanes lead with the pending lane on even minutes; pin it so the ladder is deterministic.
+        real = datetime.now(tz)
+        return real.replace(minute=real.minute - real.minute % 2)
+
+
+def two_fragmented(n):
+    """Two pending recordings two hours apart, each owned by n locked one-line windows."""
+    rows = {}
+    for k in range(2):
+        rid, claims = f'r{k}', []
+        base = AT + timedelta(hours=2 * k)
+        for i in range(n):
+            start = base + timedelta(seconds=10 * i)
+            rows[C + f'd{k}-{i}'] = derived(f'd{k}-{i}', start, 10, [rid])
+            claims.append(claim(f'd{k}-{i}', start, 10))
+        rows[C + rid] = source(
+            rid,
+            started_at=base,
+            finished_at=base + timedelta(seconds=10 * n),
+            claims=claims,
+            v3_pending_since=base,
+            v3_pending=True,
+        )
+    return rows
+
+
+class ChargeTransaction:
+    """The charge's transaction on the in-memory client: reads go through ``get(transaction=...)``."""
+
+    def __init__(self, rows):
+        self.rows = rows
+
+    def update(self, ref, patch):
+        self.rows[ref.path].update(patch)
+
+
+def capped_once(builder, monkeypatch):
+    """A cap retry whose first commit hits the locked-closure batch cap and whose retry commits."""
+    loads, _, parks = batch_cap_pass(builder, monkeypatch, fits_at=None, pending=2)
+    commits = []
+
+    def commit(*a, bounded_pending_limit=None, **kw):
+        commits.append(bounded_pending_limit)
+        if len(commits) == 1:
+            raise store.LockedBatchCap('v3_derived_budget')  # before any transaction
+        return set()
+
+    monkeypatch.setattr(service, '_commit', commit)
+    monkeypatch.setattr(service, 'datetime', EvenMinute)
+    return loads, commits, parks
+
+
+@pytest.mark.asyncio
+async def test_the_cap_retrys_real_load_charges_the_owners_day_again(builder, monkeypatch):
+    # The retry is a new load, and a new load is a new allowance attempt: both are charged on the held builder lease.
+    _, commits, parks = capped_once(builder, monkeypatch)
+    rows = two_fragmented(8)
+    lease_path = '/users/u/conversation_v3_leases/builder'
+    rows[lease_path] = {'token': 'token', 'until': datetime.now(timezone.utc) + timedelta(minutes=4)}
+    client = MemoryQuery(rows)
+    real_get = MemoryQuery.get
+    monkeypatch.setattr(MemoryQuery, 'get', lambda self, transaction=None: real_get(self))
+    monkeypatch.setattr(store.firestore, 'transactional', lambda body: body)
+    monkeypatch.setattr(
+        store, 'run_preloaded_transaction_with_contention_retry', lambda c, op, *a: op(ChargeTransaction(c.rows), *a)
+    )
+    monkeypatch.setattr(store, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(store, 'load', REAL_LOAD)
+    monkeypatch.setattr(store, '_charge_locked_attempt', CHARGE)
+    monkeypatch.setenv('CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS', '*')
+    monkeypatch.setattr(store, 'DERIVED_LIMIT', 10)  # two seeds load 16 locked rows: past the origin bound
+    monkeypatch.setattr(store, 'LOCKED_DERIVED_ALLOWANCE', 20)
+    planned = []
+
+    async def plan(uid, groups, outlines, recordings, *a, **kw):
+        planned.append(sorted(recordings))
+        return []
+
+    monkeypatch.setattr(service, '_plan_projection', plan)
+    assert await service.reconcile('u') == 'committed'
+    assert planned == [['r0', 'r1'], ['r0']] and commits == [32, 1] and parks == []
+    lease = rows[lease_path]
+    assert lease['v3_locked_day'] == datetime.now(timezone.utc).date().isoformat()
+    assert lease['v3_locked_passes'] == 2  # the capped attempt and the retry's load
+
+
+@pytest.mark.asyncio
+async def test_the_cap_retry_replans_its_smaller_page(builder, monkeypatch):
+    # service._plan_projection runs for real on both passes; the retry plans only the one seed it loaded.
+    loads, commits, parks = capped_once(builder, monkeypatch)
+
+    def load(uid, *, pending_limit=32, unlocked_limit=None, unlocked_page=None, **kw):
+        seeds = (min(pending_limit, 2), 0)
+        loads.append(seeds)
+        if unlocked_page is not None:
+            unlocked_page.seeds = seeds
+        return {f'r{k}': source(f'r{k}', started_at=AT + timedelta(hours=2 * k)) for k in range(seeds[0])}, {}, []
+
+    planned = []
+
+    async def plan(uid, groups, outlines, recordings, *a, **kw):
+        rows = await REAL_PLAN(uid, groups, outlines, recordings, *a, **kw)
+        planned.append((sorted(recordings), sorted(rid for row in rows for rid in row.get('v3_recording_ids') or ())))
+        return rows
+
+    monkeypatch.setattr(store, 'load', load)
+    monkeypatch.setattr(service, '_plan_projection', plan)
+    assert await service.reconcile('u') == 'committed'
+    assert loads == [(2, 0), (1, 0)] and commits == [32, 1] and parks == []
+    assert [recordings for recordings, _ in planned] == [['r0', 'r1'], ['r0']]
+    assert planned[1][1] and set(planned[1][1]) == {'r0'}  # the retry's plan covers only its own seed

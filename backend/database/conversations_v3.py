@@ -123,8 +123,11 @@ LOCKED_FETCH_FACTOR = 2
 # the origin bound, is interrupted after a committed prefix, or parks. A spent day, or a charge that cannot be
 # written, loads with the origin bound. The ceiling is attempts x the most one attempt can read: the charge, a load
 # of at most 2 x 2,694 + 1 derived documents plus 400 sources and the seeds (about 5.9k), and a commit of up to about
-# 24k reads whose batches each run at most three transactions (main's contention retry), so about 78k; 20 x 78k
-# is about 1.6M reads per listed owner per day. 0 turns the allowance off.
+# 24k reads whose batches each run at most three transactions (main's contention retry), so about 78k Firestore
+# reads; 20 x 78k is about 1.6M Firestore reads per listed owner per day. Object-lake reads are separate: the load
+# decodes each fetched row and source, about one lake GET per pointer row (repeats included, since the decoded memo
+# holds only 32), so at most 5,388 + 400 + 2, about 5.8k; the commit preloads at most 32 per batch, 192 in all.
+# About 6k lake GETs per attempt and 0.12M per owner per day, and none while rows stay inline. 0 turns it off.
 LOCKED_DAILY_PASSES = _env_allowance('CONVERSATIONS_V3_LOCKED_DAILY_PASSES', 20)
 LOCKED_DAY_FIELD, LOCKED_PASSES_FIELD = 'v3_locked_day', 'v3_locked_passes'
 # Body runs per locked-closure batch: main's contention retry starts at most three transactions
@@ -687,11 +690,16 @@ def _committable_rows(sources):
 def _preload_batch_pointers(uid, batch_prepared):
     """Load a locked-closure batch's transcript pointers before its transaction (lake reads only: no Firestore read,
     no upload), so the privacy filter inside never replays the body to load one. A batch holds at most
-    MAX_PRELOAD_DOCUMENTS pointers, which the memo holds; it starts fresh so none is evicted."""
+    MAX_PRELOAD_DOCUMENTS pointers, which the memo holds; it starts fresh so none is evicted. A failed load releases
+    the plaintext it already decoded before the error propagates."""
     transcript_pointer.clear_memo()
-    for row in batch_prepared:
-        if isinstance(row.get('transcript_segments'), dict):
-            transcript_pointer.preload_pointer(uid, row['transcript_segments'])
+    try:
+        for row in batch_prepared:
+            if isinstance(row.get('transcript_segments'), dict):
+                transcript_pointer.preload_pointer(uid, row['transcript_segments'])
+    except BaseException:
+        transcript_pointer.clear_memo()
+        raise
 
 
 def _past_origin_bound(uid, existing, *, key='builder'):

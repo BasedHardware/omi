@@ -191,7 +191,9 @@ lease, under the held lease and before it reads, whatever the pass does next. A 
 that cannot be written, loads with the origin bound. Ceiling: 20 attempts x about 78k reads (a load of at most
 5,389 fetched derived documents plus 400 sources and the seeds, plus a commit whose batches each run their body
 at most three times: contention retries and transcript-pointer replays alike, with each batch's pointers loaded
-from the lake before its transaction), about 1.6M reads per listed owner per day.
+from the lake before its transaction), about 1.6M Firestore reads per listed owner per day. Lake object reads are
+separate: about one GET per decoded pointer row in the load (about 5.8k) plus at most 192 for the commit's preload,
+so about 0.12M per owner per day, and none while rows stay inline (prod admits no lake writes today).
 
 An empty list, or `CONVERSATIONS_V3_LOCKED_DERIVED_ALLOWANCE`, `CONVERSATIONS_V3_LOCKED_DERIVED_BYTES`,
 `CONVERSATIONS_V3_LOCKED_MAX_BATCHES` or `CONVERSATIONS_V3_LOCKED_DAILY_PASSES` set to `0`, restores the origin
