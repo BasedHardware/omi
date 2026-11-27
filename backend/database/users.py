@@ -67,6 +67,7 @@ from database.redis_db import (
     try_acquire_user_platform_write_lock,
 )
 from utils.other.request_deadline import request_deadline_remaining_seconds
+from utils.byok_activation import BYOK_HEARTBEAT_TTL_SECONDS, byok_state_is_active
 from models.users import (
     LOCATION_CONTEXT_DISCLOSED_PROVIDERS,
     LOCATION_CONTEXT_PURPOSE,
@@ -330,8 +331,6 @@ def set_user_cancellation_feedback(uid: str, reason: str, reason_details: Option
 # We never store keys themselves; only SHA-256 fingerprints so we can detect
 # rotation. `active` is the subscription-bypass gate.
 
-BYOK_HEARTBEAT_TTL_SECONDS = 7 * 24 * 60 * 60  # 7 days
-
 
 def get_byok_state(uid: str, *, firestore_client: Any | None = None) -> dict:
     client = firestore_client or get_data_plane_firestore_client()
@@ -356,17 +355,9 @@ def get_byok_state(uid: str, *, firestore_client: Any | None = None) -> dict:
 
 def is_byok_active(uid: str, *, firestore_client: Any | None = None) -> bool:
     """True if user has a live BYOK activation (heartbeat within TTL)."""
-    state = get_byok_state(uid, firestore_client=firestore_client)
-    if not state.get('active'):
-        return False
-    last_seen = state.get('last_seen_at')
-    if not last_seen:
-        return False
-    if isinstance(last_seen, datetime):
-        age = (datetime.now(timezone.utc) - last_seen).total_seconds()
-    else:
-        return False
-    return age <= BYOK_HEARTBEAT_TTL_SECONDS
+    return byok_state_is_active(
+        get_byok_state(uid, firestore_client=firestore_client), heartbeat_ttl_seconds=BYOK_HEARTBEAT_TTL_SECONDS
+    )
 
 
 @transactional

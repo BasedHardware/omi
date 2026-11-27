@@ -1,5 +1,6 @@
 """Real serving intake/resolver, synthetic privacy/funding/model/transport leaves."""
 
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
@@ -289,10 +290,19 @@ async def test_declared_language_needs_no_probe_or_probe_funding(world):
     assert not world.model.called and not world.vendor.called
 
 
-@pytest.mark.parametrize('persisted_byok', [False, True])
-async def test_held_audio_audit_respects_persisted_byok(world, monkeypatch, tmp_path, persisted_byok):
+@pytest.mark.parametrize(
+    ('owner_state', 'audit_submissions'),
+    [('eligible', 1), ('active_byok', 0), ('expired_byok', 1), ('custom_stt', 0)],
+)
+async def test_held_audio_audit_respects_persisted_stt_settings(
+    world, monkeypatch, tmp_path, owner_state, audit_submissions
+):
     world.language = 'en'
-    world.user_fields['stt_byok_enabled'] = persisted_byok
+    if owner_state in {'active_byok', 'expired_byok'}:
+        heartbeat_age = timedelta(days=8) if owner_state == 'expired_byok' else timedelta()
+        world.user_fields['byok'] = {'active': True, 'last_seen_at': datetime.now(timezone.utc) - heartbeat_age}
+    if owner_state == 'custom_stt':
+        world.user_fields['transcription_preferences'] = {'uses_custom_stt': True}
     monkeypatch.setattr(intake, 'resolve_batch_policy', lambda uid: BatchUnitPolicy(batch_enabled=True))
     monkeypatch.setattr(intake.legacy_dark, 'current_mode', lambda uid=None: LegacySyncMode.DRAINING)
     monkeypatch.setenv(coverage.FLAG, 'off')
@@ -313,4 +323,4 @@ async def test_held_audio_audit_respects_persisted_byok(world, monkeypatch, tmp_
 
     assert result.outcome == 'admitted'
     assert world.staged_contexts[0]['stt_language_evidence'] == 'declared'
-    assert executor.submit.call_count == (0 if persisted_byok else 1)
+    assert executor.submit.call_count == audit_submissions
