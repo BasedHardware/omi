@@ -118,7 +118,7 @@ final conversationsScenarios = <AuditScenario>[
       await a.pump(const ConversationsPage(requestInitialLoad: false), providers: _listProviders(items));
       expect(find.byType(ConversationListItem), findsOneWidget);
       expect(find.byType(HomeLockedRowView), findsOneWidget);
-      expect(find.text('3 conversations waiting'), findsOneWidget);
+      expect(find.text('3 recordings waiting'), findsOneWidget);
       expect(find.textContaining('Planning the next team meeting'), findsNothing);
       await a.shot('Conversation list with the day\'s locked conversations as one row');
     },
