@@ -42,12 +42,15 @@ QUALIFYING_INITIATORS = frozenset({"user", "unknown"})
 ENABLED_ENV = "MCP_DAILY_ROLLUP_ENABLED"
 
 # KEYS[1] stats hash, KEYS[2] dirty zset. ARGV: tool, eligible (0/1), flush delay, ttl,
-# and an optional fixed clock in seconds (tests only; production passes '').
+# an optional fixed Redis clock in seconds (tests only; production passes ''), and
+# the successful call's timestamp in seconds. Redis TIME orders cadence; success
+# time is retained separately for reader-window attribution.
 # Redis TIME orders calls across instances, so gaps are never negative. Gaps are
 # whole seconds, matching dateDiff('second', ...) on the raw stream. Ineligible
 # (scheduled_agent) calls count only toward ``raw``, as in the raw reader.
 _RECORD = """
 local now = tonumber(ARGV[5]) or tonumber(redis.call('TIME')[1])
+local success = tonumber(ARGV[6]) or now
 local key = KEYS[1]
 redis.call('HINCRBY', key, 'raw', 1)
 if ARGV[2] == '1' then
@@ -63,6 +66,8 @@ if ARGV[2] == '1' then
     end
   end
   redis.call('HSET', key, 'last', now)
+  local last_success = tonumber(redis.call('HGET', key, 'last_success') or '-1')
+  if success > last_success then redis.call('HSET', key, 'last_success', success) end
   redis.call('HINCRBY', key, 'n', 1)
   local t = redis.call('HINCRBY', key, 't:' .. ARGV[1], 1)
   local dom = tonumber(redis.call('HGET', key, 'dom') or '0')
@@ -127,7 +132,11 @@ def record_success(
     if not enabled() or not uid:
         return False
     r = redis if redis is not None else redis_db.r
-    day = _day(now or datetime.now(timezone.utc))
+    success_at = now or datetime.now(timezone.utc)
+    if success_at.tzinfo is None:
+        success_at = success_at.replace(tzinfo=timezone.utc)
+    success_at = success_at.astimezone(timezone.utc)
+    day = _day(success_at)
     eligible = "1" if initiator in QUALIFYING_INITIATORS else "0"
     try:
         r.eval(
@@ -140,6 +149,7 @@ def record_success(
             FLUSH_DELAY_SECONDS,
             KEY_TTL_SECONDS,
             "" if clock_s is None else str(int(clock_s)),
+            str(int(success_at.timestamp())),
         )
     except Exception:  # noqa: BLE001 - telemetry must fail open
         record_rollup_degradation('redis_record', 'skip', 'unavailable')
@@ -156,6 +166,9 @@ def snapshot_properties(day: str, client: str, stats: dict) -> dict:
     fields = {_text(k): _text(v) for k, v in stats.items()}
     as_int = lambda name: int(fields.get(name, "0") or 0)  # noqa: E731
     first, last = as_int("first"), as_int("last")
+    # Fall back to the old processing-time field while a pre-fix Redis key is
+    # waiting for its first success under the new writer.
+    last_success = as_int("last_success") or last
     return {
         "utc_day": f"{day[:4]}-{day[4:6]}-{day[6:]}",
         "client": client,
@@ -166,8 +179,8 @@ def snapshot_properties(day: str, client: str, stats: dict) -> dict:
         "sum_gap_sq_s": as_int("sg2"),
         "span_s": max(0, last - first) if as_int("n") else 0,
         "dominant_tool_calls": as_int("dom"),
-        "last_call_at": datetime.fromtimestamp(last, timezone.utc).isoformat() if as_int("n") else None,
-        "last_call_s": last if as_int("n") else 0,
+        "last_call_at": datetime.fromtimestamp(last_success, timezone.utc).isoformat() if as_int("n") else None,
+        "last_call_s": last_success if as_int("n") else 0,
         "schema_version": ROLLUP_SCHEMA_VERSION,
         "source_platform": "mcp",
         "$process_person_profile": False,

@@ -22,7 +22,13 @@ def redis(monkeypatch):
 
 def record(redis, at, *, uid='u1', client='codex', tool='get_memories', initiator='user'):
     return rollup.record_success(
-        uid=uid, client=client, tool=tool, initiator=initiator, now=DAY, redis=redis, clock_s=T0 + at
+        uid=uid,
+        client=client,
+        tool=tool,
+        initiator=initiator,
+        now=DAY + timedelta(seconds=at),
+        redis=redis,
+        clock_s=T0 + at,
     )
 
 
@@ -68,6 +74,8 @@ def test_snapshot_matches_raw_cadence_definitions(redis):
     assert {k: props[k] for k in raw_stats(calls)} == raw_stats(calls)
     assert props['raw_calls'] == 6
     assert props['utc_day'] == '2026-11-23' and props['client'] == 'codex'
+    assert props['last_call_s'] == T0 + 4000
+    assert props['last_call_at'] == datetime.fromtimestamp(T0 + 4000, timezone.utc).isoformat()
     assert props['$process_person_profile'] is False
 
 
@@ -146,6 +154,44 @@ def test_day_bucket_follows_the_success_time_not_the_worker_clock(redis):
     )  # the worker runs after midnight
     assert redis.exists(rollup.stats_key('20261123', 'u1', 'codex'))
     assert not redis.exists(rollup.stats_key('20261124', 'u1', 'codex'))
+
+
+def test_delayed_cross_midnight_success_keeps_reader_time_and_redis_cadence(redis):
+    first_success = datetime(2026, 11, 23, 23, 59, 57, tzinfo=timezone.utc)
+    latest_success = datetime(2026, 11, 23, 23, 59, 59, tzinfo=timezone.utc)
+    older_queued_success = datetime(2026, 11, 23, 23, 59, 58, tzinfo=timezone.utc)
+    first_processed = int(first_success.timestamp())
+    latest_processed = int(datetime(2026, 11, 24, 0, 0, 4, tzinfo=timezone.utc).timestamp())
+    older_processed = int(datetime(2026, 11, 24, 0, 0, 5, tzinfo=timezone.utc).timestamp())
+
+    for success_at, redis_at in (
+        (first_success, first_processed),
+        (latest_success, latest_processed),
+        (older_queued_success, older_processed),
+    ):
+        assert rollup.record_success(
+            uid='u1',
+            client='codex',
+            tool='get_memories',
+            initiator='user',
+            now=success_at,
+            redis=redis,
+            clock_s=redis_at,
+        )
+
+    key = rollup.stats_key('20261123', 'u1', 'codex')
+    assert int(redis.hget(key, 'last')) == older_processed
+    count, emitted = flush(redis, datetime(2026, 11, 24, 0, 1, tzinfo=timezone.utc))
+
+    assert count == 1
+    props = emitted[0]['properties']
+    assert props['utc_day'] == '2026-11-23'
+    assert props['last_call_s'] == int(latest_success.timestamp())
+    assert props['last_call_at'] == latest_success.isoformat()
+    # Cadence remains ordered by Redis processing time, including the delayed queue.
+    assert props['positive_gaps'] == 2
+    assert props['sum_gap_s'] == 8
+    assert props['span_s'] == 8
 
 
 @pytest.mark.parametrize('error', [None, RuntimeError('capture failed')])

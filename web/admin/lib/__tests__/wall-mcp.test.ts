@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { computeWall } from "../wall-metrics";
 import { wallPresentation } from "../wall-presentation";
-import { activityQuery } from "../wall-posthog";
+import { activityQuery, weeklyGrowthQuery } from "../wall-posthog";
 import {
   MCP_ACTIVITY_VERSION,
   MCP_MARKER_MISSING,
@@ -188,6 +188,20 @@ it("reads every property the backend rollup snapshot emits", () => {
     const type = key === "client" || key === "utc_day" ? "String" : "Int";
     expect(sql).toContain(`JSONExtract${type}(properties,'${key}')`);
   }
+});
+
+it("uses the rollup success timestamp for daily and weekly reader windows", () => {
+  const end = new Date("2026-11-24T00:00:00Z");
+  const latestFromSuccess =
+    "toDateTime(JSONExtractInt(properties,'last_call_s')) latest";
+  const daily = activityQuery(end, 7);
+  const weekly = weeklyGrowthQuery(end, 1);
+
+  expect(daily).toContain(latestFromSuccess);
+  expect(daily).toContain("dateDiff('second',mcp_days.latest,");
+  expect(weekly).toContain(latestFromSuccess);
+  expect(weekly).toContain("groupUniqArray(mcp_days.utc_day) ds");
+  expect(weekly).toContain("dateDiff('second',mcp_days.latest,");
 });
 
 it.skipIf(process.env.OMI_TV_CLICKHOUSE_FIXTURE !== "1")(
