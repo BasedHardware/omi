@@ -51,6 +51,9 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
   set testWals(List<Wal> wals) => _wals = wals;
 
   @visibleForTesting
+  List<Wal> get testWals => List.unmodifiable(_wals);
+
+  @visibleForTesting
   set testDevice(BtDevice? device) => _device = device;
 
   DeviceConnection? _testConnection;
@@ -359,6 +362,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
     final admittedGeneration = _localSync?.sessionGeneration ?? -1;
 
     String deviceId = _device!.id;
+    LimitlessDeviceConnection? syncingConnection;
 
     try {
       var connection = _testConnection ?? await ServiceManager.instance().device.ensureConnection(deviceId);
@@ -369,6 +373,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
       }
 
       final limitlessConnection = connection as LimitlessDeviceConnection;
+      syncingConnection = limitlessConnection;
       limitlessConnection.clearBuffer();
       await limitlessConnection.enableBatchMode();
       Logger.debug("FlashPageSync: Batch mode enabled");
@@ -745,6 +750,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
       wal.deviceDownloadFraction = null;
 
       listener.onWalUpdated();
+      syncingConnection?.releaseBatchDrainAfterSyncFailure();
       try {
         await _enableRealTimeMode(deviceId);
       } catch (_) {}

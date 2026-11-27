@@ -1194,6 +1194,134 @@ void main() {
     expect(decodeVarint(ackBody, 1)[0], 150);
   });
 
+  test('unavailable withheld pages release the ACK barrier and capped reads stay capped', () async {
+    final transport = FakeDeviceTransport();
+    final connection = LimitlessDeviceConnection(
+      BtDevice(name: 'Limitless Pendant', id: 'fake-limitless', type: DeviceType.limitless, rssi: -50),
+      transport,
+      setupSettleDelay: Duration.zero,
+      reconnectSettleDelay: Duration.zero,
+    );
+    addTearDown(connection.disconnect);
+    await connection.connect();
+    await connection.acknowledgeProcessedData(150);
+    await connection.enableBatchMode();
+
+    transport.onWrite = (data) {
+      if (decodeWrapperCommand(data)['messageNumber'] == 8) {
+        throw StateError('batch mode re-entry failed');
+      }
+    };
+    await connection.onNetworkSocketReconnected();
+    transport.onWrite = null;
+
+    final withheldFrame = opusFrame(0xb8, 61, 40);
+    transport.emit(
+      limitlessRxCharUuid,
+      bleWrapper(
+        10,
+        0,
+        1,
+        pendantMessage(
+          storageBufferBytes(
+            session: 7,
+            seq: 1,
+            index: 100,
+            page: flashPageBytes(1750000000000, [
+              audioWrapper(audioBlobOfFrames([withheldFrame]))
+            ]),
+          ),
+        ),
+      ),
+    );
+    await pumpEventQueue();
+
+    expect(await connection.acknowledgeProcessedData(150), 99,
+        reason: 'the capped frontier, not the older stored ACK maximum, is returned');
+
+    final statusStorage = [
+      ...intField(1, 101),
+      ...intField(2, 2500),
+      ...intField(3, 3),
+      ...intField(4, 120000),
+      ...intField(5, 170000),
+    ];
+    final statusStruct = [...intField(1, 85), ...bytesField(5, statusStorage)];
+    final statusFuture = connection.getStorageStatus();
+    await pumpEventQueue();
+    transport.emit(
+      limitlessRxCharUuid,
+      bleWrapper(11, 0, 1, [...intField(1, 85), ...bytesField(5, statusStruct)]),
+    );
+    expect((await statusFuture)?['oldest_flash_page'], 101);
+    expect(await connection.acknowledgeProcessedData(200), 200,
+        reason: 'status proves page 100 left the flash ring, releasing its barrier');
+  });
+
+  test('terminal batch failure releases drain ownership before reconnect', () async {
+    final transport = FakeDeviceTransport();
+    final connection = LimitlessDeviceConnection(
+      BtDevice(name: 'Limitless Pendant', id: 'fake-limitless', type: DeviceType.limitless, rssi: -50),
+      transport,
+      setupSettleDelay: Duration.zero,
+      reconnectSettleDelay: Duration.zero,
+    );
+    addTearDown(connection.disconnect);
+    await connection.connect();
+
+    var watchStarts = 0;
+    final watchRestarted = Completer<void>();
+    connection.watchCustomLiveAudio(
+      captureIsCurrent: () => true,
+      onEnabled: () {
+        watchStarts++;
+        if (watchStarts == 2 && !watchRestarted.isCompleted) watchRestarted.complete();
+      },
+      report: (_) {},
+    );
+    await connection.enableBatchMode();
+    transport.emitState(DeviceTransportState.disconnected);
+    connection.releaseBatchDrainAfterSyncFailure();
+    transport.emitState(DeviceTransportState.connected);
+
+    await watchRestarted.future.timeout(const Duration(seconds: 2));
+    expect(connection.isBatchMode, isFalse);
+    expect(watchStarts, 2, reason: 'the retained Custom Live binding restarts after live mode is selected');
+  });
+
+  test('empty envelope audio fields fall back to legacy frame extraction', () async {
+    final transport = FakeDeviceTransport();
+    final connection = LimitlessDeviceConnection(
+      BtDevice(name: 'Limitless Pendant', id: 'fake-limitless', type: DeviceType.limitless, rssi: -50),
+      transport,
+      setupSettleDelay: Duration.zero,
+    );
+    addTearDown(connection.disconnect);
+    await connection.connect();
+
+    final frame = opusFrame(0xb8, 71, 40);
+    final received = Completer<void>();
+    final decoded = <List<int>>[];
+    final subscription = await connection.performGetBleAudioBytesListener(
+      onAudioBytesReceived: (value) {
+        decoded.add(value);
+        if (!received.isCompleted) received.complete();
+      },
+    );
+    addTearDown(() => subscription?.cancel());
+
+    transport.emit(
+      limitlessRxCharUuid,
+      bleWrapper(10, 0, 1, [
+        ...bytesField(4, const []),
+        ...bytesField(9, realtimeAudioBytes([frame])),
+      ]),
+    );
+
+    await received.future.timeout(const Duration(seconds: 2));
+    expect(decoded, [frame]);
+  });
+
   test('stored flash-page frames count as live progress when no unconfirmed drain owns the stream', () async {
     final transport = FakeDeviceTransport();
     final connection = LimitlessDeviceConnection(

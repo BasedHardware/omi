@@ -121,6 +121,29 @@ void main() {
     expect(await adapter.resolvedFeatureEnabled('kill'), isTrue);
   });
 
+  test('a timed out refresh releases the slot and ignores its late answer', () async {
+    final pendingFirst = Completer<Map<String, OmiFlag>?>();
+    var calls = 0;
+    final adapter = PostHogAnalyticsAdapter(
+      apiKey: 'test',
+      omiFlags: () {
+        calls++;
+        if (calls == 1) return pendingFirst.future;
+        return Future.value({'kill': (enabled: false, variant: null, payloadJson: null)});
+      },
+    )..identify(userId: 'u');
+
+    expect(await adapter.reloadFeatureFlagsWithTimeout(const Duration(milliseconds: 5)), isFalse);
+    expect(calls, 1);
+    expect(await adapter.reloadFeatureFlagsWithTimeout(const Duration(seconds: 1)), isTrue);
+    expect(calls, 2, reason: 'the retry must start a fresh request instead of coalescing with the timed out GET');
+
+    pendingFirst.complete({'kill': (enabled: true, variant: null, payloadJson: null)});
+    await Future<void>.delayed(Duration.zero);
+    expect(await adapter.resolvedFeatureEnabled('kill'), isFalse,
+        reason: 'the abandoned request cannot overwrite the fresh snapshot');
+  });
+
   test('same-account profile updates preserve flags and an in-flight refresh', () async {
     final pending = Completer<Map<String, OmiFlag>?>();
     var delayed = false;

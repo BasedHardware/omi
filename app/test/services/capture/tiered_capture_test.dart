@@ -315,6 +315,46 @@ void main() {
     expect(connection.stopCalls, greaterThan(0));
   });
 
+  test('tracking consent opt-out fails open and resumed consent keeps the kill cadence', () async {
+    const flag = 'android-custom-live-audio-recovery-kill';
+    final adapter = await setRefactorFlags({flag: true});
+    addTearDown(AnalyticsManager.resetForTesting);
+    world.controller.updateRecordingDevice(null);
+    await world.settle();
+    SharedPreferencesUtil().uid = 'capture-test-owner';
+    await SharedPreferencesUtil().saveCustomSttConfig(
+      const CustomSttConfig(provider: SttProvider.customLive, url: 'wss://local-stt.example.test'),
+    );
+    final device = BtDevice(id: 'limitless-consent-flag', name: 'Limitless', type: DeviceType.limitless, rssi: -40);
+    final connection = _WatchedLimitlessConnection();
+    world.deviceConnection = connection;
+    await world.controller.streamDeviceRecording(device: device);
+    await world.settle();
+    expect(connection.captureIsCurrent, isNull, reason: 'the confirmed kill switch closes the watch');
+    expect(adapter.reloadCount, 1);
+
+    AnalyticsManager().optOutTracking();
+    await world.settle();
+    expect(connection.captureIsCurrent?.call(), isTrue, reason: 'without consent the flag context fails open');
+    await world.elapse(const Duration(minutes: 5));
+    expect(adapter.reloadCount, 1, reason: 'opt-out does not keep issuing authenticated flag reads');
+
+    adapter.flags[flag] = false;
+    AnalyticsManager().optInTracking();
+    await world.settle();
+    expect(adapter.reloadCount, 2);
+    expect(connection.captureIsCurrent?.call(), isTrue);
+
+    final readsBeforePeriodicRefresh = adapter.reloadCount;
+    await world.elapse(const Duration(minutes: 4, seconds: 59));
+    adapter.flags[flag] = true;
+    await world.elapse(const Duration(seconds: 1));
+    await world.settle();
+    expect(adapter.reloadCount, greaterThan(readsBeforePeriodicRefresh),
+        reason: 'the five-minute kill refresh resumes after consent returns');
+    expect(connection.captureIsCurrent, isNull);
+  });
+
   test('periodic kill refresh stays armed while Custom Live is temporarily paused', () async {
     const flag = 'android-custom-live-audio-recovery-kill';
     final adapter = await setRefactorFlags({flag: false});
@@ -345,6 +385,50 @@ void main() {
 
     await world.elapse(const Duration(minutes: 5));
     expect(connection.captureIsCurrent, isNull, reason: 'the next scheduled read applies the kill switch');
+  });
+
+  test('leaving Custom Live cancels periodic flag reads and returning re-arms them', () async {
+    const flag = 'android-custom-live-audio-recovery-kill';
+    final adapter = await setRefactorFlags({flag: false});
+    addTearDown(AnalyticsManager.resetForTesting);
+    world.controller.updateRecordingDevice(null);
+    await world.settle();
+    SharedPreferencesUtil().uid = 'capture-test-owner';
+    await SharedPreferencesUtil().saveCustomSttConfig(
+      const CustomSttConfig(provider: SttProvider.customLive, url: 'wss://local-stt.example.test'),
+    );
+    final device = BtDevice(id: 'limitless-provider-switch', name: 'Limitless', type: DeviceType.limitless, rssi: -40);
+    final connection = _WatchedLimitlessConnection();
+    world.deviceConnection = connection;
+    await world.controller.streamDeviceRecording(device: device);
+    await world.settle();
+    expect(adapter.reloadCount, 1);
+    expect(connection.captureIsCurrent?.call(), isTrue);
+
+    await SharedPreferencesUtil().saveCustomSttConfig(
+      const CustomSttConfig(provider: SttProvider.custom, url: 'wss://other-stt.example.test'),
+    );
+    await world.controller.onTranscriptionSettingsChanged();
+    await world.settle();
+    expect(connection.captureIsCurrent, isNull);
+
+    await world.elapse(const Duration(minutes: 5, seconds: 1));
+    expect(adapter.reloadCount, 1, reason: 'a non-Custom-Live provider must not keep refreshing the kill flag');
+
+    await SharedPreferencesUtil().saveCustomSttConfig(
+      const CustomSttConfig(provider: SttProvider.customLive, url: 'wss://returned-stt.example.test'),
+    );
+    await world.controller.onTranscriptionSettingsChanged();
+    await world.settle();
+    expect(adapter.reloadCount, 2, reason: 'returning to Custom Live reads the flag and restarts cadence');
+
+    final readsBeforePeriodicRefresh = adapter.reloadCount;
+    await world.elapse(const Duration(minutes: 4, seconds: 59));
+    adapter.flags[flag] = true;
+    await world.elapse(const Duration(seconds: 1));
+    await world.settle();
+    expect(adapter.reloadCount, greaterThan(readsBeforePeriodicRefresh));
+    expect(connection.captureIsCurrent, isNull);
   });
 
   test('a missing kill stays enabled through failed periodic reads and a later kill is applied', () async {

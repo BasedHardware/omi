@@ -170,6 +170,8 @@ class _FakeLimitless implements LimitlessDeviceConnection {
   int _extractIdx = 0;
   final acks = <int>[];
   int? ackLimit;
+  int drainReleaseCalls = 0;
+  bool failBatchEnable = false;
   bool batchMode = false;
   bool realTimeMode = false;
 
@@ -178,7 +180,14 @@ class _FakeLimitless implements LimitlessDeviceConnection {
 
   @override
   Future<void> enableBatchMode() async {
+    if (failBatchEnable) throw StateError('batch transfer failed');
     batchMode = true;
+  }
+
+  @override
+  void releaseBatchDrainAfterSyncFailure() {
+    drainReleaseCalls++;
+    batchMode = false;
   }
 
   @override
@@ -995,9 +1004,32 @@ void main() {
     await expectLater(sync.syncWal(wal: wal), throwsException);
 
     expect(card.acks, isEmpty);
+    expect(card.drainReleaseCalls, 1, reason: 'terminal sync failure relinquishes local batch ownership');
     expect(wal.status, isNot(WalStatus.synced));
     expect(wal.isSyncing, isFalse);
     await sync.stop();
+  });
+
+  test('Limitless: delete keeps a synced WAL when the device ACK is capped', () async {
+    final card = _FakeLimitless(pages: const [])..ackLimit = 1;
+    final wal = Wal(
+      timerStart: 1700000000,
+      codec: BleAudioCodec.opus,
+      seconds: 5,
+      status: WalStatus.synced,
+      storage: WalStorage.flashPage,
+      device: 'limitless-1',
+      fileNum: 0,
+      storageTotalBytes: 2,
+    );
+    final sync = FlashPageWalSyncImpl(_Listener())
+      ..testDevice = BtDevice(id: 'limitless-1', name: 'Limitless', type: DeviceType.limitless, rssi: -40)
+      ..testConnection = card
+      ..testWals = [wal];
+
+    await expectLater(sync.deleteWal(wal), throwsStateError);
+
+    expect(sync.testWals, [same(wal)], reason: 'a short ACK must leave the local row available');
   });
 
   test('Limitless: a cancelled transfer returns quietly and keeps the wal pending', () async {

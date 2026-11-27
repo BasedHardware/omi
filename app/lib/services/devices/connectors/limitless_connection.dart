@@ -572,7 +572,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
   /// field 4 contains live frames. Raw frame payloads still use the fallback.
   bool _publishAudioFramesFromPendantEnvelope(List<int> payload) {
     var pos = 0;
-    var foundAudioField = false;
+    var withheldStoredFrames = false;
     final storedFrames = <List<int>>[];
     final liveFrames = <List<int>>[];
 
@@ -603,7 +603,6 @@ class LimitlessDeviceConnection extends DeviceConnection {
             if (valueStart <= pos || length < 0 || length > payload.length - valueStart) return false;
             pos = valueStart + length;
             if (fieldNumber == 2) {
-              foundAudioField = true;
               final storageBuffer = payload.sublist(valueStart, pos);
               final pageFrames = _extractOpusFramesFromFlashPage(storageBuffer);
               if (_batchDrainActive && !_isBatchMode && pageFrames.isNotEmpty) {
@@ -613,6 +612,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
                   // this page, so preserve its frames in the live delivery path.
                   storedFrames.addAll(pageFrames);
                 } else {
+                  withheldStoredFrames = true;
                   _unconfirmedStoredPageIndices.add(pageIndex);
                   DebugLogManager.logEvent('limitless_stored_frames_dropped', {
                     'frames': pageFrames.length,
@@ -624,7 +624,6 @@ class LimitlessDeviceConnection extends DeviceConnection {
                 storedFrames.addAll(pageFrames);
               }
             } else if (fieldNumber == 4) {
-              foundAudioField = true;
               final encodedLiveField = payload.sublist(fieldStart, pos);
               liveFrames.addAll(_extractOpusFrames(encodedLiveField)[0] as List<List<int>>);
             }
@@ -641,7 +640,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
       return false;
     }
 
-    if (!foundAudioField) return false;
+    if (storedFrames.isEmpty && liveFrames.isEmpty && !withheldStoredFrames) return false;
     // During reconnect, indexed pages in an active drain are withheld from the
     // live stream and ACK-capped until replay. In other modes, stored frames can
     // represent live progress and keep the recovery watchdog from false stalls.
@@ -994,6 +993,19 @@ class LimitlessDeviceConnection extends DeviceConnection {
   void _clearReplayedStoredPageBarrier(int? index) {
     if (!_batchDrainActive || !_isBatchMode || index == null || !_unconfirmedStoredPageIndices.remove(index)) return;
     DebugLogManager.logEvent('limitless_unconfirmed_stored_page_replayed', {'pageIndex': index});
+  }
+
+  void _pruneUnavailableStoredPageBarriers(Map<String, int> status) {
+    final oldestAvailable = status['oldest_flash_page'];
+    if (oldestAvailable == null) return;
+    final unavailable = _unconfirmedStoredPageIndices.where((index) => index < oldestAvailable).toList();
+    for (final index in unavailable) {
+      _unconfirmedStoredPageIndices.remove(index);
+      DebugLogManager.logWarning('Limitless withheld page is no longer available', {
+        'pageIndex': index,
+        'oldestAvailablePageIndex': oldestAvailable,
+      });
+    }
   }
 
   Map<String, dynamic> _parseFlashPageInfo(List<int> flashPageData) {
@@ -1528,7 +1540,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
           });
         }
       }
-      if (acknowledgedIndex <= _lastAcknowledgedIndex) return _lastAcknowledgedIndex;
+      if (acknowledgedIndex <= _lastAcknowledgedIndex) return acknowledgedIndex;
       final ackCmd = _encodeAcknowledgeProcessedData(acknowledgedIndex);
       await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, ackCmd);
       Logger.debug('Limitless: Acknowledged processed data up to index $acknowledgedIndex');
@@ -1666,6 +1678,21 @@ class LimitlessDeviceConnection extends DeviceConnection {
       if (!_realtimeSuppressed) _armStreamHealthWatch(reason: 'batch_mode_enable_failed');
       Logger.debug('Limitless: Error enabling batch mode: $e');
       DebugLogManager.logError(e, null, 'Limitless failed to enable batch mode');
+    }
+  }
+
+  /// Relinquish local drain ownership after a terminal sync failure. A later
+  /// reconnect will explicitly select live mode and can restart its retained
+  /// Custom Live watch; withheld-page barriers remain until replay or status
+  /// proves those pages have left the pendant's flash ring.
+  void releaseBatchDrainAfterSyncFailure() {
+    if (!_batchDrainActive && !_isBatchMode) return;
+    _batchDrainActive = false;
+    _isBatchMode = false;
+    _batchModeEpoch = null;
+    DebugLogManager.logWarning('Limitless batch drain ownership released after sync failure');
+    if (_isCurrentSession(connectionEpoch) && !_realtimeSuppressed) {
+      _armStreamHealthWatch(reason: 'batch_sync_failed');
     }
   }
 
@@ -2144,6 +2171,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
               final storageState = _parseStorageStateFromDeviceStatus(data, innerPos, innerPos + statusLength);
               if (storageState != null && storageState.isNotEmpty) {
                 _storageState = storageState;
+                _pruneUnavailableStoredPageBarriers(storageState);
                 final pendingStatus = _storageStateCompleter;
                 if (pendingStatus != null && !pendingStatus.isCompleted) pendingStatus.complete(storageState);
               }

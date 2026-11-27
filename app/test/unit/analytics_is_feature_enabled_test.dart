@@ -13,6 +13,7 @@ class _FlagAdapter
         AnalyticsAdapter,
         AnalyticsIdentityAdapter,
         AnalyticsFeatureFlagAdapter,
+        AnalyticsTimeoutAwareFeatureFlagAdapter,
         AnalyticsBooleanFlagAdapter,
         AnalyticsResolvedFlagAdapter {
   bool _initialized = false;
@@ -51,12 +52,19 @@ class _FlagAdapter
 
   final variantReads = <Completer<String?>>[];
   final reloads = <Completer<bool>>[];
+  final refreshTimeouts = <Duration>[];
 
   @override
   Future<bool> reloadFeatureFlags() {
     final completer = Completer<bool>();
     reloads.add(completer);
     return completer.future;
+  }
+
+  @override
+  Future<bool> reloadFeatureFlagsWithTimeout(Duration timeout) {
+    refreshTimeouts.add(timeout);
+    return reloadFeatureFlags();
   }
 
   @override
@@ -308,5 +316,6 @@ void main() {
 
     expect(value, isNull);
     expect(refreshFailed, isTrue);
+    expect(adapter.refreshTimeouts, [const Duration(milliseconds: 5)]);
   });
 }

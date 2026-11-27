@@ -622,7 +622,10 @@ class AnalyticsManager {
         if (refresh) {
           bool reloaded;
           try {
-            reloaded = await adapter.reloadFeatureFlags().timeout(refreshTimeout);
+            reloaded = adapter is AnalyticsTimeoutAwareFeatureFlagAdapter
+                ? await (adapter as AnalyticsTimeoutAwareFeatureFlagAdapter)
+                    .reloadFeatureFlagsWithTimeout(refreshTimeout)
+                : await adapter.reloadFeatureFlags().timeout(refreshTimeout);
           } catch (_) {
             reloaded = false;
           }

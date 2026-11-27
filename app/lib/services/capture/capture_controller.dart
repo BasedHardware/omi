@@ -2846,6 +2846,7 @@ class CaptureController extends ChangeNotifier
         !config.isEnabled ||
         config.provider != SttProvider.customLive) {
       connection.stopCustomLiveAudioWatch();
+      _cancelCustomLiveAudioFlagRetry();
       return;
     }
     bool isCurrent() {

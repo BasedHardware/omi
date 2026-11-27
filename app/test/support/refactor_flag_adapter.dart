@@ -14,6 +14,7 @@ class RefactorFlagAdapter
   final Map<String, bool> cachedFlags;
   final Set<String> multivariateFlags = {};
   bool initialized = false;
+  int reloadCount = 0;
   int reloadFailuresRemaining = 0;
   void Function()? onCachedRead;
   @override
@@ -40,6 +41,7 @@ class RefactorFlagAdapter
   Future<bool> isFeatureEnabled(String key) async => flags[key] == true;
   @override
   Future<bool> reloadFeatureFlags() async {
+    reloadCount++;
     if (reloadFailuresRemaining > 0) {
       reloadFailuresRemaining--;
       return false;

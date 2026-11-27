@@ -19,6 +19,7 @@ class PostHogAnalyticsAdapter
         AnalyticsDeliveryAdapter,
         AnalyticsIdentityAdapter,
         AnalyticsFeatureFlagAdapter,
+        AnalyticsTimeoutAwareFeatureFlagAdapter,
         AnalyticsBooleanFlagAdapter {
   PostHogAnalyticsAdapter({
     required this.apiKey,
@@ -37,6 +38,7 @@ class PostHogAnalyticsAdapter
   /// Bumped on every identity change so an in-flight answer for account A
   /// cannot land after B takes over.
   int _identityGeneration = 0;
+  int _omiFlagsReloadGeneration = 0;
   Future<bool>? _omiFlagsReloadInFlight;
   int? _omiFlagsReloadInFlightIdentityGeneration;
   String? _flagIdentity;
@@ -208,6 +210,24 @@ class PostHogAnalyticsAdapter
   @override
   Future<bool> reloadFeatureFlags() => _reloadOmiFlags();
 
+  @override
+  Future<bool> reloadFeatureFlagsWithTimeout(Duration timeout) async {
+    final reload = _reloadOmiFlags();
+    try {
+      return await reload.timeout(timeout);
+    } on TimeoutException {
+      // The underlying GET cannot be cancelled. Invalidate its generation and
+      // release the slot so a scheduled retry starts a fresh request; a late
+      // result from this request can no longer replace the active snapshot.
+      if (identical(_omiFlagsReloadInFlight, reload)) {
+        _omiFlagsReloadGeneration++;
+        _omiFlagsReloadInFlight = null;
+        _omiFlagsReloadInFlightIdentityGeneration = null;
+      }
+      return false;
+    }
+  }
+
   /// A failed or superseded fetch keeps the previous Omi answer for this identity.
   Future<bool> _reloadOmiFlags() {
     final inFlight = _omiFlagsReloadInFlight;
@@ -215,11 +235,13 @@ class PostHogAnalyticsAdapter
     final fetch = omiFlags;
     if (fetch == null) return Future.value(false);
     final identityGeneration = _identityGeneration;
+    final reloadGeneration = ++_omiFlagsReloadGeneration;
     late final Future<bool> reload;
     reload = () async {
       try {
         final flags = await fetch();
-        if (flags == null || identityGeneration != _identityGeneration) return false;
+        if (flags == null || identityGeneration != _identityGeneration || reloadGeneration != _omiFlagsReloadGeneration)
+          return false;
         _omi = Map.unmodifiable(flags);
         return true;
       } catch (_) {
