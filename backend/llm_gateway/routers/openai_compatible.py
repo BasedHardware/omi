@@ -421,6 +421,7 @@ async def create_image_generation(request: Request, caller: ServiceAuthDependenc
     model = _string_request_value(request_body, 'model', default='unknown')
     api_key = os.getenv('OPENAI_API_KEY', '').strip()
     upstream_status = None
+    retry_headers: dict[str, str] = {}
     rejection_body: object = None
     error_class = 'internal_error'
     metadata = None
@@ -429,7 +430,13 @@ async def create_image_generation(request: Request, caller: ServiceAuthDependenc
             error_class = 'invalid_config'
             return JSONResponse(
                 status_code=503,
-                content={'error': {'message': 'provider request failed: invalid_config', 'type': 'api_error'}},
+                content={
+                    'error': {
+                        'message': 'provider request failed: invalid_config',
+                        'type': 'api_error',
+                        'code': 'invalid_config',
+                    }
+                },
             )
         response = await _get_image_generation_client().post(
             'https://api.openai.com/v1/images/generations',
@@ -437,11 +444,15 @@ async def create_image_generation(request: Request, caller: ServiceAuthDependenc
             json=request_body,
         )
         upstream_status = response.status_code
+        if upstream_status == 429 and (retry_after := response.headers.get('Retry-After')) is not None:
+            retry_headers['Retry-After'] = retry_after
         body = response.json()
         if response.is_error:
             rejection_body = body
         # Keep provider outages distinguishable from an internal gateway 500.
-        result = JSONResponse(status_code=502 if upstream_status >= 500 else upstream_status, content=body)
+        result = JSONResponse(
+            status_code=502 if upstream_status >= 500 else upstream_status, content=body, headers=retry_headers
+        )
         if response.is_success:
             metadata = ProviderResponseMetadata(
                 usage=image_usage(
@@ -457,8 +468,9 @@ async def create_image_generation(request: Request, caller: ServiceAuthDependenc
     except (httpx.HTTPError, ValueError):
         error_class = 'transport_or_invalid_response'
         return JSONResponse(
-            status_code=502,
+            status_code=429 if upstream_status == 429 else 502,
             content={'error': {'message': 'provider request failed', 'type': 'api_error'}},
+            headers=retry_headers,
         )
     except asyncio.CancelledError:
         error_class = 'cancelled'

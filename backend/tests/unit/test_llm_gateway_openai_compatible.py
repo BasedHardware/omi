@@ -436,6 +436,26 @@ def test_image_generation_records_gateway_attempt(monkeypatch, caplog):
             {'type': 'server_error'},
         ),
         (
+            httpx.Response(
+                429,
+                headers={'Retry-After': '17'},
+                json={'error': {'type': 'rate_limit_error', 'code': 'rate_limit_exceeded'}},
+            ),
+            429,
+            'provider_http_429',
+            'rate_limit_exceeded',
+            {'type': 'rate_limit_error', 'code': 'rate_limit_exceeded'},
+        ),
+        (
+            httpx.Response(
+                429, headers={'Retry-After': 'Wed, 02 Dec 2026 00:00:00 GMT'}, text='private app description'
+            ),
+            429,
+            'transport_or_invalid_response',
+            'unknown',
+            {},
+        ),
+        (
             httpx.Response(400, text='private app description'),
             502,
             'transport_or_invalid_response',
@@ -474,6 +494,7 @@ def test_image_generation_records_safe_rejections(
     )
 
     assert response.status_code == gateway_status
+    assert response.headers.get('Retry-After') == provider_response.headers.get('Retry-After')
     assert len(traces) == 1
     [attempt] = traces[0].attempts
     assert attempt.error_class == error_class
@@ -489,6 +510,32 @@ def test_image_generation_records_safe_rejections(
     assert 'private prompt' not in caplog.text
     assert 'private app description' not in caplog.text
     assert 'private user identifier' not in caplog.text
+
+
+def test_image_generation_reports_unconfigured_provider(monkeypatch, caplog):
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+    monkeypatch.delenv('OPENAI_API_KEY', raising=False)
+    traces = []
+    monkeypatch.setattr(openai_compatible, 'schedule_attempt_trace', lambda _context, trace: traces.append(trace))
+
+    def unexpected_provider():
+        pytest.fail('missing credentials must stop before dispatch')
+
+    monkeypatch.setattr(openai_compatible, '_get_image_generation_client', unexpected_provider)
+    response = TestClient(app).post(
+        '/v1/images/generations',
+        headers=auth_headers(),
+        json={'model': 'gpt-image-1', 'prompt': 'private prompt'},
+    )
+
+    assert response.status_code == 503
+    assert response.json()['error']['code'] == 'invalid_config'
+    assert 'Retry-After' not in response.headers
+    [trace] = traces
+    [attempt] = trace.attempts
+    assert attempt.error_class == 'invalid_config'
+    assert 'outcome=error error_class=invalid_config' in caplog.text
+    assert 'upstream_http_status=none' in caplog.text
 
 
 def test_image_generation_normalizes_auto_defaults_for_estimated_accounting(monkeypatch):

@@ -1781,7 +1781,7 @@ async def generate_app_icon_endpoint(
         )
 
     from utils.llm.app_generator import generate_app_icon
-    from utils.llm.gateway_client import ImageGatewayUnavailableError
+    from utils.llm.gateway_client import ImageGatewayError
     import base64
 
     try:
@@ -1794,11 +1794,8 @@ async def generate_app_icon_endpoint(
         return {'status': 'ok', 'icon_base64': icon_base64, 'mime_type': 'image/png'}
     except HTTPException:
         raise
-    except ImageGatewayUnavailableError:
-        raise HTTPException(
-            status_code=503,
-            detail={'code': 'icon_generation_unavailable', 'retryable': True},
-        )
+    except ImageGatewayError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail, headers=exc.headers) from exc
     except Exception as e:
         gateway_status = e.response.status_code if isinstance(e, httpx.HTTPStatusError) else None
         logger.error('Error generating icon: %s gateway_http_status=%s', type(e).__name__, gateway_status)
