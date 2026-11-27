@@ -189,6 +189,7 @@ class WalSyncs implements IWalSync {
     _device = device;
     _firmwareVersion = firmwareVersion;
     if (changedDevice || (wasRing && !usesIndependentRingDrain)) _cancelRingDrain();
+    _storageSync.setDevice(device?.copyWith(firmwareRevision: _resolvedFirmware));
     _ringSync.setDevice(device?.copyWith(firmwareRevision: _resolvedFirmware));
     if (usesIndependentRingDrain && (changedDevice || !wasRing)) unawaited(wakeRingDrain());
     // Ring status shares the legacy characteristic but has a different layout.
@@ -328,7 +329,8 @@ class WalSyncs implements IWalSync {
   /// Safe no-op when no device is set; each sub-sync guards against running
   /// while a sync is in progress.
   Future<bool> refreshWalsFromDevice({String? firmwareVersion}) async {
-    if (_device == null) return false;
+    final device = _device;
+    if (device == null) return false;
     // Prefer the caller-supplied firmware, then the enriched value stored at
     // setDevice — the raw connect object's firmwareRevision can still be
     // 'Unknown', which would misroute ring-buffer discovery.
@@ -345,12 +347,14 @@ class WalSyncs implements IWalSync {
       // Old firmware has no multi-file stats command; the SD-card list below
       // is its authoritative device inventory. Any cached multi-file rows for
       // this device still need a supported refresh before their deletes count.
-      storageInventoryConfirmed = !_storageSync.hasCachedWalsForDevice(_device!.id);
+      storageInventoryConfirmed = !_storageSync.hasCachedWalsForDevice(device.id);
     } else {
       storageInventoryConfirmed = await _storageSync.refreshWalsFromDevice();
     }
     final sdcardInventoryConfirmed = !_usesLegacySdcard || await _sdcardSync.refreshWalsFromDevice();
+    if (_device?.id != device.id) return false;
     final flashInventoryConfirmed = await _flashPageSync.refreshWalsFromDevice();
+    if (_device?.id != device.id) return false;
     return storageInventoryConfirmed && sdcardInventoryConfirmed && flashInventoryConfirmed;
   }
 

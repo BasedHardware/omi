@@ -289,7 +289,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
     final device = _device;
     if (device == null) return false;
     if (device.type != DeviceType.limitless) return true;
-    if (SharedPreferencesUtil().batchModeEnabled) return false;
+    if (SharedPreferencesUtil().batchModeEnabled) return true;
     _wals = await _getMissingWals();
     if (_wals.isEmpty && !_storageStatusUnavailable) _lastStallReason = FlashSyncStallReason.none;
     listener.onWalUpdated();

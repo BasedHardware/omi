@@ -139,6 +139,15 @@ void main() {
     expect(retained.single.storageOffset, listed.storageOffset);
   });
 
+  test('batch-mode flash listing skip is neutral for device inventory confirmation', () async {
+    final preferences = SharedPreferencesUtil();
+    preferences.batchModeEnabled = true;
+    addTearDown(() => preferences.batchModeEnabled = false);
+    final sync = _syncFor(_FakePendant(_flash(oldest: 1000, newest: 1099)));
+
+    expect(await sync.refreshWalsFromDevice(), isTrue);
+  });
+
   test('partial drain resumes after durable pages even when their ACK is withheld', () {
     expect(
       FlashPageWalSyncImpl.resumePageAfterDurablePage(startPage: 100, lastDurablePageIndex: 149),

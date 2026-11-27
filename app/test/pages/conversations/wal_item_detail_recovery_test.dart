@@ -23,6 +23,7 @@ class _Sync extends ChangeNotifier implements SyncProvider {
   final transferDone = Completer<void>();
   bool failDelete = false;
   bool retainOnDelete = false;
+  bool refreshRingIdentityOnDelete = false;
   Wal? transferring;
   @override
   double get walsSyncedProgress => 0.87;
@@ -49,7 +50,21 @@ class _Sync extends ChangeNotifier implements SyncProvider {
   Future<void> deleteWal(Wal wal, {String? firmwareVersion, bool refreshDevice = true}) async {
     deleted.add(wal);
     if (failDelete) throw StateError('simulated device delete failure');
-    if (!retainOnDelete) wals.removeWhere((item) => item.id == wal.id && item.storage == wal.storage);
+    if (refreshRingIdentityOnDelete) {
+      wals
+        ..clear()
+        ..add(Wal(
+          timerStart: wal.timerStart + 60,
+          codec: wal.codec,
+          seconds: wal.seconds,
+          status: WalStatus.miss,
+          storage: WalStorage.sdcard,
+          device: wal.device,
+          fileNum: -1,
+        ));
+    } else if (!retainOnDelete) {
+      wals.removeWhere(wal.hasSameDeviceInventoryIdentity);
+    }
   }
 
   @override
@@ -122,7 +137,7 @@ Future<_Sync> _open(WidgetTester tester, {WalStorage storage = WalStorage.disk})
   return sync;
 }
 
-Future<_Sync> _openDeleteFlow(WidgetTester tester, {required bool failDelete}) async {
+Future<_Sync> _openDeleteFlow(WidgetTester tester, {required bool failDelete, bool ringBufferWal = false}) async {
   final sync = _Sync()..failDelete = failDelete;
   final wal = Wal(
     timerStart: 1700000000,
@@ -131,6 +146,7 @@ Future<_Sync> _openDeleteFlow(WidgetTester tester, {required bool failDelete}) a
     status: WalStatus.miss,
     storage: WalStorage.sdcard,
     device: 'synthetic-pendant',
+    fileNum: ringBufferWal ? -1 : 0,
   );
   sync.wals.add(wal);
   final device = _Device();
@@ -296,6 +312,25 @@ void main() {
 
     expect(sync.deleted, hasLength(1));
     expect(sync.allWals, hasLength(1));
+    expect(find.byType(WalItemDetailPage), findsOneWidget);
+    expect(find.text(l10n.failedToDeleteSomeItems), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('recording detail recognizes a refreshed ring WAL after deletion', (tester) async {
+    final sync = await _openDeleteFlow(tester, failDelete: false, ringBufferWal: true);
+    sync.refreshRingIdentityOnDelete = true;
+    final l10n = AppLocalizations.of(tester.element(find.byType(WalItemDetailPage)));
+
+    await tester.tap(find.byIcon(Icons.more_horiz));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(l10n.deleteRecording));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(l10n.delete));
+    await tester.pumpAndSettle();
+
+    expect(sync.deleted, hasLength(1));
+    expect(sync.allWals.single.id, isNot(sync.deleted.single.id));
     expect(find.byType(WalItemDetailPage), findsOneWidget);
     expect(find.text(l10n.failedToDeleteSomeItems), findsOneWidget);
     expect(tester.takeException(), isNull);

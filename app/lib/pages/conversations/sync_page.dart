@@ -38,7 +38,7 @@ Widget _buildFaIcon(FaIconData icon, {double size = 18, Color color = const Colo
 }
 
 bool _walStillListed(SyncProvider provider, Wal wal) {
-  return provider.allWals.any((candidate) => candidate.storage == wal.storage && candidate.id == wal.id);
+  return provider.allWals.any(wal.hasSameDeviceInventoryIdentity);
 }
 
 String? _deviceFirmwareVersion(BuildContext context, Wal wal) {

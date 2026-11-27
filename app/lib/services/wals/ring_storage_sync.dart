@@ -507,7 +507,10 @@ class RingStorageSyncImpl implements RingStorageSync {
   /// the audio cannot resurrect as a "new" recording on the next sync.
   @override
   Future deleteWal(Wal wal) async {
-    if (!_wals.any((w) => w.id == wal.id)) return;
+    if (wal.storage != WalStorage.sdcard || wal.fileNum != -1) return;
+    final matchingWals = _wals.where(wal.hasSameDeviceInventoryIdentity).toList();
+    if (matchingWals.isEmpty) throw StateError('Ring recording is no longer in the current device inventory');
+    final currentWal = matchingWals.first;
     if (_isSyncing) {
       Logger.debug('RingStorageSync.deleteWal: skipping — sync in progress');
       throw StateError('Ring deletion is unavailable while sync is in progress');
@@ -517,7 +520,7 @@ class RingStorageSyncImpl implements RingStorageSync {
       Logger.debug('RingStorageSync.deleteWal: ring clear not confirmed, keeping WAL');
       throw StateError('Device did not confirm the ring clear');
     }
-    _wals = _wals.where((w) => w.id != wal.id).toList();
+    _wals = _wals.where((w) => !currentWal.hasSameDeviceInventoryIdentity(w)).toList();
     listener.onWalUpdated();
   }
 

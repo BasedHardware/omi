@@ -1355,11 +1355,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     syncs.setDevice(device, firmwareVersion: currentFirmwareVersion);
     // WalSyncs attaches legacy SD only for confirmed legacy firmware.
     syncs.flashPage.setDevice(device);
-    syncs.storage.setDevice(
-      device.copyWith(
-        firmwareRevision: WalSyncs.resolveDiscoveryFirmware(currentFirmwareVersion, device.firmwareRevision),
-      ),
-    );
 
     // Device connection and inventory are a recovery wake, even when the
     // home page is not mounted. The coordinator serializes it with every

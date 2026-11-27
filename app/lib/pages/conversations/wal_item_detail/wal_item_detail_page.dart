@@ -592,7 +592,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
             : context.read<DeviceProvider>().currentFirmwareVersion;
         await provider.deleteWal(target, firmwareVersion: firmwareVersion);
         if (!context.mounted) return;
-        final retained = provider.allWals.any((wal) => wal.storage == target.storage && wal.id == target.id);
+        final retained = provider.allWals.any(target.hasSameDeviceInventoryIdentity);
         if (retained) {
           OmiFeedback.error(context, context.l10n.failedToDeleteSomeItems);
         } else {

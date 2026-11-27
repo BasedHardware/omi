@@ -863,10 +863,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   bool _isDeviceBackedWal(Wal wal) => wal.storage != WalStorage.disk && wal.storage != WalStorage.mem;
 
   bool _sameDeleteInventoryIdentity(Wal a, Wal b) {
-    if (a.storage != b.storage) return false;
-    final aRing = a.storage == WalStorage.sdcard && a.fileNum == -1;
-    if (aRing) return b.fileNum == -1 && a.device == b.device;
-    return a.id == b.id;
+    return a.hasSameDeviceInventoryIdentity(b);
   }
 
   void _retainUnconfirmedDeviceWals(Iterable<Wal> targets) {

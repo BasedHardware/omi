@@ -637,7 +637,7 @@ void main() {
     expect(find.text(l.pendingFilesDeleted), findsNothing);
   });
 
-  testWidgets('row delete does not treat a rebuilt ring as the deleted row', (tester) async {
+  testWidgets('row delete reports a rebuilt ring that remains in the inventory', (tester) async {
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     Wal ring(int start) => Wal(
           timerStart: start,
@@ -661,7 +661,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(Key(rediscovered.id)), findsOneWidget);
-    expect(find.text(l.failedToDeleteSomeItems), findsNothing);
+    expect(find.text(l.failedToDeleteSomeItems), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
