@@ -5,6 +5,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/wals/ring_storage_sync.dart';
 import 'package:omi/services/wals/sdcard_wal_sync.dart';
+import 'package:omi/services/wals/storage_sync.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 
@@ -33,6 +34,12 @@ class _FakeConnection implements DeviceConnection {
   Future<bool> clearRing() async {
     clearRingCalls++;
     return clearRingResult;
+  }
+
+  @override
+  Future<bool> deleteStorageFile(int fileIndex) async {
+    deleteCommands++;
+    return true;
   }
 
   @override
@@ -291,6 +298,23 @@ void main() {
 
       expect(connection.deleteCommands, 2, reason: 'the second row is attempted after the first throws');
       expect((await sync.getMissingWals()).map((wal) => wal.id), [first.id]);
+    });
+  });
+
+  group('StorageSyncImpl multi-file delete routing', () {
+    test('supported 3.0.18 firmware still receives the delete command', () async {
+      final connection = _FakeConnection();
+      final device = _device.copyWith(firmwareRevision: '3.0.18');
+      final wal = _sdWal();
+      final sync = StorageSyncImpl(_Listener())
+        ..setDevice(device)
+        ..testConnection = connection
+        ..testWals = [wal];
+
+      await sync.deleteWal(wal);
+
+      expect(connection.deleteCommands, 1);
+      expect(await sync.getMissingWals(), isEmpty);
     });
   });
 }

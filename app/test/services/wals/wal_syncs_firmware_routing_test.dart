@@ -622,6 +622,46 @@ void main() {
       expect(await storage.getMissingWals(), [wal]);
     });
 
+    for (final status in [WalStatus.synced, WalStatus.miss]) {
+      test('unconfirmed pre-multi-file bulk ${status.name} delete retains rows', () async {
+        final device = BtDevice(
+          id: 'pendant',
+          name: 'Omi',
+          type: DeviceType.omi,
+          rssi: -40,
+          firmwareRevision: '3.0.16',
+        );
+        final wal = Wal(
+          timerStart: 1704067200,
+          codec: BleAudioCodec.opus,
+          seconds: 60,
+          status: status,
+          storage: WalStorage.sdcard,
+          device: device.id,
+          fileNum: 2,
+        );
+        final storage = StorageSyncImpl(_Listener())
+          ..setDevice(device)
+          ..testWals = [wal];
+        final deleteEvents = <String>[];
+        final syncs = WalSyncs(
+          _Listener(),
+          sdcardSync: _SpySdcard(),
+          storageSync: storage,
+          flashPageSync: _ReadyFlashPage(),
+          phoneSync: _DeleteSpyPhone(deleteEvents),
+        )..setDevice(device);
+        final deleteAll = status == WalStatus.synced ? syncs.deleteAllSyncedWals : syncs.deleteAllPendingWals;
+
+        await expectLater(deleteAll(), throwsStateError);
+
+        expect(storage.hasCachedWalsForDevice(device.id), isTrue);
+        if (status == WalStatus.miss) expect(await storage.getMissingWals(), [wal]);
+        expect(await syncs.refreshWalsFromDevice(), isFalse);
+        expect(storage.hasCachedWalsForDevice(device.id), isTrue);
+      });
+    }
+
     test('multi-file firmware requires both device inventories to confirm', () async {
       final sdcard = _SpySdcard();
       final storage = _InventoryStorage(confirmed: true);

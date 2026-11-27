@@ -340,8 +340,7 @@ class WalSyncs implements IWalSync {
       if (usesIndependentRingDrain && (_ringPass != null || ring.isSyncing)) return false;
       // The independent ring reader uses INFO without a discovery STOP and
       // reports whether that authoritative read completed.
-      storageInventoryConfirmed =
-          await _ringSync.refreshWalsFromDevice() && !_storageSync.hasCachedWalsForDevice(_device!.id);
+      storageInventoryConfirmed = await _ringSync.refreshWalsFromDevice();
     } else if (_usesLegacySdcard && !isMultiFileStorageFirmware(fw)) {
       // Old firmware has no multi-file stats command; the SD-card list below
       // is its authoritative device inventory. Any cached multi-file rows for
