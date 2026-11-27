@@ -562,6 +562,28 @@ void _batteryDisplayGuardTests() {
     expect(provider.batteryReadingStuck, isFalse);
   });
 
+  testWidgets('an unchanged sample just past the flat threshold still wakes the UI', (tester) async {
+    final transport = _ChargingTransport()..value = [0];
+    final clock = _Clock();
+    final provider = guarded(transport, clock);
+    addTearDown(transport.notifications.close);
+    addTearDown(transport.batteryNotifications.close);
+    addTearDown(provider.dispose);
+    provider.connectedDevice = _device();
+    provider.setIsConnected(true);
+    await provider.initiateChargingStatusListener();
+    await provider.initiateBleBatteryListener();
+    transport.batteryNotifications.add([1]);
+    var notified = 0;
+    provider.addListener(() => notified++);
+    clock.advance(const Duration(minutes: 10, milliseconds: 500));
+    transport.batteryNotifications.add([1]);
+    expect(provider.displayBatteryLevel, -1);
+    expect(notified, 1, reason: 'the sample that lands before the timer publishes the change itself');
+    await tester.pump(const Duration(minutes: 11));
+    expect(notified, 1, reason: 'the timer does not publish it twice');
+  });
+
   testWidgets('first pairing hides a stuck near-empty reading and holds the low-battery alert', (tester) async {
     final transport = _ChargingTransport()..value = [0];
     final clock = _Clock();

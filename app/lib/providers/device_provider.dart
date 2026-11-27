@@ -167,6 +167,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   int _batteryDisplaySession = -1;
   Timer? _batteryDisplayTimer;
   final Set<BatteryHideReason> _reportedHideReasons = {};
+
+  /// Whether listeners were last told the number is hidden; null before this connection's first.
+  bool? _publishedBatteryHidden;
   bool isCharging = false;
   bool? _observedChargingStatus;
   bool? get observedChargingStatus => _observedChargingStatus;
@@ -731,13 +734,11 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     } else if (_firstChargeDeviceId == null) {
       _cancelBatteryRead();
     }
-    final wasHidden = batteryHideReason != null;
     _batteryDisplay.onSample(value, charging: isCharging);
     final notified = _updateBatteryLevel(value, refresh: refresh);
     _noteLowBattery(value);
-    _noteBatteryDisplay();
     // Ordinary changes keep the level throttle; only a number appearing or disappearing forces a rebuild.
-    final visibilityChanged = wasHidden != (batteryHideReason != null);
+    final visibilityChanged = _noteBatteryDisplay();
     if ((firstChargeResolved || visibilityChanged) && !notified) notifyListeners();
   }
 
@@ -748,6 +749,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _batteryDisplayTimer?.cancel();
     _batteryDisplayTimer = null;
     _reportedHideReasons.clear();
+    _publishedBatteryHidden = null;
     _batteryDisplay.beginConnection(deviceId);
     if (!_batteryDisplayGuardLoaded) {
       _batteryDisplayGuardLoaded = true;
@@ -764,10 +766,11 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   /// Publishes the shown battery to the iOS widget, reports a newly hidden reading
-  /// once per connection, and wakes the UI when a flat reading turns stale.
-  void _noteBatteryDisplay() {
+  /// once per connection, and wakes the UI when a flat reading turns stale. Returns
+  /// true when the number's visibility differs from what listeners were last told.
+  bool _noteBatteryDisplay() {
     final device = connectedDevice;
-    if (device == null) return;
+    if (device == null) return false;
     BatteryWidgetService().updateBatteryInfo(
       deviceName: device.name,
       batteryLevel: displayBatteryLevel,
@@ -779,18 +782,21 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     if (reason != null && _chargingStatusReady && _reportedHideReasons.add(reason)) {
       _reportBatteryHidden(reason);
     }
+    final hidden = reason != null;
+    final visibilityChanged = _publishedBatteryHidden != hidden;
+    _publishedBatteryHidden = hidden;
     _batteryDisplayTimer?.cancel();
     _batteryDisplayTimer = null;
     final wait = _batteryDisplay.untilFlat(batteryLevel, charging: isCharging);
-    if (wait == null) return;
-    final session = _batterySession;
-    _batteryDisplayTimer = Timer(wait + const Duration(seconds: 1), () {
-      _batteryDisplayTimer = null;
-      if (_isDisposed || session != _batterySession) return;
-      final hidden = batteryHideReason != null;
-      _noteBatteryDisplay();
-      if (hidden) notifyListeners();
-    });
+    if (wait != null) {
+      final session = _batterySession;
+      _batteryDisplayTimer = Timer(wait + const Duration(seconds: 1), () {
+        _batteryDisplayTimer = null;
+        if (_isDisposed || session != _batterySession) return;
+        if (_noteBatteryDisplay()) notifyListeners();
+      });
+    }
+    return visibilityChanged;
   }
 
   static void _emitBatteryHidden(BatteryHideReason reason) =>
@@ -964,10 +970,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _bleChargingStatusListener = listener;
     // If the initial read was unavailable, begin a bounded check once setup has
     // finished. Until then the default false value does not imply an unplug.
-    final wasHidden = batteryHideReason != null;
     _updateFirstChargeCheck(isCharging);
-    _noteBatteryDisplay();
-    if (wasHidden != (batteryHideReason != null)) notifyListeners();
+    if (_noteBatteryDisplay()) notifyListeners();
   }
 
   void _publishChargingStatus(bool charging) {
@@ -975,10 +979,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _observedChargingStatus = charging;
     final deviceId = connectedDevice?.id;
     if (deviceId != null) _batteryDisplay.onCharging(deviceId, charging);
-    final wasHidden = batteryHideReason != null;
     isCharging = charging;
-    _noteBatteryDisplay();
-    if (changed || wasHidden != (batteryHideReason != null)) notifyListeners();
+    final visibilityChanged = _noteBatteryDisplay();
+    if (changed || visibilityChanged) notifyListeners();
   }
 
   Future<void> _presentFullyChargedNotification(String deviceId) async {
