@@ -46,7 +46,7 @@ void main() {
     );
   });
 
-  test('refresh keeps an absent kill switch unresolved instead of reporting it off', () async {
+  test('refresh keeps an absent kill switch unresolved only for callers that require resolution', () async {
     await setRefactorFlags({});
     addTearDown(AnalyticsManager.resetForTesting);
     await _waitForSettledIdentity();
@@ -56,8 +56,34 @@ void main() {
         'android-custom-live-audio-recovery-kill',
         refresh: true,
       ),
+      isFalse,
+    );
+    expect(
+      await AnalyticsManager().resolvedBooleanFeatureFlag(
+        'android-custom-live-audio-recovery-kill',
+        refresh: true,
+        missingIsUnresolved: true,
+      ),
       isNull,
     );
+  });
+
+  test('flag refresh reports a transient fetch failure to retry owners', () async {
+    await setRefactorFlags({}, reloadFailures: 1);
+    addTearDown(AnalyticsManager.resetForTesting);
+    await _waitForSettledIdentity();
+    var refreshFailed = false;
+
+    expect(
+      await AnalyticsManager().resolvedBooleanFeatureFlag(
+        'android-custom-live-audio-recovery-kill',
+        refresh: true,
+        missingIsUnresolved: true,
+        onRefreshFailure: () => refreshFailed = true,
+      ),
+      isNull,
+    );
+    expect(refreshFailed, isTrue);
   });
 
   test('a resolved multivariate arm is not enabled as a boolean kill switch', () async {

@@ -609,15 +609,24 @@ class AnalyticsManager {
       false;
 
   /// Returns null while an authenticated flag answer is unavailable.
-  Future<bool?> resolvedBooleanFeatureFlag(String key, {required bool refresh}) => _readFlag<bool?>((adapter) async {
+  Future<bool?> resolvedBooleanFeatureFlag(
+    String key, {
+    required bool refresh,
+    bool missingIsUnresolved = false,
+    void Function()? onRefreshFailure,
+  }) =>
+      _readFlag<bool?>((adapter) async {
         if (adapter is! AnalyticsBooleanFlagAdapter) return null;
         final boolean = adapter as AnalyticsBooleanFlagAdapter;
-        if (refresh && await adapter.reloadFeatureFlags()) {
-          if (adapter is AnalyticsResolvedFlagAdapter) {
-            final resolved = await (adapter as AnalyticsResolvedFlagAdapter).resolvedFeatureEnabled(key);
-            if (resolved == null) return null;
+        if (refresh) {
+          if (await adapter.reloadFeatureFlags()) {
+            if (missingIsUnresolved && adapter is AnalyticsResolvedFlagAdapter) {
+              final resolved = await (adapter as AnalyticsResolvedFlagAdapter).resolvedFeatureEnabled(key);
+              if (resolved == null) return null;
+            }
+            return boolean.isBooleanFeatureEnabledCached(key);
           }
-          return boolean.isBooleanFeatureEnabledCached(key);
+          onRefreshFailure?.call();
         }
         if (adapter is AnalyticsResolvedFlagAdapter &&
             await (adapter as AnalyticsResolvedFlagAdapter).resolvedFeatureEnabled(key) != null) {

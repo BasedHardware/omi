@@ -204,6 +204,37 @@ void main() {
     expect(connection.captureIsCurrent?.call(), isTrue);
   });
 
+  test('a failed kill-switch fetch can retry on a later capture gate pass', () async {
+    AnalyticsManager.resetForTesting();
+    addTearDown(AnalyticsManager.resetForTesting);
+    world.controller.updateRecordingDevice(null);
+    await world.settle();
+    SharedPreferencesUtil().uid = 'capture-test-owner';
+    await SharedPreferencesUtil().saveCustomSttConfig(
+      const CustomSttConfig(provider: SttProvider.customLive, url: 'wss://local-stt.example.test'),
+    );
+    final device = BtDevice(id: 'limitless-fetch-retry', name: 'Limitless', type: DeviceType.limitless, rssi: -40);
+    final connection = _WatchedLimitlessConnection();
+    world.deviceConnection = connection;
+    await world.controller.streamDeviceRecording(device: device);
+    await world.settle();
+    expect(connection.watchStarts, 1);
+
+    final adapter = await setRefactorFlags({}, reloadFailures: 2);
+    await world.settle();
+    expect(connection.captureIsCurrent, isNull, reason: 'a failed flag fetch keeps recovery gated');
+
+    await world.elapse(const Duration(seconds: 5));
+    await world.settle();
+    expect(connection.captureIsCurrent, isNull, reason: 'one bounded fetch retry is allowed');
+
+    adapter.flags['android-custom-live-audio-recovery-kill'] = false;
+    await world.controller.onTranscriptionSettingsChanged();
+    await world.settle();
+    expect(connection.watchStarts, 2);
+    expect(connection.captureIsCurrent?.call(), isTrue);
+  });
+
   test('resolved kill switch prevents a Custom Live watch from being installed', () async {
     await setRefactorFlags({'android-custom-live-audio-recovery-kill': true});
     addTearDown(AnalyticsManager.resetForTesting);

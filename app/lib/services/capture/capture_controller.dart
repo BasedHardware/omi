@@ -289,6 +289,7 @@ class CaptureController extends ChangeNotifier
   int _customLiveAudioRecoveryFlagGeneration = 0;
   bool _customLiveAudioRecoveryFlagRefreshInFlight = false;
   int _customLiveAudioRecoveryFlagRetriesForEpoch = 0;
+  int _customLiveAudioRecoveryFlagFetchRetriesForEpoch = 0;
   Timer? _customLiveAudioRecoveryFlagRetryTimer;
 
   String get _captureEvidenceRoot {
@@ -2889,6 +2890,7 @@ class CaptureController extends ChangeNotifier
     _customLiveAudioRecoveryFlagIdentityEpoch = -1;
     _customLiveAudioRecoveryFlagRefreshInFlight = false;
     _customLiveAudioRecoveryFlagRetriesForEpoch = 0;
+    _customLiveAudioRecoveryFlagFetchRetriesForEpoch = 0;
     _customLiveAudioRecoveryFlagRetryTimer?.cancel();
     _customLiveAudioRecoveryFlagRetryTimer = null;
     _customLiveAudioRecoveryKillSwitchEnabled = null;
@@ -2903,9 +2905,12 @@ class CaptureController extends ChangeNotifier
     _customLiveAudioRecoveryFlagRefreshInFlight = true;
     final generation = _customLiveAudioRecoveryFlagGeneration;
     unawaited(() async {
+      var refreshFailed = false;
       final enabled = await AnalyticsManager().resolvedBooleanFeatureFlag(
         'android-custom-live-audio-recovery-kill',
         refresh: true,
+        missingIsUnresolved: true,
+        onRefreshFailure: () => refreshFailed = true,
       );
       if (_captureControllerDisposed ||
           generation != _customLiveAudioRecoveryFlagGeneration ||
@@ -2915,23 +2920,39 @@ class CaptureController extends ChangeNotifier
       _customLiveAudioRecoveryFlagRefreshInFlight = false;
       _customLiveAudioRecoveryKillSwitchEnabled = enabled;
       if (enabled == null) {
+        if (refreshFailed) {
+          if (_customLiveAudioRecoveryFlagFetchRetriesForEpoch == 0) {
+            _customLiveAudioRecoveryFlagFetchRetriesForEpoch = 1;
+            _scheduleCustomLiveAudioFlagRetry(generation, identityEpoch);
+          } else {
+            _customLiveAudioRecoveryFlagIdentityEpoch = -1;
+          }
+          return;
+        }
         if (_customLiveAudioRecoveryFlagRetriesForEpoch == 0) {
           _customLiveAudioRecoveryFlagRetriesForEpoch = 1;
-          _customLiveAudioRecoveryFlagRetryTimer = _scheduling.once(const Duration(seconds: 5), () {
-            _customLiveAudioRecoveryFlagRetryTimer = null;
-            if (generation != _customLiveAudioRecoveryFlagGeneration ||
-                identityEpoch != AnalyticsManager.identityEpoch) {
-              return;
-            }
-            _customLiveAudioRecoveryFlagIdentityEpoch = -1;
-            _refreshLimitlessCustomLiveWatch();
-          });
+          _scheduleCustomLiveAudioFlagRetry(generation, identityEpoch);
         }
       } else {
         _customLiveAudioRecoveryFlagRetriesForEpoch = 0;
+        _customLiveAudioRecoveryFlagFetchRetriesForEpoch = 0;
       }
       _refreshLimitlessCustomLiveWatch();
     }());
+  }
+
+  void _scheduleCustomLiveAudioFlagRetry(int generation, int identityEpoch) {
+    if (_customLiveAudioRecoveryFlagRetryTimer != null) return;
+    _customLiveAudioRecoveryFlagRetryTimer = _scheduling.once(const Duration(seconds: 5), () {
+      _customLiveAudioRecoveryFlagRetryTimer = null;
+      if (_captureControllerDisposed ||
+          generation != _customLiveAudioRecoveryFlagGeneration ||
+          identityEpoch != AnalyticsManager.identityEpoch) {
+        return;
+      }
+      _customLiveAudioRecoveryFlagIdentityEpoch = -1;
+      _refreshLimitlessCustomLiveWatch();
+    });
   }
 
   bool get _customLiveAudioRecoveryKilled {
@@ -3254,6 +3275,8 @@ class CaptureController extends ChangeNotifier
     _reconnectGraceTimer = null;
     _captureHealthTimer?.cancel();
     _captureHealthTimer = null;
+    _customLiveAudioRecoveryFlagRetryTimer?.cancel();
+    _customLiveAudioRecoveryFlagRetryTimer = null;
     _calendarGapTimer?.cancel();
     _calendarGapTimer = null;
     unawaited(_setIngressAuthorized(false));
