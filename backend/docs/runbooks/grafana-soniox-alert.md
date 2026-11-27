@@ -1,8 +1,8 @@
 # Soniox alert-only Grafana provisioning
 
-The Soniox routing release needs only `omi-batch-soniox-daily-hours`. Do not approve Grafana run `46045070289` for that purpose: its `workflow_dispatch` run uses `grafana_dashboard_provisioning.yml` at `3804359ea806d93a65e466bbccb52f187392119b`, whose production path can also update five Ops dashboards, two Business dashboards, and every drifted rule in the repository alert export except the separately managed Redis pilot. The alert set is upserted, not pruned. The Business dashboard step has no pre-apply backup or restore path, so that run has no executable inverse for its full planned write set.
+The Soniox routing release needs only `omi-batch-soniox-daily-hours`. Do not approve or re-dispatch Grafana run `46045070289`: it was cancelled on 2026-11-27. That run used `grafana_dashboard_provisioning.yml` at `3804359ea806d93a65e466bbccb52f187392119b`, whose production path can also update five Ops dashboards, two Business dashboards, and every drifted rule in the repository alert export except the separately managed Redis pilot. The alert set is upserted, not pruned. The Business dashboard step has no pre-apply backup or restore path, so that run has no executable inverse for its full planned write set.
 
-Keep that run's prod gate pending. After this workflow is merged to `main`, cancel the waiting broad run to release its alert concurrency group, then dispatch the scoped workflow below.
+The workflow display name in this PR, `Provision Soniox Grafana alert`, is provisional pending David's naming decision. Keep uncapped routing off. After David names the workflow and this change is merged to `main`, dispatch the scoped workflow below.
 
 ## Apply one rule
 
