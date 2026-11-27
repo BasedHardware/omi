@@ -378,21 +378,34 @@ A derived-budget park recorded before paging shipped, with indexed unlocked wind
 when it is recorded and waits out the usual backoff. See the [bounded pending](../listen_pusher_pipeline/changes/2026-11-26-v3-bounded-pending.md)
 and [bounded unlocked](../listen_pusher_pipeline/changes/2026-11-26-v3-bounded-unlocked.md) change notes.
 A one-seed closure still over the derived budget (one long recording owning hundreds of locked
-one-line windows) parks with `v3_bounded_pending_attempted` already set. To admit it:
+one-line windows) parks with `v3_bounded_pending_attempted` already set. The allowance ships with
+`CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS` unbound on every loader: the code default is empty, so nobody is
+admitted. Owner tags never go in Git (this repository is public), so the list reaches the loaders only
+through Secret Manager.
 
+**Before the first owner (once, its own change).** This step needs an operator with Secret Manager and
+IAM rights in `based-hardware`; Release's `ro-prod` identity cannot verify or create secrets or grants.
+1. The operator creates the secret `CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS` with version 1 payload `none`
+   (it admits nobody) and grants `roles/secretmanager.secretAccessor` on that secret to
+   `backend-runtime@based-hardware.iam.gserviceaccount.com`. They post the secret metadata and the grant on
+   SCA-2918, never the value.
+2. Only then, a small PR binds it on the four loaders in `deploy/runtime_env/prod.overlay.yaml`
+   (`secrets:` entry `CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS`, `secret` of the same name; the pump inherits
+   it from integration), adds `v3-locked-closure-owners` to the activation manifest over the same four
+   runtimes, and adds the binding to the approved secret-binding baseline. A binding to a secret that does
+   not exist stops the next revision of all four services from starting, so this PR merges only after
+   step 1's receipt.
+3. Roll the four loaders. Record the secret version their serving revisions read: equal `latest`
+   references cannot show they loaded the same version.
+
+**To admit an owner.**
 1. Take the owner's `owner=` tag from the `v3 reconcile blocked reason=v3_derived_budget` log line.
-2. Ask Release to add the tag to the secret version: a new version of the Secret Manager secret
-   `CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS` (project `based-hardware`) whose payload is the full
-   comma-separated tag list, through the normal secret workflow. Never put a tag in Git or in an env
-   edit: this repository is public. The first version's payload is `none`, which admits nobody.
-3. Release rolls a new revision of every runtime that runs `store.load()`: `backend` and
-   `backend-integration` (the on-open builder), and `backend-sync` and `backend-sync-backfill` (builder
-   tasks). All four bind `version: latest` (`deploy/runtime_env/prod.overlay.yaml`), so a revision reads
-   the newest version at startup; `backend-projection-pump` inherits the binding from integration. `pusher`
-   and `backend-listen` only mark pending and enqueue; they never load a closure. A loader still on an old
-   revision keeps parking the owner and re-arming its backoff until it rolls. The activation manifest
-   (`deploy/activation/conversations-v3.yaml`, `v3-locked-closure-*`) checks that the four bind the same
-   secret reference.
+2. The operator adds a new version of the secret whose payload is the full comma-separated tag list.
+   Never put a tag in Git or in an env edit.
+3. Roll a new revision of every runtime that runs `store.load()`: `backend` and `backend-integration`
+   (the on-open builder), and `backend-sync` and `backend-sync-backfill` (builder tasks; the task handler
+   can target either). `pusher` and `backend-listen` only mark pending and enqueue; they never load a
+   closure. A loader still on an old revision keeps parking the owner until it rolls.
 4. Clear the park as below.
 
 The next pass loads the locked claimants within the allowance and commits in at most
@@ -400,19 +413,30 @@ The next pass loads the locked claimants within the allowance and commits in at 
 commit would need more batches writes nothing and retries down the same ladder a load-time overflow
 uses, pending and unlocked seeds alike: 32 pending + 8 unlocked, then 8 + 8, then 1 + 1, then one seed of
 either kind. The step comes from the seeds the pass read, so it re-enters at most three times, and it parks
-only at one seed. Only builder passes get the allowance: derive
-and re-derive keep their partition bounds, so a heavy derive is planned as its own run.
+only at one seed. Only builder passes get the allowance: derive and re-derive keep their partition bounds,
+so a heavy derive is planned as its own run.
 
-**Per-owner ceiling.** While pending remains, a pending-seeded request can run up to 3 inline passes, and
-the owner is woken again each minute. Without a cap that is up to 3 x 30k reads a minute (about 130M a
-day) for one listed owner. `CONVERSATIONS_V3_LOCKED_DAILY_PASSES` (default 48) caps allowance
-**attempts** per owner per UTC day: a builder load past the origin bound counts one on the builder lease
-before any paid work, whether the pass then commits, fails or parks. A spent day, or a count that cannot
-be written, gives the origin bound (the owner parks as before). The bound is about 48 x 30k = 1.44M reads,
-plus parked retries at the origin bound (up to about 24 a day at about 6.5k reads). In total that is about
-1.6M reads per listed owner per day. Under lock contention a commit batch can re-run up to 5 times, so the
-pathological ceiling is about 48 x 125k, about 6.2M a day per owner. Admit owners one at a time first. A step expected to exceed 10M reads a day (more than about six listed owners at the cap) needs
-the Firestore cost owner (SCA-2173).
+**Per-owner daily budget.** While pending remains, a pending-seeded request can run up to 3 inline passes,
+and the owner is woken again each minute, so the budget counts attempts. Every builder load of a listed
+owner charges one attempt to `v3_locked_day` / `v3_locked_passes` on the builder lease, in its own
+transaction under the held lease, before the load reads anything. That covers a capped attempt and each
+smaller-page retry, a commit interrupted after a committed prefix, a smaller page that fits the origin
+bound, and a parked pass. `CONVERSATIONS_V3_LOCKED_DAILY_PASSES` (default 20) is the day's budget. A
+spent day, a lease that is not held, or a charge that cannot be written loads with the origin bound, so
+the owner parks as before.
+
+The ceiling is attempts x the most one attempt can read:
+- the charge: 1 read and 1 write, at most three tries;
+- the load: up to about 5.3k reads (3,072 rows at the measured 1.6 reads per row, plus up to 400 sources);
+- the commit: up to about 24k reads, and each batch runs at most three transactions under main's contention
+  retry, so up to about 72k;
+- renewals: a few reads.
+
+That is about 78k reads per attempt, and 20 x 78k, about **1.6M reads per listed owner per day**, as a
+ceiling. Measured attempts read 6.5k to 22k, so a typical day is well under it. Parked retries after the
+budget is spent run at the origin bound, as for any parked owner today. Admit owners one at a time first. A
+step expected to exceed 10M reads a day (more than about six listed owners) needs the Firestore cost owner
+(SCA-2173).
 
 An owner that still parks needs the fragment repair (SCA-2918). To undo, add a secret version without the tag (or `none`) and roll the four loaders.
 `CONVERSATIONS_V3_COMMIT_LEASE_RENEWAL=off` stops the lease renewal before each later projection batch.

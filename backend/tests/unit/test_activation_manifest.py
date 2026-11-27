@@ -285,7 +285,7 @@ def test_v3_manifest_matches_the_code_it_declares(manifest):
 
 
 def test_v3_manifest_env_is_declared_in_the_prod_runtime_source(manifest):
-    """Each required key reaches each runtime in the composed prod runtime env (direct, secret, ConfigMap or envFrom)."""
+    """Each required key reaches each runtime in the composed prod runtime env (direct, ConfigMap or envFrom)."""
     import yaml
 
     # The composed manifest is large enough to exceed the unit CPU budget with the pure Python parser.
@@ -297,8 +297,7 @@ def test_v3_manifest_env_is_declared_in_the_prod_runtime_source(manifest):
         if runtime in prod['gke']:
             return set(prod['gke'][runtime].get('env', {})) | shared_config_map
         service = prod['cloud_run']['services'].get(runtime)
-        # A Secret Manager binding (a uid-bearing list in this public repo) reaches the runtime as env too.
-        return None if service is None else set(service.get('env', {})) | set(service.get('secrets', {}))
+        return None if service is None else set(service.get('env', {}))
 
     for req in manifest['env']:
         # Keys with a code default are checked too: the source must still declare them for every runtime.

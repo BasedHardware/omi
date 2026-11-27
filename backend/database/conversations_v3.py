@@ -108,12 +108,14 @@ def _env_allowance(name, default):
 LOCKED_DERIVED_ALLOWANCE = _env_allowance('CONVERSATIONS_V3_LOCKED_DERIVED_ALLOWANCE', 2048)
 LOCKED_DERIVED_BYTES = _env_allowance('CONVERSATIONS_V3_LOCKED_DERIVED_BYTES', 8 * 1024 * 1024)
 LOCKED_MAX_BATCHES = _env_int('CONVERSATIONS_V3_LOCKED_MAX_BATCHES', 6)
-# A listed owner may run up to 3 inline passes per request while pending remains, so the per-owner ceiling is
-# set by passes, not by one pass: at most this many allowance ATTEMPTS per owner per UTC day, counted when a
-# builder load first exceeds the origin bound (before any paid work), whether the pass then commits, fails or
-# parks. At the cap, or if the count cannot be written, the pass gets the origin bound (and parks if it
-# overflows, at today's retry cost). 0 turns the allowance off.
-LOCKED_DAILY_PASSES = _env_allowance('CONVERSATIONS_V3_LOCKED_DAILY_PASSES', 48)
+# The per-owner daily budget, in allowance ATTEMPTS: every builder load of a listed owner is charged one on the
+# builder lease before it reads anything, whether it then commits, hits the batch cap and retries smaller, fits
+# the origin bound, is interrupted after a committed prefix, or parks. A spent day, or a charge that cannot be
+# written, loads with the origin bound. The ceiling is attempts x the most one attempt can read: the charge, a load
+# of up to about 5.3k reads, and a commit of up to about 24k reads whose batches each run at most three
+# transactions (main's contention retry), so about 78k; 20 x 78k is about 1.6M reads per listed owner per day.
+# 0 turns the allowance off.
+LOCKED_DAILY_PASSES = _env_allowance('CONVERSATIONS_V3_LOCKED_DAILY_PASSES', 20)
 LOCKED_DAY_FIELD, LOCKED_PASSES_FIELD = 'v3_locked_day', 'v3_locked_passes'
 CLAIM_READ_CHUNK = 100
 
@@ -586,18 +588,21 @@ def _locked_passes_today(lease, now=None):
     return int(lease.get(LOCKED_PASSES_FIELD) or 0) if lease.get(LOCKED_DAY_FIELD) == day else 0
 
 
-def _count_locked_attempt(client, uid, now=None):
-    """Count one locked-closure attempt on the owner's UTC day, before any paid work or write.
+def _charge_locked_attempt(client, uid, now=None):
+    """Charge one allowance attempt to the owner's UTC day under the held builder lease, before the load reads.
 
-    Attempts, not commits: a pass that later fails, races or parks still spent its load and outline, so the daily
-    cap (LOCKED_DAILY_PASSES) bounds every allowance pass. The count is re-checked in the transaction. False, the
-    origin bound, when the day is spent or the count cannot be written: the counter never becomes a new failure."""
+    Attempts, not commits (Release FIX-FIRST and panel F2 on #26443): every builder load of a listed owner spends
+    one, so the daily cap bounds capped retries, interrupted commits and smaller pages alike. The day's count is
+    checked inside the transaction. False, today's bound, when the lease is not held, the day is spent, or the charge
+    cannot be written: the charge never becomes a failure of its own."""
     ref = leases.lease_ref(client, uid, 'builder')
 
     @firestore.transactional
-    def count(tx):
+    def charge(tx):
         lease = ref.get(transaction=tx).to_dict() or {}
         at = now or datetime.now(timezone.utc)
+        if not lease.get('token') or not lease.get('until') or lease['until'] <= at:
+            return False
         used = _locked_passes_today(lease, at)
         if used >= LOCKED_DAILY_PASSES:
             return False
@@ -605,29 +610,29 @@ def _count_locked_attempt(client, uid, now=None):
         return True
 
     try:
-        counted = bool(run_preloaded_transaction_with_contention_retry(client, count))
+        charged = bool(run_preloaded_transaction_with_contention_retry(client, charge))
     except Exception as error:
         metrics.safe_metric(
             lambda: logger.warning(
-                'event=v3_locked_closure_count outcome=failed exception_type=%s', type(error).__name__
+                'event=v3_locked_closure_charge outcome=failed exception_type=%s', type(error).__name__
             )
         )
         return False
-    if not counted:
-        metrics.safe_metric(lambda: logger.info('event=v3_locked_closure_count outcome=daily_cap'))
-    return counted
+    if not charged:
+        metrics.safe_metric(lambda: logger.info('event=v3_locked_closure_charge outcome=refused'))
+    return charged
 
 
-def _locked_allowance(uid, lease=None, *, key='builder'):
-    """(rows, bytes) the closure may add for locked claimants; (0, 0) off the allowlist, when switched off, for
-    any pass but a builder pass, or (given the builder lease) once the owner has used today's committed
-    allowance passes. Builder passes only, so the batch cap and the daily cap apply wherever the allowance
-    does: derive and re-derive keep their own partition bounds, and a heavy derive is planned as its own run."""
+def _locked_allowance(uid, *, key='builder'):
+    """(rows, bytes) the closure may add for locked claimants; (0, 0) off the allowlist, when switched off, or for
+    any pass but a builder pass. Builder passes only, so the batch cap and the daily cap apply wherever the
+    allowance does: derive and re-derive keep their own partition bounds, and a heavy derive is planned as its own
+    run. load() also needs the attempt charged (_charge_locked_attempt) before it uses these sizes."""
     if key != 'builder':
         return 0, 0
-    if not LOCKED_DERIVED_ALLOWANCE or not LOCKED_DERIVED_BYTES or not locked_closure_owner(uid):
+    if not LOCKED_DERIVED_ALLOWANCE or not LOCKED_DERIVED_BYTES or not LOCKED_DAILY_PASSES:
         return 0, 0
-    if lease is not None and _locked_passes_today(lease) >= LOCKED_DAILY_PASSES:
+    if not locked_closure_owner(uid):
         return 0, 0
     return LOCKED_DERIVED_ALLOWANCE, LOCKED_DERIVED_BYTES
 
@@ -676,6 +681,10 @@ def load(
     client = firestore_client or get_firestore_client()
     if account_deletion_blocks_user_work(uid):
         raise Conflict('account_deletion')
+    # A listed owner's builder load is an allowance attempt: charged before it reads, or it gets today's bound.
+    allowed = _locked_allowance(uid, key='builder')
+    if allowed != (0, 0) and not _charge_locked_attempt(client, uid):
+        allowed = (0, 0)
     coll = user_conversations(client, uid)
     silence_gap = timedelta(seconds=boundary_seconds(cohesion=stretch_cohesion_enabled())[0])
     margin = max(timedelta(minutes=20), silence_gap)
@@ -745,7 +754,7 @@ def load(
     queried = set()
     by_claims = closure_by_claims()
     # load() is the builder pass's loader (it reads the builder lease); derive uses load_derive.
-    extra_rows, extra_bytes = _locked_allowance(uid, state, key='builder')
+    extra_rows, extra_bytes = allowed
     row_limit = DERIVED_LIMIT + extra_rows
     sizes = {cid: _encoded_bytes(row.get('transcript_segments') or []) for cid, row in existing.items()}
     locked = {cid for cid, row in existing.items() if locked_claimant(row)}
@@ -899,9 +908,6 @@ def load(
             continue
         if policy.builder_eligible({**unreadable[rid], '_v3_unreadable': False}):
             raise Conflict('recording_decode_unavailable')
-    if extra_rows and _past_origin_bound(uid, existing) and not _count_locked_attempt(client, uid):
-        # Over today's attempts, or the count could not be written: today's bound, which this closure exceeds.
-        raise Conflict('v3_derived_budget')
     _mark_successor_pending(coll, recordings)
     attach_finish_predecessors(coll, recordings, existing)
     if unlocked_page is not None:

@@ -841,13 +841,13 @@ def test_park_with_indexed_unlocked_windows_spends_the_paging_attempt(strict):
 
 
 def allowance(monkeypatch, rows, nbytes=1 << 30, owners='*', counted=True):
-    """List the owner and stand in for the attempt counter (its own tests use a transactional client)."""
+    """List the owner and stand in for the attempt charge (its own tests use a transactional client)."""
     monkeypatch.setenv('CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS', owners)
     monkeypatch.setattr(store, 'DERIVED_LIMIT', 10)
     monkeypatch.setattr(store, 'LOCKED_DERIVED_ALLOWANCE', rows)
     monkeypatch.setattr(store, 'LOCKED_DERIVED_BYTES', nbytes)
     attempts = []
-    monkeypatch.setattr(store, '_count_locked_attempt', lambda client, uid: attempts.append(uid) or counted)
+    monkeypatch.setattr(store, '_charge_locked_attempt', lambda client, uid: attempts.append(uid) or counted)
     return attempts
 
 
@@ -1191,69 +1191,71 @@ def builder_lease(strict, day_lease=None):
         ({'v3_locked_day': '2026-01-01', 'v3_locked_passes': 9}, 1),
     ],
 )
-def test_an_allowance_attempt_counts_against_the_owners_day(strict, seeded, expected):
+def test_an_allowance_attempt_is_charged_to_the_owners_day(strict, seeded, expected):
     if seeded and seeded['v3_locked_day'] == 'today':
         seeded = {**seeded, 'v3_locked_day': TODAY()}
     builder_lease(strict, seeded)
-    assert store._count_locked_attempt(strict, UID) is True
+    assert store._charge_locked_attempt(strict, UID) is True
     assert (lease_doc(strict)['v3_locked_day'], lease_doc(strict)['v3_locked_passes']) == (TODAY(), expected)
 
 
-def test_the_attempt_count_is_rechecked_in_its_transaction(strict, monkeypatch):
-    # A concurrent pass spent the last attempt after this pass read its lease: the transaction refuses it.
-    monkeypatch.setattr(store, 'LOCKED_DAILY_PASSES', 3)
-    builder_lease(strict, {'v3_locked_day': TODAY(), 'v3_locked_passes': 3})
-    assert store._count_locked_attempt(strict, UID) is False
-    assert lease_doc(strict)['v3_locked_passes'] == 3
+@pytest.mark.parametrize('used, charged', [(19, True), (20, False)])
+def test_the_day_holds_twenty_attempts_checked_in_the_charge_transaction(strict, used, charged):
+    # The default budget; a concurrent pass that spent the last attempt after this one was admitted is refused here.
+    assert store.LOCKED_DAILY_PASSES == 20
+    builder_lease(strict, {'v3_locked_day': TODAY(), 'v3_locked_passes': used})
+    assert store._charge_locked_attempt(strict, UID) is charged
+    assert lease_doc(strict)['v3_locked_passes'] == used + charged
+
+
+def test_an_attempt_is_charged_only_under_a_held_builder_lease(strict):
+    builder_lease(strict)
+    lease_doc(strict)['until'] = datetime.now(timezone.utc) - timedelta(seconds=1)
+    assert store._charge_locked_attempt(strict, UID) is False
+    assert 'v3_locked_passes' not in lease_doc(strict)
 
 
 @pytest.mark.parametrize('error', [FirestoreContentionExhausted('lease contention'), RuntimeError('unavailable')])
-def test_an_unwritable_count_fails_closed_to_the_origin_bound(strict, monkeypatch, error):
+def test_an_unwritable_charge_fails_closed_to_the_origin_bound(strict, monkeypatch, error):
     builder_lease(strict)
 
     def fail(*a, **kw):
         raise error
 
     monkeypatch.setattr(store, 'run_preloaded_transaction_with_contention_retry', fail)
-    assert store._count_locked_attempt(strict, UID) is False
+    assert store._charge_locked_attempt(strict, UID) is False
 
 
-def test_a_load_past_the_origin_bound_counts_one_attempt_before_any_paid_work(monkeypatch):
+@pytest.mark.parametrize('rows', [30, 10])
+def test_every_listed_builder_load_is_charged_before_it_reads(monkeypatch, rows):
+    # Charged whether the closure then uses the allowance (30) or fits the origin bound (10, the smaller page after
+    # a capped attempt), and whatever the pass does next: commit, cap retry, interrupted prefix or park.
     attempts = allowance(monkeypatch, 20)
-    store.load('u', firestore_client=MemoryQuery(fragmented(30)))
-    assert attempts == ['u']  # counted at load, whether the pass then commits, fails or parks
+    reads = []
+    real = MemoryQuery.stream
+    monkeypatch.setattr(MemoryQuery, 'stream', lambda self: reads.append(list(attempts)) or real(self))
+    store.load('u', firestore_client=MemoryQuery(fragmented(rows)))
+    assert attempts == ['u'] and reads and reads[0] == ['u']  # charged before the first query
 
 
-def test_a_load_within_the_origin_bound_is_not_an_attempt(monkeypatch):
-    attempts = allowance(monkeypatch, 20)
+def test_an_unlisted_owner_is_never_charged(monkeypatch):
+    attempts = allowance(monkeypatch, 20, owners='')
     store.load('u', firestore_client=MemoryQuery(fragmented(10)))
     assert attempts == []
 
 
-def test_an_uncounted_attempt_gets_the_origin_bound(monkeypatch):
-    # Over the day's attempts in the transaction, or the count could not be written.
+def test_an_uncharged_attempt_gets_the_origin_bound(monkeypatch):
+    # The day is spent, the lease is not held, or the charge could not be written.
     attempts = allowance(monkeypatch, 20, counted=False)
     with pytest.raises(Conflict, match='v3_derived_budget'):
         store.load('u', firestore_client=MemoryQuery(fragmented(30)))
-    assert attempts == ['u']
     assert len(store.load('u', firestore_client=MemoryQuery(fragmented(10)))[1]) == 10
+    assert attempts == ['u', 'u']
 
 
-def test_a_commit_no_longer_counts(strict, monkeypatch):
+def test_a_commit_charges_nothing(strict, monkeypatch):
     heavy_commit(strict, monkeypatch, listed=True, past_bound='rows', cap=6)
     assert 'v3_locked_passes' not in lease_doc(strict)
-
-
-@pytest.mark.parametrize('used, loads', [(47, True), (48, False)])
-def test_the_daily_pass_cap_turns_the_allowance_off_for_the_rest_of_the_day(monkeypatch, used, loads):
-    allowance(monkeypatch, 20)
-    rows = fragmented(30)
-    rows['/users/u/conversation_v3_leases/builder'] = {'v3_locked_day': TODAY(), 'v3_locked_passes': used}
-    if loads:
-        assert len(store.load('u', firestore_client=MemoryQuery(rows))[1]) == 30
-    else:
-        with pytest.raises(Conflict, match='v3_derived_budget'):
-            store.load('u', firestore_client=MemoryQuery(rows))
 
 
 # ---- builder passes only: derive and re-derive keep today's bound (Home v3 lead ruling, 2026-11-27) ----------

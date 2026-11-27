@@ -28,25 +28,23 @@ allowance keeps the batch count from being driven by stored speech.
 
 **Per-owner ceiling.** While pending remains, a pending-seeded request runs up to 3 inline passes, and the owner is
 woken each minute. Uncapped, one listed owner could therefore spend up to 3 x 30k reads a minute (about 130M a day).
-`CONVERSATIONS_V3_LOCKED_DAILY_PASSES` (default 48) caps allowance **attempts** per owner per UTC day, not commits. A
-builder load that first exceeds the origin bound counts one attempt (`v3_locked_day`, `v3_locked_passes` on the builder
-lease) in its own small transaction, before the outline or any write, re-checking the cap. A pass that then fails,
-races, hits the batch cap or parks has still spent its attempt; each batch-cap retry that loads past the origin bound
-is another attempt. If the day is spent, or the count cannot be written (contention exhausted, Firestore error), the
-pass gets the origin bound, which this closure exceeds, so it falls down the load ladder and parks as before. The
-counter never adds a failure of its own.
+`CONVERSATIONS_V3_LOCKED_DAILY_PASSES` (default 20) is a per-owner budget of allowance **attempts** per UTC day, not
+commits. Every builder load of a listed owner charges one (`v3_locked_day`, `v3_locked_passes` on the builder lease) in
+its own transaction under the held lease, before the load reads anything. So a capped attempt and each smaller-page
+retry, a commit interrupted after a committed prefix, a smaller page that fits the origin bound, and a parked pass are
+all charged. A spent day, a lease that is not held, or a charge that cannot be written (contention exhausted, a
+Firestore error) loads with the origin bound, so the owner parks as before. The charge never adds a failure of its
+own.
 
-Worst case per listed owner per day:
-- an attempt costs its load (up to about 4.5k reads), the count (1 read, 1 write) and a commit of up to about 24k
-  reads; a capped attempt reads nothing at commit;
-- under lock contention a commit batch can re-run, up to 5 transaction attempts per batch (main's retry policy), so
-  the pathological ceiling for one attempt is about 4.5k + 5 x 24k, about 125k reads;
-- 48 attempts: about 1.44M reads without contention, about 6M at the pathological ceiling;
-- parked retries after the cap run at the origin bound: up to about 24 a day (backoff), each a load ladder of up to
-  about 6.5k reads, so about 0.16M.
+The ceiling is derived from that counter as attempts x the most one attempt can read:
+- the charge: 1 read and 1 write, at most three tries;
+- the load: up to about 5.3k reads;
+- the commit: up to about 24k reads; each batch runs at most three transactions under main's contention retry, so
+  up to about 72k;
+- renewals: a few reads.
 
-So about 1.6M reads per listed owner per day in practice, and at most about 6.2M if every batch of every attempt
-exhausts its contention retries.
+That is about 78k per attempt, and 20 x 78k, **about 1.6M reads per listed owner per day**. The measured attempts read
+6.5k to 22k. Parked retries after the budget is spent run at the origin bound, at today's cost for any parked owner.
 
 **Lease.** The caller renews the pass's lease (`builder`, or `backfill-builder` for a derive pass) once before the
 commit. The commit now renews it before every later batch, so a 6-batch commit cannot outlive the 240 s lease after
@@ -79,16 +77,21 @@ batch cap and daily passes must agree on the four loaders, and the activation ma
 (`deploy/activation/conversations-v3.yaml`, `v3-locked-closure-*`) requires one value. Lease renewal is decided per
 commit, so it is not in the manifest.
 
-**Owner list in Secret Manager.** This repository is public, so owner tags never go in Git. The four loaders bind
-`CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS` to the Secret Manager secret of the same name, `version: latest`. Release
-provisions it, with first version `none` and `secretAccessor` for `backend-runtime@`, before this change merges: a
-Cloud Run revision bound to a missing secret does not start. Admitting an owner is a new secret version, then a new
-revision on the four loaders. The four size keys stay literal in the prod overlay, at the code defaults.
+**Owner list: unbound in this change.** This repository is public, so owner tags never go in Git.
+`CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS` ships unbound on all four loaders; its code default is empty, so nobody is
+admitted. Admission needs a later, separate change, which needs an operator with Secret Manager and IAM rights:
+1. provision the secret `CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS` (version 1 `none`, `secretAccessor` for
+   `backend-runtime@`);
+2. then a small PR binds it on the four loaders and adds `v3-locked-closure-owners` to the activation manifest;
+3. then roll.
+
+Each owner after that is a new secret version and a roll; see the runbook. The four numeric keys are literal in the
+prod overlay, at the code defaults.
 
 **Refinement.** Serving backend-sync runs 300/300 timing, so the live planner never offers refinement. Under
 custom timing it is offered, one merge of 2 to 8 donors per pass, and the fixture keeps custody either way.
 
 **Rollout.** Off by default. List one parked owner whose closure is at most 1,200 rows, then five (at most about 8M
 reads a day at the cap), then all parked owners. Listing more than about six owners, `*`, or any step that expects
-more than 10M reads a day needs a yes from the Firestore cost owner (SCA-2173). Roll back with a secret version of `none` and a revision roll. A follow-up should fence unchanged locked rows
+more than 10M reads a day needs a yes from the Firestore cost owner (SCA-2173). Roll back with a secret version of `none` and a revision roll (or, before the binding change, there is nothing to roll back). A follow-up should fence unchanged locked rows
 once, not in every batch, which would cut commit reads from about 12k to about 3k per heavy pass.

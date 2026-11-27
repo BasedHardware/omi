@@ -611,11 +611,6 @@ overlay:
         - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
         - REPEAT_WORK_REVISION_ENABLED
         secrets:
-          # SCA-2918 locked-closure admission list (owner tags). The payload lives only in Secret Manager: this repo
-          # is public. Release provisions the secret; admitting an owner is a new secret version plus a new revision.
-          CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS:
-            secret: CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS
-            version: latest
           CONVERSATIONS_V3_LIVE_RECAP_COHORT:
             secret: CONVERSATIONS_V3_LIVE_RECAP_COHORT
             version: '1'
@@ -658,11 +653,12 @@ overlay:
             secret: PLAY_ACCOUNT_ID_HMAC_KEY
             version: latest
         env:
-          # SCA-2918 locked-closure sizes: one value on every closure loader (activation manifest).
+          # SCA-2918 locked-closure sizes: one value on every closure loader (activation manifest). The owner list
+          # (CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS) is unbound here: nobody is admitted until its secret is bound.
           CONVERSATIONS_V3_LOCKED_DERIVED_ALLOWANCE: {value: '2048', category: config}
           CONVERSATIONS_V3_LOCKED_DERIVED_BYTES: {value: '8388608', category: config}
           CONVERSATIONS_V3_LOCKED_MAX_BATCHES: {value: '6', category: config}
-          CONVERSATIONS_V3_LOCKED_DAILY_PASSES: {value: '48', category: config}
+          CONVERSATIONS_V3_LOCKED_DAILY_PASSES: {value: '20', category: config}
           CONVERSATIONS_V3_LIVE_TITLE: {value: 'on', category: ops_kill}
           CONVERSATIONS_V3_FAST_FINISH: {value: 'on', category: ops_kill}
           CONVERSATIONS_V3_FAST_FINISH_CHUNKED: {value: 'on', category: ops_kill}
@@ -1082,11 +1078,6 @@ overlay:
         - SYNC_REPROCESS_COALESCE_ENABLED
         - REPEAT_WORK_REVISION_ENABLED
         secrets:
-          # SCA-2918 locked-closure admission list (owner tags). The payload lives only in Secret Manager: this repo
-          # is public. Release provisions the secret; admitting an owner is a new secret version plus a new revision.
-          CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS:
-            secret: CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS
-            version: latest
           SONIOX_API_KEY:
             secret: SONIOX_API_KEY
             version: latest
@@ -1094,11 +1085,12 @@ overlay:
             secret: DREAM_AGENT_FEEDBACK_SALT
             version: latest
         env:
-          # SCA-2918 locked-closure sizes: one value on every closure loader (activation manifest).
+          # SCA-2918 locked-closure sizes: one value on every closure loader (activation manifest). The owner list
+          # (CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS) is unbound here: nobody is admitted until its secret is bound.
           CONVERSATIONS_V3_LOCKED_DERIVED_ALLOWANCE: {value: '2048', category: config}
           CONVERSATIONS_V3_LOCKED_DERIVED_BYTES: {value: '8388608', category: config}
           CONVERSATIONS_V3_LOCKED_MAX_BATCHES: {value: '6', category: config}
-          CONVERSATIONS_V3_LOCKED_DAILY_PASSES: {value: '48', category: config}
+          CONVERSATIONS_V3_LOCKED_DAILY_PASSES: {value: '20', category: config}
           CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED:
             value: 'off'
             category: rollout
@@ -1522,11 +1514,6 @@ overlay:
         service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
       backend-sync-backfill:
         secrets:
-          # SCA-2918 locked-closure admission list (owner tags). The payload lives only in Secret Manager: this repo
-          # is public. Release provisions the secret; admitting an owner is a new secret version plus a new revision.
-          CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS:
-            secret: CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS
-            version: latest
           SONIOX_API_KEY:
             secret: SONIOX_API_KEY
             version: latest
@@ -1546,11 +1533,12 @@ overlay:
         - SYNC_REPROCESS_COALESCE_ENABLED
         - REPEAT_WORK_REVISION_ENABLED
         env:
-          # SCA-2918 locked-closure sizes: one value on every closure loader (activation manifest).
+          # SCA-2918 locked-closure sizes: one value on every closure loader (activation manifest). The owner list
+          # (CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS) is unbound here: nobody is admitted until its secret is bound.
           CONVERSATIONS_V3_LOCKED_DERIVED_ALLOWANCE: {value: '2048', category: config}
           CONVERSATIONS_V3_LOCKED_DERIVED_BYTES: {value: '8388608', category: config}
           CONVERSATIONS_V3_LOCKED_MAX_BATCHES: {value: '6', category: config}
-          CONVERSATIONS_V3_LOCKED_DAILY_PASSES: {value: '48', category: config}
+          CONVERSATIONS_V3_LOCKED_DAILY_PASSES: {value: '20', category: config}
           CONVERSATIONS_V3_LIVE_TITLE: {value: 'on', category: ops_kill}
           CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED:
             value: 'off'
@@ -1926,11 +1914,6 @@ overlay:
       backend-integration:
         # Approved recovery-only binding; op1 pre-binds and verifies access before deploy.
         secrets:
-          # SCA-2918 locked-closure admission list (owner tags). The payload lives only in Secret Manager: this repo
-          # is public. Release provisions the secret; admitting an owner is a new secret version plus a new revision.
-          CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS:
-            secret: CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS
-            version: latest
           SONIOX_API_KEY:
             secret: SONIOX_API_KEY
             version: latest
@@ -1950,11 +1933,12 @@ overlay:
         - REPEAT_WORK_REVISION_ENABLED
         - HOSTED_DIARIZATION_API_URL
         env:
-          # SCA-2918 locked-closure sizes: one value on every closure loader (activation manifest).
+          # SCA-2918 locked-closure sizes: one value on every closure loader (activation manifest). The owner list
+          # (CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS) is unbound here: nobody is admitted until its secret is bound.
           CONVERSATIONS_V3_LOCKED_DERIVED_ALLOWANCE: {value: '2048', category: config}
           CONVERSATIONS_V3_LOCKED_DERIVED_BYTES: {value: '8388608', category: config}
           CONVERSATIONS_V3_LOCKED_MAX_BATCHES: {value: '6', category: config}
-          CONVERSATIONS_V3_LOCKED_DAILY_PASSES: {value: '48', category: config}
+          CONVERSATIONS_V3_LOCKED_DAILY_PASSES: {value: '20', category: config}
           CONVERSATIONS_V3_LIVE_TITLE: {value: 'off', category: ops_kill}
           CONVERSATIONS_V3_FAST_FINISH: {value: 'on', category: ops_kill}
           CONVERSATIONS_V3_FAST_FINISH_CHUNKED: {value: 'on', category: ops_kill}

@@ -4111,9 +4111,6 @@ environments:
             SCREEN_FRAME_SIGNING_SECRET:
               secret: SCREEN_FRAME_SIGNING_SECRET
               version: latest
-            CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS:
-              secret: CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS
-              version: latest
             CONVERSATIONS_V3_LIVE_RECAP_COHORT:
               secret: CONVERSATIONS_V3_LIVE_RECAP_COHORT
               version: '1'
@@ -4461,7 +4458,7 @@ environments:
               value: '6'
               category: config
             CONVERSATIONS_V3_LOCKED_DAILY_PASSES:
-              value: '48'
+              value: '20'
               category: config
             CONVERSATIONS_V3_LIVE_TITLE:
               value: 'on'
@@ -4764,9 +4761,6 @@ environments:
               version: latest
             GOOGLE_MAPS_API_KEY:
               secret: GOOGLE_MAPS_API_KEY
-              version: latest
-            CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS:
-              secret: CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS
               version: latest
             SONIOX_API_KEY:
               secret: SONIOX_API_KEY
@@ -5074,7 +5068,7 @@ environments:
               value: '6'
               category: config
             CONVERSATIONS_V3_LOCKED_DAILY_PASSES:
-              value: '48'
+              value: '20'
               category: config
             CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED: {value: 'off', category: rollout}
             CONVERSATIONS_V3_BACKFILL:
@@ -5363,9 +5357,6 @@ environments:
               version: latest
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
-              version: latest
-            CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS:
-              secret: CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS
               version: latest
             SONIOX_API_KEY:
               secret: SONIOX_API_KEY
@@ -5656,7 +5647,7 @@ environments:
               value: '6'
               category: config
             CONVERSATIONS_V3_LOCKED_DAILY_PASSES:
-              value: '48'
+              value: '20'
               category: config
             CONVERSATIONS_V3_LIVE_TITLE:
               value: 'on'
@@ -5931,9 +5922,6 @@ environments:
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
-            CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS:
-              secret: CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS
-              version: latest
             SONIOX_API_KEY:
               secret: SONIOX_API_KEY
               version: latest
@@ -6182,7 +6170,7 @@ environments:
               value: '6'
               category: config
             CONVERSATIONS_V3_LOCKED_DAILY_PASSES:
-              value: '48'
+              value: '20'
               category: config
             CONVERSATIONS_V3_LIVE_TITLE:
               value: 'off'
@@ -6462,9 +6450,6 @@ environments:
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
-            CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS:
-              secret: CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS
-              version: latest
             SONIOX_API_KEY:
               secret: SONIOX_API_KEY
               version: latest
@@ -6713,7 +6698,7 @@ environments:
               value: '6'
               category: config
             CONVERSATIONS_V3_LOCKED_DAILY_PASSES:
-              value: '48'
+              value: '20'
               category: config
             CONVERSATIONS_V3_LIVE_TITLE:
               value: 'on'

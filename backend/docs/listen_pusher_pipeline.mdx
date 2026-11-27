@@ -150,13 +150,14 @@ restore the recorded clock at the default timing; custom timing always uses land
 [short-topic sit-down change note](./listen_pusher_pipeline/changes/2026-11-25-v3-short-topic-sitdown.md).
 
 `CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS` defaults to empty (off). It lists owner tags
-(`sha256(uid)[:12]`, the `owner=` tag of the blocked log) or `*`. Its prod value comes only from the
-Secret Manager secret of the same name (`version: latest`; this repository is public), first version
-`none`. It is read by every runtime that runs builder passes (`store.load()`): the on-open builder on
-`backend` and `backend-integration`, and builder tasks on `backend-sync` and `backend-sync-backfill`.
-`pusher` and `backend-listen` only mark pending and enqueue. The list and the sizes, cap and daily
-passes below must have one value on all four loaders (`deploy/activation/conversations-v3.yaml`,
-`v3-locked-closure-*`). Only builder passes get the allowance; derive and re-derive keep their bounds.
+(`sha256(uid)[:12]`, the `owner=` tag of the blocked log) or `*`. This repository is public, so the list
+never goes in Git: it ships unbound on every loader, and a later change binds it to the Secret Manager
+secret of the same name, after an operator provisions it (version 1 `none`). It is read by every runtime
+that runs builder passes (`store.load()`): the on-open builder on `backend` and `backend-integration`, and
+builder tasks on `backend-sync` and `backend-sync-backfill`. `pusher` and `backend-listen` only mark
+pending and enqueue. The sizes, cap and daily budget below must have one value on all four loaders
+(`deploy/activation/conversations-v3.yaml`, `v3-locked-closure-*`). Only builder passes get the
+allowance; derive and re-derive keep their bounds.
 
 For a listed owner, the live closure's locked claimants (rows `preserve_finished_windows` keeps fixed)
 may go past the origin bound:
@@ -170,10 +171,11 @@ Rewritable rows keep the original bound. Such a closure may commit in at most
 ladder below the seeds it read (pending + unlocked: 32 + 8, 8 + 8, 1 + 1, then one of either kind). It
 re-enters at most three times and parks only at one seed.
 
-At most `CONVERSATIONS_V3_LOCKED_DAILY_PASSES` (default 48) allowance attempts run per owner per UTC
-day. A builder load past the origin bound counts one in `v3_locked_day` and `v3_locked_passes` on the
-builder lease, before any paid work, whether the pass then commits or not. After that, or if the count
-cannot be written, the owner's passes use the origin bound.
+`CONVERSATIONS_V3_LOCKED_DAILY_PASSES` (default 20) is the owner's daily budget of allowance attempts.
+Every builder load of a listed owner charges one in `v3_locked_day` and `v3_locked_passes` on the builder
+lease, under the held lease and before it reads, whatever the pass does next. A spent day, or a charge
+that cannot be written, loads with the origin bound. Ceiling: 20 attempts x about 78k reads (load, plus a
+commit whose batches each run at most three transactions), about 1.6M reads per listed owner per day.
 
 An empty list, or a size, the cap or the daily passes set to `0`, restores the origin bound.
 

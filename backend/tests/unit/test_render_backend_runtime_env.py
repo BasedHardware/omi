@@ -863,16 +863,6 @@ def test_prod_cloud_run_secret_refs_match_approved_bindings():
         'backend-integration': common | {'POSTHOG_EVENTS_API_KEY'},
         'backend-projection-pump': common | {'POSTHOG_EVENTS_API_KEY'},
     }
-    # Home v3 lead 2026-11-27 (SCA-2918): the locked-closure owner list carries owner tags, so it is a secret
-    # (this repo is public) on every closure loader; the pump inherits it from integration (same identity).
-    for loader in (
-        'backend',
-        'backend-sync',
-        'backend-sync-backfill',
-        'backend-integration',
-        'backend-projection-pump',
-    ):
-        service_baseline[loader] = service_baseline[loader] | {'CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS'}
     job_baseline = {
         'notifications-job': {
             'OMI_LLM_GATEWAY_SERVICE_TOKEN',

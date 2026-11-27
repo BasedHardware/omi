@@ -123,23 +123,16 @@ env:
     default: 'on'
     runtimes: *v3_writers
     equal: true
-  - id: v3-locked-closure-owners
-    why: >-
-      database/conversations_v3.load reads the allowlist on every runtime that loads a closure: the on-open
-      builder (backend, backend-integration), builder tasks (backend-sync) and derive (backend-sync-backfill).
-      A loader without the owner keeps parking it and re-arming the backoff, so admission must not be
-      half-applied (SCA-2918). pusher and backend-listen only mark pending and enqueue (triggers.changed);
-      they never load a closure. The value is a Secret Manager binding (CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS,
-      version latest; owner tags stay out of this public repo), so equal compares the secret reference
-    keys: [CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS]
-    default: ''
-    runtimes: &v3_closure_loaders [backend, backend-integration, backend-sync, backend-sync-backfill]
-    equal: true
   - id: v3-locked-closure-rows
-    why: the locked-claimant row allowance; loaders that disagree load different closures for one owner
+    why: >-
+      database/conversations_v3.load runs on every runtime that runs builder passes: the on-open builder (backend,
+      backend-integration) and builder tasks (backend-sync, and backend-sync-backfill, which the task handler can
+      target). pusher and backend-listen only mark pending and enqueue. The locked-claimant row allowance must agree
+      across them, or loaders load different closures for one owner (SCA-2918). The owner list
+      (CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS) joins this manifest with its Secret Manager binding, in its own change
     keys: [CONVERSATIONS_V3_LOCKED_DERIVED_ALLOWANCE]
     default: '2048'
-    runtimes: *v3_closure_loaders
+    runtimes: &v3_closure_loaders [backend, backend-integration, backend-sync, backend-sync-backfill]
     equal: true
   - id: v3-locked-closure-bytes
     why: the locked-claimant byte allowance; loaders that disagree load different closures for one owner
@@ -154,9 +147,9 @@ env:
     runtimes: *v3_closure_loaders
     equal: true
   - id: v3-locked-closure-daily-passes
-    why: the per-owner daily cap on locked-closure commits, counted on the builder lease; one value on every loader
+    why: the per-owner daily budget of locked-closure attempts, charged on the builder lease before each load; one value on every loader
     keys: [CONVERSATIONS_V3_LOCKED_DAILY_PASSES]
-    default: '48'
+    default: '20'
     runtimes: *v3_closure_loaders
     equal: true
   - id: v3-gateway-endpoint
