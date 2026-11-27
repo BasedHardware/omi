@@ -341,7 +341,9 @@ consecutive native directory-sync failures, the process opens a fail-fast
 circuit. Later custody writes stay in memory while native barrier probes retry
 with exponential backoff from 30 seconds up to 30 minutes; disk admission
 resumes only after a probe succeeds. Native directory sync runs off the UI
-thread. A receipt remains until both restart-index files have been flushed and
+thread. Receiptless retries probe the open directory circuit before creating
+audio, keeping the WAL in memory if that probe fails. A receipt remains until
+both restart-index files have been flushed and
 their shared Documents directory has crossed the native durability barrier;
 failure retains replay proof for the next startup. When pending receipts
 exist, deleted-account cleanup captures persisted main, backup, temporary and

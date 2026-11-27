@@ -748,6 +748,48 @@ void main() {
     expect(synced, contains(LiveWalReceipt.directory(dir).path));
   }, skip: LiveWalReceipt.writeEnabled ? false : 'Receipt writer is disabled by dart-define');
 
+  test('receiptless audio retry probes an open directory circuit before writing', () async {
+    var elapsed = Duration.zero;
+    var allowSync = false;
+    var syncCalls = 0;
+    var writeCalls = 0;
+    LiveWalReceipt.directorySyncElapsedForTesting = () => elapsed;
+    LiveWalReceipt.syncDirectoryForTesting = (_) async {
+      syncCalls++;
+      if (!allowSync) throw const FileSystemException('injected retry-probe failure');
+    };
+    final audioFile = File('${dir.path}/receiptless-retry.bin');
+    LiveWalReceipt.writeAudioForTesting = (file, bytes) async {
+      writeCalls++;
+      await file.writeAsBytes(bytes, flush: true);
+    };
+
+    for (var i = 0; i < 3; i++) {
+      await expectLater(
+        LiveWalReceipt.syncAudioParentDirectory(audioFile),
+        throwsA(isA<LiveWalDirectorySyncException>()),
+      );
+    }
+    expect(LiveWalReceipt.directorySyncCircuitOpenForTesting, isTrue);
+    elapsed = LiveWalReceipt.directorySyncRetryAfterForTesting! + const Duration(milliseconds: 1);
+
+    await expectLater(
+      LiveWalReceipt.writeReceiptlessAudio(audioFile, [1, 2, 3]),
+      throwsA(isA<LiveWalDirectorySyncException>()),
+    );
+    expect(writeCalls, 0);
+    expect(await audioFile.exists(), isFalse);
+    expect(syncCalls, 4, reason: 'the expired circuit probes before any receiptless file is created');
+
+    elapsed = LiveWalReceipt.directorySyncRetryAfterForTesting! + const Duration(milliseconds: 1);
+    allowSync = true;
+    await LiveWalReceipt.writeReceiptlessAudio(audioFile, [1, 2, 3]);
+    expect(writeCalls, 1);
+    expect(await audioFile.readAsBytes(), [1, 2, 3]);
+    expect(LiveWalReceipt.directorySyncCircuitOpenForTesting, isFalse);
+    expect(syncCalls, 6, reason: 'a successful preflight and post-write barrier are both required');
+  });
+
   test('complete audio after a late write error is flushed before index admission', () async {
     var failAfterComplete = true;
     LiveWalReceipt.writeAudioForTesting = (file, bytes) async {

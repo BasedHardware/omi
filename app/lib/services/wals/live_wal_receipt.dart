@@ -238,6 +238,10 @@ class LiveWalReceipt {
   /// reservation if either the write or its directory barrier fails.
   static Future<void> writeReceiptlessAudio(File audio, List<int> bytes) async {
     try {
+      // After an open circuit's retry deadline expires, prove this directory
+      // can sync before creating receiptless audio. If the probe fails, there
+      // is no new directory entry that cleanup would also be unable to sync.
+      if (_directorySyncCircuitOpen) await _syncDirectory(audio.parent);
       if (_directorySyncBackoffActive) {
         throw LiveWalDirectorySyncException(StateError('directory sync circuit is open'),
             circuitOpened: false, reportFailure: false);
