@@ -1301,7 +1301,7 @@ jobs:
                   "  -o jsonpath='{.spec.template.spec.containers[?(@.name==\"pusher\")].image}{\"\\n\"}'",
                   "# only if that reads the candidate:",
                   "kubectl -n prod-omi-backend rollout undo deployment/prod-omi-pusher",
-                  "kubectl -n prod-omi-backend rollout status deployment/prod-omi-pusher --timeout=9600s",
+                  "kubectl -n prod-omi-backend rollout status deployment/prod-omi-pusher --timeout=160m",
                   "python3 backend/scripts/deploy_status_report.py --env prod --include-gke --gke-service pusher",
                   "```",
                   "",
@@ -1317,7 +1317,7 @@ jobs:
           deployment_tag: ${{ inputs.pusher_image_digest }}
           environment: prod
           # Static text only: the notifier interpolates this into its message.
-          release_version: 'REFUSED_INVERSE HOLD, no further patch. Manual restore by the Release prod-operator: read the pusher image of deployment/prod-omi-pusher; only if it is the candidate run kubectl -n prod-omi-backend rollout undo deployment/prod-omi-pusher, then kubectl -n prod-omi-backend rollout status deployment/prod-omi-pusher --timeout=9600s and read back the pinned baseline digest on every ready pod and a clean deploy_status_report.py. See the run summary and the runbook Manual recovery after REFUSED_INVERSE.'
+          release_version: 'REFUSED_INVERSE HOLD, no further patch. Manual restore by the Release prod-operator: read the pusher image of deployment/prod-omi-pusher; only if it is the candidate run kubectl -n prod-omi-backend rollout undo deployment/prod-omi-pusher, then kubectl -n prod-omi-backend rollout status deployment/prod-omi-pusher and read back the pinned baseline digest on every ready pod and a clean deploy_status_report.py. See the run summary and the runbook Manual recovery after REFUSED_INVERSE.'
           status: failure
           telegram_bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           telegram_chat_id: ${{ secrets.TELEGRAM_CHAT_ID }}
