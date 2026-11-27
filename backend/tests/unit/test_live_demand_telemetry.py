@@ -805,6 +805,19 @@ def test_connected_seconds_split_exactly_past_the_transition_cap(monkeypatch):
         telemetry.current_demand.reset(token)
 
 
+def test_visibility_floor_names_the_bucket_at_the_trimmed_edge(monkeypatch):
+    """Trimming the log must not cost the seconds before its first entry as unknown."""
+    now = [100.0]
+    monkeypatch.setattr(telemetry, 'monotonic', lambda: now[0])
+    monkeypatch.setattr(telemetry, 'VISIBILITY_LOG_SECONDS', 1.0)
+    cohort = telemetry.DemandTelemetry('admitted')
+    cohort.observe_visibility({'foreground': True, 'transcript_visible': False})
+    now[0] = 102.0
+    cohort.observe_visibility({'foreground': False, 'transcript_visible': False})
+    assert cohort.visibility_seconds(100.0, 102.0) == [('foreground', 2.0)]
+    assert cohort.visibility_seconds(100.5, 103.0) == [('foreground', 1.5), ('background', 1.0)]
+
+
 def test_connected_seconds_carry_the_custody_fallback_reason(monkeypatch):
     now = [100.0]
     monkeypatch.setattr(telemetry, 'monotonic', lambda: now[0])
