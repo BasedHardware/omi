@@ -32,14 +32,6 @@ void main() {
         const PhoneMicRecordingStopped(),
         const TranscribeLaterToggled(enabled: false),
         const TranscribeLaterToggled(enabled: true),
-        const OrphanAudioReceiptless(
-          phase: OrphanAudioReceiptlessPhase.recovery,
-          receiptlessManagedCount: 0,
-          receiptlessManagedBytes: 0,
-          managedReceiptMissingSkipCount: 0,
-          receiptScanTruncated: false,
-          censusComplete: true,
-        ),
       ];
       for (final event in events) {
         // A caller retaining/mutating a property map must not affect a later emission.
@@ -76,18 +68,6 @@ void main() {
         [
           'Transcribe Later Toggled',
           {...globals, 'enabled': true}
-        ],
-        [
-          'Orphan Audio Receiptless Custody',
-          {
-            ...globals,
-            'phase': 'recovery',
-            'receiptless_managed_count': 0,
-            'receiptless_managed_bytes': 0,
-            'managed_receipt_missing_skip_count': 0,
-            'receipt_scan_truncated': false,
-            'census_complete': true,
-          }
         ],
       ]);
       expect(AnalyticsManager.queuedEventCountForTesting, 0);

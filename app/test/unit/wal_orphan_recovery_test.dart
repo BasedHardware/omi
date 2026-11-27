@@ -1498,6 +1498,32 @@ void main() {
     expect(writer.testWals, isNot(contains(pending)));
   });
 
+  test('account purge can use exact in-memory proof for receiptless live writes', () async {
+    var failWrite = false;
+    final writer = await ledger(
+      realCensus: true,
+      persist: (rows) async {
+        if (failWrite) throw const FileSystemException('injected index failure');
+        expect(await WalFileManager.saveWals(rows), isTrue);
+      },
+    );
+    await captureReceiptAudio(writer);
+    failWrite = true;
+    await expectLater(writer.finalizeCurrentSession(), throwsA(isA<FileSystemException>()));
+    failWrite = false;
+    final pending = writer.testWals.singleWhere((wal) => wal.recordingSessionId == 'receipt-session');
+    final audioFile = File('${dir.path}/${pending.filePath}');
+    expect(pending.liveFileWriteId, isNull);
+    expect(LiveWalReceipt.isManagedBasename(pending.filePath!), isTrue);
+    expect(await audioFile.exists(), isTrue);
+    expect(await receiptFor(pending.filePath!).exists(), isFalse);
+
+    await writer.purgeAccountWals('owner-a');
+
+    expect(await audioFile.exists(), isFalse);
+    expect(writer.testWals, isNot(contains(pending)));
+  }, skip: LiveWalReceipt.writeEnabled ? 'Run with --dart-define=OMI_LIVE_WAL_RECEIPT_OFF=true' : false);
+
   test('receiptless managed audio is visible but cannot be recovered or reclaimed', () async {
     final basename = LiveWalReceipt.uniqueName(name(now - 2), LiveWalReceipt.newId());
     final candidate = await audio(basename);

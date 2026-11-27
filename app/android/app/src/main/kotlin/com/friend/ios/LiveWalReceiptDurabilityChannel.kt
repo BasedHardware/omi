@@ -13,6 +13,8 @@ import io.flutter.plugin.common.MethodChannel
 
 /** Directory fsync bridge shared by UI and headless Flutter engines. */
 object LiveWalReceiptDurabilityChannel {
+    // Android's OsConstants omits this Linux ABI flag on some SDK stubs.
+    private const val O_DIRECTORY = 0x10000
     private val ioExecutor = Executors.newSingleThreadExecutor { task ->
         Thread(task, "omi-live-wal-durability").apply { isDaemon = true }
     }
@@ -40,7 +42,7 @@ object LiveWalReceiptDurabilityChannel {
             override(directory)
             return
         }
-        val fd = Os.open(directory.path, OsConstants.O_RDONLY or OsConstants.O_DIRECTORY, 0)
+        val fd = Os.open(directory.path, OsConstants.O_RDONLY or O_DIRECTORY, 0)
         try {
             Os.fsync(fd)
         } finally {

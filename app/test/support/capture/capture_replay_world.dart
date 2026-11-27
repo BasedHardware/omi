@@ -500,6 +500,15 @@ class CaptureReplayWorld {
         return null;
       },
     );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+      const MethodChannel('com.omi/live_wal_receipt_durability'),
+      (MethodCall call) async {
+        if (call.method != 'syncDirectory') {
+          throw MissingPluginException('Unsupported live WAL durability method: ${call.method}');
+        }
+        return null;
+      },
+    );
 
     scheduler = ManualScheduler(clock: clock);
     hostApi = FakePhoneMicHostApi();

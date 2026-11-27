@@ -109,6 +109,8 @@ class LiveWalReceipt {
   /// inference, even if the directory or both indexes disappear.
   static bool isManagedBasename(String name) => _managedNamePattern.hasMatch(name);
 
+  static String? managedId(String name) => _managedNamePattern.firstMatch(name)?.group(1)?.toLowerCase();
+
   /// Staging files and retired receipts never count toward replay work.
   static String? _receiptBasename(String entryPath) {
     final entryName = path.basename(entryPath);
@@ -499,12 +501,16 @@ class LiveWalReceipt {
   }
 
   static Future<bool> matchesPendingPurgeInSnapshot(File audio, Wal wal, LiveWalPurgeSnapshot snapshot) async {
-    if (!purgeEnabled || !isManagedBasename(path.basename(audio.path)) || audio.parent.path != snapshot.documentsPath) {
+    final name = path.basename(audio.path);
+    if (!purgeEnabled ||
+        !isManagedBasename(name) ||
+        audio.parent.path != snapshot.documentsPath ||
+        wal.storage != WalStorage.disk ||
+        wal.filePath != name) {
       return false;
     }
-    final name = path.basename(audio.path);
     final expected = _binding(name, wal.toJson());
-    if (expected == null || snapshot.basenames.contains(name.toLowerCase())) return false;
+    if (snapshot.basenames.contains(name.toLowerCase())) return false;
     final pending = _receipt(audio.parent, name);
     int? length;
     try {
@@ -516,11 +522,16 @@ class LiveWalReceipt {
       // The exact write proof below is limited to this in-memory WAL object.
     }
     final memoryProof = _writerProofs[wal];
-    if (length == null && memoryProof?.basename == name && memoryProof?.binding == expected) {
+    final proofMatches = memoryProof?.basename == name &&
+        memoryProof?.binding.owner == wal.ownerUid &&
+        memoryProof?.binding.id == (expected?.id ?? managedId(name)) &&
+        (expected == null || memoryProof?.binding == expected);
+    if (length == null && proofMatches) {
       length = memoryProof!.length;
     }
-    if (length == null) return false;
-    return await _matchesPurgeAudio(audio, length, expected.digest);
+    final digest = expected?.digest ?? (proofMatches ? memoryProof?.binding.digest : null);
+    if (length == null || digest == null) return false;
+    return await _matchesPurgeAudio(audio, length, digest);
   }
 
   static void rememberWriterProof(Wal wal, String basename, int length, LiveWalBinding binding) {

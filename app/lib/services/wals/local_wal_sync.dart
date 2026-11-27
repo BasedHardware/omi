@@ -1601,8 +1601,11 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           if (wal.liveRingId != null) wal.liveDeviceId = wal.device;
           wal.filePath = fileName;
           wal.storage = WalStorage.disk;
-          if (digest != null && writeId != null && owner != null) {
-            LiveWalReceipt.rememberWriterProof(wal, fileName, data.length, (id: writeId, owner: owner, digest: digest));
+          final proofId = writeId ?? LiveWalReceipt.managedId(fileName);
+          if (proofId != null && owner != null && owner.isNotEmpty && owner != 'legacy') {
+            final proofDigest = digest ?? sha256.convert(data).toString();
+            LiveWalReceipt.rememberWriterProof(
+                wal, fileName, data.length, (id: proofId, owner: owner, digest: proofDigest));
           }
         } catch (e) {
           reportDirectorySyncFailure(e);
