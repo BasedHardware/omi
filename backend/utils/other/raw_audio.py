@@ -57,7 +57,7 @@ def provenance(raw: bytes, supplied: dict[str, Any]) -> dict[str, str]:
 
 
 def filename_provenance(path: str) -> dict[str, Any]:
-    # TODO(SCA-3376): fixed token positions refuse current app names, whose
+    # TODO(SCA-3376, #26356): fixed token positions refuse current app names, whose
     # codec may be ``opus_fs320`` and which may carry ``_clke<run>`` before the
     # timestamp. The duplicate shadow/sampler path parses those locally in
     # ``record_wal_sample.staged_name_provenance``; storage, handoff and
