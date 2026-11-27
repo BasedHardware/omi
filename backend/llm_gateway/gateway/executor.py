@@ -159,20 +159,21 @@ async def execute_chat_completion(
     serving_is_lkg = selected_route_is_lkg(resolved_route)
     _validate_credential_mode(serving_route, credential_context)
     budget_ms = serving_route.timeouts.request_ms
+    caller_budget_ms = background_flex_budget_ms or 0
+    has_background_budget = 0 < caller_budget_ms <= BACKGROUND_FLEX_MAX_BUDGET_MS
+    if has_background_budget:
+        budget_ms = min(budget_ms, caller_budget_ms)
+    deadline_monotonic = monotonic() + budget_ms / 1000.0
     flex_deadline = None
     scoped_flex = serving_route.lane_id in BACKGROUND_FLEX_LANES and _enabled(BACKGROUND_FLEX_SWITCH)
     if (
-        background_flex_budget_ms is not None
-        and 0 < background_flex_budget_ms <= BACKGROUND_FLEX_MAX_BUDGET_MS
+        has_background_budget
         and scoped_flex
         and _background_flex_applies(resolved_route, serving_route, credential_context, max_provider_attempts)
     ):
-        available_ms = min(budget_ms, background_flex_budget_ms, BACKGROUND_FLEX_MAX_BUDGET_MS)
         reserve_ms = BACKGROUND_FLEX_STANDARD_RESERVE_MS.get(serving_route.lane_id, 45_000)
-        if available_ms >= reserve_ms:
-            budget_ms = available_ms
-            flex_deadline = monotonic() + (budget_ms - reserve_ms) / 1000.0
-    deadline_monotonic = monotonic() + budget_ms / 1000.0
+        if budget_ms > reserve_ms:
+            flex_deadline = deadline_monotonic - reserve_ms / 1000.0
 
     first_failure: FailureClass | None = None
     last_error: GatewayError | None = None
@@ -190,7 +191,7 @@ async def execute_chat_completion(
             deadline_monotonic=deadline_monotonic,
             flex_deadline=flex_deadline,
             allow_legacy_flex=not scoped_flex,
-            enforce_deadline=flex_deadline is not None,
+            enforce_deadline=has_background_budget,
         )
     except _BackgroundFlexTerminalError as exc:
         raise exc.gateway_error from exc.__cause__
@@ -217,7 +218,7 @@ async def execute_chat_completion(
                 max_provider_attempts=max_provider_attempts,
                 deadline_monotonic=deadline_monotonic,
                 allow_legacy_flex=not scoped_flex,
-                enforce_deadline=flex_deadline is not None,
+                enforce_deadline=has_background_budget,
             )
         except GatewayError as exc:
             last_error = exc
