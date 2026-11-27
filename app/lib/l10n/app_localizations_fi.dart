@@ -15847,4 +15847,9 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Osaa nauhoituksista on vielä laitteella. Anna niiden synkronoitua puhelimeen loppuun ja käynnistä sitten päivitys.';
+
+  @override
+  String summaryTemplateSelectionLimit(int count) {
+    return 'Voit valita enintään $count yhteenvetomallia.';
+  }
 }

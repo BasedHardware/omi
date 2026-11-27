@@ -15614,4 +15614,9 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get firmwareSyncRecordingsFirstMessage => '일부 녹음이 아직 기기에 남아 있습니다. 휴대폰으로의 동기화가 완료되면 업데이트를 시작해 주세요.';
+
+  @override
+  String summaryTemplateSelectionLimit(int count) {
+    return '요약 템플릿은 최대 $count개까지 선택할 수 있습니다.';
+  }
 }

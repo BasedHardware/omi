@@ -15878,4 +15878,9 @@ class AppLocalizationsHr extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Neke snimke još su na tvojem uređaju. Pričekaj da se sinkroniziraju na tvoj telefon, a zatim pokreni ažuriranje.';
+
+  @override
+  String summaryTemplateSelectionLimit(int count) {
+    return 'Možete odabrati najviše $count predložaka za sažetak.';
+  }
 }

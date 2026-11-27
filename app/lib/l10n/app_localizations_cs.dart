@@ -15841,4 +15841,9 @@ class AppLocalizationsCs extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Některé nahrávky jsou stále ve vašem zařízení. Počkejte, až se synchronizují do telefonu, a potom spusťte aktualizaci.';
+
+  @override
+  String summaryTemplateSelectionLimit(int count) {
+    return 'Můžete vybrat nejvýše $count šablon shrnutí.';
+  }
 }

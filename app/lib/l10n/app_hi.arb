@@ -4768,5 +4768,6 @@
     "playStripePlanPaused": "आपका {plan} प्लान रुका हुआ है।",
     "firmwareNewestSupportedForDevice": "आपका डिवाइस पहले से ही नवीनतम समर्थित फर्मवेयर संस्करण पर है",
     "firmwareSyncRecordingsFirstTitle": "पहले अपनी रिकॉर्डिंग सिंक करें",
-    "firmwareSyncRecordingsFirstMessage": "कुछ रिकॉर्डिंग अभी भी आपके डिवाइस पर हैं। उन्हें आपके फ़ोन पर सिंक होने दें, फिर अपडेट शुरू करें।"
+    "firmwareSyncRecordingsFirstMessage": "कुछ रिकॉर्डिंग अभी भी आपके डिवाइस पर हैं। उन्हें आपके फ़ोन पर सिंक होने दें, फिर अपडेट शुरू करें।",
+    "summaryTemplateSelectionLimit": "आप ज़्यादा से ज़्यादा {count} सारांश टेम्पलेट चुन सकते हैं।"
 }

@@ -15894,4 +15894,9 @@ class AppLocalizationsKn extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'ಕೆಲವು ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಇನ್ನೂ ನಿಮ್ಮ ಸಾಧನದಲ್ಲಿವೆ. ಅವುಗಳು ನಿಮ್ಮ ಫೋನ್‌ಗೆ ಸಿಂಕ್ ಆಗಲು ಬಿಡಿ, ನಂತರ ನವೀಕರಣ ಪ್ರಾರಂಭಿಸಿ.';
+
+  @override
+  String summaryTemplateSelectionLimit(int count) {
+    return 'ನೀವು ಗರಿಷ್ಠ $count ಸಾರಾಂಶ ಟೆಂಪ್ಲೇಟ್‌ಗಳನ್ನು ಆಯ್ಕೆ ಮಾಡಬಹುದು.';
+  }
 }

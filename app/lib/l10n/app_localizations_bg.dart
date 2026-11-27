@@ -15894,4 +15894,9 @@ class AppLocalizationsBg extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Някои записи все още са на устройството. Оставете ги да приключат със синхронизирането към телефона, след което започнете актуализацията.';
+
+  @override
+  String summaryTemplateSelectionLimit(int count) {
+    return 'Можете да изберете до $count шаблона за обобщение.';
+  }
 }

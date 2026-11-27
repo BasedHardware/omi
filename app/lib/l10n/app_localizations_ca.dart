@@ -15922,4 +15922,9 @@ class AppLocalizationsCa extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Alguns enregistraments encara són al vostre dispositiu. Deixeu que acabin de sincronitzar-se al telèfon i, després, inicieu l\'actualització.';
+
+  @override
+  String summaryTemplateSelectionLimit(int count) {
+    return 'Pots triar fins a $count plantilles de resum.';
+  }
 }

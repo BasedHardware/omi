@@ -15906,4 +15906,9 @@ class AppLocalizationsTe extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'కొన్ని రికార్డింగ్‌లు ఇంకా మీ డివైస్‌లో ఉన్నాయి. అవి మీ ఫోన్‌కు పూర్తిగా సమకాలీకరించనివ్వండి, తర్వాత నవీకరణను ప్రారంభించండి.';
+
+  @override
+  String summaryTemplateSelectionLimit(int count) {
+    return 'మీరు గరిష్ఠంగా $count సారాంశ టెంప్లేట్‌లను ఎంచుకోవచ్చు.';
+  }
 }

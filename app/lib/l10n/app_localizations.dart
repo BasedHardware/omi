@@ -27800,6 +27800,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Some recordings are still on your device. Let them finish syncing to your phone, then start the update.'**
   String get firmwareSyncRecordingsFirstMessage;
+
+  /// Toast when the user tries to select too many summary templates to run together.
+  ///
+  /// In en, this message translates to:
+  /// **'You can select up to {count} summary templates.'**
+  String summaryTemplateSelectionLimit(int count);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

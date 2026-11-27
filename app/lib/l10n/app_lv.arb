@@ -4768,5 +4768,6 @@
     "playStripePlanPaused": "Jūsu {plan} plāns ir apturēts.",
     "firmwareNewestSupportedForDevice": "Jūsu ierīcē jau ir jaunākā atbalstītā aparatprogrammatūras versija",
     "firmwareSyncRecordingsFirstTitle": "Vispirms sinhronizējiet savus ierakstus",
-    "firmwareSyncRecordingsFirstMessage": "Daži ieraksti vēl atrodas jūsu ierīcē. Ļaujiet tiem pabeigt sinhronizēšanu ar tālruni, pēc tam sāciet atjaunināšanu."
+    "firmwareSyncRecordingsFirstMessage": "Daži ieraksti vēl atrodas jūsu ierīcē. Ļaujiet tiem pabeigt sinhronizēšanu ar tālruni, pēc tam sāciet atjaunināšanu.",
+    "summaryTemplateSelectionLimit": "Var atlasīt ne vairāk kā {count} kopsavilkuma veidnes."
 }

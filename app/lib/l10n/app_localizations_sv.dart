@@ -15850,4 +15850,9 @@ class AppLocalizationsSv extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Vissa inspelningar finns fortfarande på din enhet. Låt dem slutföra synkroniseringen till telefonen och starta sedan uppdateringen.';
+
+  @override
+  String summaryTemplateSelectionLimit(int count) {
+    return 'Du kan välja upp till $count sammanfattningsmallar.';
+  }
 }

@@ -15837,4 +15837,9 @@ class AppLocalizationsSk extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Niektoré nahrávky sa stále nachádzajú na zariadení. Počkajte, kým sa dokončí ich synchronizácia s telefónom, a potom spustite aktualizáciu.';
+
+  @override
+  String summaryTemplateSelectionLimit(int count) {
+    return 'Môžete vybrať najviac $count šablón zhrnutia.';
+  }
 }

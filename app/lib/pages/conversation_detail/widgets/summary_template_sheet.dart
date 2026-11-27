@@ -303,8 +303,7 @@ class _SummaryTemplateSheetState extends State<SummaryTemplateSheet> {
       installing: _installingAppId == app.id,
       onTap: () {
         if (_multiSelect && !_selectedAppIds.contains(app.id) && _selectedAppIds.length >= maxBatchSummaryTemplates) {
-          OmiFeedback.error(
-              context, '${context.l10n.frequencyMaximum} · ${context.l10n.selectedCount(maxBatchSummaryTemplates)}');
+          OmiFeedback.error(context, context.l10n.summaryTemplateSelectionLimit(maxBatchSummaryTemplates));
           return;
         }
         setState(() {
