@@ -612,9 +612,11 @@ void main() {
     expect(LiveWalReceipt.directory(dir).listSync().whereType<File>(), isEmpty);
   }, skip: LiveWalReceipt.writeEnabled ? false : 'Receipt writer is disabled by dart-define');
 
-  test('repeated directory sync failures emit telemetry and bypass the barrier until restart', () async {
+  test('repeated directory sync failures emit telemetry and fail fast with RAM custody', () async {
     var currentSeconds = now;
+    var syncCalls = 0;
     LiveWalReceipt.syncDirectoryForTesting = (_) async {
+      syncCalls++;
       throw const FileSystemException('injected persistent directory sync failure');
     };
     final events = <WalWriteReceipt>[];
@@ -629,16 +631,17 @@ void main() {
     final held = writer.testWals.singleWhere((wal) => wal.recordingSessionId == 'receipt-session');
     expect(held.storage, WalStorage.mem);
     expect(events.any((event) => event.result == WalWriteReceiptResult.directorySyncFailed), isTrue);
-    expect(LiveWalReceipt.directorySyncBypassedForTesting, isTrue);
+    expect(LiveWalReceipt.directorySyncCircuitOpenForTesting, isTrue);
 
     currentSeconds += 60;
     await captureReceiptAudio(writer, sessionId: 'retry-session');
     await writer.finalizeCurrentSession();
 
-    expect(writer.testWals.where((wal) => wal.storage == WalStorage.mem), isEmpty);
-    expect(writer.testWals.any((wal) => wal.recordingSessionId == 'retry-session' && wal.storage == WalStorage.disk),
-        isTrue);
-  }, skip: LiveWalReceipt.writeEnabled ? false : 'Receipt writer is disabled by dart-define');
+    final retained = writer.testWals.where((wal) => wal.storage == WalStorage.mem).toList();
+    expect(retained.map((wal) => wal.recordingSessionId), containsAll(['receipt-session', 'retry-session']));
+    expect(syncCalls, 3, reason: 'the open circuit fails fast without repeatedly calling the native channel');
+    expect(dir.listSync().whereType<File>().where((file) => file.path.endsWith('.bin')), isEmpty);
+  });
 
   test('partial audio write retires its published receipt durably and keeps the WAL in memory', () async {
     final synced = <String>[];
