@@ -171,12 +171,13 @@ class BatteryDisplayPolicy {
     return null;
   }
 
-  /// Remembers [level] for the current device when it is hidden as stuck, so the next
-  /// connection hides it at once instead of after another [flatHold].
+  /// Remembers [level] for the current device when it is proven stuck (flat, or near empty
+  /// after a long charge), so the next connection hides it at once instead of after another
+  /// [flatHold]. A first-pairing suspicion is never remembered: that pendant may really be empty.
   void rememberIfStuck(int level, {required bool charging}) {
     final id = _deviceId;
     final reason = hideReason(level, charging: charging);
-    if (id == null || reason == null || reason == BatteryHideReason.chargingLow) return;
+    if (id == null || (reason != BatteryHideReason.flat && reason != BatteryHideReason.longCharge)) return;
     if (_remembered?.$1 == level) return;
     final now = _clock();
     _remembered = (level, now);

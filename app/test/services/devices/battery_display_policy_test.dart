@@ -110,6 +110,20 @@ void main() {
     expect(p.hideReason(1, charging: false), isNull);
   });
 
+  test('a first-pairing suspicion is not remembered across an app restart', () {
+    final store = InMemoryBatteryStuckStore();
+    var p = BatteryDisplayPolicy(clock: () => now, store: store)..beginConnection('omi');
+    p.markFirstPairing('omi');
+    p.onSample(2, charging: false);
+    expect(p.hideReason(2, charging: false), BatteryHideReason.firstPairing);
+    p.rememberIfStuck(2, charging: false);
+    expect(store.load(), isEmpty);
+
+    p = BatteryDisplayPolicy(clock: () => now, store: store)..beginConnection('omi');
+    p.onSample(2, charging: false);
+    expect(p.hideReason(2, charging: false), isNull, reason: 'never proven stuck, so it shows after a restart');
+  });
+
   test('a stuck reading is hidden at once on the next connection, until a real reading arrives', () {
     final store = InMemoryBatteryStuckStore();
     var p = BatteryDisplayPolicy(clock: () => now, store: store)..beginConnection('omi');
