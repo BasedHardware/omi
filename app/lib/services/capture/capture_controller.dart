@@ -999,6 +999,9 @@ class CaptureController extends ChangeNotifier
   @visibleForTesting
   set testSessionStartSeconds(int v) => _sessionStartSeconds = v;
 
+  @visibleForTesting
+  set testCustomLiveAudioRecoveryFlagRecordingId(String? value) => _customLiveAudioRecoveryFlagRecordingId = value;
+
   /// Unix timestamp (seconds) when the current offline/batch device-recording
   /// session started. Set only in offline mode (the websocket path that sets
   /// [_sessionStartSeconds] is skipped there); drives the "captured so far"
@@ -2922,6 +2925,10 @@ class CaptureController extends ChangeNotifier
   void _onCustomLiveAudioFlagContextChanged() {
     _resetCustomLiveAudioFlagResolution();
     _refreshLimitlessCustomLiveWatch();
+    // The watch may be temporarily ineligible (pause, suspension, or call),
+    // but flag-context changes still need to restart the capture-scoped kill
+    // switch cadence. The normal watch refresh reads it only when eligible.
+    if (_customLiveAudioRecoveryFlagRecordingId != null) _refreshCustomLiveAudioKillSwitch();
   }
 
   void _resetCustomLiveAudioFlagResolution() {
@@ -3016,7 +3023,13 @@ class CaptureController extends ChangeNotifier
           identityEpoch != AnalyticsManager.identityEpoch) {
         return;
       }
-      if (activeRecordingId != _customLiveAudioRecoveryFlagRecordingId) return;
+      if (activeRecordingId != _customLiveAudioRecoveryFlagRecordingId) {
+        // This can be a transient admission window during a session transition.
+        // Let the next eligible pass fetch again instead of leaving this
+        // identity epoch permanently marked as already refreshed.
+        _customLiveAudioRecoveryFlagIdentityEpoch = -1;
+        return;
+      }
       _customLiveAudioRecoveryFlagIdentityEpoch = -1;
       if (resetFetchRetries) {
         _customLiveAudioRecoveryFlagFetchRetriesForEpoch = 0;

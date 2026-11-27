@@ -1074,6 +1074,38 @@ void main() {
     expect(sync.testWals.single.storageOffset, 132);
   });
 
+  test('FlashPage: a resumed range under 30 pages remains listed', () async {
+    final card = _FakeLimitless(pages: const [])
+      ..flashStatus = {
+        'oldest_flash_page': 10,
+        'newest_flash_page': 20,
+        'current_storage_session': 1,
+      };
+    final pending = Wal(
+      timerStart: 1700000000,
+      codec: BleAudioCodec.opus,
+      seconds: 9,
+      status: WalStatus.miss,
+      storage: WalStorage.flashPage,
+      device: 'limitless-1',
+      fileNum: 1,
+      storageOffset: 15,
+      storageTotalBytes: 20,
+    );
+    final sync = FlashPageWalSyncImpl(_Listener())
+      ..testDevice = BtDevice(id: 'limitless-1', name: 'Limitless', type: DeviceType.limitless, rssi: -40)
+      ..testConnection = card
+      ..testWals = [pending];
+    addTearDown(sync.stop);
+
+    await sync.refreshWalsFromDevice();
+
+    expect(sync.testWals, hasLength(1));
+    expect(sync.testWals.single.id, pending.id);
+    expect(sync.testWals.single.storageOffset, 15);
+    expect(sync.testWals.single.storageTotalBytes, 20);
+  });
+
   test('FlashPage: disconnect clears a prior unknown stall reason', () async {
     final card = _FakeLimitless(pages: [null]);
     final wal = Wal(

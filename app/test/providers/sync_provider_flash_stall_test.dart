@@ -1,6 +1,10 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/app_globals.dart';
+import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/wals.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -126,6 +130,32 @@ void main() {
     expect(provider.syncState.hasError, isTrue);
     expect(provider.syncError,
         "Your Pendant's stored audio could not be confirmed. Keep your Pendant connected and try syncing again.");
+    provider.dispose();
+  });
+
+  testWidgets('an unknown flash stall uses the localized pendant message', (tester) async {
+    final walService = _FakeWalService();
+    walService.syncs.flashStallReason = FlashSyncStallReason.unknown;
+    final provider = SyncProvider(walService: walService, uploadGate: _hermeticGate(), startBackgroundSync: false);
+    await provider.initialized;
+
+    await tester.pumpWidget(MaterialApp(
+      navigatorKey: globalNavigatorKey,
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: const Scaffold(),
+    ));
+    final localizedMessage =
+        AppLocalizations.of(globalNavigatorKey.currentContext!)!.pendantAudioUnconfirmedSyncBlocked;
+
+    await provider.syncWals();
+
+    expect(provider.syncError, localizedMessage);
     provider.dispose();
   });
 

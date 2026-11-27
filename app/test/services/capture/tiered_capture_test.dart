@@ -401,6 +401,79 @@ void main() {
     expect(connection.captureIsCurrent, isNull, reason: 'the next scheduled read applies the kill switch');
   });
 
+  test('a consent change while paused re-arms the Custom Live kill refresh', () async {
+    const flag = 'android-custom-live-audio-recovery-kill';
+    final adapter = await setRefactorFlags({flag: false});
+    addTearDown(AnalyticsManager.resetForTesting);
+    world.controller.updateRecordingDevice(null);
+    await world.settle();
+    SharedPreferencesUtil().uid = 'capture-test-owner';
+    await SharedPreferencesUtil().saveCustomSttConfig(
+      const CustomSttConfig(provider: SttProvider.customLive, url: 'wss://local-stt.example.test'),
+    );
+    final device =
+        BtDevice(id: 'limitless-paused-consent-flag', name: 'Limitless', type: DeviceType.limitless, rssi: -40);
+    final connection = _WatchedLimitlessConnection();
+    world.deviceConnection = connection;
+    await world.controller.streamDeviceRecording(device: device);
+    await world.settle();
+    expect(connection.captureIsCurrent?.call(), isTrue);
+
+    await world.controller.pauseCapture();
+    await world.settle();
+    AnalyticsManager().optOutTracking();
+    await world.settle();
+    await world.elapse(const Duration(minutes: 5));
+    expect(adapter.reloadCount, 1, reason: 'opt-out does not fetch flags');
+
+    adapter.flags[flag] = false;
+    AnalyticsManager().optInTracking();
+    await world.settle();
+    final readsAfterConsentReturns = adapter.reloadCount;
+    expect(readsAfterConsentReturns, greaterThan(1));
+
+    adapter.flags[flag] = true;
+    await world.elapse(const Duration(minutes: 5));
+    await world.settle();
+    expect(adapter.reloadCount, greaterThan(readsAfterConsentReturns),
+        reason: 'the context-change refresh must arm the next periodic read while paused');
+
+    await world.controller.resumeCapture();
+    await world.settle();
+    expect(connection.captureIsCurrent, isNull, reason: 'the paused periodic read observes the kill switch');
+  });
+
+  test('a transient recording identity mismatch does not strand the kill refresh epoch', () async {
+    const flag = 'android-custom-live-audio-recovery-kill';
+    final adapter = await setRefactorFlags({flag: false});
+    addTearDown(AnalyticsManager.resetForTesting);
+    world.controller.updateRecordingDevice(null);
+    await world.settle();
+    SharedPreferencesUtil().uid = 'capture-test-owner';
+    await SharedPreferencesUtil().saveCustomSttConfig(
+      const CustomSttConfig(provider: SttProvider.customLive, url: 'wss://local-stt.example.test'),
+    );
+    final device =
+        BtDevice(id: 'limitless-transient-identity', name: 'Limitless', type: DeviceType.limitless, rssi: -40);
+    final connection = _WatchedLimitlessConnection();
+    world.deviceConnection = connection;
+    await world.controller.streamDeviceRecording(device: device);
+    await world.settle();
+    expect(connection.captureIsCurrent?.call(), isTrue);
+    final recordingId = world.controller.activeRecordingId!;
+
+    world.controller.testCustomLiveAudioRecoveryFlagRecordingId = 'transient-other-recording';
+    await world.elapse(const Duration(minutes: 5));
+    await world.settle();
+    expect(adapter.reloadCount, 1, reason: 'a transient identity mismatch must not cause an immediate fetch');
+
+    world.controller.testCustomLiveAudioRecoveryFlagRecordingId = recordingId;
+    await world.controller.onTranscriptionSettingsChanged();
+    await world.settle();
+    expect(adapter.reloadCount, 2, reason: 'the next eligible pass must fetch after clearing the stale epoch');
+    expect(connection.captureIsCurrent?.call(), isTrue);
+  });
+
   test('leaving Custom Live cancels periodic flag reads and returning re-arms them', () async {
     const flag = 'android-custom-live-audio-recovery-kill';
     final adapter = await setRefactorFlags({flag: false});

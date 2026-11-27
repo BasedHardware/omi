@@ -38,6 +38,13 @@ Widget _buildFaIcon(FaIconData icon, {double size = 18, Color color = const Colo
   );
 }
 
+bool _walStillListed(SyncProvider provider, Wal wal) {
+  final ring = wal.storage == WalStorage.sdcard && wal.fileNum == -1;
+  return provider.allWals.any((candidate) =>
+      candidate.storage == wal.storage &&
+      (ring ? candidate.fileNum == -1 && candidate.device == wal.device : candidate.id == wal.id));
+}
+
 class WalListItem extends StatelessWidget {
   final DateTime date;
   final int walIdx;
@@ -134,6 +141,10 @@ class WalListItem extends StatelessWidget {
             } catch (error) {
               Logger.debug('Sync delete failed: ${error.runtimeType}');
               if (context.mounted) OmiFeedback.error(context, context.l10n.failedToDeleteSomeItems);
+              return;
+            }
+            if (context.mounted && _walStillListed(syncProvider, wal)) {
+              OmiFeedback.error(context, context.l10n.failedToDeleteSomeItems);
             }
           }
         },
@@ -183,11 +194,7 @@ class WalListItem extends StatelessWidget {
                 return false;
               }
               if (!context.mounted) return false;
-              final ring = wal.storage == WalStorage.sdcard && wal.fileNum == -1;
-              final retained = syncProvider.allWals.any((candidate) =>
-                  candidate.storage == wal.storage &&
-                  (ring ? candidate.fileNum == -1 && candidate.device == wal.device : candidate.id == wal.id));
-              if (retained) OmiFeedback.error(context, context.l10n.failedToDeleteSomeItems);
+              if (_walStillListed(syncProvider, wal)) OmiFeedback.error(context, context.l10n.failedToDeleteSomeItems);
               // The provider refresh removes a confirmed delete. Returning false
               // keeps failed device deletes from leaving a dismissed row in place.
               return false;
@@ -198,7 +205,6 @@ class WalListItem extends StatelessWidget {
               color: Colors.red,
               child: const Icon(Icons.delete, color: Colors.white),
             ),
-            onDismissed: (_) {},
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: () {
@@ -260,6 +266,10 @@ class WalListItem extends StatelessWidget {
                           } catch (error) {
                             Logger.debug('Sync delete failed: ${error.runtimeType}');
                             if (context.mounted) OmiFeedback.error(context, context.l10n.failedToDeleteSomeItems);
+                            return;
+                          }
+                          if (context.mounted && _walStillListed(syncProvider, wal)) {
+                            OmiFeedback.error(context, context.l10n.failedToDeleteSomeItems);
                           }
                         }
                       }),

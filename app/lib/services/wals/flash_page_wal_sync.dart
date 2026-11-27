@@ -204,7 +204,10 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
     if (pageCount <= 0 && !awaitingDurableAck) return [];
     int estimatedSeconds = awaitingDurableAck ? listed.seconds : (pageCount * secondsPerFlashPage).round();
 
-    if (pageCount > 30 || awaitingDurableAck) {
+    // The 30-page threshold applies only to newly discovered backlogs. Once a
+    // WAL has been offered and advanced, keep its remaining range visible even
+    // when a short retry has 30 or fewer pages left.
+    if (pageCount > 30 || awaitingDurableAck || (listed != null && pageCount > 0)) {
       // Wal.id is device_timerStart. Reuse the previous recording identity when
       // the refreshed device range overlaps its locally pending page range.
       int timerStart = listed?.timerStart ?? DateTime.now().millisecondsSinceEpoch ~/ 1000 - estimatedSeconds;
