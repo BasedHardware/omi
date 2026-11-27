@@ -320,7 +320,11 @@ owner receipts, `.wal-live-receipts` sidecars, legacy jobs/preferences, ring
 checkpoint/download refs and capture-committed journals (including temporary
 files). A sidecar reserves only its managed basename; missing or unreadable
 sidecars leave that audio visible as receiptless, never eligible for adoption
-or reclaim. The directory scan examines at most 128 ordinary entries, skips
+or reclaim. Receiptless live writes, including ownerless capture and the
+receipt-issuance kill switch, also use managed basenames. If index publication
+is interrupted, a later account therefore cannot adopt those bytes through
+legacy filename heuristics; the census retains them as aggregate-only managed
+audio. The directory scan examines at most 128 ordinary entries, skips
 `staging` and `retired` before the budget, and reports truncation separately.
 Unscanned managed names remain receiptless. Unexpected or invalid sidecar
 entries are diagnostic and do not invalidate unrelated census results; a sidecar

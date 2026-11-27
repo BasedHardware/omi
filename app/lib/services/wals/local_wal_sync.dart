@@ -1459,16 +1459,16 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     return true;
   }
 
-  int _storageFileSeq = 0;
-
   Future<String> _uniqueStorageFileName(Wal wal, {String? writeId}) async {
     final claimable = captureEvidenceWalClaimable(wal);
     final planned = wal.filePath;
     final name = claimable && planned != null && planned.isNotEmpty ? planned.split('/').last : wal.getFileName();
     if (writeId != null) return LiveWalReceipt.uniqueName(name, writeId);
-    if (!_fileReferencedByOtherWal(wal, name) && !await _localFileExistsByName(name)) return name;
     for (;;) {
-      final candidate = walCollisionName(name, _storageFileSeq++, claimable);
+      // Receiptless live files still need a census-visible marker. Otherwise a
+      // crash between audio flush and index commit leaves an ordinary filename
+      // that a later account could adopt through the legacy owner heuristic.
+      final candidate = LiveWalReceipt.uniqueName(name, LiveWalReceipt.newId());
       if (!_fileReferencedByOtherWal(wal, candidate) && !await _localFileExistsByName(candidate)) {
         return candidate;
       }

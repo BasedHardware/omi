@@ -74,8 +74,8 @@ void main() {
   Future<void> json(String name, Object value) => File('${dir.path}/$name').writeAsString(jsonEncode(value));
   Future<File> audio(String name, {List<int>? bytes}) => File('${dir.path}/$name')
       .writeAsBytes(bytes ?? List.generate(50, (_) => [1, 0, 0, 0, 7]).expand((v) => v).toList());
-  Future<RecordingOrphanCensus> census() => captureRecordingCensus(
-      documents: dir.path, memoryBuckets: {'active': []}, phoneSeconds: now, currentOwner: 'owner-a');
+  Future<RecordingOrphanCensus> census({String currentOwner = 'owner-a'}) => captureRecordingCensus(
+      documents: dir.path, memoryBuckets: {'active': []}, phoneSeconds: now, currentOwner: currentOwner);
   int receiptlessManagedCount(RecordingOrphanCensus result) {
     final classification = result.summary['orphan_classification'] as Map;
     final classes = classification['classes'] as Map;
@@ -794,6 +794,42 @@ void main() {
     expect(LiveWalReceipt.directory(dir).listSync(recursive: true).whereType<File>(), isEmpty);
     expect(synced, contains(dir.path));
   }, skip: LiveWalReceipt.writeEnabled ? false : 'Receipt writer is disabled by dart-define');
+
+  test('ownerless receiptless WAL cannot be adopted by a later account after index failure', () async {
+    SharedPreferencesUtil().uid = '';
+    var failIndex = false;
+    final writer = await ledger(
+      realCensus: true,
+      persist: (rows) async {
+        if (failIndex) throw const FileSystemException('injected ownerless index failure');
+        expect(await WalFileManager.saveWals(rows), isTrue);
+      },
+    );
+    await captureReceiptAudio(writer);
+
+    failIndex = true;
+    await expectLater(writer.finalizeCurrentSession(), throwsA(isA<FileSystemException>()));
+    failIndex = false;
+    final pending = writer.testWals.singleWhere((wal) => wal.recordingSessionId == 'receipt-session');
+    final fileName = pending.filePath!;
+    final audioFile = File('${dir.path}/$fileName');
+    expect(pending.ownerUid, 'legacy');
+    expect(pending.storage, WalStorage.disk);
+    expect(pending.liveFileWriteId, isNull);
+    expect(LiveWalReceipt.isManagedBasename(fileName), isTrue);
+    expect(await audioFile.readAsBytes(), orderedEquals(encodeWalFrames(receiptFrames)));
+    expect(await receiptFor(fileName).exists(), isFalse);
+
+    // Simulate restart under a different account. Startup recovery must leave
+    // this audio fenced and visible rather than infer the new account as owner.
+    SharedPreferencesUtil().uid = 'owner-b';
+    final restarted = await ledger(realCensus: true);
+    expect(restarted.testWals.where((wal) => wal.filePath == fileName), isEmpty);
+    expect(await audioFile.exists(), isTrue);
+    final afterRestart = await census(currentOwner: 'owner-b');
+    expect(afterRestart.orphans.where((file) => file.filePath == audioFile.path), isEmpty);
+    expect(receiptlessManagedCount(afterRestart), 1);
+  });
 
   test('surviving ambiguous receipt removes the empty exclusive audio reservation', () async {
     final receiptDirectory = LiveWalReceipt.directory(dir);
@@ -1518,7 +1554,7 @@ void main() {
     await writer.finalizeCurrentSession();
     final newlyWritten = writer.testWals.singleWhere((w) => w.recordingSessionId == 'receipt-session');
     expect(newlyWritten.liveFileWriteId, isNull);
-    expect(LiveWalReceipt.isManagedBasename(newlyWritten.filePath!), isFalse);
+    expect(LiveWalReceipt.isManagedBasename(newlyWritten.filePath!), isTrue);
     expect(syncedDirectories.where((path) => path == dir.path).length, greaterThan(audioParentSyncsBeforeFlush));
     expect(await receiptFor(filename).exists(), isTrue);
 
