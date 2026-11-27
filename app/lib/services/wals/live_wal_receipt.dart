@@ -743,7 +743,11 @@ class LiveWalReceipt {
 
   /// Run only after both restart index generations have durably committed the
   /// matching record. Best effort: a later startup can try again.
-  static Future<void> retireCommitted(File primaryFile, File backupFile) async {
+  static Future<void> retireCommitted(
+    File primaryFile,
+    File backupFile, {
+    void Function()? onDirectorySyncFailure,
+  }) async {
     try {
       if (path.normalize(primaryFile.parent.path) != path.normalize(backupFile.parent.path)) return;
       final pending = directory(backupFile.parent);
@@ -773,7 +777,17 @@ class LiveWalReceipt {
             indexesDurable = true;
           }
           await entry.delete();
-        } catch (_) {/* Keep uncertain receipts for a later retry. */}
+        } catch (error) {
+          if (error is LiveWalDirectorySyncException) {
+            final circuitTrip = consumeDirectorySyncCircuitTrip();
+            if (error.reportFailure || circuitTrip) {
+              try {
+                onDirectorySyncFailure?.call();
+              } catch (_) {/* Telemetry never changes receipt custody. */}
+            }
+          }
+          // Keep uncertain receipts for a later retry.
+        }
       }
     } catch (_) {/* Receipt maintenance never invalidates an index commit. */}
   }

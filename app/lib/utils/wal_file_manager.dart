@@ -52,11 +52,12 @@ class WalFileManager {
 
   /// Only a startup read can retire receipts that both restart indexes
   /// already cover. Use the index lock so neither file can change mid-proof.
-  static Future<void> retireCommittedLiveWalReceipts() => _saveLock.withResource(() async {
+  static Future<void> retireCommittedLiveWalReceipts({void Function()? onDirectorySyncFailure}) =>
+      _saveLock.withResource(() async {
         final primary = _walFile;
         final backup = _walBackupFile;
         if (primary != null && backup != null) {
-          await LiveWalReceipt.retireCommitted(primary, backup);
+          await LiveWalReceipt.retireCommitted(primary, backup, onDirectorySyncFailure: onDirectorySyncFailure);
         }
       });
 

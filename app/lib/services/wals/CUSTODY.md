@@ -345,7 +345,8 @@ thread. Receiptless retries probe the open directory circuit before creating
 audio, keeping the WAL in memory if that probe fails. A receipt remains until
 both restart-index files have been flushed and
 their shared Documents directory has crossed the native durability barrier;
-failure retains replay proof for the next startup. When pending receipts
+failure retains replay proof for the next startup and emits the generation-
+fenced `directory_sync_failed` receipt event. When pending receipts
 exist, deleted-account cleanup captures persisted main, backup, temporary and
 quarantine index references before account-purge index rewrites, then reuses
 that snapshot after WAL readiness. It reads at most 128 receipt entries per

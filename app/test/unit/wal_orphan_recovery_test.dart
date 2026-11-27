@@ -1623,20 +1623,25 @@ void main() {
     expect(await WalFileManager.saveWals(await WalFileManager.loadIndexedWals()), isTrue);
     var allowDirectorySync = false;
     var directorySyncCalls = 0;
+    final events = <WalWriteReceiptResult>[];
     LiveWalReceipt.syncDirectoryForTesting = (directory) async {
       expect(directory.path, dir.path);
       directorySyncCalls++;
       if (!allowDirectorySync) throw const FileSystemException('injected index directory sync failure');
     };
 
-    await WalFileManager.retireCommittedLiveWalReceipts();
+    await WalFileManager.retireCommittedLiveWalReceipts(
+      onDirectorySyncFailure: () => events.add(WalWriteReceiptResult.directorySyncFailed),
+    );
     expect(directorySyncCalls, 1);
     expect(await receipt.exists(), isTrue, reason: 'failed index directory sync keeps replay proof');
+    expect(events, [WalWriteReceiptResult.directorySyncFailed]);
 
     allowDirectorySync = true;
     await WalFileManager.retireCommittedLiveWalReceipts();
     expect(directorySyncCalls, 2);
     expect(await receipt.exists(), isFalse, reason: 'durable main and backup names permit retirement');
+    expect(events, [WalWriteReceiptResult.directorySyncFailed]);
   });
 
   for (final delta in [false, true]) {

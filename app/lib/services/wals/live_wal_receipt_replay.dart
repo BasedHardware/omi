@@ -21,7 +21,11 @@ extension _LiveWalReceiptReplay on LocalWalSyncImpl {
       final documents = await getApplicationDocumentsDirectory();
       if (!await LiveWalReceipt.directory(documents).exists() || !_isCurrent(generation)) return;
       final knownBasenames = _liveWalReservedNames();
-      if (knownBasenames.isNotEmpty) await WalFileManager.retireCommittedLiveWalReceipts();
+      if (knownBasenames.isNotEmpty) {
+        await WalFileManager.retireCommittedLiveWalReceipts(onDirectorySyncFailure: () {
+          if (_isCurrent(generation)) _emitLiveWalReceipt(WalWriteReceiptResult.directorySyncFailed);
+        });
+      }
       if (!_isCurrent(generation)) return;
       try {
         prefs = await SharedPreferences.getInstance();
