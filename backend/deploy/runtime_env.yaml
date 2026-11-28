@@ -3343,6 +3343,8 @@ environments:
             category: ops_kill
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+          LIFECYCLE_V2_MODE: {value: shadow, category: rollout}
+          LIFECYCLE_V2_MODE_SERVE_PERCENT: {value: '1', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
           PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
             value: 'true'
@@ -3699,6 +3701,8 @@ environments:
             category: reliability
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+          LIFECYCLE_V2_MODE: {value: shadow, category: rollout}
+          LIFECYCLE_V2_MODE_SERVE_PERCENT: {value: '1', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
           PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
             value: 'true'
@@ -4493,6 +4497,8 @@ environments:
               category: ops_kill
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+            LIFECYCLE_V2_MODE: {value: shadow, category: rollout}
+            LIFECYCLE_V2_MODE_SERVE_PERCENT: {value: '1', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
             PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
               value: 'true'
@@ -5088,6 +5094,8 @@ environments:
               category: ops_kill
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+            LIFECYCLE_V2_MODE: {value: shadow, category: rollout}
+            LIFECYCLE_V2_MODE_SERVE_PERCENT: {value: '1', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
             PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
               value: 'true'
@@ -5674,6 +5682,8 @@ environments:
               category: ops_kill
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+            LIFECYCLE_V2_MODE: {value: shadow, category: rollout}
+            LIFECYCLE_V2_MODE_SERVE_PERCENT: {value: '1', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
             PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
               value: 'true'
@@ -6221,6 +6231,8 @@ environments:
               category: ops_kill
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+            LIFECYCLE_V2_MODE: {value: shadow, category: rollout}
+            LIFECYCLE_V2_MODE_SERVE_PERCENT: {value: '1', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
             PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
               value: 'true'
@@ -6756,6 +6768,8 @@ environments:
               category: ops_kill
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+            LIFECYCLE_V2_MODE: {value: shadow, category: rollout}
+            LIFECYCLE_V2_MODE_SERVE_PERCENT: {value: '1', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
             PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
               value: 'true'

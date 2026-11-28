@@ -353,6 +353,10 @@ env:
     value: "true"
   - name: CAPTURE_GROUP_CONTAINMENT_MODE
     value: "off"
+  - name: LIFECYCLE_V2_MODE
+    value: "shadow"
+  - name: LIFECYCLE_V2_MODE_SERVE_PERCENT
+    value: "1"
   - name: CLIENT_SUMMARIES_AT_CAP_ENABLED
     value: "true"
   - name: BUCKET_SPEECH_PROFILES
