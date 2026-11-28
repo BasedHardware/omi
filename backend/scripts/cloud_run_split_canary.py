@@ -8,7 +8,7 @@ The guard must evaluate only the supplied UTC interval and return its verdict.
 """
 
 import argparse
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 import hashlib
 import json
@@ -20,6 +20,13 @@ import subprocess
 import sys
 import time
 import urllib.request
+
+if __package__:
+    from . import serving_has
+else:
+    # Isolated Python does not add the script directory to sys.path.
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import serving_has
 
 REVISION = re.compile(r'[a-z][a-z0-9-]{0,62}')
 # Values are (donor hold-back percentage points, post-promotion guard seconds).
@@ -38,6 +45,10 @@ VERDICT_EXIT = {'PASS': 0, 'TRIP': 1, 'NO_COMPARATOR': 3, 'INSUFFICIENT_DATA': 4
 class Hold(RuntimeError):
     """The verified partial map remains in place for Release to resolve."""
 
+    def __init__(self, verdict, state):
+        super().__init__(verdict)
+        self.state = state
+
 
 @dataclass(frozen=True)
 class TrafficState:
@@ -47,9 +58,13 @@ class TrafficState:
     observed: dict
     tags: tuple = ()
     converged: bool = True
+    generation: int = 0
+    annotations: dict = field(default_factory=dict)
+    tags_observed: bool = True
 
 
 REVISION_TARGET = 'TRAFFIC_TARGET_ALLOCATION_TYPE_REVISION'
+RECOVERY_ANNOTATION = 'omi.me/holdback-recovery'
 
 
 class CloudRunTraffic:
@@ -66,6 +81,7 @@ class CloudRunTraffic:
         self.name = f'projects/{project}/locations/{region}/services/{service}'
         self.url = 'https://run.googleapis.com/v2/' + self.name
         self.request = request
+        self.promotion = None
 
     def _traffic(self, entries):
         result, tags = {}, {}
@@ -99,7 +115,17 @@ class CloudRunTraffic:
             and generation == doc.get('observedGeneration')
             and tags == observed_tags
         )
-        return TrafficState(doc['uid'], doc['etag'], requested, observed, tags, converged)
+        return TrafficState(
+            doc['uid'],
+            doc['etag'],
+            requested,
+            observed,
+            tags,
+            converged,
+            int(generation or 0),
+            doc.get('annotations') or {},
+            tags == observed_tags,
+        )
 
     def replace(self, state, target):
         remaining = dict(target)
@@ -111,22 +137,61 @@ class CloudRunTraffic:
             dict(type=REVISION_TARGET, revision=revision, percent=percent)
             for revision, percent in sorted(remaining.items())
         ]
-        # The entire map (including unchanged tags) changes in one CAS update.
-        self.request(
-            'PATCH',
-            self.url + '?updateMask=traffic',
-            body=dict(name=self.name, etag=state.etag, traffic=traffic),
-            timeout=15,
-        )
+        annotations = dict(state.annotations)
+        if self.promotion is not None and target != self.promotion['inverse']:
+            if not state.generation:
+                raise RuntimeError('traffic_generation_unknown')
+            # Store ownership in the same CAS as traffic. A local receipt cannot
+            # cover the interval between the server accepting PATCH and runner loss.
+            annotations[RECOVERY_ANNOTATION] = json.dumps(
+                dict(
+                    self.promotion,
+                    uid=state.uid,
+                    tags=state.tags,
+                    generation=state.generation + 1,
+                    previous_map=state.requested,
+                    requested_map=target,
+                ),
+                separators=(',', ':'),
+            )
+        else:
+            annotations.pop(RECOVERY_ANNOTATION, None)
+        self._patch(state, traffic=traffic, annotations=annotations)
+        self._wait_for(state, target, annotations.get(RECOVERY_ANNOTATION))
+
+    def _wait_for(self, state, target, marker):
         deadline = time.monotonic() + 90
         while (remaining_seconds := deadline - time.monotonic()) > 0:
             live = self.read(timeout=min(15, remaining_seconds))
-            if live.uid != state.uid or live.tags != state.tags:
+            current_marker = live.annotations.get(RECOVERY_ANNOTATION)
+            if (
+                live.uid != state.uid
+                or live.tags != state.tags
+                or current_marker not in (marker, state.annotations.get(RECOVERY_ANNOTATION))
+            ):
                 raise RuntimeError('traffic_identity_changed')
-            if live.converged and live.requested == live.observed == target:
+            if current_marker == marker and live.converged and live.requested == live.observed == target:
                 return
             time.sleep(min(2, max(0, deadline - time.monotonic())))
         raise RuntimeError('traffic_move_not_observed')
+
+    def _patch(self, state, *, annotations, **updates):
+        if annotations != state.annotations:
+            updates['annotations'] = annotations
+        self.request(
+            'PATCH',
+            self.url + '?updateMask=' + ','.join(updates),
+            body=dict(name=self.name, etag=state.etag, **updates),
+            timeout=15,
+        )
+
+    def leave_held(self, state):
+        # An intentional hold belongs to Release and must not look interrupted.
+        owned_move(state, self.promotion)
+        annotations = dict(state.annotations)
+        del annotations[RECOVERY_ANNOTATION]
+        self._patch(state, annotations=annotations)
+        self._wait_for(state, state.requested, None)
 
 
 def plan_for(service, inverse, donor, *, split):
@@ -189,7 +254,49 @@ def allocations(plan, candidate, donor_percent=0):
     return result
 
 
-def restore_completed(service, wire, transport, receipt, floor=None):
+def promotion_shares(plan):
+    if len(plan['inverse']) > 1:
+        donor_share = plan['inverse'][plan['donor']]
+        yield donor_share - min(10, donor_share - plan['holdback'] - 1)
+    yield plan['holdback']
+    yield 0
+
+
+def owned_move(state, identity=None):
+    marker = json.loads(state.annotations.get(RECOVERY_ANNOTATION, 'null'))
+    if not isinstance(marker, dict) or (identity and any(marker.get(k) != v for k, v in identity.items())):
+        raise RuntimeError('rollback_traffic_ownership_lost')
+    service, candidate = marker['service'], marker['candidate']
+    plan = decode_plan(service, marker['plan'])
+    if not valid_revision(service, candidate) or candidate in plan['inverse']:
+        raise RuntimeError('rollback_traffic_ownership_lost')
+    maps = [plan['inverse'], *(allocations(plan, candidate, share) for share in promotion_shares(plan))]
+    if (
+        not state.generation
+        or state.generation != marker['generation']
+        or state.uid != marker['uid']
+        or state.tags != tuple(map(tuple, marker['tags']))
+        or not state.tags_observed
+        or state.requested != marker['requested_map']
+        or not any(
+            marker['previous_map'] == previous
+            and state.requested == requested
+            and state.observed in (previous, requested)
+            for previous, requested in zip(maps, maps[1:])
+        )
+    ):
+        raise RuntimeError('rollback_traffic_ownership_lost')
+    return marker
+
+
+def check_release_floor(allocations, tags, floor_check):
+    # A zero-percent revision can still receive requests through its tag URL.
+    for revision in sorted(set(allocations) | {revision for _, revision in tags}):
+        if floor_check(revision) is not True:
+            raise ValueError('release_floor_rejected')
+
+
+def restore_completed(service, wire, transport, receipt, *, floor_check):
     plan = decode_plan(service, wire)
     candidate = receipt['candidate']
     if (
@@ -202,10 +309,6 @@ def restore_completed(service, wire, transport, receipt, floor=None):
     expected = allocations(plan, candidate)
     if receipt['final_map'] != expected:
         raise ValueError('rollback_receipt_map_mismatch')
-    if floor is not None:
-        # SCA-3804: the admitted inverse may only be restored when every
-        # revision it routes to still satisfies the published release floor.
-        floor(tuple(plan['inverse']))
     current = transport.read()
     if (
         not current.converged
@@ -216,6 +319,7 @@ def restore_completed(service, wire, transport, receipt, floor=None):
         or current.observed != expected
     ):
         raise RuntimeError('rollback_traffic_ownership_lost')
+    check_release_floor(plan['inverse'], current.tags, floor_check)
     transport.replace(current, plan['inverse'])
 
 
@@ -225,27 +329,10 @@ def restore_completed(service, wire, transport, receipt, floor=None):
 FLOOR_REFRESH = ('git', 'fetch', '--no-tags', 'origin', '+refs/heads/main:refs/remotes/origin/main')
 
 
-def release_floor(targets, *, script, project, region, refresh=None, run=subprocess.run):
-    """Refuse any rollback target the published backend release floor rejects.
-
-    When refresh is supplied its command must succeed before any target is
-    checked; a failed refresh refuses the check instead of trusting a cached
-    floor.
-    """
-    if refresh is not None:
-        fetched = run(list(refresh), capture_output=True, text=True)
-        if fetched.returncode:
-            reason = ' '.join((fetched.stderr or '').split())[:400]
-            raise ValueError(f'release_floor_refresh_failed:{reason}')
-    for revision in targets:
-        completed = run(
-            [sys.executable, str(script), '--revision', revision, '--project', project, '--region', region],
-            capture_output=True,
-            text=True,
-        )
-        if completed.returncode:
-            reason = ' '.join((completed.stderr or '').split())[:400]
-            raise ValueError(f'release_floor_refused:{revision}:{reason}')
+def refresh_release_floor(*, run=subprocess.run):
+    completed = run(list(FLOOR_REFRESH), capture_output=True, text=True, timeout=60)
+    if completed.returncode:
+        raise ValueError('release_floor_refresh_failed')
 
 
 def recovery_plan(receipt, run, run_id):
@@ -280,7 +367,30 @@ def recovery_plan(receipt, run, run_id):
     return service, wire
 
 
-def promote(service, wire, candidate, transport, guard, *, sleep=time.sleep, now=None, on_promoted=None, floor=None):
+def restore_interrupted(transport, run, run_id, *, floor_check):
+    current = transport.read()
+    marker = owned_move(current)
+    service, _ = recovery_plan(marker, run, run_id)
+    if service != transport.service or marker['target'] != transport.name:
+        raise ValueError('rollback_receipt_mismatch')
+    check_release_floor(marker['inverse'], current.tags, floor_check)
+    transport.replace(current, marker['inverse'])
+
+
+def promote(
+    service,
+    wire,
+    candidate,
+    transport,
+    guard,
+    *,
+    floor_check,
+    refresh_floor=None,
+    recovery_identity=None,
+    sleep=time.sleep,
+    now=None,
+    on_promoted=None,
+):
     """Guard a named candidate and return only after its final map is observed.
 
     For a split service a guarded canary first borrows up to 10 percentage
@@ -296,8 +406,6 @@ def promote(service, wire, candidate, transport, guard, *, sleep=time.sleep, now
     inverse, donor = plan['inverse'], plan['donor']
     if not valid_revision(service, candidate) or candidate in inverse:
         raise ValueError('invalid_candidate')
-    if floor is not None:
-        floor(tuple(inverse))
     initial = transport.read()
     if (
         not initial.uid
@@ -307,6 +415,12 @@ def promote(service, wire, candidate, transport, guard, *, sleep=time.sleep, now
         or initial.observed != inverse
     ):
         raise ValueError('named_inverse_mismatch')
+
+    if refresh_floor is not None:
+        refresh_floor()
+    check_release_floor(inverse, initial.tags, floor_check)
+    if candidate not in {revision for _, revision in initial.tags} and floor_check(candidate) is not True:
+        raise ValueError('release_floor_rejected')
 
     def read():
         current = transport.read()
@@ -318,6 +432,8 @@ def promote(service, wire, candidate, transport, guard, *, sleep=time.sleep, now
         current = read()
         if not current.converged or current.requested != expected or current.observed != expected:
             raise RuntimeError('traffic_readback_mismatch')
+        if recovery_identity is not None and expected != inverse:
+            owned_move(current, recovery_identity)
         return current
 
     def move(current, donor_percent):
@@ -337,7 +453,7 @@ def promote(service, wire, candidate, transport, guard, *, sleep=time.sleep, now
         verdict = guard(service, candidate, donor, start, end)
         unchanged = assert_guard_traffic(current)
         if verdict in ('NO_COMPARATOR', 'INSUFFICIENT_DATA'):
-            raise Hold(verdict)
+            raise Hold(verdict, unchanged)
         if verdict != 'PASS':
             raise RuntimeError('holdback_guard_tripped' if verdict == 'TRIP' else 'invalid_guard_verdict')
         return unchanged
@@ -352,15 +468,17 @@ def promote(service, wire, candidate, transport, guard, *, sleep=time.sleep, now
     attempted = []
     try:
         current = initial
-        if len(inverse) > 1:
-            canary = min(10, inverse[donor] - plan['holdback'] - 1)
-            current = guard_window(move(current, inverse[donor] - canary), MIN_WINDOW)
-        current = guard_window(move(current, plan['holdback']), plan['guard_seconds'])
-        promoted = move(current, 0)
+        *guarded_shares, final_share = promotion_shares(plan)
+        windows = (MIN_WINDOW, plan['guard_seconds']) if len(guarded_shares) == 2 else (plan['guard_seconds'],)
+        for share, window in zip(guarded_shares, windows):
+            current = guard_window(move(current, share), window)
+        promoted = move(current, final_share)
         if on_promoted:
             on_promoted(promoted)
         return promoted.observed
-    except Hold:
+    except Hold as held:
+        if recovery_identity is not None:
+            transport.leave_held(held.state)
         raise
     except BaseException:
         if attempted:
@@ -368,10 +486,12 @@ def promote(service, wire, candidate, transport, guard, *, sleep=time.sleep, now
             if current.requested != inverse:
                 if current.requested not in attempted or current.observed not in [inverse, *attempted]:
                     raise RuntimeError('rollback_traffic_ownership_lost')
-                if floor is not None:
-                    # Recheck at restore time: the published floor can move
-                    # while a multi-hour guard window is open.
-                    floor(tuple(inverse))
+                if recovery_identity is not None:
+                    owned_move(current, recovery_identity)
+                # A guard window can outlive the floor read before the move.
+                if refresh_floor is not None:
+                    refresh_floor()
+                check_release_floor(inverse, current.tags, floor_check)
                 transport.replace(current, inverse)
             settled(inverse)
         raise
@@ -418,6 +538,46 @@ def guard_command(command, project, region, *, run=subprocess.run):
         return pending
 
     return evaluate
+
+
+def revision_image_source(revision, project, region, *, repo, describe=None, registry=None):
+    """Full source commit of a revision's application image: pinned digest, then
+    the registry's OCI revision label or commit tags (serving_has). The
+    OMI_BACKEND_RELEASE_SHA env stamp is never read: env merges keep stale
+    values, so it can name a release the revision does not serve. Any read
+    that cannot prove the source raises ValueError (fail closed)."""
+    if describe is None:
+
+        def describe(name):
+            flags = ['--project', project, '--region', region, '--format=json']
+            return json.loads(serving_has.command([serving_has.GCLOUD, 'run', 'revisions', 'describe', name, *flags]))
+
+    document = describe(revision)
+    if (document.get('metadata') or {}).get('name') != revision:
+        raise ValueError('revision_identity_mismatch')
+    # No service argument: the desktop-backend env-stamp fallback never applies here.
+    source = serving_has.image_source(document, repo, registry=registry)
+    if not re.fullmatch(r'[0-9a-f]{40}', source or ''):
+        raise ValueError('image_source_unproven')
+    return source
+
+
+def release_floor_command(script, project, region, *, repo='.', run=subprocess.run, describe=None, registry=None):
+    """Prove each revision's image source, then run the reviewed
+    verify_backend_release_floor.py on that exact commit (--sha)."""
+
+    repo = str(Path(repo).resolve())
+    script = Path(script).resolve()
+
+    def check(revision):
+        try:
+            source = revision_image_source(revision, project, region, repo=repo, describe=describe, registry=registry)
+            result = run([sys.executable, '-I', str(script), '--sha', source], cwd=repo, timeout=120)
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, IndexError, subprocess.SubprocessError):
+            return False
+        return result.returncode == 0
+
+    return check
 
 
 def gcloud_json(method, url, *, body=None, timeout=15):
@@ -485,9 +645,8 @@ def main(argv=None):
         if mode != 'validate-plan':
             command.add_argument('--project', required=True)
             command.add_argument('--region', required=True)
-            command.add_argument('--promotion-receipt', type=Path, required=True)
-        if mode in ('restore-completed', 'promote'):
             command.add_argument('--release-floor-check', type=Path, required=True)
+            command.add_argument('--promotion-receipt', type=Path, required=True)
         if mode == 'promote':
             command.add_argument('--refresh-floor', action='store_true', required=True)
             command.add_argument('--candidate', required=True)
@@ -499,24 +658,26 @@ def main(argv=None):
     recovery = commands.add_parser('recover-run')
     recovery.add_argument('--project', required=True)
     recovery.add_argument('--region', required=True)
+    recovery.add_argument('--release-floor-check', type=Path, required=True)
     recovery.add_argument('--run-id', type=int, required=True)
     recovery.add_argument('--run-metadata', type=Path, required=True)
-    recovery.add_argument('--promotion-receipt', type=Path, required=True)
-    recovery.add_argument('--release-floor-check', type=Path, required=True)
+    recovery.add_argument('--promotion-receipt', type=Path)
     args = parser.parse_args(argv)
-    floor = None
-    if getattr(args, 'release_floor_check', None) is not None:
-        refresh = FLOOR_REFRESH if getattr(args, 'refresh_floor', False) else None
-        floor = lambda targets: release_floor(  # noqa: E731 - single-use CLI closure
-            targets, script=args.release_floor_check, project=args.project, region=args.region, refresh=refresh
-        )
     try:
         if args.mode == 'recover-run':
-            receipt = json.loads(args.promotion_receipt.read_text())
             run = json.loads(args.run_metadata.read_text())
-            service, wire = recovery_plan(receipt, run, args.run_id)
-            transport = CloudRunTraffic(args.project, args.region, service, gcloud_json)
-            restore_completed(service, wire, transport, receipt, floor)
+            floor_check = release_floor_command(args.release_floor_check, args.project, args.region)
+            if args.promotion_receipt is not None:
+                receipt = json.loads(args.promotion_receipt.read_text())
+                service, wire = recovery_plan(receipt, run, args.run_id)
+                transport = CloudRunTraffic(args.project, args.region, service, gcloud_json)
+                restore_completed(service, wire, transport, receipt, floor_check=floor_check)
+            else:
+                target = re.match(r'Holdback prod/([a-z-]+) sha=', run['display_title'])
+                if target is None:
+                    raise ValueError('rollback_run_binding_mismatch')
+                transport = CloudRunTraffic(args.project, args.region, target[1], gcloud_json)
+                restore_interrupted(transport, run, args.run_id, floor_check=floor_check)
             print('HOLDBACK_RESTORED exact admitted inverse')
             return 0
         if hashlib.sha256(args.plan.encode()).hexdigest() != args.binding:
@@ -525,8 +686,15 @@ def main(argv=None):
         if args.mode == 'validate-plan':
             return 0
         transport = CloudRunTraffic(args.project, args.region, args.service, gcloud_json)
+        floor_check = release_floor_command(args.release_floor_check, args.project, args.region)
         if args.mode == 'restore-completed':
-            restore_completed(args.service, args.plan, transport, json.loads(args.promotion_receipt.read_text()), floor)
+            restore_completed(
+                args.service,
+                args.plan,
+                transport,
+                json.loads(args.promotion_receipt.read_text()),
+                floor_check=floor_check,
+            )
             print('HOLDBACK_RESTORED exact admitted inverse')
             return 0
 
@@ -537,19 +705,24 @@ def main(argv=None):
         ):
             raise ValueError('invalid_promotion_run_identity')
 
+        identity = dict(
+            schema=1,
+            service=args.service,
+            plan=args.plan,
+            inverse=plan['inverse'],
+            source=args.source,
+            control=args.control,
+            run_id=args.run_id,
+            run_attempt=args.run_attempt,
+            target=transport.name,
+            binding=args.binding,
+            candidate=args.candidate,
+        )
+        transport.promotion = identity
+
         def record(state):
             receipt = dict(
-                schema=1,
-                service=args.service,
-                plan=args.plan,
-                inverse=plan['inverse'],
-                source=args.source,
-                control=args.control,
-                run_id=args.run_id,
-                run_attempt=args.run_attempt,
-                target=transport.name,
-                binding=args.binding,
-                candidate=args.candidate,
+                identity,
                 uid=state.uid,
                 etag=state.etag,
                 tags=state.tags,
@@ -560,7 +733,17 @@ def main(argv=None):
 
         default = [sys.executable, '-I', str(Path(__file__).with_name('guard_eval.py'))]
         guard = guard_command(args.guard_command or default, args.project, args.region)
-        result = promote(args.service, args.plan, args.candidate, transport, guard, on_promoted=record, floor=floor)
+        result = promote(
+            args.service,
+            args.plan,
+            args.candidate,
+            transport,
+            guard,
+            floor_check=floor_check,
+            refresh_floor=refresh_release_floor,
+            recovery_identity=identity,
+            on_promoted=record,
+        )
         print(json.dumps(result, sort_keys=True))
         return 0
     except Hold as error:

@@ -25,6 +25,8 @@ CLASSES = {"1xx", "2xx", "3xx", "4xx", "5xx"}
 NAME = re.compile(r"[a-z][a-z0-9-]{0,62}")
 LOG_PAGE_SIZE = 10_000
 LOG_PAGE_BUDGET = 24
+# Like 2xx and 3xx, production 429 request logs are sampled at 10%.
+SAMPLED_CLIENT_STATUSES = (429,)
 # A designed-refusal record is written while its request is in flight. Its
 # timestamp can sit this far from the request log's on either side.
 REFUSAL_RECORD_SLACK_SECONDS = 120
@@ -78,6 +80,7 @@ def policy_for(service, route_names=None):
     policy["log_page_budget"] = budgets.get(service, LOG_PAGE_BUDGET)
     integers = (
         "success_log_weight",
+        "rate_limited_log_weight",
         "settle_seconds",
         "minimum_requests",
         "minimum_effective_requests",
@@ -173,31 +176,39 @@ class Population:
         return result
 
 
-def service_population(side, weight):
+def log_weights(policy):
+    return policy["success_log_weight"], policy["rate_limited_log_weight"]
+
+
+def service_population(side, weights):
     classes = side["service"]
     total = sum(count(value) for value in classes.values())
     if "service_logs" not in side:
         # Historical offline fixtures carry preaggregated status classes.
         return Population(total, count(classes.get("5xx", 0)), count(classes.get("4xx", 0)))
-    logged = route_population(side["service_logs"], weight, {})
+    logged = route_population(side["service_logs"], weights, {})
     if logged.errors > total:
         return replace(logged, population_note="log_total_used_logged_5xx_exceeds_gmp_total")
     return Population(total, logged.errors, logged.clients)
 
 
-def route_population(statuses, weight, refusal_records):
-    """Count one route's statuses, excluding only 5xx matched to a designed-refusal record.
+def route_population(statuses, weights, refusal_records):
+    """Weight sampled log classes back to request counts. Unsampled 4xx/5xx count once.
 
-    ``refusal_records`` maps status to the number of designed-refusal records
-    matched to this route, revision and window. More records than observed
-    responses of that status cannot be reconciled and never clamp.
+    Only 5xx matched to a designed-refusal record are excluded. ``refusal_records``
+    maps status to the number of designed-refusal records matched to this route,
+    revision and window. More records than observed responses of that status
+    cannot be reconciled and never clamp.
     """
+    success_weight, limited_weight = weights
     successes = clients = errors = excluded = 0
     observed = Counter()
     for status, value in statuses.items():
         status, value = int(status), count(value)
         if 200 <= status < 400:
             successes += value
+        elif status in SAMPLED_CLIENT_STATUSES:
+            clients += limited_weight * value
         elif 400 <= status < 500:
             clients += value
         elif 500 <= status < 600:
@@ -212,7 +223,8 @@ def route_population(statuses, weight, refusal_records):
         if records > observed[status]:
             raise RefusalRecordsUnreconciled("records_exceed_route_responses")
         excluded += records
-    return Population(weight * successes + clients + errors, errors - excluded, clients, excluded, weight)
+    weight = max(success_weight, limited_weight)
+    return Population(success_weight * successes + clients + errors, errors - excluded, clients, excluded, weight)
 
 
 def compare(candidate, inverse, policy, alpha):
@@ -249,8 +261,8 @@ def evaluate(policy, candidate, inverse):
     leave the 5xx numerator; they stay in the denominator as observed requests.
     Records that cannot be reconciled hold with INSUFFICIENT_DATA.
     """
-    weight = policy["success_log_weight"]
-    service_pair = [service_population(side, weight) for side in (candidate, inverse)]
+    weights = log_weights(policy)
+    service_pair = [service_population(side, weights) for side in (candidate, inverse)]
     if not service_pair[1].requests:
         # Report the service counts without a separate route read for refusals.
         row = compare(*service_pair, policy, policy["alpha"])
@@ -259,7 +271,7 @@ def evaluate(policy, candidate, inverse):
     try:
         route_pairs = {
             name: [
-                route_population(side["routes"].get(name, {}), weight, refusal_records(side, name, route))
+                route_population(side["routes"].get(name, {}), weights, refusal_records(side, name, route))
                 for side in (candidate, inverse)
             ]
             for name, route in routes.items()
@@ -546,7 +558,7 @@ def read_window(
             name: {"service": series, "service_logs": logs[name], "routes": {}, "refusal_records": {}}
             for name, series in counts.items()
         }
-        if service_population(inputs[inverse], policy["success_log_weight"]).requests:
+        if service_population(inputs[inverse], log_weights(policy)).requests:
             for name, route in policy["routes"].items():
                 statuses = telemetry.route_counts(service, candidate, inverse, start, end, route)
                 for revision, aggregate in statuses.items():

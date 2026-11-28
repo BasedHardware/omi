@@ -16,7 +16,7 @@
 #   workerd-rollback    helm rollback prod workerd to workerd_helm_revision.
 #   repair-traffic-only  Restore Cloud Run traffic to the serving revisions.
 #   recover-pump-cap    SCA-3318 one-time service-level cap correction on the dark pump.
-#   recover-split       Restore the admitted inverse from a failed bound promotion receipt.
+#   recover-split       Restore the admitted inverse of a failed bound promotion.
 #   probe-app-icon      Check app-icon containment on the admitted Backend revision.
 
 name: Deploy Backend to Cloud RUN
@@ -1575,12 +1575,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
-      - name: Checkout immutable recovery controls
+      - name: Checkout immutable recovery controls and release-floor history
         uses: actions/checkout@v7
         with:
           ref: ${{ github.workflow_sha }}
+          fetch-depth: 0
           persist-credentials: false
-      - name: Fetch the original attempt and its completed promotion receipt
+      - name: Fetch the original attempt and any completed promotion receipt
         env:
           GH_TOKEN: ${{ github.token }}
           ORIGINAL_RUN: ${{ inputs.split_recovery_run_id }}
@@ -1595,9 +1596,18 @@ jobs:
             .status == "completed" and (.display_title | startswith("Holdback prod/"))' "$evidence/run.json" >/dev/null
           deploy_conclusion="$(gh api --paginate "$original/jobs" --jq '.jobs[] | select(.name == "deploy") | .conclusion')"
           case "$deploy_conclusion" in failure|cancelled|timed_out) ;; *) exit 1 ;; esac
-          gh run download "$ORIGINAL_RUN" --repo "$GITHUB_REPOSITORY" \
-            --name "backend-holdback-promotion-$ORIGINAL_RUN-1" --dir "$evidence/artifact"
-          test -s "$evidence/artifact/backend-holdback-promotion.json"
+          artifact="backend-holdback-promotion-$ORIGINAL_RUN-1"
+          count="$(gh api --method GET "repos/$GITHUB_REPOSITORY/actions/runs/$ORIGINAL_RUN/artifacts" \
+            -f name="$artifact" --jq '.total_count')"
+          case "$count" in
+            0) ;;
+            1)
+              gh run download "$ORIGINAL_RUN" --repo "$GITHUB_REPOSITORY" \
+                --name "$artifact" --dir "$evidence/artifact"
+              test -s "$evidence/artifact/backend-holdback-promotion.json"
+              ;;
+            *) exit 1 ;;
+          esac
           printf 'SPLIT_RECOVERY_EVIDENCE=%s\n' "$evidence" >> "$GITHUB_ENV"
       - name: Authenticate existing production workflow identity
         uses: google-github-actions/auth@v3
@@ -1627,11 +1637,15 @@ jobs:
           ORIGINAL_RUN: ${{ inputs.split_recovery_run_id }}
           PROJECT: ${{ vars.GCP_PROJECT_ID }}
         run: |
+          set -euo pipefail
+          receipt=()
+          if [[ -f "$SPLIT_RECOVERY_EVIDENCE/artifact/backend-holdback-promotion.json" ]]; then
+            receipt=(--promotion-receipt "$SPLIT_RECOVERY_EVIDENCE/artifact/backend-holdback-promotion.json")
+          fi
           python3 backend/scripts/cloud_run_split_canary.py recover-run \
             --project "$PROJECT" --region "$REGION" --run-id "$ORIGINAL_RUN" \
             --run-metadata "$SPLIT_RECOVERY_EVIDENCE/run.json" \
-            --promotion-receipt "$SPLIT_RECOVERY_EVIDENCE/artifact/backend-holdback-promotion.json" \
-            --release-floor-check .github/scripts/verify_backend_release_floor.py
+            --release-floor-check .github/scripts/verify_backend_release_floor.py "${receipt[@]}"
 
   recover-projection-pump-cap:
     needs: validate-production-boundary

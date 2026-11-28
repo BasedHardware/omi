@@ -562,6 +562,7 @@ def poll_latest_ready_convergence(
     wait_seconds: float,
     interval_seconds: float,
     include_listener: bool = True,
+    expected_serving_percent: int = 100,
     collector: Callable[[Mapping[str, Sequence[str]]], dict[str, Mapping[str, Any]]] | None = None,
 ) -> LatestReadyPoll:
     """Wait a bounded window for lagging latestReadyRevisionName pointers to converge.
@@ -594,7 +595,9 @@ def poll_latest_ready_convergence(
             )
         time.sleep(min(interval_seconds, remaining))
         documents = {**documents, **resolve(wanted)}
-        errors = evaluate(expectation, documents, include_listener=include_listener)
+        errors = evaluate(
+            expectation, documents, include_listener=include_listener, expected_serving_percent=expected_serving_percent
+        )
         lagging_now, others = partition_latest_ready_lag(expectation, errors)
         if not others and not lagging_now:
             return LatestReadyPoll(
@@ -891,6 +894,7 @@ def main() -> int:
                     wait_seconds=args.latest_ready_wait_seconds,
                     interval_seconds=args.latest_ready_poll_interval_seconds,
                     include_listener=include_listener,
+                    expected_serving_percent=args.expected_serving_percent,
                 )
                 documents = poll.documents
                 errors = evaluate(

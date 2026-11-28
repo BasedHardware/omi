@@ -52,8 +52,8 @@ def traffic_revision(traffic):
     positive = []
     for target in traffic:
         name = target.get('revisionName')
-        # Cloud Run can omit the zero percentage of a tagged route.
-        percent = target.get('percent', 0 if target.get('tag') and revision_name(name) else None)
+        # Cloud Run can omit the zero percentage of a retained revision even without a tag.
+        percent = target.get('percent', 0 if revision_name(name) else None)
         if type(percent) is not int or not 0 <= percent <= 100:
             raise ValueError('traffic_unknown')
         if percent:
