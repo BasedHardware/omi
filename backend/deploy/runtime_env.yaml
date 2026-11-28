@@ -152,6 +152,8 @@ environments:
             value: 'off'
             category: ops_kill
           CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'off', category: rollout}
+          NOTES_PACKET_V2_MODE: {value: 'off', category: rollout}
+          CALLS_RECAP_MODE: {value: 'off', category: rollout}
           TRANSLATION_DEMAND_GATE_ENABLED: {value: 'true', category: rollout}
           TRANSLATION_ONOPEN_ENABLED: {value: 'true', category: rollout}
           TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
@@ -590,6 +592,8 @@ environments:
             value: 'true'
             category: ops_kill
           CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'off', category: rollout}
+          NOTES_PACKET_V2_MODE: {value: 'off', category: rollout}
+          CALLS_RECAP_MODE: {value: 'off', category: rollout}
           CLIENT_SUMMARIES_AT_CAP_ENABLED: {value: 'true', category: rollout}
           LLM_GATEWAY_ACCOUNTING_ENABLED: {value: 'true', category: rollout}
           MEMORY_ENABLED:
@@ -1197,6 +1201,8 @@ environments:
               value: 'true'
               category: ops_kill
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'off', category: rollout}
+            NOTES_PACKET_V2_MODE: {value: 'off', category: rollout}
+            CALLS_RECAP_MODE: {value: 'off', category: rollout}
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
               category: ops_kill
@@ -1614,6 +1620,8 @@ environments:
               value: 'true'
               category: ops_kill
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'off', category: rollout}
+            NOTES_PACKET_V2_MODE: {value: 'off', category: rollout}
+            CALLS_RECAP_MODE: {value: 'off', category: rollout}
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
               category: ops_kill
@@ -2038,6 +2046,8 @@ environments:
               value: 'true'
               category: ops_kill
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'off', category: rollout}
+            NOTES_PACKET_V2_MODE: {value: 'off', category: rollout}
+            CALLS_RECAP_MODE: {value: 'off', category: rollout}
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
               category: ops_kill
@@ -2439,6 +2449,8 @@ environments:
               value: 'true'
               category: ops_kill
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'off', category: rollout}
+            NOTES_PACKET_V2_MODE: {value: 'off', category: rollout}
+            CALLS_RECAP_MODE: {value: 'off', category: rollout}
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
               category: ops_kill
@@ -2709,6 +2721,8 @@ environments:
             DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
+            NOTES_PACKET_V2_MODE: {value: 'off', category: rollout}
+            CALLS_RECAP_MODE: {value: 'off', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             GOOGLE_CLOUD_PROJECT:
@@ -3090,6 +3104,8 @@ environments:
             value: 'off'
             category: ops_kill
           CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'off', category: rollout}
+          NOTES_PACKET_V2_MODE: {value: 'off', category: rollout}
+          CALLS_RECAP_MODE: {value: 'off', category: rollout}
           TRANSLATION_DEMAND_GATE_ENABLED: {value: 'true', category: rollout}
           TRANSLATION_ONOPEN_ENABLED: {value: 'true', category: rollout}
           TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
@@ -3655,6 +3671,8 @@ environments:
             value: 'true'
             category: ops_kill
           CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'off', category: rollout}
+          NOTES_PACKET_V2_MODE: {value: 'off', category: rollout}
+          CALLS_RECAP_MODE: {value: 'off', category: rollout}
           CLIENT_SUMMARIES_AT_CAP_ENABLED: {value: 'true', category: rollout}
           LLM_GATEWAY_ACCOUNTING_ENABLED: {value: 'true', category: rollout}
           MEMORY_ENABLED:
@@ -4314,6 +4332,8 @@ environments:
               value: 'true'
               category: ops_kill
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'off', category: rollout}
+            NOTES_PACKET_V2_MODE: {value: 'off', category: rollout}
+            CALLS_RECAP_MODE: {value: 'off', category: rollout}
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
               category: ops_kill
@@ -4924,6 +4944,8 @@ environments:
               value: 'true'
               category: ops_kill
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'off', category: rollout}
+            NOTES_PACKET_V2_MODE: {value: 'off', category: rollout}
+            CALLS_RECAP_MODE: {value: 'off', category: rollout}
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
               category: ops_kill
@@ -5527,6 +5549,8 @@ environments:
               value: 'true'
               category: ops_kill
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'off', category: rollout}
+            NOTES_PACKET_V2_MODE: {value: 'off', category: rollout}
+            CALLS_RECAP_MODE: {value: 'off', category: rollout}
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
               category: ops_kill
@@ -6088,6 +6112,8 @@ environments:
               value: 'true'
               category: ops_kill
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'off', category: rollout}
+            NOTES_PACKET_V2_MODE: {value: 'off', category: rollout}
+            CALLS_RECAP_MODE: {value: 'off', category: rollout}
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
               category: ops_kill
@@ -6623,6 +6649,8 @@ environments:
               value: 'true'
               category: ops_kill
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'off', category: rollout}
+            NOTES_PACKET_V2_MODE: {value: 'off', category: rollout}
+            CALLS_RECAP_MODE: {value: 'off', category: rollout}
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
               category: ops_kill
@@ -7050,6 +7078,8 @@ environments:
             DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
+            NOTES_PACKET_V2_MODE: {value: 'off', category: rollout}
+            CALLS_RECAP_MODE: {value: 'off', category: rollout}
             FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
               value: 'false'
               category: ops_kill
