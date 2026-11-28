@@ -67,9 +67,10 @@ intent or receipt retry stays in `batch_privacy_late_sweeps` with a
 `omi_batch_pipeline_privacy_post_window_dead_letters_total`.
 `omi-batch-privacy-erasure-dead-stock` tracks retained dead letters from
 `omi_batch_pipeline_privacy_post_window_dead_letter_units`.
-`omi-batch-privacy-erasure-stock-stale` detects a missing stock observation or
-one at least 15 minutes old. A single publisher admitted through a shared Redis
-cooldown counts the indexed timestamps at most every five minutes.
+`omi-batch-privacy-erasure-stock-stale` fires when the stock observation stays
+missing or at least 15 minutes old for five minutes. A single publisher admitted
+through a shared Redis cooldown counts the indexed timestamps at most every
+five minutes.
 
 Pipeline owns recovery. The collection has no separate resolution field or
 in-tree operator redrive command. A retained row with the dead-letter timestamp

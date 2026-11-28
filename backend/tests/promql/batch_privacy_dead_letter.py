@@ -64,14 +64,27 @@ def main():
                 *at(35, 'BatchPrivacyStock'),
                 *at(40),
                 *at(54),
-                *at(55, 'BatchPrivacyStale'),
+                *at(55),
+                *at(59),
+                *at(60, 'BatchPrivacyStale'),
             ],
         },
         {
             'name': 'missing stock observation',
             'interval': '1m',
             'input_series': [],
-            'alert_rule_test': at(35, 'BatchPrivacyStale'),
+            'alert_rule_test': [*at(0), *at(4), *at(5, 'BatchPrivacyStale')],
+        },
+        {
+            'name': 'publisher replacement starts at zero, then samples within the hold',
+            'interval': '1m',
+            'input_series': [
+                _series('_units', '0x19 stale', 'retiring'),
+                _series('_observed_at_seconds', '0+60x19 stale', 'retiring'),
+                _series('_units', '0x30', 'replacement'),
+                _series('_observed_at_seconds', '0x21 1320x8', 'replacement'),
+            ],
+            'alert_rule_test': [*at(20), *at(21), *at(22), *at(25)],
         },
     ]
     with tempfile.TemporaryDirectory(prefix='batch-privacy-dead-letter-promql-') as directory:

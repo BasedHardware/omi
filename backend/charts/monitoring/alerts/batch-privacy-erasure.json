@@ -220,11 +220,11 @@
     ],
     "noDataState": "OK",
     "execErrState": "KeepLast",
-    "for": "0s",
+    "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
       "dashboard_url": "https://monitor.omi.me/d/omi-batch-stuck-census",
-      "summary": "No paired dead-letter stock observation has been available in the last 15 minutes.",
+      "summary": "For five minutes, no paired dead-letter stock observation has been younger than 15 minutes.",
       "user_impact": "Operators cannot verify whether delayed batch erasure has unresolved failures.",
       "scope": "Agent tier. Production aggregate observation freshness across publishing replicas.",
       "verification": "In Grafana Explore, check aggregate stock and observation age on gmp-cloud-run.",
