@@ -17,12 +17,19 @@ state helpers and the callback's rejection paths; no live services.
 import asyncio
 import json
 import os
+from html import escape
+from unittest.mock import AsyncMock, Mock
+
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
 
 from routers import apps as apps_router  # noqa: E402
 from utils import mcp_client  # noqa: E402
+from models.app import ChatTool  # noqa: E402
 
 
 class _FakeRedis:
@@ -146,3 +153,54 @@ def test_callback_reaches_exchange_when_state_and_owner_match(monkeypatch):
     # owner checks passed and the flow proceeded to the provider call.
     assert reached == [True]
     assert response.status_code == 502
+
+
+@pytest.mark.parametrize('app_name,tool_count', [('Pencil', 250), ('<img src=x onerror="alert(1)">', 250), (None, 0)])
+def test_callback_confirms_connection_without_exposing_tool_catalog(monkeypatch, app_name, tool_count):
+    _patch_redis(monkeypatch)
+    state = mcp_client.create_mcp_oauth_state('app-1', 'uid-1')
+    app_data = {
+        'name': app_name,
+        'uid': 'uid-1',
+        'external_integration': {
+            'mcp_server_url': 'https://mcp.example.com',
+            'mcp_oauth_tokens': {'token_endpoint': 'https://mcp.example.com/token', 'client_id': 'client-1'},
+        },
+    }
+    _patch_route(monkeypatch, app_data)
+    exchange = AsyncMock(
+        return_value={'access_token': 'fake-access', 'refresh_token': 'fake-refresh', 'expires_in': 900}
+    )
+    tools = [
+        ChatTool(name=f'internal_tool_{i}', description='Test tool', endpoint='https://mcp.example.com')
+        for i in range(tool_count)
+    ]
+    discover = AsyncMock(return_value=tools)
+    update, invalidate, enable = Mock(), Mock(), Mock()
+    monkeypatch.setattr(apps_router, 'exchange_oauth_code', exchange)
+    monkeypatch.setattr(apps_router, 'discover_mcp_tools', discover)
+    monkeypatch.setattr(apps_router, 'update_app_in_db', update)
+    monkeypatch.setattr(apps_router, 'delete_app_cache_by_id', invalidate)
+    monkeypatch.setattr(apps_router, 'enable_app', enable)
+    app = FastAPI()
+    app.include_router(apps_router.router)
+
+    with TestClient(app) as client:
+        response = client.get('/v1/apps/mcp/callback', params={'code': 'code-1', 'state': state})
+
+    assert response.status_code == 200
+    assert response.headers['content-type'].startswith('text/html')
+    assert escape(app_name or 'Your app') in response.text
+    assert 'is now connected to Omi.' in response.text
+    assert 'Close this window to continue in Omi.' in response.text
+    assert 'internal_tool_' not in response.text
+    assert '<img' not in response.text
+    assert len(response.content) < 7000
+    discover.assert_awaited_once_with('https://mcp.example.com', 'fake-access')
+    saved = update.call_args.args[0]
+    assert saved['id'] == 'app-1'
+    assert saved['status'] == 'approved'
+    assert saved['external_integration']['mcp_oauth_tokens']['refresh_token'] == 'fake-refresh'
+    assert [tool['name'] for tool in saved['chat_tools']] == [tool.name for tool in tools]
+    invalidate.assert_called_once_with('app-1')
+    enable.assert_called_once_with('uid-1', 'app-1')
