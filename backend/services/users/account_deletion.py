@@ -92,6 +92,26 @@ ACCOUNT_DELETION_WIPE_COMPLETED = 'Account Deletion Wipe Completed'
 ACCOUNT_DELETION_WIPE_FAILED = 'Account Deletion Wipe Failed'
 
 
+def _sanitize_error_detail(text: str) -> str:
+    cleaned = sanitize(text)
+    if not isinstance(cleaned, str):  # pyright: ignore[reportUnnecessaryIsInstance]
+        return text
+    return cleaned
+
+
+def _parse_max_attempts(raw: object) -> int:
+    if isinstance(raw, bool):
+        return 10
+    if isinstance(raw, int):
+        return max(1, raw)
+    if isinstance(raw, str):
+        try:
+            return max(1, int(raw.strip()))
+        except ValueError:
+            return 10
+    return 10
+
+
 def _historical_memory_ids(uid: str) -> list[str]:
     """Enumerate historical provider identities through the universal owner."""
 
@@ -588,11 +608,6 @@ def background_wipe_user_data(
                 pass
             except Exception as persist_err:
                 logger.error(f'delete_account billing status persist failed for {uid}: {sanitize(str(persist_err))}')
-        if not billing_parked:
-            try:
-                users_db.mark_user_deletion_wipe_failed(uid)
-            except Exception as persist_err:
-                logger.error(f'delete_account wipe status persist failed for {uid}: {sanitize(str(persist_err))}')
         required_failures, best_effort_failures = _purge_failures(purge_result)
         failed_operations = [failure['operation'] for failure in required_failures + best_effort_failures]
         # A later step's failure is named even when the derived purge already recorded best-effort failures
@@ -600,6 +615,14 @@ def background_wipe_user_data(
         if current_operation != 'derived_data' and current_operation not in failed_operations:
             failed_operations.append(current_operation)
         failed_operations = failed_operations or [current_operation]
+        if not billing_parked:
+            try:
+                error_detail = ', '.join(failed_operations)
+                if str(e):
+                    error_detail = f'{error_detail}: {e}'
+                users_db.mark_user_deletion_wipe_failed(uid, error=_sanitize_error_detail(error_detail))
+            except Exception as persist_err:
+                logger.error(f'delete_account wipe status persist failed for {uid}: {sanitize(str(persist_err))}')
         _emit_deletion_telemetry(
             uid,
             ACCOUNT_DELETION_WIPE_FAILED,
@@ -664,7 +687,7 @@ def enqueue_deletion_wipe(uid: str, wipe_job_id: str):
 
 def _mark_wipe_failed_after_enqueue_error(uid: str, error: Exception):
     try:
-        users_db.mark_user_deletion_wipe_failed(uid)
+        users_db.mark_user_deletion_wipe_failed(uid, error=_sanitize_error_detail(str(error)))
     except Exception as persist_err:
         logger.error(
             f'delete_account enqueue failure status persist failed for {uid}: {sanitize(str(persist_err))}; '
@@ -1002,6 +1025,45 @@ def reconcile_pending_deletion_wipes(limit: int = 100) -> dict[str, int]:
             if due_at is None or due_at > datetime.now(timezone.utc):
                 skipped += 1
                 continue
+
+        raw_attempts = record.get('wipe_attempts')
+        attempts = (
+            raw_attempts
+            if isinstance(raw_attempts, int) and not isinstance(raw_attempts, bool) and raw_attempts > 0
+            else 0
+        )
+        max_attempts = _parse_max_attempts(getattr(users_db, 'DELETION_WIPE_MAX_ATTEMPTS', 10))
+        if record.get('wipe_status') == 'failed' and attempts >= max_attempts:
+            failure_detail = _sanitize_error_detail(
+                str(record.get('wipe_error') or f'exhausted after {attempts} attempts')
+            )
+            try:
+                dead_lettered = users_db.dead_letter_deletion_wipe(
+                    uid,
+                    reason='reconciliation_attempts_exhausted',
+                    error=failure_detail,
+                    allowed_statuses=('failed',),
+                    min_attempts=max_attempts,
+                )
+            except Exception as e:
+                logger.error(f'delete_account reconciliation dead-letter failed for {uid}: {sanitize(str(e))}')
+                skipped += 1
+                continue
+            if dead_lettered:
+                _emit_deletion_telemetry(
+                    uid,
+                    ACCOUNT_DELETION_WIPE_FAILED,
+                    {
+                        'failed_operations': ['reconciliation_attempts_exhausted'],
+                        'retry_count': attempts,
+                        'terminal': True,
+                    },
+                )
+                logger.critical(
+                    f'delete_account reconciliation permanently aborted for {uid}: attempt cap {attempts} reached'
+                )
+            skipped += 1
+            continue
         # ``deleting_auth`` is a legacy durable intent from the former
         # two-transaction admission path. The worker now owns Firebase Auth
         # deletion, so a stale legacy intent is safe to claim even when the
@@ -1048,7 +1110,39 @@ def reconcile_pending_deletion_wipes(limit: int = 100) -> dict[str, int]:
             enqueue_account_deletion_wipe(wipe_job_id)
         except Exception as e:
             logger.error(f'delete_account reconciliation enqueue failed for {uid}: {sanitize(str(e))}')
-            _mark_wipe_failed_after_enqueue_error(uid, e)
+            new_attempts = attempts + 1
+            if new_attempts >= max_attempts:
+                dead_lettered = False
+                try:
+                    dead_lettered = users_db.dead_letter_deletion_wipe(
+                        uid,
+                        reason='enqueue_attempts_exhausted',
+                        error=_sanitize_error_detail(str(e)),
+                        allowed_statuses=('retrying', 'failed'),
+                        increment_attempt=True,
+                    )
+                except Exception as persist_err:
+                    logger.error(
+                        f'delete_account reconciliation dead-letter failed for {uid}: {sanitize(str(persist_err))}'
+                    )
+                    _mark_wipe_failed_after_enqueue_error(uid, e)
+                    skipped += 1
+                    continue
+                if dead_lettered:
+                    _emit_deletion_telemetry(
+                        uid,
+                        ACCOUNT_DELETION_WIPE_FAILED,
+                        {
+                            'failed_operations': ['enqueue_attempts_exhausted'],
+                            'retry_count': new_attempts,
+                            'terminal': True,
+                        },
+                    )
+                    logger.critical(
+                        f'delete_account reconciliation permanently failed for {uid} after {new_attempts} attempts: {sanitize(str(e))}'
+                    )
+            else:
+                _mark_wipe_failed_after_enqueue_error(uid, e)
             skipped += 1
             continue
         requeued += 1

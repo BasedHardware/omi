@@ -13,7 +13,7 @@ testing/import_isolation.load_module_fresh.
 
 import os
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
 import pytest
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
@@ -178,7 +178,10 @@ def test_typesense_failure_keeps_wipe_incomplete_and_retryable(users_service):
     assert result is False
     m['delete_user_data'].assert_called_once_with('uid1')
     users_service.users_db.mark_user_deletion_wipe_completed.assert_not_called()
-    users_service.users_db.mark_user_deletion_wipe_failed.assert_called_once_with('uid1')
+    users_service.users_db.mark_user_deletion_wipe_failed.assert_called_once_with('uid1', error=ANY)
+    recorded_error = users_service.users_db.mark_user_deletion_wipe_failed.call_args.kwargs['error']
+    assert 'conversation_typesense_purge' in recorded_error
+    assert 'typesense down' in recorded_error
 
 
 def test_typesense_wrapper_requires_verified_purge(users_service, monkeypatch):

@@ -1,3 +1,4 @@
+import os
 from database.people_generation import bump_people_generation, write_person
 from database.person_speech_samples import add_sample_transaction
 from database.people_projection import project_people
@@ -43,8 +44,11 @@ from database.conversation_effect_fence import (
 )
 from database.account_deletion_policy import (
     ACCOUNT_DELETION_GRACE_STATUS,
+    DEFAULT_DELETION_WIPE_MAX_ATTEMPTS,
+    WIPE_RETRY_RESET,
     deletion_billing_error_is_already_gone,
     deletion_wipe_retry_delay,
+    parse_deletion_wipe_max_attempts,
 )
 from database.account_deletion_transitions import (
     adopt_legacy_late_agent_vm_cleanup as _adopt_legacy_late_agent_vm_cleanup_txn,
@@ -69,6 +73,7 @@ from database.redis_db import (
     try_acquire_client_device_write_lock,
     try_acquire_user_platform_write_lock,
 )
+from utils.log_sanitizer import sanitize
 from utils.other.request_deadline import request_deadline_remaining_seconds
 from models.users import (
     LOCATION_CONTEXT_DISCLOSED_PROVIDERS,
@@ -97,7 +102,26 @@ def _request_deadline_firestore_kwargs() -> dict[str, float]:
 
 # Run-lock TTL (30 minutes) plus grace for a dead worker's last heartbeat.
 DELETION_WIPE_RUNNING_STALE_AFTER = timedelta(minutes=45)
-_DELETION_WIPE_TERMINAL_STATUSES = frozenset({'completed', 'cancelled'})
+# Retry backoff (DELETION_WIPE_RETRY_BASE_DELAY / DELETION_WIPE_RETRY_MAX_DELAY) lives in
+# database.account_deletion_policy. When attempts reach DELETION_WIPE_MAX_ATTEMPTS,
+# failed wipes transition to terminal_failed so dead queues or permanently poisoned
+# records do not burn infinite transactions.
+DELETION_WIPE_MAX_ATTEMPTS = parse_deletion_wipe_max_attempts(
+    os.getenv('DELETION_WIPE_MAX_ATTEMPTS', str(DEFAULT_DELETION_WIPE_MAX_ATTEMPTS))
+)
+_WIPE_ERROR_MAX_LENGTH = 500
+_DELETION_WIPE_TERMINAL_STATUSES = frozenset({'completed', 'cancelled', 'terminal_failed'})
+# Exclude ``cancelled`` so a restored account (which keeps its prior wipe_job_id) can
+# re-arm a fresh deletion intent; active, completed, and terminal_failed join/refuse.
+_DELETION_WIPE_INTENT_JOIN_STATUSES = frozenset(
+    {'pending', 'retrying', 'running', 'failed', 'completed', 'terminal_failed'}
+)
+
+
+def _effective_deletion_wipe_max_attempts() -> int:
+    return parse_deletion_wipe_max_attempts(DELETION_WIPE_MAX_ATTEMPTS)
+
+
 LOCATION_CONTEXT_CONSENT_TTL = timedelta(days=30)
 ONBOARDING_ADMISSION_PATH = "onboarding_admission/current"
 ONBOARDING_ADMISSION_TTL = timedelta(minutes=20)
@@ -511,7 +535,7 @@ def _mark_user_deletion_wipe_intent_txn(transaction, doc_ref, wipe_job_id: str) 
                     operation_id=f'wipe-intent-promote:{wipe_job_id}',
                 )
                 return {'wipe_job_id': existing_job_id, 'dispatch_claimed': True}
-            if status in {'pending', 'retrying', 'running', 'failed', 'completed'}:
+            if status in _DELETION_WIPE_INTENT_JOIN_STATUSES:
                 return {'wipe_job_id': existing_job_id, 'dispatch_claimed': False}
     write_account_authority(
         transaction,
@@ -521,6 +545,7 @@ def _mark_user_deletion_wipe_intent_txn(transaction, doc_ref, wipe_job_id: str) 
             'wipe_intent_at': datetime.now(timezone.utc),
             'wipe_queued_at': datetime.now(timezone.utc),
             'wipe_job_id': wipe_job_id,
+            **WIPE_RETRY_RESET,
         },
         merge=True,
         preimage=snapshot,
@@ -589,18 +614,137 @@ def mark_user_deletion_wipe_completed(uid: str) -> bool:
     )
 
 
+def _sanitize_wipe_error(error: object, default: str = '') -> str:
+    """Mask tokens/PII, collapse newlines, and cap length for durable failure fields."""
+    if error is None:
+        return default
+    raw = str(error).strip()
+    if not raw:
+        return default
+    cleaned: object = sanitize(raw)
+    if not isinstance(cleaned, str):
+        cleaned = raw
+    single_line = ' '.join(cleaned.splitlines()).strip()
+    return single_line[:_WIPE_ERROR_MAX_LENGTH] if single_line else default
+
+
+def _failed_wipe_attempts(data: dict[str, Any]) -> int:
+    raw_attempts = data.get('wipe_attempts')
+    return (
+        raw_attempts if isinstance(raw_attempts, int) and not isinstance(raw_attempts, bool) and raw_attempts > 0 else 0
+    )
+
+
+def _terminal_failed_fields(now: datetime, reason: str, error: object, *, default_error: str) -> dict[str, Any]:
+    return {
+        'wipe_status': 'terminal_failed',
+        'wipe_terminal_at': now,
+        'terminal_reason': _sanitize_wipe_error(reason, default='max_attempts_exceeded'),
+        'terminal_error': _sanitize_wipe_error(error, default=default_error),
+    }
+
+
 @cache_writer('deletion_marker_cache')
-def mark_user_deletion_wipe_failed(uid: str):
+def mark_user_deletion_wipe_failed(uid: str, error: str | None = None):
     """Mark the background data wipe as failed so a reconciliation worker can retry."""
+    client = account_deletion_firestore_client()
+    fields: dict[str, Any] = {
+        'wipe_status': 'failed',
+        'wipe_failed_at': datetime.now(timezone.utc),
+        'wipe_attempts': firestore.Increment(1),
+    }
+    safe_error = _sanitize_wipe_error(error)
+    if safe_error:
+        fields['wipe_error'] = safe_error
+    merge_account_authority(
+        client,
+        account_deletion_document(uid, firestore_client=client),
+        fields,
+    )
+
+
+@cache_writer('deletion_marker_cache')
+def mark_user_deletion_wipe_terminal_failed(uid: str, reason: str = '', error: str = '') -> None:
+    """Transition an account deletion to terminal failure when retry attempts are exhausted.
+
+    Stops all subsequent reconciliation re-enqueueing and Firestore transaction loops.
+    """
     client = account_deletion_firestore_client()
     merge_account_authority(
         client,
         account_deletion_document(uid, firestore_client=client),
-        {
-            'wipe_status': 'failed',
-            'wipe_failed_at': datetime.now(timezone.utc),
-            'wipe_attempts': firestore.Increment(1),
-        },
+        _terminal_failed_fields(
+            datetime.now(timezone.utc),
+            reason or 'max_attempts_exceeded',
+            error,
+            default_error='unknown_failure_detail',
+        ),
+    )
+
+
+@transactional
+def _dead_letter_deletion_wipe_txn(
+    transaction,
+    doc_ref,
+    *,
+    reason: str,
+    error: object = '',
+    allowed_statuses: frozenset[str] = frozenset({'failed'}),
+    min_attempts: int | None = None,
+    increment_attempt: bool = False,
+    operation_id: str,
+) -> bool:
+    snapshot = doc_ref.get(transaction=transaction)
+    if not snapshot.exists:
+        return False
+    data = snapshot.to_dict() or {}
+    if data.get('wipe_status') not in allowed_statuses:
+        return False
+    attempts = _failed_wipe_attempts(data)
+    if min_attempts is not None and attempts < max(1, min_attempts):
+        return False
+    recorded_attempts = attempts + 1 if increment_attempt else attempts
+    fields = _terminal_failed_fields(
+        datetime.now(timezone.utc),
+        reason or 'max_attempts_exceeded',
+        error if error else data.get('wipe_error'),
+        default_error=f'max attempts ({recorded_attempts}) exceeded',
+    )
+    if increment_attempt:
+        fields['wipe_attempts'] = recorded_attempts
+    write_account_authority(
+        transaction,
+        doc_ref,
+        fields,
+        preimage=snapshot,
+        operation_id=operation_id,
+    )
+    return True
+
+
+@cache_writer('deletion_marker_cache')
+def dead_letter_deletion_wipe(
+    uid: str,
+    *,
+    reason: str,
+    error: object = '',
+    allowed_statuses: tuple[str, ...] | frozenset[str] = ('failed',),
+    min_attempts: int | None = None,
+    increment_attempt: bool = False,
+) -> bool:
+    """Atomically transition an eligible deletion marker to ``terminal_failed``."""
+    operation_id = uuid.uuid4().hex
+    client = account_deletion_firestore_client()
+    doc_ref = account_deletion_document(uid, firestore_client=client)
+    return _dead_letter_deletion_wipe_txn(
+        client.transaction(),
+        doc_ref,
+        reason=reason,
+        error=error,
+        allowed_statuses=frozenset(allowed_statuses),
+        min_attempts=min_attempts,
+        increment_attempt=increment_attempt,
+        operation_id=operation_id,
     )
 
 
@@ -721,7 +865,7 @@ def _mark_user_deletion_billing_failed_txn(
     if snapshot.exists:
         data = snapshot.to_dict() or {}
         if (
-            data.get('wipe_status') in ('cancelled', 'completed')
+            data.get('wipe_status') in _DELETION_WIPE_TERMINAL_STATUSES
             or data.get('wipe_auth_deleted_at')
             or data.get(ARMED_AT) is not None
         ):
@@ -771,7 +915,7 @@ def cancel_user_deletion_wipe(uid: str):
     merge_account_authority(
         client,
         account_deletion_document(uid, firestore_client=client),
-        {'wipe_status': 'cancelled', 'wipe_cancelled_at': datetime.now(timezone.utc)},
+        {'wipe_status': 'cancelled', 'wipe_cancelled_at': datetime.now(timezone.utc), **WIPE_RETRY_RESET},
     )
 
 
@@ -848,7 +992,7 @@ def get_pending_deletion_wipes(
                 break
             data = doc.to_dict()
             queued_at = data.get('wipe_queued_at')
-            if queued_at and queued_at < stale_cutoff:
+            if not queued_at or queued_at < stale_cutoff:
                 result.append(data | {'uid': doc.id})
 
     if len(result) < limit:
@@ -863,8 +1007,13 @@ def get_pending_deletion_wipes(
             if len(result) >= limit:
                 break
             data = doc.to_dict()
-            running_at = data.get('wipe_running_at')
-            if running_at and running_at < now - running_stale_window(data, running_stale_after):
+            running_at = (
+                data.get('wipe_running_at')
+                or data.get('wipe_claimed_at')
+                or data.get('wipe_queued_at')
+                or data.get('wipe_intent_at')
+            )
+            if not running_at or running_at < now - running_stale_window(data, running_stale_after):
                 result.append(data | {'uid': doc.id})
 
     if len(result) < limit:
@@ -879,7 +1028,7 @@ def get_pending_deletion_wipes(
                 break
             data = doc.to_dict()
             intent_at = data.get('wipe_intent_at')
-            if intent_at and intent_at < stale_cutoff:
+            if not intent_at or intent_at < stale_cutoff:
                 result.append(data | {'uid': doc.id})
 
     if len(result) < limit:
@@ -892,7 +1041,7 @@ def get_pending_deletion_wipes(
             # Use the longer ``running_stale_after`` window so a queued-but-
             # not-yet-running retrying claim is not returned as a candidate
             # before the worker has had a chance to start.
-            if claimed_at and claimed_at < now - running_stale_window(data, running_stale_after):
+            if not claimed_at or claimed_at < now - running_stale_window(data, running_stale_after):
                 result.append(data | {'uid': doc.id})
 
     return result
@@ -971,7 +1120,12 @@ def _claim_deletion_wipe_txn(
         # it if it's stale beyond ``running_stale_after`` — the worker almost
         # certainly crashed or the pod was killed mid-execution. A fresh or
         # moderately recent ``running`` marker belongs to a live worker.
-        running_at = data.get('wipe_running_at')
+        running_at = (
+            data.get('wipe_running_at')
+            or data.get('wipe_claimed_at')
+            or data.get('wipe_queued_at')
+            or data.get('wipe_intent_at')
+        )
         if running_at and running_at >= now - running_stale_window(data, running_stale_after):
             return None
         write_account_authority(
@@ -983,6 +1137,24 @@ def _claim_deletion_wipe_txn(
         )
         return snapshot.id
     if status == 'failed':
+        attempts = _failed_wipe_attempts(data)
+        if attempts >= _effective_deletion_wipe_max_attempts():
+            write_account_authority(
+                transaction,
+                doc_ref,
+                _terminal_failed_fields(
+                    now,
+                    'max_attempts_exceeded',
+                    data.get('wipe_error'),
+                    default_error=f'max attempts ({attempts}) exceeded',
+                ),
+                preimage=snapshot,
+                operation_id=operation_id,
+            )
+            return None
+        failed_at = data.get('wipe_failed_at')
+        if failed_at and failed_at + deletion_wipe_retry_delay(attempts if attempts > 0 else 1) > now:
+            return None
         write_account_authority(
             transaction,
             doc_ref,
@@ -999,8 +1171,8 @@ def _claim_deletion_wipe_txn(
         # beyond ``stale_after`` (10 min) without transitioning to ``running``.
         # Using the short window would let the periodic reconciler enqueue
         # another copy every pass, causing duplicate wipes to race.
-        if claimed_at and claimed_at < now - running_stale_window(data, running_stale_after):
-            # Stale claim (worker probably crashed). Re-claim it.
+        if not claimed_at or claimed_at < now - running_stale_window(data, running_stale_after):
+            # Stale or timestamp-less claim (worker probably crashed). Re-claim it.
             transaction.update(doc_ref, {'wipe_claimed_at': now})
             return snapshot.id
     return None
@@ -1048,7 +1220,7 @@ def _claim_deletion_wipe_task_txn(
 
     if status == 'completed':
         return 'completed'
-    if status in ('cancelled', 'deleting_auth'):
+    if status in _DELETION_WIPE_TERMINAL_STATUSES or status == 'deleting_auth':
         return 'not_actionable'
     if expected_job_id is None and data.get(ARMED_AT) is not None:
         return 'erase_required'
@@ -1059,6 +1231,23 @@ def _claim_deletion_wipe_task_txn(
         running_at = data.get('wipe_running_at')
         if running_at and running_at >= now - running_stale_window(data, running_stale_after):
             return 'running'
+
+    if status == 'failed':
+        attempts = _failed_wipe_attempts(data)
+        if attempts >= _effective_deletion_wipe_max_attempts():
+            write_account_authority(
+                transaction,
+                doc_ref,
+                _terminal_failed_fields(
+                    now,
+                    'max_attempts_exceeded',
+                    data.get('wipe_error'),
+                    default_error=f'max attempts ({attempts}) exceeded',
+                ),
+                preimage=snapshot,
+                operation_id=operation_id,
+            )
+            return 'not_actionable'
 
     # A queued task retries transient pre-Auth billing failures. The reconciler
     # only recovers historical already-gone billing errors, never an outage.

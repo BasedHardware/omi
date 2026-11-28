@@ -21,6 +21,26 @@ ACCOUNT_DELETION_GRACE_STATUS = 'pending_deletion'
 ACCOUNT_DELETION_RESTORABLE_STATUSES = frozenset({'pending_deletion', 'pending'})
 DELETION_WIPE_RETRY_BASE_DELAY = timedelta(minutes=5)
 DELETION_WIPE_RETRY_MAX_DELAY = timedelta(hours=1)
+DEFAULT_DELETION_WIPE_MAX_ATTEMPTS = 10
+WIPE_RETRY_RESET: dict[str, object] = {
+    'wipe_attempts': 0,
+    'wipe_error': None,
+    'wipe_failed_at': None,
+}
+
+
+def parse_deletion_wipe_max_attempts(raw: object) -> int:
+    """Parse max wipe retry attempts safely, falling back cleanly and flooring at 1."""
+    if isinstance(raw, bool):
+        return DEFAULT_DELETION_WIPE_MAX_ATTEMPTS
+    if isinstance(raw, int):
+        return max(1, raw)
+    if isinstance(raw, str):
+        try:
+            return max(1, int(raw.strip()))
+        except ValueError:
+            return DEFAULT_DELETION_WIPE_MAX_ATTEMPTS
+    return DEFAULT_DELETION_WIPE_MAX_ATTEMPTS
 
 
 def deletion_wipe_retry_delay(attempts: int) -> timedelta:
@@ -87,11 +107,14 @@ __all__ = [
     'ACCOUNT_DELETION_GRACE_STATUS',
     'ACCOUNT_DELETION_INVALID_STATUS',
     'ACCOUNT_DELETION_RESTORABLE_STATUSES',
+    'DEFAULT_DELETION_WIPE_MAX_ATTEMPTS',
     'DELETION_WIPE_RETRY_BASE_DELAY',
     'DELETION_WIPE_RETRY_MAX_DELAY',
+    'WIPE_RETRY_RESET',
     'account_deletion_blocks_access',
     'account_deletion_marker_blocks_access',
     'account_deletion_restorable',
     'deletion_wipe_retry_delay',
     'normalize_account_deletion_status',
+    'parse_deletion_wipe_max_attempts',
 ]
