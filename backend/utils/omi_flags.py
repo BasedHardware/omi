@@ -23,7 +23,7 @@ from threading import Lock
 from typing import Any, Mapping
 
 from database import omi_flags as store
-from database.omi_flags import parse_platforms
+from database.omi_flags import InvalidFlagPlatformsError, parse_platforms
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
@@ -48,6 +48,7 @@ class FlagRule:
 
     @classmethod
     def from_doc(cls, key: str, doc: Mapping[str, Any]) -> 'FlagRule':
+        platforms = parse_platforms(doc.get('platforms', ()))
         pct = float(doc.get('rollout_percentage') or 0)
         variant = doc.get('variant')
         payload = doc.get('payload')
@@ -60,7 +61,7 @@ class FlagRule:
             allow_uids=frozenset(str(u) for u in doc.get('allow_uids') or ()),
             deny_uids=frozenset(str(u) for u in doc.get('deny_uids') or ()),
             surfaces=tuple(str(s) for s in doc.get('surfaces') or ()),
-            platforms=parse_platforms(doc.get('platforms', ())),
+            platforms=platforms,
         )
 
 
@@ -147,7 +148,7 @@ class _SnapshotCache:
                 if docs is None and version != current:
                     version, docs = store.read_all(client)
                 if docs is not None:
-                    self._snapshot = Snapshot(version, {k: FlagRule.from_doc(k, d) for k, d in docs.items()})
+                    self._snapshot = Snapshot(version, {key: _rule_from_store(key, doc) for key, doc in docs.items()})
         except Exception as exc:
             record_fallback(
                 component='feature_flags',
@@ -158,6 +159,22 @@ class _SnapshotCache:
                 log=logger,
                 failure_subtype=type(exc).__name__[:64],
             )
+
+
+def _rule_from_store(key: str, doc: Mapping[str, Any]) -> FlagRule:
+    try:
+        return FlagRule.from_doc(key, doc)
+    except InvalidFlagPlatformsError:
+        record_fallback(
+            component='feature_flags',
+            from_mode='store',
+            to_mode='disabled',
+            reason='other',
+            outcome='degraded',
+            log=logger,
+            failure_subtype='invalid_rule_platforms',
+        )
+        return FlagRule.from_doc(key, {'surfaces': doc.get('surfaces')})
 
 
 _cache = _SnapshotCache()

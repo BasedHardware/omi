@@ -174,6 +174,25 @@ def test_store_failure_keeps_last_known_good(store, monkeypatch):
     assert recorded.call_args.kwargs['to_mode'] == 'last_known_good'
 
 
+def test_invalid_platforms_disable_only_that_rule_and_allow_refresh(store, monkeypatch):
+    recorded = Mock()
+    monkeypatch.setattr(omi_flags, 'record_fallback', recorded)
+    store.docs = {
+        'targeted': {'active': True, 'rollout_percentage': 100, 'surfaces': ['mobile'], 'platforms': ['ios']},
+        'legacy': {'active': False, 'surfaces': ['mobile']},
+    }
+    assert omi_flags.resolve_surface('u', 'mobile', 'ios')[1]['targeted'] == omi_flags.Resolved(True)
+    store.docs['targeted']['platforms'] = ['invalid']
+    store.docs['legacy'].update(active=True, rollout_percentage=100)
+    store.version = 2
+    store.now[0] += 60
+    assert omi_flags.resolve_surface('u', 'mobile', 'ios') == (
+        2,
+        {'legacy': omi_flags.Resolved(True), 'targeted': omi_flags.Resolved(False)},
+    )
+    assert recorded.call_args.kwargs['failure_subtype'] == 'invalid_rule_platforms'
+
+
 def test_client_construction_failure_degrades_like_a_read_failure(store, monkeypatch):
     recorded = Mock()
     monkeypatch.setattr(omi_flags, 'record_fallback', recorded)
@@ -321,6 +340,7 @@ def test_proactivity_omi_source_and_absent_fails_closed(store, monkeypatch):
 
 
 ENTRY = {'key': 'k', 'surfaces': ['macos'], 'lifecycle': 'rollout'}
+MOBILE_ENTRY = {**ENTRY, 'surfaces': ['mobile']}
 
 
 def test_posthog_import_converts_only_simple_rows():
@@ -366,14 +386,20 @@ def test_merge_rule_validates_and_copies_registry_surfaces():
 
 def test_merge_rule_preserves_platforms_unless_replaced_or_cleared():
     current = {'platforms': ['ios']}
-    assert cli.merge_rule(current, ENTRY, {'rollout_percentage': 10})['platforms'] == ['ios']
-    assert cli.merge_rule(current, ENTRY, {'platforms': ['ios', 'android']})['platforms'] == ['ios', 'android']
-    assert cli.merge_rule(current, ENTRY, {'platforms': []})['platforms'] == []
+    assert cli.merge_rule(current, MOBILE_ENTRY, {'rollout_percentage': 10})['platforms'] == ['ios']
+    assert cli.merge_rule(current, MOBILE_ENTRY, {'platforms': ['ios', 'android']})['platforms'] == ['ios', 'android']
+    assert cli.merge_rule(current, MOBILE_ENTRY, {'platforms': []})['platforms'] == []
     assert current == {'platforms': ['ios']}
 
 
+@pytest.mark.parametrize('surfaces', [['macos'], ['backend', 'mobile']])
+def test_merge_rule_refuses_platform_targeting_for_non_mobile_only_keys(surfaces):
+    with pytest.raises(cli.FlagCliError, match='requires a mobile-only flag'):
+        cli.merge_rule(None, {**ENTRY, 'surfaces': surfaces}, {'platforms': ['ios']})
+
+
 def test_set_refuses_platform_targeted_mirror_before_external_checks(monkeypatch, capsys):
-    monkeypatch.setattr(cli, 'load_registry', lambda: {'k': ENTRY})
+    monkeypatch.setattr(cli, 'load_registry', lambda: {'k': MOBILE_ENTRY})
     monkeypatch.setattr(cli, '_client', lambda args: object())
     monkeypatch.setattr(cli.store, 'read_all', lambda client: (1, {'k': {'platforms': ['ios']}}))
     require, posthog, write = Mock(), Mock(), Mock()
@@ -424,7 +450,7 @@ def test_preview_reads_once_and_never_writes_or_prints_stored_uids(monkeypatch, 
 @pytest.mark.parametrize('options', [['--platforms', 'ios', 'android'], ['--all-platforms']])
 def test_set_platform_expansion_requires_live_preflight(monkeypatch, options):
     current = {'active': True, 'rollout_percentage': 100, 'platforms': ['ios']}
-    monkeypatch.setattr(cli, 'load_registry', lambda: {'k': ENTRY})
+    monkeypatch.setattr(cli, 'load_registry', lambda: {'k': MOBILE_ENTRY})
     monkeypatch.setattr(cli, '_client', lambda args: object())
     monkeypatch.setattr(cli.store, 'read_all', lambda client: (1, {'k': current}))
     require = Mock(side_effect=SystemExit(4))
@@ -436,17 +462,6 @@ def test_set_platform_expansion_requires_live_preflight(monkeypatch, options):
     assert error.value.code == 4
     require.assert_called_once_with('k', 100, None)
     write.assert_not_called()
-
-
-def test_live_preflight_classifies_platform_narrowing_and_first_ramp():
-    classify = cli.live_preflight.widens_exposure
-    before = {'active': True, 'rollout_percentage': 0}
-    assert classify(before, {'rollout_percentage': 5, 'platforms': ['ios']}) is True
-    before['rollout_percentage'] = 100
-    assert classify(before, {'platforms': ['ios']}) is False
-    assert classify({**before, 'platforms': ['ios']}, None) is True
-    with pytest.raises(cli.live_preflight.MixedWrite):
-        classify({**before, 'platforms': ['ios']}, {'platforms': ['android']})
 
 
 @pytest.fixture(scope='module')

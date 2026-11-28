@@ -90,6 +90,8 @@ def merge_rule(current: dict[str, Any] | None, entry: dict[str, Any], changes: d
     rule['deny_uids'] = sorted(set(rule.get('deny_uids') or ()))
     rule['surfaces'] = list(entry['surfaces'])
     rule['platforms'] = list(store.parse_platforms(rule['platforms']))
+    if rule['platforms'] and rule['surfaces'] != ['mobile']:
+        raise FlagCliError('platform targeting requires a mobile-only flag')
     return rule
 
 

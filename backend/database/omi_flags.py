@@ -35,9 +35,13 @@ REDIS_TIMEOUT_SECONDS = 0.25
 FLAG_PLATFORMS = ('ios', 'android')
 
 
+class InvalidFlagPlatformsError(ValueError):
+    """The stored or proposed platform list cannot be evaluated."""
+
+
 def parse_platforms(value: Any) -> tuple[str, ...]:
     if not isinstance(value, (list, tuple)) or any(platform not in FLAG_PLATFORMS for platform in value):
-        raise ValueError('platforms must be a list containing only ios or android')
+        raise InvalidFlagPlatformsError('platforms must be a list containing only ios or android')
     return tuple(value)
 
 

@@ -17,7 +17,9 @@ fixed in code by #24370 (Nik's release gate still applies).
     `updated_by`. An empty or absent `platforms` admits every platform. A non-empty
     list accepts only `ios` and `android`. The resolver checks it before UID allow
     and deny lists. Requests with a missing or unmatched platform receive
-    `enabled: false` for that rule, including UID allowlist members.
+    `enabled: false` for that rule, including UID allowlist members. An invalid
+    platform list disables the affected rule and emits a fallback event. The
+    rest of the snapshot still refreshes.
   - `omi_flags_meta/state.version`: bumped by every write.
   - `omi_flags_audit/*`: before/after, actor, reason; written in the same transaction.
 - **Evaluation:** `utils/omi_flags.py`, in process. Each process re-checks the version
@@ -77,9 +79,14 @@ python scripts/omi_flags.py --project <flag-project> delete screen_task_jev_gate
   platform-targeted rule.
 - `set KEY --platforms ios` targets iOS. Use `--platforms ios android` to target
   both while keeping missing or unknown headers off, or `--all-platforms` to
-  clear the restriction. Omitting both preserves the stored platforms. Widening
-  the eligible platforms on an exposed rule runs the same live preflight as a
-  percentage increase.
+  clear the restriction. Omitting both preserves the stored platforms. Targeting
+  is available for mobile-only keys so shared flags can continue to serve their
+  backend and other clients. Widening the eligible platforms on an exposed rule
+  runs the same live preflight as a percentage increase.
+- Verify the serving backend supports platform targeting before activating a
+  targeted rule. If reverting backend support, first deactivate any targeted
+  rules with the platform-aware writer and verify the deactivation has
+  propagated. Older evaluators ignore the platform field.
 - The live preflight discovers backend readers by key. A client-only key such
   as `mobile-batch-upload-hold` can return `key_unread` on a raise. The Release
   owner handles any approved exception through the existing audited
