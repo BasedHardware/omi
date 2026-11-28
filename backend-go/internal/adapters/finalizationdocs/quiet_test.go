@@ -88,6 +88,68 @@ func TestF19QuietSuccessorBeforeAdmissionAndReconnectFence(t *testing.T) {
 	}
 }
 
+func TestPL001DueQuietReplayAdvancesOrRetires(t *testing.T) {
+	t.Parallel()
+	// Match exercise_pl001_due_quiet_replay_advances_or_retires in the Python emulator proof.
+	store, bench, ref := quietFixture(t)
+	a := queue.AdmittingForTest(t, ref.Owner)
+	leaseExpiry := store.Clock.Now().Add(300 * time.Second)
+	setRecordingLease(t, bench, ref, leaseExpiry)
+	check, err := store.ArmQuiet(t.Context(), a, ref, 120, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := jobs + "/" + finalization.QuietID(ref)
+	readJob := func() (document, time.Time) {
+		snapshot, readErr := bench.Raw.Doc(path).Get(t.Context())
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		return snapshot.Data(), snapshot.UpdateTime
+	}
+	store.Clock = clock.Fixed{T: check.Due}
+	if !field[time.Time](read(t, bench, path), "reconcile_after_at").Equal(check.Due) {
+		t.Fatal("fixture did not persist a due quiet wake")
+	}
+
+	wake, err := store.WakeQuiet(t.Context(), a, check)
+	if err != nil || wake.Action != rules.QuietWait {
+		t.Fatalf("active recording did not defer quiet wake: %+v, %v", wake, err)
+	}
+	successor, successorVersion := readJob()
+	due := field[time.Time](successor, "reconcile_after_at")
+	if successor["status"] != quietWaiting || successor["dispatch_generation"] != check.Generation+1 ||
+		wake.Check.Generation != check.Generation+1 || !due.Equal(leaseExpiry) ||
+		!due.Equal(wake.Check.Due) || !due.Equal(field[time.Time](successor, "due_at")) {
+		t.Fatalf("no durable successor: %+v, %v", wake, successor)
+	}
+	stale, err := store.WakeQuiet(t.Context(), a, check)
+	_, afterStaleVersion := readJob()
+	if err != nil || stale.Action != rules.QuietStale || !afterStaleVersion.Equal(successorVersion) {
+		t.Fatalf("superseded wake changed the fresh successor: %+v, %v", stale, err)
+	}
+
+	if _, deleteErr := bench.Raw.Doc(conversationPath).Delete(t.Context()); deleteErr != nil {
+		t.Fatal(deleteErr)
+	}
+	store.Clock = clock.Fixed{T: due}
+	closed, err := store.WakeQuiet(t.Context(), a, wake.Check)
+	if err != nil || closed.Action != rules.QuietRetire {
+		t.Fatalf("missing conversation did not retire the quiet check: %+v, %v", closed, err)
+	}
+	retired, retiredVersion := readJob()
+	if _, indexed := retired["reconcile_after_at"]; indexed || retired["status"] != quietDone ||
+		!field[time.Time](retired, "updated_at").Equal(due) {
+		t.Fatalf("retirement left an indexed obligation: %v", retired)
+	}
+	stale, err = store.WakeQuiet(t.Context(), a, wake.Check)
+	_, afterStaleVersion = readJob()
+	if err != nil || stale.Action != rules.QuietStale || !afterStaleVersion.Equal(retiredVersion) ||
+		bench.Exists(t, conversationPath) {
+		t.Fatalf("redelivery changed retired work or recreated the conversation: %+v, %v", stale, err)
+	}
+}
+
 func TestF19QuietAdmissionBindsAndRetiresCurrentCheck(t *testing.T) {
 	t.Parallel()
 	store, bench, ref := quietFixture(t)

@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """Real Firestore cursor/CAS contract; run only against an isolated emulator."""
 
-from database import conversation_processing_recovery as processing_recovery
-
 import os
 import sys
 from datetime import datetime, timedelta, timezone
@@ -14,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 os.environ.setdefault('ENCRYPTION_SECRET', 'quiet_replay_emulator_only_secret_32_bytes')
 
 from google.cloud import firestore
+from database import conversation_processing_recovery as processing_recovery
 from database import conversations, recording_sessions, proactivity, quiet_check_retirement
 from database import oversized_conversation_terminal, stuck_backfill, user_data_deletion, batch_pipeline_purge
 from database._client import delete_collection_recursive
@@ -23,6 +22,66 @@ from models.conversation_enums import ConversationStatus
 from database import conversation_finalization_jobs as jobs
 from database import conversation_quiet_checks as checks
 from services import conversation_finalization as service
+
+
+def exercise_pl001_due_quiet_replay_advances_or_retires(client):
+    """Match TestPL001DueQuietReplayAdvancesOrRetires against real indexed fields."""
+    uid, cid, session_id = 'synthetic-quiet-replay', 'capture', 'session'
+    start = datetime(2026, 10, 22, tzinfo=timezone.utc)
+    lease_expiry = start + timedelta(seconds=300)
+    now = start
+    user = client.collection('users').document(uid)
+    row = user.collection('conversations').document(cid)
+    row.set(
+        {
+            'source': 'omi',
+            'status': 'in_progress',
+            'last_speech_at': start,
+            'finished_at': start,
+            'transcript_segments': [{'text': 'synthetic fixture'}],
+            'external_data': {'recording_session_id': session_id},
+        }
+    )
+    user.collection('recording_sessions').document(session_id).set(
+        {
+            'uid': uid,
+            'recording_session_id': session_id,
+            'conversation_id': cid,
+            'lifecycle_phase': 'in_progress',
+            'lease_expires_at': lease_expiry,
+        }
+    )
+    with patch.object(checks, '_now', side_effect=lambda: now):
+        armed = checks.arm_quiet_check(uid, cid, 120, firestore_client=client)
+        job_id, generation = armed['job_id'], armed['dispatch_generation']
+        job = client.collection(jobs.FINALIZATION_JOBS_COLLECTION).document(job_id)
+        now = start + timedelta(seconds=120)
+        assert job.get().to_dict()['reconcile_after_at'] == now
+
+        deferred = checks.evaluate_quiet_check(job_id, generation, firestore_client=client)
+        successor_snapshot = job.get()
+        successor = successor_snapshot.to_dict()
+        assert deferred['status'] == 'deferred'
+        assert successor['status'] == 'waiting_quiet'
+        assert successor['dispatch_generation'] == generation + 1
+        assert successor['due_at'] == successor['reconcile_after_at'] == deferred['due_at']
+        assert successor['reconcile_after_at'] == lease_expiry
+        assert checks.evaluate_quiet_check(job_id, generation, firestore_client=client) == {'status': 'stale'}
+        assert job.get().update_time == successor_snapshot.update_time
+
+        row.delete()
+        now = successor['due_at']
+        assert checks.evaluate_quiet_check(job_id, generation + 1, firestore_client=client) == {
+            'status': 'done',
+            'reason': 'missing_conversation',
+        }
+        retired_snapshot = job.get()
+        retired = retired_snapshot.to_dict()
+        assert retired['status'] == 'quiet_done' and 'reconcile_after_at' not in retired
+        assert retired['updated_at'] == now
+        assert checks.evaluate_quiet_check(job_id, generation + 1, firestore_client=client) == {'status': 'stale'}
+        assert job.get().update_time == retired_snapshot.update_time
+        assert not row.get().exists
 
 
 def exercise_lifecycle_retirement(client):
@@ -250,12 +309,11 @@ def exercise_lifecycle_retirement(client):
         terminal.set({'status': 'completed', 'dispatch_generation': 1, 'reconcile_after_at': now})
         jobs.claim_finalization_replay(terminal.id, stale_after=timedelta(seconds=60), firestore_client=client)
         assert 'reconcile_after_at' not in terminal.get().to_dict()
-        # Account erasure bypasses the single-conversation delete adapter and
-        # must also remove global due indexes. Use the real recursive deleter.
+        # Account erasure removes the entire quiet job, including its due index.
         stack.enter_context(patch.object(batch_pipeline_purge, 'purge_batch_owner'))
         stack.enter_context(patch.object(user_data_deletion, 'get_data_plane_firestore_client', return_value=client))
         user_data_deletion.purge_user_subtree(uid, client, delete_collection_recursive)
-        retired(ref)
+        assert not ref.get().exists
         # Force several pages with equal UID index values; snapshot cursors
         # must retain the implicit document-name ordering across retirements.
         for number in range(5):
@@ -333,6 +391,7 @@ def main():
     project = os.environ.get('GOOGLE_CLOUD_PROJECT', 'demo-quiet-replay')
     assert project.startswith('demo-'), 'isolated demo project required'
     client = firestore.Client(project=project)
+    exercise_pl001_due_quiet_replay_advances_or_retires(client)
     exercise_transport_hold(client)
     exercise_lifecycle_retirement(client)
     col = client.collection(jobs.FINALIZATION_JOBS_COLLECTION)
@@ -388,28 +447,8 @@ def main():
     assert jobs.get_finalization_replay_oldest_overdue_age_seconds(firestore_client=client) >= 3600
     # Exhaustion wraps, and the elevated cap actually reaches beyond 100.
     assert len(jobs.get_finalization_replay_candidates(limit=1000, firestore_client=client)) == 100
-    # Exercise the real evaluate transaction and SDK field deletion, rather
-    # than relying on the narrow unit fixture's DELETE_FIELD sentinel.
-    missing = col.document('quiet-missing-conversation')
-    missing.set(
-        {
-            'kind': 'listen_quiet_check',
-            'status': 'waiting_quiet',
-            'dispatch_generation': 1,
-            'uid': 'synthetic-emulator',
-            'conversation_id': 'absent',
-            'quiet_timeout_seconds': 120,
-            'due_at': now - timedelta(hours=1),
-            'reconcile_after_at': now - timedelta(hours=1),
-        }
-    )
     assert checks.quiet_deadline({}) is None
     assert jobs.recovery_admission_refusal('synthetic-emulator', {}, now) == 'status'
-    result = checks.evaluate_quiet_check(missing.id, 1, firestore_client=client)
-    retired = missing.get().to_dict()
-    assert result == {'status': 'done', 'reason': 'missing_conversation'}
-    assert retired['status'] == 'quiet_done' and 'reconcile_after_at' not in retired
-    assert retired['updated_at'] >= now
     # A crash-reserved prefix must be revisited even if a full later page
     # becomes due every minute. Freeze the sweep's cutoff across invocations.
     for snapshot in col.stream():
@@ -434,7 +473,7 @@ def main():
             'b',
         ]
     print(
-        'PASS: 101-row starvation, deleted boundary, wrap, increased limit, oldest age, missing-conversation retirement, crash-safe bounded sweep'
+        'PASS: PL-001 quiet wake progression and retirement, 101-row starvation, deleted boundary, wrap, increased limit, oldest age, crash-safe bounded sweep'
     )
 
 
