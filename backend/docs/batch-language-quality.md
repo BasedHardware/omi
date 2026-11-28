@@ -18,7 +18,11 @@ streaming provider policy.
   malformed, unavailable or low-confidence detection selects Modulate. Provider
   selection without audio proof conservatively returns Modulate. An unavailable
   allowed multilingual provider is a configuration failure. Named supported
-  languages keep configured provider ordering without a probe.
+  languages keep configured provider ordering without a probe. On legacy sync, a
+  stored user language the batch model cannot serve selects Modulate without a
+  probe, the batch-eligibility rule (`BATCH_PIPELINE_LANGUAGE_ELIGIBILITY_ENABLED`)
+  applied to per-segment selection: a confident wrong European verdict on a
+  short sample must not route Japanese speech to Parakeet.
 - New batch sync intake resolves the effective legacy input from the user’s
   single-language preference. A primary app language alone does not constrain
   speech. Named unsupported inputs retain the legacy multilingual route before

@@ -1629,6 +1629,7 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
                         path=DispatchPath.LANGUAGE_PROBE,
                     ),
                     cohort_key=uid,
+                    declared_language=user_language,
                 ),
             )
             if (
