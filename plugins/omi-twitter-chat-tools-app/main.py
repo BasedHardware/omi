@@ -10,13 +10,14 @@ import secrets
 import hashlib
 import base64
 from datetime import datetime, timedelta
-from typing import Optional, List, Dict, Any
+from typing import Optional, Any
 from urllib.parse import quote, urlencode
 
 import requests
+import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Query, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 
 from db import (
     store_twitter_tokens,
@@ -517,7 +518,7 @@ async def tool_post_tweet(request: Request):
     """Post a new tweet."""
     try:
         body = await request.json()
-        log(f"=== POST_TWEET ===")
+        log("=== POST_TWEET ===")
 
         uid = body.get("uid")
         text = body.get("text")
@@ -573,7 +574,7 @@ async def tool_get_timeline(request: Request):
     """Get user's home timeline."""
     try:
         body = await request.json()
-        log(f"=== GET_TIMELINE ===")
+        log("=== GET_TIMELINE ===")
 
         uid = body.get("uid")
         count = requested_count(body)
@@ -625,7 +626,7 @@ async def tool_get_my_tweets(request: Request):
     """Get user's own tweets."""
     try:
         body = await request.json()
-        log(f"=== GET_MY_TWEETS ===")
+        log("=== GET_MY_TWEETS ===")
 
         uid = body.get("uid")
         count = requested_count(body)
@@ -1182,22 +1183,23 @@ async def twitter_callback(
             "code_verifier": code_verifier
         }
 
-        if TWITTER_CLIENT_SECRET:
-            # Confidential client
-            response = requests.post(
-                TWITTER_TOKEN_URL,
-                data=token_data,
-                auth=(TWITTER_CLIENT_ID, TWITTER_CLIENT_SECRET),
-                timeout=REQUEST_TIMEOUT,
-            )
-        else:
-            # Public client
-            token_data["client_id"] = TWITTER_CLIENT_ID
-            response = requests.post(
-                TWITTER_TOKEN_URL,
-                data=token_data,
-                timeout=REQUEST_TIMEOUT,
-            )
+        async with httpx.AsyncClient() as client:
+            if TWITTER_CLIENT_SECRET:
+                # Confidential client
+                response = await client.post(
+                    TWITTER_TOKEN_URL,
+                    data=token_data,
+                    auth=(TWITTER_CLIENT_ID, TWITTER_CLIENT_SECRET),
+                    timeout=REQUEST_TIMEOUT,
+                )
+            else:
+                # Public client
+                token_data["client_id"] = TWITTER_CLIENT_ID
+                response = await client.post(
+                    TWITTER_TOKEN_URL,
+                    data=token_data,
+                    timeout=REQUEST_TIMEOUT,
+                )
 
         if response.status_code != 200:
             log(f"Token exchange failed: {response.status_code}")
