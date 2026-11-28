@@ -303,13 +303,14 @@ class StorageSyncImpl implements StorageSync {
   @override
   Future deleteWal(Wal wal) async {
     if (wal.storage != WalStorage.sdcard || !_wals.any((w) => w.id == wal.id)) return;
-    if (_device == null) {
+    final device = _device;
+    if (device == null) {
       // Keep the cached row visible while disconnected. The caller can retry
       // after reconnecting and confirming this row's owning device inventory.
       listener.onWalUpdated();
       return;
     }
-    if (_device != null && wal.device != _device!.id) {
+    if (wal.device != device.id) {
       // Not this device's recording (e.g. left by a device this phone no
       // longer pairs with): drop the stale local row, nothing to delete.
       _wals = _wals.where((w) => w.id != wal.id).toList();
@@ -317,7 +318,7 @@ class StorageSyncImpl implements StorageSync {
       if (wal.status != WalStatus.synced) throw StateError("Owning device is unavailable; only cached row removed");
       return;
     }
-    if (_device == null || _confirmedInventoryDeviceId != _device!.id) {
+    if (_confirmedInventoryDeviceId != device.id) {
       throw StateError('Current device file indexes have not been confirmed');
     }
     if (_firmwareCannotDeleteMultiFileWals) {
