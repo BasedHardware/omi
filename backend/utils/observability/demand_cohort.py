@@ -426,6 +426,23 @@ class DemandTelemetry:
             )
 
 
+LIVE_SPEND_LEGS = Counter(
+    'omi_live_stt_spend_legs_total',
+    'Paid provider transports closed by output status and available billing basis',
+    ['provider', 'outcome', 'billing_basis'],
+)
+LIVE_SPEND_SUBMITTED_SECONDS = Counter(
+    'omi_live_stt_spend_submitted_seconds_total',
+    'PCM seconds successfully written, recorded at paid provider transport close',
+    ['provider', 'outcome', 'billing_basis'],
+)
+LIVE_SPEND_BILLABLE_SECONDS = Counter(
+    'omi_live_stt_spend_billable_seconds_total',
+    'Timed seconds on the documented provider billing basis, recorded at transport close',
+    ['provider', 'outcome', 'billing_basis'],
+)
+
+
 class WireAudioMeter:
     """Pin at transport creation; call only after a successful binary audio write."""
 
@@ -435,19 +452,39 @@ class WireAudioMeter:
         self.provider = provider
         self.origin = transport_origin()
         self.bytes_per_second = 2 * sample_rate * channels
+        self.submitted_seconds = 0.0
+        self.closed = False
 
     def written(self, data: bytes | str) -> None:
-        if self.telemetry is not None and isinstance(data, bytes) and data and self.bytes_per_second > 0:
+        if not isinstance(data, bytes) or not data or self.bytes_per_second <= 0:
+            return
+        seconds = len(data) / self.bytes_per_second
+        self.submitted_seconds += seconds
+        if self.telemetry is not None:
             record_metric(
                 BATCH_WIRE_AUDIO,
                 {'provider': self.provider, 'batch_cohort': self.batch_cohort, 'origin': self.origin},
-                len(data) / self.bytes_per_second,
+                seconds,
             )
             record_metric(
                 WIRE_AUDIO,
                 {'provider': self.provider, 'demand_cohort': cohort_label(self.telemetry), 'origin': self.origin},
-                len(data) / self.bytes_per_second,
+                seconds,
             )
+
+    def close_spend(self, *, text_seen: bool, connected_seconds: float | None = None) -> None:
+        if self.closed or self.provider not in {'soniox', 'modulate'}:
+            return
+        self.closed = True
+        labels = {
+            'provider': self.provider,
+            'outcome': 'text' if text_seen else 'no_text' if self.submitted_seconds else 'no_audio',
+            'billing_basis': 'connection' if connected_seconds is not None else 'unknown',
+        }
+        record_metric(LIVE_SPEND_LEGS, labels)
+        record_metric(LIVE_SPEND_SUBMITTED_SECONDS, labels, self.submitted_seconds)
+        if connected_seconds is not None:
+            record_metric(LIVE_SPEND_BILLABLE_SECONDS, labels, connected_seconds)
 
 
 class ConnectedSecondsMeter:
@@ -467,7 +504,8 @@ class ConnectedSecondsMeter:
         self.cohort = cohort_label(self.telemetry)
         self.origin = transport_origin()
         self.provider = provider
-        self.accounted_at = monotonic()
+        self.accounted_at = self.opened_at = monotonic()
+        self.closed_seconds: float | None = None
         self.closed = False
 
     def _fallback_reason(self) -> str:
@@ -492,6 +530,8 @@ class ConnectedSecondsMeter:
             return
         start, self.accounted_at = self.accounted_at, now
         self.closed = close
+        if close:
+            self.closed_seconds = max(0.0, now - self.opened_at)
         if elapsed <= 0:
             return
         fallback_reason = self._fallback_reason()

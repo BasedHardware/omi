@@ -12,6 +12,7 @@ import os
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from llm_gateway.gateway import idempotency
+from utils.llm import margin_attribution
 from llm_gateway.gateway.accounting import (
     AccountingContext,
     AttemptTrace,
@@ -156,6 +157,9 @@ async def _create_chat_completion(
             payer='byok' if credentials.mode.value == 'byok' else 'omi',
             fallback_feature=resolved_route.lane.lane_id,
         )
+        if caller.name == 'backend' and resolved_route.lane.lane_id in margin_attribution.LANES and not keyed_request:
+            revision, input_size = margin_attribution.parse_header(request.headers.get(margin_attribution.HEADER))
+            accounting_context = replace(accounting_context, margin_revision=revision, margin_input_size=input_size)
         if keyed_request:
             accounting_context = replace(
                 accounting_context,

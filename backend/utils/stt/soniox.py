@@ -482,7 +482,17 @@ class SafeSonioxSocket(STTSocket):
         except Exception:
             pass
         # Idempotent: covers a receive task cancelled before it ever started.
+        self._record_spend_close()
+
+    def _record_spend_close(self) -> None:
         telemetry_call(self, '_connected_meter', 'flush', close=True)
+        telemetry_call(
+            self,
+            '_demand_wire',
+            'close_spend',
+            text_seen=self.stream_end.text_seen,
+            connected_seconds=getattr(getattr(self, '_connected_meter', None), 'closed_seconds', None),
+        )
 
     def disable_capture_axis_diagnostics(self) -> None:
         self._capture_axis = None
@@ -749,6 +759,7 @@ class SafeSonioxSocket(STTSocket):
             try:
                 self._flush_pending()
             finally:
+                self._record_spend_close()
                 self._done_event.set()
 
     def _flush_pending(self, ready: Optional[List[Dict[str, Any]]] = None) -> None:

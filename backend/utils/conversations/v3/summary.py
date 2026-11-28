@@ -20,6 +20,7 @@ from config.conversations_v3 import live_recap_enabled
 from config.llm_spend import background_flex_retry_enabled, v3_summary_first_open_gating_enabled
 from database import conversations_v3 as store
 from models.conversation import Conversation
+from utils.conversations.llm_input_dedupe import observe_foreground_completion
 from utils.conversations.v3 import models, planner, policy, recap_telemetry, visibility
 from utils.conversations.v3.triggers import enqueue
 from utils.observability.fallback import record_fallback
@@ -63,11 +64,16 @@ def write(uid, row, emit):
     from utils.conversations.process_conversation import _get_structured  # pyright: ignore[reportPrivateUsage]
     from utils.generated_compute import generated_compute_scope
 
-    with generated_compute_scope(uid), models.notes_mode(
-        uid, foreground=True, emit=emit, backfilled=bool(row.get('v3_derived') and row.get('backfilled'))
+    live_recap = recap_telemetry.active()
+    with (
+        generated_compute_scope(uid),
+        models.notes_mode(
+            uid, foreground=True, emit=emit, backfilled=bool(row.get('v3_derived') and row.get('backfilled'))
+        ),
+        observe_foreground_completion(None if live_recap else row),
     ):
         structured, _discarded = _get_structured(
-            uid, row.get('language') or 'en', Conversation(**row), live_recap=recap_telemetry.active()
+            uid, row.get('language') or 'en', Conversation(**row), live_recap=live_recap
         )
     if row.get('title_locked') or (
         not recap_telemetry.active() and row.get('v3_unlocked') and (row.get('structured') or {}).get('title')

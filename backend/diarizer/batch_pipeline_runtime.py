@@ -12,6 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import logging
 import os
+from contextlib import nullcontext
 import signal
 import subprocess
 import sys
@@ -50,6 +51,7 @@ from database.privacy_check_metrics import (
     MEMO_REQUESTS,
 )
 from database.batch_pipeline_shadow_hook import shadow_from_env, shadow_parity_collectors
+from diarizer.asr_spend import AsrSpend
 from diarizer.batch_pipeline import is_fatal_cuda_error
 from diarizer.batch_pipeline_startup import ChainMemoryProbe, load_worker, synchronize_gpu
 from utils.batch_pipeline.artifact_policy import create_artifact_store
@@ -96,12 +98,14 @@ class SynchronizedWorker:
         on_fatal: Callable[[], None] | None = None,
         memory_probe: Any = None,
         timings: StageTimings | None = None,
+        asr_spend: AsrSpend | None = None,
     ):
         self.worker = worker
         self.synchronize = synchronize
         self.on_fatal = on_fatal
         self.memory_probe = memory_probe
         self.timings = timings or StageTimings()
+        self.asr_spend = asr_spend
         self._unavailable = False
 
     def process_batch(self, items, **kwargs):
@@ -121,22 +125,23 @@ class SynchronizedWorker:
         pending = None
         try:
             baseline = self.memory_probe.begin() if self.memory_probe else None
-            try:
-                pending = process(items, **kwargs)
-                return pending
-            finally:
-                # Python completion is not CUDA completion. Never publish before
-                # quiescence, even for a dedicated GPU with no live reservation.
-                # Profiling times the existing synchronize; it adds no new one.
-                self.timings.call('cuda_sync', self.synchronize)
-                if self.memory_probe:
-                    sample = self.memory_probe.finish(baseline)
-                    logger.info(
-                        'event=batch_chain_memory items=%d audio_seconds=%.3f sample=%s',
-                        len(items),
-                        sum(item.duration_seconds for item in items),
-                        sample,
-                    )
+            with self.asr_spend.flight() if self.asr_spend is not None else nullcontext():
+                try:
+                    pending = process(items, **kwargs)
+                    return pending
+                finally:
+                    # Python completion is not CUDA completion. Never publish before
+                    # quiescence, even for a dedicated GPU with no live reservation.
+                    # Profiling times the existing synchronize; it adds no new one.
+                    self.timings.call('cuda_sync', self.synchronize)
+                    if self.memory_probe:
+                        sample = self.memory_probe.finish(baseline)
+                        logger.info(
+                            'event=batch_chain_memory items=%d audio_seconds=%.3f sample=%s',
+                            len(items),
+                            sum(item.duration_seconds for item in items),
+                            sample,
+                        )
         except Exception as error:
             # Synchronization can fail after compute handed off writes. Fatal
             # CUDA must not leave those writes running beyond the receipt.
@@ -302,7 +307,9 @@ async def run_process(store: Any, artifacts: Any, registry: CollectorRegistry, s
         )
         pump = Pump(
             Scheduler(store, metrics=metrics, pool='batch'),
-            SynchronizedWorker(worker, on_fatal=fatal, memory_probe=ChainMemoryProbe(), timings=timings),
+            SynchronizedWorker(
+                worker, on_fatal=fatal, memory_probe=ChainMemoryProbe(), timings=timings, asr_spend=AsrSpend(registry)
+            ),
             metrics=metrics,
             timings=timings,
             batch_size=config.batch_size,

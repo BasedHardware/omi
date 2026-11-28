@@ -17,6 +17,8 @@ from config.llm_input_legacy import (
 )
 
 import dataclasses
+from contextlib import contextmanager
+from contextvars import ContextVar
 from copy import deepcopy
 import hashlib
 import json
@@ -35,6 +37,7 @@ from utils.conversations.processing_steps import blocking_step, run_inline
 from utils.summary_quality import clean_structured, capture_availability
 
 from utils.conversations.summary_delivery import present as summary_present
+from utils.llm import margin_attribution
 from config.sync_reprocess import dedupe_enabled
 
 from utils.sync.repeat_work_metrics import record_feature
@@ -254,16 +257,10 @@ def notes(uid: str, conversation: Any, prefix: Any, generate, hashes: dict[str, 
     return run_inline(notes_steps(uid, conversation, prefix, blocking_step(generate), hashes, **kwargs))
 
 
-def notes_steps(uid: str, conversation: Any, prefix: Any, generate, hashes: dict[str, str] | None, **kwargs):
-    open_loop_out = kwargs.pop('open_loop_out', None)
-    if kwargs.get('task_intelligence_capture') and reminder_policy.enabled():
-        kwargs['reminder_source'] = reminder_policy.source_input(conversation)
-    if not dedupe_enabled() or hashes is None:
-        return (yield from generate(prefix, uid=uid, open_loop_out=open_loop_out, **kwargs))
+def _notes_inputs(uid: str, prefix: Any, arguments: dict[str, Any]) -> dict[str, Any]:
     inputs = {
         'prefix': prefix,
-        **({}),
-        'arguments': kwargs,
+        'arguments': arguments,
         'notes_packet': _notes_packet_identity(uid),
         'action_items_v2': serving_for('ACTION_ITEMS_V2_MODE', uid),
         'tier_escalation': os.getenv('NOTES_TIER_ESCALATION_ENABLED', ''),
@@ -273,6 +270,49 @@ def notes_steps(uid: str, conversation: Any, prefix: Any, generate, hashes: dict
     scaled_detail = _scaled_notes_identity(prefix)
     if scaled_detail is not None:
         inputs['scaled_detail'] = scaled_detail
+    return inputs
+
+
+def _loaded_completion_cohort(uid: str, row: dict[str, Any], prefix: Any, arguments: dict[str, Any]) -> str:
+    try:
+        if row.get('discarded') or not (row.get(NOTES_HASH) and row.get(NOTES_OUTPUT_HASH)):
+            return _completion_cohort(row, False)
+        # Foreground writes can replace the output without restamping the existing checkpoint.
+        candidate = Structured.model_validate(row.get('structured'))
+        if row[NOTES_OUTPUT_HASH] != output_fingerprint(candidate):
+            return 'unknown'
+        inputs = _notes_inputs(uid, prefix, arguments)
+        matched = _matches(row[NOTES_HASH], 'notes', inputs, fingerprint('notes', inputs))
+        return _completion_cohort(row, matched)
+    except Exception:
+        # Observation must leave generation available even for unsupported fingerprint inputs.
+        return 'unknown'
+
+
+_foreground_completion_row: ContextVar[dict[str, Any] | None] = ContextVar('foreground_notes_completion', default=None)
+
+
+@contextmanager
+def observe_foreground_completion(row: dict[str, Any] | None):
+    """Pass the loaded checkpoint without changing the legacy hashed prompt pipeline."""
+    token = _foreground_completion_row.set(row)
+    try:
+        yield
+    finally:
+        _foreground_completion_row.reset(token)
+
+
+def notes_steps(uid: str, conversation: Any, prefix: Any, generate, hashes: dict[str, str] | None, **kwargs):
+    open_loop_out = kwargs.pop('open_loop_out', None)
+    if kwargs.get('task_intelligence_capture') and reminder_policy.enabled():
+        kwargs['reminder_source'] = reminder_policy.source_input(conversation)
+    if not dedupe_enabled() or hashes is None:
+        completion_row = _foreground_completion_row.get()
+        if completion_row is None:
+            return (yield from generate(prefix, uid=uid, open_loop_out=open_loop_out, **kwargs))
+        with margin_attribution.observe(revision=_loaded_completion_cohort(uid, completion_row, prefix, kwargs)):
+            return (yield from generate(prefix, uid=uid, open_loop_out=open_loop_out, **kwargs))
+    inputs = _notes_inputs(uid, prefix, kwargs)
     digest = fingerprint('notes', inputs)
     row = _stored(uid, conversation) if getattr(conversation, 'id', None) else {}
     saved = None
@@ -311,12 +351,33 @@ def notes_steps(uid: str, conversation: Any, prefix: Any, generate, hashes: dict
             CHECKPOINT_ERRORS.labels(feature='notes').inc()
         MISSES.labels(feature='notes').inc()
         record_feature(uid, conversation, 'notes', 'invoked')
-        output = yield from generate(prefix, uid=uid, open_loop_out=open_loop_out, **kwargs)
+        with margin_attribution.observe(revision=_completion_cohort(row, matched_input)):
+            output = yield from generate(prefix, uid=uid, open_loop_out=open_loop_out, **kwargs)
     if saved is not None and not summary_present(output):
         hashes[QUALITY_FILTER_HASH] = repair_key
     hashes[NOTES_HASH] = digest
     hashes[NOTES_OUTPUT_HASH] = output_fingerprint(output)
     return output
+
+
+def _completion_cohort(row, matched_input):
+    if not row or row.get('discarded'):
+        return 'unknown'
+    if row.get(NOTES_HASH) and row.get(NOTES_OUTPUT_HASH):
+        return 'same_revision' if matched_input else 'changed_revision'
+    if (
+        row.get('v3_derived')
+        and not row.get('v3_notes_written')
+        and not row.get('summary_covers_through')
+        and not row.get(NOTES_HASH)
+        and not row.get(NOTES_OUTPUT_HASH)
+    ):
+        try:
+            if not summary_present(row.get('structured')):
+                return 'first_completion'
+        except TypeError:
+            pass  # A malformed legacy checkpoint cannot establish first completion.
+    return 'unknown'
 
 
 def _quality_violation(structured: dict[str, Any]) -> NotesQualityRepairReason | None:
