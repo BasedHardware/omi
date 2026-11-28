@@ -32,6 +32,13 @@ REDIS_VERSION_KEY = 'omi_flags:version'
 # Serving reads are bounded: a slow store must not stall the request that triggered the refresh.
 READ_TIMEOUT_SECONDS = 3.0
 REDIS_TIMEOUT_SECONDS = 0.25
+FLAG_PLATFORMS = ('ios', 'android')
+
+
+def parse_platforms(value: Any) -> tuple[str, ...]:
+    if not isinstance(value, (list, tuple)) or any(platform not in FLAG_PLATFORMS for platform in value):
+        raise ValueError('platforms must be a list containing only ios or android')
+    return tuple(value)
 
 
 def store_target() -> tuple[str, str] | None:
@@ -136,6 +143,8 @@ def write_rule(
     StaleRuleError if the stored rule has since changed, so a decision made on that snapshot cannot
     overwrite a concurrent write.
     """
+    if rule is not None:
+        parse_platforms(rule.get('platforms', ()))
     meta_ref = client.collection(META_COLLECTION).document(META_DOC)
     flag_ref = client.collection(FLAGS_COLLECTION).document(key)
     audit_ref = client.collection(AUDIT_COLLECTION).document()

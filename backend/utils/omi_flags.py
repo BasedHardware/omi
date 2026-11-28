@@ -23,6 +23,7 @@ from threading import Lock
 from typing import Any, Mapping
 
 from database import omi_flags as store
+from database.omi_flags import parse_platforms
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
@@ -43,6 +44,7 @@ class FlagRule:
     allow_uids: frozenset[str] = frozenset()
     deny_uids: frozenset[str] = frozenset()
     surfaces: tuple[str, ...] = ()
+    platforms: tuple[str, ...] = ()
 
     @classmethod
     def from_doc(cls, key: str, doc: Mapping[str, Any]) -> 'FlagRule':
@@ -58,6 +60,7 @@ class FlagRule:
             allow_uids=frozenset(str(u) for u in doc.get('allow_uids') or ()),
             deny_uids=frozenset(str(u) for u in doc.get('deny_uids') or ()),
             surfaces=tuple(str(s) for s in doc.get('surfaces') or ()),
+            platforms=parse_platforms(doc.get('platforms', ())),
         )
 
 
@@ -87,7 +90,9 @@ def rollout_hash(key: str, uid: str) -> float:
     return int(digest, 16) / _LONG_SCALE
 
 
-def evaluate(rule: FlagRule, uid: str) -> Resolved:
+def evaluate(rule: FlagRule, uid: str, platform: str | None = None) -> Resolved:
+    if rule.platforms and platform not in rule.platforms:
+        return Resolved(False)
     if not rule.active or uid in rule.deny_uids:
         return Resolved(False)
     if uid not in rule.allow_uids:
@@ -168,8 +173,8 @@ def resolve(key: str, uid: str) -> Resolved | None:
     return evaluate(rule, uid) if rule is not None else None
 
 
-def resolve_surface(uid: str, surface: str) -> tuple[int | None, dict[str, Resolved]]:
+def resolve_surface(uid: str, surface: str, platform: str | None = None) -> tuple[int | None, dict[str, Resolved]]:
     snap = snapshot()
     return snap.version, {
-        key: evaluate(rule, uid) for key, rule in sorted(snap.rules.items()) if surface in rule.surfaces
+        key: evaluate(rule, uid, platform) for key, rule in sorted(snap.rules.items()) if surface in rule.surfaces
     }
