@@ -2,8 +2,8 @@
 
 The production Integration manifest now declares a 20-second serving tick and
 the incumbent `en-overflow-1116` batch route table. The projection pump overrides
-both inherited settings with its prior values. Staging keeps its 10-second
-tick and mirrors Integration's vendor table.
+both inherited settings with its prior values. Staging mirrors the production Integration cadence
+and route table.
 
 Release admission still requires a preview against the serving Integration
 revision. The preview must show literal follow-up slots of 4 and account for

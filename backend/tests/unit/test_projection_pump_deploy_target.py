@@ -233,6 +233,8 @@ def test_prod_pump_is_integration_plus_the_dark_overrides():
             'BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED',
             'BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED',
             'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP',
+            'BATCH_PIPELINE_SERVING_TICK_SECONDS',
+            'BATCH_VENDOR_ROUTE_TABLE',
             live_title_key,
             fast_finish_key,
         }
@@ -243,6 +245,8 @@ def test_prod_pump_is_integration_plus_the_dark_overrides():
         assert pump['env'][name] == integration['env'][name], name
     # SCA-4316: each lane keeps its serving title setting.
     backfill_env = services['backend-sync-backfill']['env']
+    assert pump['env']['BATCH_PIPELINE_SERVING_TICK_SECONDS'] == {'value': '10', 'category': 'rollout'}
+    assert pump['env']['BATCH_VENDOR_ROUTE_TABLE'] == backfill_env['BATCH_VENDOR_ROUTE_TABLE']
     assert integration['env'][live_title_key]['value'] == 'off'
     assert backfill_env[live_title_key]['value'] == 'on'
     assert pump['env'][live_title_key] == {'value': 'on', 'category': 'ops_kill'}

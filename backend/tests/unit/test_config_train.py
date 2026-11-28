@@ -52,7 +52,7 @@ def test_restored_integration_cadence_is_pinned_only_on_its_ops_service(environm
     services = yaml.safe_load((BACKEND / f'deploy/ops/{environment}.yaml').read_text())['cloud_run']
     expected = {
         'BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS': '200',
-        'BATCH_PIPELINE_SERVING_TICK_SECONDS': '10',
+        'BATCH_PIPELINE_SERVING_TICK_SECONDS': '20',
         'BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT': '16',
     }
     assert service in services
