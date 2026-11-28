@@ -1239,6 +1239,71 @@ class MainTest(unittest.TestCase):
         self.assertIn("steps.hold.outputs.status == 'REVERSED'", job)
 
 
+class ImageOnlyLeaseOverrideRefusalTest(unittest.TestCase):
+    """SCA-4463: image-only keeps the live config, so lease override inputs are refused, never ignored."""
+
+    VALID = {
+        "MODE": "promote",
+        "TARGET_ENV": "prod",
+        "TARGET_SERVICE": "pusher",
+        "SOURCE_SHA": "a" * 40,
+        "REQUESTED_DIGEST": DIGEST,
+        "QUALIFICATION_RUN_ID": "123",
+        "ROLE_DIGEST": "",
+        "SKIP_CAPACITY": "false",
+        "SKIP_LOCK": "false",
+        "BREAK_GLASS_CONFIRM": "",
+        "BREAK_GLASS_REASON": "",
+        "EVIDENCE": "{}",
+        "GITHUB_REPOSITORY": "BasedHardware/omi",
+        "GITHUB_REF": "refs/heads/main",
+        "GITHUB_SHA": "c" * 40,
+        "GITHUB_WORKFLOW_SHA": "c" * 40,
+        "GITHUB_RUN_ATTEMPT": "1",
+        "LEASE_OVERRIDE_MODE": "none",
+        "LEASE_OVERRIDE_SERVE_PERCENT": "",
+        "LEASE_OVERRIDE_SECONDS": "",
+        "LEASE_OVERRIDE_DEPLOYED_AT": "",
+    }
+
+    def setUp(self):
+        workflow = (control.ROOT / ".github/workflows/gcp_backend_pusher.yml").read_text(encoding="utf-8")
+        job = workflow.split("\n  pusher-image-only:\n", 1)[1]
+        first, block = re.split(r"\n      - name: ", "\n" + job.split("    steps:\n", 1)[1], maxsplit=2)[1:3]
+        self.block = first
+        self.assertTrue(first.startswith("Validate protected image-only dispatch\n"))
+        self.script = "\n".join(
+            line[10:] for line in first.split("        run: |\n", 1)[1].splitlines() if line.startswith("          ") or not line.strip()
+        )
+
+    def run_validation(self, **overrides):
+        env = {**os.environ, **self.VALID, **overrides}
+        return subprocess.run(["bash", "-c", self.script], env=env, capture_output=True, text=True)
+
+    def test_inputs_reach_the_first_step_through_env_only(self):
+        for suffix in ("mode", "serve_percent", "seconds", "deployed_at"):
+            self.assertIn(f"${{{{ inputs.pusher_record_token_lease_override_{suffix} }}}}", self.block)
+        self.assertNotIn("${{", self.script)
+
+    def test_default_inputs_pass_and_any_override_input_fails_before_any_write(self):
+        result = self.run_validation()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.run_validation(LEASE_OVERRIDE_MODE="").returncode, 0)
+        for mode in ("promote", "rollback", "canary", "preview"):
+            for key, value in (
+                ("LEASE_OVERRIDE_MODE", "shadow"),
+                ("LEASE_OVERRIDE_MODE", "off"),
+                ("LEASE_OVERRIDE_SERVE_PERCENT", "0"),
+                ("LEASE_OVERRIDE_SECONDS", "3600"),
+                ("LEASE_OVERRIDE_DEPLOYED_AT", "1795662310"),
+            ):
+                with self.subTest(mode=mode, key=key):
+                    result = self.run_validation(MODE=mode, **{key: value})
+                    self.assertEqual(result.returncode, 1)
+                    self.assertIn("Image-only operations keep the live Pusher config", result.stderr)
+                    self.assertIn("standard Pusher deploy", result.stderr)
+
+
 class DetectorTest(unittest.TestCase):
     """The workflow's page decision, run through the same module and CLI the workflow calls."""
 

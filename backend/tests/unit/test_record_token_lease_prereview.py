@@ -137,13 +137,23 @@ async def test_renewal_failure_does_not_interrupt_live_audio(world, monkeypatch,
     monkeypatch.setattr(record_audio, 'renew_record_token_lease', failure)
     stored = []
     try:
-        await barrier.renew_recording('record')
+        first = await barrier.renew_recording('record')
         # This is the caller order used by both receive and upload batches:
         # the failed metadata side channel must return to the storage lane.
         stored.append(b'live audio')
-        await barrier.renew_recording('record')
-        assert failure.call_count == 2  # clock not advanced on failure
-        assert barrier.lease_renewed_at['record'] == original_time - 7200
+        second = await barrier.renew_recording('record')
+        if mode == 'serve':
+            # Serve fences: requeue the batch and retry metadata on the next one.
+            assert (first, second) == (False, False)
+            assert failure.call_count == 2  # clock not advanced on failure
+            assert barrier.lease_renewed_at['record'] == original_time - 7200
+        else:
+            # SCA-4463: shadow fences nothing; storage proceeds as in off and the
+            # next attempt waits the normal half-lease interval.
+            assert (first, second) == (True, True)
+            assert failure.call_count == 1
+            assert barrier.lease_renewed_at['record'] > original_time - 7200
+            assert 'record' not in barrier.lease_renewal_failed
         assert stored == [b'live audio']
         assert 'record' not in barrier.failed_recordings
     finally:

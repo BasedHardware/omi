@@ -13,10 +13,13 @@ predates the block would silently ignore the values, so a render that does not
 carry the vector fails here, before any cluster mutation.
 
 No input (mode ``none`` and the other three empty) binds nothing and the
-deploy keeps today's ConfigMap references. Rules match the shared binding in
-``.github/actions/deploy-backend-stack/action.yml``, except that every number
-must be a plain decimal integer: mode in {off, shadow, serve}, serve percent
-0-100, lease seconds 1800-7200, epoch >= 0 and > 0 unless mode is off.
+deploy keeps today's ConfigMap references. The override is narrower than the
+shared binding in ``.github/actions/deploy-backend-stack/action.yml``: mode in
+{off, shadow} with serve percent exactly 0. A Pusher-only ``serve`` would turn on
+``prepare_recovery`` for Pusher's cohort while Sync and the seal readers stay
+off, so serve is reached only through the coordinated shared ramp. Every number
+must be a plain decimal integer: lease seconds 1800-7200, epoch >= 0 and > 0
+unless mode is off.
 """
 
 from __future__ import annotations
@@ -33,7 +36,9 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 CHART = ROOT / "backend/charts/pusher"
-MODES = ("off", "shadow", "serve")
+# Serve is reached only through the coordinated shared ConfigMap ramp, never here.
+MODES = ("off", "shadow")
+SHARED_ONLY_MODES = ("serve",)
 NO_OVERRIDE = "none"
 INPUT_ENV = {
     "mode": "PUSHER_LEASE_OVERRIDE_MODE",
@@ -70,18 +75,26 @@ def parse_vector(mode: str, serve_percent: str, seconds: str, deployed_at: str) 
         if any(numbers):
             raise OverrideError("lease override numbers require an explicit override mode")
         return None
+    if mode in SHARED_ONLY_MODES:
+        raise OverrideError(
+            "a Pusher-only lease override cannot serve; serve is reached only through the coordinated shared ramp"
+        )
     if mode not in MODES:
         raise OverrideError(f"lease override mode must be one of {', '.join((NO_OVERRIDE, *MODES))}")
     if not all(numbers):
         raise OverrideError("a lease override needs serve percent, lease seconds and deployed-at epoch together")
+    if serve_percent != "0":
+        raise OverrideError(
+            "lease override serve percent must be exactly 0; serve is reached only through the coordinated shared ramp"
+        )
     vector = {
         "mode": mode,
-        "servePercent": _integer(serve_percent, "lease override serve percent", 0, 100),
+        "servePercent": serve_percent,
         "seconds": _integer(seconds, "lease override seconds", 1800, 7200),
         "deployedAt": _integer(deployed_at, "lease override deployed-at epoch", 0, 10**12 - 1),
     }
     if mode != "off" and vector["deployedAt"] == "0":
-        raise OverrideError("shadow or serve lease override requires a pinned release epoch")
+        raise OverrideError("a shadow lease override requires a pinned release epoch")
     return vector
 
 

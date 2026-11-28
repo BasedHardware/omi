@@ -389,13 +389,27 @@ class PusherRecordBarrier:
                     late_observation=observed,
                 )
             except Exception:
+                if not lease.token_lease_serving(self.uid):
+                    # Shadow, or serve outside this uid's cohort: the lease is
+                    # observation only and fences nothing, so a failed renewal
+                    # must not hold storage or the audio ACK. Return what the
+                    # off path returns and wait the normal half-lease interval
+                    # before the next attempt, so an outage does not stall
+                    # every frame batch on a metadata timeout.
+                    self.lease_renewed_at[conversation_id] = now
+                    lease_metrics.RENEWAL_FAILURES_SHADOW.inc()
+                    logger.warning('record token lease renewal failed outside serve; storage continues', exc_info=True)
+                    return conversation_id not in self.lease_renewal_failed
                 # Retain/requeue this batch before storage can accept and clear
                 # it. Keep the old clock so the next attempt retries metadata.
                 self.lease_renewal_failed.add(conversation_id)
+                lease_metrics.RENEWAL_FAILURES_SERVE.inc()
                 _record_failure('renew')
                 return False
             if conversation_id not in self.registered_sessions or conversation_id in self.failed_recordings:
-                return False  # A concurrent failed drain already retired local lease ownership.
+                # A concurrent failed drain already retired local lease ownership.
+                # Outside serve, return what the off path returns for that state.
+                return not lease.token_lease_serving(self.uid) and conversation_id not in self.lease_renewal_failed
             if observed.get('late'):
                 self.late_appends.add(conversation_id)
             if conversation_id not in self.lease_renewed_at:

@@ -88,7 +88,9 @@ on:
       # keeps the four keys on the shared ConfigMap. Set, all four are required;
       # the canary and the Pusher release render them as container env (which
       # wins over envFrom) and this run does not write the shared ConfigMap, so
-      # backend-listen keeps its own vector.
+      # backend-listen keeps its own vector. Only off and shadow at serve percent
+      # 0: serve is reached only through the coordinated shared ramp. Image-only
+      # runs keep the live config and refuse any of these inputs.
       pusher_record_token_lease_override_mode:
         description: 'Pusher only: record token lease override mode (none keeps the shared ConfigMap vector)'
         required: false
@@ -98,9 +100,8 @@ on:
           - none
           - 'off'
           - shadow
-          - serve
       pusher_record_token_lease_override_serve_percent:
-        description: 'Pusher lease override only: serve percent 0-100'
+        description: 'Pusher lease override only: serve percent, must be 0 (serve is shared-ramp only)'
         required: false
         default: ''
       pusher_record_token_lease_override_seconds:
@@ -1310,9 +1311,20 @@ jobs:
           BREAK_GLASS_CONFIRM: ${{ inputs.break_glass_confirm }}
           BREAK_GLASS_REASON: ${{ inputs.break_glass_reason }}
           EVIDENCE: ${{ inputs.pusher_image_only_evidence }}
+          LEASE_OVERRIDE_MODE: ${{ inputs.pusher_record_token_lease_override_mode }}
+          LEASE_OVERRIDE_SERVE_PERCENT: ${{ inputs.pusher_record_token_lease_override_serve_percent }}
+          LEASE_OVERRIDE_SECONDS: ${{ inputs.pusher_record_token_lease_override_seconds }}
+          LEASE_OVERRIDE_DEPLOYED_AT: ${{ inputs.pusher_record_token_lease_override_deployed_at }}
         run: |
           set -euo pipefail
           case "$MODE" in preview|canary|promote|rollback) ;; *) exit 1 ;; esac
+          # SCA-4463: image-only patches only the container image and keeps the live
+          # config, so a lease override here would be silently ignored. Refuse it.
+          if [[ "${LEASE_OVERRIDE_MODE:-none}" != none || -n "$LEASE_OVERRIDE_SERVE_PERCENT" ||
+                -n "$LEASE_OVERRIDE_SECONDS" || -n "$LEASE_OVERRIDE_DEPLOYED_AT" ]]; then
+            echo "Image-only operations keep the live Pusher config, including any record token lease override; leave the pusher_record_token_lease_override_* inputs at none/empty, or run a standard Pusher deploy to change the lease vector." >&2
+            exit 1
+          fi
           if [[ "$GITHUB_REPOSITORY" != BasedHardware/omi || "$GITHUB_REF" != refs/heads/main ||
                 "$GITHUB_SHA" != "$GITHUB_WORKFLOW_SHA" || "$GITHUB_RUN_ATTEMPT" != 1 ||
                 "$TARGET_ENV" != prod || "$TARGET_SERVICE" != pusher ||

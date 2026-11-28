@@ -114,11 +114,12 @@ RECORD_TOKEN_LEASE_MODE RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT RECORD_TOKEN_LEASE
     {{- fail (printf "recordTokenLeaseOverride.%s must be a string" $key) -}}
   {{- end -}}
 {{- end -}}
-{{- if not (has $lease.mode (list "off" "shadow" "serve")) -}}
-  {{- fail "recordTokenLeaseOverride.mode must be off, shadow or serve" -}}
+{{- /* Serve is reached only through the coordinated shared ConfigMap ramp. */ -}}
+{{- if not (has $lease.mode (list "off" "shadow")) -}}
+  {{- fail "recordTokenLeaseOverride.mode must be off or shadow; serve is reached only through the coordinated shared ramp" -}}
 {{- end -}}
-{{- if or (not (regexMatch "^(0|[1-9][0-9]{0,2})$" $lease.servePercent)) (gt (atoi $lease.servePercent) 100) -}}
-  {{- fail "recordTokenLeaseOverride.servePercent must be an integer from 0 to 100" -}}
+{{- if ne $lease.servePercent "0" -}}
+  {{- fail "recordTokenLeaseOverride.servePercent must be exactly 0; serve is reached only through the coordinated shared ramp" -}}
 {{- end -}}
 {{- if or (not (regexMatch "^[1-9][0-9]{3}$" $lease.seconds)) (lt (atoi $lease.seconds) 1800) (gt (atoi $lease.seconds) 7200) -}}
   {{- fail "recordTokenLeaseOverride.seconds must be an integer from 1800 to 7200" -}}
@@ -127,7 +128,7 @@ RECORD_TOKEN_LEASE_MODE RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT RECORD_TOKEN_LEASE
   {{- fail "recordTokenLeaseOverride.deployedAt must be a non-negative integer epoch" -}}
 {{- end -}}
 {{- if and (ne $lease.mode "off") (eq $lease.deployedAt "0") -}}
-  {{- fail "recordTokenLeaseOverride.deployedAt must pin a shared release epoch before shadow/serve" -}}
+  {{- fail "recordTokenLeaseOverride.deployedAt must pin a shared release epoch before shadow" -}}
 {{- end -}}
 - name: RECORD_TOKEN_LEASE_MODE
   value: {{ $lease.mode | quote }}

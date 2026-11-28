@@ -1597,7 +1597,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "Omi Release",
-      "rationale": "Manual protected production Pusher only. SCA-4763 replaces the isolated rehearsal with live server dry-runs and GitHub API verification of the non-secret evidence input; preview and canary verification stay read-only. The forecast covers one guarded rollout wait per run (forward, the single reverse after a failed post-move gate, or rollback); the 220-minute job ceiling is that one 160-minute wait plus checks, receipts and paging. SCA-4463's lease override inputs widen the shared workflow_dispatch trigger but add no step to this job; the one-minute raise only records that reviewed trigger change. No PR or scheduled runs.",
+      "rationale": "Manual protected production Pusher only. SCA-4763 replaces the isolated rehearsal with live server dry-runs and GitHub API verification of the non-secret evidence input; preview and canary verification stay read-only. The forecast covers one guarded rollout wait per run (forward, the single reverse after a failed post-move gate, or rollback); the 220-minute job ceiling is that one 160-minute wait plus checks, receipts and paging. SCA-4463's lease override inputs widen the shared workflow_dispatch trigger; this job adds no step and its existing validation step refuses any non-default override input before checkout or any write, a shell test of four env values. The one-minute raise only records that reviewed trigger change. No PR or scheduled runs.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -5568,8 +5568,7 @@
               "options": [
                 "none",
                 "off",
-                "shadow",
-                "serve"
+                "shadow"
               ],
               "required": "false",
               "type": "choice"
@@ -5581,7 +5580,7 @@
             },
             "pusher_record_token_lease_override_serve_percent": {
               "default": "",
-              "description": "Pusher lease override only: serve percent 0-100",
+              "description": "Pusher lease override only: serve percent, must be 0 (serve is shared-ramp only)",
               "required": "false"
             },
             "pusher_role_image_digest": {

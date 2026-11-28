@@ -381,6 +381,12 @@ def test_shared_configmap_source_is_byte_identical_with_the_bound_override(
         'recordTokenLeaseOverride:\n  mode: "shadow"\n  servePercent: "0"\n  seconds: "3600"\n',
         'recordTokenLeaseOverride:\n  mode: "off"\n  servePercent: "0"\n  seconds: "3600"\n  deployedAt: "0"\n  x: "1"\n',
         'recordTokenLeaseOverride: shadow\n',
+        # Serve is reached only through the coordinated shared ramp (SCA-4463).
+        'recordTokenLeaseOverride:\n  mode: "serve"\n  servePercent: "1"\n  seconds: "3600"\n  deployedAt: "1"\n',
+        'recordTokenLeaseOverride:\n  mode: "serve"\n  servePercent: "0"\n  seconds: "3600"\n  deployedAt: "1"\n',
+        'recordTokenLeaseOverride:\n  mode: "shadow"\n  servePercent: "1"\n  seconds: "3600"\n  deployedAt: "1"\n',
+        'recordTokenLeaseOverride:\n  mode: "off"\n  servePercent: "100"\n  seconds: "3600"\n  deployedAt: "0"\n',
+        'recordTokenLeaseOverride:\n  mode: "shadow"\n  servePercent: "00"\n  seconds: "3600"\n  deployedAt: "1"\n',
     ],
 )
 def test_pusher_chart_refuses_an_invalid_override(tmp_path, raw):
@@ -408,7 +414,7 @@ def _shared_binding_code():
     'vector,valid',
     [
         (('shadow', '0', '3600', '1795662310'), True),
-        (('serve', '100', '1800', '2000000000'), True),
+        (('shadow', '0', '1800', '2000000000'), True),
         (('off', '0', '7200', '0'), True),
         (('shadow', '0', '3600', '0'), False),
         (('typo', '0', '3600', '1'), False),
@@ -438,6 +444,33 @@ def test_override_vector_uses_the_shared_binding_rules_strictly(monkeypatch, tmp
     monkeypatch.setenv('GITHUB_ENV', str(target))
     exec(compile(_shared_binding_code(), '<shared binding>', 'exec'), {})
     assert dict(line.split('=', 1) for line in target.read_text().splitlines()) == dict(zip(LEASE_ENV_NAMES, vector))
+
+
+@pytest.mark.parametrize(
+    'vector,message',
+    [
+        (('serve', '1', '3600', '1795662310'), 'cannot serve'),
+        (('serve', '0', '3600', '1795662310'), 'cannot serve'),
+        (('serve', '100', '1800', '2000000000'), 'cannot serve'),
+        (('shadow', '1', '3600', '1795662310'), 'exactly 0'),
+        (('shadow', '100', '3600', '1795662310'), 'exactly 0'),
+        (('off', '50', '3600', '0'), 'exactly 0'),
+        (('shadow', '00', '3600', '1795662310'), 'exactly 0'),
+    ],
+)
+def test_override_refuses_pusher_only_serve(tmp_path, vector, message):
+    """SCA-4463: a Pusher-only serve would turn on prepare_recovery for Pusher's
+    cohort while the other readers are off; serve is shared-ramp only."""
+    override = _override_module()
+    with pytest.raises(override.OverrideError, match=message):
+        override.parse_vector(*vector)
+    github_env = tmp_path / 'github-env'
+    github_env.write_text('PREVIOUS=kept\n')
+    environ = dict(zip(override.INPUT_ENV.values(), vector))
+    with pytest.raises(override.OverrideError, match=message):
+        override.bind('prod', 'pusher', tmp_path / 'serve.yaml', environ, github_env)
+    assert github_env.read_text() == 'PREVIOUS=kept\n'
+    assert not (tmp_path / 'serve.yaml').exists()
 
 
 def test_no_override_binds_nothing_and_an_override_binds_a_rendered_values_file(tmp_path):
@@ -516,7 +549,7 @@ def test_pusher_workflow_threads_the_override_into_every_pusher_render_and_skips
     config = _workflow(PUSHER_WORKFLOW)
     inputs = config[True]['workflow_dispatch']['inputs']
     assert inputs['pusher_record_token_lease_override_mode']['default'] == 'none'
-    assert inputs['pusher_record_token_lease_override_mode']['options'] == ['none', 'off', 'shadow', 'serve']
+    assert inputs['pusher_record_token_lease_override_mode']['options'] == ['none', 'off', 'shadow']
     for suffix in ('serve_percent', 'seconds', 'deployed_at'):
         assert inputs[f'pusher_record_token_lease_override_{suffix}']['default'] == ''
     steps = _pusher_deploy_steps()
