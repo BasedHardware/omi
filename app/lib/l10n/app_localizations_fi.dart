@@ -15863,4 +15863,34 @@ class AppLocalizationsFi extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Käsitellään $date';
   }
+
+  @override
+  String get pendantStopQuestionTitle => 'Miksi lopetit riipuksen pitämisen?';
+
+  @override
+  String get pendantStopReasonUncomfortable => 'Pitäminen on epämukavaa';
+
+  @override
+  String get pendantStopReasonHabit => 'Unohdin sen tai en koskaan tottunut siihen';
+
+  @override
+  String get pendantStopReasonCharging => 'Lataaminen on vaivalloista';
+
+  @override
+  String get pendantStopReasonValue => 'Ei ole tarpeeksi hyödyllinen';
+
+  @override
+  String get pendantStopReasonDevice => 'Laiteongelma';
+
+  @override
+  String get pendantStopReasonOther => 'Muu';
+
+  @override
+  String get pendantStopOptionalNote => 'Lisää muistiinpano (valinnainen)';
+
+  @override
+  String get pendantStopSendNote => 'Lähetä muistiinpano';
+
+  @override
+  String get pendantStopQuestionThanks => 'Kiitos palautteen jakamisesta';
 }

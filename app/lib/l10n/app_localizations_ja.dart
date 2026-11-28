@@ -15624,4 +15624,34 @@ class AppLocalizationsJa extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return '$dateに処理予定';
   }
+
+  @override
+  String get pendantStopQuestionTitle => 'ペンダントを着けなくなった理由を教えてください';
+
+  @override
+  String get pendantStopReasonUncomfortable => '着け心地が悪い';
+
+  @override
+  String get pendantStopReasonHabit => '忘れてしまうか、習慣にならなかった';
+
+  @override
+  String get pendantStopReasonCharging => '充電が面倒';
+
+  @override
+  String get pendantStopReasonValue => 'あまり役に立たなかった';
+
+  @override
+  String get pendantStopReasonDevice => 'デバイスの問題';
+
+  @override
+  String get pendantStopReasonOther => 'その他';
+
+  @override
+  String get pendantStopOptionalNote => 'メモを追加（任意）';
+
+  @override
+  String get pendantStopSendNote => 'メモを送信';
+
+  @override
+  String get pendantStopQuestionThanks => 'フィードバックを共有していただきありがとうございます';
 }

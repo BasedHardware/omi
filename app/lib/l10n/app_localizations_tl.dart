@@ -15985,4 +15985,34 @@ class AppLocalizationsTl extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Maiiproseso sa $date';
   }
+
+  @override
+  String get pendantStopQuestionTitle => 'Bakit mo tinigil ang pagsusuot ng iyong pendant?';
+
+  @override
+  String get pendantStopReasonUncomfortable => 'Hindi komportableng isuot';
+
+  @override
+  String get pendantStopReasonHabit => 'Nakalimutan ko o hindi ko naging gawi';
+
+  @override
+  String get pendantStopReasonCharging => 'Hassle ang pag-charge';
+
+  @override
+  String get pendantStopReasonValue => 'Hindi sapat na kapaki-pakinabang';
+
+  @override
+  String get pendantStopReasonDevice => 'Problema sa device';
+
+  @override
+  String get pendantStopReasonOther => 'Iba pa';
+
+  @override
+  String get pendantStopOptionalNote => 'Magdagdag ng tala (opsyonal)';
+
+  @override
+  String get pendantStopSendNote => 'Ipadala ang tala';
+
+  @override
+  String get pendantStopQuestionThanks => 'Salamat sa pagbabahagi ng iyong feedback';
 }

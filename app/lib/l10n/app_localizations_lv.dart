@@ -15893,4 +15893,34 @@ class AppLocalizationsLv extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Apstrādās $date';
   }
+
+  @override
+  String get pendantStopQuestionTitle => 'Kāpēc pārtraucāt nēsāt savu kulonu?';
+
+  @override
+  String get pendantStopReasonUncomfortable => 'Neērti nēsāt';
+
+  @override
+  String get pendantStopReasonHabit => 'Aizmirstu vai neizveidojās ieradums';
+
+  @override
+  String get pendantStopReasonCharging => 'Uzlāde ir apgrūtinoša';
+
+  @override
+  String get pendantStopReasonValue => 'Nav pietiekami noderīgs';
+
+  @override
+  String get pendantStopReasonDevice => 'Ierīces problēma';
+
+  @override
+  String get pendantStopReasonOther => 'Cits';
+
+  @override
+  String get pendantStopOptionalNote => 'Pievienot piezīmi (pēc izvēles)';
+
+  @override
+  String get pendantStopSendNote => 'Nosūtīt piezīmi';
+
+  @override
+  String get pendantStopQuestionThanks => 'Paldies, ka dalījāties ar atsauksmi';
 }

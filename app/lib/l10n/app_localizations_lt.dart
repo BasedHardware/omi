@@ -15883,4 +15883,34 @@ class AppLocalizationsLt extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Apdorojama $date';
   }
+
+  @override
+  String get pendantStopQuestionTitle => 'Kodėl nustojote nešioti savo pakabuką?';
+
+  @override
+  String get pendantStopReasonUncomfortable => 'Nepatogu nešioti';
+
+  @override
+  String get pendantStopReasonHabit => 'Pamiršdavau arba nepripratau jo nešioti';
+
+  @override
+  String get pendantStopReasonCharging => 'Įkrauti per daug rūpesčių';
+
+  @override
+  String get pendantStopReasonValue => 'Nepakankamai naudinga';
+
+  @override
+  String get pendantStopReasonDevice => 'Įrenginio problema';
+
+  @override
+  String get pendantStopReasonOther => 'Kita';
+
+  @override
+  String get pendantStopOptionalNote => 'Pridėti pastabą (neprivaloma)';
+
+  @override
+  String get pendantStopSendNote => 'Siųsti pastabą';
+
+  @override
+  String get pendantStopQuestionThanks => 'Dėkojame, kad pasidalinote atsiliepimu';
 }

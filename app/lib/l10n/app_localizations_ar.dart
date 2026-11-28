@@ -15770,4 +15770,34 @@ class AppLocalizationsAr extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'تتم المعالجة في $date';
   }
+
+  @override
+  String get pendantStopQuestionTitle => 'لماذا توقفت عن ارتداء القلادة؟';
+
+  @override
+  String get pendantStopReasonUncomfortable => 'غير مريحة في الارتداء';
+
+  @override
+  String get pendantStopReasonHabit => 'نسيتها أو لم أعتد على ارتدائها';
+
+  @override
+  String get pendantStopReasonCharging => 'الشحن مزعج';
+
+  @override
+  String get pendantStopReasonValue => 'ليست مفيدة بما يكفي';
+
+  @override
+  String get pendantStopReasonDevice => 'مشكلة في الجهاز';
+
+  @override
+  String get pendantStopReasonOther => 'أخرى';
+
+  @override
+  String get pendantStopOptionalNote => 'أضف ملاحظة (اختياري)';
+
+  @override
+  String get pendantStopSendNote => 'إرسال الملاحظة';
+
+  @override
+  String get pendantStopQuestionThanks => 'شكراً لمشاركة ملاحظاتك';
 }

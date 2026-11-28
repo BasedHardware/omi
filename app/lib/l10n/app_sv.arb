@@ -4772,5 +4772,15 @@
     "batteryRestartToRefresh": "Starta om Omi för att uppdatera",
     "onTheWayAllowanceHeldTitle": "Bearbetas {date} när dina minuter förnyas",
     "onTheWayAllowanceHeldUpgrade": "Eller bearbeta dem direkt med en planuppgradering",
-    "onTheWayDayProcessesOn": "Bearbetas {date}"
+    "onTheWayDayProcessesOn": "Bearbetas {date}",
+    "pendantStopQuestionTitle": "Varför slutade du bära ditt hängsmycke?",
+    "pendantStopReasonUncomfortable": "Obekvämt att bära",
+    "pendantStopReasonHabit": "Jag glömde det eller kom aldrig in i vanan",
+    "pendantStopReasonCharging": "Laddning är ett besvär",
+    "pendantStopReasonValue": "Inte tillräckligt användbart",
+    "pendantStopReasonDevice": "Ett problem med enheten",
+    "pendantStopReasonOther": "Annat",
+    "pendantStopOptionalNote": "Lägg till en anteckning (valfritt)",
+    "pendantStopSendNote": "Skicka anteckning",
+    "pendantStopQuestionThanks": "Tack för din återkoppling"
 }

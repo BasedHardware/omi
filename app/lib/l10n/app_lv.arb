@@ -4772,5 +4772,15 @@
     "batteryRestartToRefresh": "Restartējiet Omi, lai atsvaidzinātu",
     "onTheWayAllowanceHeldTitle": "Tiks apstrādāti {date}, kad atjaunosies jūsu minūtes",
     "onTheWayAllowanceHeldUpgrade": "Vai jauniniet plānu, lai tos apstrādātu uzreiz",
-    "onTheWayDayProcessesOn": "Apstrādās {date}"
+    "onTheWayDayProcessesOn": "Apstrādās {date}",
+    "pendantStopQuestionTitle": "Kāpēc pārtraucāt nēsāt savu kulonu?",
+    "pendantStopReasonUncomfortable": "Neērti nēsāt",
+    "pendantStopReasonHabit": "Aizmirstu vai neizveidojās ieradums",
+    "pendantStopReasonCharging": "Uzlāde ir apgrūtinoša",
+    "pendantStopReasonValue": "Nav pietiekami noderīgs",
+    "pendantStopReasonDevice": "Ierīces problēma",
+    "pendantStopReasonOther": "Cits",
+    "pendantStopOptionalNote": "Pievienot piezīmi (pēc izvēles)",
+    "pendantStopSendNote": "Nosūtīt piezīmi",
+    "pendantStopQuestionThanks": "Paldies, ka dalījāties ar atsauksmi"
 }

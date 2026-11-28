@@ -15840,4 +15840,34 @@ class AppLocalizationsHi extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return '$date को प्रोसेस होगा';
   }
+
+  @override
+  String get pendantStopQuestionTitle => 'आपने पेंडेंट पहनना क्यों बंद किया?';
+
+  @override
+  String get pendantStopReasonUncomfortable => 'पहनने में असहज';
+
+  @override
+  String get pendantStopReasonHabit => 'मैं भूल जाता था या कभी आदत नहीं बनी';
+
+  @override
+  String get pendantStopReasonCharging => 'चार्ज करने में परेशानी होती है';
+
+  @override
+  String get pendantStopReasonValue => 'काफ़ी उपयोगी नहीं';
+
+  @override
+  String get pendantStopReasonDevice => 'डिवाइस में समस्या';
+
+  @override
+  String get pendantStopReasonOther => 'अन्य';
+
+  @override
+  String get pendantStopOptionalNote => 'नोट जोड़ें (वैकल्पिक)';
+
+  @override
+  String get pendantStopSendNote => 'नोट भेजें';
+
+  @override
+  String get pendantStopQuestionThanks => 'अपनी प्रतिक्रिया साझा करने के लिए धन्यवाद';
 }

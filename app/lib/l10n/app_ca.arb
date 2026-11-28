@@ -4772,5 +4772,15 @@
     "batteryRestartToRefresh": "Reinicieu Omi per actualitzar el valor",
     "onTheWayAllowanceHeldTitle": "Es processaran el {date} quan es renovin els vostres minuts",
     "onTheWayAllowanceHeldUpgrade": "O processa'ls de seguida amb una actualització del pla",
-    "onTheWayDayProcessesOn": "Es processaran el {date}"
+    "onTheWayDayProcessesOn": "Es processaran el {date}",
+    "pendantStopQuestionTitle": "Per què heu deixat de portar el penjoll?",
+    "pendantStopReasonUncomfortable": "Incòmode de portar",
+    "pendantStopReasonHabit": "Se m'oblida o no hi he agafat mai el costum",
+    "pendantStopReasonCharging": "Carregar-lo és una molèstia",
+    "pendantStopReasonValue": "No és prou útil",
+    "pendantStopReasonDevice": "Un problema del dispositiu",
+    "pendantStopReasonOther": "Altres",
+    "pendantStopOptionalNote": "Afegiu una nota (opcional)",
+    "pendantStopSendNote": "Envia la nota",
+    "pendantStopQuestionThanks": "Gràcies per compartir els vostres comentaris"
 }

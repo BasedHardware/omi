@@ -15600,4 +15600,34 @@ class AppLocalizationsZh extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return '将于 $date 处理';
   }
+
+  @override
+  String get pendantStopQuestionTitle => '您为什么不再佩戴吊坠？';
+
+  @override
+  String get pendantStopReasonUncomfortable => '佩戴不舒适';
+
+  @override
+  String get pendantStopReasonHabit => '我总是忘记或从未养成习惯';
+
+  @override
+  String get pendantStopReasonCharging => '充电很麻烦';
+
+  @override
+  String get pendantStopReasonValue => '不够实用';
+
+  @override
+  String get pendantStopReasonDevice => '设备出现问题';
+
+  @override
+  String get pendantStopReasonOther => '其他';
+
+  @override
+  String get pendantStopOptionalNote => '添加备注（可选）';
+
+  @override
+  String get pendantStopSendNote => '发送备注';
+
+  @override
+  String get pendantStopQuestionThanks => '感谢您分享反馈';
 }

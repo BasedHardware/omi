@@ -15851,4 +15851,34 @@ class AppLocalizationsFa extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'در $date پردازش می‌شود';
   }
+
+  @override
+  String get pendantStopQuestionTitle => 'چرا دیگر آویزتان را نمی‌پوشید؟';
+
+  @override
+  String get pendantStopReasonUncomfortable => 'استفاده از آن راحت نیست';
+
+  @override
+  String get pendantStopReasonHabit => 'فراموش می‌کردم یا هیچ‌وقت به آن عادت نکردم';
+
+  @override
+  String get pendantStopReasonCharging => 'شارژ کردن آن دردسر دارد';
+
+  @override
+  String get pendantStopReasonValue => 'به اندازه کافی مفید نیست';
+
+  @override
+  String get pendantStopReasonDevice => 'مشکل در دستگاه';
+
+  @override
+  String get pendantStopReasonOther => 'سایر';
+
+  @override
+  String get pendantStopOptionalNote => 'افزودن یادداشت (اختیاری)';
+
+  @override
+  String get pendantStopSendNote => 'ارسال یادداشت';
+
+  @override
+  String get pendantStopQuestionThanks => 'ممنون که بازخوردتان را به اشتراک گذاشتید';
 }

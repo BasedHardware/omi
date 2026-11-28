@@ -12329,5 +12329,15 @@
     "batteryRestartToRefresh": "Ponovno zaženite Omi, da osvežite podatke",
     "onTheWayAllowanceHeldTitle": "Obdelani bodo {date}, ko se obnovijo vaše minute",
     "onTheWayAllowanceHeldUpgrade": "Ali pa jih obdelajte takoj z nadgradnjo paketa",
-    "onTheWayDayProcessesOn": "Obdelani bodo {date}"
+    "onTheWayDayProcessesOn": "Obdelani bodo {date}",
+    "pendantStopQuestionTitle": "Zakaj ste prenehali nositi obesek?",
+    "pendantStopReasonUncomfortable": "Neprijetno za nošenje",
+    "pendantStopReasonHabit": "Pozabljali ste ali si nikoli niste ustvarili navade",
+    "pendantStopReasonCharging": "Polnjenje je nadloga",
+    "pendantStopReasonValue": "Ni dovolj uporaben",
+    "pendantStopReasonDevice": "Težava z napravo",
+    "pendantStopReasonOther": "Drugo",
+    "pendantStopOptionalNote": "Dodajte opombo (neobvezno)",
+    "pendantStopSendNote": "Pošlji opombo",
+    "pendantStopQuestionThanks": "Hvala za vaše povratne informacije"
 }

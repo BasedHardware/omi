@@ -15630,4 +15630,34 @@ class AppLocalizationsKo extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return '$date에 처리';
   }
+
+  @override
+  String get pendantStopQuestionTitle => '펜던트 착용을 중단한 이유는 무엇인가요?';
+
+  @override
+  String get pendantStopReasonUncomfortable => '착용이 불편해서';
+
+  @override
+  String get pendantStopReasonHabit => '잊어버리거나 습관이 되지 않아서';
+
+  @override
+  String get pendantStopReasonCharging => '충전이 번거로워서';
+
+  @override
+  String get pendantStopReasonValue => '충분히 유용하지 않아서';
+
+  @override
+  String get pendantStopReasonDevice => '기기 문제가 있어서';
+
+  @override
+  String get pendantStopReasonOther => '기타';
+
+  @override
+  String get pendantStopOptionalNote => '메모 추가(선택 사항)';
+
+  @override
+  String get pendantStopSendNote => '메모 보내기';
+
+  @override
+  String get pendantStopQuestionThanks => '피드백을 공유해 주셔서 감사합니다';
 }

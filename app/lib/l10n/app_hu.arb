@@ -4868,5 +4868,15 @@
     "batteryRestartToRefresh": "Indítsa újra az Omit a frissítéshez",
     "onTheWayAllowanceHeldTitle": "Feldolgozás: {date}, amikor megújulnak a perceid",
     "onTheWayAllowanceHeldUpgrade": "Vagy dolgozd fel őket azonnal csomagfrissítéssel",
-    "onTheWayDayProcessesOn": "Feldolgozás: {date}"
+    "onTheWayDayProcessesOn": "Feldolgozás: {date}",
+    "pendantStopQuestionTitle": "Miért hagytad abba a medál viselését?",
+    "pendantStopReasonUncomfortable": "Kényelmetlen viselni",
+    "pendantStopReasonHabit": "Elfelejtettem, vagy sosem vált szokássá",
+    "pendantStopReasonCharging": "A töltése macerás",
+    "pendantStopReasonValue": "Nem elég hasznos",
+    "pendantStopReasonDevice": "Eszközhiba",
+    "pendantStopReasonOther": "Egyéb",
+    "pendantStopOptionalNote": "Megjegyzés hozzáadása (nem kötelező)",
+    "pendantStopSendNote": "Megjegyzés küldése",
+    "pendantStopQuestionThanks": "Köszönjük, hogy megosztottad a visszajelzésedet"
 }

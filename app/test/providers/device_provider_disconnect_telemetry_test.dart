@@ -16,6 +16,7 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/devices.dart';
+import 'package:omi/services/experiments/pendant_absence.dart';
 import 'package:omi/services/wals/sync_wake_scope.dart';
 import 'package:omi/services/devices/connectors/omi_connection.dart';
 import 'package:omi/services/devices/transports/device_transport.dart';
@@ -168,6 +169,25 @@ void main() {
   });
 
   tearDown(AnalyticsManager.resetForTesting);
+
+  for (final type in [DeviceType.omi, DeviceType.openglass]) {
+    test('only a normalized pendant disconnect starts an absence ($type)', () async {
+      final prefs = SharedPreferencesUtil();
+      final previousUid = prefs.uid;
+      final uid = 'survey-disconnect-$type';
+      prefs.uid = uid;
+      addTearDown(() => prefs.uid = previousUid);
+      final raw = _device('survey-disconnect');
+      final provider = DeviceProvider()
+        ..connectedDevice = raw
+        ..pairedDevice = raw.copyWith(type: type);
+      addTearDown(provider.dispose);
+
+      provider.onDeviceDisconnected(captureLinkAlreadyHandled: true);
+      final later = PendantAbsence(now: () => DateTime.now().add(const Duration(days: 4)));
+      expect(later.eligibleDays(uid, paired: raw, connected: false), type == DeviceType.omi ? 4 : null);
+    });
+  }
 
   for (final emptyRead in [false, true]) {
     for (final recoverViaNotify in [false, true]) {

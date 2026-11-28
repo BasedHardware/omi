@@ -15744,4 +15744,34 @@ class AppLocalizationsHe extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'ייעבדו ב-$date';
   }
+
+  @override
+  String get pendantStopQuestionTitle => 'למה הפסקת לענוד את התליון?';
+
+  @override
+  String get pendantStopReasonUncomfortable => 'לא נוח לענוד';
+
+  @override
+  String get pendantStopReasonHabit => 'שכחתי או שמעולם לא התרגלתי אליו';
+
+  @override
+  String get pendantStopReasonCharging => 'הטענה מסורבלת';
+
+  @override
+  String get pendantStopReasonValue => 'לא מספיק שימושי';
+
+  @override
+  String get pendantStopReasonDevice => 'בעיה במכשיר';
+
+  @override
+  String get pendantStopReasonOther => 'אחר';
+
+  @override
+  String get pendantStopOptionalNote => 'הוסף הערה (אופציונלי)';
+
+  @override
+  String get pendantStopSendNote => 'שלח הערה';
+
+  @override
+  String get pendantStopQuestionThanks => 'תודה ששיתפת את המשוב שלך';
 }

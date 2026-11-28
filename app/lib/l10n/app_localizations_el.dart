@@ -15963,4 +15963,34 @@ class AppLocalizationsEl extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Επεξεργασία στις $date';
   }
+
+  @override
+  String get pendantStopQuestionTitle => 'Γιατί σταματήσατε να φοράτε το μενταγιόν σας;';
+
+  @override
+  String get pendantStopReasonUncomfortable => 'Άβολο στη φορά';
+
+  @override
+  String get pendantStopReasonHabit => 'Το ξεχνώ ή δεν το έκανα ποτέ συνήθεια';
+
+  @override
+  String get pendantStopReasonCharging => 'Η φόρτιση είναι ταλαιπωρία';
+
+  @override
+  String get pendantStopReasonValue => 'Δεν είναι αρκετά χρήσιμο';
+
+  @override
+  String get pendantStopReasonDevice => 'Πρόβλημα με τη συσκευή';
+
+  @override
+  String get pendantStopReasonOther => 'Άλλο';
+
+  @override
+  String get pendantStopOptionalNote => 'Προσθέστε μια σημείωση (προαιρετικό)';
+
+  @override
+  String get pendantStopSendNote => 'Αποστολή σημείωσης';
+
+  @override
+  String get pendantStopQuestionThanks => 'Ευχαριστούμε που μοιραστήκατε τα σχόλιά σας';
 }

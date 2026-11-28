@@ -12329,5 +12329,15 @@
     "batteryRestartToRefresh": "రిఫ్రెష్ చేయడానికి Omi ను రీస్టార్ట్ చేయండి",
     "onTheWayAllowanceHeldTitle": "మీ నిమిషాలు రిన్యూ అయ్యే {date}న ప్రాసెస్ అవుతుంది",
     "onTheWayAllowanceHeldUpgrade": "లేదా ప్లాన్ అప్‌గ్రేడ్‌తో వెంటనే ప్రాసెస్ చేయించండి",
-    "onTheWayDayProcessesOn": "{date}న ప్రాసెస్ అవుతుంది"
+    "onTheWayDayProcessesOn": "{date}న ప్రాసెస్ అవుతుంది",
+    "pendantStopQuestionTitle": "మీరు మీ పెండెంట్ ధరించడం ఎందుకు మానేశారు?",
+    "pendantStopReasonUncomfortable": "ధరించడానికి అసౌకర్యంగా ఉంటుంది",
+    "pendantStopReasonHabit": "నేను మర్చిపోయాను లేదా ఎప్పుడూ అలవాటుగా మార్చుకోలేదు",
+    "pendantStopReasonCharging": "ఛార్జ్ చేయడం ఇబ్బందికరంగా ఉంటుంది",
+    "pendantStopReasonValue": "అంతగా ఉపయోగకరంగా లేదు",
+    "pendantStopReasonDevice": "డివైస్‌లో సమస్య",
+    "pendantStopReasonOther": "ఇతర",
+    "pendantStopOptionalNote": "గమనిక జోడించండి (ఐచ్ఛికం)",
+    "pendantStopSendNote": "గమనికను పంపండి",
+    "pendantStopQuestionThanks": "మీ ఫీడ్‌బ్యాక్‌ను పంచినందుకు ధన్యవాదాలు"
 }

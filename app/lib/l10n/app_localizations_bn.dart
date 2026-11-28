@@ -15853,4 +15853,34 @@ class AppLocalizationsBn extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return '$date তারিখে প্রসেস হবে';
   }
+
+  @override
+  String get pendantStopQuestionTitle => 'আপনি কেন আপনার পেন্ডেন্ট পরা বন্ধ করেছেন?';
+
+  @override
+  String get pendantStopReasonUncomfortable => 'পরতে অস্বস্তিকর';
+
+  @override
+  String get pendantStopReasonHabit => 'ভুলে যাই বা অভ্যাস হয়নি';
+
+  @override
+  String get pendantStopReasonCharging => 'চার্জ দেওয়া ঝামেলার';
+
+  @override
+  String get pendantStopReasonValue => 'যথেষ্ট দরকারি নয়';
+
+  @override
+  String get pendantStopReasonDevice => 'ডিভাইসের সমস্যা';
+
+  @override
+  String get pendantStopReasonOther => 'অন্য';
+
+  @override
+  String get pendantStopOptionalNote => 'একটি নোট যোগ করুন (ঐচ্ছিক)';
+
+  @override
+  String get pendantStopSendNote => 'নোট পাঠান';
+
+  @override
+  String get pendantStopQuestionThanks => 'আপনার প্রতিক্রিয়া শেয়ার করার জন্য ধন্যবাদ';
 }

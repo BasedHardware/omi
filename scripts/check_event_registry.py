@@ -45,6 +45,33 @@ def git(ref, path):
     return result.stdout if result.returncode == 0 else None
 
 
+def check_outcomes_fixture(root, record):
+    """Run the outcomes SQL after substituting only its warehouse projection."""
+    paths = [Path(record[key]) for key in ('outcomes_query', 'outcomes_fixture')]
+    if any(path.parent != Path('contracts/analytics/consumers') for path in paths):
+        raise ValueError('outcomes query and fixture must be in the consumer directory')
+    query_path, fixture_path = (root / path for path in paths)
+    _, marker, aggregation = query_path.read_text().partition('-- Offline-testable outcomes\n')
+    if not marker:
+        raise ValueError('outcomes query must mark the end of its warehouse projection')
+    fixture = json.loads(fixture_path.read_text())
+    query = """WITH readback_parameters AS (
+        SELECT :release_ms AS release_ms, :app_namespace AS app_namespace
+    ), projected_events AS (SELECT * FROM projected_fixture),
+    """ + aggregation
+    with sqlite3.connect(':memory:') as db:
+        db.execute("""CREATE TABLE projected_fixture(
+            event TEXT, person_id TEXT, event_id TEXT, event_ms INTEGER,
+            joined_ms INTEGER, app_namespace TEXT, plan TEXT, reason TEXT
+        )""")
+        db.executemany('INSERT INTO projected_fixture VALUES (?, ?, ?, ?, ?, ?, ?, ?)', fixture['events'])
+        if sorted(db.execute(query, fixture['parameters']).fetchall()) != sorted(map(tuple, fixture['expected'])):
+            raise ValueError('outcomes query disagrees with the expected readback fixture')
+        db.execute('DELETE FROM projected_fixture')
+        if db.execute(query, fixture['parameters']).fetchall():
+            raise ValueError('outcomes query manufactures responses on empty input')
+
+
 def validate(doc, root=ROOT, prior=None):
     errors = []
     events = doc['events']
@@ -71,6 +98,7 @@ def validate(doc, root=ROOT, prior=None):
                     errors.append(f'{key}: released properties are immutable except append-only enum values')
         if not set(prior['adopted_files']) <= set(doc['adopted_files']):
             errors.append('adoption cannot be removed')
+    checked_outcomes = set()
     for event in events:
         label = event['id']
         if not IDENT.fullmatch(label) or not event['wire_name'].strip():
@@ -129,6 +157,9 @@ def validate(doc, root=ROOT, prior=None):
                     db.execute('DELETE FROM events')
                     if db.execute(query, {'app_namespace': 'mobile-test', 'build_number': '1'}).fetchall():
                         raise ValueError('query manufactures presence on empty input')
+                if record.get('outcomes_fixture') and consumer not in checked_outcomes:
+                    check_outcomes_fixture(root, record)
+                    checked_outcomes.add(consumer)
             except (OSError, KeyError, ValueError, sqlite3.Error) as exc:
                 errors.append(f'{label}: unusable consumer {consumer}: {exc}')
     correlated = [e for e in events if e['phase'] != 'point']

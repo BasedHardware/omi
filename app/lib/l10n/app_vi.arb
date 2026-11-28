@@ -4772,5 +4772,15 @@
     "batteryRestartToRefresh": "Khởi động lại Omi để làm mới",
     "onTheWayAllowanceHeldTitle": "Sẽ xử lý vào {date} khi số phút của bạn được gia hạn",
     "onTheWayAllowanceHeldUpgrade": "Hoặc xử lý ngay bằng cách nâng cấp gói",
-    "onTheWayDayProcessesOn": "Xử lý vào {date}"
+    "onTheWayDayProcessesOn": "Xử lý vào {date}",
+    "pendantStopQuestionTitle": "Tại sao bạn ngừng đeo Pendant?",
+    "pendantStopReasonUncomfortable": "Không thoải mái khi đeo",
+    "pendantStopReasonHabit": "Tôi hay quên hoặc chưa tạo được thói quen",
+    "pendantStopReasonCharging": "Việc sạc phiền phức",
+    "pendantStopReasonValue": "Chưa đủ hữu ích",
+    "pendantStopReasonDevice": "Vấn đề về thiết bị",
+    "pendantStopReasonOther": "Khác",
+    "pendantStopOptionalNote": "Thêm ghi chú (không bắt buộc)",
+    "pendantStopSendNote": "Gửi ghi chú",
+    "pendantStopQuestionThanks": "Cảm ơn bạn đã chia sẻ phản hồi"
 }

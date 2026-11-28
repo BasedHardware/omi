@@ -39,6 +39,7 @@ import 'package:omi/pages/action_items/widgets/task_selection_action_bar.dart';
 import 'package:omi/pages/conversations/widgets/merge_action_bar.dart';
 import 'package:omi/pages/home/home_content.dart';
 import 'package:omi/pages/home/widgets/home_tab_switcher.dart';
+import 'package:omi/pages/home/widgets/pendant_stop_question.dart';
 import 'package:omi/pages/home/home_widgets_publisher.dart';
 import 'package:omi/pages/home/plan_refresh_on_resume.dart';
 import 'package:omi/pages/phone_calls/active_call_banner.dart';
@@ -63,6 +64,7 @@ import 'package:omi/services/quick_actions_service.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/services/announcement_service.dart';
+import 'package:omi/services/experiments/pendant_absence.dart';
 import 'package:omi/services/account_cutover/account_cutover_blocking_gate.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
@@ -414,6 +416,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         // audio (Stage Manager / YouTube) without an AVAudioSession interrupt.
         captureProvider.onAppResumed();
         _scheduleHomeWidgetFreshness(context.read<ActionItemsProvider>());
+        _checkPendantStopQuestion(context.read<DeviceProvider>());
         // Pick up any batch recordings the native layer wrote while backgrounded/closed.
         Provider.of<LocalRecordingsProvider>(context, listen: false).refresh();
         if (context.read<HomeProvider>().selectedIndex == HomeProvider.tasksTab) {
@@ -619,6 +622,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           },
         );
 
+        _checkPendantStopQuestion(deviceProvider);
+
         // Register callback for device connection to check firmware announcements and device onboarding
         deviceProvider.onDeviceConnected = (BtDevice device) {
           _onDeviceConnectedForAnnouncements(device);
@@ -631,6 +636,22 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         }
       });
     });
+  }
+
+  void _checkPendantStopQuestion(DeviceProvider deviceProvider) {
+    final prefs = SharedPreferencesUtil();
+    final uid = prefs.uid;
+    PendantStopQuestion.enqueue(
+      queue: PromptQueue.instance,
+      absence: PendantAbsence.instance,
+      uid: uid,
+      isCurrentUser: () => mounted && prefs.uid == uid,
+      isOnboarded: () => prefs.onboardingCompleted,
+      isForeground: () => WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed,
+      paired: () => prefs.btDevice,
+      connected: () => deviceProvider.isConnected || deviceProvider.connectedDevice != null,
+      readPlan: () => context.read<UsageProvider>().subscription?.subscription.plan,
+    );
   }
 
   bool _deviceOnboardingShown = false;
@@ -1136,7 +1157,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     HomeNavigation.unregister(_openRoute);
     _promptGate.detach();
     // These prompts close over this Home; a later Home (after sign-out and sign-in) enqueues its own.
-    for (final id in const ['home-announcements', 'device-tutorial', 'firmware-announcements']) {
+    for (final id in const [
+      'home-announcements',
+      'device-tutorial',
+      'firmware-announcements',
+      PendantStopQuestion.promptId,
+    ]) {
       PromptQueue.instance.remove(id);
     }
     _releaseFeedbackClearance();

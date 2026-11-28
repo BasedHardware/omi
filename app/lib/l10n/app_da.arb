@@ -4814,5 +4814,15 @@
     "batteryRestartToRefresh": "Genstart Omi for at opdatere værdien",
     "onTheWayAllowanceHeldTitle": "Behandles {date}, når dine minutter fornyes",
     "onTheWayAllowanceHeldUpgrade": "Eller behandl dem med det samme med en opgradering af din plan",
-    "onTheWayDayProcessesOn": "Behandles {date}"
+    "onTheWayDayProcessesOn": "Behandles {date}",
+    "pendantStopQuestionTitle": "Hvorfor stoppede du med at bære dit vedhæng?",
+    "pendantStopReasonUncomfortable": "Ubehagelig at bære",
+    "pendantStopReasonHabit": "Jeg glemmer det eller fik aldrig rutinen",
+    "pendantStopReasonCharging": "Det er besværligt at oplade",
+    "pendantStopReasonValue": "Ikke nyttig nok",
+    "pendantStopReasonDevice": "Et problem med enheden",
+    "pendantStopReasonOther": "Andet",
+    "pendantStopOptionalNote": "Tilføj en bemærkning (valgfrit)",
+    "pendantStopSendNote": "Send bemærkning",
+    "pendantStopQuestionThanks": "Tak for at du deler din feedback"
 }

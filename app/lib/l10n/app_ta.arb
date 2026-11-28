@@ -12329,5 +12329,15 @@
     "batteryRestartToRefresh": "புதுப்பிக்க Omi ஐ மறுதொடக்கம் செய்யவும்",
     "onTheWayAllowanceHeldTitle": "உங்கள் நிமிடங்கள் புதுப்பிக்கப்படும்போது {date} அன்று செயலாக்கப்படும்",
     "onTheWayAllowanceHeldUpgrade": "அல்லது திட்ட மேம்பாடு மூலம் அவற்றை உடனடியாகச் செயலாக்குங்கள்",
-    "onTheWayDayProcessesOn": "{date} அன்று செயலாக்கம்"
+    "onTheWayDayProcessesOn": "{date} அன்று செயலாக்கம்",
+    "pendantStopQuestionTitle": "பதக்கத்தை அணிவதை நீங்கள் ஏன் நிறுத்திவிட்டீர்கள்?",
+    "pendantStopReasonUncomfortable": "அணிவதற்கு அசௌகரியமாக இருந்தது",
+    "pendantStopReasonHabit": "மறந்துவிட்டேன் அல்லது அது பழக்கமாகவே இல்லை",
+    "pendantStopReasonCharging": "சார்ஜ் செய்வது தொந்தரவாக இருந்தது",
+    "pendantStopReasonValue": "அவ்வளவு பயனுள்ளதாக இல்லை",
+    "pendantStopReasonDevice": "சாதனத்தில் ஒரு பிரச்சனை",
+    "pendantStopReasonOther": "மற்றவை",
+    "pendantStopOptionalNote": "ஒரு குறிப்பைச் சேர்க்கவும் (விருப்பத்தேர்வு)",
+    "pendantStopSendNote": "குறிப்பை அனுப்பவும்",
+    "pendantStopQuestionThanks": "உங்கள் கருத்தைப் பகிர்ந்ததற்கு நன்றி"
 }

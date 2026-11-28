@@ -4772,5 +4772,15 @@
     "batteryRestartToRefresh": "Start Omi på nytt for å oppdatere verdien",
     "onTheWayAllowanceHeldTitle": "Behandles på {date} når minuttene dine fornyes",
     "onTheWayAllowanceHeldUpgrade": "Eller behandle dem umiddelbart med en planoppgradering",
-    "onTheWayDayProcessesOn": "Behandles {date}"
+    "onTheWayDayProcessesOn": "Behandles {date}",
+    "pendantStopQuestionTitle": "Hvorfor sluttet du å bruke anhenget ditt?",
+    "pendantStopReasonUncomfortable": "Ubehagelig å ha på",
+    "pendantStopReasonHabit": "Jeg glemte det, eller fikk aldri rutinen på plass",
+    "pendantStopReasonCharging": "Lading er et styr",
+    "pendantStopReasonValue": "Ikke nyttig nok",
+    "pendantStopReasonDevice": "Et problem med enheten",
+    "pendantStopReasonOther": "Annet",
+    "pendantStopOptionalNote": "Legg til et notat (valgfritt)",
+    "pendantStopSendNote": "Send notat",
+    "pendantStopQuestionThanks": "Takk for tilbakemeldingen din"
 }

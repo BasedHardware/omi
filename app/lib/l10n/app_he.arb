@@ -12329,5 +12329,15 @@
     "batteryRestartToRefresh": "הפעל מחדש את Omi כדי לרענן",
     "onTheWayAllowanceHeldTitle": "ייעבדו ב-{date} כשהדקות שלך יתחדשו",
     "onTheWayAllowanceHeldUpgrade": "או עבד אותן מיד עם שדרוג תוכנית",
-    "onTheWayDayProcessesOn": "ייעבדו ב-{date}"
+    "onTheWayDayProcessesOn": "ייעבדו ב-{date}",
+    "pendantStopQuestionTitle": "למה הפסקת לענוד את התליון?",
+    "pendantStopReasonUncomfortable": "לא נוח לענוד",
+    "pendantStopReasonHabit": "שכחתי או שמעולם לא התרגלתי אליו",
+    "pendantStopReasonCharging": "הטענה מסורבלת",
+    "pendantStopReasonValue": "לא מספיק שימושי",
+    "pendantStopReasonDevice": "בעיה במכשיר",
+    "pendantStopReasonOther": "אחר",
+    "pendantStopOptionalNote": "הוסף הערה (אופציונלי)",
+    "pendantStopSendNote": "שלח הערה",
+    "pendantStopQuestionThanks": "תודה ששיתפת את המשוב שלך"
 }

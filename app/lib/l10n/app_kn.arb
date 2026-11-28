@@ -12329,5 +12329,15 @@
     "batteryRestartToRefresh": "ರಿಫ್ರೆಶ್ ಮಾಡಲು Omi ಅನ್ನು ಮರುಪ್ರಾರಂಭ ಮಾಡಿ",
     "onTheWayAllowanceHeldTitle": "ನಿಮ್ಮ ನಿಮಿಷಗಳು ನವೀಕರಣವಾಗುವ {date} ರಂದು ಪ್ರಕ್ರಿಯೆಗೊಳ್ಳುತ್ತದೆ",
     "onTheWayAllowanceHeldUpgrade": "ಅಥವಾ ಪ್ಲಾನ್ ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡುವ ಮೂಲಕ ತಕ್ಷಣ ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಿ",
-    "onTheWayDayProcessesOn": "{date} ರಂದು ಪ್ರಕ್ರಿಯೆ"
+    "onTheWayDayProcessesOn": "{date} ರಂದು ಪ್ರಕ್ರಿಯೆ",
+    "pendantStopQuestionTitle": "ನೀವು ನಿಮ್ಮ ಪೆಂಡೆಂಟ್ ಧರಿಸುವುದನ್ನು ಏಕೆ ನಿಲ್ಲಿಸಿದ್ದೀರಿ?",
+    "pendantStopReasonUncomfortable": "ಧರಿಸಲು ಅಸ್ವಸ್ಥವಾಗಿದೆ",
+    "pendantStopReasonHabit": "ಮರೆತುಬಿಟ್ಟೆ ಅಥವಾ ಅಭ್ಯಾಸವಾಗಲಿಲ್ಲ",
+    "pendantStopReasonCharging": "ಚಾರ್ಜ್ ಮಾಡುವುದು ಕಿರಿಕಿರಿಯ ಕೆಲಸ",
+    "pendantStopReasonValue": "ಸಾಕಷ್ಟು ಉಪಯುಕ್ತವಾಗಿಲ್ಲ",
+    "pendantStopReasonDevice": "ಸಾಧನದ ಸಮಸ್ಯೆ",
+    "pendantStopReasonOther": "ಇತರೆ",
+    "pendantStopOptionalNote": "ಟಿಪ್ಪಣಿ ಸೇರಿಸಿ (ಐಚ್ಛಿಕ)",
+    "pendantStopSendNote": "ಟಿಪ್ಪಣಿ ಕಳುಹಿಸಿ",
+    "pendantStopQuestionThanks": "ನಿಮ್ಮ ಅಭಿಪ್ರಾಯವನ್ನು ಹಂಚಿಕೊಂಡಿದ್ದಕ್ಕೆ ಧನ್ಯವಾದ"
 }

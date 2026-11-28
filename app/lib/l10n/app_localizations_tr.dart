@@ -15868,4 +15868,34 @@ class AppLocalizationsTr extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return '$date tarihinde işlenecek';
   }
+
+  @override
+  String get pendantStopQuestionTitle => 'Kolyeyi neden takmayı bıraktınız?';
+
+  @override
+  String get pendantStopReasonUncomfortable => 'Takması rahatsız edici';
+
+  @override
+  String get pendantStopReasonHabit => 'Unuttum ya da hiç alışkanlık edinemedim';
+
+  @override
+  String get pendantStopReasonCharging => 'Şarj etmek zahmetli';
+
+  @override
+  String get pendantStopReasonValue => 'Yeterince faydalı değil';
+
+  @override
+  String get pendantStopReasonDevice => 'Cihazla ilgili bir sorun';
+
+  @override
+  String get pendantStopReasonOther => 'Diğer';
+
+  @override
+  String get pendantStopOptionalNote => 'Not ekle (isteğe bağlı)';
+
+  @override
+  String get pendantStopSendNote => 'Notu gönder';
+
+  @override
+  String get pendantStopQuestionThanks => 'Geri bildiriminizi paylaştığınız için teşekkürler';
 }

@@ -4807,5 +4807,15 @@
     "batteryRestartToRefresh": "Reinicie o Omi para atualizar",
     "onTheWayAllowanceHeldTitle": "Serão processados em {date} quando seus minutos renovarem",
     "onTheWayAllowanceHeldUpgrade": "Ou processe-os imediatamente com um upgrade de plano",
-    "onTheWayDayProcessesOn": "Processa em {date}"
+    "onTheWayDayProcessesOn": "Processa em {date}",
+    "pendantStopQuestionTitle": "Por que você parou de usar o Pendant?",
+    "pendantStopReasonUncomfortable": "Desconfortável de usar",
+    "pendantStopReasonHabit": "Esqueci ou nunca criei o hábito",
+    "pendantStopReasonCharging": "Carregar é um incômodo",
+    "pendantStopReasonValue": "Não é útil o suficiente",
+    "pendantStopReasonDevice": "Um problema no dispositivo",
+    "pendantStopReasonOther": "Outro",
+    "pendantStopOptionalNote": "Adicionar uma observação (opcional)",
+    "pendantStopSendNote": "Enviar observação",
+    "pendantStopQuestionThanks": "Obrigado por compartilhar seu feedback"
 }

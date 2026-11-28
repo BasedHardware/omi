@@ -15853,4 +15853,34 @@ class AppLocalizationsSk extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Spracuje sa $date';
   }
+
+  @override
+  String get pendantStopQuestionTitle => 'Prečo ste prestali nosiť prívesok?';
+
+  @override
+  String get pendantStopReasonUncomfortable => 'Nepohodlné na nosenie';
+
+  @override
+  String get pendantStopReasonHabit => 'Zabudli ste naň alebo ste si nikdy nevytvorili návyk';
+
+  @override
+  String get pendantStopReasonCharging => 'Nabíjanie je nepríjemné';
+
+  @override
+  String get pendantStopReasonValue => 'Nie je dostatočne užitočný';
+
+  @override
+  String get pendantStopReasonDevice => 'Problém so zariadením';
+
+  @override
+  String get pendantStopReasonOther => 'Iné';
+
+  @override
+  String get pendantStopOptionalNote => 'Pridať poznámku (nepovinné)';
+
+  @override
+  String get pendantStopSendNote => 'Odoslať poznámku';
+
+  @override
+  String get pendantStopQuestionThanks => 'Ďakujeme za vašu spätnú väzbu';
 }

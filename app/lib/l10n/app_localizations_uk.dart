@@ -15891,4 +15891,34 @@ class AppLocalizationsUk extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Буде оброблено $date';
   }
+
+  @override
+  String get pendantStopQuestionTitle => 'Чому ви перестали носити підвіску?';
+
+  @override
+  String get pendantStopReasonUncomfortable => 'Незручно носити';
+
+  @override
+  String get pendantStopReasonHabit => 'Забуваю або так і не звик до цього';
+
+  @override
+  String get pendantStopReasonCharging => 'Незручно заряджати';
+
+  @override
+  String get pendantStopReasonValue => 'Недостатньо корисно';
+
+  @override
+  String get pendantStopReasonDevice => 'Проблема з пристроєм';
+
+  @override
+  String get pendantStopReasonOther => 'Інше';
+
+  @override
+  String get pendantStopOptionalNote => 'Додати нотатку (необов\'язково)';
+
+  @override
+  String get pendantStopSendNote => 'Надіслати нотатку';
+
+  @override
+  String get pendantStopQuestionThanks => 'Дякуємо, що поділилися своїм відгуком';
 }

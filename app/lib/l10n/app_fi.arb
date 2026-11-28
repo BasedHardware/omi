@@ -4772,5 +4772,15 @@
     "batteryRestartToRefresh": "Käynnistä Omi uudelleen päivittämiseksi",
     "onTheWayAllowanceHeldTitle": "Käsitellään {date}, kun minuittisi uudistuvat",
     "onTheWayAllowanceHeldUpgrade": "Tai käsittele ne heti tilauksen päivityksellä",
-    "onTheWayDayProcessesOn": "Käsitellään {date}"
+    "onTheWayDayProcessesOn": "Käsitellään {date}",
+    "pendantStopQuestionTitle": "Miksi lopetit riipuksen pitämisen?",
+    "pendantStopReasonUncomfortable": "Pitäminen on epämukavaa",
+    "pendantStopReasonHabit": "Unohdin sen tai en koskaan tottunut siihen",
+    "pendantStopReasonCharging": "Lataaminen on vaivalloista",
+    "pendantStopReasonValue": "Ei ole tarpeeksi hyödyllinen",
+    "pendantStopReasonDevice": "Laiteongelma",
+    "pendantStopReasonOther": "Muu",
+    "pendantStopOptionalNote": "Lisää muistiinpano (valinnainen)",
+    "pendantStopSendNote": "Lähetä muistiinpano",
+    "pendantStopQuestionThanks": "Kiitos palautteen jakamisesta"
 }

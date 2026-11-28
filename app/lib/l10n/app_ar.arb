@@ -4772,5 +4772,15 @@
     "batteryRestartToRefresh": "أعد تشغيل Omi لتحديث القراءة",
     "onTheWayAllowanceHeldTitle": "ستتم المعالجة في {date} عندما تتجدد دقائقك",
     "onTheWayAllowanceHeldUpgrade": "أو عالجها فورًا بترقية خطتك",
-    "onTheWayDayProcessesOn": "تتم المعالجة في {date}"
+    "onTheWayDayProcessesOn": "تتم المعالجة في {date}",
+    "pendantStopQuestionTitle": "لماذا توقفت عن ارتداء القلادة؟",
+    "pendantStopReasonUncomfortable": "غير مريحة في الارتداء",
+    "pendantStopReasonHabit": "نسيتها أو لم أعتد على ارتدائها",
+    "pendantStopReasonCharging": "الشحن مزعج",
+    "pendantStopReasonValue": "ليست مفيدة بما يكفي",
+    "pendantStopReasonDevice": "مشكلة في الجهاز",
+    "pendantStopReasonOther": "أخرى",
+    "pendantStopOptionalNote": "أضف ملاحظة (اختياري)",
+    "pendantStopSendNote": "إرسال الملاحظة",
+    "pendantStopQuestionThanks": "شكراً لمشاركة ملاحظاتك"
 }

@@ -15938,4 +15938,34 @@ class AppLocalizationsCa extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Es processaran el $date';
   }
+
+  @override
+  String get pendantStopQuestionTitle => 'Per què heu deixat de portar el penjoll?';
+
+  @override
+  String get pendantStopReasonUncomfortable => 'Incòmode de portar';
+
+  @override
+  String get pendantStopReasonHabit => 'Se m\'oblida o no hi he agafat mai el costum';
+
+  @override
+  String get pendantStopReasonCharging => 'Carregar-lo és una molèstia';
+
+  @override
+  String get pendantStopReasonValue => 'No és prou útil';
+
+  @override
+  String get pendantStopReasonDevice => 'Un problema del dispositiu';
+
+  @override
+  String get pendantStopReasonOther => 'Altres';
+
+  @override
+  String get pendantStopOptionalNote => 'Afegiu una nota (opcional)';
+
+  @override
+  String get pendantStopSendNote => 'Envia la nota';
+
+  @override
+  String get pendantStopQuestionThanks => 'Gràcies per compartir els vostres comentaris';
 }

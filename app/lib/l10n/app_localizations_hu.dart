@@ -15916,4 +15916,34 @@ class AppLocalizationsHu extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Feldolgozás: $date';
   }
+
+  @override
+  String get pendantStopQuestionTitle => 'Miért hagytad abba a medál viselését?';
+
+  @override
+  String get pendantStopReasonUncomfortable => 'Kényelmetlen viselni';
+
+  @override
+  String get pendantStopReasonHabit => 'Elfelejtettem, vagy sosem vált szokássá';
+
+  @override
+  String get pendantStopReasonCharging => 'A töltése macerás';
+
+  @override
+  String get pendantStopReasonValue => 'Nem elég hasznos';
+
+  @override
+  String get pendantStopReasonDevice => 'Eszközhiba';
+
+  @override
+  String get pendantStopReasonOther => 'Egyéb';
+
+  @override
+  String get pendantStopOptionalNote => 'Megjegyzés hozzáadása (nem kötelező)';
+
+  @override
+  String get pendantStopSendNote => 'Megjegyzés küldése';
+
+  @override
+  String get pendantStopQuestionThanks => 'Köszönjük, hogy megosztottad a visszajelzésedet';
 }

@@ -15783,4 +15783,34 @@ class AppLocalizationsTh extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'ประมวลผลในวันที่ $date';
   }
+
+  @override
+  String get pendantStopQuestionTitle => 'ทำไมคุณจึงเลิกสวมจี้?';
+
+  @override
+  String get pendantStopReasonUncomfortable => 'ใส่แล้วไม่สบายตัว';
+
+  @override
+  String get pendantStopReasonHabit => 'ลืมสวมหรือไม่เคยชินกับการสวม';
+
+  @override
+  String get pendantStopReasonCharging => 'การชาร์จยุ่งยาก';
+
+  @override
+  String get pendantStopReasonValue => 'ไม่ค่อยมีประโยชน์';
+
+  @override
+  String get pendantStopReasonDevice => 'ปัญหาด้านอุปกรณ์';
+
+  @override
+  String get pendantStopReasonOther => 'อื่น ๆ';
+
+  @override
+  String get pendantStopOptionalNote => 'เพิ่มโน้ต (ไม่บังคับ)';
+
+  @override
+  String get pendantStopSendNote => 'ส่งโน้ต';
+
+  @override
+  String get pendantStopQuestionThanks => 'ขอบคุณที่แบ่งปันความคิดเห็นของคุณ';
 }

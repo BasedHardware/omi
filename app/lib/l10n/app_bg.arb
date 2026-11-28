@@ -4772,5 +4772,15 @@
     "batteryRestartToRefresh": "Рестартирайте Omi, за да опресните стойността",
     "onTheWayAllowanceHeldTitle": "Ще се обработят на {date}, когато се подновят минутите ви",
     "onTheWayAllowanceHeldUpgrade": "Или ги обработете веднага с надграждане на плана",
-    "onTheWayDayProcessesOn": "Ще се обработят на {date}"
+    "onTheWayDayProcessesOn": "Ще се обработят на {date}",
+    "pendantStopQuestionTitle": "Защо спряхте да носите медальона си?",
+    "pendantStopReasonUncomfortable": "Неудобно за носене",
+    "pendantStopReasonHabit": "Забравях или така и не свикнах",
+    "pendantStopReasonCharging": "Зареждането е досадно",
+    "pendantStopReasonValue": "Не е достатъчно полезен",
+    "pendantStopReasonDevice": "Проблем с устройството",
+    "pendantStopReasonOther": "Друго",
+    "pendantStopOptionalNote": "Добавете бележка (по желание)",
+    "pendantStopSendNote": "Изпращане на бележката",
+    "pendantStopQuestionThanks": "Благодарим, че споделихте обратната си връзка"
 }

@@ -4232,6 +4232,12 @@ export interface PaywallStatusResponse {
   paywalled: boolean;
 }
 
+export interface PendantStopFeedbackRequest {
+  days_without_connection: number;
+  details: string;
+  reason: "uncomfortable_to_wear" | "forgot_or_no_habit" | "charging_is_a_hassle" | "not_useful_enough" | "device_problem" | "other" | "note_only";
+}
+
 export interface PendingSyncResponse {
   pending_export: Array<ActionItemResponse>;
   synced_items: Array<ActionItemResponse>;
@@ -7403,6 +7409,7 @@ export interface OmiApiSchemas {
   "PaymentSubscriptionResponse": PaymentSubscriptionResponse;
   "PaymentUpgradeSubscriptionResponse": PaymentUpgradeSubscriptionResponse;
   "PaywallStatusResponse": PaywallStatusResponse;
+  "PendantStopFeedbackRequest": PendantStopFeedbackRequest;
   "PendingSyncResponse": PendingSyncResponse;
   "PendingWorkItem": PendingWorkItem;
   "PendingWorkSnapshot": PendingWorkSnapshot;
@@ -12377,6 +12384,16 @@ export interface OmiApiPaths {
       operationId: "update_onboarding_state_v1_users_onboarding_patch";
       responses: {
         "200": UserStatusResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/pendant-stop-feedback": {
+    post: {
+      operationId: "submit_pendant_stop_feedback_v1_users_pendant_stop_feedback_post";
+      responses: {
+        "204": void;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -22434,6 +22451,27 @@ export async function update_onboarding_state_v1_users_onboarding_patch(header: 
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function submit_pendant_stop_feedback_v1_users_pendant_stop_feedback_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: PendantStopFeedbackRequest, init?: OmiApiClientInit): Promise<void> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/pendant-stop-feedback`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return;
+}
+
 export async function get_all_people_v1_users_people_get(query: { include_speech_samples?: boolean, include_stats?: boolean }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Array<Person>> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/people`;
@@ -24599,4 +24637,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 560 client methods generated.
+// Total: 561 client methods generated.

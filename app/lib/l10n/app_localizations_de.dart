@@ -15975,4 +15975,34 @@ class AppLocalizationsDe extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Wird am $date verarbeitet';
   }
+
+  @override
+  String get pendantStopQuestionTitle => 'Warum tragen Sie Ihren Anhänger nicht mehr?';
+
+  @override
+  String get pendantStopReasonUncomfortable => 'Unbequem zu tragen';
+
+  @override
+  String get pendantStopReasonHabit => 'Ich habe es vergessen oder mir nie angewöhnt';
+
+  @override
+  String get pendantStopReasonCharging => 'Aufladen ist umständlich';
+
+  @override
+  String get pendantStopReasonValue => 'Nicht nützlich genug';
+
+  @override
+  String get pendantStopReasonDevice => 'Ein Problem mit dem Gerät';
+
+  @override
+  String get pendantStopReasonOther => 'Sonstiges';
+
+  @override
+  String get pendantStopOptionalNote => 'Notiz hinzufügen (optional)';
+
+  @override
+  String get pendantStopSendNote => 'Notiz senden';
+
+  @override
+  String get pendantStopQuestionThanks => 'Danke, dass Sie Ihr Feedback geteilt haben';
 }

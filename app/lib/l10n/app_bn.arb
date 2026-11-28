@@ -12329,5 +12329,15 @@
     "batteryRestartToRefresh": "রিফ্রেশ করতে Omi পুনরায় চালু করুন",
     "onTheWayAllowanceHeldTitle": "আপনার মিনিট নবায়ন হলে {date} তারিখে প্রসেস হবে",
     "onTheWayAllowanceHeldUpgrade": "অথবা প্ল্যান আপগ্রেড করে সেগুলো এখনই প্রসেস করুন",
-    "onTheWayDayProcessesOn": "{date} তারিখে প্রসেস হবে"
+    "onTheWayDayProcessesOn": "{date} তারিখে প্রসেস হবে",
+    "pendantStopQuestionTitle": "আপনি কেন আপনার পেন্ডেন্ট পরা বন্ধ করেছেন?",
+    "pendantStopReasonUncomfortable": "পরতে অস্বস্তিকর",
+    "pendantStopReasonHabit": "ভুলে যাই বা অভ্যাস হয়নি",
+    "pendantStopReasonCharging": "চার্জ দেওয়া ঝামেলার",
+    "pendantStopReasonValue": "যথেষ্ট দরকারি নয়",
+    "pendantStopReasonDevice": "ডিভাইসের সমস্যা",
+    "pendantStopReasonOther": "অন্য",
+    "pendantStopOptionalNote": "একটি নোট যোগ করুন (ঐচ্ছিক)",
+    "pendantStopSendNote": "নোট পাঠান",
+    "pendantStopQuestionThanks": "আপনার প্রতিক্রিয়া শেয়ার করার জন্য ধন্যবাদ"
 }

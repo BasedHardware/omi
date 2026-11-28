@@ -12329,5 +12329,15 @@
     "batteryRestartToRefresh": "Перазагрузіце Omi, каб абнавіць паказанне",
     "onTheWayAllowanceHeldTitle": "Будуць апрацаваны {date}, калі абновяцца вашыя хвіліны",
     "onTheWayAllowanceHeldUpgrade": "Або апрацуйце іх адразу з абнаўленнем плана",
-    "onTheWayDayProcessesOn": "Будуць апрацаваны {date}"
+    "onTheWayDayProcessesOn": "Будуць апрацаваны {date}",
+    "pendantStopQuestionTitle": "Чаму вы перасталі насіць прывеску?",
+    "pendantStopReasonUncomfortable": "Нязручна ў насенні",
+    "pendantStopReasonHabit": "Я забываў або так і не прывык",
+    "pendantStopReasonCharging": "Зараджаць нязручна",
+    "pendantStopReasonValue": "Не дастаткова карысная",
+    "pendantStopReasonDevice": "Праблема з прыладай",
+    "pendantStopReasonOther": "Іншае",
+    "pendantStopOptionalNote": "Дадайце нататку (неабавязкова)",
+    "pendantStopSendNote": "Даслаць нататку",
+    "pendantStopQuestionThanks": "Дзякуй, што падзяліліся сваім водгукам"
 }

@@ -15899,4 +15899,34 @@ class AppLocalizationsNl extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Worden verwerkt op $date';
   }
+
+  @override
+  String get pendantStopQuestionTitle => 'Waarom ben je gestopt met het dragen van je hanger?';
+
+  @override
+  String get pendantStopReasonUncomfortable => 'Onprettig om te dragen';
+
+  @override
+  String get pendantStopReasonHabit => 'Ik vergat het of het werd nooit een gewoonte';
+
+  @override
+  String get pendantStopReasonCharging => 'Opladen is een gedoe';
+
+  @override
+  String get pendantStopReasonValue => 'Niet nuttig genoeg';
+
+  @override
+  String get pendantStopReasonDevice => 'Een probleem met het apparaat';
+
+  @override
+  String get pendantStopReasonOther => 'Anders';
+
+  @override
+  String get pendantStopOptionalNote => 'Notitie toevoegen (optioneel)';
+
+  @override
+  String get pendantStopSendNote => 'Notitie verzenden';
+
+  @override
+  String get pendantStopQuestionThanks => 'Bedankt voor het delen van je feedback';
 }

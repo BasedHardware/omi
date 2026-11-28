@@ -15966,4 +15966,34 @@ class AppLocalizationsTa extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return '$date அன்று செயலாக்கம்';
   }
+
+  @override
+  String get pendantStopQuestionTitle => 'பதக்கத்தை அணிவதை நீங்கள் ஏன் நிறுத்திவிட்டீர்கள்?';
+
+  @override
+  String get pendantStopReasonUncomfortable => 'அணிவதற்கு அசௌகரியமாக இருந்தது';
+
+  @override
+  String get pendantStopReasonHabit => 'மறந்துவிட்டேன் அல்லது அது பழக்கமாகவே இல்லை';
+
+  @override
+  String get pendantStopReasonCharging => 'சார்ஜ் செய்வது தொந்தரவாக இருந்தது';
+
+  @override
+  String get pendantStopReasonValue => 'அவ்வளவு பயனுள்ளதாக இல்லை';
+
+  @override
+  String get pendantStopReasonDevice => 'சாதனத்தில் ஒரு பிரச்சனை';
+
+  @override
+  String get pendantStopReasonOther => 'மற்றவை';
+
+  @override
+  String get pendantStopOptionalNote => 'ஒரு குறிப்பைச் சேர்க்கவும் (விருப்பத்தேர்வு)';
+
+  @override
+  String get pendantStopSendNote => 'குறிப்பை அனுப்பவும்';
+
+  @override
+  String get pendantStopQuestionThanks => 'உங்கள் கருத்தைப் பகிர்ந்ததற்கு நன்றி';
 }

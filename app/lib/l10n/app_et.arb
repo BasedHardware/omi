@@ -4772,5 +4772,15 @@
     "batteryRestartToRefresh": "Taaskäivitage Omi värskendamiseks",
     "onTheWayAllowanceHeldTitle": "Töödeldakse {date}, kui teie minutid uuenevad",
     "onTheWayAllowanceHeldUpgrade": "Või töödelge need kohe plaani täiendusega",
-    "onTheWayDayProcessesOn": "Töödeldakse {date}"
+    "onTheWayDayProcessesOn": "Töödeldakse {date}",
+    "pendantStopQuestionTitle": "Miks te lõpetasite ripatsi kandmise?",
+    "pendantStopReasonUncomfortable": "Ebamugav kanda",
+    "pendantStopReasonHabit": "Unustasin selle ära või harjumust ei tekkinud",
+    "pendantStopReasonCharging": "Laadimine on tüütu",
+    "pendantStopReasonValue": "Pole piisavalt kasulik",
+    "pendantStopReasonDevice": "Probleem seadmega",
+    "pendantStopReasonOther": "Muu",
+    "pendantStopOptionalNote": "Lisa märkus (valikuline)",
+    "pendantStopSendNote": "Saada märkus",
+    "pendantStopQuestionThanks": "Täname tagasiside jagamise eest"
 }

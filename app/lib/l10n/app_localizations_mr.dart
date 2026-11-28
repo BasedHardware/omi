@@ -15866,4 +15866,34 @@ class AppLocalizationsMr extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return '$date रोजी प्रक्रिया';
   }
+
+  @override
+  String get pendantStopQuestionTitle => 'तुम्ही तुमचा पेंडेंट घालणे का बंद केले?';
+
+  @override
+  String get pendantStopReasonUncomfortable => 'घालण्यास असहज वाटते';
+
+  @override
+  String get pendantStopReasonHabit => 'विसरायचे किंवा सवय लागलीच नाही';
+
+  @override
+  String get pendantStopReasonCharging => 'चार्ज करणे त्रासदायक आहे';
+
+  @override
+  String get pendantStopReasonValue => 'पुरेसे उपयुक्त नाही';
+
+  @override
+  String get pendantStopReasonDevice => 'डिव्हाइसची समस्या';
+
+  @override
+  String get pendantStopReasonOther => 'इतर';
+
+  @override
+  String get pendantStopOptionalNote => 'टीप जोडा (ऐच्छिक)';
+
+  @override
+  String get pendantStopSendNote => 'टीप पाठवा';
+
+  @override
+  String get pendantStopQuestionThanks => 'प्रतिक्रिया शेअर केल्याबद्दल धन्यवाद';
 }

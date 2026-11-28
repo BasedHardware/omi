@@ -15896,4 +15896,34 @@ class AppLocalizationsMs extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Diproses pada $date';
   }
+
+  @override
+  String get pendantStopQuestionTitle => 'Mengapa anda berhenti memakai pendant anda?';
+
+  @override
+  String get pendantStopReasonUncomfortable => 'Tidak selesa dipakai';
+
+  @override
+  String get pendantStopReasonHabit => 'Saya terlupa atau tidak pernah menjadi tabiat';
+
+  @override
+  String get pendantStopReasonCharging => 'Mengecas menyusahkan';
+
+  @override
+  String get pendantStopReasonValue => 'Tidak cukup berguna';
+
+  @override
+  String get pendantStopReasonDevice => 'Masalah peranti';
+
+  @override
+  String get pendantStopReasonOther => 'Lain-lain';
+
+  @override
+  String get pendantStopOptionalNote => 'Tambah nota (pilihan)';
+
+  @override
+  String get pendantStopSendNote => 'Hantar nota';
+
+  @override
+  String get pendantStopQuestionThanks => 'Terima kasih kerana berkongsi maklum balas anda';
 }

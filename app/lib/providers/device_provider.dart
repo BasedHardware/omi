@@ -40,6 +40,7 @@ import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/sync_health_watchdog.dart';
+import 'package:omi/services/experiments/pendant_absence.dart';
 import 'package:omi/services/telemetry/client_telemetry.dart';
 import 'package:omi/services/battery_widget_service.dart';
 import 'package:omi/services/wals/wal_syncs.dart';
@@ -1266,6 +1267,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     final generation = _sessionGeneration;
     // Capture before setConnectedDevice(null) clears both device references.
     final disconnectedDeviceId = pairedDevice?.id ?? connectedDevice?.id;
+    if (PendantAbsence.isPendant(pairedDevice ?? connectedDevice)) {
+      PendantAbsence.instance.observeAbsence(SharedPreferencesUtil().uid);
+    }
     Logger.debug('onDisconnected inside: $connectedDevice');
     _havingNewFirmware = false;
     _firmwareUpdatePromptCoordinator.invalidatePresentation();
@@ -1414,6 +1418,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     }
 
     final normalizedDevice = pairedDevice ?? device;
+    if (PendantAbsence.isPendant(normalizedDevice)) {
+      PendantAbsence.instance.recordConnection(SharedPreferencesUtil().uid);
+    }
     if (captureProvider != null) {
       captureProvider?.updateRecordingDevice(normalizedDevice);
     }

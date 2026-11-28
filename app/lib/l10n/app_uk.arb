@@ -4772,5 +4772,15 @@
     "batteryRestartToRefresh": "Перезавантажте Omi, щоб оновити",
     "onTheWayAllowanceHeldTitle": "Буде оброблено {date}, коли відновляться ваші хвилини",
     "onTheWayAllowanceHeldUpgrade": "Або обробіть їх одразу, покращивши план",
-    "onTheWayDayProcessesOn": "Буде оброблено {date}"
+    "onTheWayDayProcessesOn": "Буде оброблено {date}",
+    "pendantStopQuestionTitle": "Чому ви перестали носити підвіску?",
+    "pendantStopReasonUncomfortable": "Незручно носити",
+    "pendantStopReasonHabit": "Забуваю або так і не звик до цього",
+    "pendantStopReasonCharging": "Незручно заряджати",
+    "pendantStopReasonValue": "Недостатньо корисно",
+    "pendantStopReasonDevice": "Проблема з пристроєм",
+    "pendantStopReasonOther": "Інше",
+    "pendantStopOptionalNote": "Додати нотатку (необов'язково)",
+    "pendantStopSendNote": "Надіслати нотатку",
+    "pendantStopQuestionThanks": "Дякуємо, що поділилися своїм відгуком"
 }

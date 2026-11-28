@@ -15924,4 +15924,34 @@ class AppLocalizationsRo extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Se procesează $date';
   }
+
+  @override
+  String get pendantStopQuestionTitle => 'De ce nu mai porți pandantivul?';
+
+  @override
+  String get pendantStopReasonUncomfortable => 'Incomod de purtat';
+
+  @override
+  String get pendantStopReasonHabit => 'Am uitat de el sau nu mi-a devenit obicei';
+
+  @override
+  String get pendantStopReasonCharging => 'Încărcarea este o bătaie de cap';
+
+  @override
+  String get pendantStopReasonValue => 'Nu este suficient de util';
+
+  @override
+  String get pendantStopReasonDevice => 'O problemă cu dispozitivul';
+
+  @override
+  String get pendantStopReasonOther => 'Altul';
+
+  @override
+  String get pendantStopOptionalNote => 'Adaugă o notă (opțional)';
+
+  @override
+  String get pendantStopSendNote => 'Trimite nota';
+
+  @override
+  String get pendantStopQuestionThanks => 'Mulțumim pentru feedback';
 }

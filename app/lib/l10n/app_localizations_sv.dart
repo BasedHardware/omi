@@ -15866,4 +15866,34 @@ class AppLocalizationsSv extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Bearbetas $date';
   }
+
+  @override
+  String get pendantStopQuestionTitle => 'Varför slutade du bära ditt hängsmycke?';
+
+  @override
+  String get pendantStopReasonUncomfortable => 'Obekvämt att bära';
+
+  @override
+  String get pendantStopReasonHabit => 'Jag glömde det eller kom aldrig in i vanan';
+
+  @override
+  String get pendantStopReasonCharging => 'Laddning är ett besvär';
+
+  @override
+  String get pendantStopReasonValue => 'Inte tillräckligt användbart';
+
+  @override
+  String get pendantStopReasonDevice => 'Ett problem med enheten';
+
+  @override
+  String get pendantStopReasonOther => 'Annat';
+
+  @override
+  String get pendantStopOptionalNote => 'Lägg till en anteckning (valfritt)';
+
+  @override
+  String get pendantStopSendNote => 'Skicka anteckning';
+
+  @override
+  String get pendantStopQuestionThanks => 'Tack för din återkoppling';
 }

@@ -15859,4 +15859,34 @@ class AppLocalizationsVi extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Xử lý vào $date';
   }
+
+  @override
+  String get pendantStopQuestionTitle => 'Tại sao bạn ngừng đeo Pendant?';
+
+  @override
+  String get pendantStopReasonUncomfortable => 'Không thoải mái khi đeo';
+
+  @override
+  String get pendantStopReasonHabit => 'Tôi hay quên hoặc chưa tạo được thói quen';
+
+  @override
+  String get pendantStopReasonCharging => 'Việc sạc phiền phức';
+
+  @override
+  String get pendantStopReasonValue => 'Chưa đủ hữu ích';
+
+  @override
+  String get pendantStopReasonDevice => 'Vấn đề về thiết bị';
+
+  @override
+  String get pendantStopReasonOther => 'Khác';
+
+  @override
+  String get pendantStopOptionalNote => 'Thêm ghi chú (không bắt buộc)';
+
+  @override
+  String get pendantStopSendNote => 'Gửi ghi chú';
+
+  @override
+  String get pendantStopQuestionThanks => 'Cảm ơn bạn đã chia sẻ phản hồi';
 }

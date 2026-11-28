@@ -15922,4 +15922,34 @@ class AppLocalizationsTe extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return '$dateన ప్రాసెస్ అవుతుంది';
   }
+
+  @override
+  String get pendantStopQuestionTitle => 'మీరు మీ పెండెంట్ ధరించడం ఎందుకు మానేశారు?';
+
+  @override
+  String get pendantStopReasonUncomfortable => 'ధరించడానికి అసౌకర్యంగా ఉంటుంది';
+
+  @override
+  String get pendantStopReasonHabit => 'నేను మర్చిపోయాను లేదా ఎప్పుడూ అలవాటుగా మార్చుకోలేదు';
+
+  @override
+  String get pendantStopReasonCharging => 'ఛార్జ్ చేయడం ఇబ్బందికరంగా ఉంటుంది';
+
+  @override
+  String get pendantStopReasonValue => 'అంతగా ఉపయోగకరంగా లేదు';
+
+  @override
+  String get pendantStopReasonDevice => 'డివైస్‌లో సమస్య';
+
+  @override
+  String get pendantStopReasonOther => 'ఇతర';
+
+  @override
+  String get pendantStopOptionalNote => 'గమనిక జోడించండి (ఐచ్ఛికం)';
+
+  @override
+  String get pendantStopSendNote => 'గమనికను పంపండి';
+
+  @override
+  String get pendantStopQuestionThanks => 'మీ ఫీడ్‌బ్యాక్‌ను పంచినందుకు ధన్యవాదాలు';
 }

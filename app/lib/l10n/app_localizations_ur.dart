@@ -15870,4 +15870,34 @@ class AppLocalizationsUr extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return '$date کو پروسیس ہوں گے';
   }
+
+  @override
+  String get pendantStopQuestionTitle => 'آپ نے پینڈنٹ پہننا کیوں چھوڑ دیا؟';
+
+  @override
+  String get pendantStopReasonUncomfortable => 'پہننا غیر آرام دہ ہے';
+
+  @override
+  String get pendantStopReasonHabit => 'میں بھول جاتا ہوں یا عادت نہیں بن سکی';
+
+  @override
+  String get pendantStopReasonCharging => 'چارجنگ مشکل کام ہے';
+
+  @override
+  String get pendantStopReasonValue => 'کافی مفید نہیں';
+
+  @override
+  String get pendantStopReasonDevice => 'ڈیوائس کا مسئلہ';
+
+  @override
+  String get pendantStopReasonOther => 'دیگر';
+
+  @override
+  String get pendantStopOptionalNote => 'نوٹ شامل کریں (اختیاری)';
+
+  @override
+  String get pendantStopSendNote => 'نوٹ بھیجیں';
+
+  @override
+  String get pendantStopQuestionThanks => 'آپ کا فیڈبیک شیئر کرنے کے لیے شکریہ';
 }

@@ -15911,4 +15911,34 @@ class AppLocalizationsRu extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Будут обработаны $date';
   }
+
+  @override
+  String get pendantStopQuestionTitle => 'Почему вы перестали носить кулон?';
+
+  @override
+  String get pendantStopReasonUncomfortable => 'Неудобно носить';
+
+  @override
+  String get pendantStopReasonHabit => 'Забывал(а) или так и не вошло в привычку';
+
+  @override
+  String get pendantStopReasonCharging => 'Заряжать неудобно';
+
+  @override
+  String get pendantStopReasonValue => 'Недостаточно полезен';
+
+  @override
+  String get pendantStopReasonDevice => 'Проблема с устройством';
+
+  @override
+  String get pendantStopReasonOther => 'Другое';
+
+  @override
+  String get pendantStopOptionalNote => 'Добавить заметку (необязательно)';
+
+  @override
+  String get pendantStopSendNote => 'Отправить заметку';
+
+  @override
+  String get pendantStopQuestionThanks => 'Спасибо за ваш отзыв';
 }

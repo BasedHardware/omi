@@ -15850,4 +15850,34 @@ class AppLocalizationsEt extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Töödeldakse $date';
   }
+
+  @override
+  String get pendantStopQuestionTitle => 'Miks te lõpetasite ripatsi kandmise?';
+
+  @override
+  String get pendantStopReasonUncomfortable => 'Ebamugav kanda';
+
+  @override
+  String get pendantStopReasonHabit => 'Unustasin selle ära või harjumust ei tekkinud';
+
+  @override
+  String get pendantStopReasonCharging => 'Laadimine on tüütu';
+
+  @override
+  String get pendantStopReasonValue => 'Pole piisavalt kasulik';
+
+  @override
+  String get pendantStopReasonDevice => 'Probleem seadmega';
+
+  @override
+  String get pendantStopReasonOther => 'Muu';
+
+  @override
+  String get pendantStopOptionalNote => 'Lisa märkus (valikuline)';
+
+  @override
+  String get pendantStopSendNote => 'Saada märkus';
+
+  @override
+  String get pendantStopQuestionThanks => 'Täname tagasiside jagamise eest';
 }

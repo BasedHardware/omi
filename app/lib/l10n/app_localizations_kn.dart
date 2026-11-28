@@ -15910,4 +15910,34 @@ class AppLocalizationsKn extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return '$date ರಂದು ಪ್ರಕ್ರಿಯೆ';
   }
+
+  @override
+  String get pendantStopQuestionTitle => 'ನೀವು ನಿಮ್ಮ ಪೆಂಡೆಂಟ್ ಧರಿಸುವುದನ್ನು ಏಕೆ ನಿಲ್ಲಿಸಿದ್ದೀರಿ?';
+
+  @override
+  String get pendantStopReasonUncomfortable => 'ಧರಿಸಲು ಅಸ್ವಸ್ಥವಾಗಿದೆ';
+
+  @override
+  String get pendantStopReasonHabit => 'ಮರೆತುಬಿಟ್ಟೆ ಅಥವಾ ಅಭ್ಯಾಸವಾಗಲಿಲ್ಲ';
+
+  @override
+  String get pendantStopReasonCharging => 'ಚಾರ್ಜ್ ಮಾಡುವುದು ಕಿರಿಕಿರಿಯ ಕೆಲಸ';
+
+  @override
+  String get pendantStopReasonValue => 'ಸಾಕಷ್ಟು ಉಪಯುಕ್ತವಾಗಿಲ್ಲ';
+
+  @override
+  String get pendantStopReasonDevice => 'ಸಾಧನದ ಸಮಸ್ಯೆ';
+
+  @override
+  String get pendantStopReasonOther => 'ಇತರೆ';
+
+  @override
+  String get pendantStopOptionalNote => 'ಟಿಪ್ಪಣಿ ಸೇರಿಸಿ (ಐಚ್ಛಿಕ)';
+
+  @override
+  String get pendantStopSendNote => 'ಟಿಪ್ಪಣಿ ಕಳುಹಿಸಿ';
+
+  @override
+  String get pendantStopQuestionThanks => 'ನಿಮ್ಮ ಅಭಿಪ್ರಾಯವನ್ನು ಹಂಚಿಕೊಂಡಿದ್ದಕ್ಕೆ ಧನ್ಯವಾದ';
 }
