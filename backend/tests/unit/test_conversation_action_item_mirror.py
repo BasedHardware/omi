@@ -58,6 +58,12 @@ def router():
     client_mod.db = MagicMock(name="db")
     client_mod.get_firestore_client = lambda: client_mod.db
 
+    v3_fence = ModuleType("database.conversations_v3_fence")
+    v3_fence.ProcessingPersistenceFenced = type("ProcessingPersistenceFenced", (RuntimeError,), {})
+
+    gateway_error_contract = ModuleType("utils.llm.gateway_error_contract")
+    gateway_error_contract.reprocess_not_completed_http_exception = lambda _error: HTTPException(status_code=503)
+
     fa_auth = _pkg("firebase_admin.auth")
     fa_auth.InvalidIdTokenError = type("InvalidIdTokenError", (Exception,), {})
 
@@ -99,6 +105,7 @@ def router():
         "typesense": _pkg("typesense"),
         "database": _pkg("database"),
         "database._client": client_mod,
+        "database.conversations_v3_fence": v3_fence,
         "database.conversations": _pkg("database.conversations"),
         "database.conversation_scan": _pkg("database.conversation_scan"),
         "database.hidden_noise_counts": _pkg("database.hidden_noise_counts"),
@@ -149,6 +156,7 @@ def router():
         **package_submodule_stubs("utils.conversations"),
         "utils.llm": _pkg("utils.llm"),
         "utils.llm.conversation_processing": _pkg("utils.llm.conversation_processing"),
+        "utils.llm.gateway_error_contract": gateway_error_contract,
         "utils.speaker_identification": _pkg("utils.speaker_identification"),
         "utils.speaker_tag_prompts.service": _pkg("utils.speaker_tag_prompts.service"),
         "utils.subscription": _pkg("utils.subscription"),

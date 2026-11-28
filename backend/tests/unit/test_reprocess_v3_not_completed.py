@@ -20,7 +20,7 @@ from fastapi import BackgroundTasks, HTTPException, Response
 import routers.conversations as conv_router
 from database.conversations_v3_fence import PersistenceDecline, ProcessingPersistenceFenced
 from utils.conversations.processing_retry import ProcessingNotCompleted
-from utils.conversations.v3 import processing
+from utils.conversations.v3 import Conflict, processing
 from utils.llm.gateway_error_contract import (
     GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL,
     RETRYABLE_CONVERSATION_PROCESSING_ERROR_CODE,
@@ -40,7 +40,7 @@ def _conversation():
     )
 
 
-def _run_external(monkeypatch, fn):
+def _run_external(monkeypatch, fn, *, fail_processing=None):
     monkeypatch.setattr(processing.leases, 'acquire', lambda *a: 'token')
     monkeypatch.setattr(processing.leases, 'keepalive', lambda *a: nullcontext())
     monkeypatch.setattr(processing.leases, 'release', lambda *a: None)
@@ -48,7 +48,7 @@ def _run_external(monkeypatch, fn):
     monkeypatch.setattr(processing.models, 'notes_mode', lambda *a, **kw: nullcontext())
     monkeypatch.setattr(processing.policy, 'explicit_retry', lambda *a, **kw: False)
     monkeypatch.setattr(processing.writers, 'begin_processing', lambda *a, **kw: True)
-    monkeypatch.setattr(processing.writers, 'fail_processing', lambda *a, **kw: None)
+    monkeypatch.setattr(processing.writers, 'fail_processing', fail_processing or (lambda *a, **kw: None))
     monkeypatch.setattr(processing.writers, 'settle_processing', lambda *a, **kw: True)
     monkeypatch.setattr(processing, 'enqueue', lambda *a, **kw: None)
     return processing.run_external(fn, 'u', 'en', _conversation())
@@ -74,6 +74,34 @@ def test_a_refused_write_names_the_persistence_stage(monkeypatch, caplog):
     assert raised.value.notes_stage == 'one_shot_notes'
     assert raised.value.elapsed_seconds >= 0.0
     assert 'event=v3_processing_not_completed stage=source_changed notes_stage=one_shot_notes' in caplog.text
+
+
+def test_source_revision_race_during_failure_settlement_keeps_retryable_contract(reprocess_refusal, monkeypatch):
+    monkeypatch.delenv(RETRYABLE_PROVIDER_FAILURE_SWITCH, raising=False)
+    source_revision = [1]
+
+    def fail_processing(uid, cid, token, expected_revision, *, content_hash):
+        assert expected_revision == 1
+        assert source_revision[0] == 2
+        raise Conflict('processing_source_changed')
+
+    def execute_reprocess(*args, **kwargs):
+        def fn(uid, language, conversation, *, persistence_observer, **kwargs):
+            source_revision[0] = 2
+            persistence_observer(False)
+            return SimpleNamespace(status='completed')
+
+        return _run_external(monkeypatch, fn, fail_processing=fail_processing)
+
+    monkeypatch.setattr(conv_router, 'execute_reprocess', execute_reprocess)
+
+    with pytest.raises(HTTPException) as raised:
+        _call_reprocess()
+
+    assert raised.value.status_code == 503
+    assert raised.value.detail == RETRYABLE_CONVERSATION_PROCESSING_ERROR_DETAIL
+    assert raised.value.headers['Retry-After'] == '2'
+    assert reprocess_refusal == ['failed']
 
 
 def test_a_run_without_a_completed_status_names_the_completion_condition(monkeypatch):

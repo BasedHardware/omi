@@ -5,10 +5,11 @@ from datetime import datetime, timedelta, timezone
 from time import monotonic
 
 from database import conversations_v3_fence as fence, conversations_v3_leases as leases
+from database.conversations_v3_fence import ProcessingPersistenceFenced
 from database import conversations_v3_processing as writers
 from models.finalization_owner import FinalizationOwnedElsewhere
 from utils.conversations.processing_retry import ProcessingNotCompleted
-from utils.conversations.v3 import models, policy
+from utils.conversations.v3 import Conflict, models, policy
 from utils.conversations.v3.triggers import enqueue
 from utils.llm.notes_observability import notes_stage
 from utils.observability.fallback import record_fallback
@@ -79,8 +80,13 @@ def run_external(fn, uid, language, conversation, *args, **kwargs):
                 raise
             except FinalizationOwnedElsewhere:
                 raise
-            except Exception:
-                writers.fail_processing(uid, conversation.id, token, revision, content_hash=content_hash)
+            except Exception as error:
+                try:
+                    writers.fail_processing(uid, conversation.id, token, revision, content_hash=content_hash)
+                except Conflict as settle_error:
+                    if isinstance(error, (ProcessingNotCompleted, ProcessingPersistenceFenced)):
+                        raise error from settle_error
+                    raise
                 raise
             armed = writers.settle_processing(
                 uid, conversation.id, token, revision, conversation.finished_at, notes=True, content_hash=content_hash
