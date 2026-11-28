@@ -284,7 +284,7 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
     assert flags[sweep_name]['fail'] == 'open'
     unsupported = names['SERVER_BATCH_UNSUPPORTED_LANGUAGES']
     assert unsupported['owner'] == 'planscost'
-    assert unsupported['review_by'] == '2026-11-30'
+    assert unsupported['review_by'] == '2026-12-06'
     assert flags['SERVER_BATCH_UNSUPPORTED_LANGUAGES']['lifecycle'] == 'config_switch'
     assert flags['SERVER_BATCH_UNSUPPORTED_LANGUAGES']['decision'] == 'keep'
     assert 'review_by' not in flags['SERVER_BATCH_UNSUPPORTED_LANGUAGES']
@@ -541,7 +541,7 @@ def test_reconnect_dark_rollout_has_a_dated_release_ramp():
     assert flag['fail'] == 'closed'
     assert flag['review_by'] == '2026-11-20'
     assert flag['extension']['until'] == '2026-11-23'
-    # Release targets gate removal by November 30 following the November 27 decision.
-    assert budget['names'][flag['key']]['review_by'] == '2026-11-30'
+    # SCA-3850 extends the budget through the December 3 production-use review.
+    assert budget['names'][flag['key']]['review_by'] == '2026-12-06'
     assert flag['ramp']['done_by'] == '2026-11-20'
     assert 'Release' in flag['ramp']['expander'] and 'Quality' in flag['ramp']['expander']
