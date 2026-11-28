@@ -142,6 +142,11 @@ class MemoriesViewModel: ObservableObject {
     didSet { resumeMemoryLoadLifecycleWaitersIfIdle() }
   }
   @Published var hasMoreMemories = true
+  /// The last server page behind the visible list stopped before the server's
+  /// read budget (`X-Omi-List-Truncated`). The rows on screen may be missing
+  /// memories, and an empty list under this flag is an unfinished read, not an
+  /// empty account (#24722).
+  @Published private(set) var listReadTruncated = false
   @Published var errorMessage: String?
   @Published var searchText = "" {
     didSet {
@@ -587,12 +592,25 @@ class MemoriesViewModel: ObservableObject {
 
     do {
       while true {
-        let page = try await APIClient.shared.getMemoriesPage(
+        let page = try await performMemoriesPageFetch(
           limit: batchSize,
           offset: offset,
+          cursor: nil,
+          includeArchive: false,
+          deviceScope: nil,
           authorizationSnapshot: authorizationSnapshot)
         fetchedLifecycleExposure = page.canonicalLifecycleExposed
         let batch = page.memories
+        guard !page.truncated else {
+          // The server stopped early, so this is not the keep-set: pruning
+          // from it would delete local rows the server simply did not reach.
+          // Keep what arrived and let the ordinary load present the
+          // unfinished read.
+          try await MemoryStorage.shared.syncServerMemories(allFetched + batch)
+          log("MemoriesViewModel: Cascade refresh stopped on a truncated list; skipped the orphan prune")
+          await loadMemories()
+          return
+        }
         if batch.isEmpty { break }
         allFetched.append(contentsOf: batch)
         offset += batch.count
@@ -653,6 +671,7 @@ class MemoriesViewModel: ObservableObject {
     isLoading = false
     isLoadingMore = false
     hasMoreMemories = true
+    listReadTruncated = false
     errorMessage = nil
     searchText = ""
     isSearching = false
@@ -738,16 +757,16 @@ class MemoriesViewModel: ObservableObject {
       log(
         "MemoriesViewModel: Auto-refresh showing \(apiMemories.count) authoritative memories"
       )
-      memories = MemoryPageProjection.visibleMemories(
-        cachedMemories: [],
-        serverMemories: apiMemories,
-        source: .authoritativeServer,
-        lifecycleExposed: page.canonicalLifecycleExposed
+      presentServerPage(
+        page,
+        visible: MemoryPageProjection.visibleMemories(
+          cachedMemories: [],
+          serverMemories: apiMemories,
+          source: .authoritativeServer,
+          lifecycleExposed: page.canonicalLifecycleExposed
+        ),
+        rawCount: apiMemories.count
       )
-      currentOffset = memories.count
-      rawBackendOffset = apiMemories.count
-      hasMoreMemories = Self.hasMoreAfterPage(page, received: apiMemories.count)
-      backendCursor = page.nextCursor
     } catch {
       // Silently ignore errors during auto-refresh
       logError("MemoriesViewModel: Auto-refresh failed", error: error)
@@ -797,6 +816,34 @@ class MemoriesViewModel: ObservableObject {
     if page.truncated { return false }
     if page.nextCursor != nil { return true }
     return ServerPaging.hasMore(received: received)
+  }
+
+  /// Present a server page as the visible list.
+  ///
+  /// A truncated page with no rows is an unfinished read: the server stopped
+  /// before it reached anything, which proves nothing about the account. Such
+  /// a page must not blank a populated list or turn the page into "No Memories
+  /// Yet", so it only records the incompleteness; every other page replaces
+  /// the list exactly as before (#24722).
+  private func presentServerPage(
+    _ page: APIClient.MemoryListPage, visible: [ServerMemory], rawCount: Int
+  ) {
+    if page.truncated && page.memories.isEmpty {
+      log("MemoriesViewModel: Server stopped before reaching any memory; keeping \(memories.count) rows on screen")
+    } else {
+      memories = visible
+      currentOffset = visible.count
+      // Track the raw backend cursor for subsequent loadMore() fetches.
+      rawBackendOffset = rawCount
+    }
+    // Use the raw backend page count for pagination, not the tier-filtered
+    // count: a full raw page may hold fewer tier matches than pageSize while
+    // later backend pages still hold matches for the selected layer. Deriving
+    // hasMoreMemories from the filtered count would disable scrolling and
+    // permanently hide those memories.
+    hasMoreMemories = Self.hasMoreAfterPage(page, received: rawCount)
+    backendCursor = page.nextCursor
+    listReadTruncated = page.truncated
   }
 
   /// Resolve specific memories by id for surfaces that cite them — today the
@@ -1003,7 +1050,8 @@ class MemoriesViewModel: ObservableObject {
   // MARK: - API Actions
 
   /// The single server-page read behind the browse surface (initial load,
-  /// refresh, load-more). Tests replace this; production uses the shared client.
+  /// refresh, load-more, conversation-cascade refresh, one-time full sync).
+  /// Tests replace this; production uses the shared client.
   var memoriesPageFetch:
     (
       @MainActor (
@@ -1207,35 +1255,23 @@ class MemoriesViewModel: ObservableObject {
           isLoading = false
           return
         }
-        memories = visibleMemories
-        currentOffset = visibleMemories.count
-        // Track the raw backend cursor for subsequent loadMore() fetches.
-        rawBackendOffset = fetchedMemories.count
-        // Use the raw backend page count for pagination, not the tier-filtered
-        // count. The API fetch is an unscoped/default-scope page, so a full raw
-        // page may contain fewer tier-matching items than pageSize while later
-        // backend pages still hold matches for the selected layer. Deriving
-        // hasMoreMemories from the filtered count would disable scrolling and
-        // permanently hide those memories. This matches the error-fallback path
-        // below and the loadMore() API path.
-        hasMoreMemories = Self.hasMoreAfterPage(page, received: fetchedMemories.count)
-        backendCursor = page.nextCursor
+        presentServerPage(page, visible: visibleMemories, rawCount: fetchedMemories.count)
         log(
-          "MemoriesViewModel: Showing \(visibleMemories.count) memories from authoritative API page (raw: \(fetchedMemories.count))"
+          "MemoriesViewModel: Showing \(memories.count) memories from authoritative API page (raw: \(fetchedMemories.count))"
         )
       } catch {
         logError("MemoriesViewModel: Failed to sync/reload from local cache", error: error)
         // Fall back to the API page if local persistence fails.
-        memories = MemoryPageProjection.visibleMemories(
-          cachedMemories: [],
-          serverMemories: fetchedMemories,
-          source: .authoritativeServer,
-          lifecycleExposed: page.canonicalLifecycleExposed
+        presentServerPage(
+          page,
+          visible: MemoryPageProjection.visibleMemories(
+            cachedMemories: [],
+            serverMemories: fetchedMemories,
+            source: .authoritativeServer,
+            lifecycleExposed: page.canonicalLifecycleExposed
+          ),
+          rawCount: fetchedMemories.count
         )
-        currentOffset = memories.count
-        rawBackendOffset = fetchedMemories.count
-        hasMoreMemories = Self.hasMoreAfterPage(page, received: fetchedMemories.count)
-        backendCursor = page.nextCursor
       }
     } catch {
       // Only show error if we don't have cached data
@@ -1417,9 +1453,12 @@ class MemoriesViewModel: ObservableObject {
     do {
       var truncated = false
       while true {
-        let page = try await APIClient.shared.getMemoriesPage(
+        let page = try await performMemoriesPageFetch(
           limit: batchSize,
+          offset: 0,
           cursor: cursor,
+          includeArchive: false,
+          deviceScope: nil,
           authorizationSnapshot: authorizationSnapshot)
         let batch = page.memories
         if page.truncated {
@@ -1581,6 +1620,8 @@ class MemoriesViewModel: ObservableObject {
       rawBackendOffset += newMemories.count
       hasMoreMemories = Self.hasMoreAfterPage(page, received: newMemories.count)
       backendCursor = page.nextCursor
+      // A truncated later page means the history on screen stops early too.
+      if page.truncated { listReadTruncated = true }
       log(
         "MemoriesViewModel: Loaded \(visibleNewMemories.count) more visible memories from API (raw: \(newMemories.count), total: \(memories.count))"
       )
@@ -2112,6 +2153,8 @@ struct MemoriesPage: View {
         errorView(error)
       } else if hasActiveMemoryQueryScope && viewModel.filteredMemories.isEmpty {
         noResultsView
+      } else if viewModel.memories.isEmpty && viewModel.listReadTruncated {
+        MemoriesUnfinishedReadState(retry: { Task { await viewModel.loadMemories() } })
       } else if viewModel.memories.isEmpty {
         emptyState
       } else if viewModel.filteredMemories.isEmpty {
@@ -2674,6 +2717,12 @@ struct MemoriesPage: View {
           }
           .frame(maxWidth: .infinity)
           .padding(.vertical, OmiSpacing.lg)
+        }
+
+        // An unfinished read: the server stopped before the end of the
+        // history, so the end of the list must not read as the end of it.
+        if viewModel.listReadTruncated && !viewModel.isLoadingMore {
+          MemoriesUnfinishedReadFooter(retry: { Task { await viewModel.loadMemories() } })
         }
 
         // "Load more" button if there are more memories

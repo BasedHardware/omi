@@ -31,6 +31,7 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/ActivityDestinationChip.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/OmiSearchField.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesUnfinishedReadStates.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesViewModel+SearchAnalytics.swift
   # The Add/Edit forms, exercised by S2c. `memory-crud` writes straight to the view model, so these
   # two sheets have no other flow that opens them.
