@@ -16,11 +16,12 @@ import 'package:omi/services/on_device/on_device_transcription_controller.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
-/// The recordings On this phone lists, newest first: every one not being sent or processed.
+/// The recordings On this phone lists: every one not being sent or processed, in the provider's
+/// order (newest first, sorted where the ledger is read).
 List<LocalRecording> onThisPhoneRecordings(Iterable<LocalRecording> all) => [
       for (final r in all)
         if (!r.isBusy) r,
-    ]..sort((a, b) => b.startedAt.compareTo(a.startedAt));
+    ];
 
 /// Whether Transcribe all sends [r]: one waiting (unless on-device transcription owns the waiting
 /// ones), or one that failed where sending again can help.

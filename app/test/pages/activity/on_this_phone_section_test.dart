@@ -74,11 +74,11 @@ Future<void> _frames(WidgetTester tester) async {
 }
 
 void main() {
-  test('lists every recording not being sent or processed, newest first', () {
+  test('lists every recording not being sent or processed, in the provider\'s newest-first order', () {
     final listed = onThisPhoneRecordings([
-      _rec('old', LocalRecordingState.pending, minutesAgo: 60),
-      _rec('sending', LocalRecordingState.uploading),
       _rec('new', LocalRecordingState.failed, minutesAgo: 5),
+      _rec('sending', LocalRecordingState.uploading),
+      _rec('old', LocalRecordingState.pending, minutesAgo: 60),
       _rec('processing', LocalRecordingState.processing),
     ]);
     expect([for (final r in listed) r.id], ['new', 'old']);
