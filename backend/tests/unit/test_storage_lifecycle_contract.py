@@ -6,6 +6,8 @@ import pytest
 from scripts.validate_storage_lifecycle import (
     LEGACY_DELETE_RULES,
     NONCURRENT_DELETE_RULE,
+    PROTECTED_AUDIO_PREFIXES,
+    RAW_CAPTURE_PREFIXES,
     validate_against_live,
     validate_desired_document,
     validate_notifications,
@@ -29,7 +31,7 @@ def test_checked_in_documents_pass_the_source_contract():
         assert validate_desired_document(_load(name)) == [], name
 
 
-def test_no_delete_rule_can_reach_chunks_except_the_scoped_noncurrent_rule():
+def test_no_delete_rule_can_reach_chunks_or_raw_capture_prefixes_except_the_scoped_noncurrent_rule():
     for name in APPLY_FILES + ROLLBACK_FILES:
         for rule in _rules(_load(name)):
             if rule["action"]["type"] != "Delete":
@@ -39,28 +41,33 @@ def test_no_delete_rule_can_reach_chunks_except_the_scoped_noncurrent_rule():
             prefixes = rule["condition"].get("matchesPrefix")
             assert prefixes, f"{name}: unscoped Delete rule"
             for prefix in prefixes:
-                assert not prefix.startswith("chunks/"), f"{name}: {prefix}"
-                assert not "chunks/".startswith(prefix), f"{name}: {prefix}"
+                for protected in PROTECTED_AUDIO_PREFIXES:
+                    assert not prefix.startswith(protected), f"{name}: {prefix} touches {protected}"
+                    assert not protected.startswith(prefix), f"{name}: {prefix} touches {protected}"
 
 
-def test_apply_files_declare_exactly_one_coldline_rule_scoped_to_chunks():
+def test_apply_files_declare_coldline_rules_for_chunks_and_raw_capture_prefixes():
     for name in APPLY_FILES:
-        set_class = [
-            r
-            for r in _rules(_load(name))
-            if r["action"]["type"] == "SetStorageClass" and r["action"]["storageClass"] == "COLDLINE"
+        set_class = [r for r in _rules(_load(name)) if r["action"]["type"] == "SetStorageClass"]
+        assert len(set_class) == 2, name
+        for rule in set_class:
+            assert rule["action"]["storageClass"] == "COLDLINE"
+            assert rule["condition"]["age"] == 30
+        assert [r["condition"]["matchesPrefix"] for r in set_class] == [
+            ["chunks/"],
+            list(RAW_CAPTURE_PREFIXES),
         ]
-        assert len(set_class) == 1, name
-        rule = set_class[0]
-        assert rule["condition"]["age"] == 30
-        assert rule["condition"]["matchesPrefix"] == ["chunks/"]
 
 
 def test_prod_coldline_rule_is_pinned_to_batch_suffixes():
     set_class = [
         r
         for r in _rules(_load("prod.json"))
-        if r["action"]["type"] == "SetStorageClass" and r["action"]["storageClass"] == "COLDLINE"
+        if (
+            r["action"]["type"] == "SetStorageClass"
+            and r["action"]["storageClass"] == "COLDLINE"
+            and r["condition"].get("matchesPrefix") == ["chunks/"]
+        )
     ]
     assert len(set_class) == 1
     rule = set_class[0]
@@ -68,6 +75,25 @@ def test_prod_coldline_rule_is_pinned_to_batch_suffixes():
         "prod Coldline transitions must stay scoped to the large batch artifacts; "
         "small .opus.enc chunks never pay back Coldline Class A pricing (p76)"
     )
+
+
+def test_prod_raw_capture_coldline_rule_shape_is_pinned():
+    for name in APPLY_FILES:
+        set_class = [
+            r
+            for r in _rules(_load(name))
+            if r["action"]["type"] == "SetStorageClass"
+            and r["condition"].get("matchesPrefix") == list(RAW_CAPTURE_PREFIXES)
+        ]
+        assert len(set_class) == 1, name
+        assert set_class[0] == {
+            "action": {"type": "SetStorageClass", "storageClass": "COLDLINE"},
+            "condition": {
+                "age": 30,
+                "matchesPrefix": ["raw-live/", "raw-sync/", "raw-mobile-batch/"],
+                "matchesStorageClass": ["STANDARD", "MULTI_REGIONAL"],
+            },
+        }, f"{name}: raw-* Coldline rule shape must stay pinned to the three capture prefixes"
 
 
 def test_prod_has_no_archive_rule():
@@ -124,7 +150,11 @@ def test_rollback_files_only_drop_rules_the_apply_variant_added():
         assert all(rule["action"]["type"] == "Delete" for rule in rollback_rules)
         assert all(rule in apply_rules for rule in rollback_rules)
         dropped = [rule for rule in apply_rules if rule not in rollback_rules]
-        expected = ["Delete", "SetStorageClass"] if apply_name == "prod.json" else ["SetStorageClass"]
+        expected = (
+            ["Delete", "SetStorageClass", "SetStorageClass"]
+            if apply_name == "prod.json"
+            else ["SetStorageClass", "SetStorageClass"]
+        )
         assert (
             sorted(rule["action"]["type"] for rule in dropped) == expected
         ), f"{apply_name}: rollback must drop exactly the rules the apply variant added beyond legacy"
@@ -173,6 +203,20 @@ def test_delete_rule_on_chunks_is_rejected():
         }
     )
     assert any("can match 'chunks/'" in error for error in errors)
+
+
+def test_delete_rule_on_raw_capture_prefixes_is_rejected():
+    for raw_prefix in (*RAW_CAPTURE_PREFIXES, "raw-"):
+        errors = validate_desired_document(
+            {
+                "bucket": "omi-dev-private-cloud-sync",
+                "project": "based-hardware-dev",
+                "lifecycle": {
+                    "rule": [{"action": {"type": "Delete"}, "condition": {"age": 365, "matchesPrefix": [raw_prefix]}}]
+                },
+            }
+        )
+        assert any("is a Delete rule whose prefix" in error for error in errors), raw_prefix
 
 
 def test_noncurrent_version_rule_is_rejected():

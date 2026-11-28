@@ -86,6 +86,16 @@ subtree walk, its generation-helper calls and their order unchanged; the new ste
 touches no People document and adds or removes no generation bump. Only this scope
 is re-pinned, regenerated with the backend Python 3.11 environment.
 
+## Finalization job erasure scope audit 2026-11-26
+
+Upstream #26310 replaces the final quiet-check cleanup call in
+`user_data_deletion.purge_user_subtree` with `purge_finalization_jobs(uid, client)`.
+AST comparison confirms that this is the only change to the pinned function;
+the People subtree traversal and generation-head deletion remain identical.
+The new helper deletes finalization jobs, not People documents. Only this
+function's fingerprint is refreshed. The strict writer suite passed 13 tests
+and the owned loopback Firestore emulator contract passed all 31 checks on Linux.
+
 ## Measure before enabling
 
 `people_scan_dedupe` remains **0**. The closed-label counter
