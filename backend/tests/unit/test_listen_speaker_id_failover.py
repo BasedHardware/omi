@@ -758,7 +758,7 @@ async def test_introduction_recognition_runs_with_capture_windows_present(monkey
     pendant user saying "My name is Alice" got no person, no assignment and no
     suggestion. This drives the REAL process_loop in clock-only mode with a
     capture window present (the exact condition that used to skip detection)
-    and requires everything origin/main's introduction path produces.
+    and checks that the introduction produces a suggestion without an assignment.
     """
     from models.message_event import SpeakerLabelSuggestionEvent
 
@@ -781,22 +781,21 @@ async def test_introduction_recognition_runs_with_capture_windows_present(monkey
         ), 'test premise failed: no capture window was attached'
 
         def _intro_handled():
-            return 'seg-intro' in stack.host.speakers.segment_assignments
+            return 'seg-intro' in stack.processor.introduction_suggestions
 
         await _wait_for(_intro_handled, timeout=15.0, message='introduction to be handled', stack=stack)
 
-        # Everything origin/main's introduction handling produced:
+        # The explicit introduction can create and suggest a contact.
         assert stack.created_people and stack.created_people[0]['name'] == 'Alice'
         suggestions = [e for e in stack.sent_events if isinstance(e, SpeakerLabelSuggestionEvent)]
         assert suggestions and suggestions[-1].person_name == 'Alice'
-        assert stack.host.state.speaker_map_dirty
-        # The introduction marks the segment suggested, so no embedding is
-        # queued for it — origin/main behavior, unchanged by the capture clock.
-        assert stack.processor.suggested_segments == {'seg-intro'}
-        # And the delivered/persisted transcript stays legacy-shaped: the
-        # segment text survives with speaker detection applied.
+        assert suggestions[-1].person_id == ''
+        assert suggestions[-1].suggested_person_id == stack.created_people[0]['id']
+        assert 'seg-intro' not in stack.host.speakers.segment_assignments
+        assert 'seg-intro' not in stack.processor.suggested_segments
         persisted = stack.decode_segments()
-        assert any('Alice' in (segment.get('text') or '') for segment in persisted), persisted
+        intro = next(segment for segment in persisted if 'Alice' in (segment.get('text') or ''))
+        assert not intro.get('person_id')
         _ = websocket
     finally:
         stack.state.active = False

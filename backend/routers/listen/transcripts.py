@@ -7,7 +7,6 @@ import logging
 import math
 import time
 import uuid
-from utils.speakers.context import name_only_allowed
 from collections import deque
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Sequence, Tuple, cast
@@ -56,13 +55,12 @@ from utils.metrics import (
 from utils.observability.fallback import record_fallback
 from utils.manual_speaker_assignments import LiveTranscriptMerge
 import config.speaker_match_scores as match_scores
-from utils.speaker_assignment import process_speaker_assigned_segments, should_update_speaker_to_person_map
+from utils.speaker_assignment import process_speaker_assigned_segments
 from utils.speaker_identification import detect_speaker_introduction
 from utils.stt.streaming import sort_segments_by_start
 from utils.stt.speaker_identity import ConversationSpeakerIdAllocator
 from utils.transcribe_decisions import (
     is_user_self_match,
-    person_id_for_client,
     resolve_photo_conversation_source,
     should_queue_speaker_embedding,
     should_skip_speaker_detection,
@@ -183,6 +181,7 @@ class TranscriptProcessor:
         self.current_session_segments: Dict[str, bool] = {}
         self._capture_merge_tails: Dict[str, Dict[str, CaptureWindowProof]] = {}
         self.suggested_segments: set[str] = set()
+        self.introduction_suggestions: set[str] = set()
         self.speaker_id_allocator = ConversationSpeakerIdAllocator()
         self.language_cache = TranscriptSegmentLanguageCache()
         self.translation_service = TranslationService()
@@ -1714,10 +1713,10 @@ class TranscriptProcessor:
                     _observe_refusal(speaker, 'enqueued', segment.speaker_id_scope)
                 except asyncio.QueueFull:
                     _observe_refusal(speaker, 'queue_full', segment.speaker_id_scope)
+            if segment_id in self.introduction_suggestions:
+                continue
             detection = detect_speaker_introduction(segment.text, language=self.host.language)
             if not detection:
-                continue
-            if not name_only_allowed(self.host.request.uid):
                 continue
             if not await speaker.named_speakers_allowed():
                 continue
@@ -1729,8 +1728,8 @@ class TranscriptProcessor:
                 continue
             person = await self.host.persistence.call(user_db.get_person_by_name, self.host.request.uid, name)
             # Only an explicit self-introduction may create a person. A bare copula
-            # ("I'm Chinese") still resolves one the user already has, so a real name
-            # keeps working, but it can no longer fill the picker with regex guesses.
+            # ("I'm Chinese") can suggest an existing contact, while only voice
+            # evidence can automatically assign that contact to the transcript.
             may_create = self.host.request.create_speakers and detection.explicit
             person_id = person['id'] if person else (str(uuid.uuid4()) if may_create else None)
             if person_id and not person:
@@ -1747,19 +1746,14 @@ class TranscriptProcessor:
             self.host.send_event(
                 SpeakerLabelSuggestionEvent(
                     speaker_id=cast(int, segment.speaker_id),
-                    person_id=person_id_for_client(person_id, self.host.request.speaker_auto_assign_enabled),
+                    person_id='',
+                    suggested_person_id=person_id,
                     person_name=name,
                     is_user=False,  # Contact-only; owner decisions use the owner wire adapter.
                     segment_id=segment_id,
                 )
             )
-            if person_id:
-                if should_update_speaker_to_person_map(segment.speaker_id):
-                    speaker.speaker_to_person[cast(int, segment.speaker_id)] = (person_id, name)
-                speaker.segment_assignments[segment_id] = person_id
-                self.host.state.speaker_map_dirty = True
-                self.host.state.speaker_map_version = getattr(self.host.state, 'speaker_map_version', 0) + 1
-                self.suggested_segments.add(segment_id)
+            self.introduction_suggestions.add(segment_id)
         if queue_from_raw is not None:
             self._queue_raw_detections(queue_from_raw, capture_windows, abs_base)
 
@@ -1822,6 +1816,7 @@ class TranscriptProcessor:
         self.photo_buffer.clear()
         self.current_session_segments.clear()
         self.suggested_segments.clear()
+        self.introduction_suggestions.clear()
         self.cache.clear()
         self.language_cache.cache.clear()
         self.translation_service.clear_session_cache()

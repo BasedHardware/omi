@@ -323,6 +323,7 @@ def test_speaker_work_requires_a_proven_capture_window():
         state=SimpleNamespace(speaker_id_enabled=True, current_conversation_id='active'),
     )
     processor.suggested_segments = set()
+    processor.introduction_suggestions = set()
     raw = [
         {'id': 'unplaced', 'speaker_id': 0, 'start': -1, 'end': -1, 'audio_alignment': 'unplaced'},
         {'id': 'rejected-v1', 'speaker_id': 0, 'start': 100, 'end': 101, '_capture_window_unavailable': True},

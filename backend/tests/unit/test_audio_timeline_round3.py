@@ -416,6 +416,7 @@ def _processor(monkeypatch, store, *, current: Optional[str], photos_sink=None):
     processor._v2_photo_failures = 0
     processor.current_session_segments = {}
     processor.suggested_segments = set()
+    processor.introduction_suggestions = set()
     processor.speaker_id_allocator = ConversationSpeakerIdAllocator()
     processor.translation_coordinator = None
     processor.translation_language = None
