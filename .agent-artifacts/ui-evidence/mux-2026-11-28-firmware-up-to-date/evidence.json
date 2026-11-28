@@ -18,7 +18,7 @@
     {
       "file": "003-mobile-ios-firmware-before-after-xxxl.png",
       "platform": "mobile-ios",
-      "description": "Same comparison at the largest accessibility text size.",
+      "description": "Same scenario at the largest accessibility text size: main, round 1 of this PR ('Curre nt Ver sion', 'Update G...'), and now ('Current Version' whole with the version below it, 'Update Guide' wrapped whole).",
       "captured_by": "agent",
       "source": "screencapture"
     },
