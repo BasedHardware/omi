@@ -45,7 +45,7 @@ abstract final class DeviceDropoffSignals {
   static const _phoneReasons = {'bluetooth_off', 'app_closed'};
   static const _trends = {'fading', 'sudden', 'gap', 'unknown'};
 
-  /// True when the open `connected_at` stamp names an established link.
+  /// True when the open `connected_at` stamp names a currently established link.
   ///
   /// iOS stamps it in `didConnect`. Android stamps it when a GATT attempt
   /// starts, before the link is established, so the stamp alone is not proof.
@@ -54,9 +54,22 @@ abstract final class DeviceDropoffSignals {
   /// both platforms. A pending attempt has neither, and a sample from the
   /// previous session predates the new stamp because the history is cleared
   /// when the link comes up.
+  ///
+  /// A completed `disconnect` row at or after the stamp closes that link.
+  /// Android teardown persists the row but leaves `connected_at`, the RSSI
+  /// history and the day buckets populated, so those historical samples would
+  /// otherwise make a dead link look open and bill every later day as
+  /// connected.
   static bool linkEstablished(Map<String, dynamic> diagnostics) {
     final connectedAt = diagnostics['connected_at'] is int ? diagnostics['connected_at'] as int : 0;
     if (connectedAt <= 0) return false;
+    var latestDisconnectAt = 0;
+    for (final row in (diagnostics['disconnect_history_v2'] as List? ?? []).whereType<Map>()) {
+      if (row['eventType'] != 'disconnect' || row['timestamp'] is! int) continue;
+      final at = row['timestamp'] as int;
+      if (at > latestDisconnectAt) latestDisconnectAt = at;
+    }
+    if (latestDisconnectAt >= connectedAt) return false;
     final packetOnLink = (diagnostics['audio_packet_days'] as List? ?? [])
         .whereType<Map>()
         .any((point) => point['last_at'] is int && (point['last_at'] as int) >= connectedAt);

@@ -211,6 +211,39 @@ void main() {
     expect(result['connected_time_fraction'], closeTo(6 / 24, 0.00001));
   });
 
+  test('a completed disconnect with a stale stamp and historical sample adds no connected time', () {
+    final sessionStart = start + 8 * _hour;
+    final disconnectedAt = start + 10 * _hour;
+    final diagnostics = {
+      'observed_at': DateTime(2026, 11, 21, 12).millisecondsSinceEpoch,
+      // Android teardown persisted the disconnect but left connected_at and
+      // the RSSI history in place, so the stamp and its samples describe a
+      // session that has already ended.
+      'connected_at': sessionStart,
+      'audio_packets_received': 5400,
+      'audio_packet_days': [
+        {'ts': start, 'received': 5400, 'expected': 5400, 'last_at': disconnectedAt - 1000},
+      ],
+      'rssi_samples': [
+        {'ts': sessionStart + 10000, 'rssi': -60},
+        {'ts': disconnectedAt - 5000, 'rssi': -62},
+      ],
+      'disconnect_history_v2': [
+        disconnect(disconnectedAt, durationMs: 2 * _hour, packets: 5400),
+      ],
+    };
+    final current = DeviceHealthTelemetry.rollup(diagnostics, day);
+    expect(current['connected_seconds'], 2 * 3600);
+    expect(current['disconnected_seconds'], 22 * 3600);
+    expect(current['connected_no_audio_seconds'], 0);
+    // The dead stamp must not bill the next, fully disconnected day: the
+    // documented stop query reads a zero connected day.
+    final dayAfter = DeviceHealthTelemetry.rollup(diagnostics, DateTime(2026, 11, 21));
+    expect(dayAfter['connected_seconds'], 0);
+    final signalsAfter = DeviceDropoffSignals.rollup(diagnostics, DateTime(2026, 11, 21));
+    expect(signalsAfter['connected_no_audio_sessions'], 0);
+  });
+
   test('an established active iOS session with zero audio counts as connected without audio', () {
     final linkAt = start + 21 * _hour;
     final diagnostics = {
