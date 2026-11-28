@@ -3,6 +3,7 @@
 import os
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
+from uuid import uuid4
 
 from google.cloud import firestore
 
@@ -16,7 +17,7 @@ def exercise_pl158_quiet_discovery_and_admission(client):
     speech = datetime(2026, 1, 1, tzinfo=timezone.utc)
     timeout = timedelta(seconds=30)
     deadline = speech + timeout
-    owner = client.collection('users').document('synthetic-pl158')
+    owner = client.collection('users').document(f'synthetic-pl158-{uuid4().hex}')
     for case in ('speech-only', 'legacy-heartbeat', 'speech-after-discovery'):
         conversation = jobs._conversation_ref(client, owner.id, case)
         fields = {
@@ -89,8 +90,11 @@ def main():
     host = os.environ.get('FIRESTORE_EMULATOR_HOST', '').rsplit(':', 1)[0]
     if host not in {'127.0.0.1', 'localhost', '[::1]'}:
         raise SystemExit('loopback Firestore emulator required')
+    project = os.environ.get('GOOGLE_CLOUD_PROJECT', '')
+    if not project.startswith('demo-'):
+        raise SystemExit('demo Google Cloud project required')
     with patch.dict(os.environ, {'LIFECYCLE_V2_MODE': 'serve', 'LISTEN_QUIET_FINALIZATION_ENABLED': 'true'}):
-        exercise_pl158_quiet_discovery_and_admission(firestore.Client(project='demo-pl158-quiet-clock'))
+        exercise_pl158_quiet_discovery_and_admission(firestore.Client(project=project))
     print('PASS: quiet discovery and admission share the speech clock in all three PL-158 cases')
 
 

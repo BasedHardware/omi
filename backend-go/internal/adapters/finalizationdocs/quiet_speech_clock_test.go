@@ -38,9 +38,9 @@ func TestPL158QuietDiscoveryAndAdmissionShareSpeechClock(t *testing.T) {
 			}
 
 			isStale := name == "speech-after-discovery"
+			laterSpeech := speech.Add(time.Second)
 			if isStale {
 				row := read(t, bench, conversationPath)
-				laterSpeech := speech.Add(time.Second)
 				row["last_speech_at"] = laterSpeech
 				put(t, bench, conversationPath, row)
 				// Meet the new deadline while admitting against the old cutoff.
@@ -54,14 +54,18 @@ func TestPL158QuietDiscoveryAndAdmissionShareSpeechClock(t *testing.T) {
 				Ref: ref, Trigger: rules.ServerRecovery, RequireExpiredLease: true,
 				QuietGeneration: wake.Check.Generation, RecoveryCutoff: wake.Cutoff,
 			}
-			intent, err := store.Admit(t.Context(), a, req, func(facts rules.AdmissionFacts) rules.AdmissionAction {
-				return rules.Admission(req.Trigger, req.RecoveryCutoff, req.RequireExpiredLease, facts)
-			})
-			if err != nil {
-				t.Fatal(err)
+			admit := func(request finalization.AdmissionRequest) finalization.Intent {
+				t.Helper()
+				intent, err := store.Admit(t.Context(), a, request, func(facts rules.AdmissionFacts) rules.AdmissionAction {
+					return rules.Admission(request.Trigger, request.RecoveryCutoff, request.RequireExpiredLease, facts)
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				return intent
 			}
+			intent := admit(req)
 			jobPath := jobs + "/" + finalization.JobID(ref, 1)
-			quietJob := read(t, bench, jobs+"/"+finalization.QuietID(ref))
 			if isStale {
 				after, err := bench.Raw.Doc(conversationPath).Get(t.Context())
 				if err != nil {
@@ -70,15 +74,20 @@ func TestPL158QuietDiscoveryAndAdmissionShareSpeechClock(t *testing.T) {
 				if intent.JobID != "" || !after.UpdateTime.Equal(before.UpdateTime) || bench.Exists(t, jobPath) {
 					t.Fatalf("stale wake changed custody: %+v, row %v", intent, after.Data())
 				}
+				quietJob := read(t, bench, jobs+"/"+finalization.QuietID(ref))
 				if quietJob["status"] != quietWaiting || quietJob["dispatch_generation"] != wake.Check.Generation {
 					t.Fatalf("stale admission lost its successor: %v", quietJob)
 				}
-				return
+				// Keep the row, clock and generation fixed. A current cutoff
+				// must succeed, isolating the old cutoff as the refusal cause.
+				req.RecoveryCutoff = laterSpeech
+				intent = admit(req)
 			}
 			row := read(t, bench, conversationPath)
 			if intent.JobID == "" || row["finalization_job_id"] != intent.JobID || row["status"] != "processing" || !bench.Exists(t, jobPath) {
 				t.Fatalf("due speech did not bind a durable intent: %+v, row %v", intent, row)
 			}
+			quietJob := read(t, bench, jobs+"/"+finalization.QuietID(ref))
 			if _, indexed := quietJob["reconcile_after_at"]; quietJob["status"] != quietDone || indexed {
 				t.Fatalf("admission left the quiet check indexed: %v", quietJob)
 			}
