@@ -16,3 +16,10 @@ EXPIRED_SEALED = Counter(
     'omi_record_token_lease_expired_sealed_total', 'Rows released under lease proof after tail/partial gates'
 )
 LATE_APPEND = Counter('omi_record_token_late_append_total', 'Observed append after lease lapse or audio closure')
+RENEWAL_FAILURES = Counter(
+    'omi_record_token_lease_renewal_failures_total',
+    'Frame lease renewals that failed; shadow is observe-only, serve fences the batch',
+    ['outcome'],
+)
+RENEWAL_FAILURES_SHADOW = RENEWAL_FAILURES.labels(outcome='renewal_failed_shadow')
+RENEWAL_FAILURES_SERVE = RENEWAL_FAILURES.labels(outcome='renewal_failed_serve')

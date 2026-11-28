@@ -564,15 +564,84 @@ async def test_lease_failure_keeps_tail_unstored_and_unacknowledged(inline_sessi
         return window
 
     monkeypatch.setattr(pusher, 'RetainedPcmWindow', retain)
+    from database import record_token_lease_metrics as lease_metrics
+
+    serve_failures = lease_metrics.RENEWAL_FAILURES_SERVE._value.get()
+    shadow_failures = lease_metrics.RENEWAL_FAILURES_SHADOW._value.get()
     pcm = b'\x01\x00' * 160
     sock = Socket(_audio_frames('conversation', [pcm]))
     await pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1)
+    assert lease_metrics.RENEWAL_FAILURES_SERVE._value.get() > serve_failures
+    assert lease_metrics.RENEWAL_FAILURES_SHADOW._value.get() == shadow_failures
     assert not remote.list_blobs('raw-live/') and not remote.list_blobs('audio-outbox/')
     assert not _sent_receipts(sock) and not projected
     assert len(windows) == 1 and bytes(windows[0].payload) == pcm
     assert windows[0].frames
     assert client.rows[path]['record_upload_sessions']
     assert not client.rows[path].get('record_audio_closed')
+
+
+# SCA-4463: outside serve (any shadow, or serve with this uid outside the
+# cohort) the lease fences nothing, so a renewal timeout at the half-lease
+# boundary must leave storage and the audio ACK exactly as in off.
+NON_SERVING_LEASE = [('off', '0'), ('shadow', '0'), ('shadow', '100'), ('serve', '0')]
+
+
+def _expire_lease_and_time_out_renewal(barrier, monkeypatch, mode, percent):
+    from google.api_core.exceptions import DeadlineExceeded
+    from database import record_audio
+
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', mode)
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', percent)
+    begin = barrier.begin_recording
+
+    async def expired_begin(cid):
+        await begin(cid)
+        if cid in barrier.lease_renewed_at:
+            barrier.lease_renewed_at[cid] -= 7200
+
+    monkeypatch.setattr(barrier, 'begin_recording', expired_begin)
+    renew = MagicMock(side_effect=DeadlineExceeded('synthetic renewal timeout'))
+    monkeypatch.setattr(record_audio, 'renew_record_token_lease', renew)
+    return renew
+
+
+@pytest.mark.parametrize('mode,percent', NON_SERVING_LEASE)
+async def test_non_serving_lease_renewal_timeout_stores_and_acknowledges_like_off(
+    inline_session, remote, monkeypatch, mode, percent
+):
+    from database import record_token_lease_metrics as lease_metrics
+
+    client, path, barrier, projected = inline_session
+    client.rows[('users', 'owner')] = {'private_cloud_sync_enabled': True}
+    renew = _expire_lease_and_time_out_renewal(barrier, monkeypatch, mode, percent)
+    before = lease_metrics.RENEWAL_FAILURES_SHADOW._value.get()
+    pcm = b'\x01\x00' * 160
+    sock = Socket(_audio_frames('conversation', [pcm]))
+    await asyncio.wait_for(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1), 5)
+    assert len(_sent_receipts(sock)) == 1
+    assert len(projected) == 1 and projected[0][0][0]['data'] == pcm
+    assert client.rows[path]['record_audio_closed']
+    assert not client.rows[path].get('record_upload_failed')
+    # One attempt, then the normal half-lease interval: no per-batch timeout stall.
+    assert renew.call_count == (0 if mode == 'off' else 1)
+    assert lease_metrics.RENEWAL_FAILURES_SHADOW._value.get() == before + renew.call_count
+
+
+@pytest.mark.parametrize('mode,percent', NON_SERVING_LEASE)
+async def test_non_serving_lease_renewal_timeout_does_not_requeue_projection_batch(
+    inline_session, monkeypatch, mode, percent
+):
+    client, path, barrier, projected = inline_session
+    monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'false')
+    monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_CHUNK_DURATION', 0)
+    renew = _expire_lease_and_time_out_renewal(barrier, monkeypatch, mode, percent)
+    pcm = b'\x01\x00' * 160
+    sock = Socket(_audio_frames('conversation', [pcm]))
+    await asyncio.wait_for(pusher._websocket_util_trigger(sock, 'owner', 16000), 5)
+    assert len(projected) == 1 and projected[0][0][0]['data'] == pcm
+    assert renew.call_count == (0 if mode == 'off' else 1)
+    assert not client.rows[path].get('record_upload_failed')
 
 
 @pytest.mark.parametrize('disconnect_first', [False, True])
