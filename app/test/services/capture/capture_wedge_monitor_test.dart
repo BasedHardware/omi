@@ -453,6 +453,12 @@ void main() {
       expect(forEvent('Capture Wedge Detected'), isEmpty);
     });
 
+    test('rayban_meta source is in scope and connects', () async {
+      final monitor = makeMonitor();
+      final handle = monitor.onCaptureSessionConnected(deviceId: 'dev-rb', source: 'rayban_meta');
+      expect(handle, isPositive);
+    });
+
     test('wedge state is isolated per device', () async {
       final monitor = makeMonitor();
       zeroSession(monitor, deviceId: 'dev-a');
@@ -571,6 +577,19 @@ void main() {
       }
       await pumpEventQueue();
       expect(forEvent('Capture Wedge Detected').single['source'], 'friend_com');
+    });
+
+    test('raybanMeta reports rayban_meta source', () async {
+      final monitor = makeMonitor();
+      for (var i = 0; i < 3; i++) {
+        monitor.onBleSessionEnded(
+          deviceId: 'dev-rb',
+          deviceType: DeviceType.raybanMeta,
+          duration: const Duration(seconds: 2),
+        );
+      }
+      await pumpEventQueue();
+      expect(forEvent('Capture Wedge Detected').single['source'], 'rayban_meta');
     });
 
     test('unsupported device types are ignored', () async {
