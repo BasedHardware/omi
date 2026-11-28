@@ -3794,6 +3794,7 @@ class MemoryService:
         offset: int = 0,
         view: str = 'released',
         as_of: Optional[datetime] = None,
+        budget: Optional[ListReadBudget] = None,
     ) -> Dict[str, Any]:
         """Return one default-memory product view across both physical origins.
 
@@ -3802,6 +3803,12 @@ class MemoryService:
         embedding, graph admission, or legacy mutation.  Canonical visibility,
         lifecycle, processing, lineage, and tombstone rules are applied by
         :meth:`read` before historical rows can join the result.
+
+        With a ``budget`` the authoritative 5,000-item window is read under the
+        request deadline. A search that cannot finish raises
+        :class:`ListReadBudgetExhausted` instead of returning a prefix that
+        looks like a complete answer (SCA-3795): a text query over a
+        half-scanned collection would silently drop matches.
         """
         bounded_limit = max(1, min(int(limit or 100), 500))
         bounded_offset = max(0, int(offset or 0))
@@ -3829,9 +3836,16 @@ class MemoryService:
         }
         if as_of is not None:
             read_kwargs["as_of"] = as_of
+        if budget is not None:
+            read_kwargs["budget"] = budget
         # Search keeps the authoritative collection read. List reads are the
         # path that must not stream ``memory_items``.
         rows = self.read(uid, authoritative=True, **read_kwargs)
+        if budget is not None and budget.truncated:
+            # The authoritative read stops on the request budget by returning
+            # an empty window; shipping that as a finished search would report
+            # "no matches" for a query that never finished (SCA-3795).
+            raise ListReadBudgetExhausted(budget.exhaustion_reason or 'deadline')
 
         query_words = {token.lower() for token in (query or "").replace(".", " ").replace(",", " ").split()}
         # Words of two characters or fewer drop only beside a longer word; a non-blank query always filters.

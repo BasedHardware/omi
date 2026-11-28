@@ -20,7 +20,13 @@ from database.firestore_index_registry import (
 from database.memory_collections import MemoryCollections
 from models.product_memory import MemoryAccessPolicy, MemoryItem, MemoryItemStatus
 from utils.memory.memory_read_api import query_archive_product_memory_items
-from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, budgeted_get_all, budgeted_document_get
+from utils.other.list_budget import (
+    ListReadBudget,
+    ListReadBudgetExhausted,
+    budgeted_document_get,
+    budgeted_get_all,
+    budgeted_stream_iter,
+)
 
 DEFAULT_PRODUCT_MEMORY_READ_LIMIT = 100
 MAX_PRODUCT_MEMORY_READ_LIMIT = 500
@@ -40,6 +46,7 @@ def fetch_default_product_memory_search(
     offset: int = 0,
     view: str = 'released',
     as_of: Optional[datetime] = None,
+    budget: Optional[ListReadBudget] = None,
 ) -> Dict[str, Any]:
     """Return the universal default-memory product view.
 
@@ -47,6 +54,11 @@ def fetch_default_product_memory_search(
     authoritative canonical-item iterator internally, while this released
     product seam delegates the final mixed-origin view back to the universal
     repository.
+
+    With a ``budget`` the authoritative collection read runs under the
+    request's deadline and per-RPC timeouts, and exhaustion raises
+    :class:`ListReadBudgetExhausted` instead of returning a page that looks
+    complete (SCA-3795).
     """
     bounded_limit = _validate_limit(limit)
     bounded_offset = _validate_offset(offset)
@@ -61,6 +73,7 @@ def fetch_default_product_memory_search(
         offset=bounded_offset,
         view='released',
         as_of=as_of,
+        budget=budget,
     )
 
 
@@ -75,6 +88,7 @@ def fetch_archive_product_memory_search(
     offset: int = 0,
     view: str = 'history',
     as_of: Optional[datetime] = None,
+    budget: Optional[ListReadBudget] = None,
 ) -> Dict[str, Any]:
     """Fetch authoritative memory `memory_items` and return explicit archive search results.
 
@@ -85,7 +99,7 @@ def fetch_archive_product_memory_search(
 
     bounded_limit = _validate_limit(limit)
     bounded_offset = _validate_offset(offset)
-    items = fetch_authoritative_product_memory_items(uid=uid, db_client=db_client)
+    items = fetch_authoritative_product_memory_items(uid=uid, db_client=db_client, budget=budget)
     results = query_archive_product_memory_items(query, items, policy=policy, now=as_of or now)
     total_count = len(results)
     paged_items = results[bounded_offset : bounded_offset + bounded_limit]
@@ -112,21 +126,13 @@ def iter_authoritative_product_memory_items(
     """Stream validated authoritative memory items for one user.
 
     With a ``budget`` the collection stream runs under the request's per-RPC
-    timeout and each fetched row is charged (#11831).
+    timeout (no SDK retry of that deadline), each fetched row is charged
+    (#11831), and an expired budget raises :class:`ListReadBudgetExhausted`
+    with the outstanding stream closed instead of walking the collection to
+    the edge timeout (SCA-3795).
     """
     collection_path = MemoryCollections(uid=uid).memory_items
-    if budget is None:
-        snapshots: Iterator[Any] = db_client.collection(collection_path).stream()
-    else:
-        timeout = budget.rpc_timeout()
-        try:
-            snapshots = db_client.collection(collection_path).stream(timeout=timeout)
-        except TypeError:
-            # Test fakes predating the budget seam.
-            snapshots = db_client.collection(collection_path).stream()
-    for snapshot in snapshots:
-        if budget is not None:
-            budget.charge(1)
+    for snapshot in budgeted_stream_iter(db_client.collection(collection_path), budget):
         raw_payload: object = snapshot.to_dict()
         payload = cast(Dict[str, Any], raw_payload) if isinstance(raw_payload, dict) else {}
         item = MemoryItem.model_validate(payload)
@@ -173,19 +179,7 @@ def iter_authoritative_product_memory_items_newest_first(
             }
         )
     query = query.limit(limit)
-    if budget is None:
-        snapshots: Iterator[Any] = query.stream()
-    else:
-        timeout = budget.rpc_timeout()
-        try:
-            snapshots = query.stream(timeout=timeout)
-        except TypeError:
-            # Test fakes predating the budget seam.
-            snapshots = query.stream()
-
-    for snapshot in snapshots:
-        if budget is not None:
-            budget.charge(1)
+    for snapshot in budgeted_stream_iter(query, budget):
         raw_payload: object = snapshot.to_dict()
         payload = cast(Dict[str, Any], raw_payload) if isinstance(raw_payload, dict) else {}
         item = MemoryItem.model_validate(payload)

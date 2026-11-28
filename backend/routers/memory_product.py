@@ -8,8 +8,9 @@ from datetime import datetime, timezone
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
+from config.memory_search_budget import memory_search_read_budget_enabled
 from database._client import db
 from database.memory_vector_repair_outbox import write_vector_repair_purge_outbox_records
 from models.product_memory import MemoryAccessPolicy
@@ -33,9 +34,14 @@ from utils.memory.vector_search_service import (
     fetch_default_vector_memory_search,
 )
 from utils.other import endpoints as auth
+from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, list_read_budget_for_request
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+MEMORY_PRODUCT_SEARCH_ROUTE = 'memory-product-search'
+MEMORY_ARCHIVE_SEARCH_ROUTE = 'memory-archive-search'
+MEMORY_SEARCH_UNAVAILABLE_DETAIL = 'Memory search is temporarily unavailable'
 
 
 def _sanitize_search_error(exc: ValueError, context: str) -> HTTPException:
@@ -105,8 +111,38 @@ def _require_product_authorization(context: ProductAuthorizationContext):
     return decision
 
 
+def _search_read_budget(request: Optional[Request], *, route: str, uid: str) -> Optional[ListReadBudget]:
+    """Build this search request's read budget, or ``None`` when rolled back.
+
+    ``OMI_MEMORY_SEARCH_READ_BUDGET_ENABLED=0`` restores the previous unbounded
+    read path for the route; everything else derives one deadline from the
+    request start so the read fails fast inside the edge timeout instead of
+    hanging to a bare 504 (SCA-3795).
+    """
+    if not memory_search_read_budget_enabled():
+        return None
+    return list_read_budget_for_request(request, route=route, owner_uid=uid)
+
+
+def _observe_search_budget(budget: Optional[ListReadBudget], outcome: str) -> None:
+    """Record only outcomes the budget actually decided: complete or truncated."""
+    if budget is not None:
+        budget.observe(outcome)
+
+
+def _search_budget_exhausted(exc: ListReadBudgetExhausted, *, context: str) -> HTTPException:
+    """Map budget exhaustion onto the existing 503 contract, never a prompt 200."""
+    logger.warning("%s read budget exhausted: reason=%s", context, exc.reason)
+    return HTTPException(
+        status_code=503,
+        detail=MEMORY_SEARCH_UNAVAILABLE_DETAIL,
+        headers={'Retry-After': '1'},
+    )
+
+
 @router.get('/memory/search', tags=['memories', 'memory'], response_model=ProductMemorySearchResponse)
 def search_product_memory(
+    request: Request = None,  # type: ignore[assignment]
     query: str = Query(''),
     limit: int = Query(100),
     offset: int = Query(0),
@@ -121,6 +157,10 @@ def search_product_memory(
     never enables Archive capability; beta useful-now reads admit current, fading,
     and unknown records while an explicit history view retrieves dated non-Archive
     records under the same grant.
+
+    The authoritative 5,000-item read runs under a request budget: a search that
+    cannot finish fails fast with 503 instead of hanging to the 30s edge timeout,
+    and never returns a partial window as a successful search.
     """
 
     _validate_search_pagination(limit, offset)
@@ -133,6 +173,7 @@ def search_product_memory(
     effective_view = 'released'
     if as_of is not None and (as_of.tzinfo is None or as_of.utcoffset() is None):
         raise HTTPException(status_code=400, detail='as_of must be timezone-aware')
+    budget = _search_read_budget(request, route=MEMORY_PRODUCT_SEARCH_ROUTE, uid=uid)
     try:
         response = fetch_default_product_memory_search(
             uid=uid,
@@ -144,9 +185,15 @@ def search_product_memory(
             offset=offset,
             view=effective_view,
             as_of=as_of if effective_view != 'released' else None,
+            budget=budget,
         )
+    except ListReadBudgetExhausted as exc:
+        _observe_search_budget(budget, 'truncated')
+        raise _search_budget_exhausted(exc, context="Product memory search") from exc
     except ValueError as exc:
         raise _sanitize_search_error(exc, "Product memory search") from exc
+    else:
+        _observe_search_budget(budget, 'complete')
 
     response['policy'] = _policy_payload(policy)
     response['global_read_gate'] = global_read_gate
@@ -213,6 +260,7 @@ def search_vector_memory(
 
 @router.get('/memory/archive/search', tags=['memories', 'memory'], response_model=ArchiveProductMemorySearchResponse)
 def search_archive_memory(
+    request: Request = None,  # type: ignore[assignment]
     query: str = Query(''),
     limit: int = Query(100),
     offset: int = Query(0),
@@ -225,6 +273,9 @@ def search_archive_memory(
     both an explicit caller opt-in flag and a persisted server-owned Archive
     capability before it constructs a policy with Archive access. The default
     search route remains Archive-free.
+
+    It reads the same authoritative collection, so it runs under the same
+    request budget and fails fast rather than hanging to the edge timeout.
     """
 
     _validate_search_pagination(limit, offset)
@@ -243,6 +294,7 @@ def search_archive_memory(
     global_read_gate = _global_read_gate_observability(authz.global_gate)
     rollout_observability = authz.observability
     policy = authz.policy or _archive_omi_chat_policy()
+    budget = _search_read_budget(request, route=MEMORY_ARCHIVE_SEARCH_ROUTE, uid=uid)
     try:
         response = fetch_archive_product_memory_search(
             uid=uid,
@@ -252,9 +304,15 @@ def search_archive_memory(
             now=_current_time(),
             limit=limit,
             offset=offset,
+            budget=budget,
         )
+    except ListReadBudgetExhausted as exc:
+        _observe_search_budget(budget, 'truncated')
+        raise _search_budget_exhausted(exc, context="Archive memory search") from exc
     except ValueError as exc:
         raise _sanitize_search_error(exc, "Archive memory search") from exc
+    else:
+        _observe_search_budget(budget, 'complete')
 
     response['policy'] = _policy_payload(policy)
     response['global_read_gate'] = global_read_gate
@@ -266,7 +324,10 @@ def search_archive_memory(
 
 
 __all__ = [
+    "MEMORY_ARCHIVE_SEARCH_ROUTE",
     "MEMORY_GLOBAL_READ_GATE_PATH",
+    "MEMORY_PRODUCT_SEARCH_ROUTE",
+    "MEMORY_SEARCH_UNAVAILABLE_DETAIL",
     "db",
     "fetch_archive_product_memory_search",
     "fetch_default_product_memory_search",
