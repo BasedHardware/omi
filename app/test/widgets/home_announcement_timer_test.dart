@@ -122,7 +122,16 @@ void main() {
     });
   }
 
-  for (final gate in ['signed-out', 'onboarding', 'background', 'paired device', 'live link', 'link opening']) {
+  for (final gate in [
+    'signed-out',
+    'onboarding',
+    'background',
+    'paired device',
+    'Friend Dev Kit',
+    'Omi Neo',
+    'live link',
+    'link opening',
+  ]) {
     testWidgets('mounted Home startup suppresses the survey for $gate', (tester) async {
       final analytics = await _mountHomeForSurvey(tester);
       try {
@@ -139,6 +148,10 @@ void main() {
             tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
           case 'paired device':
             prefs.btDevice = _surveyPendant.copyWith(type: DeviceType.openglass);
+          case 'Friend Dev Kit':
+            prefs.btDevice = _surveyPendant.copyWith(name: 'Friend Dev Kit 1', modelNumber: 'Omi Device');
+          case 'Omi Neo':
+            prefs.btDevice = _surveyPendant.copyWith(modelNumber: 'Omi Neo');
           case 'live link':
             device.isConnected = true;
           case 'link opening':

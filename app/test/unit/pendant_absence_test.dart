@@ -35,6 +35,8 @@ void main() {
     expect(days(connected: true), isNull);
     expect(days(paired: BtDevice.empty()), isNull);
     expect(days(paired: pendant.copyWith(type: DeviceType.openglass)), isNull);
+    expect(days(paired: pendant.copyWith(name: '', modelNumber: 'Unknown')), isNull);
+    expect(days(paired: pendant.copyWith(type: DeviceType.friendPendant)), 3);
     expect(days(user: 'other'), isNull);
   });
 

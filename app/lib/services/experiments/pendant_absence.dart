@@ -8,6 +8,7 @@ import 'package:crypto/crypto.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/utils/device.dart';
 import 'package:omi/utils/logger.dart';
 
 /// Shared by the pendant-stop question (SCA-4815) and reconnect nudge (SCA-4889).
@@ -27,10 +28,12 @@ class PendantAbsence {
   final DateTime Function() _now;
   final _prefs = SharedPreferencesUtil();
 
-  static bool isPendant(BtDevice? device) =>
-      device != null &&
-      device.id.isNotEmpty &&
-      (device.type == DeviceType.omi || device.type == DeviceType.friendPendant);
+  static bool isPendant(BtDevice? device) {
+    if (device == null || device.id.isEmpty) return false;
+    return device.type == DeviceType.friendPendant ||
+        (device.type == DeviceType.omi &&
+            DeviceUtils.isOmiCv1(modelNumber: device.modelNumber, deviceName: device.name));
+  }
 
   String _digest(String uid) => sha256.convert(utf8.encode('pendant-absence:$uid')).toString();
   String _lastConnectionKey(String uid) => 'pendant_last_connected_at:${_digest(uid)}';
