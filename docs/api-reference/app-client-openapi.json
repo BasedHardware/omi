@@ -42549,7 +42549,7 @@
   "paths": {
     "/memory/search": {
       "get": {
-        "description": "Search default-visible memory product memory for the authenticated user.\n\nThis product endpoint constructs the default Omi-chat access policy explicitly\nand delegates Firestore reads/filtering to the memory product read service. It\nnever enables Archive capability; beta useful-now reads admit current, fading,\nand unknown records while an explicit history view retrieves dated non-Archive\nrecords under the same grant.",
+        "description": "Search default-visible memory product memory for the authenticated user.\n\nThis product endpoint constructs the default Omi-chat access policy explicitly\nand delegates Firestore reads/filtering to the memory product read service. It\nnever enables Archive capability; beta useful-now reads admit current, fading,\nand unknown records while an explicit history view retrieves dated non-Archive\nrecords under the same grant.\n\nThe authoritative 5,000-item read runs under a request budget: a search that\ncannot finish fails fast with 503 instead of hanging to the 30s edge timeout,\nand never returns a partial window as a successful search.",
         "operationId": "search_product_memory_memory_search_get",
         "parameters": [
           {

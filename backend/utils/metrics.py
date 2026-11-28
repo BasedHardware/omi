@@ -1602,7 +1602,7 @@ LIST_READ_SECONDS = Histogram(
     ['route'],
 )
 
-for _list_route in ('action-items', 'conversations', 'memories'):
+for _list_route in ('action-items', 'conversations', 'memories', 'memory-product-search', 'memory-archive-search'):
     LIST_READ_DOCUMENTS_TOTAL.labels(route=_list_route)
     LIST_READ_SECONDS.labels(route=_list_route)
     for _list_outcome in ('complete', 'truncated'):

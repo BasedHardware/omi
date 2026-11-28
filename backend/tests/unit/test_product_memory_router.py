@@ -11,10 +11,11 @@ os.environ.setdefault(
 
 
 class _HTTPException(Exception):
-    def __init__(self, status_code, detail):
+    def __init__(self, status_code, detail, headers=None):
         super().__init__(detail)
         self.status_code = status_code
         self.detail = detail
+        self.headers = headers
 
 
 class _APIRouter:
@@ -89,6 +90,11 @@ def _memory_product_router_import_isolation():
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState  # noqa: E402
 from models.product_memory import MemoryItem, MemoryItemStatus, MemoryTier, ProcessingState  # noqa: E402
 from utils.memory.short_term_lifecycle import DEFAULT_SHORT_TERM_TTL_DAYS  # noqa: E402
+from utils.other.list_budget import (  # noqa: E402
+    LIST_READ_DEFAULT_BUDGET_SECONDS,
+    ListReadBudget,
+    ListReadBudgetExhausted,
+)
 
 memory_product = None  # populated by _memory_product_router_import_isolation
 
@@ -800,3 +806,100 @@ def test_vector_search_endpoint_persists_repair_outbox_only_with_server_flag(mon
     assert record['outbox_path'] == outbox_path
     assert db_client.docs[outbox_path]['record_id'] == record['record_id']
     assert db_client.docs[outbox_path]['idempotency_key'] == record['record_id']
+
+
+def test_product_search_maps_budget_exhaustion_to_503_without_returning_a_page(monkeypatch):
+    db_client = _FirestoreFake({_global_read_gate_path(): _global_read_gate_doc()})
+
+    def _exhausted(**_kwargs):
+        raise ListReadBudgetExhausted('deadline')
+
+    monkeypatch.setattr(memory_product, 'db', db_client)
+    monkeypatch.setattr(memory_product, 'fetch_default_product_memory_search', _exhausted)
+
+    try:
+        memory_product.search_product_memory(query='coffee', limit=25, offset=0, uid='u1')
+    except _HTTPException as exc:
+        assert exc.status_code == 503
+        assert exc.detail == memory_product.MEMORY_SEARCH_UNAVAILABLE_DETAIL
+        assert exc.headers == {'Retry-After': '1'}
+    else:
+        raise AssertionError('a search that ran out of budget must not return a page as success')
+
+
+def test_archive_search_maps_budget_exhaustion_to_503_without_returning_a_page(monkeypatch):
+    db_client = _FirestoreFake(
+        {
+            _global_read_gate_path(): _global_read_gate_doc(),
+            'users/u1/memory_control/state': {
+                'schema_version': 1,
+                'uid': 'u1',
+                'mode': 'read',
+                'fallback_projection_ready': True,
+                'stage_gates': {'shadow': 'passed', 'write': 'passed', 'read': 'passed'},
+                'grants': {'omi_chat': {'default_memory': True, 'archive': True}},
+            },
+        }
+    )
+
+    def _exhausted(**_kwargs):
+        raise ListReadBudgetExhausted('documents')
+
+    monkeypatch.setattr(memory_product, 'db', db_client)
+    monkeypatch.setattr(memory_product, 'fetch_archive_product_memory_search', _exhausted)
+
+    try:
+        memory_product.search_archive_memory(query='coffee', limit=25, offset=0, include_archive=True, uid='u1')
+    except _HTTPException as exc:
+        assert exc.status_code == 503
+        assert exc.detail == memory_product.MEMORY_SEARCH_UNAVAILABLE_DETAIL
+        assert exc.headers == {'Retry-After': '1'}
+    else:
+        raise AssertionError('an archive search that ran out of budget must not return a page as success')
+
+
+def test_product_search_reads_under_a_request_scoped_budget(monkeypatch):
+    db_client = _FirestoreFake({_global_read_gate_path(): _global_read_gate_doc()})
+    search = MagicMock(
+        return_value={
+            'uid': 'u1',
+            'query': 'coffee',
+            'items': [],
+            'total_count': 0,
+            'returned_count': 0,
+            'limit': 25,
+            'offset': 0,
+        }
+    )
+    monkeypatch.setattr(memory_product, 'db', db_client)
+    monkeypatch.setattr(memory_product, 'fetch_default_product_memory_search', search)
+
+    memory_product.search_product_memory(query='coffee', limit=25, offset=0, uid='u1')
+
+    budget = search.call_args.kwargs['budget']
+    assert isinstance(budget, ListReadBudget)
+    assert budget.route == memory_product.MEMORY_PRODUCT_SEARCH_ROUTE
+    assert 0 < budget.remaining_seconds <= LIST_READ_DEFAULT_BUDGET_SECONDS
+    assert not budget.truncated
+
+
+def test_product_search_kill_switch_restores_the_unbounded_read(monkeypatch):
+    db_client = _FirestoreFake({_global_read_gate_path(): _global_read_gate_doc()})
+    search = MagicMock(
+        return_value={
+            'uid': 'u1',
+            'query': 'coffee',
+            'items': [],
+            'total_count': 0,
+            'returned_count': 0,
+            'limit': 25,
+            'offset': 0,
+        }
+    )
+    monkeypatch.setenv('OMI_MEMORY_SEARCH_READ_BUDGET_ENABLED', '0')
+    monkeypatch.setattr(memory_product, 'db', db_client)
+    monkeypatch.setattr(memory_product, 'fetch_default_product_memory_search', search)
+
+    memory_product.search_product_memory(query='coffee', limit=25, offset=0, uid='u1')
+
+    assert search.call_args.kwargs['budget'] is None
