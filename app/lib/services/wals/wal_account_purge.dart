@@ -18,6 +18,67 @@ extension _WalAccountPurge on LocalWalSyncImpl {
       _retiredWals.any((w) => identical(w, wal)) ||
       _foreignWals.any((w) => identical(w, wal));
 
+  Future<bool> _deleteWal(
+    Wal wal, {
+    required int generation,
+    bool accountPurge = false,
+    Map<Wal, WalOfferedAudio>? exportOffered,
+  }) async {
+    final offered = exportOffered?[wal];
+    bool canDelete() =>
+        _isCurrent(generation) &&
+        _isTrackedWal(wal) &&
+        (offered != null
+            ? ownsOfferedAudio(wal, offered.identity, generation)
+            : exportOffered == null || wal.status != WalStatus.outsideRecoveryWindow);
+
+    if (!canDelete()) return false;
+    final filePath = wal.filePath;
+    if (filePath != null && filePath.isNotEmpty) {
+      try {
+        final fullPath = await Wal.getFilePath(filePath);
+        if (fullPath == null) return false;
+        if (!canDelete() || (exportOffered != null && wal.filePath != filePath)) return false;
+        final type = await FileSystemEntity.type(fullPath, followLinks: false);
+        if (!canDelete() || (exportOffered != null && wal.filePath != filePath)) return false;
+        final file = File(fullPath);
+        if (offered != null) {
+          if (type != FileSystemEntityType.file) return false;
+          final digest = (await sha256.bind(file.openRead()).first).toString();
+          if (digest != offered.sha256 || !canDelete()) return false;
+          if (await FileSystemEntity.type(fullPath, followLinks: false) != FileSystemEntityType.file || !canDelete()) {
+            return false;
+          }
+        }
+        if (type == FileSystemEntityType.file || type == FileSystemEntityType.link) {
+          if (accountPurge &&
+              LiveWalReceipt.isManagedBasename(path.basename(fullPath)) &&
+              !_confirmedDurableWalKeys.contains(_durableKey(wal))) {
+            if (!await WalFileManager.matchesPendingLiveWalPurge(file, wal) || !canDelete()) return false;
+          }
+          if (_fileReferencedByOtherWal(wal, path.basename(fullPath))) {
+            if (wal.liveFileWriteId != null && !await LiveWalReceipt.retireForSharedDeletion(file, wal)) return false;
+          } else {
+            await file.delete();
+            if (wal.liveFileWriteId != null) await LiveWalReceipt.retireAfterFileDeletion(file, wal);
+            final sidecar = File(nativeBatchGeolocationSidecarPath(fullPath));
+            if (await sidecar.exists()) await sidecar.delete();
+            if (!_isCurrent(generation)) return false;
+          }
+        } else if (type != FileSystemEntityType.notFound) {
+          return false;
+        }
+      } catch (e) {
+        Logger.debug(e.toString());
+        return false;
+      }
+    }
+
+    final removed = _wals.remove(wal) | _retiredWals.remove(wal) | _foreignWals.remove(wal);
+    if (removed && wal.holdForUser && _isCurrent(generation)) heldRevision.value++;
+    return removed;
+  }
+
   /// Foreign-owner records left by accounts deleted from this phone are removed at
   /// load instead of parked forever: the user asked for that data to go, and a parked
   /// backlog of a dead account would otherwise be rewritten into the index on every
@@ -160,4 +221,26 @@ extension _WalAccountPurge on LocalWalSyncImpl {
     if (!_isCurrent(generation) || uid != SharedPreferencesUtil().uid) return;
     await _reconcileAndPersistCurrentOwner();
   }
+}
+
+/// Snapshot a recording for the Offline Sync export offer.
+extension WalOfferedAudioSnapshot on LocalWalSyncImpl {
+  /// Resolve the original file identity before showing the destructive offer.
+  /// The same bytes must later reach the encoder or pass the delete check.
+  Future<WalOfferedAudio?> snapshotOfferedAudio(Wal wal, WalFileIdentity identity, int generation) =>
+      _enqueueBuffer(() async {
+        if (!ownsOfferedAudio(wal, identity, generation)) return null;
+        try {
+          final path = await Wal.getFilePath(identity.path);
+          if (path == null || await FileSystemEntity.type(path, followLinks: false) != FileSystemEntityType.file) {
+            return null;
+          }
+          final digest = identity.sha256 ?? (await sha256.bind(File(path).openRead()).first).toString();
+          if (!ownsOfferedAudio(wal, identity, generation)) return null;
+          return (identity: identity, sha256: digest);
+        } on Exception catch (error) {
+          Logger.debug('Could not verify offered audio: ${error.runtimeType}');
+          return null;
+        }
+      });
 }

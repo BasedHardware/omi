@@ -82,7 +82,7 @@ abstract class LocalWalSync implements IWalSync {
   void clearUserData();
   Future<void> deleteAllSyncedWals();
   Future<void> deleteAllPendingWals();
-  Future<void> deleteAllCorruptedWals();
+  Future<void> deleteAllCorruptedWals({Map<Wal, WalOfferedAudio> exportOffered = const {}});
 
   /// Applies the auto-remove synced-copies retention preference immediately
   /// (e.g. right after the user enables it). Best-effort; returns the number

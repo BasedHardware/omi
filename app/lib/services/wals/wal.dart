@@ -61,6 +61,11 @@ enum WalStatus {
 
 enum WalStorage { mem, disk, sdcard, flashPage }
 
+/// Exact file metadata paired with the tracked WAL instance for bulk deletion.
+typedef WalOfferedAudio = ({WalFileIdentity identity, String sha256});
+
+typedef WalFileIdentity = ({String? path, String? sha256, String? ownerUid, String? sessionId, WalStorage storage});
+
 enum SyncMethod { ble }
 
 /// Bounded reasons an upload was refused, persisted so the row can say which
@@ -580,6 +585,14 @@ class Wal {
   /// Null on records written before this field existed (pre-upgrade data).
   String? _ownerUid;
   String? get ownerUid => _ownerUid;
+
+  WalFileIdentity get fileIdentity => (
+        path: filePath,
+        sha256: fileSha256,
+        ownerUid: ownerUid,
+        sessionId: recordingSessionId,
+        storage: storage,
+      );
   set ownerUid(String? value) {
     if (_ownerUid == value) return;
     _ownerUid = value;

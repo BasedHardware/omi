@@ -377,6 +377,15 @@ if the server rejects a later attempt past its lookback, the existing
 `outsideRecoveryWindow` status is persisted, the held row stays visible as
 failed, and every audio byte remains retained until explicit user deletion.
 
+Offline Sync Clear All offers export before confirming deletion of a Too old
+file. The confirmation binds each offered WAL and its source checksum to the
+current session. For a legacy WAL without a saved checksum, the offer hashes
+its file before showing the confirmation. The WAV decoder verifies the bytes
+it reads, and phone bulk deletion checks the checksum under the same queue as
+phone and device chunk writes. Unverified, changed and unoffered Too old
+files, including rows that become Too old while resolving file paths, are
+kept. Opening or cancelling the export controls preserves the recordings.
+
 At most 200 oldest eligible files enter `miss` custody per pass, at most 400 per
 rolling 24 hours, and pending rows across all buckets never rise above 720.
 Timestamped reservations fsync to a device-local budget file before row admission; a crash/failure may spend budget

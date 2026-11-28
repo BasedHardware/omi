@@ -111,26 +111,32 @@ extension DeviceChunkPersistence on LocalWalSync {
     }
     try {
       final dir = await getApplicationDocumentsDirectory();
-      var name = fileName?.call() ?? source.getFileNameByTimeStarts(timerStart, clockRun: clockRun) as String;
-      if (fileName != null) {
-        while (await File('${dir.path}/$name').exists()) {
-          name = fileName();
+      Future<String> writeChunk() async {
+        var name = fileName?.call() ?? source.getFileNameByTimeStarts(timerStart, clockRun: clockRun) as String;
+        if (fileName != null) {
+          while (await File('${dir.path}/$name').exists()) {
+            name = fileName();
+          }
+        } else if (await File('${dir.path}/$name').exists()) {
+          final dot = name.lastIndexOf('.');
+          final stem = dot > 0 ? name.substring(0, dot) : name;
+          final ext = dot > 0 ? name.substring(dot) : '';
+          final timestampSeparator = stem.lastIndexOf('_');
+          final prefix = stem.substring(0, timestampSeparator);
+          final timestamp = stem.substring(timestampSeparator + 1);
+          do {
+            final nonce = nextCollisionSequence();
+            name = const bool.fromEnvironment('OMI_DEVICE_COLLISION_TIMESTAMP_LAST_OFF')
+                ? '${stem}_u$nonce$ext'
+                : '${deviceClockCollisionPrefix(prefix, nonce)}_$timestamp$ext';
+          } while (await File('${dir.path}/$name').exists());
         }
-      } else if (await File('${dir.path}/$name').exists()) {
-        final dot = name.lastIndexOf('.');
-        final stem = dot > 0 ? name.substring(0, dot) : name;
-        final ext = dot > 0 ? name.substring(dot) : '';
-        final timestampSeparator = stem.lastIndexOf('_');
-        final prefix = stem.substring(0, timestampSeparator);
-        final timestamp = stem.substring(timestampSeparator + 1);
-        do {
-          final nonce = nextCollisionSequence();
-          name = const bool.fromEnvironment('OMI_DEVICE_COLLISION_TIMESTAMP_LAST_OFF')
-              ? '${stem}_u$nonce$ext'
-              : '${deviceClockCollisionPrefix(prefix, nonce)}_$timestamp$ext';
-        } while (await File('${dir.path}/$name').exists());
+        await File('${dir.path}/$name').writeAsBytes(data, flush: true);
+        return name;
       }
-      await File('${dir.path}/$name').writeAsBytes(data, flush: true);
+
+      final ledger = this;
+      final name = ledger is LocalWalSyncImpl ? await ledger._enqueueBuffer(writeChunk) : await writeChunk();
       final fps = source.codec.getFramesPerSecond();
       final wal = Wal(
           codec: codec ?? source.codec,

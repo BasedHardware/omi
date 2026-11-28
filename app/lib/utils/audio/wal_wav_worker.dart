@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:isolate';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart';
 import 'package:opus_dart/opus_dart.dart';
 import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
 
@@ -23,6 +24,7 @@ class WalWavWorkItem {
   final int channels;
   final int bitsPerSample;
   final OpusFrameDecoder? opusFrameDecoder;
+  final String? expectedInputSha256;
 
   const WalWavWorkItem.cached({required this.walId, required this.cachedWavPath})
       : inputPath = null,
@@ -32,7 +34,8 @@ class WalWavWorkItem {
         sampleRate = 0,
         channels = 0,
         bitsPerSample = 0,
-        opusFrameDecoder = null;
+        opusFrameDecoder = null,
+        expectedInputSha256 = null;
 
   const WalWavWorkItem.decode({
     required this.walId,
@@ -44,6 +47,7 @@ class WalWavWorkItem {
     required this.channels,
     required this.bitsPerSample,
     this.opusFrameDecoder,
+    this.expectedInputSha256,
   }) : cachedWavPath = null;
 }
 
@@ -123,6 +127,28 @@ Stream<Uint8List> readLengthPrefixedFrames(Stream<List<int>> chunks) async* {
   }
 }
 
+class _SourceDigest implements Sink<Digest> {
+  Digest? value;
+
+  @override
+  void add(Digest data) => value = data;
+
+  @override
+  void close() {}
+}
+
+// Hash the exact chunks read by the decoder. The caller discards scratch on mismatch.
+Stream<List<int>> _verifySource(Stream<List<int>> bytes, String expected) async* {
+  final digest = _SourceDigest();
+  final hash = sha256.startChunkedConversion(digest);
+  await for (final chunk in bytes) {
+    hash.add(chunk);
+    yield chunk;
+  }
+  hash.close();
+  if (digest.value.toString() != expected) throw StateError('Recording audio changed');
+}
+
 bool _opusInitialized = false;
 
 Future<void> _ensureOpusInitialized() async {
@@ -141,9 +167,11 @@ Future<String?> _decodeToWav(WalWavWorkItem item, String outputPath) async {
   }
   final inputPath = item.inputPath;
   if (inputPath != null && !await File(inputPath).exists()) return null;
-  final frames = inputPath != null
-      ? readLengthPrefixedFrames(File(inputPath).openRead())
-      : Stream<Uint8List>.fromIterable(item.memoryFrames.map(Uint8List.fromList));
+  final bytes = inputPath == null ? null : File(inputPath).openRead();
+  final expected = item.expectedInputSha256;
+  final frames = bytes == null
+      ? Stream<Uint8List>.fromIterable(item.memoryFrames.map(Uint8List.fromList))
+      : readLengthPrefixedFrames(expected == null ? bytes : _verifySource(bytes, expected));
   SimpleOpusDecoder? nativeDecoder;
   RandomAccessFile? output;
   var dataSize = 0;

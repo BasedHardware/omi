@@ -1958,50 +1958,6 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     DebugLogManager.logEvent('wal_transcript_coverage', fields);
   }
 
-  Future<bool> _deleteWal(Wal wal, {required int generation, bool accountPurge = false}) async {
-    if (!_isCurrent(generation) || !_isTrackedWal(wal)) return false;
-    final filePath = wal.filePath;
-    if (filePath != null && filePath.isNotEmpty) {
-      try {
-        final fullPath = await Wal.getFilePath(filePath);
-        if (fullPath == null) return false;
-        if (!_isCurrent(generation) || !_isTrackedWal(wal)) return false;
-        final type = await FileSystemEntity.type(fullPath, followLinks: false);
-        if (!_isCurrent(generation) || !_isTrackedWal(wal)) return false;
-        if (type == FileSystemEntityType.file || type == FileSystemEntityType.link) {
-          final file = File(fullPath);
-          if (accountPurge &&
-              LiveWalReceipt.isManagedBasename(path.basename(fullPath)) &&
-              !_confirmedDurableWalKeys.contains(_durableKey(wal))) {
-            if (!await WalFileManager.matchesPendingLiveWalPurge(file, wal) ||
-                !_isCurrent(generation) ||
-                !_isTrackedWal(wal)) {
-              return false;
-            }
-          }
-          if (_fileReferencedByOtherWal(wal, fullPath.split('/').last)) {
-            if (wal.liveFileWriteId != null && !await LiveWalReceipt.retireForSharedDeletion(file, wal)) return false;
-          } else {
-            await file.delete();
-            if (wal.liveFileWriteId != null) await LiveWalReceipt.retireAfterFileDeletion(file, wal);
-            final sidecar = File(nativeBatchGeolocationSidecarPath(fullPath));
-            if (await sidecar.exists()) await sidecar.delete();
-            if (!_isCurrent(generation)) return false;
-          }
-        } else if (type != FileSystemEntityType.notFound) {
-          return false;
-        }
-      } catch (e) {
-        Logger.debug(e.toString());
-        return false;
-      }
-    }
-
-    final removed = _wals.remove(wal) | _retiredWals.remove(wal) | _foreignWals.remove(wal);
-    if (removed && wal.holdForUser && _isCurrent(generation)) heldRevision.value++;
-    return removed;
-  }
-
   @override
   Future deleteWal(Wal wal) async {
     final generation = _sessionGeneration;
@@ -2383,6 +2339,17 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     return _publishedWals!;
   }
 
+  /// A saved export offer must still refer to an active, unshared phone file.
+  bool ownsOfferedAudio(Wal wal, WalFileIdentity identity, int generation) {
+    final path = identity.path;
+    return _isCurrent(generation) &&
+        _activeWals.contains(wal) &&
+        wal.fileIdentity == identity &&
+        path != null &&
+        path.isNotEmpty &&
+        !_fileReferencedByOtherWal(wal, path.split('/').last);
+  }
+
   /// Synchronous metadata snapshot only: no lock, flush, load, repair or save.
   /// Export aggregation/JSON decoding happens off the UI isolate.
   Map<String, List<RecordingInventoryRow>> get recordingInventorySnapshot => {
@@ -2412,7 +2379,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     final syncedWals = _wals.where((w) => w.status == WalStatus.synced).toList();
     for (final wal in syncedWals) {
       if (!_isCurrent(generation)) break;
-      await _deleteWal(wal, generation: generation);
+      await _deleteWal(wal, generation: generation, exportOffered: const {});
     }
     await _saveWalsToFile(generation);
     _notifyUpdated(generation);
@@ -2425,17 +2392,15 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         _wals.where((w) => w.status == WalStatus.miss || (w.status == WalStatus.uploaded && w.syncedAt == 0)).toList();
     for (final wal in pendingWals) {
       if (!_isCurrent(generation)) break;
-      await _deleteWal(wal, generation: generation);
+      await _deleteWal(wal, generation: generation, exportOffered: const {});
     }
     await _saveWalsToFile(generation);
     _notifyUpdated(generation);
   }
 
-  /// Removes terminally unavailable recordings when the user explicitly
-  /// clears all local recordings. They are intentionally excluded from the
-  /// retryable Pending action.
+  /// A Too old file can be bulk-deleted only after it was offered for export.
   @override
-  Future<void> deleteAllCorruptedWals() async {
+  Future<void> deleteAllCorruptedWals({Map<Wal, WalOfferedAudio> exportOffered = const {}}) async {
     final generation = _sessionGeneration;
     final corruptedWals = _wals
         .where(
@@ -2448,7 +2413,12 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         .toList();
     for (final wal in corruptedWals) {
       if (!_isCurrent(generation)) break;
-      await _deleteWal(wal, generation: generation);
+      if (exportOffered.containsKey(wal)) {
+        // Serialize the verified unlink with writes of phone and device WAL files.
+        await _enqueueBuffer(() => _deleteWal(wal, generation: generation, exportOffered: exportOffered));
+      } else {
+        await _deleteWal(wal, generation: generation, exportOffered: exportOffered);
+      }
     }
     await _saveWalsToFile(generation);
     _notifyUpdated(generation);

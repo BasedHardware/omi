@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:isolate';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/services.dart';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -294,6 +295,38 @@ void main() {
       expect(wav.sublist(44), [1, 1, 2, 2, 3, 3, 4, 4]);
       expect(player.lastWorkerIsolateName, equals('writeRecordingWav'));
       expect(player.lastWorkerIsolateName, isNot(equals(Isolate.current.debugName)));
+    });
+
+    test('guarded export checks source bytes instead of reusing an earlier playback WAV', () async {
+      final wal = await pcmFile(2410, [1, 2, 3, 4]);
+      final source = File('${dir.path}/${wal.filePath}');
+      final digest = sha256.convert(await source.readAsBytes()).toString();
+      expect(wal.fileSha256, isNull);
+      final sourceDigests = {wal: digest};
+      expect(await player.ensureAudioFileExists(wal), isNotNull);
+
+      await player.shareRecordingAsAudio([wal], canShare: () => true, sourceDigests: sourceDigests);
+      expect(shares, hasLength(1));
+
+      await pcmFile(2410, [5, 6, 7, 8]);
+      await expectLater(
+          player.shareRecordingAsAudio([wal], canShare: () => true, sourceDigests: sourceDigests), throwsStateError);
+      expect(shares, hasLength(1), reason: 'replaced bytes must never reach the native share sheet');
+    });
+
+    test('guarded export removes its WAV when the offer expires before sharing', () async {
+      final wal = await pcmFile(2420, [1, 2, 3, 4]);
+      final before = await dir.list().map((item) => item.path).toSet();
+
+      final source = File('${dir.path}/${wal.filePath}');
+      final digest = sha256.convert(await source.readAsBytes()).toString();
+      await expectLater(
+        player.shareRecordingAsAudio([wal], canShare: () => false, sourceDigests: {wal: digest}),
+        throwsStateError,
+      );
+
+      expect(shares, isEmpty);
+      expect(await dir.list().map((item) => item.path).toSet(), before);
     });
 
     test('decodes single WAL audio file on a background isolate', () async {
