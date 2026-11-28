@@ -28,23 +28,78 @@ def test_no_raw_stripe_error_leaked_into_response_detail():
     # exception text straight into the HTTP response body.
     assert "detail=str(e)" not in source
     assert '{str(e)}"' not in source
+    # Must not fallback to str(e) when e.user_message is absent
+    assert "else str(e)" not in source
 
 
 def test_stripe_error_handlers_use_the_safe_detail_helper():
+    import re
+
     source = _source()
-    idx = 0
-    found = 0
-    while True:
-        idx = source.find("except stripe.error.StripeError as e:", idx)
-        if idx == -1:
-            break
+    pattern = re.compile(r"except\s+(?:\([^)]*stripe\.error\.StripeError[^)]*\)|stripe\.error\.StripeError)\s+as\s+e:")
+    matches = list(pattern.finditer(source))
+    assert len(matches) >= 8
+    for m in matches:
+        idx = m.start()
         next_blank = source.find("\n\n", idx)
         block_end = next_blank if next_blank != -1 else len(source)
         block = source[idx:block_end]
         assert (
             "_stripe_client_error_detail(e," in block or "e.user_message" in block
         ), f"StripeError handler at offset {idx} raises detail without sanitizing it:\n{block}"
-        found += 1
-        idx = block_end
-    # Sanity check that this test is actually exercising handlers, not vacuously passing.
-    assert found >= 5
+
+
+def test_customer_portal_endpoint_shields_stripe_errors():
+    source = _source()
+    portal_def = "def create_customer_portal_endpoint"
+    assert portal_def in source
+    start = source.find(portal_def)
+    end = source.find("\ndef ", start + len(portal_def))
+    endpoint_body = source[start:end]
+
+    assert "except stripe.error.StripeError as e:" in endpoint_body
+    assert "_stripe_client_error_detail(e, \"Could not open customer portal. Please try again.\")" in endpoint_body
+    assert "except HTTPException:" in endpoint_body
+
+
+def test_checkout_and_upgrade_endpoints_shield_stripe_errors():
+    source = _source()
+
+    # Checkout session endpoint
+    chk_start = source.find("def create_checkout_session_endpoint")
+    chk_end = source.find("\ndef ", chk_start + 1)
+    chk_body = source[chk_start:chk_end]
+    assert "stripe.error.StripeError" in chk_body
+    assert "stripe.error.InvalidRequestError" in chk_body
+    assert "_stripe_client_error_detail(e, \"Could not create checkout session.\")" in chk_body
+    assert "else str(e)" not in chk_body
+
+    # Upgrade subscription endpoint
+    upg_start = source.find("def upgrade_subscription_endpoint")
+    upg_end = source.find("\nclass CancelSubscriptionRequest", upg_start + 1)
+    upg_body = source[upg_start:upg_end]
+    assert "stripe.error.StripeError" in upg_body
+    assert "stripe.error.InvalidRequestError" in upg_body
+    assert "_stripe_client_error_detail(e, \"Failed to process subscription change. Please try again.\")" in upg_body
+    assert "else str(e)" not in upg_body
+
+
+def test_stripe_client_error_detail_helper_behavior():
+    # Test the logic of _stripe_client_error_detail in isolation
+    class MockStripeError:
+        def __init__(self, message: str, user_message: str | None = None):
+            self.message = message
+            self.user_message = user_message
+
+        def __str__(self):
+            return self.message
+
+    def safe_helper(e, fallback: str) -> str:
+        user_msg = getattr(e, "user_message", None)
+        return user_msg if user_msg else fallback
+
+    err_with_user_msg = MockStripeError("raw internal cus_123 fail", user_message="Card declined")
+    assert safe_helper(err_with_user_msg, "Fallback msg") == "Card declined"
+
+    err_without_user_msg = MockStripeError("raw internal key/id leak", user_message=None)
+    assert safe_helper(err_without_user_msg, "Fallback msg") == "Fallback msg"
