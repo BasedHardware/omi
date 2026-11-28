@@ -11,7 +11,7 @@ from typing import NamedTuple
 from fastapi import HTTPException
 
 from utils.byok import get_byok_key, has_validated_byok_keys
-from utils.conversations.processing_metrics import record_retryable_processing_response
+from utils.conversations.processing_metrics import REPROCESS_METRIC_ROUTE, record_retryable_processing_response
 from utils.conversations.processing_retry import retryable_provider_failure_class
 from utils.other.raise_site import raise_site_of, tag_raise_site
 from utils.other.request_deadline import RequestDeadlineExceeded
@@ -447,3 +447,28 @@ def conversation_processing_http_exception(
         return retryable
     logger.error('Conversation processing failed: %s', type(error).__name__)
     return HTTPException(status_code=500, detail=GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL)
+
+
+def reprocess_not_completed_http_exception(error: BaseException) -> HTTPException:
+    """Answer a v3 writer that returned without a stored summary.
+
+    The write was refused or the run did not complete: the conversation is
+    unchanged, and a retry after the source settles can succeed. That is the
+    documented retryable condition, so answer the typed 503 + ``Retry-After``
+    contract the mobile caller already retries instead of an untyped 500. One
+    bounded line names the stage that stopped completion and the notes lane
+    that ran last, so a refused write attributes the wait as well as the cause.
+    The existing provider-retry kill switch restores the generic 500.
+    """
+    stage = getattr(error, 'stage', None) or 'persistence_fenced'
+    notes_lane = getattr(error, 'notes_stage', 'none')
+    elapsed = getattr(error, 'elapsed_seconds', None)
+    fields = f'stage={stage} notes_stage={notes_lane}'
+    if elapsed is not None:
+        fields += f' elapsed_seconds={elapsed:.3f}'
+    if not retryable_provider_failure_answer_enabled():
+        logger.error('event=reprocess_processing_not_completed outcome=generic_500 %s', fields)
+        return HTTPException(status_code=500, detail=GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL)
+    record_retryable_processing_response('other', REPROCESS_METRIC_ROUTE)
+    logger.warning('event=reprocess_processing_not_completed outcome=retryable_503 %s', fields)
+    return retryable_processing_response('v3_processing_not_completed')

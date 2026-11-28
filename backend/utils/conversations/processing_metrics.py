@@ -6,12 +6,16 @@ from contextvars import ContextVar
 from prometheus_client import Counter
 
 FROM_SEGMENTS_METRIC_ROUTE = 'from_segments'
+REPROCESS_METRIC_ROUTE = 'reprocess'
 RETRYABLE_PROCESSING_FAILURE_CLASSES = frozenset({'timeout', 'transport', 'provider_status'})
 RETRYABLE_PROCESSING_ROUTES = frozenset(
     {
         'conversation_processing',
         'conversation_processing/app_result',
         FROM_SEGMENTS_METRIC_ROUTE,
+        # A user reprocess whose v3 write was refused (stale source, lost
+        # lease, other writer) is retryable too: it answers the same typed 503.
+        REPROCESS_METRIC_ROUTE,
         # Internal Cloud Tasks builder routes answer the same contract so a
         # provider 5xx on the v3 outline path is retried, not an unhandled 500.
         'conversations_v3_reconcile',

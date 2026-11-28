@@ -34,6 +34,7 @@ from database.account_deletion_marker import account_deletion_blocks_user_work
 import database.users as users_db
 from utils.agent_capabilities.errors import TRANSCRIPT_EDIT_HTTP_ERRORS
 from database import conversation_tombstones, home_visibility_index
+from database.conversations_v3_fence import ProcessingPersistenceFenced
 from database.legal_holds import (
     DestructiveGateTakeover,
     DestructiveOperationInProgress,
@@ -93,6 +94,7 @@ from models.conversation import (
 from utils.sync.bridge_pending import hidden_from_default_detail
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.processing_trigger import ProcessingTrigger
+from utils.conversations.processing_retry import ProcessingNotCompleted
 from utils.conversations.reprocess_contract import DERIVED_EFFECTS_TRANSCRIPT_FIELD, FIRST_PARTY_SUMMARY_SOURCE
 from utils.conversations.analytics import build_conversation_analytics
 from utils.conversations.render import (
@@ -157,6 +159,7 @@ from utils.conversations.search import (
     search_conversations,
 )
 from utils.llm.conversation_processing import SummaryProviderError, generate_summary_with_prompt
+from utils.llm.gateway_error_contract import reprocess_not_completed_http_exception
 from utils.speaker_assignment_teaching import commit_manual_assignment
 from utils.ignored_voice_markers import record_exclusion_markers, retire_exclusion_markers
 from utils.speaker_learning_jobs import schedule_reprocessed_learning
@@ -1037,7 +1040,8 @@ def get_conversation_finalization_status(
         },
         502: {'description': 'The selected app produced no summary (detail code app_result_failed)'},
         503: {
-            'description': 'Transient provider failure; the in-progress conversation is recoverable and may be retried',
+            'description': 'Transient provider failure or a refused processing write (stale source, lost lease, '
+            'or another writer); the conversation is recoverable and may be retried',
             'content': {
                 'application/json': {
                     'schema': {
@@ -1155,6 +1159,9 @@ def reprocess_conversation(
             detail={'code': 'recording_restore_retry_required', 'message': 'Recording restore needs a retry'},
             headers={'Retry-After': '1'},
         ) from error
+    except (ProcessingNotCompleted, ProcessingPersistenceFenced) as error:
+        attention_db.finish(uid, operation, 'failed')
+        raise reprocess_not_completed_http_exception(error) from error
     except Exception:
         attention_db.finish(uid, operation, 'failed')
         raise

@@ -14,6 +14,27 @@ from google.api_core.exceptions import (
 from config.conversation_processing_retry import DETERMINISTIC_PROCESSING_FAILURE, TRANSIENT_PROCESSING_FAILURE
 
 
+class ProcessingNotCompleted(RuntimeError):
+    """A writer returned without storing a completed summary.
+
+    The conversation is unchanged: the write was refused, the run ended without
+    a completion, or the row's source moved while the run held it. A retry can
+    succeed, so the user-facing boundary answers the documented retryable
+    contract instead of an untyped 500.
+
+    ``stage`` is the bounded point that stopped completion (a persistence
+    decline reason or the completion condition that failed); ``notes_stage`` is
+    the notes lane that ran last; ``elapsed_seconds`` is the whole wait, so one
+    line attributes both the refusal and what spent the budget.
+    """
+
+    def __init__(self, stage: str, *, elapsed_seconds: float = 0.0, notes_stage: str = 'none'):
+        super().__init__('v3_processing_not_completed')
+        self.stage = stage
+        self.elapsed_seconds = elapsed_seconds
+        self.notes_stage = notes_stage
+
+
 def _provider_exception_types(*names: str) -> tuple[type[BaseException], ...]:
     """Return available SDK exception classes, tolerating intentionally small stubs."""
     exception_types = []

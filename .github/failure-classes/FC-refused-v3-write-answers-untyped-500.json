@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "id": "FC-refused-v3-write-answers-untyped-500",
+  "family": "retry-classification",
+  "violated_contract": "A user reprocess whose v3 write is refused must answer the documented retryable contract, not a generic server-fault 500. The conversation is unchanged when the write is refused (a newer sync transcript revision, a lost summary lease, another writer, or a deletion) or when the run ends without a completed status, so a retry after the source settles can succeed. A bare 500 both tells the caller the write failed for good and leaves what spent the 8-298 s wait unattributable in the log.",
+  "canonical_prevention": "Keep the v3 writer's refusal typed with a bounded stage, the last notes lane, and the whole wait (utils/conversations/v3/processing.py via utils/conversations/processing_retry.py and utils/llm/notes_observability.py), and map it at the user-reprocess boundary to the existing 503 conversation_processing_retryable + Retry-After answer (utils/llm/gateway_error_contract.py, routers/conversations.py), gated by CONVERSATION_PROCESSING_RETRYABLE_PROVIDER_FAILURE_ENABLED. A contract test must assert the typed stage from a persistence decline, the completion-condition stage, the route's 503 + Retry-After, the persistence-fence mapping, and the kill switch restoring the generic 500.",
+  "canonical_prevention_artifact": [
+    "backend/utils/conversations/v3/processing.py",
+    "backend/utils/conversations/processing_retry.py",
+    "backend/utils/llm/notes_observability.py",
+    "backend/utils/llm/gateway_error_contract.py",
+    "backend/routers/conversations.py",
+    "backend/tests/unit/test_reprocess_v3_not_completed.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/routers/conversations.py",
+    "backend/utils/conversations/v3/**",
+    "backend/utils/conversations/processing_retry.py",
+    "backend/utils/llm/notes_observability.py",
+    "backend/utils/llm/gateway_error_contract.py"
+  ],
+  "status": "open"
+}

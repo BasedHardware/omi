@@ -55702,7 +55702,7 @@
                 }
               }
             },
-            "description": "Transient provider failure; the in-progress conversation is recoverable and may be retried"
+            "description": "Transient provider failure or a refused processing write (stale source, lost lease, or another writer); the conversation is recoverable and may be retried"
           }
         },
         "security": [
