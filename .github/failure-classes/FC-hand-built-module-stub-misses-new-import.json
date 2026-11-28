@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-hand-built-module-stub-misses-new-import",
+  "family": "test-fidelity",
+  "violated_contract": "A unit test that replaces a real module with a hand-built ModuleType stub and then loads the module under test fresh must stub every name the module under test imports from it at import time. #26429 added `run_transactional` to `database/users.py`'s top-level `from ._client import ...`; the two suites that stub `database._client` by hand (test_users_add_sample_transaction.py, test_users_missing_doc_guards.py) were not updated, so all 26 of their tests errored at collection with ImportError on main, and every backend PR whose unit selection includes them went red for a change it did not make.",
+  "canonical_prevention": "When a module gains a top-level import from a stubbed dependency, grep the tests that stub that dependency by hand and add the name (or build the stub from the real module's public names). Run the changed module's dependent suites through test.sh before merge, not only the tests next to the edited code.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_users_add_sample_transaction.py",
+    "backend/tests/unit/test_users_missing_doc_guards.py"
+  ],
+  "evidence_prs": [26429],
+  "scope_hints": [
+    "backend/database/users.py",
+    "backend/database/_client.py",
+    "backend/testing/import_isolation.py"
+  ],
+  "status": "open"
+}

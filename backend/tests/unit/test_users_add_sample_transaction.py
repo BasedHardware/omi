@@ -20,6 +20,13 @@ from testing.import_isolation import load_module_fresh, stub_modules
 _BACKEND = Path(__file__).resolve().parents[2]
 
 
+def _run_transactional(client, transactional_callable, *args, initial_transaction=None, **kwargs):
+    """Stand-in for database._client.run_transactional: one attempt, no retry policy."""
+    for name in ("attempts", "transient", "sleep", "random_value", "outcome"):
+        kwargs.pop(name, None)
+    return transactional_callable(initial_transaction or client.transaction(), *args, **kwargs)
+
+
 @pytest.fixture(scope="module")
 def users_db():
     """Load a fresh database.users against stubbed database._client + firestore chain."""
@@ -38,6 +45,7 @@ def users_db():
         name="get_data_plane_firestore_client", return_value=client_stub.db
     )
     client_stub.data_plane_db = client_stub.db
+    client_stub.run_transactional = _run_transactional
 
     firestore_stub = ModuleType("google.cloud.firestore")
     google_pkg = ModuleType("google")

@@ -26,6 +26,13 @@ os.environ.setdefault(
 )
 
 
+def _run_transactional(client, transactional_callable, *args, initial_transaction=None, **kwargs):
+    """Stand-in for database._client.run_transactional: one attempt, no retry policy."""
+    for name in ("attempts", "transient", "sleep", "random_value", "outcome"):
+        kwargs.pop(name, None)
+    return transactional_callable(initial_transaction or client.transaction(), *args, **kwargs)
+
+
 def _module(name: str, **attrs: object) -> ModuleType:
     mod = ModuleType(name)
     for key, value in attrs.items():
@@ -50,6 +57,7 @@ def users():
             get_data_plane_firestore_client=MagicMock(),
             get_customer_firestore_client=MagicMock(),
             data_plane_db=MagicMock(),
+            run_transactional=_run_transactional,
         ),
         "database.firestore_cache": _module(
             "database.firestore_cache", CachePolicy=MagicMock(), get_or_fetch=MagicMock(), invalidate=MagicMock()
