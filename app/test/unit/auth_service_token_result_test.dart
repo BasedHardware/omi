@@ -209,7 +209,7 @@ void main() {
     }
   });
 
-  test('expireSession is idempotent, emits once, and clears only user display caches', () async {
+  test('expireSession is idempotent, emits once, and clears only account-scoped state', () async {
     final pendingMemory = Memory(
       id: 'pending-1',
       uid: 'user-1',
@@ -244,7 +244,9 @@ void main() {
       'pendingMemories': <String>[jsonEncode(pendingMemory.toJson())],
       'goals_tracker_local_goals': '[{"id":"old-goal"}]',
       'btDevice': 'preserve-device',
+      'aiConsentGiven': true,
       'onboardingCompleted': true,
+      'permissionsCompleted': true,
       'offlineRecordingMarker': 'preserve-recording',
     });
     await SharedPreferencesUtil.init();
@@ -280,7 +282,9 @@ void main() {
     expect(SharedPreferencesUtil().preferredSummarizationAppId, isEmpty);
     expect(SharedPreferencesUtil().calendarEnabled, isFalse);
     expect(raw.getString('btDevice'), 'preserve-device');
-    expect(raw.getBool('onboardingCompleted'), isTrue);
+    expect(SharedPreferencesUtil().aiConsentGiven, isFalse);
+    expect(SharedPreferencesUtil().onboardingCompleted, isFalse);
+    expect(SharedPreferencesUtil().permissionsCompleted, isFalse);
     expect(raw.getString('offlineRecordingMarker'), 'preserve-recording');
     expect(raw.containsKey('pendingMemories'), isFalse);
     expect(raw.getStringList('pendingMemories:user-1'), hasLength(1));
