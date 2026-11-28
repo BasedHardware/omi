@@ -1,0 +1,4 @@
+{
+  "change": "Permission prompts now explain how Omi uses your microphone, camera, photos, contacts, and location",
+  "platforms": ["ios"]
+}
