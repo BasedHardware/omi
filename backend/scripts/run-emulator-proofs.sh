@@ -232,6 +232,11 @@ run_proof "stale merge-head promotion (real transactions, privacy fence, stale h
   env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" \
   "$PYTHON" -m pytest -q -p no:cacheprovider scripts/merge_stale_head_emulator_test.py
 
+# Daily parity PL-631/632/633: older copiers, incapable mergers and same-slot redrive.
+run_proof "result protocol conformance (sim + emulator required; Postgres when available)" \
+  env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider scripts/result_protocol_emulator_test.py
+
 run_proof "Firestore read budget: batch unit end-to-end (M3 scenario 1)" \
   "$PYTHON" -m pytest -q -s -p no:cacheprovider tests/integration/test_firestore_read_budget_batch_unit.py
 run_proof "Firestore read budget: conversation list page (M3 scenario 3)" \
