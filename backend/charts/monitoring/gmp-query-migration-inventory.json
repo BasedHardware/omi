@@ -683,6 +683,34 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
+      "expression": "max(omi_batch_pipeline_privacy_post_window_dead_letter_units{project_id=\"based-hardware\"} and (time() - omi_batch_pipeline_privacy_post_window_dead_letter_observed_at_seconds{project_id=\"based-hardware\"} < 900)) or vector(0)",
+      "file": "alerts/batch-privacy-erasure.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_privacy_post_window_dead_letter_observed_at_seconds",
+        "omi_batch_pipeline_privacy_post_window_dead_letter_units"
+      ],
+      "owner_title": "Unresolved batch privacy erasure dead letters",
+      "owner_uid": "omi-batch-privacy-erasure-dead-stock",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "((time() - max(omi_batch_pipeline_privacy_post_window_dead_letter_observed_at_seconds{project_id=\"based-hardware\"} and omi_batch_pipeline_privacy_post_window_dead_letter_units{project_id=\"based-hardware\"})) >= bool 900) or vector(1)",
+      "file": "alerts/batch-privacy-erasure.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_privacy_post_window_dead_letter_observed_at_seconds",
+        "omi_batch_pipeline_privacy_post_window_dead_letter_units"
+      ],
+      "owner_title": "Batch privacy erasure dead-letter stock is stale",
+      "owner_uid": "omi-batch-privacy-erasure-stock-stale",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "((max(time() - omi_batch_pipeline_metrics_refreshed_at_seconds{namespace=\"prod-omi-backend\"}) >= bool 900) or vector(1)) + (count(count by (priority) (omi_batch_pipeline_oldest_age_seconds{namespace=\"prod-omi-backend\"} != omi_batch_pipeline_oldest_age_seconds{namespace=\"prod-omi-backend\"})) or vector(0)) + (count(count by (priority) (omi_batch_pipeline_retry_age_seconds{namespace=\"prod-omi-backend\"} != omi_batch_pipeline_retry_age_seconds{namespace=\"prod-omi-backend\"})) or vector(0))",
       "file": "alerts/batch-queue-safety.json",
       "issues": [],
@@ -4922,7 +4950,7 @@
   ],
   "counts": {
     "explicit_bridge": 42,
-    "query_consumers": 332
+    "query_consumers": 334
   },
   "schema_version": 1,
   "source": "repository, not live Grafana export"

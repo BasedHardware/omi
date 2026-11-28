@@ -173,6 +173,7 @@ BODY_DIGEST = {
     'database.conversations_v3.commit_projection': 'f6f6c894b77c617cd877358fc70396033bde60277f1c47af8e2adaf22fe24ae9',
     'services.first_week_summary_closeout.durable_outcome_counts': '2d897eaed1ab4b371b208b10e3297bf4f02d7090f0c4f82aa97b25bf8c2d20a2',
     'database.batch_pipeline_conversation_purge_scans._claim': '662c759fc79795f0851e0b18082b7dcb006e109253e45ba1fde2190d542bddf8',
+    'database.batch_privacy_dead_letter_stock.publish_dead_letter_stock': '95836f087ba8b4a8087b7b15f85c14f4f370844024fa786fff25a0d761d90617',
     'database.batch_privacy_late_sweeps.reconcile_batch_privacy_late_sweeps': 'bd0c62aeb7bab5e86e3fdbb73bc9b6cb395a1218923110590d0a8fcaacabd5f6',
     'database.batch_pipeline_conversation_purge_scans.run_job': 'fe5d30b77da198a7e0dc188115c8906fb6446925079a4e96339d36675a55faeb',
     'database.batch_pipeline_store.FirestoreStore.protected_retries': 'b55d2960c94057cb8df9b9cdd2e7728b6af63728bc0a2cb6f5bd333efed443a2',
@@ -439,6 +440,16 @@ _add(
         base={'now': T0},
         neutrals={'limit': _LIMIT},
         domains={'execution': [False, True]},
+    )
+)
+_add(DriverEntry('database.batch_privacy_dead_letter_stock.count_dead_letters'))
+_add(
+    CoveredByEntry(
+        'database.batch_privacy_dead_letter_stock.publish_dead_letter_stock',
+        ('database.batch_privacy_dead_letter_stock.count_dead_letters',),
+        'The Redis-admitted publisher delegates its only Firestore read to the aggregate count.',
+        expect_observed=False,
+        body_digest=BODY_DIGEST['database.batch_privacy_dead_letter_stock.publish_dead_letter_stock'],
     )
 )
 _add(

@@ -61,11 +61,21 @@ These failures retry at five-minute intervals while execution is paused.
 Permanent receipt failures move to a dedicated retry row while the cursor
 continues to other artifacts. After five attempts by default
 (`BATCH_PRIVACY_LATE_SWEEP_PERMANENT_ATTEMPTS`, bounded to 1–20), the invalid
-intent or receipt retry stays in `batch_privacy_late_sweeps` with neither
-`due_at` nor `execute_at`. The Grafana rule
+intent or receipt retry stays in `batch_privacy_late_sweeps` with a
+`dead_lettered_at` timestamp and neither `due_at` nor `execute_at`. The Grafana rule
 `omi-batch-privacy-erasure-dead-letter` watches increases in
-`omi_batch_pipeline_privacy_post_window_dead_letters_total`. Pipeline owns
-recovery. Hold activation, check the counter by `error`, and match the error
+`omi_batch_pipeline_privacy_post_window_dead_letters_total`.
+`omi-batch-privacy-erasure-dead-stock` tracks retained dead letters from
+`omi_batch_pipeline_privacy_post_window_dead_letter_units`.
+`omi-batch-privacy-erasure-stock-stale` detects a missing stock observation or
+one at least 15 minutes old. A single publisher admitted through a shared Redis
+cooldown counts the indexed timestamps at most every five minutes.
+
+Pipeline owns recovery. The collection has no separate resolution field or
+in-tree operator redrive command. A retained row with the dead-letter timestamp
+is unresolved. A verified retry that completes through the existing sweeper
+removes the row and lowers the next stock sample. Hold activation, check the
+aggregate counter by `error`, and match the error
 to the saved dead-letter row using authorized access. For
 `scope_history_unavailable`, recover the original Commit-time privacy proof
 before requeueing. For receipt failures, verify the original scope and storage
@@ -123,8 +133,9 @@ scenario assumes much wider proven sink coverage and GPU connectivity.
    clearance, clean shadow readback, and isolated qualification. Verify the
    production Firestore history window and SDK path, measure queued intents
    and their age, budget the second owner-wide discovery scan, and confirm
-   that the dead-letter alert has been provisioned and sees its source before
-   enabling execution.
+   that the dead-letter alerts have been provisioned and see their sources.
+   Before setting `bpp_late_erasure_execute` above `0`, require a stock
+   observation younger than 15 minutes with stock equal to `0`.
 4. When execution is verified, set `bpp_tokenless_write_shadow=0` on the
    scoped integration canary and enable the approved
    `bpp_tokenless_write_cache` cohort with `bpp_tokenless_write_audit=100`.

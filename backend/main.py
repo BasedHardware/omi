@@ -82,6 +82,7 @@ from services.conversation_finalization import reconcile_listen_finalization_job
 from services.conversation_finalization import reconcile_stale_in_progress_conversations
 from services.conversation_finalization import reconcile_stale_processing_conversations
 from database.durable_queue_age import publish_all_queue_oldest_ready_ages
+from database.batch_privacy_dead_letter_stock import publish_dead_letter_stock
 from database.batch_privacy_late_sweeps import reconcile_batch_privacy_late_sweeps
 from services.users.account_deletion import reconcile_pending_deletion_wipes
 from utils.conversations.deletion_batch_purge import reconcile_conversation_batch_purges
@@ -318,6 +319,10 @@ async def startup_event():
     start_background_task(
         _periodic_conversation_batch_purge_reconcile(), name='periodic_conversation_batch_purge_reconcile'
     )
+    if is_conversation_batch_purge_dispatch_configured():
+        start_background_task(
+            _periodic_batch_privacy_dead_letter_stock(), name='periodic_batch_privacy_dead_letter_stock'
+        )
     start_background_task(_periodic_durable_queue_age_publish(), name='periodic_durable_queue_age_publish')
     start_background_task(
         proactive_message_dispatcher(),
@@ -422,6 +427,12 @@ async def _periodic_conversation_batch_purge_reconcile(interval_seconds: int | N
                 logger.info(f"Periodic conversation batch-purge reconciliation: {result}")
         except Exception as e:
             logger.error(f"Periodic conversation batch-purge reconciliation failed: {e}")
+
+
+async def _periodic_batch_privacy_dead_letter_stock():
+    while True:
+        await run_blocking(db_executor, publish_dead_letter_stock)
+        await asyncio.sleep(30)
 
 
 def _drain_listen_finalization_jobs():
