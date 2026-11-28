@@ -795,6 +795,7 @@ def _get_structured_steps(
                 open_loop_out=open_loop_out,
                 **notes_agent_inputs(main_conv, desktop_capture),
             )
+            require_request_budget()
             if async_notes:
                 structured = yield from llm_input_dedupe.notes_steps(
                     uid, main_conv, prefix, conversation_notes_steps, llm_hashes, **notes_inputs

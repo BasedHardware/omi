@@ -551,13 +551,17 @@ def _run_processing_lease_heartbeat(
 
 
 @contextmanager
-def processing_admission_guard(uid: str, conversation_id: str, *, rollback_on_failure: bool = True):
+def processing_admission_guard(
+    uid: str, conversation_id: str, *, rollback_on_failure: bool = True, log_errors: bool = True
+):
     """Guard an inline (in-request) processing run against stranding its admission.
 
     Wrap the synchronous ``process_conversation`` call with this; if it raises,
     the lifecycle owner rolls the admission back to ``in_progress`` and re-raises.
     A rollback error (e.g. the conversation was deleted mid-processing) is
     logged instead of replacing the original processing exception.
+    With rollback disabled, a producer that logs its own failure can also
+    disable this guard's error log.
 
     While the guarded block runs, a daemon heartbeat renews the server-owned
     admission lease (``processing_admitted_at``). A live — even slow — processor
@@ -619,7 +623,7 @@ def processing_admission_guard(uid: str, conversation_id: str, *, rollback_on_fa
                 conversation_id,
                 rolled_back,
             )
-        else:
+        elif log_errors:
             log_failure(
                 'synchronous conversation processing failed uid=%s conversation=%s (no rollback: producer owns recovery)',
                 uid,

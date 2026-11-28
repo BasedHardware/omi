@@ -10,6 +10,8 @@ from importlib import import_module
 from zoneinfo import ZoneInfo
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple, TYPE_CHECKING, cast
 
+from google.api_core.exceptions import DeadlineExceeded
+
 try:
     from langchain_core.exceptions import OutputParserException
 except ModuleNotFoundError:
@@ -76,6 +78,7 @@ from utils.llm.notes_output_contract import finish_notes_contract, OUTPUT_RULES
 from utils.other.request_deadline import (
     RequestDeadlineExceeded,
     capped_deadline_seconds,
+    request_deadline_absolute,
     request_deadline_exceeded,
 )
 from utils.llm.notes_identity import notes_identity, screen_speaker_bindings
@@ -505,7 +508,18 @@ def conversation_notes_steps(prefix: ConversationPromptPrefix, *, uid: Optional[
 
 def _observed_notes_steps(prefix: ConversationPromptPrefix, **kwargs: Any) -> Steps[Structured]:
     with notes_observation() as run:
-        result = yield from _shaped_conversation_notes_steps(prefix, **kwargs)
+        try:
+            result = yield from _shaped_conversation_notes_steps(prefix, **kwargs)
+        except DeadlineExceeded as error:
+            if request_deadline_absolute() is None:
+                raise
+            # The notes chain can raise a dependency RPC's deadline. Keep the
+            # synchronous HTTP retry policy scoped to from-segments.
+            raise TimeoutError('notes dependency timed out') from error
+        except TimeoutError as error:
+            if not isinstance(error, RequestDeadlineExceeded) and request_deadline_exceeded():
+                raise RequestDeadlineExceeded('notes exhausted its processing budget') from error
+            raise
         observe_notes_output(run, result)
         return result
 
