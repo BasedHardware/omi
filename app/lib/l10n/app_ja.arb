@@ -4427,7 +4427,7 @@
     "deviceOnboardingAskNowTitle": "質問をどうぞ",
     "deviceOnboardingAskNowSubtitle": "声に出して話してください。Omi が聞いています。",
     "deviceOnboardingPressAgainHint": "話し終えたら、もう一度ボタンを押して送信します。",
-    "trialUpsellTitle": "Omi Pro を{days}日間無料でお試し",
+    "trialUpsellTitle": "Omi Pro {days}日間無料体験",
     "trialUpsellBody": "開始するにはカードを登録してください。今日のお支払いはありません。請求前にお知らせします。いつでもキャンセルできます。",
     "trialUpsellClaim": "{days}日間の無料トライアルを使う",
     "settingsUpgradeTrialSubtitle": "{days}日間の無料トライアルを始める",

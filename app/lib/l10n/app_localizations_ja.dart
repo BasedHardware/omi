@@ -14330,7 +14330,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String trialUpsellTitle(int days) {
-    return 'Omi Pro を$days日間無料でお試し';
+    return 'Omi Pro $days日間無料体験';
   }
 
   @override
