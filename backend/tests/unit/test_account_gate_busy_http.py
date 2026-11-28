@@ -24,6 +24,13 @@ def test_account_gate_busy_http_exception_is_409_with_short_retry_after():
     assert 1 <= ACCOUNT_GATE_BUSY_RETRY_AFTER_SECONDS <= 3
 
 
+def test_account_gate_busy_can_use_service_unavailable_for_stale_conflict_routes():
+    error = account_gate_busy_http_exception(status_code=503)
+    assert error.status_code == 503
+    assert error.detail == ACCOUNT_GATE_BUSY_DETAIL
+    assert error.headers["Retry-After"] == str(ACCOUNT_GATE_BUSY_RETRY_AFTER_SECONDS)
+
+
 def _fence() -> DestructiveOperationInProgress:
     return DestructiveOperationInProgress("canonical mutation blocked by destructive operation")
 
@@ -220,18 +227,65 @@ def test_review_resolve_route_maps_takeover_to_409(monkeypatch):
     assert response.headers["Retry-After"] == "2"
 
 
-@pytest.mark.parametrize(
-    "error_type", [DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable]
-)
-def test_conversation_assign_speaker_route_maps_destructive_gate_to_409(monkeypatch, conversation_routes, error_type):
-    """A manual speaker assignment blocked by the account fence is retryable, not a 500 (SCA-4074)."""
+def test_conversation_assign_speaker_route_maps_real_transaction_fence_to_retryable_503(
+    monkeypatch, conversation_routes
+):
+    """The assignment transaction's real fence reaches HTTP without becoming a 500."""
+    from datetime import datetime, timezone
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
+    from database import legal_holds, speaker_assignment_effects, transcript_pointer
 
-    def blocked(*args, **kwargs):
-        raise error_type("external data write blocked by destructive operation")
+    class Snapshot:
+        def __init__(self, payload=None):
+            self.exists = payload is not None
+            self.payload = payload
 
-    monkeypatch.setattr(conversation_routes, "commit_manual_assignment", blocked)
+        def to_dict(self):
+            return self.payload
+
+    class Document:
+        def __init__(self, path):
+            self.path = path
+
+        def get(self, transaction=None):
+            if self.path == "account_deletions/uid":
+                return Snapshot()
+            if self.path == f"{legal_holds.LEGAL_HOLD_DELETION_GATES_COLLECTION}/uid":
+                return Snapshot(
+                    {
+                        "schema_version": legal_holds.LEGAL_HOLD_DELETION_GATE_SCHEMA_VERSION,
+                        "uid": "uid",
+                        "kind": "explicit_memory_deletion",
+                        "token": "live-owner-token",
+                        "state": "running",
+                        "started_at": datetime.now(timezone.utc),
+                    }
+                )
+            raise AssertionError(f"unexpected authority read: {self.path}")
+
+    class Client:
+        def document(self, path):
+            return Document(path)
+
+    class Transaction:
+        pass
+
+    # Exercise the real assignment transaction wrapper and fence, with only
+    # Firestore's transaction runner replaced by a deterministic callback.
+    monkeypatch.setattr(speaker_assignment_effects.firestore, "transactional", lambda fn: fn)
+    monkeypatch.setattr(
+        transcript_pointer,
+        "run_preloaded_transactional",
+        lambda client, callback, **kwargs: callback(Transaction()),
+    )
+
+    def actual_fenced_assignment(uid, *args, **kwargs):
+        return speaker_assignment_effects.run_assignment_transaction(
+            Client(), lambda transaction, bookkeeping: pytest.fail("live fence must stop before assignment"), uid=uid
+        )
+
+    monkeypatch.setattr(conversation_routes.conversations_db, "assign_conversation_speaker", actual_fenced_assignment)
     app = FastAPI()
     app.include_router(conversation_routes.router)
     app.dependency_overrides[conversation_routes.auth.get_current_user_uid] = lambda: "uid"
@@ -239,12 +293,12 @@ def test_conversation_assign_speaker_route_maps_destructive_gate_to_409(monkeypa
         "/v1/conversations/conv/assign-speaker/3",
         params={"assign_type": "is_user", "value": "true"},
     )
-    assert response.status_code == 409
+    assert response.status_code == 503
     assert response.json() == {"detail": ACCOUNT_GATE_BUSY_DETAIL}
     assert response.headers["Retry-After"] == str(ACCOUNT_GATE_BUSY_RETRY_AFTER_SECONDS)
 
 
-def test_review_answer_route_maps_destructive_gate_to_409(monkeypatch):
+def test_review_answer_route_maps_destructive_gate_to_retryable_503(monkeypatch):
     """A Review speaker answer applies an assignment through the same fence."""
     from unittest.mock import MagicMock
     from fastapi import FastAPI
@@ -261,6 +315,6 @@ def test_review_answer_route_maps_destructive_gate_to_409(monkeypatch):
     app.include_router(review_routes.router)
     app.dependency_overrides[review_routes.auth.get_current_user_uid] = lambda: "uid"
     response = TestClient(app).post("/v2/review/items/same_person:toy/answer", json={"not_sure": True})
-    assert response.status_code == 409
+    assert response.status_code == 503
     assert response.json() == {"detail": ACCOUNT_GATE_BUSY_DETAIL}
     assert response.headers["Retry-After"] == str(ACCOUNT_GATE_BUSY_RETRY_AFTER_SECONDS)

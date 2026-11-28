@@ -331,8 +331,8 @@ def answer_item(uid: str, item_id: str, answer: ReviewAnswer | ReviewAnswerV2, *
         store.release_failed_answer(uid, item_id)
         raise
     except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable):
-        # A live account gate means nothing was written: release the offered
-        # answer so the client's retry can apply it after the gate clears.
+        # The assignment transaction fences before committing speaker/person changes;
+        # release the offered answer so the client's retry can apply it after the gate clears.
         store.release_failed_answer(uid, item_id)
         raise
     except LookupError as exc:

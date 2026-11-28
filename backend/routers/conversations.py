@@ -2020,14 +2020,12 @@ def delete_conversation(
         raise HTTPException(
             status_code=409, detail='Conversation changed during deletion; refresh and retry'
         ) from error
-    except RuntimeError as error:
-        if type(error).__name__ not in {
-            'DestructiveGateTakeover',
-            'DestructiveOperationInProgress',
-            'LegalHoldActive',
-            'LegalHoldAuthorityUnavailable',
-        }:
-            raise
+    except (
+        DestructiveGateTakeover,
+        DestructiveOperationInProgress,
+        LegalHoldActive,
+        LegalHoldAuthorityUnavailable,
+    ) as error:
         raise account_gate_busy_http_exception() from error
 
 
@@ -2220,14 +2218,11 @@ def _delete_conversation_under_gate(
                     status_code=503,
                     detail='Conversation memory retraction is busy, please retry',
                 ) from error
-            except RuntimeError as error:
-                # Isolated router tests stub database/utils.other at import time.
-                if type(error).__name__ not in {
-                    "DestructiveGateTakeover",
-                    "DestructiveOperationInProgress",
-                    "LegalHoldAuthorityUnavailable",
-                }:
-                    raise
+            except (
+                DestructiveGateTakeover,
+                DestructiveOperationInProgress,
+                LegalHoldAuthorityUnavailable,
+            ) as error:
                 raise account_gate_busy_http_exception() from error
 
         from utils.notifications import sync_action_item_reminder
@@ -2519,7 +2514,8 @@ def _assign_manual_speaker(
     except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as error:
         # The write fence stays exclusive; while a destructive operation owns the
         # account gate the edit is retryable, not a server fault (#SCA-4074).
-        raise account_gate_busy_http_exception() from error
+        # Released clients map every 409 from this legacy route to stale speaker data.
+        raise account_gate_busy_http_exception(status_code=503) from error
     except LookupError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     except PermissionError as error:

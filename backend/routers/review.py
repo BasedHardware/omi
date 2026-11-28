@@ -66,7 +66,8 @@ def _call(fn, *args, **kwargs):
     except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
         # A speaker answer applies a manual assignment through the account fence;
         # while a destructive operation owns the gate, retry instead of 500.
-        raise account_gate_busy_http_exception() from exc
+        # Released clients treat every 409 from this answer route as stale evidence.
+        raise account_gate_busy_http_exception(status_code=503) from exc
 
 
 @router.get('/v1/review/items', response_model=ReviewItemsResponse, tags=['review'])

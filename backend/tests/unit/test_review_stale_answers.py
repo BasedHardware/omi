@@ -563,7 +563,7 @@ def test_missing_entity_is_not_on_the_terminal_allowlist(harness):
 
 
 def test_destructive_gate_releases_the_offered_answer_for_retry(harness, monkeypatch):
-    """A live account gate writes nothing: the answer is released and the 409 is retryable."""
+    """A live account gate releases the answer with a retryable non-conflict status."""
     client, _ = harness
     item_id = offer(client)
 
@@ -572,7 +572,7 @@ def test_destructive_gate_releases_the_offered_answer_for_retry(harness, monkeyp
 
     monkeypatch.setattr(review_changes, 'merge_review_entities', gate_busy)
     response = answer(client, item_id)
-    assert response.status_code == 409, response.text
+    assert response.status_code == 503, response.text
     assert response.json() == {'detail': 'account_gate_busy'}
     assert response.headers['Retry-After'] == '2'
     row = store.user(UID).collection('review_answers').document(store.safe_id(item_id)).get().to_dict()

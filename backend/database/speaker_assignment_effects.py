@@ -83,6 +83,7 @@ def persist_assignment_effects(
     donor_ids: Sequence[str],
     bookkeeping: AssignmentBookkeeping,
     owner_segment_ids: Optional[list] = None,
+    person_to_create: Optional[Mapping[str, Any]] = None,
 ) -> tuple[list[str], list[Mapping[str, Any]]]:
     """Return the removed sample paths and the relabeled previous segments."""
     # Read before writes; fence profiles and evidence atomically with the label.
@@ -101,10 +102,23 @@ def persist_assignment_effects(
     source = user_ref.collection('conversations').document(conversation_id).get(transaction=transaction).to_dict() or {}
     user_doc = user_ref.get(transaction=transaction).to_dict() or {}
     save_other = bool(user_doc.get('save_other_voice_profiles', True))
-    people = {
-        pid: (pref := user_ref.collection('people').document(pid), pref.get(transaction=transaction).to_dict())
-        for pid in previous | {p for p in (person_id, rejected_person_id) if p}
-    }
+    new_person_id = None
+    new_person_payload = None
+    if person_to_create is not None:
+        new_person_payload = {**person_to_create, 'is_user_created': True}
+        new_person_id = new_person_payload.get('id')
+        if not isinstance(new_person_id, str) or not new_person_id or new_person_id != person_id:
+            raise ValueError('New person must match the assigned person id')
+    people = {}
+    for pid in previous | {p for p in (person_id, rejected_person_id) if p}:
+        pref = user_ref.collection('people').document(pid)
+        snapshot = pref.get(transaction=transaction)
+        doc = snapshot.to_dict()
+        if pid == new_person_id:
+            if snapshot.exists:
+                raise ValueError('New person id already exists')
+            doc = new_person_payload
+        people[pid] = (pref, doc)
     if any(not people[pid][1] for pid in (person_id, rejected_person_id) if pid):
         raise LookupError('Person not found')
     docs, now = {pid: doc for pid, (_, doc) in people.items()}, datetime.now(timezone.utc)
@@ -195,6 +209,11 @@ def persist_assignment_effects(
         bookkeeping.recurring_events = tuple(recurring_events)
     if owner_update:
         transaction.update(user_ref, owner_update)
+    if new_person_id is not None:
+        assert new_person_payload is not None
+        person_ref, _ = people[new_person_id]
+        transaction.create(person_ref, {**new_person_payload, **updates.pop(new_person_id, {})})
+        bump_people_generation(transaction, person_ref)
     for pid, update in updates.items():
         transaction.update(people[pid][0], update)
         bump_people_generation(transaction, people[pid][0])

@@ -23,7 +23,6 @@ import numpy as np
 from config.speaker_prior import pinned_speaker_prior_enabled
 from database import owner_confirmation as owner_confirmation_db
 from database import conversations as conversations_db
-from database.legal_holds import external_write_fence
 from database import redis_db
 from database import users as users_db
 from database import voice_profiles as voice_profiles_db
@@ -620,26 +619,26 @@ def quality_outcome(
 
 def _resolve_person(
     uid: str, request: SpeakerTagPromptAnswerRequest, answer: SpeakerTagPromptAnswer
-) -> Tuple[str, Dict[str, Any]]:
+) -> Tuple[str, Dict[str, Any], bool]:
     if answer == SpeakerTagPromptAnswer.person:
         if not request.person_id:
             raise TagPromptInvalid('person_id is required')
         found: Optional[Dict[str, Any]] = users_db.get_person(uid, request.person_id)
         if not found:
             raise LookupError('Person not found')
-        return request.person_id, found
+        return request.person_id, found, False
     name = (request.name or '').strip()
     if len(name) < 2:
         raise TagPromptInvalid('name is required')
     existing = users_db.get_person_by_name(uid, name)
     if existing:
-        return existing['id'], existing
+        return existing['id'], existing, False
     now = datetime.now(timezone.utc)
     person_id = str(uuid.uuid4())
     person: Dict[str, Any] = {'id': person_id, 'name': name, 'created_at': now, 'updated_at': now}
-    with external_write_fence(uid):
-        users_db.create_person(uid, person)
-    return person_id, person
+    # Stage a new person with the speaker assignment transaction. If its account
+    # fence rejects the write, neither the person nor the label is committed.
+    return person_id, person, True
 
 
 def _apply_owner_answer(
@@ -754,10 +753,13 @@ def apply_answer(
         uid, conversation, request.segment_ids, request.origin.value, current_ids(uid, [conversation])
     )
     person_id: Optional[str] = None
+    person_to_create: Optional[Dict[str, Any]] = None
     person_enrolled = False
     voice_sample_queued = False
     if answer in _NAMED_ANSWERS:
-        person_id, person = _resolve_person(uid, request, answer)
+        person_id, person, is_new_person = _resolve_person(uid, request, answer)
+        if is_new_person:
+            person_to_create = person
         person_enrolled = bool(person.get('speaker_embedding'))
 
     if answer == SpeakerTagPromptAnswer.me:
@@ -791,7 +793,14 @@ def apply_answer(
     elif person_id is not None:
         settings = voice_profiles_db.get_voice_profile_settings(uid)
         train = settings['save_other_voice_profiles']
-        conversation, resolved = _assign(uid, request, is_user=False, person_id=person_id, train=train)
+        conversation, resolved = _assign(
+            uid,
+            request,
+            is_user=False,
+            person_id=person_id,
+            train=train,
+            person_to_create=person_to_create,
+        )
         retire_exclusion_markers(
             uid,
             conversation.get('id') or request.conversation_id,
@@ -902,6 +911,7 @@ def _assign(
     train: bool,
     rejection: Optional[Dict[str, Any]] = None,
     owner_segment_ids: Optional[List[str]] = None,
+    person_to_create: Optional[Dict[str, Any]] = None,
 ) -> Tuple[Dict[str, Any], List[str]]:
     """Label the whole diarized speaker in that conversation, like "apply to all" in the tag sheet."""
     assignment_options: Dict[str, Any] = {}
@@ -909,6 +919,8 @@ def _assign(
         assignment_options['owner_segment_ids'] = owner_segment_ids
     if rejection:
         assignment_options['rejection'] = rejection
+    if person_to_create is not None:
+        assignment_options['person_to_create'] = person_to_create
     raw, resolved, _removed, _before = conversations_db.assign_conversation_speaker(
         uid,
         request.conversation_id,
