@@ -25,6 +25,8 @@ import pytest
 
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
 
+from prometheus_client import REGISTRY
+
 from database import conversation_finalization_jobs as jobs
 from database import conversation_terminal_title as terminal_title
 from database import conversations as conversations_db
@@ -442,13 +444,37 @@ def test_dead_letter_at_the_document_limit_still_terminalizes_without_growth():
     assert 'structured' not in patch
 
 
-def test_dead_letter_with_room_below_the_limit_keeps_title_and_retry():
+def test_dead_letter_at_the_document_limit_counts_and_logs_the_dropped_title(capsys):
+    conversation = _conversation({'transcript_segments': _near_limit_segments(slack=8)})
+    metric = 'omi_conversation_terminal_title_dropped_total'
+    before = REGISTRY.get_sample_value(metric, {'path': 'dead_letter'}) or 0
+
+    patch = _dead_letter(conversation)
+    events = [json.loads(line) for line in capsys.readouterr().out.strip().splitlines() if line.strip()]
+
+    # The drop is never silent: the row terminalizes untitled, and the counter
+    # plus the revision-attributed event both fire exactly once.
+    assert patch['status'] == 'completed'
+    assert 'structured' not in patch
+    assert REGISTRY.get_sample_value(metric, {'path': 'dead_letter'}) == before + 1
+    assert {
+        'event': 'terminal_title',
+        'outcome': 'dropped',
+        'path': 'dead_letter',
+        'conversation_id': 'conversation-1',
+    } in events
+
+
+def test_dead_letter_with_room_below_the_limit_keeps_title_and_no_drop_count(capsys):
     conversation = _conversation({'transcript_segments': _near_limit_segments(slack=512)})
+    metric = 'omi_conversation_terminal_title_dropped_total'
+    before = REGISTRY.get_sample_value(metric, {'path': 'dead_letter'}) or 0
 
     patch = _dead_letter(conversation)
 
     assert patch['structured']['title'] == 'Near the ceiling.'
     assert patch['summary_retryable'] is True
+    assert REGISTRY.get_sample_value(metric, {'path': 'dead_letter'}) == before
 
 
 def test_orphan_at_the_document_limit_still_terminalizes_without_growth():
