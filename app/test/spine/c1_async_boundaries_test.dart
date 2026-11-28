@@ -9,6 +9,8 @@ import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/conversation_location_capture.dart';
 import 'package:omi/utils/enums.dart';
 
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import '../support/capture/scripted_device_connection.dart';
 import '../support/capture/capture_replay_world.dart';
 import '../support/spine/contract.dart';
 import 'c1_composition_test.dart' show dependencies;
@@ -45,10 +47,12 @@ void main() {
     final w = await CaptureReplayWorld.boot(tempDir: dir);
     try {
       w.disposeController();
+      final pendant = BtDevice(id: 'c1-pendant', name: 'Omi', type: DeviceType.omi, rssi: -40);
+      w.deviceConnection = ScriptedDeviceConnection();
       final location = HeldLocation();
       final d = dependencies(world: w, preferences: SharedPreferencesUtil(), location: location);
       final p = composeCaptureProvider(d);
-      await p.streamRecording();
+      await p.streamDeviceRecording(device: pendant);
       await pumpEventQueue();
       expect(location.captures, 1);
       d.owner.replaceSession('different-account');

@@ -69,10 +69,11 @@ CaptureDependencies dependencies(
     CaptureSessionOwner? owner}) {
   final clock = world?.clock ?? VirtualClock(DateTime.utc(2026));
   return CaptureDependencies(
-    ensureDeviceConnection: (_) async => null,
+    ensureDeviceConnection: (_) async => world?.deviceConnection,
     wal: world?.wal ?? InertWal(),
-    phoneMic: world?.mic ?? InertMic(),
+    phoneMic: InertMic(),
     batchSupported: false,
+    microphonePermission: () async => false,
     auth: auth ?? CaptureAuthBoundary(isSignedIn: () => true, refreshIdToken: () async => null),
     connectivity: CaptureConnectivityBoundary(
         initiallyConnected: true, changes: changes?.stream ?? const Stream.empty(), isConnected: () => true),
@@ -104,7 +105,6 @@ CaptureDependencies dependencies(
             now: clock.now),
     localSegments: LocalSegmentStore.disabled(),
     codec: codec ?? (_) async => BleAudioCodec.pcm16,
-    microphonePermission: () async => true,
     refreshConversation: () async {},
     telemetry: RecordingLifecycleTelemetry(emitter: (_, __) {}, idFactory: () => 'synthetic', clock: clock.now),
   );
