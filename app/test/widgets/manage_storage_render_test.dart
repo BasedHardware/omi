@@ -76,19 +76,24 @@ void main() {
     });
   }
 
-  Future<void> pumpSheet(WidgetTester tester, Widget sheet, {String? title, bool closable = true}) async {
+  Future<void> pumpSheet(WidgetTester tester, Widget sheet,
+      {String? title,
+      bool closable = true,
+      Color Function()? surface,
+      EdgeInsets? padding,
+      Brightness brightness = Brightness.dark}) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
     tester.view.physicalSize = const Size(393, 852);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final previous = OmiColors.active;
-    OmiColors.active = OmiColors.forBrightness(Brightness.dark);
+    OmiColors.active = OmiColors.forBrightness(brightness);
     addTearDown(() => OmiColors.active = previous);
     await tester.pumpWidget(RepaintBoundary(
       key: boundary,
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
-        theme: buildOmiTheme(brightness: Brightness.dark),
+        theme: buildOmiTheme(brightness: brightness),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: const [Locale('en')],
         home: Scaffold(
@@ -96,12 +101,13 @@ void main() {
           body: Align(
             alignment: Alignment.bottomCenter,
             child: Material(
-              color: OmiColors.surface1,
+              color: (surface ?? () => OmiColors.surface1)(),
               borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
               child: OmiSheetScaffold(
                 title: title,
                 showCloseButton: closable,
-                padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, OmiSpacing.xs, OmiSpacing.xl, OmiSpacing.xl),
+                padding:
+                    padding ?? const EdgeInsets.fromLTRB(OmiSpacing.xl, OmiSpacing.xs, OmiSpacing.xl, OmiSpacing.xl),
                 child: sheet,
               ),
             ),
@@ -112,17 +118,41 @@ void main() {
     await tester.pump();
   }
 
-  testWidgets('Manage Storage shows hours of audio and where it waits', (tester) async {
-    await pumpSheet(
-      tester,
-      OfflineSyncStorageSheet(amounts: _amounts, onFreeUpSpace: () {}, onDeletePending: () {}, onDeleteAll: () {}),
-      title: 'Manage Storage',
-    );
-    expect(find.text('440h'), findsOneWidget);
-    expect(find.text('On this phone 71h · On your Omi 11h'), findsOneWidget);
-    await writeFrame(tester, '001-mobile-ios-manage-storage-hours');
-    debugDefaultTargetPlatformOverride = null;
-  });
+  for (final (slug, brightness) in [
+    ('001-mobile-ios-manage-storage-hours', Brightness.dark),
+    ('005-mobile-ios-manage-storage-light', Brightness.light),
+  ]) {
+    testWidgets('Manage Storage shows hours of audio and where it waits ($brightness)', (tester) async {
+      await pumpSheet(
+        tester,
+        Builder(
+          builder: (context) => OfflineSyncStorageSheet(
+            amounts: _amounts,
+            onFreeUpSpace: () {},
+            onDeletePending: () {},
+            onDeleteAll: () {},
+            // As on the Auto Sync page.
+            footer: OmiSettingsRow.toggle(
+              leading: const Icon(Icons.auto_delete_outlined),
+              title: AppLocalizations.of(context).autoRemoveSyncedCopiesTitle,
+              subtitle: AppLocalizations.of(context).autoRemoveSyncedCopiesDays(7),
+              value: true,
+              onChanged: (_) {},
+            ),
+          ),
+        ),
+        title: 'Manage Storage',
+        // As showOfflineSyncStorageSheet opens it.
+        surface: () => OmiColors.surface0,
+        padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, OmiSpacing.xl),
+        brightness: brightness,
+      );
+      expect(find.text('440h'), findsOneWidget);
+      expect(find.text('On this phone 71h · On your Omi 11h'), findsOneWidget);
+      await writeFrame(tester, slug);
+      debugDefaultTargetPlatformOverride = null;
+    });
+  }
 
   testWidgets('deleting not-uploaded audio confirms the hours and that sync pauses', (tester) async {
     await pumpSheet(tester, const SizedBox(height: 200));

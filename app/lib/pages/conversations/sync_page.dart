@@ -420,10 +420,8 @@ class _SyncPageState extends State<SyncPage> {
       );
     }
 
-    showOmiSheet<void>(
+    showOfflineSyncStorageSheet(
       context: context,
-      title: context.l10n.manageStorage,
-      padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, OmiSpacing.xs, OmiSpacing.xl, OmiSpacing.xl),
       builder: (sheetContext) => OfflineSyncStorageSheet(
         amounts: amounts,
         onFreeUpSpace: () => clear(sheetContext, StorageClearScope.uploaded),

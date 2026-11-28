@@ -62,21 +62,16 @@ void main() {
       ]) {
         final text = find.text(label);
         expect(text, findsOneWidget);
-        final cards = tester
-            .widgetList<Container>(find.ancestor(of: text, matching: find.byType(Container)))
-            .where((w) => w.decoration is BoxDecoration && (w.decoration! as BoxDecoration).color != null);
-        final background = (cards.first.decoration! as BoxDecoration).color!;
+        final card = text.evaluate().single.findAncestorWidgetOfExactType<Material>()!;
         final foreground = tester.widget<Text>(text).style!.color!;
-        expect(contrast(foreground, background), greaterThanOrEqualTo(4.5), reason: '$label in $brightness');
+        expect(contrast(foreground, card.color!), greaterThanOrEqualTo(4.5), reason: '$label in $brightness');
       }
-      final count = find.text('0s');
-      expect(count, findsNWidgets(2));
-      for (final element in count.evaluate()) {
+      final amount = find.text('0s');
+      expect(amount, findsNWidgets(2));
+      for (final element in amount.evaluate()) {
         final text = element.widget as Text;
-        final badge = element.findAncestorWidgetOfExactType<Container>()!;
-        final fill = (badge.decoration! as BoxDecoration).color!;
-        final background = Color.alphaBlend(fill, OmiColors.surface2);
-        expect(contrast(text.style!.color!, background), greaterThanOrEqualTo(4.5));
+        final card = element.findAncestorWidgetOfExactType<Material>()!;
+        expect(contrast(text.style!.color!, card.color!), greaterThanOrEqualTo(4.5));
       }
       expect(find.text('Free up space'), findsNothing);
       expect(find.text('Delete'), findsNothing);
@@ -117,10 +112,10 @@ void main() {
       final l10n = AppLocalizations.of(context);
       expect(find.text(l10n.storageUploadedTitle), findsOneWidget);
       expect(find.text(l10n.storageNotUploadedTitle), findsOneWidget);
-      for (final label in [l10n.storageFreeUpSpace, l10n.delete]) {
+      for (final label in [l10n.storageFreeUpSpace, l10n.delete, l10n.storageDeleteEverything]) {
         final element = find.text(label).evaluate().single;
         final text = element.widget as Text;
-        final finder = find.ancestor(of: find.byWidget(text), matching: find.byType(OmiButton)).first;
+        final finder = find.ancestor(of: find.byWidget(text), matching: find.byType(InkWell)).first;
         await tester.ensureVisible(finder);
         await tester.pumpAndSettle();
         final bounds = tester.getRect(finder);

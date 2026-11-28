@@ -1026,10 +1026,8 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       );
     }
 
-    showOmiSheet<void>(
+    showOfflineSyncStorageSheet(
       context: context,
-      title: context.l10n.manageStorage,
-      padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, OmiSpacing.xs, OmiSpacing.xl, OmiSpacing.xl),
       builder: (sheetContext) => OfflineSyncStorageSheet(
         amounts: amounts,
         onFreeUpSpace: () => clear(sheetContext, StorageClearScope.uploaded),
@@ -1094,19 +1092,16 @@ class _AutoRemoveRowState extends State<_AutoRemoveRow> {
   @override
   Widget build(BuildContext context) {
     final days = SharedPreferencesUtil().autoRemoveSyncedCopiesDays;
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.lgAll),
-      child: OmiSettingsRow.toggle(
-        leading: const Icon(Icons.auto_delete),
-        title: context.l10n.autoRemoveSyncedCopiesTitle,
-        subtitle: context.l10n.autoRemoveSyncedCopiesDays(days),
-        value: _value,
-        onChanged: (value) {
-          setState(() => _value = value);
-          widget.onChanged(value);
-        },
-      ),
+    // Drawn inside the uploaded-audio group, which owns the background.
+    return OmiSettingsRow.toggle(
+      leading: const Icon(Icons.auto_delete_outlined),
+      title: context.l10n.autoRemoveSyncedCopiesTitle,
+      subtitle: context.l10n.autoRemoveSyncedCopiesDays(days),
+      value: _value,
+      onChanged: (value) {
+        setState(() => _value = value);
+        widget.onChanged(value);
+      },
     );
   }
 }

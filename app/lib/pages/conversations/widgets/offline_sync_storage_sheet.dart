@@ -6,6 +6,20 @@ import 'package:omi/services/wals/storage_clear.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
+/// Opens Manage Storage the way Settings opens: grouped cards on the page
+/// surface, so row subtitles keep their contrast.
+Future<void> showOfflineSyncStorageSheet({required BuildContext context, required WidgetBuilder builder}) {
+  return showOmiSurfaceSheet<void>(
+    context: context,
+    surface: () => OmiColors.surface0,
+    builder: (sheetContext) => OmiSheetScaffold(
+      title: sheetContext.l10n.manageStorage,
+      padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, OmiSpacing.xl),
+      child: Builder(builder: builder),
+    ),
+  );
+}
+
 /// Manage Storage: how much audio the phone and the pendant hold, by whether it
 /// can be removed safely. Amounts are hours of audio, never file counts: each
 /// file is about a minute, so a count of 26,589 read as conversations.
@@ -15,7 +29,8 @@ class OfflineSyncStorageSheet extends StatelessWidget {
   final VoidCallback onDeletePending;
   final VoidCallback onDeleteAll;
 
-  /// Extra settings shown between the rows and Delete everything (Auto-Remove).
+  /// An extra row for the uploaded-audio group (Auto-Remove), drawn under its
+  /// action. It must paint no background of its own, like an [OmiSettingsRow].
   final Widget? footer;
 
   const OfflineSyncStorageSheet({
@@ -30,40 +45,57 @@ class OfflineSyncStorageSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = context.l10n;
-    final pendingLines = [
-      storageWhereLine(amounts, l),
-      l.storageNotUploadedWarning,
-    ];
+    final hasPending = amounts.pendingCount > 0;
     return SingleChildScrollView(
       child: Column(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _StorageRow(
-            icon: FontAwesomeIcons.circleCheck,
-            iconColor: Colors.green,
-            title: l.storageUploadedTitle,
-            amount: OmiDuration.compact(amounts.uploadedSeconds, l),
-            lines: [l.storageUploadedSubtitle],
-            action: amounts.uploadedCount > 0
-                ? OmiButton.secondary(
-                    label: l.storageFreeUpSpace, size: OmiButtonSize.compact, onPressed: onFreeUpSpace)
-                : null,
-          ),
-          const SizedBox(height: 12),
-          _StorageRow(
-            icon: FontAwesomeIcons.clockRotateLeft,
-            iconColor: Colors.orange,
-            title: l.storageNotUploadedTitle,
-            amount: OmiDuration.compact(amounts.pendingSeconds, l),
-            lines: amounts.pendingCount > 0 ? pendingLines : const [],
-            action: amounts.pendingCount > 0
-                ? OmiButton.destructive(label: l.delete, size: OmiButtonSize.compact, onPressed: onDeletePending)
-                : null,
-          ),
-          if (footer != null) ...[const SizedBox(height: 12), footer!],
+          OmiSettingsGroup(children: [
+            OmiSettingsRow(
+              leading: FaIcon(FontAwesomeIcons.circleCheck, color: OmiColors.success),
+              title: l.storageUploadedTitle,
+              subtitle: l.storageUploadedSubtitle,
+              trailing: _Hours(OmiDuration.compact(amounts.uploadedSeconds, l)),
+            ),
+            if (amounts.uploadedCount > 0)
+              OmiSettingsRow(
+                leading: const Icon(Icons.cleaning_services_outlined),
+                title: l.storageFreeUpSpace,
+                onTap: onFreeUpSpace,
+                showChevron: false,
+              ),
+            if (footer != null) footer!,
+          ]),
+          const SizedBox(height: OmiSpacing.md),
+          OmiSettingsGroup(children: [
+            OmiSettingsRow(
+              leading: FaIcon(FontAwesomeIcons.clockRotateLeft, color: OmiColors.warning),
+              title: l.storageNotUploadedTitle,
+              subtitle: hasPending ? storageWhereLine(amounts, l) : null,
+              trailing: _Hours(OmiDuration.compact(amounts.pendingSeconds, l)),
+            ),
+            if (hasPending)
+              OmiSettingsRow(
+                leading: const Icon(Icons.delete_outline),
+                title: l.delete,
+                subtitle: l.storageNotUploadedWarning,
+                onTap: onDeletePending,
+                showChevron: false,
+                isDestructive: true,
+              ),
+          ]),
           if (amounts.allCount > 0) ...[
-            const SizedBox(height: 20),
-            OmiButton.destructive(label: l.storageDeleteEverything, expand: true, onPressed: onDeleteAll),
+            const SizedBox(height: OmiSpacing.lg),
+            OmiSettingsGroup(children: [
+              OmiSettingsRow(
+                leading: const Icon(Icons.delete_forever_outlined),
+                title: l.storageDeleteEverything,
+                onTap: onDeleteAll,
+                showChevron: false,
+                isDestructive: true,
+              ),
+            ]),
           ],
         ],
       ),
@@ -81,85 +113,21 @@ String storageWhereLine(StorageAmounts amounts, AppLocalizations l) {
   );
 }
 
-class _StorageRow extends StatelessWidget {
-  final FaIconData icon;
-  final Color iconColor;
-  final String title;
-  final String amount;
-  final List<String> lines;
-  final Widget? action;
+/// The amount a group holds. It is the answer the sheet exists to give, so it
+/// reads in primary text rather than the faded settings value style.
+class _Hours extends StatelessWidget {
+  final String text;
 
-  const _StorageRow({
-    required this.icon,
-    required this.iconColor,
-    required this.title,
-    required this.amount,
-    required this.lines,
-    required this.action,
-  });
+  const _Hours(this.text);
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.lgAll),
-      child: LayoutBuilder(builder: (context, constraints) {
-        // On a phone the row is ~345 pt wide; beside the text a label like
-        // "Free up space" would squeeze the title onto two lines.
-        final actionBelow = constraints.maxWidth < 400 || MediaQuery.textScalerOf(context).scale(1) > 1.3;
-        return Column(mainAxisSize: MainAxisSize.min, children: [
-          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(color: iconColor.withValues(alpha: 0.15), borderRadius: OmiRadius.mdAll),
-              child: Center(child: FaIcon(icon, size: 16, color: iconColor)),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: OmiType.subhead.copyWith(color: OmiColors.textPrimary, fontWeight: FontWeight.w500),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: OmiColors.textPrimary.withValues(alpha: 0.08),
-                          borderRadius: OmiRadius.smAll,
-                        ),
-                        child: Text(
-                          amount,
-                          style: OmiType.caption.copyWith(color: OmiColors.textPrimary.withValues(alpha: 0.7)),
-                        ),
-                      ),
-                    ],
-                  ),
-                  for (final line in lines) ...[
-                    const SizedBox(height: 3),
-                    Text(line, style: OmiType.caption.copyWith(color: OmiColors.textPrimary.withValues(alpha: 0.7))),
-                  ],
-                ],
-              ),
-            ),
-            if (action != null && !actionBelow) ...[const SizedBox(width: 8), action!],
-          ]),
-          if (action != null && actionBelow)
-            Padding(
-              padding: const EdgeInsets.only(top: OmiSpacing.xs),
-              child: Align(alignment: AlignmentDirectional.centerEnd, child: action),
-            ),
-        ]);
-      }),
-    );
-  }
+  Widget build(BuildContext context) => Text(
+        text,
+        maxLines: 1,
+        style: OmiType.body.copyWith(
+          color: OmiColors.textPrimary,
+          fontWeight: FontWeight.w500,
+          fontFeatures: const [FontFeature.tabularFigures()],
+        ),
+      );
 }
