@@ -98,9 +98,16 @@ def test_release_floor_verifies_every_target_revision(tmp_path):
 
     def run(command, **kwargs):
         commands.append(command)
-        return SimpleNamespace(returncode=1 if command[3] == 'backend-shadow' else 0)
+        return SimpleNamespace(
+            returncode=1 if command[3] == 'backend-shadow' else 0,
+            stderr=(
+                'ERROR: Backend release floor rejected the target. below floor\n'
+                if command[3] == 'backend-shadow'
+                else ''
+            ),
+        )
 
-    with pytest.raises(ValueError, match='release_floor_refused:backend-shadow'):
+    with pytest.raises(ValueError) as refused:
         canary.release_floor(
             ('backend-donor', 'backend-shadow'),
             script=script,
@@ -109,6 +116,8 @@ def test_release_floor_verifies_every_target_revision(tmp_path):
             run=run,
         )
     assert [command[3] for command in commands] == ['backend-donor', 'backend-shadow']
+    assert 'release_floor_refused:backend-shadow' in str(refused.value)
+    assert 'below floor' in str(refused.value)
 
 
 def test_bound_rollback_paths_request_the_published_release_floor():
