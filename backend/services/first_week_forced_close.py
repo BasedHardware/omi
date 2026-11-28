@@ -281,7 +281,9 @@ def _cursor(value: Any) -> dict[str, Any] | None:
     end, path = value.get('window_end'), value.get('path')
     if isinstance(end, bool) or not isinstance(end, (int, float)) or not math.isfinite(end):
         return None
-    parts = path.split('/') if isinstance(path, str) else []
+    if not isinstance(path, str):
+        return None
+    parts = path.split('/')
     if len(parts) != 4 or parts[0] != 'users' or parts[2] != 'conversations' or not parts[1] or not parts[3]:
         return None
     return {'window_end': float(end), 'path': path}
