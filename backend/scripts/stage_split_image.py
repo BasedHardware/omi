@@ -2,6 +2,7 @@
 """Stage an image-only Backend candidate from the named Ready donor at zero traffic."""
 
 import argparse
+import json
 import os
 from pathlib import Path
 import re
@@ -109,11 +110,55 @@ def stage_body(service, donor, plan, candidate, image, source):
     return body
 
 
+def runtime_env_config(entries):
+    """Return the comparable runtime-config map, excluding the image source stamp."""
+    config = {}
+    for entry in entries:
+        name = entry.get('name')
+        require(isinstance(name, str) and bool(name), 'env_entry_invalid')
+        if name == STAMP:
+            continue
+        if 'value' in entry:
+            config[name] = ('value', str(entry['value']))
+            continue
+        ref = (entry.get('valueFrom') or {}).get('secretKeyRef') or {}
+        require(isinstance(ref.get('name'), str) and isinstance(ref.get('key'), str), 'env_entry_invalid')
+        config[name] = ('secret', ref['name'], ref['key'])
+    return config
+
+
+def require_inherited_env(entries, expected_state):
+    """Refuse a split plan whose inherited donor config is not this source's config.
+
+    The staged candidate is the donor template with only the image and release
+    stamp replaced, so an env-changing split plan would promote a runtime config
+    that differs from the manifest. Refuse it here, before promotion, instead of
+    letting the post-deploy live checks discover it. Only key names are reported.
+    """
+    require(
+        isinstance(expected_state, dict) and SERVICE in (expected_state.get('services') or {}),
+        'split_plan_expected_state_incomplete',
+    )
+    expected = runtime_env_config(expected_state['services'][SERVICE]['env'])
+    actual = runtime_env_config(entries)
+    missing = sorted(set(expected) - set(actual))
+    extra = sorted(set(actual) - set(expected))
+    changed = sorted(name for name in set(expected) & set(actual) if expected[name] != actual[name])
+    require(
+        not (missing or extra or changed),
+        'split_plan_changes_runtime_env:'
+        + ','.join(
+            [*(f'-{name}' for name in missing), *(f'+{name}' for name in extra), *(f'~{name}' for name in changed)][:20]
+        ),
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for field in ('plan', 'candidate', 'image', 'source'):
         parser.add_argument('--' + field, required=True)
     parser.add_argument('--verify', action='store_true')
+    parser.add_argument('--expected-state', type=Path)
     args = parser.parse_args()
     try:
         require(
@@ -164,6 +209,11 @@ def main():
             # the commit tag. Normalize only the application image we proved.
             app(actual['spec'])['image'] = args.image
             require(actual == template_config(body['spec']['template']), 'candidate_config_mismatch')
+            if args.expected_state is not None:
+                require_inherited_env(
+                    ingress['env'],
+                    json.loads(args.expected_state.read_text(encoding='utf-8')),
+                )
         else:
             gcloud_json('PUT', service_url, body=body, timeout=30)
     except Exception:

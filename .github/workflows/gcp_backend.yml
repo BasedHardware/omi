@@ -1606,6 +1606,22 @@ jobs:
           service_account: omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com
       - name: Set up existing gcloud client
         uses: google-github-actions/setup-gcloud@v3
+      - name: Fetch the release-floor history from current main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +x
+          set -euo pipefail
+          # The floor verifier needs the restored revision's commit object and
+          # its ancestry back to the published floor, so the immutable checkout's
+          # depth-1 history is not enough (SCA-3804 recovery repair).
+          history_args=()
+          if [[ "$(git rev-parse --is-shallow-repository)" == true ]]; then
+            history_args=(--unshallow)
+          fi
+          git fetch --no-tags "${history_args[@]}" \
+            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            +refs/heads/main:refs/remotes/origin/main
       - name: Restore only the admitted inverse while ownership still matches
         env:
           ORIGINAL_RUN: ${{ inputs.split_recovery_run_id }}
@@ -1614,7 +1630,8 @@ jobs:
           python3 backend/scripts/cloud_run_split_canary.py recover-run \
             --project "$PROJECT" --region "$REGION" --run-id "$ORIGINAL_RUN" \
             --run-metadata "$SPLIT_RECOVERY_EVIDENCE/run.json" \
-            --promotion-receipt "$SPLIT_RECOVERY_EVIDENCE/artifact/backend-holdback-promotion.json"
+            --promotion-receipt "$SPLIT_RECOVERY_EVIDENCE/artifact/backend-holdback-promotion.json" \
+            --release-floor-check .github/scripts/verify_backend_release_floor.py
 
   recover-projection-pump-cap:
     needs: validate-production-boundary
