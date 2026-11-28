@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-android-processing-backlog.png",
+      "platform": "mobile-android",
+      "description": "Home offers to process waiting recordings after the server reports available allowance (Flutter widget harness, Android theme, synthetic data)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-android-processing-confirmation.png",
+      "platform": "mobile-android",
+      "description": "Confirmation shows the allowance estimate and leaves excess recordings waiting (Flutter widget harness, Android theme, synthetic data)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}
