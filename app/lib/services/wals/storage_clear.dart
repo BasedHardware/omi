@@ -1,3 +1,6 @@
+// Manage Storage clear model: which recordings each clear removes, the hours
+// of audio per storage row, and the verified outcome of a clear. Pure and
+// synchronous; SyncProvider.clearStorage owns running a clear.
 import 'package:omi/services/wals/wal.dart';
 
 /// What a Manage Storage clear removes.
