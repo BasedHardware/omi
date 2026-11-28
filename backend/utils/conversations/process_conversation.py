@@ -266,6 +266,7 @@ from utils.llm.chat import (
 from utils.llm.external_integrations import get_message_structure
 from utils.llm.clients import generate_embedding
 from utils.notifications import send_notification
+from utils.other.from_segments_timing import mark_from_segments_persisted
 from utils.other.request_deadline import RequestDeadlineExceeded, require_request_budget
 from utils.other.hume import (
     get_hume,
@@ -2882,6 +2883,7 @@ def _process_conversation_steps(
         completed: Conversation | None = None,
         derived_effects: DerivedEffectsDisposition = DerivedEffectsDisposition.RUN,
     ) -> None:
+        mark_from_segments_persisted(current)
         for settle in final_pass_settlements:
             settle(current)
         final_pass_settlements.clear()

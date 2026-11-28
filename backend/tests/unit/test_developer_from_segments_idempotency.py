@@ -1,4 +1,6 @@
 import asyncio
+import json
+import logging
 from time import monotonic
 from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime, timedelta, timezone
@@ -15,6 +17,7 @@ import pytest
 from config import refactor_modes
 import database.conversations as conversations_db
 from database.firestore_read_metrics import FirestoreReadSite
+from omi_logging import JsonFormatter, TraceContextMiddleware
 import routers.developer as developer
 import utils.conversations.meeting_receipt as meeting_receipt
 from models.conversation import Conversation, CreateConversation
@@ -24,6 +27,7 @@ from utils.conversations.meeting_treatment import meeting_treatment_verdict
 from utils.llm.gateway_error_contract import conversation_processing_http_exception
 from utils.other.raise_site import raise_site_of
 from utils.other import request_deadline
+from utils.other.from_segments_timing import FromSegmentsTiming
 from utils.other.request_deadline import RequestDeadlineExceeded
 from utils.conversations.transcript_hash import transcript_sha256_for_binding
 from utils.conversations.processing_steps import AsyncStep
@@ -853,11 +857,21 @@ async def test_ios_notes_continue_after_http_deadline_and_same_row_replays(monke
     entered_notes = Event()
     release_notes = Event()
     finished = Event()
+    worker_timing_finished = Event()
     delete = MagicMock()
     event = MagicMock()
     tasks = []
     monkeypatch.setenv(developer.FROM_SEGMENTS_CONTINUED_PROCESSING_MODE_ENV, mode)
     monkeypatch.setattr(request_deadline, 'FROM_SEGMENTS_REQUEST_BUDGET_SECONDS', 1.0)
+    caplog.set_level(logging.INFO, logger='utils.other.from_segments_timing')
+    timed_worker = developer._timed_from_segments_steps
+
+    def track_worker(process, timing):
+        result = yield from timed_worker(process, timing)
+        worker_timing_finished.set()
+        return result
+
+    monkeypatch.setattr(developer, '_timed_from_segments_steps', track_worker)
 
     def create(_uid, payload, *, idempotent):
         assert idempotent and not row
@@ -871,8 +885,9 @@ async def test_ios_notes_continue_after_http_deadline_and_same_row_replays(monke
         assert conversation.transcript_segments[0].text == _segment()['text']
 
         def provider():
-            entered_notes.set()
-            assert release_notes.wait(5)
+            with notes.notes_observation():
+                entered_notes.set()
+                assert release_notes.wait(5)
 
         yield AsyncStep(lambda: asyncio.to_thread(provider), run_sync=provider)
         conversation.status = ConversationStatus.completed
@@ -880,6 +895,7 @@ async def test_ios_notes_continue_after_http_deadline_and_same_row_replays(monke
 
     def persist(_uid, payload):
         row.update(payload)
+        return True
 
     claim = MagicMock(side_effect=create)
     processor = MagicMock(side_effect=process)
@@ -928,6 +944,7 @@ async def test_ios_notes_continue_after_http_deadline_and_same_row_replays(monke
             release_notes.set()
             await asyncio.gather(*tasks)
         assert await asyncio.to_thread(finished.wait, 5)
+        assert await asyncio.to_thread(worker_timing_finished.wait, 5)
 
         retry = await client.post(path, headers=headers, json=body)
 
@@ -943,9 +960,74 @@ async def test_ios_notes_continue_after_http_deadline_and_same_row_replays(monke
     assert [
         record.raise_site for record in caplog.records if getattr(record, 'event', None) == 'from_segments_503'
     ] == ['request_budget_exhausted', 'from_segments_processing_in_flight']
+    timing_entries = [
+        json.loads(record.getMessage().split(' ', 1)[1])
+        for record in caplog.records
+        if getattr(record, 'event', None) == 'from_segments_timing'
+    ]
+    http_entries = [entry for entry in timing_entries if entry['phase'] == 'http']
+    assert [entry['http_status'] for entry in http_entries] == [503, 503, 200]
+    initial, active, replay = http_entries
+    assert initial['intake_finished_ms'] <= initial['notes_started_ms'] < initial['http_finished_ms']
+    assert 'notes_finished_ms' not in initial and 'persisted_ms' not in initial
+    assert all('notes_started_ms' not in entry and 'persisted_ms' not in entry for entry in (active, replay))
+    assert all(entry['intake_finished_ms'] <= entry['http_finished_ms'] for entry in (active, replay))
+    (worker,) = [entry for entry in timing_entries if entry['phase'] == 'worker']
+    assert worker['http_status'] == 503
+    assert worker['http_finished_ms'] == initial['http_finished_ms']
+    assert worker['notes_succeeded'] is True
+    assert (
+        worker['http_finished_ms']
+        < worker['notes_finished_ms']
+        <= worker['persisted_ms']
+        <= worker['worker_finished_ms']
+    )
+    allowed_fields = {
+        'event',
+        'phase',
+        'client_kind',
+        'keyed',
+        'http_status',
+        'http_finished_ms',
+        'intake_finished_ms',
+        'notes_started_ms',
+        'notes_finished_ms',
+        'notes_succeeded',
+        'persisted_ms',
+        'worker_finished_ms',
+    }
+    assert all(entry.keys() <= allowed_fields for entry in timing_entries)
+    assert all(entry['client_kind'] == 'mobile_ios' and entry['keyed'] is True for entry in timing_entries)
 
 
-async def test_eight_waiting_ios_continuations_do_not_starve_a_keyed_android_upload(monkeypatch, segment_api_app):
+def test_timing_emits_closed_label_and_one_http_entry_when_worker_finishes_first(caplog):
+    caplog.set_level(logging.INFO, logger='utils.other.from_segments_timing')
+    timing = FromSegmentsTiming(monotonic(), 'untrusted-platform', False)
+
+    with timing.worker():
+        timing.mark('persisted_ms')
+    timing.finish_http(200)
+
+    (record,) = caplog.records
+    assert record.phase == 'http'
+    assert record.client_kind == 'unknown'
+    assert record.keyed is False
+    assert record.persisted_ms <= record.worker_finished_ms <= record.http_finished_ms
+    assert 'untrusted-platform' not in record.getMessage()
+
+    async def format_record(_scope, _receive, _send):
+        return JsonFormatter('backend', 'test', 'test-project').format(record)
+
+    trace = 'a' * 32
+    scope = {'type': 'http', 'headers': [(b'x-cloud-trace-context', f'{trace}/42;o=1'.encode())]}
+    formatted = asyncio.run(TraceContextMiddleware(format_record)(scope, None, None))
+    assert trace not in formatted
+    assert 'logging.googleapis.com/spanId' not in formatted
+
+
+async def test_eight_waiting_ios_continuations_do_not_starve_a_keyed_android_upload(
+    monkeypatch, segment_api_app, caplog
+):
     rows = {}
     waiting = 0
     all_waiting = asyncio.Event()
@@ -953,6 +1035,7 @@ async def test_eight_waiting_ios_continuations_do_not_starve_a_keyed_android_upl
     android_started = []
     monkeypatch.setenv(developer.FROM_SEGMENTS_CONTINUED_PROCESSING_MODE_ENV, 'serve')
     monkeypatch.setenv('OMI_SHAPED_AGENT_MODE', 'on')
+    caplog.set_level(logging.INFO, logger='utils.other.from_segments_timing')
 
     def create(_uid, payload, *, idempotent):
         assert idempotent and payload['id'] not in rows
@@ -1060,6 +1143,17 @@ async def test_eight_waiting_ios_continuations_do_not_starve_a_keyed_android_upl
                 slow_responses = await asyncio.gather(*slow_uploads)
 
     assert [response.status_code for response in slow_responses] == [200] * 8
+    ios_timings = [
+        record
+        for record in caplog.records
+        if getattr(record, 'event', None) == 'from_segments_timing' and record.client_kind == 'mobile_ios'
+    ]
+    assert len(ios_timings) == 8
+    for timing in ios_timings:
+        assert timing.phase == 'http'
+        assert timing.http_status == 200
+        assert timing.notes_succeeded
+        assert timing.notes_started_ms <= timing.notes_finished_ms <= timing.persisted_ms <= timing.http_finished_ms
 
 
 @pytest.mark.parametrize(

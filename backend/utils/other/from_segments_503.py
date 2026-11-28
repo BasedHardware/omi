@@ -75,10 +75,14 @@ class FromSegments503Route(ExternalListCacheRoute):
 
         async def handler(request: Request) -> Response:
             started = time.monotonic()
+            request.state.from_segments_started = started
+            status = None
             try:
                 with defer_retryable_processing_response_count():
                     response = await original(request)
+                status = response.status_code
             except HTTPException as exc:
+                status = exc.status_code
                 if exc.status_code == 503:
                     failure_class = retryable_processing_response_failure_class(exc)
                     if failure_class is not None:
@@ -90,6 +94,12 @@ class FromSegments503Route(ExternalListCacheRoute):
                         failure_class=failure_class,
                     )
                 raise
+            finally:
+                # Auth, rate limiting or validation can finish before the
+                # handler can classify the parsed session key.
+                timing = getattr(request.state, 'from_segments_timing', None)
+                if timing is not None:
+                    timing.finish_http(status)
             if response.status_code == 503:
                 # No reachable site returns a 503 response; a returned one has no
                 # tag to read, so it is reported as the defect it is.

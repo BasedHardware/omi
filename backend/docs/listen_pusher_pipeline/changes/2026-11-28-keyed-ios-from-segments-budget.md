@@ -19,6 +19,16 @@ can be reclaimed only if the lease observed at intake still matches. The
 A `conversation_processing_retryable` site with `failure_class=timeout`
 identifies a dependency timeout.
 
+The `from_segments_timing` INFO event records monotonic millisecond offsets
+from route entry for intake, notes, persistence, and HTTP exit. Every
+classified attempt emits an `http` record. A worker that finishes after HTTP
+exit emits one additional `worker` record with the original HTTP status and
+available stage offsets. Use `http` records for attempt counts and `worker`
+records for late stage timings. Each record contains only a closed client
+kind, the keyed boolean, status, and timing fields. Auth, rate-limit, and
+validation refusals before the parsed key is available use the existing route
+telemetry.
+
 Release owns admission and rollback. SCA-3846 owns the production measurement
 of valid-attempt 503s, a previously cut retry returning 200, and two passing
 health ticks. See the [pipeline contract](../../listen_pusher_pipeline.mdx#continued-ios-from-segments-processing).

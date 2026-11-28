@@ -119,7 +119,7 @@ class JsonFormatter(logging.Formatter):
         trace = _TRACE.get()
         if trace is None and record.exc_info:
             trace = _exception_trace(record.exc_info[1])
-        if trace and self.project:
+        if trace and self.project and not getattr(record, 'omit_trace', False):
             payload['logging.googleapis.com/trace'] = f'projects/{self.project}/traces/{trace[0]}'
             payload['logging.googleapis.com/spanId'] = trace[1]
             payload['logging.googleapis.com/trace_sampled'] = trace[2]

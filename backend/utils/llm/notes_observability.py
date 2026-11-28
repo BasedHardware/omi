@@ -6,6 +6,8 @@ from time import monotonic
 from contextvars import ContextVar
 from typing import Any
 
+from utils.other.from_segments_timing import from_segments_worker_timing
+
 logger = logging.getLogger(__name__)
 _current: ContextVar[Any] = ContextVar('notes_run', default=None)
 
@@ -129,12 +131,19 @@ def current_run() -> NotesRun | None:
 def notes_observation():
     run = NotesRun('baseline')
     token = _current.set(run)
+    timing = from_segments_worker_timing()
+    succeeded = False
+    if timing is not None:
+        timing.mark('notes_started_ms')
     try:
         yield run
+        succeeded = True
     except Exception:
         run.error = True
         raise
     finally:
+        if timing is not None:
+            timing.finish_notes(succeeded)
         run.emit()
         _current.reset(token)
 

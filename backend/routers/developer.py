@@ -93,6 +93,7 @@ from utils.apps import update_personas_async
 from utils.log_sanitizer import sanitize
 from utils.other.endpoints import with_rate_limit, get_current_user_uid
 from utils.other.from_segments_503 import FromSegments503Route
+from utils.other.from_segments_timing import FromSegmentsTiming, mark_from_segments_persisted
 from utils.other.raise_site import raise_site_of
 from utils.other.request_deadline import (
     RequestDeadlineExceeded,
@@ -2464,8 +2465,10 @@ def _process_validated_from_segments(
                 logger.warning('from_segments_tombstoned_cleanup_failed')
             return ConversationResponse(id=conversation.id, status='deleted', discarded=True)
 
-        lifecycle_service.persist_processed_conversation(
-            uid, omit_null_processing_state(strip_client_processing(conversation.model_dump()))
+        mark_from_segments_persisted(
+            lifecycle_service.persist_processed_conversation(
+                uid, omit_null_processing_state(strip_client_processing(conversation.model_dump()))
+            )
         )
 
     if request.folder_id is not None:
@@ -2501,6 +2504,13 @@ def _process_validated_from_segments(
         processing_deferred=conversation.processing_deferred,
         meeting_treatment_eligible=meeting_treatment_eligible,
     )
+
+
+def _timed_from_segments_steps(
+    process: Callable[[], Steps[ConversationResponse]], timing: FromSegmentsTiming
+) -> Steps[ConversationResponse]:
+    with timing.worker():
+        return (yield from process())
 
 
 def _budgeted_from_segments_steps(
@@ -2552,24 +2562,30 @@ async def create_conversation_from_segments_user(
     device_ctx = resolve_client_device_from_request(http_request)
     client_kind = extract_client_kind(http_request)
     keyed = bool(request.client_session_id or request.sent_blank_client_session_id)
+    timing = FromSegmentsTiming(http_request.state.from_segments_started, client_kind, keyed)
+    http_request.state.from_segments_timing = timing
     keyed_ios = keyed and client_kind == 'mobile_ios'
     async_notes = keyed_ios and serving_for(FROM_SEGMENTS_CONTINUED_PROCESSING_MODE_ENV, uid, default='off')
     try:
         prepared = await await_within_request_deadline(
             lambda: run_blocking(
                 db_executor,
-                _prepare_conversation_from_segments,
-                uid,
-                request,
-                client_device_id=device_ctx.client_device_id,
-                client_platform=device_ctx.platform,
-                client_kind=client_kind,
-                app_build=extract_app_build(http_request),
-                async_notes=async_notes,
+                timing.intake,
+                partial(
+                    _prepare_conversation_from_segments,
+                    uid,
+                    request,
+                    client_device_id=device_ctx.client_device_id,
+                    client_platform=device_ctx.platform,
+                    client_kind=client_kind,
+                    app_build=extract_app_build(http_request),
+                    async_notes=async_notes,
+                ),
             )
         )
         if not callable(prepared):
             return prepared
+        prepared = partial(_timed_from_segments_steps, prepared, timing)
         if not keyed:
             # After an unkeyed create commits, a retry has no stable identity
             # to reuse. Keep waiting for its response once processing starts.
