@@ -1117,7 +1117,9 @@ def test_ios_retryable_cut_retains_claim_and_fast_retry_returns_completed(
     if failure == 'notes_dependency':
         monkeypatch.setattr(notes, 'route_for_uid', lambda _uid: 'new')
         monkeypatch.setattr(
-            notes, '_shaped_conversation_notes_steps', MagicMock(side_effect=DeadlineExceeded('synthetic notes timeout'))
+            notes,
+            '_shaped_conversation_notes_steps',
+            MagicMock(side_effect=DeadlineExceeded('synthetic notes timeout')),
         )
     if failure == 'admission_budget':
         guard = developer.lifecycle_service.processing_admission_guard

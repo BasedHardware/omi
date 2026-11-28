@@ -355,7 +355,7 @@ def test_one_shot_fallback_spends_only_the_remaining_budget(monkeypatch, shaped_
     token = set_request_deadline(2.0)
     started = time.monotonic()
     try:
-        with pytest.raises(TimeoutError) as raised:
+        with pytest.raises(RequestDeadlineExceeded):
             conversation_processing.get_conversation_notes(_notes_prefix(), **_notes_kwargs())
     finally:
         elapsed = time.monotonic() - started
@@ -364,7 +364,6 @@ def test_one_shot_fallback_spends_only_the_remaining_budget(monkeypatch, shaped_
     # 1.5 s agentic + the 0.5 s that remained, not a fresh 2 s one-shot budget.
     assert elapsed < 2.6
     assert one_shot_calls == [1]
-    assert type(raised.value) is TimeoutError
 
 
 def test_notes_deadline_maps_to_a_tagged_retryable_503():
