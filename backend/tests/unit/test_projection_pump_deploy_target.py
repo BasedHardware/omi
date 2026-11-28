@@ -233,6 +233,8 @@ def test_prod_pump_is_integration_plus_the_dark_overrides():
             'BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED',
             'BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED',
             'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP',
+            'BATCH_PIPELINE_SERVING_TICK_SECONDS',
+            'BATCH_VENDOR_ROUTE_TABLE',
             live_title_key,
             fast_finish_key,
         }
@@ -241,6 +243,13 @@ def test_prod_pump_is_integration_plus_the_dark_overrides():
     assert set(pump['env']) - set(integration['env']) <= overridden
     for name in set(integration['env']) - overridden:
         assert pump['env'][name] == integration['env'][name], name
+    # SCA-4928: the pump retains its prior tick and full vendor route table.
+    assert pump['env']['BATCH_PIPELINE_SERVING_TICK_SECONDS'] == {'value': '10', 'category': 'rollout'}
+    route_table = pump['env']['BATCH_VENDOR_ROUTE_TABLE']
+    assert route_table['category'] == 'rollout'
+    assert json.loads(route_table['value']) == json.loads(
+        (BACKEND / 'deploy/batch-pipeline/vendor_route_table.prod.json').read_text()
+    )
     # SCA-4316: each lane keeps its serving title setting.
     backfill_env = services['backend-sync-backfill']['env']
     assert integration['env'][live_title_key]['value'] == 'off'
@@ -334,6 +343,12 @@ def prod_state(monkeypatch):
 
     walk(MANIFEST['environments']['prod']['cloud_run'])
     return RENDERER['_render_cloud_run_state'](MANIFEST['environments']['prod'])
+
+
+def test_rendered_integration_keeps_four_literal_followup_slots(prod_state):
+    env = {entry['name']: entry for entry in prod_state['services']['backend-integration']['env']}
+    name = 'BATCH_PIPELINE_PROJECTION_FOLLOWUP_SLOTS'
+    assert env[name] == {'name': name, 'value': '4'}
 
 
 def test_rendered_pump_env_is_dark_and_keeps_only_the_required_secrets(prod_state):

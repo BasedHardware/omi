@@ -1,6 +1,7 @@
 """Exercise split release guard accounting, recovery custody and checkout lookup."""
 
 from dataclasses import replace
+from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 from pathlib import Path
@@ -128,6 +129,13 @@ def test_bound_rollback_paths_request_the_published_release_floor():
         '--release-floor-check "$DEPLOY_WORKFLOW_ROOT/.github/scripts/verify_backend_release_floor.py"'
         in restore['run']
     )
+    shift = next(step for step in action['runs']['steps'] if step.get('id') == 'shift-cloud-run-traffic')
+    assert (
+        '--release-floor-check "$DEPLOY_WORKFLOW_ROOT/.github/scripts/verify_backend_release_floor.py"' in shift['run']
+    )
+    # The verifier needs the restored revision's ancestry, so main is fetched
+    # (unshallowing a shallow checkout) before the executor runs.
+    assert shift['run'].index('refs/remotes/origin/main') < shift['run'].index('promote \\')
     workflow = yaml.safe_load((repo / '.github/workflows/gcp_backend.yml').read_text())
     recovery = workflow['jobs']['recover-bound-split']['steps']
     restore_index = next(i for i, step in enumerate(recovery) if 'recover-run' in step.get('run', ''))
@@ -270,6 +278,8 @@ def test_completed_receipt_can_be_restored_from_another_run(tmp_path, monkeypatc
         return state.observed
 
     monkeypatch.setattr(canary, 'promote', promote)
+    floor = tmp_path / 'floor.py'
+    floor.write_text('import sys\nsys.exit(0)\n')
     target = ['--project', 'example', '--region', 'us-central1', '--promotion-receipt', str(receipt_path)]
     identity = ['--run-id', str(run_id)]
     assert (
@@ -292,6 +302,9 @@ def test_completed_receipt_can_be_restored_from_another_run(tmp_path, monkeypatc
                 control,
                 '--candidate',
                 'backend-candidate',
+                '--release-floor-check',
+                str(floor),
+                '--refresh-floor',
             ]
         )
         == 0
@@ -310,8 +323,6 @@ def test_completed_receipt_can_be_restored_from_another_run(tmp_path, monkeypatc
         display_title=f'Holdback prod/{service} sha={source} by selection:{"0" * 32} plan={binding}',
     )
     run_path.write_text(json.dumps(run))
-    floor = tmp_path / 'floor.py'
-    floor.write_text('import sys\nsys.exit(0)\n')
     recover = ['recover-run', *target, *identity, '--run-metadata', str(run_path), '--release-floor-check', str(floor)]
     assert canary.main(recover) == 0
     transport.replace.assert_called_once_with(transport.read.return_value, {'backend-donor': 90, 'backend-shadow': 10})
@@ -413,3 +424,273 @@ def test_serving_contains_uses_local_git_ancestry(monkeypatch):
     monkeypatch.setattr(serving_revision, 'release_of', lambda *_: parent)
     with pytest.raises(ValueError, match='release_does_not_contain_commit'):
         serving_revision.validate({}, 'backend-revision', revision, opts)
+
+
+class SplitTransport:
+    """Minimal Cloud Run traffic transport that records every write."""
+
+    name = 'projects/example/locations/us-central1/services/backend'
+
+    def __init__(self, state):
+        self.state = state
+        self.writes = []
+
+    def read(self):
+        return self.state
+
+    def replace(self, current, target):
+        assert current is self.state
+        self.writes.append(dict(target))
+        self.state = canary.TrafficState(
+            self.state.uid, f'etag{len(self.writes)}', dict(target), dict(target), self.state.tags
+        )
+
+
+def split_transport():
+    inverse = {'backend-donor': 90, 'backend-shadow': 10}
+    return SplitTransport(canary.TrafficState('uid', 'etag0', dict(inverse), dict(inverse))), inverse
+
+
+def trip_guard(service, candidate, donor, start, end):
+    return 'TRIP'
+
+
+def advancing_clock():
+    """Guard windows settle only after the sleep they request."""
+    clock = [datetime(2030, 1, 1, tzinfo=timezone.utc)]
+
+    def now():
+        return clock[0]
+
+    def sleep(seconds):
+        clock[0] += timedelta(seconds=seconds)
+
+    return now, sleep
+
+
+def test_promote_refuses_an_ineligible_inverse_before_any_traffic_move():
+    transport, _ = split_transport()
+    checked = []
+
+    def floor(targets):
+        checked.append(tuple(targets))
+        raise ValueError('release_floor_refused:backend-shadow: below floor')
+
+    now, sleep = advancing_clock()
+    with pytest.raises(ValueError, match='release_floor_refused:backend-shadow'):
+        canary.promote(
+            'backend',
+            holdback_wire(),
+            'backend-candidate',
+            transport,
+            trip_guard,
+            sleep=sleep,
+            now=now,
+            floor=floor,
+        )
+    assert checked == [('backend-donor', 'backend-shadow')]
+    assert transport.writes == []
+    assert transport.state.requested == {'backend-donor': 90, 'backend-shadow': 10}
+
+
+def test_promote_restores_an_eligible_inverse_after_a_guard_trip():
+    transport, inverse = split_transport()
+    checked = []
+
+    def floor(targets):
+        checked.append(tuple(targets))
+
+    now, sleep = advancing_clock()
+    with pytest.raises(RuntimeError, match='holdback_guard_tripped'):
+        canary.promote(
+            'backend',
+            holdback_wire(),
+            'backend-candidate',
+            transport,
+            trip_guard,
+            sleep=sleep,
+            now=now,
+            floor=floor,
+        )
+    # Checked before the first move and again before the restore.
+    assert checked == [('backend-donor', 'backend-shadow')] * 2
+    assert transport.writes[-1] == inverse
+    assert transport.state.requested == inverse
+
+
+def test_promote_refuses_to_restore_when_the_floor_moves_during_the_guard():
+    transport, inverse = split_transport()
+    calls = []
+
+    def floor(targets):
+        calls.append(tuple(targets))
+        if len(calls) == 2:
+            raise ValueError('release_floor_refused:backend-shadow: floor moved')
+
+    now, sleep = advancing_clock()
+    with pytest.raises(ValueError, match='release_floor_refused:backend-shadow'):
+        canary.promote(
+            'backend',
+            holdback_wire(),
+            'backend-candidate',
+            transport,
+            trip_guard,
+            sleep=sleep,
+            now=now,
+            floor=floor,
+        )
+    assert len(calls) == 2
+    assert inverse not in transport.writes
+    assert transport.state.requested != inverse
+
+
+def test_promote_requires_the_release_floor_on_the_cli(tmp_path):
+    base = [
+        'promote',
+        '--service',
+        'backend',
+        '--plan',
+        holdback_wire(),
+        '--binding',
+        hashlib.sha256(holdback_wire().encode()).hexdigest(),
+        '--candidate',
+        'backend-candidate',
+        '--project',
+        'example',
+        '--region',
+        'us-central1',
+        '--promotion-receipt',
+        str(tmp_path / 'receipt.json'),
+        '--source',
+        'a' * 40,
+        '--control',
+        'b' * 40,
+        '--run-id',
+        '1',
+        '--run-attempt',
+        '1',
+    ]
+    with pytest.raises(SystemExit):
+        canary.main(base)
+
+
+def holdback_wire():
+    return 'holdback-v1;backend-donor;backend-donor=90,backend-shadow=10;5;7200'
+
+
+def published_floor(tmp_path, *, eligible, refresh_ok, calls):
+    """Build a floor callback that refreshes origin/main like the real CLI."""
+    script = tmp_path / 'verify_backend_release_floor.py'
+    script.write_text('')
+    rounds = {'refresh': 0}
+
+    def run(command, **kwargs):
+        if command and command[0] == 'git':
+            rounds['refresh'] += 1
+            calls.append('refresh')
+            ok = refresh_ok(rounds['refresh'])
+            return SimpleNamespace(
+                returncode=0 if ok else 1,
+                stderr='' if ok else 'fatal: could not read from remote repository\n',
+            )
+        calls.append(command[3])
+        ok = eligible(rounds['refresh'])
+        return SimpleNamespace(
+            returncode=0 if ok else 1,
+            stderr='' if ok else 'ERROR: Backend release floor rejected the target. below floor\n',
+        )
+
+    return lambda targets: canary.release_floor(
+        targets,
+        script=script,
+        project='example',
+        region='us-central1',
+        refresh=canary.FLOOR_REFRESH,
+        run=run,
+    )
+
+
+def test_promote_enforces_a_floor_published_during_the_guard(tmp_path):
+    transport, inverse = split_transport()
+    calls = []
+    floor = published_floor(
+        tmp_path,
+        eligible=lambda round_: round_ == 1,
+        refresh_ok=lambda round_: True,
+        calls=calls,
+    )
+    now, sleep = advancing_clock()
+    with pytest.raises(ValueError, match='release_floor_refused'):
+        canary.promote(
+            'backend',
+            holdback_wire(),
+            'backend-candidate',
+            transport,
+            trip_guard,
+            sleep=sleep,
+            now=now,
+            floor=floor,
+        )
+    # The restore-time round refreshed origin/main again, then refused.
+    assert calls[:3] == ['refresh', 'backend-donor', 'backend-shadow']
+    assert calls[3] == 'refresh'
+    assert inverse not in transport.writes
+    assert transport.state.requested != inverse
+
+
+def test_failed_floor_refresh_prevents_the_inverse_write(tmp_path):
+    transport, inverse = split_transport()
+    calls = []
+    floor = published_floor(
+        tmp_path,
+        eligible=lambda round_: True,
+        refresh_ok=lambda round_: round_ == 1,
+        calls=calls,
+    )
+    now, sleep = advancing_clock()
+    with pytest.raises(ValueError, match='release_floor_refresh_failed'):
+        canary.promote(
+            'backend',
+            holdback_wire(),
+            'backend-candidate',
+            transport,
+            trip_guard,
+            sleep=sleep,
+            now=now,
+            floor=floor,
+        )
+    assert calls == ['refresh', 'backend-donor', 'backend-shadow', 'refresh']
+    assert inverse not in transport.writes
+    assert transport.state.requested != inverse
+
+
+def test_promote_requires_the_floor_refresh_on_the_cli(tmp_path):
+    base = [
+        'promote',
+        '--service',
+        'backend',
+        '--plan',
+        holdback_wire(),
+        '--binding',
+        hashlib.sha256(holdback_wire().encode()).hexdigest(),
+        '--candidate',
+        'backend-candidate',
+        '--project',
+        'example',
+        '--region',
+        'us-central1',
+        '--promotion-receipt',
+        str(tmp_path / 'receipt.json'),
+        '--source',
+        'a' * 40,
+        '--control',
+        'b' * 40,
+        '--run-id',
+        '1',
+        '--run-attempt',
+        '1',
+        '--release-floor-check',
+        str(tmp_path / 'floor.py'),
+    ]
+    with pytest.raises(SystemExit):
+        canary.main(base)

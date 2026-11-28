@@ -293,9 +293,11 @@ def inventory_names(inventory):
 def prestart_snapshot(cluster, *, namespace, name, live_name, run_id, canary_config_map, live_config_map):
     """Before the canary exists: the full inventory it will reference, isolated ConfigMap included.
 
-    The canary is rendered from the same chart as the live Pusher, so its references
-    are the live template's with the runtime ConfigMap renamed to the isolated one.
-    The recorded inventory later has to match the canary's own references exactly.
+    The canary's Pod template is the live template with only the candidate image, the
+    canary identity labels and the runtime ConfigMap name changed (SCA-4763), so its
+    references are the live template's with the runtime ConfigMap renamed to the
+    isolated one. The recorded inventory later has to match the canary's own references
+    exactly.
     """
     require(
         all(NAME.fullmatch(value or "") for value in (namespace, name, live_name, canary_config_map, live_config_map)),

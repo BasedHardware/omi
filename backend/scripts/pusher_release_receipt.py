@@ -31,6 +31,11 @@ if str(ROOT / "backend") not in sys.path:
 # exactly what the production promotion recomputes.
 from scripts.verify_pusher_promotion_evidence import contract_fingerprint  # noqa: E402
 
+# SCA-4763: the isolated image-only canary is derived from the live workload, not
+# rendered from the dispatching main, so its receipt must derive the expected
+# template the same way rather than compare against a chart render.
+from scripts.pusher_canary_from_live import DeriveError, derive_deployment  # noqa: E402
+
 DIGEST_RE = re.compile(r"^sha256:[a-f0-9]{64}$")
 SHA_RE = re.compile(r"^[a-f0-9]{40}$")
 RECEIPT_SCHEMA_VERSION = 1
@@ -390,6 +395,9 @@ def record_live_receipt(
     release_name: str | None = None,
     isolated_canary: bool = False,
     config_map_name: str | None = None,
+    derived_from_live: bool = False,
+    live_release_name: str | None = None,
+    live_config_map_name: str | None = None,
 ) -> dict[str, Any]:
     if not SHA_RE.fullmatch(source_sha):
         raise ReceiptError("Pusher receipt requires a full lowercase source SHA")
@@ -408,14 +416,33 @@ def record_live_receipt(
         digest=digest,
         expected_deployment_name=release,
     )
-    rendered_documents = rendered_chart_documents(
-        environment,
-        repository,
-        digest,
-        release_name=release,
-        isolated_canary=isolated_canary,
-        config_map_name=config_name,
-    )
+    if derived_from_live:
+        # The canary copies the live Pusher template; "expected" is the live
+        # baseline at receipt time with only the candidate image and the isolated
+        # names applied, using the same derivation the creation step ran.
+        baseline_release = live_release_name or f"{environment}-omi-pusher"
+        baseline = _run_json(["kubectl", "-n", namespace, "get", "deployment", baseline_release, "-o", "json"])
+        try:
+            expected = derive_deployment(
+                baseline,
+                name=release,
+                namespace=namespace,
+                image=f"{repository}@{digest}",
+                canary_config_map=config_name,
+                live_config_map=live_config_map_name or f"{environment}-omi-backend-config",
+            )
+        except DeriveError as exc:
+            raise ReceiptError(str(exc)) from exc
+        rendered_documents = [expected]
+    else:
+        rendered_documents = rendered_chart_documents(
+            environment,
+            repository,
+            digest,
+            release_name=release,
+            isolated_canary=isolated_canary,
+            config_map_name=config_name,
+        )
     expected_deployments = [
         document
         for document in rendered_documents
@@ -500,6 +527,13 @@ def main() -> int:
     live.add_argument("--release-name")
     live.add_argument("--isolated-canary", action="store_true")
     live.add_argument("--config-map-name")
+    live.add_argument(
+        "--derived-from-live",
+        action="store_true",
+        help="The workload is a copy of the live Pusher template; derive the expected template from it",
+    )
+    live.add_argument("--live-release-name")
+    live.add_argument("--live-config-map-name")
     live.add_argument("--output", type=Path, required=True)
     qualification = subparsers.add_parser("record-qualification")
     qualification.add_argument("--deployment-receipt", type=Path, required=True)
@@ -519,6 +553,9 @@ def main() -> int:
                 release_name=args.release_name,
                 isolated_canary=args.isolated_canary,
                 config_map_name=args.config_map_name,
+                derived_from_live=args.derived_from_live,
+                live_release_name=args.live_release_name,
+                live_config_map_name=args.live_config_map_name,
             )
         else:
             raw = json.loads(args.deployment_receipt.read_text(encoding="utf-8"))

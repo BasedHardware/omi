@@ -86,6 +86,9 @@ overlay:
         BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'false', category: ops_kill}
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+        # David 2026-11-28: lifecycle v2 serve ramp 1% -> 10% -> 100% by 12-12 (SCA-5312). Rollback: percent '0'.
+        LIFECYCLE_V2_MODE: {value: shadow, category: rollout}
+        LIFECYCLE_V2_MODE_SERVE_PERCENT: {value: '1', category: rollout}
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
         PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
         # Allowance watch reads the same monthly doc the Cloud Run billing gate trusts (SCA-1750).
@@ -347,6 +350,9 @@ overlay:
         SYNC_TASKS_LOCATION: {value: us-central1, category: reliability}
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+        # David 2026-11-28: lifecycle v2 serve ramp 1% -> 10% -> 100% by 12-12 (SCA-5312). Rollback: percent '0'.
+        LIFECYCLE_V2_MODE: {value: shadow, category: rollout}
+        LIFECYCLE_V2_MODE_SERVE_PERCENT: {value: '1', category: rollout}
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
         PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
         PUSHER_RECORD_SEAL_WAKE_ENABLED: {value: 'true', category: ops_kill}
@@ -689,6 +695,9 @@ overlay:
           BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED: {value: 'false', category: ops_kill}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+          # David 2026-11-28: lifecycle v2 serve ramp 1% -> 10% -> 100% by 12-12 (SCA-5312). Rollback: percent '0'.
+          LIFECYCLE_V2_MODE: {value: shadow, category: rollout}
+          LIFECYCLE_V2_MODE_SERVE_PERCENT: {value: '1', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
           PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
@@ -1110,6 +1119,9 @@ overlay:
           BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED: {value: 'true', category: ops_kill}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+          # David 2026-11-28: lifecycle v2 serve ramp 1% -> 10% -> 100% by 12-12 (SCA-5312). Rollback: percent '0'.
+          LIFECYCLE_V2_MODE: {value: shadow, category: rollout}
+          LIFECYCLE_V2_MODE_SERVE_PERCENT: {value: '1', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
           PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
@@ -1152,7 +1164,7 @@ overlay:
           # Soniox (Modulate failover, no Soniox cap; page omi-batch-soniox-daily-hours); fresh English
           # overflows to Modulate past the GPU SLO; percent is the runtime ramp. Kill switches: BATCH_VENDOR_OVERFLOW_ENABLED /
           # BATCH_VENDOR_ROUTING_ENABLED = false. Removing the line serves the builtin table.
-          BATCH_VENDOR_ROUTE_TABLE: {value: '{"schema_version":1,"table_version":"soniox-unsupported-1127","selection":"ordered","gpu_floor_percent":0.0,"routes":{"gpu":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":null,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"modulate":{"price_usd_per_audio_hour":0.06,"daily_audio_hours_cap":5000.0,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"soniox":{"price_usd_per_audio_hour":0.12,"daily_audio_hours_cap":null,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"}},"rows":[{"language_class":"en","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"gpu_supported","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]},{"language_class":"gpu_unsupported","options":[{"route":"soniox","quality_tier":"accepted","quality_source":"public_eval_1127"},{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"}]},{"language_class":"*","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]}]}', category: rollout}
+          BATCH_VENDOR_ROUTE_TABLE: &soniox_unsupported_1127 {value: '{"schema_version":1,"table_version":"soniox-unsupported-1127","selection":"ordered","gpu_floor_percent":0.0,"routes":{"gpu":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":null,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"modulate":{"price_usd_per_audio_hour":0.06,"daily_audio_hours_cap":5000.0,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"soniox":{"price_usd_per_audio_hour":0.12,"daily_audio_hours_cap":null,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"}},"rows":[{"language_class":"en","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"gpu_supported","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]},{"language_class":"gpu_unsupported","options":[{"route":"soniox","quality_tier":"accepted","quality_source":"public_eval_1127"},{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"}]},{"language_class":"*","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]}]}', category: rollout}
           # RECENT English also overflows while its own GPU backlog is past the SLO (David 2026-11-16,
           # L4 stockout: ~35k RECENT ready, FRESH ~4). Modulate cap 3000 -> 5000 audio-h/day in the same
           # ruling. Rollback: 'fresh' (today's FRESH-only overflow).
@@ -1562,6 +1574,9 @@ overlay:
           BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'false', category: ops_kill}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+          # David 2026-11-28: lifecycle v2 serve ramp 1% -> 10% -> 100% by 12-12 (SCA-5312). Rollback: percent '0'.
+          LIFECYCLE_V2_MODE: {value: shadow, category: rollout}
+          LIFECYCLE_V2_MODE_SERVE_PERCENT: {value: '1', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
           PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
@@ -1965,9 +1980,9 @@ overlay:
           # next UTC day). Rollback: 'false' in one config train (David 2026-11-18, support-packet decision 13).
           UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
           UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
-          # Margin-40 O1 inverse: full deploys must retain the admitted 200/10/class16 cadence.
+          # SCA-4928: preserve the serving Integration 200/20/class16 cadence.
           BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS: {value: '200', category: rollout}
-          BATCH_PIPELINE_SERVING_TICK_SECONDS: {value: '10', category: rollout}
+          BATCH_PIPELINE_SERVING_TICK_SECONDS: {value: '20', category: rollout}
           BATCH_PIPELINE_PROJECTION_FOLLOWUP_SLOTS: {value: '4', category: rollout}
           BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT: {value: '16', category: rollout}
           # SCA-2283: retain the behavior of the serving pre-flag image until custody admission.
@@ -1988,6 +2003,9 @@ overlay:
           BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'true', category: ops_kill}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+          # David 2026-11-28: lifecycle v2 serve ramp 1% -> 10% -> 100% by 12-12 (SCA-5312). Rollback: percent '0'.
+          LIFECYCLE_V2_MODE: {value: shadow, category: rollout}
+          LIFECYCLE_V2_MODE_SERVE_PERCENT: {value: '1', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
           PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
@@ -2025,13 +2043,8 @@ overlay:
           # Off on backend-integration: this host has no HOSTED_DIARIZATION_API_URL (listed in forbidden_env),
           # so its batch final pass can only fall back. Keep the URL absent here or re-enable the pass.
           BATCH_FINAL_PASS_ENABLED: {value: 'false', category: ops_kill}
-          # Standing batch vendor route table (lead2 863cd6, David 49b7e4/065da8): compact JSON of
-          # backend/deploy/batch-pipeline/vendor_route_table.prod.json (soniox-unsupported-1127), pinned
-          # by tests/unit/test_batch_vendor_route_table_prod.py. Languages Parakeet cannot serve start on
-          # Soniox (Modulate failover, no Soniox cap; page omi-batch-soniox-daily-hours); fresh English
-          # overflows to Modulate past the GPU SLO; percent is the runtime ramp. Kill switches: BATCH_VENDOR_OVERFLOW_ENABLED /
-          # BATCH_VENDOR_ROUTING_ENABLED = false. Removing the line serves the builtin table.
-          BATCH_VENDOR_ROUTE_TABLE: {value: '{"schema_version":1,"table_version":"soniox-unsupported-1127","selection":"ordered","gpu_floor_percent":0.0,"routes":{"gpu":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":null,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"modulate":{"price_usd_per_audio_hour":0.06,"daily_audio_hours_cap":5000.0,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"soniox":{"price_usd_per_audio_hour":0.12,"daily_audio_hours_cap":null,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"}},"rows":[{"language_class":"en","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"gpu_supported","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]},{"language_class":"gpu_unsupported","options":[{"route":"soniox","quality_tier":"accepted","quality_source":"public_eval_1127"},{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"}]},{"language_class":"*","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]}]}', category: rollout}
+          # SCA-4928: preserve the serving Integration route table until its vendor rollout is admitted.
+          BATCH_VENDOR_ROUTE_TABLE: {value: '{"schema_version":1,"table_version":"en-overflow-1116","selection":"ordered","gpu_floor_percent":0.0,"routes":{"gpu":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":null,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"modulate":{"price_usd_per_audio_hour":0.06,"daily_audio_hours_cap":5000.0,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"soniox":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":1000.0,"monthly_budget_usd":null,"failover_only":true,"speaker_turns":"discard"}},"rows":[{"language_class":"en","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"gpu_supported","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]},{"language_class":"gpu_unsupported","options":[{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"*","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]}]}', category: rollout}
           # RECENT English also overflows while its own GPU backlog is past the SLO (David 2026-11-16,
           # L4 stockout: ~35k RECENT ready, FRESH ~4). Modulate cap 3000 -> 5000 audio-h/day in the same
           # ruling. Rollback: 'fresh' (today's FRESH-only overflow).
@@ -2299,6 +2312,9 @@ overlay:
         - BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_PERCENT
         - BATCH_POLICY_KILL_SWITCH_LOG_ON_CHANGE_ENABLED
         env:
+          # Keep the pump's existing pins when Integration preserves its serving settings.
+          BATCH_PIPELINE_SERVING_TICK_SECONDS: {value: '10', category: rollout}
+          BATCH_VENDOR_ROUTE_TABLE: *soniox_unsupported_1127
           CONVERSATIONS_V3_LIVE_TITLE: {value: 'on', category: ops_kill}
           # The pump derives from integration; keep its own fast finish at the code default (cohort).
           CONVERSATIONS_V3_FAST_FINISH: {value: 'cohort', category: ops_kill}

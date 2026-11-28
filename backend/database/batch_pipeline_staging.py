@@ -16,6 +16,13 @@ def artifact_id(segment_id: str, uri: str) -> str:
     return hashlib.sha256(f'{segment_id}\0{reserved}'.encode()).hexdigest()
 
 
+def retire_upload_reservation(receipt: dict[str, Any]) -> None:
+    """End active upload custody while preserving its exact late-erasure window."""
+    deadline = receipt.pop('write_pending_until', None)
+    if isinstance(deadline, datetime):
+        receipt['late_erasure_pending_until'] = deadline
+
+
 def unsettled(client: Any, namespace: str, before: datetime, limit: int = 100) -> list[str]:
     docs = (
         client.collection(f'{namespace}_artifacts')
@@ -44,16 +51,11 @@ def reap_one(store: Store, key: str, now: datetime) -> bool:
         if source.get('uri', '').split('#', 1)[0] == uri:
             return False  # Accepted pre-unit custody has no TTL, including OFF/outage.
         attached = job.get('audio_uri') if row['kind'] == 'audio' else (job.get('result') or {}).get('result_uri')
-        if row['kind'] != 'audio':
-            # A parked sweep still needs the original window after this reaper retires the upload marker.
-            row['late_erasure_pending_until'] = deadline
-        if attached and attached.split('#', 1)[0] == uri:
-            row.pop('write_pending_until', None)
-        elif job.get('state') == 'leased' and row['kind'] != 'audio' and job.get('lease_until', 0) > now.timestamp():
-            return False  # A current model batch may not have submitted results yet.
-        else:
-            row.pop('write_pending_until', None)
+        if not attached or attached.split('#', 1)[0] != uri:
+            if job.get('state') == 'leased' and row['kind'] != 'audio' and job.get('lease_until', 0) > now.timestamp():
+                return False  # A current model batch may not have submitted results yet.
             row['cleanup_after'] = now
+        retire_upload_reservation(row)
         tx.put('artifacts', key, row)
         return True
 

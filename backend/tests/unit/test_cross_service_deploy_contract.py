@@ -547,15 +547,16 @@ def test_integration_cadence_exception_preserves_worker_role_boundary(results: R
     worker = model.deployments['helm/batch-pipeline-worker']
     expected = {
         'BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS': ('200', '100'),
-        'BATCH_PIPELINE_SERVING_TICK_SECONDS': ('10', '20'),
+        'BATCH_PIPELINE_SERVING_TICK_SECONDS': ('20', '20'),
     }
-    cadence_gaps = {f'reader-split|prod|helm/batch-pipeline-worker/{key}' for key in expected}
-    violations = contract.check_reader_split(results.baseline)
-    assert cadence_gaps <= {v.key for v in violations}
+    gap_prefix = 'reader-split|prod|helm/batch-pipeline-worker/'
+    cadence_gaps = {gap_prefix + key for key, values in expected.items() if values[0] != values[1]}
+    observed = {v.key for v in contract.check_reader_split(results.baseline)}
+    assert observed & {gap_prefix + key for key in expected} == cadence_gaps
     for key, (admitted, retained_default) in expected.items():
         assert integration.env[key] == admitted
         assert key not in worker.env
         assert contract.effective(worker, key, results.baseline.readers) == retained_default
-    # These remain observable violations, accepted only as two exact role-specific gaps.
+    # The page-row split remains an exact role-specific gap.
     # The existing head-priority and independent-recovery mutations still reject real drift.
     assert cadence_gaps <= contract.load_known_gaps().keys()
