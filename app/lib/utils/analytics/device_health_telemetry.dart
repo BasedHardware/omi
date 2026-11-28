@@ -9,7 +9,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
+import 'package:omi/services/experiments/device_dropoff_telemetry.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
+import 'package:omi/utils/analytics/device_dropoff_signals.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -221,7 +223,9 @@ class DeviceHealthTelemetry {
     return '≥${limits.last}';
   }
 
-  static Map<String, dynamic> rollup(Map<String, dynamic> diagnostics, DateTime day) {
+  /// [dropoff] adds the [DeviceDropoffSignals] fields (schema 3); the kill
+  /// switch turns them off and restores the schema 2 shape.
+  static Map<String, dynamic> rollup(Map<String, dynamic> diagnostics, DateTime day, {bool dropoff = true}) {
     final start = DateTime(day.year, day.month, day.day).millisecondsSinceEpoch;
     final end = DateTime(day.year, day.month, day.day + 1).millisecondsSinceEpoch;
     // Writers emit integer millis; a fractional observed_at would shift both
@@ -245,6 +249,10 @@ class DeviceHealthTelemetry {
     final resets = <String, int>{};
     var connectedMs = 0;
     var connectedBeforeHorizonMs = 0;
+    // Schema 3 connected time. Same disconnect rows, but the open link counts
+    // only once it is established (see DeviceDropoffSignals.linkEstablished).
+    var establishedMs = 0;
+    var establishedBeforeHorizonMs = 0;
     double? lostAudioSeconds;
     final resolved = (diagnostics['outage_resolved_days'] as Map?)?[start.toString()] as num?;
     if (resolved != null) lostAudioSeconds = resolved.toDouble();
@@ -273,11 +281,16 @@ class DeviceHealthTelemetry {
       // truncate into a shifted connected-window inside the lost-audio cap.
       final ts = event['timestamp'] is int ? event['timestamp'] as int : 0;
       final duration = event['connectionDurationMs'] is int ? event['connectionDurationMs'] as int : 0;
-      connectedMs += (ts.clamp(start, end) - (ts - duration).clamp(start, end)).clamp(0, end - start);
+      final sessionMs = (ts.clamp(start, end) - (ts - duration).clamp(start, end)).clamp(0, end - start);
+      // A measured session start/end is established-link evidence.
+      connectedMs += sessionMs;
+      establishedMs += sessionMs;
       if (retentionHorizon > start) {
         final prefixEnd = retentionHorizon < end ? retentionHorizon : end;
-        connectedBeforeHorizonMs +=
+        final prefixMs =
             (ts.clamp(start, prefixEnd) - (ts - duration).clamp(start, prefixEnd)).clamp(0, prefixEnd - start);
+        connectedBeforeHorizonMs += prefixMs;
+        establishedBeforeHorizonMs += prefixMs;
       }
       if (ts < start || ts >= end) continue;
       final reason = event['reason']?.toString() ?? 'unknown';
@@ -310,6 +323,17 @@ class DeviceHealthTelemetry {
     final activeSince = diagnostics['connected_at'] is int ? diagnostics['connected_at'] as int : 0;
     if (activeSince > 0 && activeSince < exposureEnd) {
       connectedMs += exposureEnd - activeSince.clamp(start, exposureEnd);
+      // The legacy fraction keeps billing the open stamp. Schema 3 counts it
+      // only when the link is established: Android stamps connected_at when a
+      // GATT attempt starts, so a pending attempt is not connected time.
+      if (DeviceDropoffSignals.linkEstablished(diagnostics)) {
+        establishedMs += exposureEnd - activeSince.clamp(start, exposureEnd);
+        if (retentionHorizon > start) {
+          final prefixEnd = retentionHorizon < end ? retentionHorizon : end;
+          establishedBeforeHorizonMs +=
+              (exposureEnd.clamp(start, prefixEnd) - activeSince.clamp(start, prefixEnd)).clamp(0, prefixEnd - start);
+        }
+      }
       if (retentionHorizon > start) {
         final prefixEnd = retentionHorizon < end ? retentionHorizon : end;
         connectedBeforeHorizonMs +=
@@ -332,14 +356,19 @@ class DeviceHealthTelemetry {
     // Exclude it from the disconnected budget whether or not a packet row
     // survived; packets are not a precondition for the correction.
     var disconnectedMs = (end - start) - connectedMs.clamp(0, end - start);
+    // Schema 3 splits the same day against established linked time.
+    var establishedDisconnectedMs = (end - start) - establishedMs.clamp(0, end - start);
     var connectionHistoryIncomplete = false;
     if (start < retentionHorizon) {
       final prefixMs = retentionHorizon.clamp(start, end) - start;
       final unknownPrefix = (prefixMs - connectedBeforeHorizonMs.clamp(0, prefixMs)).clamp(0, prefixMs);
       disconnectedMs -= unknownPrefix;
+      final establishedUnknownPrefix = (prefixMs - establishedBeforeHorizonMs.clamp(0, prefixMs)).clamp(0, prefixMs);
+      establishedDisconnectedMs -= establishedUnknownPrefix;
       connectionHistoryIncomplete = true;
     }
     if (disconnectedMs < 0) disconnectedMs = 0;
+    if (establishedDisconnectedMs < 0) establishedDisconnectedMs = 0;
     final disconnectedSeconds = disconnectedMs / 1000;
     if (unresolved != null && unresolved > disconnectedSeconds) {
       lostAudioSeconds = (lostAudioSeconds ?? 0) - (unresolved - disconnectedSeconds);
@@ -430,7 +459,7 @@ class DeviceHealthTelemetry {
         rssiAtLeastMinus60: ringReadRssi[3],
         rssiUnknown: ringReadRssi[4],
       ).properties,
-      'schema_version': 2,
+      'schema_version': dropoff ? 3 : 2,
       'day_app_build': builds.isEmpty ? null : (builds.toList()..sort()),
       'day_firmware': firmwares.isEmpty ? null : (firmwares.toList()..sort()),
       'lost_audio_seconds': lostAudioSeconds?.clamp(0, 86400),
@@ -448,6 +477,15 @@ class DeviceHealthTelemetry {
       if (lastOffChargerMvMax != null) 'last_off_charger_mv_max': lastOffChargerMvMax,
       if (socFrozenSamples != null) 'soc_frozen_samples': socFrozenSamples,
       'device_resets_by_reason': resets,
+      if (dropoff) ...{
+        // Explicit split: lost_audio_seconds stays "time without a link".
+        // Both sides use established-link evidence, so a pending Android GATT
+        // attempt is disconnected time, not a connected day.
+        'connected_seconds': establishedMs.clamp(0, end - start) ~/ 1000,
+        'disconnected_seconds': establishedDisconnectedMs ~/ 1000,
+        'audio_packets_per_connected_minute': establishedMs < 60000 ? null : received * 60000 ~/ establishedMs,
+        ...DeviceDropoffSignals.rollup(diagnostics, day),
+      },
     };
   }
 
@@ -527,6 +565,7 @@ class DeviceHealthTelemetry {
     Future<String> Function(String)? loadDiagnostics,
     void Function(String, Map<String, dynamic>)? emit,
     Map<String, dynamic>? emissionContext,
+    Future<bool> Function()? dropoffDisabled,
   }) async {
     if (!AnalyticsManager.deviceHealthRecordingEnabled || !_inFlightDevices.add(device.id)) return;
     try {
@@ -624,6 +663,12 @@ class DeviceHealthTelemetry {
           : Platform.isIOS
               ? (await DeviceInfoPlugin().iosInfo).utsname.machine
               : (await DeviceInfoPlugin().androidInfo).model;
+      var dropoff = true;
+      try {
+        dropoff = !await (dropoffDisabled ?? DeviceDropoffTelemetryPolicy.disabled)();
+      } catch (_) {
+        // An unreadable kill switch keeps the fields on.
+      }
       var day = last == null ? yesterday : DateTime(last.year, last.month, last.day + 1);
       final oldest = DateTime(yesterday.year, yesterday.month, yesterday.day - 6);
       if (day.isBefore(oldest)) day = oldest;
@@ -634,7 +679,7 @@ class DeviceHealthTelemetry {
           day = DateTime(day.year, day.month, day.day + 1);
           continue;
         }
-        final daily = rollup(diagnostics, day);
+        final daily = rollup(diagnostics, day, dropoff: dropoff);
         final dayFirmware = daily['day_firmware'] as List?;
         final dayBuild = daily['day_app_build'] as List?;
         final properties = {

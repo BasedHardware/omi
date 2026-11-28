@@ -287,7 +287,7 @@ void main() {
     expect(events.single['lost_audio_seconds'], 86400);
     expect(events.single['unresolved_outage_seconds'], 86400);
     expect(events.single['unresolved_outage_open'], isTrue);
-    expect(events.single['schema_version'], 2);
+    expect(events.single['schema_version'], 3);
   }, tags: ['depends_on_21152']);
 
   test('first recovered packet splits durable outage at midnight after process death', () async {
@@ -333,7 +333,7 @@ void main() {
     await drainDelivery();
     events.addAll(delivered);
     expect(events.map((e) => e['day']), ['2026-10-08', '2026-10-10']);
-    expect(events.first['schema_version'], 2);
+    expect(events.first['schema_version'], 3);
     expect(events.first['app_version'], 'old+1');
     expect(events.last['app_version'], 'new+2');
     expect(events.first['day_app_build'], ['old+1']);
