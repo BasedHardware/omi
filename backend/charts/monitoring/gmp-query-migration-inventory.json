@@ -670,6 +670,19 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
+      "expression": "sum(increase(omi_batch_pipeline_privacy_post_window_dead_letters_total{project_id=\"based-hardware\"}[30m])) or vector(0)",
+      "file": "alerts/batch-privacy-erasure.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_privacy_post_window_dead_letters_total"
+      ],
+      "owner_title": "Batch privacy erasure needs recovery",
+      "owner_uid": "omi-batch-privacy-erasure-dead-letter",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "((max(time() - omi_batch_pipeline_metrics_refreshed_at_seconds{namespace=\"prod-omi-backend\"}) >= bool 900) or vector(1)) + (count(count by (priority) (omi_batch_pipeline_oldest_age_seconds{namespace=\"prod-omi-backend\"} != omi_batch_pipeline_oldest_age_seconds{namespace=\"prod-omi-backend\"})) or vector(0)) + (count(count by (priority) (omi_batch_pipeline_retry_age_seconds{namespace=\"prod-omi-backend\"} != omi_batch_pipeline_retry_age_seconds{namespace=\"prod-omi-backend\"})) or vector(0))",
       "file": "alerts/batch-queue-safety.json",
       "issues": [],
@@ -4909,7 +4922,7 @@
   ],
   "counts": {
     "explicit_bridge": 42,
-    "query_consumers": 331
+    "query_consumers": 332
   },
   "schema_version": 1,
   "source": "repository, not live Grafana export"

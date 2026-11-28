@@ -2474,9 +2474,10 @@
         "logging_googleapis_com:user_omi_pipeline_firestore_contention_exhausted",
         "logging_googleapis_com:user_omi_pipeline_owner_drain_advanced_count",
         "logging_googleapis_com:user_omi_pipeline_owner_drain_advanced_sum",
-        "logging_googleapis_com:user_omi_pipeline_owner_drain_claim_busy"
+        "logging_googleapis_com:user_omi_pipeline_owner_drain_claim_busy",
+        "omi_batch_pipeline_privacy_post_window_dead_letters_total"
       ],
-      "declaration_evidence": "backend/charts/monitoring/batch-projection/log-metrics.json; source declarations only, not observed production series."
+      "declaration_evidence": "Log metrics are declared in backend/charts/monitoring/batch-projection/log-metrics.json. The batch privacy counter is declared in backend/database/privacy_check_metrics.py and admitted by the Cloud Run scrape filters and the GKE serving charts' fastMetrics filters. These are source declarations, not observed production series."
     }
   }
 }

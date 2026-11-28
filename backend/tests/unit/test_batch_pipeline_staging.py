@@ -29,9 +29,11 @@ def stage(store, *, kind='audio', deadline=None):
 
 def test_abandoned_staging_becomes_durable_cleanup_obligation():
     store = MemoryStore()
-    work, key = stage(store)
+    deadline = NOW - ORPHAN_GRACE
+    _, key = stage(store, deadline=deadline)
     assert reap_one(store, key, NOW)
     assert store.rows['artifacts', key]['cleanup_after'] == NOW
+    assert store.rows['artifacts', key]['late_erasure_pending_until'] == deadline
     assert not reap_one(store, key, NOW)
 
 

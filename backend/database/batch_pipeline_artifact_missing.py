@@ -100,7 +100,7 @@ class ArtifactMissingStore:
         dedupe batch projections. Reuse this exact upload and queue only the
         absent units; projected siblings never re-enter compute or assignment.
         """
-        from database.batch_pipeline_staging import artifact_id
+        from database.batch_pipeline_staging import artifact_id, retire_upload_reservation
         from utils.batch_pipeline.scheduler import Scheduler
         from database.batch_pipeline_projection import held_without_recovery
 
@@ -148,7 +148,7 @@ class ArtifactMissingStore:
                 prepared.append((sid, job, uri, reservation))
             # All authority and staging reads precede queue/artifact writes.
             for sid, job, uri, reservation in prepared:
-                reservation.pop('write_pending_until', None)
+                retire_upload_reservation(reservation)
                 tx.put('artifacts', artifact_id(sid, uri), reservation)
                 job['audio_uri'] = uri
                 job['audio_staged_at'] = now

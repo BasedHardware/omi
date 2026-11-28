@@ -1342,9 +1342,9 @@ def test_maskless_account_revocation_arms_recording_erasure(plane):
     assert intent.get('conversation_id') == ''
 
 
-def _register_pending_result(plane, monkeypatch, tmp_path, variant):
+def _register_pending_artifact(plane, monkeypatch, tmp_path, variant, *, kind='result'):
     bucket, namespace, uid = 'synthetic-late-batch', 'batch_pipeline_dev', plane.uid
-    storage = LocalStorageClient(tmp_path / 'result-upload')
+    storage = LocalStorageClient(tmp_path / 'artifact-upload')
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.setenv('BUCKET_BATCH_PIPELINE', bucket)
     monkeypatch.setattr(late_sweeps, 'create_storage_client', lambda: storage)
@@ -1370,12 +1370,17 @@ def _register_pending_result(plane, monkeypatch, tmp_path, variant):
     job = {'owner_id': uid, 'state': 'leased', 'conversation_id': cid, 'projection_binding': asdict(binding)}
     if variant == 'native':
         job.update(record_lane_owner=lane, record_origin=True)
-    plane.client.collection(f'{namespace}_jobs').document(segment).set(job)
+    job_ref = plane.client.collection(f'{namespace}_jobs').document(segment)
+    job_ref.set(job)
     artifacts = create_artifact_store(
         FirestoreStore(namespace, firestore_client=plane.client), storage, bucket, b'x' * 32
     )
     item = WorkItem(segment, uid, 100, 'record:pending', 1, Priority.FRESH, conversation_id=cid, privacy_generation=0)
-    uri = artifacts.persist_result(item, {'synthetic_result': True})
+    if kind == 'audio':
+        uri = artifacts.stage_audio(item, b'synthetic audio', record_origin=origin, record_lane_owner=lane)
+        job_ref.update({'audio_uri': uri})
+    else:
+        uri = artifacts.persist_result(item, {'synthetic_result': True})
     blob = storage.bucket(bucket).blob(uri.removeprefix(f'gs://{bucket}/').split('#', 1)[0])
     [receipt] = plane.client.collection(f'{namespace}_artifacts').stream()
     return user, receipt, blob
@@ -1383,7 +1388,7 @@ def _register_pending_result(plane, monkeypatch, tmp_path, variant):
 
 @pytest.mark.parametrize('variant', ['desktop-sync', 'legacy-nonrecording', 'native', 'legacy-unstamped'])
 def test_account_opt_out_preserves_allowed_admitted_results(plane, monkeypatch, tmp_path, variant):
-    user, receipt, blob = _register_pending_result(
+    user, receipt, blob = _register_pending_artifact(
         plane, monkeypatch, tmp_path, 'native' if variant == 'legacy-unstamped' else variant
     )
     start = receipt.create_time
@@ -1417,12 +1422,13 @@ def test_account_opt_out_preserves_allowed_admitted_results(plane, monkeypatch, 
         assert 'execute_at' not in debt.to_dict()
 
 
-def test_default_closed_sweep_keeps_proof_and_resumes_after_history_window(plane, monkeypatch, tmp_path):
-    from database.batch_pipeline_staging import ORPHAN_GRACE, reap_one
+@pytest.mark.parametrize('kind', ['result', 'audio'])
+def test_default_closed_sweep_keeps_proof_and_resumes_after_orphan_grace(plane, monkeypatch, tmp_path, kind):
+    from database.batch_pipeline_staging import ORPHAN_GRACE, reap
 
     monkeypatch.delenv('FIRESTORE_READ_LEVERS')
     client = plane.client
-    user, receipt, blob = _register_pending_result(plane, monkeypatch, tmp_path, 'native')
+    user, receipt, blob = _register_pending_artifact(plane, monkeypatch, tmp_path, 'native', kind=kind)
     user.update({'private_cloud_sync_enabled': False})
     [intent] = client.collection(late_intents.COLLECTION).stream()
     reconcile = late_sweeps.reconcile_batch_privacy_late_sweeps
@@ -1440,13 +1446,14 @@ def test_default_closed_sweep_keeps_proof_and_resumes_after_history_window(plane
     assert reconcile(firestore_client=client) == {}
     mocked_storage.assert_not_called()
     assert intent.reference.get().exists and receipt.reference.get().exists and blob.exists()
-    client.collection('batch_pipeline_dev_jobs').document(receipt.get('segment_id')).update(
-        {'result.result_uri': receipt.get('uri')}
-    )
+    if kind == 'result':
+        client.collection('batch_pipeline_dev_jobs').document(receipt.get('segment_id')).update(
+            {'result.result_uri': receipt.get('uri')}
+        )
     store = FirestoreStore('batch_pipeline_dev', firestore_client=client)
-    assert reap_one(store, receipt.id, clock[0])
+    assert reap(store, clock[0]) == 1
     retired = receipt.reference.get().to_dict()
-    assert 'write_pending_until' not in retired and retired['late_erasure_pending_until'] == deadline
+    assert 'write_pending_until' not in retired and 'cleanup_after' not in retired
     monkeypatch.setattr(
         late_sweeps, '_historical_scope', MagicMock(side_effect=AssertionError('proof must be durable'))
     )
@@ -1455,8 +1462,230 @@ def test_default_closed_sweep_keeps_proof_and_resumes_after_history_window(plane
         if reconcile(firestore_client=client) == {'completed': 1}:
             break
         clock[0] += late_sweeps.PAGE_RETRY
-    assert not intent.reference.get().exists and not receipt.reference.get().exists and not blob.exists()
+    assert not intent.reference.get().exists
+    assert not blob.exists(), 'resuming the sweep must erase the staged object'
+    assert not receipt.reference.get().exists
+    assert retired['late_erasure_pending_until'] == deadline
     assert _pending_count('artifact_execution') == 0
+
+
+def _stage_coalesced_source(store, artifacts, item, now):
+    from database import batch_pipeline_coalescing as coalescing
+
+    uri = artifacts.stage_audio(item, b'synthetic held audio', record_origin=False)
+    uid = item.owner_id
+    member = {'owner_id': uid, 'item': replace(item, audio_uri=uri).to_dict(), 'uri': uri, 'job_id': 'original-intake'}
+    group = {
+        'id': 'coalesce-group',
+        'key': 'coalesce-head',
+        'owner_id': uid,
+        'owner_key': hashlib.sha256(uid.encode()).hexdigest(),
+        'conversation_id': item.conversation_id,
+        'privacy_generation': item.privacy_generation,
+        'state': 'sealed',
+        'mode': 'merged',
+        'token': 'held-lease',
+        'lease_until': now + 60,
+        'members': [member],
+    }
+
+    def seed(tx):
+        tx.put('coalesce_groups', group['id'], group)
+        tx.put('coalesce_sources', item.segment_id, member)
+        tx.put('coalesce_quota', 'global', {'groups': 1, 'owners': {group['owner_key']: 1}})
+        tx.put('intakes', member['job_id'], {'coalesce_group': group['id']})
+        tx.put('intakes', 'merged-intake', {'owner_id': uid, 'segment_ids': ['merged-unit']})
+
+    store.run(seed)
+    return uri, lambda: coalescing.finish(store, group, ['merged-intake'], now)
+
+
+def _stage_reupload(store, artifacts, item, binding, now):
+    from database.batch_pipeline_artifact_missing import ArtifactMissingStore
+
+    old_uri = 'gs://synthetic-late-batch/missing#1'
+    snapshot = {
+        **replace(item, audio_uri=old_uri).to_dict(),
+        'owner_key': hashlib.sha256(item.owner_id.encode()).hexdigest(),
+        'projection_binding': asdict(binding),
+        'state': 'quarantined',
+        'recovery_state': 'failed_held',
+        'merge_pending': False,
+        'artifact_disposition': {
+            'state': 'missing',
+            'privacy_generation': item.privacy_generation,
+            'evidence': {'uri_sha256': hashlib.sha256(old_uri.encode()).hexdigest()},
+        },
+    }
+
+    def seed(tx):
+        tx.put('jobs', item.segment_id, snapshot)
+        tx.put(
+            'content',
+            f'{item.owner_id}/{binding.content_id}',
+            {
+                'job_id': binding.job_id,
+                'status': 'partial',
+                'dispatch_protocol': 'batch_v1',
+                'batch_pipeline': {
+                    'protocol_version': 1,
+                    'namespace': store.namespace,
+                    'segment_ids': list(binding.segment_ids),
+                },
+            },
+        )
+
+    store.run(seed)
+    protocol = ArtifactMissingStore(store)
+    _, _, snapshots = protocol.reupload_snapshot(item.owner_id, binding.content_id)
+    uri = artifacts.stage_audio(item, b'synthetic replacement audio')
+
+    def retire():
+        assert (
+            protocol.restore_reupload(item.owner_id, binding.content_id, snapshots, {item.segment_id: uri}, now)
+            == binding.job_id
+        )
+
+    return uri, retire
+
+
+def _stage_alias(store, artifacts, item, binding, now, *, require_artifacts):
+    from database.batch_pipeline_intake import admit
+    from database.batch_pipeline_source_reuse import TABLE, receipt_id
+    from database.batch_pipeline_staging import artifact_id
+
+    uid, source_id, source_key = item.owner_id, hashlib.sha256(b'canonical-unit').hexdigest(), 'a' * 64
+    canonical = replace(item, segment_id=source_id, source_reuse_key=source_key, audio_uri='gs://synthetic/audio#1')
+    canonical_binding = replace(
+        binding, job_id='canonical-job', content_id='canonical-content', segment_ids=(source_id,)
+    )
+    result = {'segment_id': source_id, 'result_uri': 'gs://synthetic/result#1', 'outcome': 'success'}
+
+    def seed(tx):
+        tx.put(
+            'jobs',
+            source_id,
+            {
+                **canonical.to_dict(),
+                'state': 'committed',
+                'projection_binding': asdict(canonical_binding),
+                'result': result,
+            },
+        )
+        tx.put('results', source_id, {'result': result, 'projection': {'state': 'ready'}})
+        tx.put(
+            TABLE,
+            receipt_id(source_key),
+            {
+                'owner_id': uid,
+                'segment_id': source_id,
+                'privacy_generation': 0,
+                'complete': True,
+                'expires_at': datetime.fromtimestamp(now, timezone.utc) + timedelta(hours=1),
+            },
+        )
+        tx.put(
+            'content',
+            f'{uid}/{canonical_binding.content_id}',
+            {'status': 'completed', 'job_id': canonical_binding.job_id},
+        )
+        for uri in (canonical.audio_uri, result['result_uri']):
+            tx.put('artifacts', artifact_id(source_id, uri), {'owner_id': uid, 'privacy_generation': 0})
+
+    store.run(seed)
+    alias = replace(item, source_reuse_key=source_key, source_alias_of=source_id)
+    alias = replace(alias, audio_uri=artifacts.stage_audio(alias, b'synthetic alias audio'))
+    marker = artifacts.persist_result(alias, {'synthetic_alias': True})
+
+    def retire():
+        assert admit(
+            store,
+            [alias],
+            binding,
+            now,
+            namespace=store.namespace,
+            policy=BatchUnitPolicy(batch_enabled=True),
+            require_artifacts=require_artifacts,
+            source_aliases={item.segment_id: {'segment_id': source_id, 'result_uri': marker}},
+        ) == {'outcome': 'batch', 'job_id': binding.job_id}
+
+    return alias.audio_uri, marker, retire
+
+
+@pytest.mark.parametrize(
+    'path', ['coalescing', 'reupload', 'alias-result', 'alias-audio-required', 'alias-audio-optional']
+)
+def test_paused_sweep_erases_artifact_after_reservation_retirement(plane, monkeypatch, tmp_path, path):
+    from database.batch_pipeline_staging import ORPHAN_GRACE, artifact_id
+
+    monkeypatch.delenv('FIRESTORE_READ_LEVERS')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setenv('BATCH_SOURCE_REUSE_ENABLED', 'true')
+    bucket = 'synthetic-late-batch'
+    monkeypatch.setenv('BUCKET_BATCH_PIPELINE', bucket)
+    storage = LocalStorageClient(tmp_path / 'retired-upload')
+    monkeypatch.setattr(late_sweeps, 'create_storage_client', lambda: storage)
+    monkeypatch.setattr(late_sweeps, 'purge_owner', lambda *_: 0)
+    client, uid = plane.client, plane.uid
+    store = FirestoreStore('batch_pipeline_dev', firestore_client=client)
+    artifacts = create_artifact_store(store, storage, bucket, b'x' * 32)
+    _conversation(plane, 'synthetic-source')
+    item = WorkItem(
+        'reserved-unit',
+        uid,
+        100,
+        'gs://synthetic/unset#1',
+        1,
+        Priority.FRESH,
+        conversation_id='synthetic-source',
+        privacy_generation=0,
+    )
+    binding = ProjectionBinding(uid, 'synthetic-job', 'synthetic-content', (item.segment_id,))
+    now = time.time()
+    if path == 'coalescing':
+        uri, retire = _stage_coalesced_source(store, artifacts, item, now)
+    elif path == 'reupload':
+        uri, retire = _stage_reupload(store, artifacts, item, binding, now)
+    else:
+        audio, marker, retire = _stage_alias(
+            store, artifacts, item, binding, now, require_artifacts=path != 'alias-audio-optional'
+        )
+        uri = marker if path == 'alias-result' else audio
+
+    address = uri.split('#', 1)[0]
+    blob = storage.bucket(bucket).blob(address.removeprefix(f'gs://{bucket}/'))
+    receipt = client.collection(f'{store.namespace}_artifacts').document(artifact_id(item.segment_id, uri))
+    reserved = receipt.get()
+    assert reserved.get('uri') == address
+    deadline = reserved.get('write_pending_until')
+    user = client.collection('users').document(uid)
+    # These are non-recording paths. The data-protection Commit covers them, and
+    # a later restore allows the real retirement transaction to run.
+    time.sleep(0.005)  # Separate artifact creation from millisecond-precision policy REQUEST_TIME.
+    user.update({'data_protection_level': 'e2ee'})
+    [intent] = client.collection(late_intents.COLLECTION).stream()
+    assert reserved.create_time <= intent.get('changed_at') <= deadline
+    reconcile = late_sweeps.reconcile_batch_privacy_late_sweeps
+    assert reconcile(firestore_client=client) == {'scope_verified': 1}
+    user.update({'data_protection_level': 'standard'})
+    retire()
+    retired = receipt.get().to_dict()
+    assert 'write_pending_until' not in retired and 'cleanup_after' not in retired
+    clock = [deadline + ORPHAN_GRACE + timedelta(seconds=1)]
+    monkeypatch.setattr(late_sweeps, '_now', lambda: clock[0])
+    assert reconcile(firestore_client=client) == {}
+    assert intent.reference.get().get('scope_verified') is True and blob.exists()
+
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', ERASURE_ON)
+    for _ in range(10):
+        if reconcile(firestore_client=client) == {'completed': 1}:
+            break
+        clock[0] += late_sweeps.PAGE_RETRY
+    assert not blob.exists(), f'resuming the sweep must erase the {path} object'
+    assert not receipt.get().exists and not intent.reference.get().exists
+    assert retired['late_erasure_pending_until'] == deadline
+    if path == 'coalescing':
+        assert retired['segment_id'] == 'merged-unit' and retired['uri'] == uri
 
 
 def _pending_count(phase):
@@ -1509,7 +1738,8 @@ def test_account_recording_erasures_require_a_denial_at_the_policy_commit(plane,
     monkeypatch.setattr(late_sweeps, '_now', lambda: clock[0])
     reconcile = late_sweeps.reconcile_batch_privacy_late_sweeps
     if path in {'history-unreadable', 'history-transient', 'unverified-retry'}:
-        monkeypatch.setenv('BATCH_PRIVACY_LATE_SWEEP_PERMANENT_ATTEMPTS', '2')
+        monkeypatch.delenv('FIRESTORE_READ_LEVERS')
+        monkeypatch.delenv('BATCH_PRIVACY_LATE_SWEEP_PERMANENT_ATTEMPTS', raising=False)
         before = _dead_letter_count('scope_history_unavailable')
 
         def unavailable(_client, reference, field_paths, read_time):
@@ -1527,11 +1757,16 @@ def test_account_recording_erasures_require_a_denial_at_the_policy_commit(plane,
             retry.set({**intent.to_dict(), 'artifact_id': receipt.id, 'scope_verified': False})
             intent.reference.delete()
             intent = retry.get()
-        assert reconcile(firestore_client=client) == {'retry': 1}
-        clock[0] += late_sweeps.RETRY
+        for attempts in range(1, 5):
+            assert reconcile(firestore_client=client) == {'retry': 1}
+            assert intent.reference.get().get('permanent_attempts') == attempts
+            assert reconcile(firestore_client=client) == {}
+            assert _dead_letter_count('scope_history_unavailable') == before
+            clock[0] += late_sweeps.RETRY
         assert reconcile(firestore_client=client) == {'dead_lettered': 1}
         assert reconcile(firestore_client=client) == {}
         debt = intent.reference.get().to_dict()
+        assert debt['permanent_attempts'] == 5
         assert debt['dead_letter_error'] == 'scope_history_unavailable'
         assert 'due_at' not in debt
         assert 'execute_at' not in debt
@@ -1598,7 +1833,7 @@ def test_late_sweep_settles_receipt_after_normal_retention_cleanup(plane, monkey
     from utils.batch_pipeline.retention import cleanup_completed_artifacts
 
     client = plane.client
-    user, reserved, blob = _register_pending_result(plane, monkeypatch, tmp_path, 'native')
+    user, reserved, blob = _register_pending_artifact(plane, monkeypatch, tmp_path, 'native')
     store = FirestoreStore('batch_pipeline_dev', firestore_client=client)
     receipt = reserved.reference
     deadline = reserved.get('write_pending_until')

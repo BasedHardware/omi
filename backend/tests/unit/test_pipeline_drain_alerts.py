@@ -115,13 +115,17 @@ def test_drain_uses_sum_for_rows_and_count_for_weighted_turn_share():
 def test_log_metric_source_scopes_and_real_turn_extraction():
     metrics = {m['name']: m for m in json.loads((MONITORING / 'batch-projection/log-metrics.json').read_text())}
     inventory = json.loads((MONITORING / 'metric-inventory.prod.json').read_text())
-    declared = inventory['datasource_metrics']['gmp-cloud-run']['declared_metrics']
+    declared = {
+        name
+        for name in inventory['datasource_metrics']['gmp-cloud-run']['declared_metrics']
+        if name.startswith('logging_googleapis_com:user_')
+    }
     expected = {
         'logging_googleapis_com:user_' + m['name'] + suffix
         for m in metrics.values()
         for suffix in (['_sum', '_count'] if m['metricDescriptor']['valueType'] == 'DISTRIBUTION' else [''])
     }
-    assert set(declared) == expected
+    assert declared == expected
     upload = metrics['omi_pipeline_upload_admission_503']['filter']
     for token in (
         'resource.type="cloud_run_revision"',
