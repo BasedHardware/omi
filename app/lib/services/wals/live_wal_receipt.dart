@@ -27,6 +27,7 @@ class LiveWalReceipt {
   static const _pending = '.json';
   static const _stagingDirectory = 'staging';
   static const _retiredDirectory = 'retired';
+  static const _retirementCursorName = '.retire-cursor';
   static const _maxEntries = 128;
   static const _maxReceiptBytes = 16 * 1024;
   static const _maxReplayBytes = 32 * 1024 * 1024;
@@ -386,23 +387,89 @@ class LiveWalReceipt {
     }
   }
 
-  /// Run only after both restart index generations have durably committed the
-  /// matching record. Best effort: a later startup can try again.
-  static Future<void> retireCommitted(File primaryFile, File backupFile) async {
+  static Future<({String? after, bool wrapping})> _readRetirementCursor(Directory pending) async {
+    try {
+      final raw = (await File(path.join(pending.path, _retirementCursorName)).readAsString()).trim();
+      if (raw.startsWith('{')) {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map && decoded['version'] == 1 && decoded['wrapping'] is bool) {
+          final after = decoded['after'];
+          if (after != null && (after is! String || !_safeName(after) || !isManagedBasename(after))) {
+            return (after: null, wrapping: false);
+          }
+          return (after: after as String?, wrapping: decoded['wrapping'] as bool);
+        }
+      }
+      // Older builds persisted the cursor as a plain basename.
+      return _safeName(raw) && isManagedBasename(raw) ? (after: raw, wrapping: false) : (after: null, wrapping: false);
+    } catch (_) {
+      return (after: null, wrapping: false);
+    }
+  }
+
+  static Future<bool> _writeRetirementCursor(Directory pending,
+      {required String? after, required bool wrapping}) async {
+    final file = File(path.join(pending.path, _retirementCursorName));
+    try {
+      if (after == null && !wrapping) {
+        if (await file.exists()) await file.delete();
+        return true;
+      }
+      if (after != null && (!_safeName(after) || !isManagedBasename(after))) return false;
+      final temporary = File('${file.path}.tmp');
+      await temporary.writeAsString(jsonEncode({'version': 1, 'after': after, 'wrapping': wrapping}), flush: true);
+      await temporary.rename(file.path);
+      return true;
+    } catch (_) {
+      // Losing the cursor only repeats a safe page; it cannot retire audio.
+      return false;
+    }
+  }
+
+  /// Run after both restart index generations have durably committed the
+  /// matching record. One bounded page is processed per call. The cursor is
+  /// durable so repeated calls and app launches eventually visit the full set.
+  /// Completing a cursor range starts one persisted wrap pass, so receipts
+  /// that became eligible behind the cursor are revisited after a restart.
+  static Future<bool> retireCommitted(File primaryFile, File backupFile) async {
     try {
       final pending = directory(backupFile.parent);
-      if (!await pending.exists() || !await primaryFile.exists() || !await backupFile.exists()) return;
+      if (await FileSystemEntity.type(pending.path, followLinks: false) != FileSystemEntityType.directory ||
+          !await primaryFile.exists() ||
+          !await backupFile.exists()) {
+        return false;
+      }
       final main = await _readIndexBindings(primaryFile);
       final backup = await _readIndexBindings(backupFile);
-      if (main.isEmpty || backup.isEmpty) return;
-      var visited = 0;
-      var backupFlushed = false;
+      if (main.isEmpty || backup.isEmpty) return false;
+
+      final cursor = await _readRetirementCursor(pending);
+      final after = cursor.after;
+      final candidates = SplayTreeMap<String, ({File file, String name})>();
       await for (final entry in pending.list(followLinks: false)) {
         final name = _receiptBasename(entry.path);
-        if (entry is! File || name == null) continue;
+        if (entry is! File || name == null || (after != null && name.compareTo(after) <= 0)) continue;
+        candidates[name] = (file: entry, name: name);
+        if (candidates.length > _maxEntries + 1) candidates.remove(candidates.lastKey());
+      }
+
+      final hasMore = candidates.length > _maxEntries;
+      final page = candidates.entries.take(_maxEntries).toList();
+      if (page.isEmpty) {
+        if (cursor.wrapping) {
+          await _writeRetirementCursor(pending, after: null, wrapping: false);
+          return false;
+        }
+        if (after != null) return _writeRetirementCursor(pending, after: null, wrapping: true);
+        await _writeRetirementCursor(pending, after: null, wrapping: false);
+        return false;
+      }
+      var backupFlushed = false;
+      for (final candidate in page) {
+        final entry = candidate.value.file;
+        final name = candidate.value.name;
         final primary = main[name], previous = backup[name];
         if (primary == null || previous == null || primary.binding != previous.binding) continue;
-        if (++visited > _maxEntries) break;
         try {
           decodeWalIndexRow(primary.row);
           decodeWalIndexRow(previous.row);
@@ -416,7 +483,18 @@ class LiveWalReceipt {
           await entry.delete();
         } catch (_) {/* Keep uncertain receipts for a later retry. */}
       }
+      if (hasMore) {
+        return _writeRetirementCursor(pending, after: page.last.key, wrapping: cursor.wrapping);
+      }
+      if (cursor.wrapping) {
+        await _writeRetirementCursor(pending, after: null, wrapping: false);
+        return false;
+      }
+      if (after != null) return _writeRetirementCursor(pending, after: null, wrapping: true);
+      await _writeRetirementCursor(pending, after: null, wrapping: false);
+      return false;
     } catch (_) {/* Receipt maintenance never invalidates an index commit. */}
+    return false;
   }
 
   /// A shared file remains on disk after a row is deleted. First retire the
