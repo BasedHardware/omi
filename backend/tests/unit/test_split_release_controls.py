@@ -74,6 +74,68 @@ def test_post_promotion_restore_refuses_changed_state(change):
     transport.replace.assert_not_called()
 
 
+def test_post_promotion_restore_checks_the_release_floor_before_moving_traffic():
+    service, wire, transport, receipt = rollback_fixture()
+    checked = []
+
+    def floor(targets):
+        checked.append(tuple(targets))
+        raise ValueError('release_floor_refused:backend-shadow')
+
+    with pytest.raises(ValueError, match='release_floor_refused'):
+        canary.restore_completed(service, wire, transport, receipt, floor)
+    assert checked == [('backend-donor', 'backend-shadow')]
+    transport.read.assert_not_called()
+    transport.replace.assert_not_called()
+
+
+def test_release_floor_verifies_every_target_revision(tmp_path):
+    script = tmp_path / 'verify_backend_release_floor.py'
+    script.write_text('')
+    commands = []
+
+    def run(command, **kwargs):
+        commands.append(command)
+        return SimpleNamespace(returncode=1 if command[3] == 'backend-shadow' else 0)
+
+    with pytest.raises(ValueError, match='release_floor_refused:backend-shadow'):
+        canary.release_floor(
+            ('backend-donor', 'backend-shadow'),
+            script=script,
+            project='example',
+            region='us-central1',
+            run=run,
+        )
+    assert [command[3] for command in commands] == ['backend-donor', 'backend-shadow']
+
+
+def test_bound_rollback_paths_request_the_published_release_floor():
+    repo = Path(__file__).resolve().parents[3]
+    action = yaml.safe_load((repo / '.github/actions/deploy-backend-stack/action.yml').read_text())
+    restore = next(step for step in action['runs']['steps'] if step['name'].startswith('Restore admitted inverse'))
+    assert (
+        '--release-floor-check "$DEPLOY_WORKFLOW_ROOT/.github/scripts/verify_backend_release_floor.py"'
+        in restore['run']
+    )
+    workflow = yaml.safe_load((repo / '.github/workflows/gcp_backend.yml').read_text())
+    recovery = workflow['jobs']['recover-bound-split']['steps']
+    assert any(
+        '--release-floor-check .github/scripts/verify_backend_release_floor.py' in step.get('run', '')
+        for step in recovery
+    )
+
+
+def test_bound_deploys_keep_the_live_runtime_env_and_drift_preflights():
+    repo = Path(__file__).resolve().parents[3]
+    action = yaml.safe_load((repo / '.github/actions/deploy-backend-stack/action.yml').read_text())
+    steps = {step['name']: step for step in action['runs']['steps']}
+    assert 'if' not in steps['Validate backend runtime env after deploy']
+    assert (
+        steps['Report live Cloud Run env drift from manifest']['if']
+        == "${{ inputs.integration_only != 'true' && (success()) }}"
+    )
+
+
 def test_completed_receipt_can_be_restored_from_another_run(tmp_path, monkeypatch):
     service, wire, transport, _ = rollback_fixture()
     source, control, run_id = 'a' * 40, 'b' * 40, 123

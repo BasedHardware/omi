@@ -1511,7 +1511,6 @@ runs:
           --wait-revision-ready backend-integration=backend-integration-${{ steps.image-tag.outputs.revision_suffix }}
 
     - name: Validate backend runtime env after deploy
-      if: ${{ !(inputs.selected_split_binding != '' && contains(inputs.selected_split_plan, ',')) }}
       shell: bash
       env:
         SYNC_LEDGER_FENCE_MODE: ${{ env.SYNC_LEDGER_FENCE_MODE }}
@@ -1541,7 +1540,7 @@ runs:
 
     - name: Report live Cloud Run env drift from manifest
       if: >-
-        ${{ !(inputs.selected_split_binding != '' && contains(inputs.selected_split_plan, ',')) && (inputs.integration_only != 'true' && (success())) }}
+        ${{ inputs.integration_only != 'true' && (success()) }}
       shell: bash
       run: |
         python3 "$DEPLOY_CONTROL_SCRIPTS/check_cloud_run_env_drift.py" \
@@ -2029,9 +2028,16 @@ runs:
         PROJECT: ${{ inputs.project_id }}
         REGION: ${{ inputs.region }}
       run: |
+        set -euo pipefail
+        history_args=()
+        if [[ "$(git rev-parse --is-shallow-repository)" == true ]]; then
+          history_args=(--unshallow)
+        fi
+        git fetch --no-tags "${history_args[@]}" origin +refs/heads/main:refs/remotes/origin/main
         python3 "$DEPLOY_CONTROL_SCRIPTS/cloud_run_split_canary.py" restore-completed \
           --service "$SERVICE" --plan "$PLAN" --binding "$BINDING" --project "$PROJECT" --region "$REGION" \
-          --promotion-receipt "$RUNNER_TEMP/backend-holdback-promotion.json"
+          --promotion-receipt "$RUNNER_TEMP/backend-holdback-promotion.json" \
+          --release-floor-check "$DEPLOY_WORKFLOW_ROOT/.github/scripts/verify_backend_release_floor.py"
 
     - name: Restore Cloud Run traffic snapshot after failed promotion
       if: >-
