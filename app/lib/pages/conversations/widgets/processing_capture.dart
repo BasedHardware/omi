@@ -22,6 +22,7 @@ import 'package:omi/pages/episodes/episode_presentation.dart';
 import 'package:omi/pages/episodes/live_episode_page.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversations/capture_state_labels.dart';
+import 'package:omi/pages/conversations/home/home_row_shell.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/enums.dart';
@@ -31,9 +32,15 @@ import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/pages/conversations/widgets/live_capture_card.dart';
 import 'package:omi/pages/phone_calls/active_call_page.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/widgets/capture_sources.dart';
 
 class ConversationCaptureWidget extends StatefulWidget {
-  const ConversationCaptureWidget({super.key, this.showsCall = false, this.deferStreamingToEpisode = false});
+  const ConversationCaptureWidget({
+    super.key,
+    this.showsCall = false,
+    this.deferStreamingToEpisode = false,
+    this.homeRowForTranscribeLater = false,
+  });
 
   /// Home shows an Omi call on this card; the Conversations tab has its own call banner.
   final bool showsCall;
@@ -41,6 +48,10 @@ class ConversationCaptureWidget extends StatefulWidget {
   /// Episodes on: a streaming capture is the live episode row in Today, so this card stays for the
   /// states that are not an episode (a call or Transcribe Later).
   final bool deferStreamingToEpisode;
+
+  /// Home's Transcribe Later row uses the same shape as every other Home row; its actions live in
+  /// a sheet instead of under the status.
+  final bool homeRowForTranscribeLater;
 
   @override
   State<ConversationCaptureWidget> createState() => _ConversationCaptureWidgetState();
@@ -146,6 +157,13 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                 onSetup: () => routeToPage(context, const TranscriptionSettingsPage())),
             null => const SizedBox.shrink(),
           };
+        }
+
+        if (widget.homeRowForTranscribeLater && batch) {
+          final isDeviceRecording = provider.liveCaptureSource != null && provider.liveCaptureSource != 'phone';
+          final noAudio = isDeviceRecording && !provider.isPaused && provider.pendantCaptureActionRequired;
+          final unverified = isDeviceRecording && !provider.isPaused && !provider.pendantCaptureVerified && !noAudio;
+          return _buildBatchRecordingUI(provider, homeRow: true, unverified: unverified);
         }
 
         return Column(children: [
@@ -355,11 +373,9 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     return const SizedBox.shrink();
   }
 
-  /// Transcribe Later (batch) card, in the live card's layout: the source glyph, a short status and
-  /// the time with its consequence, then the controls. There is no live transcript. Storage running
-  /// out is a problem (warning glyph, details sheet); a pendant that records on its own (Limitless)
-  /// shows the minutes it holds and has no controls, since it records without the phone.
-  Widget _buildBatchRecordingUI(CaptureProvider provider, {bool unverified = false}) {
+  /// Transcribe Later (batch) presentation. Home puts its controls in a sheet; other callers keep
+  /// the stacked card. There is no live transcript.
+  Widget _buildBatchRecordingUI(CaptureProvider provider, {bool homeRow = false, bool unverified = false}) {
     final l10n = context.l10n;
     final isLimitless = provider.recordingDevice?.type == DeviceType.limitless;
     final prefs = SharedPreferencesUtil();
@@ -428,6 +444,86 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           },
         ),
     ];
+
+    if (homeRow) {
+      final elapsedLabel = unverified || isLimitless || elapsedSeconds == null
+          ? null
+          : LiveCaptureCard.formatElapsed(Duration(seconds: elapsedSeconds));
+      final rowDetail = storageFull || unverified || isLimitless
+          ? copy.detail ?? (isLimitless ? note : null)
+          : muted
+              ? l10n.transcribeLaterPaused
+              : l10n.transcribeLaterTitle;
+      final subtitle = [
+        if (elapsedLabel != null) elapsedLabel,
+        if (rowDetail?.isNotEmpty == true) rowDetail!,
+      ].join('  ·  ');
+      final canOpenControls = actions.isNotEmpty || copy.explanation != null;
+
+      Future<void> showControls() => showOmiSheet<void>(
+            context: context,
+            title: l10n.transcribeLaterTitle,
+            builder: (sheetContext) => Padding(
+              padding: const EdgeInsets.only(bottom: OmiSpacing.md),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (copy.explanation case final explanation?) ...[
+                    Text(explanation, style: OmiType.body.copyWith(color: OmiColors.textSecondary)),
+                    if (actions.isNotEmpty) const SizedBox(height: OmiSpacing.lg),
+                  ],
+                  if (actions.isNotEmpty)
+                    _OfflineControls(
+                      actions: [
+                        for (final action in actions)
+                          (
+                            icon: action.icon,
+                            label: action.label,
+                            onTap: () {
+                              Navigator.of(sheetContext).pop();
+                              action.onTap();
+                            },
+                          ),
+                      ],
+                    ),
+                ],
+              ),
+            ),
+          );
+
+      final controlsButton = canOpenControls
+          ? SizedBox(
+              width: kOmiMinTapTarget,
+              height: kOmiMinTapTarget,
+              child: IconButton(
+                key: const Key('home_live_controls'),
+                tooltip: l10n.moreOptions,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints.tightFor(width: kOmiMinTapTarget, height: kOmiMinTapTarget),
+                icon: const Icon(Icons.more_horiz_rounded),
+                onPressed: () => showControls(),
+              ),
+            )
+          : null;
+
+      return HomeRowShell(
+        key: const Key('home_live_row'),
+        tile: HomeRowTile(
+          outline: storageFull || unverified ? OmiColors.warning : null,
+          child: Icon(CaptureSources.icon(source), size: 18, color: OmiColors.textPrimary),
+        ),
+        title: copy.status,
+        subtitle: subtitle.isEmpty ? null : subtitle,
+        subtitleColor: storageFull || unverified ? OmiColors.warning : null,
+        semanticsLabel:
+            [CaptureSources.label(context, source), copy.status, if (subtitle.isNotEmpty) subtitle].join(', '),
+        semanticsHint: canOpenControls ? l10n.moreOptions : null,
+        trailing: controlsButton,
+        actionTrailing: controlsButton != null,
+        onTap: canOpenControls ? showControls : null,
+      );
+    }
 
     return Column(
       mainAxisSize: MainAxisSize.min,

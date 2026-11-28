@@ -14,12 +14,17 @@ import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/pages/conversations/auto_sync_page.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
 import 'package:omi/pages/conversations/daily_recaps_page.dart';
+import 'package:omi/pages/conversations/home/home_live_rows.dart';
+import 'package:omi/pages/conversations/home/home_model.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
+import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/pages/conversations/home/home_locked_row.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/wals/wal.dart';
+import 'package:omi/services/sockets/local_stt_failure.dart';
+import 'package:omi/utils/enums.dart';
 
 import '../fakes.dart';
 import '../harness.dart';
@@ -96,6 +101,31 @@ const _twoSourceGroup = CaptureGroup(
 );
 
 final conversationsScenarios = <AuditScenario>[
+  AuditScenario(
+    id: 'home-transcribe-later',
+    title: 'Transcribe Later on Home',
+    page: 'lib/pages/conversations/home/home_live_rows.dart (HomeLiveRowView)',
+    state: 'Phone-mic Transcribe Later recording with available elapsed time and Pause, New recording and Stop actions',
+    run: (a) async {
+      final capture = _TranscribeLaterCapture();
+      await a.pump(
+        const HomeLiveRowView(row: HomeLiveRow(HomeLiveKind.transcribeLater)),
+        providers: [ChangeNotifierProvider<CaptureProvider>.value(value: capture)],
+      );
+      expect(find.byKey(const Key('home_live_row')), findsOneWidget);
+      expect(find.text('Recording'), findsOneWidget);
+      await a.shot('Transcribe Later uses the standard Home row', step: 'row');
+
+      await a.tap(find.byKey(const Key('home_live_controls')));
+      expect(find.text('Pause'), findsOneWidget);
+      expect(find.text('New recording'), findsOneWidget);
+      expect(find.text('Stop'), findsOneWidget);
+      await a.shot('Open the Transcribe Later controls sheet', step: 'controls');
+      globalNavigatorKey.currentState!.pop();
+      await a.settle();
+      capture.dispose();
+    },
+  ),
   AuditScenario(
     id: 'conversations-locked-preview',
     title: 'Saved conversations waiting on their allowance',
@@ -228,3 +258,46 @@ final conversationsScenarios = <AuditScenario>[
     },
   ),
 ];
+
+class _TranscribeLaterCapture extends ChangeNotifier implements CaptureProvider {
+  bool paused = false;
+
+  @override
+  String? get liveCaptureSource => 'phone';
+  @override
+  bool get isPhoneMicBatchRecording => true;
+  @override
+  RecordingState get recordingState => RecordingState.record;
+  @override
+  bool get havingRecordingDevice => false;
+  @override
+  LocalSttFailure? get localSttFailure => null;
+  @override
+  bool get isPaused => paused;
+  @override
+  bool get pendantCaptureVerified => true;
+  @override
+  bool get pendantCaptureActionRequired => false;
+  @override
+  BtDevice? get recordingDevice => null;
+  @override
+  bool get offlineMuted => paused;
+  @override
+  int? get offlineRecordingElapsedSeconds => 125;
+  @override
+  int? get offlineRecordingStartedAt => null;
+  @override
+  Duration? get customSttBufferingDuration => null;
+  @override
+  Future<void> toggleOfflineMute() async {
+    paused = !paused;
+    notifyListeners();
+  }
+
+  @override
+  Future<void> startNewOfflineRecording() async {}
+  @override
+  Future<bool> stopStreamRecording({String reason = 'user_stopped', bool resumeHandedOffPendant = true}) async => true;
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}

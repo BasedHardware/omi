@@ -42,6 +42,20 @@
       "description": "Activity holding what needs the reader: a failed conversation under Needs attention, and On this phone with a waiting and a failed recording, a count and Transcribe all",
       "captured_by": "agent",
       "source": "visual-audit"
+    },
+    {
+      "file": "007-mobile-ios-home-transcribe-later.png",
+      "platform": "mobile-ios",
+      "description": "Transcribe Later recording shown in Home's standard live row with its elapsed time and controls affordance",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "008-mobile-ios-home-transcribe-later-controls.png",
+      "platform": "mobile-ios",
+      "description": "Transcribe Later controls sheet with Pause, New recording and Stop",
+      "captured_by": "agent",
+      "source": "visual-audit"
     }
   ]
 }

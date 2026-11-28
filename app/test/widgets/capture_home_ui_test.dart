@@ -18,6 +18,7 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversations/widgets/live_capture_card.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
+import 'package:omi/pages/conversations/home/home_row_shell.dart';
 import 'package:omi/pages/episodes/live_episode_page.dart';
 import 'package:omi/pages/home/widgets/battery_info_widget.dart';
 import 'package:omi/providers/capture_provider.dart';
@@ -759,6 +760,40 @@ void main() {
   });
 
   group('Transcribe Later (batch) card controls', () {
+    testWidgets('Home uses a standard row and puts its controls in a sheet', (tester) async {
+      final capture = _Capture(_Live.phone, batch: true);
+      await pump(
+        tester,
+        const ConversationCaptureWidget(showsCall: true, homeRowForTranscribeLater: true),
+        capture: capture,
+      );
+
+      expect(find.byType(HomeRowShell), findsOneWidget);
+      expect(find.byType(LiveCaptureCard), findsNothing);
+      expect(tester.getSize(find.byType(HomeRowShell)).height, 80);
+      expect(find.text('2:05  ·  ${en.transcribeLaterTitle}'), findsOneWidget);
+      expect(find.text(en.pause), findsNothing);
+      expect(find.text(en.newRecording), findsNothing);
+      expect(find.text(en.stop), findsNothing);
+
+      await tester.tap(find.byKey(const Key('home_live_controls')));
+      await tester.pumpAndSettle();
+      expect(find.text(en.transcribeLaterTitle), findsOneWidget);
+      expect(find.text(en.pause), findsOneWidget);
+      expect(find.text(en.newRecording), findsOneWidget);
+      expect(find.text(en.stop), findsOneWidget);
+
+      await tester.tap(find.text(en.pause));
+      await tester.pumpAndSettle();
+      expect(capture.offlineMuteToggles, 1);
+      expect(find.text(en.transcribeLaterTitle), findsNothing);
+      expect(find.text(en.paused), findsOneWidget);
+      expect(find.textContaining(en.transcribeLaterPaused), findsOneWidget);
+      await tester.tap(find.byKey(const Key('home_live_controls')));
+      await tester.pumpAndSettle();
+      expect(find.text(en.resume), findsOneWidget);
+    });
+
     testWidgets('tapping Pause in batch mode transitions button to Resume, clears spinner, and freezes elapsed timer',
         (tester) async {
       final capture = _Capture(_Live.pendantBatch, batch: true);

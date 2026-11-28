@@ -40,8 +40,8 @@ class HomeLiveRowView extends StatelessWidget {
     final failure = context.select<CaptureProvider, Object?>((c) => c.localSttFailure);
     final Widget body = switch (row.kind) {
       HomeLiveKind.call => const _CallRow(),
-      // Transcribe Later keeps its own controls (Pause, New recording, Stop).
-      HomeLiveKind.transcribeLater => const ConversationCaptureWidget(),
+      // Transcribe Later keeps its actions in a sheet, on the same row geometry as Home's other rows.
+      HomeLiveKind.transcribeLater => const ConversationCaptureWidget(homeRowForTranscribeLater: true),
       // The server's conversation in progress is its own row, as every conversation is: its live tile,
       // "Listening" until it has a title, its length, and no snippet or date.
       HomeLiveKind.conversation => ConversationListItem(
