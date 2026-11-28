@@ -71,7 +71,7 @@ class _Fence:
         with self._lock:
             return bool(self._pending or self._cleanups or self.session or state.get('session'))
 
-    def submit(
+    def start(
         self,
         executor: Executor,
         fn: Callable[..., Any],
@@ -274,7 +274,7 @@ async def _fenced(
     **kwargs: Any,
 ) -> Any:
     """Run one step the fence outlives. A cancel abandons it only if not started."""
-    future = _fence(state).submit(executor, fn, args, kwargs, bounded=bounded, settled=settled)
+    future = _fence(state).start(executor, fn, args, kwargs, bounded=bounded, settled=settled)
     return await asyncio.wrap_future(future)
 
 
