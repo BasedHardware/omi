@@ -37,7 +37,10 @@ from utils.analytics import billable_transcription_seconds, billable_transcripti
 from utils.usage_provenance import live_usage_metadata
 from utils.apps import is_audio_bytes_app_enabled, get_enabled_apps
 from utils.sync.mobile_standard_batch import mobile_standard_batch_enabled, mobile_standard_batch_rollout_enabled
+from config.live_stt_preview_custody import preview_batch_custody_enabled
+from config.server_batch import capture_compatible as server_batch_capture_compatible
 from config.server_batch import owned as server_batch_owned
+from config.server_batch import request_eligible as server_batch_request_eligible
 from config import listen_reconnect
 from routers.listen.batch_close import resumable_after_drop
 from routers.listen.local_preview import renew_local_preview, restore_non_preview_path
@@ -81,6 +84,7 @@ from utils.observability.transcription import (
 from utils.pusher import PusherCircuitBreakerOpen
 from utils.live_speaker_suggestions import emit_speaker_suggestion as emit_live_speaker_suggestion
 from utils.stt.streaming import get_stt_service_for_language
+from utils.stt.demand_consumers import realtime_consumer_active
 import utils.stt.replay_delivery as replay_delivery
 from utils.stt.live_failure import terminate_live_stt_backoff
 from config.live_demand import DemandSelection
@@ -212,6 +216,8 @@ class ListenSessionRuntime:
         # Mobile local-preview lane, pinned once before STT starts (routers/listen/local_preview.py).
         self.local_preview_batch = False
         self.server_batch_only = False
+        self.server_batch_requires_live = False
+        self.server_batch_realtime_bypass = False
         self.server_batch_initialized = False
         self.has_speech_profile = False
         self.conversation_creation_timeout = request.conversation_timeout
@@ -754,6 +760,34 @@ class ListenSessionRuntime:
             self.spawn(self.onboarding_handler.send_current_question(), name='onboarding_first_question')
         return True
 
+    async def _resolve_server_batch_live_requirement(self) -> None:
+        # Pin the choice before prepare() can reserve a new lane or rebind an
+        # existing one. A batch-owned recording keeps its original custody.
+        fresh_batch = server_batch_request_eligible(self)
+        candidate = getattr(self, '_policy_resume_candidate', None) or {}
+        resume_batch = server_batch_owned(candidate) and server_batch_capture_compatible(self, candidate)
+        may_resume_or_promote = (
+            self.client_conversation_id or (self.request.local_preview and preview_batch_custody_enabled())
+        ) and server_batch_request_eligible(self, existing_capture=True)
+        if not (fresh_batch or resume_batch or may_resume_or_promote):
+            return
+        try:
+            self.server_batch_requires_live = await asyncio.wait_for(
+                realtime_consumer_active(self.request.uid), timeout=2.0
+            )
+        except Exception:
+            self.server_batch_requires_live = True
+            record_fallback(
+                component='stt_selection',
+                from_mode='batch',
+                to_mode='live',
+                reason='other',
+                outcome='recovered',
+                log=logger,
+            )
+        else:
+            self.server_batch_realtime_bypass = self.server_batch_requires_live and fresh_batch
+
     async def _send_ping(self) -> bool:
         """Write one keepalive frame, owning a gone peer the same way `asend_event` does.
 
@@ -1040,7 +1074,7 @@ class ListenSessionRuntime:
     async def refresh_mobile_batch_admission(self) -> None:
         was_local_preview = bool(getattr(self, 'local_preview_batch', False))
         if renew_local_preview(self):
-            # Local-preview admission is pinned; integrations degrade by ruling.
+            # Local-preview admission is pinned for this socket.
             self.mobile_standard_batch = True
             return
         if was_local_preview:
@@ -1107,6 +1141,7 @@ class ListenSessionRuntime:
                 max_pending_requests=self.limits.max_pending_requests,
                 max_pending_speaker_sample_requests=self.limits.max_pending_speaker_sample_requests,
                 client_kind=self.client_kind,
+                realtime_batch_bypass=self.server_batch_realtime_bypass,
                 # v2 audio requires the capture clock (single channel, server
                 # STT — always on internally) AND the AUDIO_TIMELINE_V2
                 # persistence admission AND a pusher capability acknowledgment.
@@ -1220,6 +1255,7 @@ class ListenSessionRuntime:
                 status='in_progress_conversations_processing', status_text='Processing Conversations'
             )
         )
+        await self._resolve_server_batch_live_requirement()
         timed_out = await self.conversations.prepare()
         background: List[asyncio.Task[Any]] = []
         try:

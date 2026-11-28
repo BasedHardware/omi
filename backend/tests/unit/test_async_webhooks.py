@@ -445,7 +445,8 @@ class TestCircuitBreakerIntegration:
             mock_client.post.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_transcript_webhook_records_success_on_200(self):
+    @pytest.mark.parametrize('bypass', [False, True])
+    async def test_transcript_webhook_records_success_on_200(self, bypass):
         """realtime_transcript_webhook must call record_success on successful HTTP call."""
         mock_cb = MagicMock()
         mock_cb.allow_request.return_value = True
@@ -460,9 +461,14 @@ class TestCircuitBreakerIntegration:
 
         with patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb), patch(
             "utils.webhooks.get_pinned_delivery_client", return_value=mock_client
-        ), patch("utils.webhooks.ClientJourneyAttempt", return_value=attempt) as journey_factory:
-            await realtime_transcript_webhook("uid-1", [{"text": "hello"}], client_kind='mobile_android')
+        ), patch("utils.webhooks.ClientJourneyAttempt", return_value=attempt) as journey_factory, patch(
+            "utils.webhooks._REALTIME_BATCH_BYPASS_DELIVERIES"
+        ) as deliveries:
+            await realtime_transcript_webhook(
+                "uid-1", [{"text": "hello"}], client_kind='mobile_android', realtime_batch_bypass=bypass
+            )
             mock_cb.record_success.assert_called_once()
+            assert deliveries.inc.call_count == int(bypass)
         journey_factory.assert_called_once_with('app_webhook_delivery', 'mobile_android')
         attempt.succeed.assert_called_once_with()
         attempt.fail.assert_not_called()

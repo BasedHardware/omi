@@ -262,7 +262,12 @@ def _ack_peer_departed(exc: Exception, websocket: Any) -> bool:
 
 
 async def _dispatch_transcript_item(
-    uid: str, segments: List[Dict[str, Any]], memory_id: Optional[str], client_kind: ClientKind = 'unknown'
+    uid: str,
+    segments: List[Dict[str, Any]],
+    memory_id: Optional[str],
+    client_kind: ClientKind = 'unknown',
+    *,
+    realtime_batch_bypass: bool = False,
 ) -> None:
     async def run(sink: str, call: Awaitable[Any]) -> None:
         try:
@@ -272,7 +277,12 @@ async def _dispatch_transcript_item(
 
     await asyncio.gather(
         run('integrations', trigger_realtime_integrations(uid, segments, memory_id, client_kind=client_kind)),
-        run('webhook', realtime_transcript_webhook(uid, segments, client_kind=client_kind)),
+        run(
+            'webhook',
+            realtime_transcript_webhook(
+                uid, segments, client_kind=client_kind, realtime_batch_bypass=realtime_batch_bypass
+            ),
+        ),
     )
 
 
@@ -1339,7 +1349,13 @@ async def _run_websocket_util_trigger(
             transcript_queue.clear()
 
             for item in batch:
-                await _dispatch_transcript_item(uid, item['segments'], item['memory_id'], resolved_client_kind)
+                await _dispatch_transcript_item(
+                    uid,
+                    item['segments'],
+                    item['memory_id'],
+                    resolved_client_kind,
+                    realtime_batch_bypass=item['realtime_batch_bypass'],
+                )
 
     async def process_audio_bytes_queue() -> None:
         """Event-driven consumer for audio bytes triggers (app integrations + webhooks)."""
@@ -1796,7 +1812,11 @@ async def _run_websocket_util_trigger(
                 conversation_or_memory_id = memory_id or current_conversation_id
                 append_bounded(
                     transcript_queue,
-                    {'segments': segments, 'memory_id': conversation_or_memory_id},
+                    {
+                        'segments': segments,
+                        'memory_id': conversation_or_memory_id,
+                        'realtime_batch_bypass': res.get('realtime_batch_bypass') is True,
+                    },
                     'transcript',
                 )
                 return

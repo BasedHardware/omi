@@ -13,12 +13,12 @@ async def test_webhook_runs_when_realtime_integration_fails():
         "routers.pusher.trigger_realtime_integrations",
         AsyncMock(side_effect=RuntimeError("integration failed")),
     ) as integration, patch("routers.pusher.realtime_transcript_webhook", AsyncMock()) as webhook:
-        await _dispatch_transcript_item("uid-1", segments, "conversation-1", "mobile_ios")
+        await _dispatch_transcript_item("uid-1", segments, "conversation-1", "mobile_ios", realtime_batch_bypass=True)
 
     # Both sinks carry the client population, so a failure in one client can be
     # told apart from a platform-wide one.
     integration.assert_awaited_once_with("uid-1", segments, "conversation-1", client_kind="mobile_ios")
-    webhook.assert_awaited_once_with("uid-1", segments, client_kind="mobile_ios")
+    webhook.assert_awaited_once_with("uid-1", segments, client_kind="mobile_ios", realtime_batch_bypass=True)
 
 
 @pytest.mark.asyncio
@@ -38,6 +38,6 @@ async def test_webhook_starts_while_realtime_integration_is_blocked():
         task = asyncio.create_task(_dispatch_transcript_item("uid-1", segments, "conversation-1"))
         await started.wait()
         await asyncio.sleep(0)
-        webhook.assert_awaited_once_with("uid-1", segments, client_kind="unknown")
+        webhook.assert_awaited_once_with("uid-1", segments, client_kind="unknown", realtime_batch_bypass=False)
         release.set()
         await task
