@@ -426,10 +426,19 @@ class FirestoreFolders:
             if self.transaction is None:
                 return self._atomic('bulk_move_conversations', conversation_ids, folder_id, mutation_id=mutation_id)
             return self._move_many(conversation_ids, folder_id, mutation_id, 'bulk_move')
-        if not conversation_ids:
+        seen_ids: Set[str] = set()
+        unique_ids: List[str] = []
+        for cid in cast(List[Any], conversation_ids):
+            if isinstance(cid, str):
+                clean = cid.strip()
+                if clean and clean not in seen_ids:
+                    seen_ids.add(clean)
+                    unique_ids.append(clean)
+
+        if not unique_ids:
             return 0
         ref = self.owner.collection('conversations')
-        docs = self.client.get_all([ref.document(cid) for cid in conversation_ids])
+        docs = self.client.get_all([ref.document(cid) for cid in unique_ids])
         affected: Set[str] = set()
         batch = self.client.batch()
         moved = count = 0
