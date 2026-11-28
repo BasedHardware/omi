@@ -2466,6 +2466,13 @@ async def wake_sync_backfill_uid(request: Request, _retry_count: int = Depends(v
     return JSONResponse(status_code=200, content={'status': 'dispatched' if dispatched else 'deferred'})
 
 
+def _timeout_at_monotonic(deadline: float) -> asyncio.Timeout:
+    # Middleware and executor leaves share time.monotonic(), while asyncio
+    # schedules absolute deadlines in the event loop's clock domain.
+    remaining = deadline - time.monotonic()
+    return asyncio.timeout_at(asyncio.get_running_loop().time() + remaining)
+
+
 @router.post("/v2/sync-jobs/run", include_in_schema=False)
 @sync_snapshot_resolve_job
 async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_cloud_tasks_oidc)):
@@ -2488,7 +2495,7 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
     entry_state: dict = {'budget_deadline_monotonic': budget_anchor + SYNC_JOB_HANDLER_BUDGET_SECONDS}
     route_deadline = entry_state['budget_deadline_monotonic']
     try:
-        async with asyncio.timeout_at(route_deadline):
+        async with _timeout_at_monotonic(route_deadline):
             fence_mode = await run_blocking(db_executor, uid_sequencer.production_fence_mode)
     except TimeoutError:
         logger.warning('event=sync_transcription_job outcome=handler_preamble_expired phase=fence_read')
@@ -2496,7 +2503,7 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
     if fence_mode is SyncLedgerFenceMode.STANDBY:
         return JSONResponse(status_code=503, content={'status': 'cutover_standby'})
     try:
-        async with asyncio.timeout_at(route_deadline):
+        async with _timeout_at_monotonic(route_deadline):
             payload = await request.json()
     except TimeoutError:
         logger.warning('event=sync_transcription_job outcome=handler_preamble_expired phase=parse')
@@ -2516,7 +2523,7 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
     if isinstance(payload, dict) and payload.get('kind') == 'sync_reprocess':
         if isinstance(payload.get('uid'), str):
             try:
-                async with asyncio.timeout_at(route_deadline):
+                async with _timeout_at_monotonic(route_deadline):
                     await warm_rollout_cohorts(payload['uid'])
             except TimeoutError:
                 logger.warning('event=sync_transcription_job outcome=handler_preamble_expired phase=cohort_warm')
@@ -2546,7 +2553,7 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
             # longer migrate into the sequencer, so it must not start a second
             # transcriber for a uid whose sequencer owner is live (M1 review L10-1).
             try:
-                async with asyncio.timeout_at(route_deadline):
+                async with _timeout_at_monotonic(route_deadline):
                     registered = await run_blocking(
                         db_executor, sync_backfill_sequencer.is_registered, payload['uid'], payload['job_id']
                     )
@@ -2580,7 +2587,7 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
             legacy_job = None
             active_owner: dict = {}
             try:
-                async with asyncio.timeout_at(route_deadline):
+                async with _timeout_at_monotonic(route_deadline):
                     legacy_job = await run_blocking(db_executor, get_sync_job, payload['job_id'])
                     if legacy_job and legacy_job.get('status') == 'processing':
                         active_owner = await run_blocking(
@@ -2607,34 +2614,35 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
                     )
             if legacy_job and legacy_job.get('status') == 'queued':
                 try:
-                    async with asyncio.timeout_at(route_deadline):
+                    async with _timeout_at_monotonic(route_deadline):
                         marked = await run_blocking(
                             db_executor, update_sync_job, payload['job_id'], {'dispatch_mode': 'sequenced'}
                         )
-                        if marked is None:
-                            return await _run_sync_job_body(request, task_retry_count, entry_state)
-                        enqueued_at = payload.get('enqueued_at')
-                        age = payload.get('recording_age_seconds')
-                        captured_at = (
-                            float(enqueued_at) - float(age)
-                            if isinstance(enqueued_at, (int, float)) and isinstance(age, (int, float))
-                            else None
-                        )
-                        await run_blocking(
-                            db_executor,
-                            sync_backfill_sequencer.register_job,
-                            payload['uid'],
-                            payload['job_id'],
-                            payload,
-                            captured_at,
-                        )
+                        if marked is not None:
+                            enqueued_at = payload.get('enqueued_at')
+                            age = payload.get('recording_age_seconds')
+                            captured_at = (
+                                float(enqueued_at) - float(age)
+                                if isinstance(enqueued_at, (int, float)) and isinstance(age, (int, float))
+                                else None
+                            )
+                            await run_blocking(
+                                db_executor,
+                                sync_backfill_sequencer.register_job,
+                                payload['uid'],
+                                payload['job_id'],
+                                payload,
+                                captured_at,
+                            )
                 except TimeoutError:
                     logger.warning(
                         'event=sync_transcription_job outcome=handler_preamble_expired phase=legacy_migration'
                     )
                     return _budget_deferral_fallback('preamble_timeout', 'degraded')
+                if marked is None:
+                    return await _run_sync_job_body(request, task_retry_count, entry_state)
                 try:
-                    async with asyncio.timeout_at(route_deadline):
+                    async with _timeout_at_monotonic(route_deadline):
                         await run_blocking(db_executor, uid_sequencer.kick, payload['uid'])
                 except TimeoutError:
                     # Registration already committed: a 409 would redeliver a
@@ -2649,7 +2657,7 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
                 return JSONResponse(status_code=200, content={'status': 'sequenced_legacy_job'})
             if legacy_job and legacy_job.get('status') in ('queued', 'processing'):
                 try:
-                    async with asyncio.timeout_at(route_deadline):
+                    async with _timeout_at_monotonic(route_deadline):
                         await run_blocking(
                             db_executor, backfill_cutover.refresh_direct_run, payload['uid'], payload['job_id']
                         )
@@ -2668,13 +2676,13 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
         return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'invalid_sequencer_identity'})
     # One absolute budget deadline for the whole sequenced request (entry_state,
     # captured and enforced at route entry): the fence read, payload parsing,
-    # begin_job (including its prior-job snapshot) each run inside a timeout_at
-    # against that deadline, so a stall in any of them ends the request through
+    # begin_job (including its prior-job snapshot) each run under
+    # that deadline, so a stall in any of them ends the request through
     # the queue-owned 409 instead of carrying it past the Cloud Tasks dispatch
     # deadline or the middleware cap this change exists to stay under.
     sequenced_attempt_state: dict = entry_state
     try:
-        async with asyncio.timeout_at(route_deadline):
+        async with _timeout_at_monotonic(route_deadline):
             claim = await run_blocking(db_executor, sync_backfill_sequencer.begin_job, uid, job_id, epoch)
     except TimeoutError:
         logger.warning('event=sync_transcription_job outcome=handler_preamble_expired phase=begin_job')
@@ -2938,7 +2946,7 @@ async def _clear_deferral_marker_after_failed_replacement(
     """
     if marker_write is not None and not marker_write.done():
         try:
-            async with asyncio.timeout_at(post_budget_deadline + SYNC_JOB_POST_ATTEMPT_CLEANUP_TIMEOUT_SECONDS):
+            async with _timeout_at_monotonic(post_budget_deadline + SYNC_JOB_POST_ATTEMPT_CLEANUP_TIMEOUT_SECONDS):
                 await asyncio.shield(marker_write)
         except Exception:
             # The write's own late failure also settles it — the clear below
@@ -2949,7 +2957,7 @@ async def _clear_deferral_marker_after_failed_replacement(
                 logger.warning('event=sync_transcription_job outcome=handler_budget_deferral_marker_drain_failed')
                 return
     try:
-        async with asyncio.timeout_at(post_budget_deadline + SYNC_JOB_POST_ATTEMPT_CLEANUP_TIMEOUT_SECONDS):
+        async with _timeout_at_monotonic(post_budget_deadline + SYNC_JOB_POST_ATTEMPT_CLEANUP_TIMEOUT_SECONDS):
             cleared = await run_blocking(db_executor, update_sync_job, job_id, {'deferred_until': None})
         if cleared is None:
             raise RuntimeError('deferred marker clear did not apply')
@@ -3066,7 +3074,7 @@ async def _defer_sync_job_after_handler_budget_expiry(
             )
         )
         try:
-            async with asyncio.timeout_at(post_budget_deadline):
+            async with _timeout_at_monotonic(post_budget_deadline):
                 owner_count_written = await asyncio.shield(owner_count_write)
         except Exception as error:
             logger.warning(
@@ -3088,7 +3096,7 @@ async def _defer_sync_job_after_handler_budget_expiry(
             # the owner it would read.
             rescued: Optional[bool] = None
             try:
-                async with asyncio.timeout_at(post_budget_deadline + SYNC_JOB_POST_ATTEMPT_CLEANUP_TIMEOUT_SECONDS):
+                async with _timeout_at_monotonic(post_budget_deadline + SYNC_JOB_POST_ATTEMPT_CLEANUP_TIMEOUT_SECONDS):
                     rescued = await asyncio.shield(owner_count_write)
             except Exception:
                 _consume_detached_outcome(owner_count_write)
@@ -3129,7 +3137,7 @@ async def _defer_sync_job_after_handler_budget_expiry(
     acquired_at: Optional[float] = None
     if acquire is not None:
         try:
-            async with asyncio.timeout_at(post_budget_deadline):
+            async with _timeout_at_monotonic(post_budget_deadline):
                 await asyncio.shield(acquire)
             acquired_at = time.time()
         except Exception as error:
@@ -3158,7 +3166,7 @@ async def _defer_sync_job_after_handler_budget_expiry(
             deferrals + 1,
         )
         try:
-            async with asyncio.timeout_at(post_budget_deadline):
+            async with _timeout_at_monotonic(post_budget_deadline):
                 await run_blocking(db_executor, enqueue_sync_job_budget_replacement, payload, schedule_at)
         except Exception as error:
             uncertain_enqueue = _is_uncertain_enqueue_error(error)
@@ -3178,7 +3186,7 @@ async def _defer_sync_job_after_handler_budget_expiry(
         )
         return JSONResponse(status_code=200, content={'status': SYNC_JOB_HANDLER_BUDGET_DEFERRED_STATUS})
     try:
-        async with asyncio.timeout_at(post_budget_deadline):
+        async with _timeout_at_monotonic(post_budget_deadline):
             # Marker first, and required: the preserved run lock expires before
             # the replacement is due, so without the marker a status poll in
             # that unlocked gap can terminally fail the job before its
@@ -3297,7 +3305,7 @@ async def _release_expired_attempt_run_lock(
     try:
         if deadline is None:
             return bool(await run_blocking(db_executor, release, job_id, lock_token))
-        async with asyncio.timeout_at(deadline):
+        async with _timeout_at_monotonic(deadline):
             return bool(await run_blocking(db_executor, release, job_id, lock_token))
     except Exception as error:
         logger.warning(
@@ -3396,7 +3404,7 @@ async def _run_sync_job_body(request: Request, task_retry_count: int, attempt_st
             # exactly as when the read fails.
             recovery_deadline = time.monotonic() + SYNC_JOB_POST_ATTEMPT_CLEANUP_TIMEOUT_SECONDS
             try:
-                async with asyncio.timeout_at(recovery_deadline):
+                async with _timeout_at_monotonic(recovery_deadline):
                     expired_job = await run_blocking(db_executor, get_sync_job, job_id)
             except Exception as error:
                 logger.warning(

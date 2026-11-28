@@ -6383,6 +6383,88 @@ async def test_sequenced_cleanup_waits_share_one_deadline():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('clock_offset', [-1_000_000.0, 1_000_000.0])
+@pytest.mark.parametrize('stall_in_preamble', [False, True])
+async def test_sync_job_shares_middleware_budget_across_clock_epochs(monkeypatch, clock_offset, stall_in_preamble):
+    module, saved_modules, _, _, fallback_calls, _ = _load_sync_router_for_fast_path()
+    loop = asyncio.get_running_loop()
+    real_loop_time = loop.time
+    elapsed = 0.0
+
+    def loop_time():
+        return real_loop_time() + elapsed
+
+    def monotonic():
+        return loop_time() + clock_offset
+
+    request = MagicMock()
+    request.json = AsyncMock(return_value={'job_id': 'job-1', 'uid': 'test-uid'})
+    request.state = SimpleNamespace(omi_request_started_monotonic=monotonic() - 40.0)
+    fence_started = asyncio.Event()
+    finish_fence = asyncio.Event()
+    attempt_started = asyncio.Event()
+    passthrough = module.run_blocking
+
+    async def run_blocking(executor, fn, *args, **kwargs):
+        if fn is module.uid_sequencer.production_fence_mode:
+            fence_started.set()
+            await finish_fence.wait()
+        return await passthrough(executor, fn, *args, **kwargs)
+
+    async def run_attempt(*args):
+        attempt_started.set()
+        await asyncio.Event().wait()
+
+    try:
+        monkeypatch.setattr(loop, 'time', loop_time)
+        monkeypatch.setattr(module, 'time', SimpleNamespace(monotonic=monotonic))
+        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 60.0
+        module.run_blocking = run_blocking
+        module._run_sync_job_attempt = run_attempt
+
+        task = asyncio.create_task(module.run_sync_job(request, task_retry_count=0))
+        try:
+            await asyncio.wait_for(fence_started.wait(), timeout=1)
+            if not stall_in_preamble:
+                elapsed = 10.0
+                finish_fence.set()
+                await asyncio.wait_for(attempt_started.wait(), timeout=1)
+            # Both phases may run until the middleware-anchored deadline.
+            elapsed = 18.0
+            await asyncio.sleep(0)
+            assert not task.done()
+
+            # Only 20 seconds were left at route entry, and the attempt used
+            # the remainder of that same deadline after the fence read.
+            elapsed = 20.1
+            response = await asyncio.wait_for(asyncio.shield(task), timeout=1)
+        finally:
+            if not task.done():
+                task.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await task
+
+        assert response.status_code == 409
+        assert json.loads(response.body) == {'status': 'locked'}
+        if stall_in_preamble:
+            request.json.assert_not_awaited()
+            assert not attempt_started.is_set()
+        module.try_acquire_sync_job_run_lock.assert_not_called()
+        module.enqueue_sync_job_budget_replacement.assert_not_called()
+        expected_reason = 'preamble_timeout' if stall_in_preamble else 'pre_lock_expiry'
+        assert [call['reason'] for call in fallback_calls] == [expected_reason]
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
 async def test_route_preamble_stall_in_begin_job_ends_request_at_the_route_deadline():
     """Thread: the route-entry budget anchor must be enforced, not just
     recorded. The sequenced wrapper performs fence read, parse, begin_job and
