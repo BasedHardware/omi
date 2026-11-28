@@ -465,6 +465,11 @@ def test_runtime_resolver_reports_unknown_holdout_membership(monkeypatch):
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     monkeypatch.setattr(runtime._cache, 'get', lambda uid: {'prod': {'conversations-v3-holdout': True}})
     assert runtime._in_rollout_cohort('synthetic', 'conversations-v3-holdout') is True
+    # An invalid rollout environment is unknown membership for the holdout, a plain miss elsewhere.
+    monkeypatch.setenv('OMI_ENV_STAGE', 'not-a-stage')
+    with pytest.raises(runtime.policy.RolloutCohortUnavailable):
+        runtime._in_rollout_cohort('synthetic', 'conversations-v3-holdout')
+    assert runtime._in_rollout_cohort('synthetic', 'conversations-v3') is False
 
 
 def test_unbound_resolver_reports_unknown_holdout_membership(monkeypatch):
