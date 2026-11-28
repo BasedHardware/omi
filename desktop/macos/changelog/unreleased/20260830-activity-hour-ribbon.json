@@ -1,0 +1,3 @@
+{
+  "change": "The Activity timeline's hour rail is now one continuous ribbon across every loaded day instead of restarting at each midnight, and you can scroll the list by hovering it and using the wheel or trackpad."
+}
