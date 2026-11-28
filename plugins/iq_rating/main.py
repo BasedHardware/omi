@@ -1581,7 +1581,7 @@ PEOPLE_LIST_CONTENT = """
 </div>
 
 <script>
-    const uid = '{uid}';
+    const uid = {uid_json};
     let peopleData = {people_data_json};
     let currentSort = 'dumbest';
     
@@ -1747,8 +1747,13 @@ async def iq_rating_page(uid: Optional[str] = Query(None, description="User ID")
             return HTMLResponse(content=html)
         
         # Generate page with people data
-        people_json = json.dumps(people_with_iq)
-        content = PEOPLE_LIST_CONTENT.format(uid=uid, people_data_json=people_json, total_people=len(people_with_iq))
+        safe_uid_json = json.dumps(str(uid)).replace("</", "<\\/")
+        safe_people_json = json.dumps(people_with_iq).replace("</", "<\\/")
+        content = PEOPLE_LIST_CONTENT.format(
+            uid_json=safe_uid_json,
+            people_data_json=safe_people_json,
+            total_people=len(people_with_iq),
+        )
         html = IQ_RATING_HTML.format(content=content)
         return HTMLResponse(content=html)
         
