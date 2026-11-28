@@ -30,8 +30,9 @@ Uri latestFirmwareVersionUri({
   });
 }
 
-/// The newest firmware for this device, [DeviceUtils.firmwareUpToDate] when nothing is newer, or null when
-/// the request failed (offline, a server error): a failed check is never "up to date" (ux-contract §17.2).
+/// The newest firmware for this device, or null when the request failed (offline, a server error): a failed
+/// check is never "up to date" (ux-contract §17.2). With [noNewerAsUpToDate] (the CV1 firmware page only),
+/// the server's "nothing newer" answer is [DeviceUtils.firmwareUpToDate] instead of null.
 Future<Map?> getLatestFirmwareVersion({
   required String deviceModelNumber,
   required String firmwareRevision,
@@ -39,6 +40,7 @@ Future<Map?> getLatestFirmwareVersion({
   required String manufacturerName,
   String? serialNumber,
   String? bootloaderSha256,
+  bool noNewerAsUpToDate = false,
 }) async {
   var res = await makeApiCall(
     url: latestFirmwareVersionUri(
@@ -54,17 +56,20 @@ Future<Map?> getLatestFirmwareVersion({
     method: 'GET',
   );
 
-  return latestFirmwareAnswer(res);
+  return latestFirmwareAnswer(res, noNewerAsUpToDate: noNewerAsUpToDate);
 }
 
 /// The 404 detail every released backend sends when no newer release exists for the device
 /// (contracts/client-compat). Other 404s (unknown device, no releases) are failed checks.
 const _noNewerFirmwareDetail = 'No suitable firmware update found for your device version.';
 
-/// Reads a `/v2/firmware/latest` response: the release, [DeviceUtils.firmwareUpToDate], or null.
-Map? latestFirmwareAnswer(http.Response? res) {
+/// Reads a `/v2/firmware/latest` response: the release, [DeviceUtils.firmwareUpToDate] (only with
+/// [noNewerAsUpToDate]), or null. The connection check and OpenGlass OTA read every non-200 as null.
+Map? latestFirmwareAnswer(http.Response? res, {bool noNewerAsUpToDate = false}) {
   if (res == null) return null;
-  if (res.statusCode == 404 && _errorDetail(res.body) == _noNewerFirmwareDetail) return DeviceUtils.firmwareUpToDate;
+  if (noNewerAsUpToDate && res.statusCode == 404 && _errorDetail(res.body) == _noNewerFirmwareDetail) {
+    return DeviceUtils.firmwareUpToDate;
+  }
   if (res.statusCode != 200) return null;
 
   return wire.GeneratedFirmwareVersionResponse.fromJson(jsonDecode(res.body) as Map<String, dynamic>).toJson();

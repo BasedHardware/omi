@@ -465,6 +465,7 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
             manufacturerName: manufacturerName,
             serialNumber: serialNumber,
             bootloaderSha256: bootloaderSha256,
+            noNewerAsUpToDate: true,
           );
     latestFirmwareDetails = details ?? {};
     if (details == null) return false;

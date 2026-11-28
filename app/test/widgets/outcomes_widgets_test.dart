@@ -182,10 +182,12 @@ void main() {
       required manufacturerName,
       serialNumber,
     }) async =>
-        latestFirmwareAnswer(http.Response(
-          '{"detail": "No suitable firmware update found for your device version."}',
-          404,
-        ));
+        latestFirmwareAnswer(
+            http.Response(
+              '{"detail": "No suitable firmware update found for your device version."}',
+              404,
+            ),
+            noNewerAsUpToDate: true);
     addTearDown(() => debugLatestFirmwareLookup = null);
     final device = BtDevice(
       id: 'd',

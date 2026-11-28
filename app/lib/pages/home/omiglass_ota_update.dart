@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:version/version.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -14,7 +15,6 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/analytics/intercom.dart';
-import 'package:omi/utils/device.dart';
 import 'package:provider/provider.dart';
 
 class OmiGlassOtaUpdate extends StatefulWidget {
@@ -129,11 +129,20 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
         details = _deviceProvider!.latestOmiGlassFirmwareDetails;
       }
 
-      if (DeviceUtils.openGlassOffersUpdate(currentVersion: _currentVersion, release: details)) {
+      if (details.isNotEmpty && details['version'] != null) {
         _latestVersion = details['version'];
-        _downloadUrl = details['download_url'];
+        _downloadUrl = details['download_url'] ?? '';
         _changelog = details['changelog'] ?? '';
-        _hasUpdate = true;
+
+        try {
+          final current = Version.parse(_currentVersion);
+          final latest = Version.parse(_latestVersion);
+          _hasUpdate = latest > current;
+        } catch (e) {
+          Logger.debug('OmiGlassOtaUpdate: Version parse error: $e');
+          // If we can't parse, assume update available if versions differ
+          _hasUpdate = _currentVersion != _latestVersion;
+        }
       }
     } catch (e) {
       Logger.debug('OmiGlassOtaUpdate: Error during init: $e');
