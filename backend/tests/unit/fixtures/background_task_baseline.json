@@ -274,6 +274,13 @@
       "why": "best-effort BYOK error telemetry"
     },
     {
+      "path": "utils/memory/memory_service.py",
+      "function": "MemoryService.update_visibility",
+      "kind": "submit_with_context",
+      "count": 1,
+      "why": "Best-effort physical cleanup of a historical copy. The canonical item and durable historical suppression are already committed before submission, so losing cleanup cannot expose the copy or change the visibility outcome."
+    },
+    {
       "path": "utils/observability/sync_phases.py",
       "function": "_BackgroundFlush.__init__",
       "kind": "threading.Thread",

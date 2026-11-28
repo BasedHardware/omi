@@ -14,6 +14,7 @@ from tests.unit.test_memory_service_parity import _sample_memory_dict
 
 @pytest.fixture
 def client(monkeypatch):
+    monkeypatch.setattr(memories.db_client_module, 'db', object())
     app = FastAPI()
     app.add_api_route('/v3/memories/{memory_id}', memories.edit_memory, methods=['PATCH'])
     app.add_api_route('/v3/memories/{memory_id}/revert', memories.revert_memory, methods=['POST'])

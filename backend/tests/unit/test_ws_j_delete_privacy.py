@@ -1505,6 +1505,7 @@ def test_update_canonical_visibility_commits_through_apply_and_outbox(monkeypatc
 
     updated = update_canonical_memory_visibility(uid, memory_id, "public", db_client=canonical_db)
 
+    assert updated is not None
     assert updated.visibility == "public"
     assert canonical_db.docs[f"users/{uid}/memory_items/{memory_id}"]["visibility"] == "public"
     operations = [
