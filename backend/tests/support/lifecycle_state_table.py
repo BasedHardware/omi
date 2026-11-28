@@ -463,8 +463,7 @@ STATES = (
             metric='omi_record_token_lease_active',
             alert=Alert('omi-record-token-lease-late-append', 'page'),
             deadline_exemption='Nested per-token lease_expires_at, stamped only when lease mode is enabled',
-            note='Exact-token finish clear (including record_custody_append.finish after durable acceptance or refusal, '
-            'and a refusing record_custody_append.begin retry clearing its own lost-reply token); '
+            note='Exact-token finish clear (including record_custody_append.finish after durable acceptance or refusal); '
             'custody lease covers the configured sync request timeout plus a named margin. '
             'abandon attestation; or computed lease lapse. Off preserves original producer proof.',
         ),

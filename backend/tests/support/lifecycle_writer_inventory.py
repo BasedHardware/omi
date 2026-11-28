@@ -2492,8 +2492,6 @@ FIELD_SITES = {
         ),
     ],
     'database/record_custody_append.py': [
-        # A refusing retry removes only its own committed token (SCA-3748).
-        ('begin.commit', 'record_upload_sessions', 'sessions', ('record_upload_sessions',)),
         ('begin.commit', 'record_upload_sessions', 'sessions', ('record_upload_sessions',)),
         ('finish.commit', 'record_upload_sessions', 'sessions', ('record_upload_sessions',)),
         (

@@ -23,7 +23,7 @@ import time
 import wave
 from contextlib import contextmanager, nullcontext
 from itertools import chain
-from config import audio_archive
+from config import audio_archive, record_seal_rules
 from config.record_wal_storage import private_archive_bucket
 from utils.other.audio_singleflight import coalesce_rebuild
 from utils.other.playback_cache import write_once, cached_manifest
@@ -2603,6 +2603,9 @@ def archive_capture_bytes(
     with owner_storage_write_gate(uid, bucket):
         if custody_conversation and conversation_tombstones.is_deleted(uid, str(custody_conversation)):
             raise audio_packs.CaptureDeleted('audio custody refused by conversation deletion intent')
+        # A sync custody fence's worker never starts this commit after its
+        # deadline; the commit itself is bounded (timeout, no retry) (SCA-3748).
+        fenced = record_seal_rules.check_custody_write_deadline() is not None
         try:
             blob.upload_from_string(
                 payload, content_type='application/octet-stream', if_generation_match=0, timeout=10, retry=None
@@ -2610,7 +2613,10 @@ def archive_capture_bytes(
         except PreconditionFailed:
             # A successful earlier upload is immutable. Do not rotate encrypted
             # ciphertext or add a billable generation on an acceptance retry.
-            blob.reload()
+            if fenced:
+                blob.reload(timeout=10, retry=None)
+            else:
+                blob.reload()
             if (blob.metadata or {}).get('sha256') != digest:
                 raise ValueError('capture identity collision')
             created = False

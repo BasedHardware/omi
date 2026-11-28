@@ -1,137 +1,241 @@
-"""Request-scoped custody fences; no upload state survives in a process cache."""
+"""Request-scoped custody fences; no upload state survives in a process cache.
+
+The fence's lifetime belongs to the storage work, not to the request
+(SCA-3748). Every fenced storage step runs on its executor thread to its real
+outcome, and only a worker-side completion releases the token: after the
+request has closed the fence and every started step has settled, it removes
+the request's temp files and runs ``finish`` with the true storage outcome.
+Cancelling the request never releases the token. A step that never started is
+abandoned. Every fenced commit starts within ``CUSTODY_STORAGE_BUDGET_SECONDS``
+of begin and is bounded, so lease-expiry repair cannot race a live writer even
+if the process dies before completion.
+"""
 
 import asyncio
 import contextvars
+from concurrent.futures import Executor, Future, InvalidStateError, ThreadPoolExecutor
 from contextvars import ContextVar
 from functools import wraps
 import json
 import logging
 import threading
+import time
 from collections.abc import Awaitable, Callable, Sequence
-from concurrent.futures import Executor
 from typing import Any, ParamSpec, TypedDict, TypeVar
 
-import anyio
 from fastapi import HTTPException
 from starlette.responses import Response
 
 from config import record_seal_rules as lease
 from database import record_custody_append, record_token_lease_metrics, record_audio
-from utils.executors import db_executor, sync_executor, run_blocking, track_executor_future
+from utils.executors import db_executor, sync_executor, run_blocking
 
 logger = logging.getLogger(__name__)
 
-
-class _Unsettled(RuntimeError):
-    """A fenced step never ran or outlived its bound; its token waits for lease expiry."""
+Settled = Callable[[Future], None]
 
 
-class _Step:
-    """One blocking custody step whose real outcome the persisted fence must outlive.
+class _Fence:
+    """One request's custody token, released only by its own workers.
 
-    Cancelling the awaiting coroutine never cancels a step that has started: the
-    worker thread runs to its true outcome and only then marks the step settled.
-    A step that has not started is abandoned atomically, so it can no longer
-    touch storage. Settlement is thread-level. The executor future is never
-    awaited, so a caller's cancel (or loop teardown) cannot cancel it; only
-    executor shutdown can, which abandons a step that never started.
+    Thread-safe. Steps settle on worker threads (or on the cancelling thread
+    for a step that never started). Completion runs once, on ``db_executor``,
+    when the fence is closed and no step is pending.
     """
 
-    def __init__(
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._pending = 0
+        self._closed = False
+        self._scheduled = False
+        self._began = False
+        self._cleanups: list[tuple[Callable[..., Any], tuple[Any, ...]]] = []
+        self._outcome: Future[bool] = Future()
+        self._context: contextvars.Context | None = None
+        self._uid: str | None = None
+        self._cid: str | None = None
+        self._verdict: bool | None = None
+        self._no_append = False
+        self.session: str | None = None
+        self.deadline: float | None = None
+        self.committed = False
+        self.late = False
+
+    def begin(self, session: str, deadline: float) -> None:
+        with self._lock:
+            self._began = True
+            self.session = session
+            self.deadline = deadline
+
+    def has_work(self, state: 'UploadState') -> bool:
+        with self._lock:
+            return bool(self._pending or self._cleanups or self.session or state.get('session'))
+
+    def submit(
         self,
         executor: Executor,
         fn: Callable[..., Any],
         args: tuple[Any, ...],
         kwargs: dict[str, Any],
         *,
-        abandonable: bool,
-    ):
-        self._loop = asyncio.get_running_loop()
-        self._gate = threading.Lock()
-        self._phase = 'queued'  # queued -> running, or queued -> abandoned
-        self._abandonable = abandonable
-        self._outcome: tuple[bool, Any] | None = None
-        self.settled: asyncio.Future[None] = self._loop.create_future()
+        bounded: bool,
+        settled: Settled | None,
+    ) -> Future:
         context = contextvars.copy_context()
+        deadline = self.deadline if bounded else None
 
         def call() -> Any:
-            return context.run(self._run, fn, args, kwargs)
+            if deadline is None:
+                return fn(*args, **kwargs)
+            with lease.bound_custody_writes(deadline):
+                lease.check_custody_write_deadline()
+                return fn(*args, **kwargs)
 
+        with self._lock:
+            if self._closed:
+                raise RuntimeError('custody fence already closed')
+            self._pending += 1
         try:
-            submission = self._loop.run_in_executor(executor, call)
-        except Exception as error:  # e.g. the executor already shut down
-            self._phase = 'abandoned'
-            self._outcome = (False, error)
-            self._settle()
-            return
-        track_executor_future(executor, submission)
-        submission.add_done_callback(self._submission_ended)
-
-    def _run(self, fn: Callable[..., Any], args: tuple[Any, ...], kwargs: dict[str, Any]) -> Any:
-        with self._gate:
-            if self._phase != 'queued':
-                raise _Unsettled('abandoned before it started')
-            self._phase = 'running'
-        try:
-            value = fn(*args, **kwargs)
-        except BaseException as error:
-            self._finish((False, error))
+            future = executor.submit(context.run, call)
+        except BaseException:
+            with self._lock:
+                self._pending -= 1
             raise
-        self._finish((True, value))
-        return value
+        future.add_done_callback(lambda done: self._settle(done, settled))
+        return future
 
-    def _finish(self, outcome: tuple[bool, Any]) -> None:
-        self._outcome = outcome
+    def _settle(self, done: Future, settled: Settled | None) -> None:
+        with self._lock:
+            try:
+                if settled is not None:
+                    settled(done)
+            finally:
+                self._pending -= 1
+                ready = self._claim()
+        if ready:
+            self._schedule()
+
+    def begin_settled(self, done: Future) -> None:
+        # Begin never ran, or answered inside one transaction with no token of
+        # ours. A begin that raised may have committed: finish reconciles it.
+        if done.cancelled() or (done.exception() is None and not done.result()):
+            self.session = None
+
+    def archive_settled(self, done: Future) -> None:
+        if not done.cancelled() and done.exception() is None and done.result():
+            self.committed = True
+
+    def observed(self, observation: dict[str, bool]) -> Settled:
+        def settled(done: Future) -> None:
+            if observation.get('late'):
+                self.late = True
+
+        return settled
+
+    def defer(self, cleanup: Callable[..., Any], args: tuple[Any, ...], state: 'UploadState') -> bool:
+        """Hand temp-file cleanup to completion while a worker may still read them."""
+        with self._lock:
+            if self._closed or not (self._pending or self.session or state.get('session')):
+                return False
+            self._cleanups.append((cleanup, args))
+            return True
+
+    def close(self, state: 'UploadState', verdict: bool | None) -> 'Future[bool]':
+        """No further steps. ``verdict`` is a live response's acceptance; None if cancelled."""
+        with self._lock:
+            if not self._closed:
+                self._closed = True
+                if not self._began:
+                    self.session = state.get('session')
+                self._uid, self._cid = state.get('uid'), state.get('cid')
+                self._verdict = verdict
+                self._no_append = bool(state.get('no_append'))
+                self.late |= bool(state.get('late_observed'))
+                self._context = contextvars.copy_context()
+            ready = self._claim()
+        if ready:
+            self._schedule()
+        return self._outcome
+
+    def _claim(self) -> bool:
+        if self._closed and not self._pending and not self._scheduled:
+            self._scheduled = True
+            return True
+        return False
+
+    def _schedule(self) -> None:
+        assert self._context is not None
         try:
-            self._loop.call_soon_threadsafe(self._settle)
-        except RuntimeError:
-            pass  # The loop has closed; nobody is left to wait.
+            db_executor.submit(self._context.run, self._complete)
+        except Exception as error:
+            # Shutdown: the temp files still go. The token waits for lease
+            # expiry and repair, which no bounded writer can outlive.
+            self._run_cleanups()
+            logger.warning('event=record_token_lease_completion outcome=deferred_to_lease')
+            self._publish(error=error)
 
-    def _settle(self) -> None:
-        if not self.settled.done():
-            self.settled.set_result(None)
+    def _run_cleanups(self) -> None:
+        cleanups, self._cleanups = self._cleanups, []
+        for cleanup, args in cleanups:
+            try:
+                cleanup(*args)
+            except Exception as error:
+                logger.warning(
+                    'event=record_token_lease_cleanup outcome=failed exception_type=%s', type(error).__name__
+                )
 
-    def _submission_ended(self, submission: asyncio.Future) -> None:
-        error = None if submission.cancelled() else submission.exception()
-        with self._gate:
-            if self._phase != 'queued':
-                return
-            # The worker can never start now: executor shutdown cancelled it.
-            self._phase = 'abandoned'
-            if error is not None:
-                self._outcome = (False, error)
-        self._settle()
+    def _complete(self) -> None:
+        # Every started storage step has settled: nothing reads the temp files.
+        self._run_cleanups()
+        try:
+            finished = self._finish()
+        except Exception as error:
+            if self._verdict is None:
+                # A cancelled request has no response to fail; its token waits
+                # for lease expiry and repair.
+                logger.warning(
+                    'event=record_token_lease_completion outcome=unavailable exception_type=%s', type(error).__name__
+                )
+            self._publish(error=error)
+        else:
+            self._publish(value=finished)
 
-    def abandon(self) -> None:
-        with self._gate:
-            if self._phase != 'queued' or not self._abandonable:
-                return
-            self._phase = 'abandoned'
-        self._settle()
+    def _finish(self) -> bool:
+        session = self.session
+        if not session:
+            return False
+        assert self._uid is not None and self._cid is not None  # A fence always has a resolved target.
+        # A live request accepts exactly what its response acknowledged. A
+        # cancelled one records what storage durably committed: no ACK was sent
+        # and the phone retries idempotently (create-only objects).
+        accepted = self._verdict if self._verdict is not None else self.committed and not self._no_append
+        try:
+            record_custody_append.finish(self._uid, self._cid, session, accepted=accepted, late_observed=self.late)
+        except record_custody_append.RecordCustodyFenceLost:
+            if not accepted:
+                raise
+            record_custody_append.recover_committed(self._uid, self._cid, session)
+            logger.warning('event=record_token_lease_completion outcome=recovered_lost_fence')
+        return True
 
-    def result(self) -> Any:
-        if self._outcome is None:
-            raise _Unsettled('custody step never ran')
-        ok, value = self._outcome
-        if ok:
-            return value
-        raise value
+    def _publish(self, *, value: bool = False, error: BaseException | None = None) -> None:
+        try:
+            if error is None:
+                self._outcome.set_result(value)
+            else:
+                self._outcome.set_exception(error)
+        except InvalidStateError:
+            pass  # The live request was cancelled while waiting; nobody reads it.
 
 
 class UploadState(TypedDict, total=False):
     uid: str
     cid: str
-    # A token begin may have committed, until begin answers. Only a confirmed
-    # session is ownership; a candidate is reconciled, never trusted.
-    candidate: str
     session: str
     durable: bool
     no_append: bool
     late_observed: bool
-    steps: list[_Step]
-    settle_deadline: float
-    unsettled: bool
-    cancelled: bool
+    fence: _Fence
 
 
 P = ParamSpec('P')
@@ -148,129 +252,56 @@ def accepted_response(response: Response | None) -> bool:
     return json.loads(bytes(response.body)).get('status') != 'failed'
 
 
-async def _wait_settled(state: UploadState, steps: Sequence[_Step]) -> bool:
-    """Wait through any cancellation until every step settled; never raises it.
-
-    A cancellation that arrives meanwhile is recorded for the wrapper to
-    re-raise. Returns False only after the custody lease bound, when the
-    persisted token must stay for lease expiry and repair.
-    """
-    loop = asyncio.get_running_loop()
-    deadline = state.setdefault('settle_deadline', loop.time() + lease.custody_token_lease_seconds())
-    # AnyIO re-delivers a scope cancel on every await; shield the wait from it.
-    with anyio.CancelScope(shield=True):
-        while True:
-            for step in steps:
-                step.abandon()
-            pending = [step.settled for step in steps if not step.settled.done()]
-            if not pending:
-                return True
-            remaining = deadline - loop.time()
-            if remaining <= 0:
-                return False
-            try:
-                await asyncio.wait(pending, timeout=remaining)
-            except asyncio.CancelledError:
-                state['cancelled'] = True
-    return False  # Unreachable: the shielded scope above is never itself cancelled.
+def _fence(state: UploadState) -> _Fence:
+    fence = state.get('fence')
+    if fence is None:
+        fence = state['fence'] = _Fence()
+    return fence
 
 
-async def _fenced(state: UploadState, executor: Executor, fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
-    """Run one step the fence owns; a cancelled caller leaves it to settle."""
-    step = _Step(executor, fn, args, kwargs, abandonable=True)
-    state.setdefault('steps', []).append(step)
-    await asyncio.shield(step.settled)
-    return step.result()
+def _owns_work(state: UploadState) -> bool:
+    fence = state.get('fence')
+    return bool(state.get('session') or (fence is not None and fence.has_work(state)))
 
 
-async def settle_upload() -> None:
-    """Hold the caller until every fenced worker settled, e.g. before temp cleanup.
-
-    Never raises a cancellation; the custody wrapper re-raises one after finish.
-    """
-    state = _upload.get()
-    steps = state.get('steps') if state is not None else None
-    if state is None or state.get('unsettled') or not steps:
-        return
-    if not await _wait_settled(state, steps):
-        state['unsettled'] = True
-
-
-async def settle_then(cleanup: Callable[..., None], *args: Any) -> None:
-    """Run route cleanup (temp files) only after every fenced worker settled.
-
-    A cancelled request's started archive worker may still read those files.
-    Never raises a cancellation; the custody wrapper re-raises it after finish.
-    """
-    try:
-        await settle_upload()
-    finally:
-        cleanup(*args)
-
-
-async def _complete(state: UploadState, fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
-    # Completion is never abandoned: a cancelled request still clears its fence.
-    step = _Step(db_executor, fn, args, kwargs, abandonable=False)
-    if not await _wait_settled(state, [step]):
-        raise _Unsettled('custody completion did not settle')
-    return step.result()
-
-
-def _finish_session(state: UploadState, uid: str, cid: str, session: str, accepted: bool) -> bool:
-    # Read on the worker as finish starts: a cancel that arrived first means the
-    # response was never delivered, so it can never become an accepted receipt.
-    return record_custody_append.finish(
-        uid,
-        cid,
-        session,
-        accepted=accepted and not state.get('cancelled'),
-        late_observed=bool(state.get('late_observed')),
-    )
+async def _fenced(
+    state: UploadState,
+    executor: Executor,
+    fn: Callable[..., Any],
+    *args: Any,
+    bounded: bool = True,
+    settled: Settled | None = None,
+    **kwargs: Any,
+) -> Any:
+    """Run one step the fence outlives. A cancel abandons it only if not started."""
+    future = _fence(state).submit(executor, fn, args, kwargs, bounded=bounded, settled=settled)
+    return await asyncio.wrap_future(future)
 
 
 async def _close(state: UploadState, response: Response | None) -> None:
+    """A live request's completion: wait for the worker's real outcome, answer from it."""
+    accepted = bool(state.get('durable') and accepted_response(response))
     try:
-        await settle_upload()
-        if state.get('unsettled'):
-            # A worker may still commit audio. Clearing now would let a seal
-            # miss it; the persisted token waits for lease expiry and repair.
-            raise _Unsettled('custody worker outlived its lease')
-        accepted = bool(state.get('durable') and accepted_response(response))
-        session = state.get('session')
-        candidate = state.get('candidate')
-        if session:
-            assert 'uid' in state and 'cid' in state  # A fence always has a resolved target.
-            try:
-                await _complete(state, _finish_session, state, state['uid'], state['cid'], session, accepted)
-            except record_custody_append.RecordCustodyFenceLost:
-                if not accepted:
-                    raise
-                await _complete(state, record_custody_append.recover_committed, state['uid'], state['cid'], session)
-                logger.warning('event=record_token_lease_completion outcome=recovered_lost_fence')
+        finished = False
+        if _owns_work(state):
+            finished = await asyncio.wrap_future(_fence(state).close(state, accepted))
+        if finished:
             if accepted_response(response) and not state.get('durable') and not state.get('no_append'):
                 raise HTTPException(status_code=503, detail='Retain local audio until durable custody is available')
-        elif candidate:
-            # Begin may have committed without answering. Clear that exact token;
-            # the request's own response is unchanged by this reconciliation.
-            assert 'uid' in state and 'cid' in state
-            try:
-                await _complete(
-                    state, record_custody_append.finish, state['uid'], state['cid'], candidate, accepted=False
-                )
-            except Exception as error:
-                logger.warning(
-                    'event=record_token_lease_completion outcome=candidate_unreconciled exception_type=%s',
-                    type(error).__name__,
-                )
         elif accepted and state.get('late_observed'):
             record_token_lease_metrics.LATE_APPEND.inc()
     except Exception as error:
         logger.warning(
             'event=record_token_lease_completion outcome=unavailable exception_type=%s', type(error).__name__
         )
-        # A cancelled request has no response to replace; its cancel propagates.
-        if not state.get('cancelled') and not state.get('no_append'):
+        if not state.get('no_append'):
             raise HTTPException(status_code=503, detail='Retain local audio and retry custody admission') from error
+
+
+def _hand_off(state: UploadState) -> None:
+    """A cancelled request: never awaits, never releases. Its workers complete."""
+    if _owns_work(state):
+        _fence(state).close(state, None)
 
 
 def custody_upload(fn: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R]]:
@@ -280,24 +311,22 @@ def custody_upload(fn: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R]]:
             return await fn(*args, **kwargs)
         state: UploadState = {}
         token = _upload.set(state)
-        response: Response | None = None
-        interrupted = False
         try:
-            result = await fn(*args, **kwargs)
-            response = result
-            return result
-        except asyncio.CancelledError:
-            # The client is gone, but a started archive worker is not. The
-            # fence clears only after it settles, with its true outcome.
-            interrupted = state['cancelled'] = True
-            raise
-        finally:
             try:
-                await _close(state, response)
-            finally:
-                _upload.reset(token)
-            if state.get('cancelled') and not interrupted:
-                raise asyncio.CancelledError()
+                response = await fn(*args, **kwargs)
+            except Exception:
+                await _close(state, None)
+                raise
+            except BaseException:
+                # Cancelled (asyncio, AnyIO scope, shutdown): no response will
+                # be delivered, and a repeated cancel must not interrupt us, so
+                # nothing here awaits. Started workers settle, then complete.
+                _hand_off(state)
+                raise
+            await _close(state, response)
+            return response
+        finally:
+            _upload.reset(token)
 
     return run
 
@@ -315,18 +344,26 @@ async def begin_upload(uid: str, cid: str | None, job_id: str, *, recording_sess
     state.update(uid=uid, cid=cid)
     if not lease.token_lease_serving(uid):
         return
-    # Retain the exact candidate even if the commit response is lost or the
-    # request is cancelled while begin is in flight.
-    candidate = state['candidate'] = 'custody:' + job_id
+    # Retain the exact candidate even if the commit response is lost.
+    session = state['session'] = 'custody:' + job_id
+    fence = _fence(state)
+    # The storage budget starts before begin stamps the token's lease.
+    fence.begin(session, time.monotonic() + lease.CUSTODY_STORAGE_BUDGET_SECONDS)
     try:
-        acquired = await _fenced(state, db_executor, record_custody_append.begin, uid, cid, candidate)
+        acquired = await _fenced(
+            state,
+            db_executor,
+            record_custody_append.begin,
+            uid,
+            cid,
+            session,
+            bounded=False,
+            settled=fence.begin_settled,
+        )
     except Exception as error:
         raise HTTPException(status_code=503, detail='Retain local audio and retry custody admission') from error
-    if acquired:
-        state['session'] = candidate
-    else:
-        # Begin answered inside one transaction that saw no token of ours.
-        state.pop('candidate')
+    if not acquired:
+        state.pop('session')
 
 
 def stored(paths: Sequence[str], archives: Sequence[str]) -> None:
@@ -351,15 +388,44 @@ def handoff_committed() -> None:
         state['durable'] = False
 
 
+def after_storage(cleanup: Callable[..., Any], *args: Any) -> None:
+    """Run route cleanup (temp files) now, or on the fence's worker once storage settled.
+
+    Synchronous, so a repeated cancel cannot interrupt it. Without a custody
+    fence (off, shadow, serve 0%) cleanup runs inline exactly as before.
+    """
+    state = _upload.get()
+    fence = state.get('fence') if state is not None else None
+    if state is None or fence is None or not fence.defer(cleanup, args, state):
+        cleanup(*args)
+
+
+async def storage_step(executor: ThreadPoolExecutor, fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+    """One owner storage write (e.g. a late-WAL retained copy) the fence must outlive."""
+    state = _upload.get()
+    if state is None or not state.get('session'):
+        return await run_blocking(executor, fn, *args, **kwargs)
+    return await _fenced(state, executor, fn, *args, **kwargs)
+
+
 async def _renew_after_append(uid: str, cid: str, state: UploadState | None) -> None:
     observed: dict[str, bool] = {}
-    kwargs = dict(
+    kwargs: dict[str, Any] = dict(
         source='custody_append',
         session=state.get('session') if state is not None else None,
         late_observation=observed,
     )
     if state is not None and state.get('session'):
-        await _fenced(state, db_executor, record_audio.renew_record_token_lease, uid, cid, **kwargs)
+        fence = _fence(state)
+        await _fenced(
+            state,
+            db_executor,
+            record_audio.renew_record_token_lease,
+            uid,
+            cid,
+            settled=fence.observed(observed),
+            **kwargs,
+        )
     else:
         await run_blocking(db_executor, record_audio.renew_record_token_lease, uid, cid, **kwargs)
     if state is not None and observed.get('late'):
@@ -377,11 +443,12 @@ async def archive(fn: Archive, uid: str, paths: list[str], metadata: dict[str, A
             await _renew_after_append(uid, cid, state)
         return archived
     assert cid is not None  # The exact upload fence was acquired for this target.
+    fence = _fence(state)
     archived = []
     for path in paths:
         # A cancelled request leaves a started worker to commit; the fence
-        # waits for it before finish (SCA-3748).
-        committed = await _fenced(state, sync_executor, fn, uid, [path], metadata)
+        # records its true outcome before finish (SCA-3748).
+        committed = await _fenced(state, sync_executor, fn, uid, [path], metadata, settled=fence.archive_settled)
         archived.extend(committed)
         # Only a completed durable file append is a signal. The transactional
         # heartbeat helper coalesces open custody tokens to lease/2; no timer.

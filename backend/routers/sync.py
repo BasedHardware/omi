@@ -2032,7 +2032,7 @@ async def sync_local_files_v2(
             detail='Sync upload could not be accepted; local audio remains available.',
         )
     finally:
-        await custody_lease.settle_then(_cleanup_files, paths)
+        custody_lease.after_storage(_cleanup_files, paths)
 
 
 @router.post('/v2/sync-local-files/{job_id}/release-hold', response_model=SyncUploadHoldReleaseResponse)

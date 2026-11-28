@@ -8,6 +8,7 @@ import math
 from datetime import datetime
 
 from database._client import run_transactional
+from config import record_seal_rules
 from config.record_audio import record_identity
 from config.record_partial import MAX_SOURCES
 from config.record_gap_fill import MAX_FILL_SECONDS, PIECE_SECONDS, FINISH_SLACK_SECONDS
@@ -85,6 +86,9 @@ def retain(uid, cid, row, paths):
                         protection,
                         {'source': 'phone_wal', 'rendition': 'record-lease-append-v1'},
                         bucket=bucket,
+                        # Under a sync custody fence no piece starts after its
+                        # commit deadline; each piece write is bounded (SCA-3748).
+                        deadline=record_seal_rules.custody_write_deadline(),
                     )
                     if created is None:
                         raise ValueError('concurrent custody chunk exists; retain WAL for coverage proof')
@@ -139,7 +143,9 @@ async def retain_upload(uid, cid, row, paths, store):
     if not custody.owns_upload(uid, cid) or retention_window(row) is None:
         return
     try:
-        await run_blocking(storage_executor, retain, uid, cid, row, paths)
+        # The custody fence outlives these chunk writes even if the request is
+        # cancelled; its worker releases the token after they settle (SCA-3748).
+        await custody.storage_step(storage_executor, retain, uid, cid, row, paths)
     finally:
         # A later object can fail after earlier create-only writes succeeded.
         # Re-arm those durable chunks even while the phone retains its WAL.

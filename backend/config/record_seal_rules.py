@@ -1,17 +1,54 @@
 """Independent default-on rollback switches for approved seal proof rules."""
 
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime
 from functools import lru_cache
 import json
 import math
 import os
 from pathlib import Path
+import time
 
 from config.refactor_modes import RECORD_TOKEN_LEASE_MODE_ENV, mode, serving_for
 
 # Cover request teardown and final custody metadata after the Cloud Run timeout.
 # This floor applies only to the exact, podless custody token, never frame leases.
 CUSTODY_REQUEST_MARGIN_SECONDS = 300
+
+# SCA-3748: a fenced custody storage commit never starts more than this long
+# after begin, and each bounded commit (client timeout plus retry deadline)
+# lands within CUSTODY_WRITE_SECONDS of starting. Their sum stays well under
+# half the custody lease, so lease-expiry repair never races a live writer.
+CUSTODY_STORAGE_BUDGET_SECONDS = 900
+CUSTODY_WRITE_SECONDS = 60
+_custody_write_deadline: ContextVar[float | None] = ContextVar('custody_write_deadline', default=None)
+
+
+class CustodyWriteDeadline(TimeoutError):
+    """A fenced custody storage commit would start after its fence's budget."""
+
+
+def custody_write_deadline():
+    """The monotonic commit deadline of the fenced step on this thread, if any."""
+    return _custody_write_deadline.get()
+
+
+def check_custody_write_deadline():
+    """Refuse to start a fenced commit after its deadline; None when unfenced."""
+    deadline = _custody_write_deadline.get()
+    if deadline is not None and time.monotonic() >= deadline:
+        raise CustodyWriteDeadline('custody storage budget spent; retain local audio')
+    return deadline
+
+
+@contextmanager
+def bound_custody_writes(deadline):
+    token = _custody_write_deadline.set(deadline)
+    try:
+        yield
+    finally:
+        _custody_write_deadline.reset(token)
 
 
 @lru_cache(maxsize=1)
