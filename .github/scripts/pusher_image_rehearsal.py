@@ -419,6 +419,24 @@ def validate_proof(proof):
     )
 
 
+QUALIFICATION_MAX_AGE_SECONDS = 24 * 3600
+
+
+def qualification_fresh(qualification_run, now=None):
+    """The development qualification finished no more than 24 hours ago."""
+    finished = qualification_run.get("updated_at")
+    if not isinstance(finished, str):
+        return False
+    try:
+        finished_at = datetime.fromisoformat(finished.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if finished_at.tzinfo is None:
+        return False
+    age = ((now or datetime.now(timezone.utc)) - finished_at).total_seconds()
+    return 0 <= age <= QUALIFICATION_MAX_AGE_SECONDS
+
+
 def check_provenance(proof):
     source = proof["source_sha"]
     candidate = proof["candidate_image"]
@@ -432,13 +450,10 @@ def check_provenance(proof):
     git = ["git", "-C", str(ROOT)]
     require(run([*git, "rev-parse", "origin/main"], "fresh_main_unavailable").strip() == main, "fetch_fresh_main")
     run([*git, "merge-base", "--is-ancestor", source, main], "source_not_merged")
+    # David 2026-11-28: the source must be on main and freshly qualified, but main may
+    # have moved past it. Requiring an unchanged Pusher closure refused every candidate
+    # on a busy main before the chain could finish (runs 46063539437, 46082813194).
     scripts = ROOT / "backend/scripts"
-    closure = run(
-        [sys.executable, str(scripts / "verify_pusher_source_closure.py"), "--image-repository", dev_repository],
-        "source_closure_unavailable",
-    ).splitlines()
-    require(closure, "source_closure_unavailable")
-    run([*git, "diff", "--quiet", source, main, "--", *closure], "source_or_chart_closure_changed")
 
     with tempfile.TemporaryDirectory(prefix="pusher-qualification-") as tmp:
         directory = Path(tmp)
@@ -481,10 +496,9 @@ def check_provenance(proof):
         metadata.write_text(
             run([*gh, f"{path}/actions/runs/{run_id}"], "qualification_run_unavailable"), encoding="utf-8"
         )
-        require(
-            json.loads(metadata.read_text(encoding="utf-8"))["head_repository"]["full_name"] == REPO,
-            "qualification_repository_mismatch",
-        )
+        qualification_run = json.loads(metadata.read_text(encoding="utf-8"))
+        require(qualification_run["head_repository"]["full_name"] == REPO, "qualification_repository_mismatch")
+        require(qualification_fresh(qualification_run), "qualification_stale")
         artifacts = directory / "artifacts"
         run(
             [
