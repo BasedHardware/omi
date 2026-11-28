@@ -483,7 +483,7 @@
             {% endif %}
 
             <div class="action-buttons">
-                <a href="/disconnect?uid={{ uid }}" class="btn btn-danger btn-small">
+                <a href="/disconnect?uid={{ uid_q|default(uid) }}" class="btn btn-danger btn-small">
                     Disconnect
                 </a>
             </div>
@@ -538,7 +538,7 @@
                 Enter your Hive API key to connect your account and start managing projects with voice.
             </p>
             
-            <form action="/settings/api-key?uid={{ uid }}" method="POST">
+            <form action="/settings/api-key?uid={{ uid_q|default(uid) }}" method="POST">
                 <div class="input-group">
                     <label for="api_key">Hive API Key</label>
                     <input 
@@ -614,8 +614,8 @@
             const projectName = selectedOption.getAttribute('data-name');
             
             if (projectId) {
-                const uid = new URLSearchParams(window.location.search).get('uid');
-                fetch(`/settings/default-project?uid=${uid}&project_id=${projectId}&project_name=${encodeURIComponent(projectName)}`, {
+                const uid = new URLSearchParams(window.location.search).get('uid') || '';
+                fetch(`/settings/default-project?uid=${encodeURIComponent(uid)}&project_id=${encodeURIComponent(projectId)}&project_name=${encodeURIComponent(projectName || '')}`, {
                     method: 'POST'
                 }).then(response => {
                     if (response.ok) {

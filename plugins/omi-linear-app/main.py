@@ -439,14 +439,16 @@ async def home(request: Request, uid: Optional[str] = None):
         teams = get_user_teams(uid)
         default_team = get_default_team(uid)
     
+    uid_q = urllib.parse.quote(uid, safe="") if uid else ""
     return templates.TemplateResponse("setup.html", {
         "request": request,
         "uid": uid,
+        "uid_q": uid_q,
         "authenticated": authenticated,
         "user_profile": user_profile,
         "teams": teams,
         "default_team": default_team,
-        "oauth_url": f"/auth/linear?uid={urllib.parse.quote(uid, safe='')}"
+        "oauth_url": f"/auth/linear?uid={uid_q}"
     })
 
 
@@ -521,7 +523,8 @@ async def linear_callback(request: Request, code: str = None, state: str = None,
     )
     
     # Redirect to home with uid
-    return RedirectResponse(url=f"/?uid={urllib.parse.quote(uid, safe='')}")
+    safe_uid = urllib.parse.quote(uid, safe="")
+    return RedirectResponse(url=f"/?uid={safe_uid}")
 
 
 @app.get("/setup/linear", tags=["setup"])
@@ -542,7 +545,8 @@ async def set_default_team(uid: str, team_id: str, team_name: str):
 async def disconnect_linear(uid: str):
     """Disconnect Linear account."""
     delete_linear_tokens(uid)
-    return RedirectResponse(url=f"/?uid={urllib.parse.quote(uid, safe='')}")
+    safe_uid = urllib.parse.quote(uid, safe="")
+    return RedirectResponse(url=f"/?uid={safe_uid}")
 
 
 # ============================================
