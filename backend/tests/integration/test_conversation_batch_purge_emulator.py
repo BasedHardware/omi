@@ -1342,9 +1342,9 @@ def test_maskless_account_revocation_arms_recording_erasure(plane):
     assert intent.get('conversation_id') == ''
 
 
-def _register_pending_result(plane, monkeypatch, tmp_path, variant):
+def _register_pending_artifact(plane, monkeypatch, tmp_path, variant, *, kind='result'):
     bucket, namespace, uid = 'synthetic-late-batch', 'batch_pipeline_dev', plane.uid
-    storage = LocalStorageClient(tmp_path / 'result-upload')
+    storage = LocalStorageClient(tmp_path / 'artifact-upload')
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.setenv('BUCKET_BATCH_PIPELINE', bucket)
     monkeypatch.setattr(late_sweeps, 'create_storage_client', lambda: storage)
@@ -1370,12 +1370,17 @@ def _register_pending_result(plane, monkeypatch, tmp_path, variant):
     job = {'owner_id': uid, 'state': 'leased', 'conversation_id': cid, 'projection_binding': asdict(binding)}
     if variant == 'native':
         job.update(record_lane_owner=lane, record_origin=True)
-    plane.client.collection(f'{namespace}_jobs').document(segment).set(job)
+    job_ref = plane.client.collection(f'{namespace}_jobs').document(segment)
+    job_ref.set(job)
     artifacts = create_artifact_store(
         FirestoreStore(namespace, firestore_client=plane.client), storage, bucket, b'x' * 32
     )
     item = WorkItem(segment, uid, 100, 'record:pending', 1, Priority.FRESH, conversation_id=cid, privacy_generation=0)
-    uri = artifacts.persist_result(item, {'synthetic_result': True})
+    if kind == 'audio':
+        uri = artifacts.stage_audio(item, b'synthetic audio', record_origin=origin, record_lane_owner=lane)
+        job_ref.update({'audio_uri': uri})
+    else:
+        uri = artifacts.persist_result(item, {'synthetic_result': True})
     blob = storage.bucket(bucket).blob(uri.removeprefix(f'gs://{bucket}/').split('#', 1)[0])
     [receipt] = plane.client.collection(f'{namespace}_artifacts').stream()
     return user, receipt, blob
@@ -1383,7 +1388,7 @@ def _register_pending_result(plane, monkeypatch, tmp_path, variant):
 
 @pytest.mark.parametrize('variant', ['desktop-sync', 'legacy-nonrecording', 'native', 'legacy-unstamped'])
 def test_account_opt_out_preserves_allowed_admitted_results(plane, monkeypatch, tmp_path, variant):
-    user, receipt, blob = _register_pending_result(
+    user, receipt, blob = _register_pending_artifact(
         plane, monkeypatch, tmp_path, 'native' if variant == 'legacy-unstamped' else variant
     )
     start = receipt.create_time
@@ -1417,12 +1422,13 @@ def test_account_opt_out_preserves_allowed_admitted_results(plane, monkeypatch, 
         assert 'execute_at' not in debt.to_dict()
 
 
-def test_default_closed_sweep_keeps_proof_and_resumes_after_history_window(plane, monkeypatch, tmp_path):
-    from database.batch_pipeline_staging import ORPHAN_GRACE, reap_one
+@pytest.mark.parametrize('kind', ['result', 'audio'])
+def test_default_closed_sweep_keeps_proof_and_resumes_after_orphan_grace(plane, monkeypatch, tmp_path, kind):
+    from database.batch_pipeline_staging import ORPHAN_GRACE, reap
 
     monkeypatch.delenv('FIRESTORE_READ_LEVERS')
     client = plane.client
-    user, receipt, blob = _register_pending_result(plane, monkeypatch, tmp_path, 'native')
+    user, receipt, blob = _register_pending_artifact(plane, monkeypatch, tmp_path, 'native', kind=kind)
     user.update({'private_cloud_sync_enabled': False})
     [intent] = client.collection(late_intents.COLLECTION).stream()
     reconcile = late_sweeps.reconcile_batch_privacy_late_sweeps
@@ -1440,13 +1446,14 @@ def test_default_closed_sweep_keeps_proof_and_resumes_after_history_window(plane
     assert reconcile(firestore_client=client) == {}
     mocked_storage.assert_not_called()
     assert intent.reference.get().exists and receipt.reference.get().exists and blob.exists()
-    client.collection('batch_pipeline_dev_jobs').document(receipt.get('segment_id')).update(
-        {'result.result_uri': receipt.get('uri')}
-    )
+    if kind == 'result':
+        client.collection('batch_pipeline_dev_jobs').document(receipt.get('segment_id')).update(
+            {'result.result_uri': receipt.get('uri')}
+        )
     store = FirestoreStore('batch_pipeline_dev', firestore_client=client)
-    assert reap_one(store, receipt.id, clock[0])
+    assert reap(store, clock[0]) == 1
     retired = receipt.reference.get().to_dict()
-    assert 'write_pending_until' not in retired and retired['late_erasure_pending_until'] == deadline
+    assert 'write_pending_until' not in retired and 'cleanup_after' not in retired
     monkeypatch.setattr(
         late_sweeps, '_historical_scope', MagicMock(side_effect=AssertionError('proof must be durable'))
     )
@@ -1455,7 +1462,10 @@ def test_default_closed_sweep_keeps_proof_and_resumes_after_history_window(plane
         if reconcile(firestore_client=client) == {'completed': 1}:
             break
         clock[0] += late_sweeps.PAGE_RETRY
-    assert not intent.reference.get().exists and not receipt.reference.get().exists and not blob.exists()
+    assert not intent.reference.get().exists
+    assert not blob.exists(), 'resuming the sweep must erase the staged object'
+    assert not receipt.reference.get().exists
+    assert retired['late_erasure_pending_until'] == deadline
     assert _pending_count('artifact_execution') == 0
 
 
@@ -1509,7 +1519,8 @@ def test_account_recording_erasures_require_a_denial_at_the_policy_commit(plane,
     monkeypatch.setattr(late_sweeps, '_now', lambda: clock[0])
     reconcile = late_sweeps.reconcile_batch_privacy_late_sweeps
     if path in {'history-unreadable', 'history-transient', 'unverified-retry'}:
-        monkeypatch.setenv('BATCH_PRIVACY_LATE_SWEEP_PERMANENT_ATTEMPTS', '2')
+        monkeypatch.delenv('FIRESTORE_READ_LEVERS')
+        monkeypatch.delenv('BATCH_PRIVACY_LATE_SWEEP_PERMANENT_ATTEMPTS', raising=False)
         before = _dead_letter_count('scope_history_unavailable')
 
         def unavailable(_client, reference, field_paths, read_time):
@@ -1527,11 +1538,16 @@ def test_account_recording_erasures_require_a_denial_at_the_policy_commit(plane,
             retry.set({**intent.to_dict(), 'artifact_id': receipt.id, 'scope_verified': False})
             intent.reference.delete()
             intent = retry.get()
-        assert reconcile(firestore_client=client) == {'retry': 1}
-        clock[0] += late_sweeps.RETRY
+        for attempts in range(1, 5):
+            assert reconcile(firestore_client=client) == {'retry': 1}
+            assert intent.reference.get().get('permanent_attempts') == attempts
+            assert reconcile(firestore_client=client) == {}
+            assert _dead_letter_count('scope_history_unavailable') == before
+            clock[0] += late_sweeps.RETRY
         assert reconcile(firestore_client=client) == {'dead_lettered': 1}
         assert reconcile(firestore_client=client) == {}
         debt = intent.reference.get().to_dict()
+        assert debt['permanent_attempts'] == 5
         assert debt['dead_letter_error'] == 'scope_history_unavailable'
         assert 'due_at' not in debt
         assert 'execute_at' not in debt
@@ -1598,7 +1614,7 @@ def test_late_sweep_settles_receipt_after_normal_retention_cleanup(plane, monkey
     from utils.batch_pipeline.retention import cleanup_completed_artifacts
 
     client = plane.client
-    user, reserved, blob = _register_pending_result(plane, monkeypatch, tmp_path, 'native')
+    user, reserved, blob = _register_pending_artifact(plane, monkeypatch, tmp_path, 'native')
     store = FirestoreStore('batch_pipeline_dev', firestore_client=client)
     receipt = reserved.reference
     deadline = reserved.get('write_pending_until')

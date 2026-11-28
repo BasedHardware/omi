@@ -140,6 +140,16 @@ def test_committed_offline_admission_gate():
     assert not b.lint(b.rules(), json.loads(b.INVENTORY.read_text()))['failures']
 
 
+@pytest.mark.parametrize('increase,expected', [(0, 0), (1, 1)])
+def test_batch_privacy_dead_letter_alert_fires_on_first_failure(increase, expected):
+    alert = b.rules()['omi-batch-privacy-erasure-dead-letter']
+    query = alert['data'][0]
+    assert query['datasourceUid'] == 'gmp-cloud-run'
+    assert b.metric_names(query['model']['expr']) == {'omi_batch_pipeline_privacy_post_window_dead_letters_total'}
+    assert not alert['isPaused'] and b.seconds(alert['for']) == 0
+    assert b.evaluate(alert, {'A': {(): [increase]}}) == {(): expected}
+
+
 def test_observed_metric_from_another_datasource_cannot_admit_a_local_prometheus_rule():
     r = rule()
     inventory = {

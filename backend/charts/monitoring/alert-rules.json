@@ -39085,5 +39085,89 @@
       "repeat_interval": "24h"
     },
     "record": null
+  },
+  {
+    "uid": "omi-batch-privacy-erasure-dead-letter",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Batch privacy erasure",
+    "title": "Batch privacy erasure needs recovery",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "sum(increase(omi_batch_pipeline_privacy_post_window_dead_letters_total{project_id=\"based-hardware\"}[30m])) or vector(0)",
+          "instant": true,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "refId": "B",
+          "type": "threshold",
+          "expression": "A",
+          "conditions": [
+            {
+              "evaluator": {
+                "type": "gt",
+                "params": [
+                  0
+                ]
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "0s",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-batch-stuck-census",
+      "summary": "A delayed batch erasure intent or receipt exhausted its bounded recovery attempts.",
+      "user_impact": "An artifact affected by a privacy change may remain stored until the erasure obligation is resolved.",
+      "scope": "Production batch privacy dead letters, including proof failures while execution is paused.",
+      "verification": "Check the increase by error and inspect the matching durable dead-letter row through the authorized recovery path.",
+      "safe_next_action": "Hold activation and verify the original policy commit, scope and storage identity before requeueing. Preserve legal-hold fences.",
+      "runbook": "backend/docs/listen_pusher_pipeline/changes/2026-11-24-batch-privacy-window.md"
+    },
+    "labels": {
+      "alert_identity": "omi-batch-privacy-erasure-dead-letter",
+      "component": "batch-pipeline",
+      "impact": "product",
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "tier": "page",
+      "audience": "human",
+      "owner": "omi-pipeline"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": []
+    }
   }
 ]

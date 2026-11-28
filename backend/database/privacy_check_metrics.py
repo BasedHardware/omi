@@ -67,6 +67,15 @@ POST_WINDOW_DEAD_LETTERS = Counter(
     'Permanent delayed erasure failures retained for recovery',
     ['error'],
 )
+# Expose a baseline before the first failure so an increase alert sees it.
+for error in (
+    'artifact_address',
+    'artifact_identity',
+    'malformed_intent',
+    'recording_lane_unproven',
+    'scope_history_unavailable',
+):
+    POST_WINDOW_DEAD_LETTERS.labels(error)
 POST_WINDOW_OPERATIONS = Counter(
     'omi_batch_pipeline_privacy_post_window_operations_total',
     'Delayed sweep erasure or reconciliation operations, including retry work',
