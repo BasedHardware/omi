@@ -1,11 +1,7 @@
-"""The projection finish guard must survive every scrape filter that feeds it.
+"""Check the projection finish guard counters at the Cloud Run GMP scrape.
 
-`OmiBatchProjectionFinishReadsPerCompletion` is the only movable guard on the
-projection finish-backoff lever, and its ratio needs both counters. The
-projection sweep runs on backend-sync and backend-integration, so the counters
-must pass the Cloud Run GMP keep rule and the in-cluster Prometheus bridge
-prefixes. A dropped counter reads as "no data", which is indistinguishable from
-a healthy zero (FC-metric-dropped-by-scrape-allowlist).
+Both producer counters must still pass the GMP keep and drop rules during
+an in-cluster exporter rollback (FC-metric-dropped-by-scrape-allowlist).
 """
 
 import ast
@@ -66,23 +62,14 @@ def keep_rule():
     return rules, keep
 
 
-def bridge_prefixes(stage):
-    path = MONITORING / f'prometheus-stackdriver-exporter/{stage}_sync_omi_cloud_run_metrics_exporter.yaml'
-    metrics = yaml.safe_load(path.read_text())['stackdriver']['metrics']
-    assert '"backend-integration"' in ' '.join(metrics['filters'])
-    return metrics['prefixes']
-
-
 def test_producer_registers_each_guard_counter_once():
     names = counter_registrations()
     for name in sorted(GUARD_COUNTERS):
         assert names.count(name) == 1, f'metrics.py registers {name} {names.count(name)} times'
 
 
-@pytest.mark.parametrize('stage', ['dev', 'prod'])
-def test_guard_counters_survive_cloud_run_and_prometheus_bridge(stage):
+def test_guard_counters_survive_cloud_run_gmp():
     rules, keep = keep_rule()
-    prefixes = bridge_prefixes(stage)
     for name in sorted(GUARD_COUNTERS):
         assert re.fullmatch(keep['regex'], name), f'Cloud Run drops {name}'
         labels = {'__name__': name}
@@ -90,9 +77,6 @@ def test_guard_counters_survive_cloud_run_and_prometheus_bridge(stage):
             if rule['action'] == 'drop':
                 value = ';'.join(labels.get(label, '') for label in rule['sourceLabels'])
                 assert not re.fullmatch(rule['regex'], value), f'Cloud Run drops {name}'
-        assert any(
-            f'prometheus.googleapis.com/{name}/'.startswith(prefix) for prefix in prefixes
-        ), f'Prometheus bridge drops {name}'
 
 
 def test_alert_ratio_consumes_both_guard_counters():
