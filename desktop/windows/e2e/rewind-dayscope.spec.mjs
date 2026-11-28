@@ -147,6 +147,14 @@ function seed(dir, dbPath) {
   add(past, 'Slides', 'board deck — Q3 review', KW_OCR, JPEGS[1])
   add(past + 8e3, 'Slides', 'board deck — Q3 review', `${KW_OCR} (slide 2)`, JPEGS[1])
   add(past + 45 * 60e3, 'Notes', 'ml study notes', SEM_OCR, JPEGS[2])
+  add(
+    today - 24 * 3600e3 + 9 * 3600e3,
+    'Mail.exe',
+    'invoice yesterday',
+    'invoice from yesterday',
+    JPEGS[0]
+  )
+  add(now - 10 * 60e3, 'Mail.exe', 'invoice today', 'invoice from today', JPEGS[1])
   db.close()
 }
 
@@ -269,7 +277,7 @@ test('day-scoped Rewind: browse, calendar, search results, drill-down, empty day
       (base) => window.omi.rewindSetEmbedSession({ desktopApiBase: base, token: 'e2e-token' }),
       stub.base
     )
-  const input = rw.locator('input[placeholder="Search what was on screen…"]')
+  const input = rw.locator('[data-testid="rewind-search"]')
   // Phase 1 (keyword) is immediate; phase 2 (semantic recall) arrives out-of-band.
   // Re-issue the query each iteration so a fresh phase-2 fires for the newest search
   // sequence, until BOTH the keyword group and the semantic "Related" group render.
@@ -296,6 +304,14 @@ test('day-scoped Rewind: browse, calendar, search results, drill-down, empty day
   await page.waitForTimeout(400) // thumbnails
   await page.screenshot({ path: path.join(shotsDir, '03-search-results.png') })
   assert.ok(gotSemantic, 'keyword group + semantic "Related" group both rendered')
+
+  const temporal = await page.evaluate(async () => window.omi.rewindSearch('invoice yesterday'))
+  const temporalFrames = temporal.groups.flatMap((group) => group.frames)
+  assert.equal(temporal.normalizedQuery, 'invoice')
+  assert.deepEqual(
+    temporalFrames.map((frame) => frame.ocrText),
+    ['invoice from yesterday']
+  )
 
   // Assert the affordance is real, not just present in the DOM by luck.
   const relatedCount = await rw.locator('text=Related').count()
