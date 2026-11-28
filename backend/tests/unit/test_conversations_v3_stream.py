@@ -611,6 +611,11 @@ def test_product_retry_uses_own_window_and_settles_tile(monkeypatch, outcome):
     if outcome == 'done':
         result = routes.reprocess_conversation('window', uid='synthetic')
         assert result.tile_state == 'done' and not result.summary_retryable
+    elif outcome == 'no_write':
+        with pytest.raises(HTTPException) as raised:
+            routes.reprocess_conversation('window', uid='synthetic')
+        assert raised.value.status_code == 503
+        assert raised.value.detail['code'] == 'conversation_processing_retryable'
     else:
         with pytest.raises(RuntimeError):
             routes.reprocess_conversation('window', uid='synthetic')

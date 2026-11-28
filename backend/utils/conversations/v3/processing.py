@@ -2,18 +2,45 @@
 
 import logging
 from datetime import datetime, timedelta, timezone
+from time import monotonic
 
 from database import conversations_v3_fence as fence, conversations_v3_leases as leases
+from database.conversations_v3_fence import ProcessingPersistenceFenced
 from database import conversations_v3_processing as writers
 from models.finalization_owner import FinalizationOwnedElsewhere
-from utils.conversations.v3 import models, policy
+from utils.conversations.processing_retry import ProcessingNotCompleted
+from utils.conversations.v3 import Conflict, models, policy
 from utils.conversations.v3.triggers import enqueue
+from utils.llm.notes_observability import notes_stage
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 
 
+def _not_completed_stage(persisted) -> str:
+    """The bounded point that stopped completion, for the one refusal line."""
+    decline = fence.persistence_declined()
+    if decline is not None:
+        return decline.reason
+    if not persisted or not persisted[-1]:
+        return 'summary_not_persisted'
+    return 'status_not_completed'
+
+
+def _not_completed(persisted, elapsed_seconds: float) -> ProcessingNotCompleted:
+    stage = _not_completed_stage(persisted)
+    lane = notes_stage()
+    logger.warning(
+        'event=v3_processing_not_completed stage=%s notes_stage=%s elapsed_seconds=%.3f',
+        stage,
+        lane,
+        elapsed_seconds,
+    )
+    return ProcessingNotCompleted(stage, elapsed_seconds=elapsed_seconds, notes_stage=lane)
+
+
 def run_external(fn, uid, language, conversation, *args, **kwargs):
+    started = monotonic()
     token = leases.acquire(uid, 'summary-' + conversation.id)
     if not token:
         raise RuntimeError('v3_summary_busy')
@@ -46,15 +73,20 @@ def run_external(fn, uid, language, conversation, *args, **kwargs):
                 with models.notes_mode(uid, foreground=retry, backfilled=backfilled):
                     result = fn(uid, language, conversation, *args, persistence_observer=observed, **kwargs)
                 if not persisted or not persisted[-1] or getattr(result.status, 'value', result.status) != 'completed':
-                    raise RuntimeError('v3_processing_not_completed')
+                    raise _not_completed(persisted, monotonic() - started)
             except (models.BackfillNotesDeletionBlocked, models.BackfillNotesAdmissionTimeout):
                 if backfill_prior is not None:
                     writers.park_backfill_processing(uid, conversation.id, token, backfill_prior)
                 raise
             except FinalizationOwnedElsewhere:
                 raise
-            except Exception:
-                writers.fail_processing(uid, conversation.id, token, revision, content_hash=content_hash)
+            except Exception as error:
+                try:
+                    writers.fail_processing(uid, conversation.id, token, revision, content_hash=content_hash)
+                except Conflict as settle_error:
+                    if isinstance(error, (ProcessingNotCompleted, ProcessingPersistenceFenced)):
+                        raise error from settle_error
+                    raise
                 raise
             armed = writers.settle_processing(
                 uid, conversation.id, token, revision, conversation.finished_at, notes=True, content_hash=content_hash

@@ -80,7 +80,7 @@ from utils.other.request_deadline import (
 )
 from utils.llm.notes_identity import notes_identity, screen_speaker_bindings
 from utils.llm.notes_output import NotesOutput, OpenLoopNotesOutput
-from utils.llm.notes_observability import current_run, notes_observation, observe_notes_output
+from utils.llm.notes_observability import current_run, mark_notes_stage, notes_observation, observe_notes_output
 from utils.conversations.processing_steps import AsyncStep, Steps, run_inline
 from utils.llm.notes_effort import bind_notes_effort
 
@@ -596,6 +596,7 @@ def _shaped_conversation_notes_steps(
         agent_inputs = dict(
             uid=uid, prefix=prefix, model=model, capture_evidence=context, words=words, frames=frames, kwargs=kwargs
         )
+        mark_notes_stage('agentic_notes')
         if async_agent and _serve_agentic_notes_steps is not None:
             agent_payload = yield from _serve_agentic_notes_steps(**agent_inputs)
         elif not async_agent:
@@ -620,6 +621,7 @@ def _shaped_conversation_notes_steps(
         # fallback now would hold the request past the client's own deadline, so
         # answer the retryable 503 instead of buying a second stalled call.
         raise RequestDeadlineExceeded('notes fallback started after the request budget was spent')
+    mark_notes_stage('one_shot_notes')
     one_shot_packet = packet if serving_for('NOTES_PACKET_V2_MODE', uid) else legacy_packet
     one_shot_packet['screen_speaker_bindings'] = screen_speaker_bindings(kwargs['notes_identity'])
     evidence[0]['content'] = json.dumps(one_shot_packet, ensure_ascii=False, default=str)

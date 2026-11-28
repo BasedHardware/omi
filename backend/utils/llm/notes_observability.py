@@ -8,6 +8,17 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 _current: ContextVar[Any] = ContextVar('notes_run', default=None)
+# The notes lane that ran last, kept outside the per-run receipt so a refused
+# write can name what spent the wait after the receipt was already emitted.
+_stage: ContextVar[str] = ContextVar('notes_stage', default='none')
+
+
+def mark_notes_stage(stage: str) -> None:
+    _stage.set(stage)
+
+
+def notes_stage() -> str:
+    return _stage.get()
 
 
 class NotesRun:

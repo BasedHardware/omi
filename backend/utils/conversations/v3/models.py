@@ -340,11 +340,15 @@ def foreground():
 def short_tasks(uid, conversation):
     """Keep the existing task extraction rules without buying a short summary."""
     from utils.llm.conversation_notes_prompts import ACTION_ITEM_EXTRACTION_RULES
+    from utils.llm.notes_observability import mark_notes_stage
     from models.structured_extraction import ExtractedActionItem
 
     if foreground():
         return conversation.structured
     require_current_generated_compute('conv_action_items', uid=uid, provider='openai', allow_byok=False)
+    # The short v3 lane's own 30 s window: name it so a refused write can say
+    # whether this or the full notes fallback spent the request.
+    mark_notes_stage('short_tasks')
     from utils.speakers.display import display_participants
 
     participants = display_participants(conversation.transcript_segments)
