@@ -1116,6 +1116,39 @@ def test_latest_ready_poll_refreshes_only_lagging_services_until_convergence() -
     assert verifier.evaluate(expectation, outcome.documents) == []
 
 
+def test_latest_ready_poll_retains_the_admitted_traffic_share() -> None:
+    service = 'backend'
+    expectation = verifier.build_expectation(
+        commit_sha='a' * 40,
+        deploy_run_id='12345',
+        deploy_run_attempt='1',
+        project='based-hardware',
+        region='us-central1',
+        environment='prod',
+        cloud_run_service=service,
+    )
+    lagging = _lagging_serving_documents(expectation, service)
+    converged = _documents(expectation)
+    for snapshot in (lagging, converged):
+        snapshot[f'cloud_run/{service}']['status']['traffic'] = [
+            {'revisionName': expectation.revisions[service], 'percent': 90},
+            {'revisionName': 'backend-previous', 'percent': 10},
+        ]
+
+    outcome = verifier.poll_latest_ready_convergence(
+        expectation,
+        lagging,
+        [service],
+        wait_seconds=5,
+        interval_seconds=0.01,
+        include_listener=False,
+        expected_serving_percent=90,
+        collector=lambda commands: {key: converged[key] for key in commands},
+    )
+
+    assert outcome.converged
+
+
 def test_latest_ready_poll_times_out_when_the_pointer_never_converges() -> None:
     expectation = _expectation()
 

@@ -1,5 +1,6 @@
 {
   "success_log_weight": 10,
+  "rate_limited_log_weight": 10,
   "settle_seconds": 600,
   "minimum_requests": 100,
   "minimum_effective_requests": 30,
