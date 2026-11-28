@@ -35,6 +35,7 @@ from fastapi import HTTPException  # noqa: E402
 from google.api_core.exceptions import ServiceUnavailable  # noqa: E402
 
 from database import conversation_finalization_jobs as jobs_db  # noqa: E402
+from routers.conversations import router as conversations_router  # noqa: E402
 from utils.conversations import lifecycle as lifecycle_service  # noqa: E402
 from utils.conversations.processing_metrics import RETRYABLE_PROCESSING_RESPONSES_TOTAL  # noqa: E402
 from utils.conversations.processing_retry import (  # noqa: E402
@@ -387,9 +388,12 @@ def test_cancellation_propagates_from_the_structuring_call(structuring_seam):
 
 @pytest.mark.parametrize('path', ['/v1/conversations', '/v1/conversations/{conversation_id}/reprocess'])
 def test_processing_routes_openapi_declare_the_typed_retryable_response(path):
-    from routers.conversations import router
-
-    route = next(route for route in router.routes if getattr(route, 'path', None) == path)
+    # ``conversations_router`` is imported at module scope: the cold
+    # ``routers.conversations`` import graph costs ~0.6-0.7 s CPU, and paying it
+    # inside the call phase put this test at 62-74% of the 1.0 s per-test CPU
+    # budget (SCA-3746). A saturated runner then crossed the budget and the
+    # duration guard failed the whole file with exit 1 and no test failure.
+    route = next(route for route in conversations_router.routes if getattr(route, 'path', None) == path)
     responses = route.responses
     retryable_detail = responses[503]['content']['application/json']['schema']['properties']['detail']
 
