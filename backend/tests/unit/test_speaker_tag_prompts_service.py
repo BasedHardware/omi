@@ -1,6 +1,5 @@
 import asyncio
 import contextvars
-from contextlib import nullcontext
 import logging
 import threading
 import time
@@ -50,7 +49,6 @@ class World:
         monkeypatch.setattr(service.users_db, 'get_person', lambda uid, pid: self.people.get(pid))
         monkeypatch.setattr(service.users_db, 'get_person_by_name', lambda uid, name: None)
         monkeypatch.setattr(service.users_db, 'create_person', lambda uid, data: self.created.append(data) or data)
-        monkeypatch.setattr(service, 'external_write_fence', lambda uid: nullcontext())
         monkeypatch.setattr(service.users_db, 'get_people', lambda uid: list(self.people.values()))
         monkeypatch.setattr(service.conversations_db, 'get_conversations', lambda *a, **k: [])
         monkeypatch.setattr(service.conversations_db, 'get_conversation', lambda *a, **k: {})
@@ -59,6 +57,8 @@ class World:
         )
 
         def assign(uid, conversation_id, **kwargs):
+            if kwargs.get('person_to_create') is not None:
+                self.created.append(dict(kwargs['person_to_create']))
             self.assignments.append(kwargs)
             segments = [
                 {'id': 's1', 'speaker_id': 1, 'start': 0, 'end': 9},
@@ -131,11 +131,12 @@ def test_saving_other_voices_off_labels_without_teaching(monkeypatch):
 def test_new_person_answer_does_not_create_person_during_destructive_gate(monkeypatch):
     world = World(monkeypatch)
 
-    def gate_busy(uid):
-        assert uid == 'u'
+    def assignment_is_fenced(uid, conversation_id, **kwargs):
+        assert uid == 'u' and conversation_id == 'c1'
+        assert kwargs['person_to_create']['name'] == 'Ana'
         raise DestructiveOperationInProgress('external data write blocked by destructive operation')
 
-    monkeypatch.setattr(service, 'external_write_fence', gate_busy)
+    monkeypatch.setattr(service.conversations_db, 'assign_conversation_speaker', assignment_is_fenced)
 
     with pytest.raises(DestructiveOperationInProgress):
         service.apply_answer('u', _request(K.identify, O.unnamed, A.new_person, name='Ana'), world.schedule, NOW)

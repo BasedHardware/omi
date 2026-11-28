@@ -90,19 +90,15 @@ def test_gate_contention_maps_to_409_with_retry_after():
     fails this guard.
     """
     body = _delete_conversation_source()
-    # Import-isolated catch: the router catches RuntimeError and name-checks for
-    # DestructiveOperationInProgress (see the except block), because importing
-    # the real exception class breaks stubbed router imports.
+    # Pin the typed gate exception mapping without importing the heavy router.
     mapped = re.search(
-        r"except RuntimeError as error:\s*\n"
-        r"\s+#.*\n"
-        r'\s+if type\(error\)\.__name__ not in \{[^}]*"DestructiveGateTakeover"[^}]*\}:\s*\n'
-        r"\s+raise\s*\n"
+        r"except \(\s*DestructiveGateTakeover,\s*DestructiveOperationInProgress,\s*"
+        r"LegalHoldActive,\s*LegalHoldAuthorityUnavailable,\s*\) as error:\s*\n"
         r"\s+raise account_gate_busy_http_exception\(\) from error",
         body,
     )
     assert mapped, (
-        "the retract path must catch the gate-contention RuntimeError and raise "
+        "the delete path must catch typed gate contention and raise "
         "account_gate_busy_http_exception (409 + Retry-After), not let it escape as 500"
     )
     assert (

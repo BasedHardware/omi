@@ -257,6 +257,6 @@ def test_answer_maps_destructive_gate_to_account_gate_busy(monkeypatch, error_ty
 
     monkeypatch.setattr(router_module.service, 'apply_answer', gate_busy)
     response = _client(monkeypatch).post('/v1/speaker-tag-prompts/answer', json=_answer_body())
-    assert response.status_code == 409
+    assert response.status_code == 503
     assert response.json() == {'detail': 'account_gate_busy'}
     assert response.headers['Retry-After'] == '2'

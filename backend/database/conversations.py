@@ -4305,6 +4305,7 @@ def assign_conversation_speaker(
     expected_voices=None,
     decided_at=None,
     recording_voice_defaults=False,
+    person_to_create=None,
 ):
     """Commit the manual edit, provenance, label evidence and invalidation in one transaction."""
     from database import recording_speakers as recording_decisions
@@ -4431,6 +4432,7 @@ def assign_conversation_speaker(
             donor_ids=(current_id, *seen),
             bookkeeping=bookkeeping,
             owner_segment_ids=owner_segment_ids,
+            person_to_create=person_to_create,
         )
         extract_learning_receipt_markers(receipt, current)
         written = {'transcript_segments': segments, 'manual_speaker_assignments': receipt, **owner_updates}

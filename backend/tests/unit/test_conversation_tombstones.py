@@ -18,7 +18,12 @@ import pytest
 from database import conversation_tombstones as tombstones
 from database import user_data_deletion
 from database.account_deletion_operational_holds import StoragePrefixPurgeBlocked, StoragePrefixPurgeError
-from database.legal_holds import LegalHoldActive
+from database.legal_holds import (
+    DestructiveGateTakeover,
+    DestructiveOperationInProgress,
+    LegalHoldActive,
+    LegalHoldAuthorityUnavailable,
+)
 from google.api_core.exceptions import AlreadyExists
 from testing.import_isolation import stub_modules, AutoMockModule
 from utils.log_sanitizer import sanitize
@@ -268,6 +273,10 @@ def test_user_delete_records_intent_before_retraction_and_cleanup(store, failure
         'MemoryService': lambda **kw: SimpleNamespace(retract_conversation_memories=retract),
         'retraction_can_be_skipped': lambda *a, **kw: False,
         'ConversationReplacementConflictError': Conflict,
+        'DestructiveGateTakeover': DestructiveGateTakeover,
+        'DestructiveOperationInProgress': DestructiveOperationInProgress,
+        'LegalHoldActive': LegalHoldActive,
+        'LegalHoldAuthorityUnavailable': LegalHoldAuthorityUnavailable,
         'HTTPException': HTTPException,
         'delete_conversation_screen_frames': cleanup,
         'delete_conversation_and_frame_evidence': hard_delete,

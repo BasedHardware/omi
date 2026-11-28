@@ -19,6 +19,7 @@ import pytest
 
 from database import conversations as db
 from database import speaker_learning_jobs as ledger
+from database.speaker_assignment_effects import AssignmentInvariantError
 from models.person_confidence import SOURCE_CARD
 from utils import speaker_learning_jobs as jobs
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
@@ -76,6 +77,41 @@ def world(monkeypatch):
 
 def assign(uid=UID, cid=CONV, **kwargs):
     return db.assign_conversation_speaker(uid, cid, **kwargs)
+
+
+def test_new_person_is_created_with_assignment_and_generation_in_one_transaction(world):
+    world.store.rows.pop(PERSON_PATH)
+
+    assign(person_id='p', segment_ids=['s0'], person_to_create={'id': 'p', 'name': 'Ana'})
+
+    person = world.store.rows[PERSON_PATH]
+    job_id, job = the_job(world.store)
+    generation_path = ('users', UID, 'people_meta', 'generation')
+    transaction = world.store.transactions[-1]
+    assert person['name'] == 'Ana' and person['is_user_created'] is True
+    assert 'label_evidence' in person
+    assert person['voice_learning_job'] == {'conversation_id': CONV, 'job_id': job_id}
+    assert job['target'] == 'person' and job['segment_ids'] == ['s0']
+    assert world.store.rows[generation_path]['generation'] == 1
+    assert [path for path, _ in transaction.creates].count(PERSON_PATH) == 1
+    assert not any(path == PERSON_PATH for path, _ in transaction.updates)
+    assert any(path == CONV_PATH for path, _ in transaction.updates)
+    assert any(path == LEDGER_PATH for path, _ in transaction.sets)
+    assert any(path == generation_path for path, _ in transaction.sets)
+
+
+@pytest.mark.parametrize(
+    'person_to_create',
+    [{'id': 'other', 'name': 'Ana'}, {'id': 'p', 'name': 'Ana'}],
+    ids=['mismatched-id', 'already-existing-id'],
+)
+def test_new_person_invariant_failures_are_not_client_stale_conflicts(world, person_to_create):
+    before = deepcopy(world.store.rows)
+
+    with pytest.raises(AssignmentInvariantError):
+        assign(person_id='p', segment_ids=['s0'], person_to_create=person_to_create)
+
+    assert world.store.rows == before
 
 
 def jobs_map(store, cid=CONV):

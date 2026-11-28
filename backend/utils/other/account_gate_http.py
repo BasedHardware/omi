@@ -10,11 +10,11 @@ ACCOUNT_GATE_BUSY_DETAIL = "account_gate_busy"
 ACCOUNT_GATE_BUSY_RETRY_AFTER_SECONDS = 2
 
 
-def account_gate_busy_http_exception() -> HTTPException:
-    """409 Conflict so clients back off instead of treating contention as a fault."""
+def account_gate_busy_http_exception(*, status_code: int = 409) -> HTTPException:
+    """Retryable gate response; use 503 where clients reserve 409 for stale evidence."""
 
     return HTTPException(
-        status_code=409,
+        status_code=status_code,
         detail=ACCOUNT_GATE_BUSY_DETAIL,
         headers={"Retry-After": str(ACCOUNT_GATE_BUSY_RETRY_AFTER_SECONDS)},
     )

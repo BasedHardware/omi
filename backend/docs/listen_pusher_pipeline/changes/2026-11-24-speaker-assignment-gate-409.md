@@ -1,4 +1,8 @@
-# Speaker assignment answers `account_gate_busy` while a destructive gate is live
+# Historical: speaker assignment gate contention returned 409
+
+> Superseded for manual speaker assignment, speaker-tag answers, and Review answers by
+> [the 2026-11-28 retryable answer status note](2026-11-28-speaker-answer-gate-503.md).
+> The speaker-label rejection route still uses 409.
 
 ## What changed
 
