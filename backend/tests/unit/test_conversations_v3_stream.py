@@ -14,6 +14,8 @@ import pytest
 
 from utils.conversations.v3 import summary
 from utils.conversations import process_conversation as process
+from utils.conversations import llm_input_dedupe as dedupe
+from utils.llm import margin_attribution
 from models.structured import Structured
 from routers import conversations as routes
 from tests.unit.test_conversations_v3_transactions import strict  # noqa: F401
@@ -185,17 +187,25 @@ async def test_refused_custom_stt_stream_serves_stored_row_without_model_work(mo
 
 
 def test_on_open_done_uses_the_locked_row_title(monkeypatch):
-    monkeypatch.setattr(
-        process, '_get_structured', lambda *a, **kw: (Structured(title='Model replacement', emoji='🔧'), False)
-    )
     row = {
         'id': 'c',
         'created_at': AT,
         'started_at': AT,
         'finished_at': AT,
         'title_locked': True,
+        'v3_derived': True,
         'structured': {'title': 'Original', 'emoji': '🌳'},
     }
+
+    def generate(*args, **kwargs):
+        def model(*args, **kwargs):
+            assert margin_attribution.header_for('conversation_v3_summary_open') == 'first_completion/unknown'
+            return Structured(title='Model replacement', emoji='🔧')
+
+        assert 'llm_hashes' not in kwargs
+        return dedupe.notes('synthetic', args[2], {}, model, None), False
+
+    monkeypatch.setattr(process, '_get_structured', generate)
     result = summary.write('synthetic', row, lambda text: None)
     assert result['title'] == 'Original' and result['emoji'] == '🌳'
 

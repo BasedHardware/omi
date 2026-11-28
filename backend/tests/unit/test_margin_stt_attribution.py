@@ -1,3 +1,5 @@
+import asyncio
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -5,6 +7,8 @@ from prometheus_client import CollectorRegistry, Counter
 
 from diarizer import asr_spend
 from utils.observability import demand_cohort
+from utils.stt.soniox import SafeSonioxSocket
+from utils.stt.streaming import SafeModulateSocket
 
 
 def test_gpu_dispatch_allocated_once_across_unequal_cohorts_and_missing_clock():
@@ -41,7 +45,17 @@ def test_gpu_dispatch_allocated_once_across_unequal_cohorts_and_missing_clock():
     assert sample('gpu_seconds', stage='recovery', audio='under_2s', outcome='unknown') is None
 
 
-def test_live_leg_close_distinguishes_connection_time_and_unknown_billing(monkeypatch):
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'provider,socket_type,done_frame,billing_basis,expected_billable',
+    [
+        ('soniox', SafeSonioxSocket, {'finished': True}, 'connection', 3),
+        ('modulate', SafeModulateSocket, {'type': 'done', 'duration_ms': 2500}, 'unknown', None),
+    ],
+)
+async def test_live_socket_teardown_records_spend_once(
+    monkeypatch, provider, socket_type, done_frame, billing_basis, expected_billable
+):
     registry = CollectorRegistry()
     for attr in ('LIVE_SPEND_LEGS', 'LIVE_SPEND_SUBMITTED_SECONDS', 'LIVE_SPEND_BILLABLE_SECONDS'):
         metric = getattr(demand_cohort, attr)
@@ -50,22 +64,45 @@ def test_live_leg_close_distinguishes_connection_time_and_unknown_billing(monkey
             attr,
             Counter(metric._name, metric._documentation, metric._labelnames, registry=registry),
         )
-    soniox = demand_cohort.WireAudioMeter('soniox', 2)
-    soniox.written(b'\0' * 4)
-    soniox.close_spend(text_seen=False, connected_seconds=3)
-    soniox.close_spend(text_seen=True, connected_seconds=4)
-    modulate = demand_cohort.WireAudioMeter('modulate', 2)
-    modulate.written(b'\0' * 8)
-    modulate.close_spend(text_seen=True)
+    now = 100.0
+    monkeypatch.setattr(demand_cohort, 'monotonic', lambda: now)
+    sent = []
+    audio_ended = asyncio.Event()
+    closed = asyncio.Event()
 
-    def sample(name, **labels):
-        return registry.get_sample_value('omi_live_stt_spend_' + name + '_total', labels)
+    class Peer:
+        async def __aiter__(self):
+            nonlocal now
+            await audio_ended.wait()
+            now += 3
+            yield json.dumps(done_frame)
 
-    no_text = {'provider': 'soniox', 'outcome': 'no_text', 'billing_basis': 'connection'}
-    unknown = {'provider': 'modulate', 'outcome': 'text', 'billing_basis': 'unknown'}
-    assert sample('legs', **no_text) == 1
-    assert sample('submitted_seconds', **no_text) == 1
-    assert sample('billable_seconds', **no_text) == 3
-    assert sample('legs', **unknown) == 1
-    assert sample('submitted_seconds', **unknown) == 2
-    assert sample('billable_seconds', **unknown) is None
+        async def send(self, data):
+            sent.append(data)
+            if data == '':
+                audio_ended.set()
+
+        async def close(self):
+            closed.set()
+
+    socket = socket_type(Peer(), lambda _: None, asyncio.get_running_loop())
+    audio = b'\x01\x00' * 8000
+    assert socket.send(audio)
+    await asyncio.wait_for(socket.drain_and_close(), timeout=2)
+    assert closed.is_set()
+    assert sent == [audio, '']
+
+    labels = {'provider': provider, 'outcome': 'no_text', 'billing_basis': billing_basis}
+
+    def samples(name):
+        series = 'omi_live_stt_spend_' + name + '_total'
+        return [
+            (sample.labels, sample.value)
+            for metric in registry.collect()
+            for sample in metric.samples
+            if sample.name == series
+        ]
+
+    assert samples('legs') == [(labels, 1)]
+    assert samples('submitted_seconds') == [(labels, 0.5)]
+    assert samples('billable_seconds') == ([(labels, expected_billable)] if expected_billable is not None else [])

@@ -7,6 +7,7 @@ from unittest.mock import Mock
 import pytest
 
 from utils.conversations import llm_input_dedupe as dedupe
+from utils.llm import margin_attribution
 
 
 @pytest.fixture
@@ -48,6 +49,47 @@ def test_notes_unchanged_skips_changed_inputs_run(enabled, monkeypatch):
         dedupe.notes('u', enabled, prefix, generate, {}, **{**inputs, name: value})
     dedupe.notes('u', enabled, {**prefix, 'context': 'A new word'}, generate, {}, **inputs)
     assert generate.call_count == 7
+
+
+@pytest.mark.parametrize(
+    'checkpoint,expected',
+    [
+        ('none', 'first_completion'),
+        ('same', 'same_revision'),
+        ('changed', 'changed_revision'),
+        ('stale_output', 'unknown'),
+        ('unstamped', 'unknown'),
+    ],
+)
+def test_on_open_observes_loaded_checkpoint_without_reusing_it(enabled, monkeypatch, checkpoint, expected):
+    from models.structured import Structured
+
+    saved = Structured(title='Saved title', overview='Saved summary')
+    prefix = {'context': 'FULL TRANSCRIPT\nSynthetic notes.'}
+    row = {'v3_derived': True}
+    if checkpoint != 'none':
+        row.update(v3_notes_written=True, structured=saved.model_dump())
+    if checkpoint not in {'none', 'unstamped'}:
+        stamps = {}
+        previous = {'context': 'An earlier transcript.'} if checkpoint == 'changed' else prefix
+        dedupe.notes('u', enabled, previous, lambda *a, **kw: saved, stamps)
+        row.update(stamps)
+    if checkpoint == 'stale_output':
+        row['structured'] = Structured(title='New title', overview='New summary').model_dump()
+    before = dict(row)
+    monkeypatch.setattr(dedupe, '_stored', lambda *a, **kw: pytest.fail('foreground notes read a checkpoint'))
+    result = Structured(title='Newly generated title')
+
+    def generate(*args, **kwargs):
+        assert margin_attribution.header_for('conversation_v3_summary_open') == f'{expected}/unknown'
+        return result
+
+    model = Mock(side_effect=generate)
+    with dedupe.observe_foreground_completion(row):
+        assert dedupe.notes('u', enabled, prefix, model, None) is result
+    model.assert_called_once_with(prefix, uid='u', open_loop_out=None)
+    assert row == before
+    assert margin_attribution.header_for('conversation_v3_summary_open') is None
 
 
 @pytest.mark.parametrize('words,scaled,regenerates', [(200, True, False), (6000, False, False), (6000, True, True)])
