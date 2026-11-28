@@ -132,6 +132,35 @@ void main() {
     final reconnected = await service.ensureConnection(device.id);
     expect(reconnected, same(connection));
   });
+
+  test('a stored device used for reconnect is not handed to subscribers as discovered', () async {
+    final device = BtDevice(
+      id: 'omi-pendant-2',
+      name: 'Omi Pendant',
+      type: DeviceType.omi,
+      rssi: -50,
+      locator: DeviceLocator.bluetooth(deviceId: 'omi-pendant-2'),
+    );
+    await SharedPreferencesUtil().btDeviceSet(device);
+    final service = DeviceService(connectionBuilder: (_) => _TimingOutConnection(device, _TimingOutTransport()));
+
+    await service.ensureConnection(device.id, force: true);
+    expect(service.devices.map((d) => d.id), [device.id]);
+
+    final subscriber = _RecordingSubscriber();
+    service.subscribe(subscriber, subscriber);
+    expect(subscriber.devices, isEmpty);
+  });
+}
+
+class _RecordingSubscriber implements IDeviceServiceSubsciption {
+  List<BtDevice>? devices;
+
+  @override
+  void onDevices(List<BtDevice> devices) => this.devices = devices;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => null;
 }
 
 class _TimingOutTransport extends _TrackingTransport {

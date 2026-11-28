@@ -15843,4 +15843,7 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Một số bản ghi âm vẫn còn trên thiết bị của bạn. Hãy đợi chúng đồng bộ xong lên điện thoại, sau đó bắt đầu cập nhật.';
+
+  @override
+  String get batteryRestartToRefresh => 'Khởi động lại Omi để làm mới';
 }

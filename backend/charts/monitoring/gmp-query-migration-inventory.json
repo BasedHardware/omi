@@ -145,6 +145,19 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
+      "expression": "(sum(increase(omi_batch_pipeline_vendor_attempt_audio_seconds_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill|backend-integration\",provider=\"soniox\"}[24h])) / 3600) or vector(0)",
+      "file": "alerts/backend-sync.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_vendor_attempt_audio_seconds_total"
+      ],
+      "owner_title": "Batch Soniox - over 1,500 audio-h/day",
+      "owner_uid": "omi-batch-soniox-daily-hours",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "sum(increase(omi_capture_retry_cap_total{outcome=\"quarantine\"}[30m])) or vector(0)",
       "file": "alerts/backlog-state-machine.json",
       "issues": [],
@@ -4896,7 +4909,7 @@
   ],
   "counts": {
     "explicit_bridge": 42,
-    "query_consumers": 330
+    "query_consumers": 331
   },
   "schema_version": 1,
   "source": "repository, not live Grafana export"

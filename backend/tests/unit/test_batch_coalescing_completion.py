@@ -63,7 +63,7 @@ async def test_mobile_hold_headers_survive_coalescing_and_publication(client, tm
 
     bodies = {}
 
-    def stage(item, body):
+    def stage(item, body, *, record_origin=None, record_lane_owner=None):
         uri = f'gs://synthetic/{item.segment_id}#1'
         bodies[uri] = body
         db.rows['artifacts', artifact_id(item.segment_id, uri)] = {

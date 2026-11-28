@@ -14,7 +14,7 @@ product's own decisions, under the arm's env, and its words come from the casset
 | Sampled first window | vendor audio LID, ``LanguageDecision.parakeet_safe`` and ``evidence == 'audio_lid'`` | yes; answer recorded |
 | Sampled later windows | ``language_class`` of the self gate's top-1 language | yes; answer from a local Whisper-base, recorded; production also refuses below its P(supported) floor and on an unavailable gate, so lab admissions are an upper bound (legacy audio and spend a lower bound) |
 | Engine for an admitted upload | the batch GPU worker: Parakeet (``PARAKEET_MODEL_BY_SURFACE[PRERECORDED]``) | yes (by construction) |
-| Engine for a legacy upload | per file (``resolve_file``): guard off -> ``multi``; on -> vendor LID, then ``get_prerecorded_service`` | yes; files simulated as fixed pieces; the self gate's confident skip is not modelled (vendor answer used) |
+| Engine for a legacy upload | per file (``resolve_file``): guard off -> ``multi``; on -> vendor LID, then ``get_prerecorded_service`` | yes; files simulated as fixed pieces with each file's selected language; the self gate's confident skip is not modelled (vendor answer used) |
 | Capacity fallback (GPU ring saturated) | not run: the batch lane is assumed unsaturated | simulated |
 | Legacy mode | assumed ``on`` (today's production) | simulated |
 | Admission exclusion off | the pinned language to Parakeet; production's resolve_route sends an unsupported pin to the provider instead, and the worker's per-window refusal is not modelled | simulated |
@@ -31,7 +31,7 @@ mapping uses the provider and model production selected.
 from __future__ import annotations
 
 import contextlib
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 import hashlib
 import json
 import os
@@ -100,11 +100,26 @@ class Route:
     self_lid_windows: Optional[int] = None
     lid_probes: Optional[int] = None  # vendor LID probes production pays for this upload (sample and legacy files)
     pieces: Optional[tuple[tuple[float, float, str], ...]] = None  # legacy: (start, end, route) per file
+    # (start, end, route, provider, model, language) per legacy file. Keep the
+    # selection for every file: one upload can use the same engine in different languages.
+    piece_details: Optional[tuple[tuple[float, float, str, str, str, str], ...]] = None
 
     def summary(self) -> dict[str, Any]:
-        out = {k: v for k, v in asdict(self).items() if v is not None and k != 'pieces'}
+        out = {k: v for k, v in asdict(self).items() if v is not None and k not in {'pieces', 'piece_details'}}
         if self.pieces:
             out['pieces'] = [[round(a, 3), round(b, 3), r] for a, b, r in self.pieces]
+        if self.piece_details:
+            out['piece_details'] = [
+                {
+                    'start_s': round(start, 3),
+                    'end_s': round(end, 3),
+                    'route': route,
+                    'provider': provider,
+                    'model': model,
+                    'language': language,
+                }
+                for start, end, route, provider, model, language in self.piece_details
+            ]
         return out
 
 
@@ -412,29 +427,51 @@ def _legacy(
     probes = 0
     step = max(1, int(file_seconds * 16000)) * 2
     pieces = []
-    engines = []  # (route, service, model, sent) per file, in file order
+    piece_details = []  # (start, end, route, service, model, sent) per file, in file order
     for offset in range(0, len(pcm16), step):
         chunk = pcm16[offset : offset + step]
         if len(chunk) < 32000 and pieces:  # a sub-second tail joins the previous file's engine
             a, _, r = pieces[-1]
-            pieces[-1] = (a, (offset + len(chunk)) / 32000, r)
+            end = (offset + len(chunk)) / 32000
+            pieces[-1] = (a, end, r)
+            _, _, previous_route, previous_provider, previous_model, previous_language = piece_details[-1]
+            piece_details[-1] = (a, end, previous_route, previous_provider, previous_model, previous_language)
             continue
         decision = lid(chunk) if guarded else None
         probes += int(guarded)
         safe = decision is not None and decision.parakeet_safe
         service, model, sent = _service(decision.language) if safe else _service(language)
         route = _route_of(service)
-        engines.append((route, service, model, sent))
-        pieces.append((offset / 32000, (offset + len(chunk)) / 32000, route))
+        start, end = offset / 32000, (offset + len(chunk)) / 32000
+        pieces.append((start, end, route))
+        piece_details.append((start, end, route, service, model, sent))
     if not pieces:
         raise RoutingError('the upload has no audio to route')
     routes = {r for _, _, r in pieces}
     if len(routes) == 1:
-        # The first file's engine and language: deterministic across runs, unlike a set's order.
-        route, service, model, sent = engines[0]
-        return Route(route, f'legacy:{reason}', service, model, sent, lid_probes=probes, pieces=tuple(pieces))
+        # Preserve the first file's top-level route while retaining later file selections below.
+        _, _, route, service, model, sent = piece_details[0]
+        return Route(
+            route,
+            f'legacy:{reason}',
+            service,
+            model,
+            sent,
+            lid_probes=probes,
+            pieces=tuple(pieces),
+            piece_details=tuple(piece_details),
+        )
     service, model, sent = _service(language)
-    return Route(MIXED, f'legacy:{reason}', service, model, sent, lid_probes=probes, pieces=tuple(pieces))
+    return Route(
+        MIXED,
+        f'legacy:{reason}',
+        service,
+        model,
+        sent,
+        lid_probes=probes,
+        pieces=tuple(pieces),
+        piece_details=tuple(piece_details),
+    )
 
 
 def decide(
@@ -482,7 +519,7 @@ def decide(
             pcm16, f'sampled_{refusal}', lid=lid, file_seconds=legacy_file_seconds, language=_legacy_language(user)
         )
         lid_fields['lid_probes'] += legacy.lid_probes or 0
-        return Route(**{**asdict(legacy), **lid_fields, 'pieces': legacy.pieces})
+        return replace(legacy, **lid_fields)
     return _legacy(pcm16, reason, lid=lid, file_seconds=legacy_file_seconds, language=_legacy_language(user))
 
 
@@ -495,17 +532,32 @@ def _legacy_language(user: Mapping[str, Any]) -> str:
     return normalized_stt_language(language) if single and isinstance(language, str) and language else 'multi'
 
 
-def cassette_pin(route: Route, mapping: Mapping[str, Mapping[str, str]], which: Optional[str] = None) -> dict[str, str]:
+def cassette_pin(
+    route: Route,
+    mapping: Mapping[str, Mapping[str, str]],
+    which: Optional[str] = None,
+    *,
+    provider: Optional[str] = None,
+    model: Optional[str] = None,
+    language: Optional[str] = None,
+) -> dict[str, str]:
     """The cassette keys that stand in for a route (``which`` picks one engine of a mixed route).
 
+    Explicit per-piece selections fill defaults; a route mapping can replace them with a cassette stand-in.
     Only keys that resolve are returned, so an unmapped engine of a mixed route keeps the scenario's own pin
     (and misses loudly) instead of becoming a wildcard that matches another engine's cassette."""
     name = which or route.route
     pin = dict(mapping.get(name) or {})
     if name == route.route:
-        pin.setdefault('provider', route.provider)
-        pin.setdefault('model', route.model)
-        pin.setdefault('language', route.language)
+        provider = provider or route.provider
+        model = model or route.model
+        language = language or route.language
     else:
-        pin.setdefault('language', 'multi' if name == MULTILINGUAL else 'en')
+        language = language or ('multi' if name == MULTILINGUAL else 'en')
+    if provider:
+        pin.setdefault('provider', provider)
+    if model:
+        pin.setdefault('model', model)
+    if language:
+        pin.setdefault('language', language)
     return {key: str(value) for key, value in pin.items() if key in ('provider', 'model', 'language') and value}

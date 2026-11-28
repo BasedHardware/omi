@@ -190,7 +190,8 @@ def test_one_mode_write_rolls_every_bucket_back_without_changing_percent(reader,
         assert rp.legacy_sync_mode('synthetic-owner') == 'on'
 
 
-def test_legacy_retirement_read_error_serves_on_even_with_a_dark_lkg(reader, clock, monkeypatch):
+def test_legacy_retirement_read_error_keeps_a_dark_lkg(reader, clock, monkeypatch):
+    # SCA-2965: serving 'on' on a read error re-created legacy jobs after legacy went dark.
     outcomes, _ = reader
     monkeypatch.setattr(rp, 'cohort_bucket', lambda uid, salt: 0)
     outcomes.extend(
@@ -201,8 +202,25 @@ def test_legacy_retirement_read_error_serves_on_even_with_a_dark_lkg(reader, clo
     )
     assert rp.legacy_sync_mode('synthetic-owner') == 'dark'
     clock[0] += 31
-    assert rp.legacy_sync_mode('synthetic-owner') == 'on'
+    assert rp.legacy_sync_mode('synthetic-owner') == 'dark'
+    assert rp.legacy_sync_mode() == 'on'  # ownerless needs legacy-sync AND batch at 100
+    assert rp.ramp_snapshot().source == 'lkg'
     assert rp.runtime_percent('batch-pipeline', env_default=100) == 25
+
+
+def test_legacy_retirement_read_error_keeps_an_on_lkg(reader, clock):
+    # The kill switch: an explicit 'on' survives a read error too.
+    outcomes, _ = reader
+    outcomes.extend(
+        [
+            ramp_doc(legacy_sync='on', percents={'legacy-sync': 100, 'batch-pipeline': 100}),
+            RuntimeError('synthetic read failure'),
+        ]
+    )
+    assert rp.legacy_sync_mode('synthetic-owner') == 'on'
+    clock[0] += 31
+    assert rp.legacy_sync_mode('synthetic-owner') == 'on'
+    assert rp.ramp_snapshot().source == 'lkg'
 
 
 @pytest.mark.parametrize('batch_percent,legacy_percent', [(0, 0), (5, 5), (25, 25), (50, 25), (100, 50), (25, 50)])

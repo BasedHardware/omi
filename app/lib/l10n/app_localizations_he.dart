@@ -15728,4 +15728,7 @@ class AppLocalizationsHe extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'חלק מההקלטות עדיין נמצאות במכשיר שלך. תן להן להשלים את הסינכרון לטלפון, ואז התחל את העדכון.';
+
+  @override
+  String get batteryRestartToRefresh => 'הפעל מחדש את Omi כדי לרענן';
 }

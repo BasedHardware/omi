@@ -15867,4 +15867,7 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Kai kurie įrašai dar yra jūsų įrenginyje. Leiskite jiems užbaigti sinchronizavimą į telefoną, tada pradėkite atnaujinimą.';
+
+  @override
+  String get batteryRestartToRefresh => 'Paleiskite Omi iš naujo, kad atnaujintumėte';
 }

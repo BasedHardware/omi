@@ -287,7 +287,8 @@
     "quiz_email_submitted",
     "quiz_screen_viewed",
     "quiz_started",
-    "MCP Daily Activity"
+    "MCP Daily Activity",
+    "Battery Reading Hidden"
    ],
    "note": "Listed events skip the default sample; later sample stages still apply to them. $-events (except $rageclick) and names containing the hog-source markers also pass; that rule lives in the function source, not in inputs."
   },
@@ -3445,6 +3446,14 @@
     "web/admin/lib/wall-mcp.ts"
    ],
    "note": "Server rollup (backend/utils/mcp_daily_rollup.py): cumulative snapshot per uid/client/UTC day at most once per 30 min, plus one after the day ends. Estimate is an upper bound from 7 days to 2026-11-23: 44,553 active 30-minute windows (6,365/day) plus 1,310 actor-client-days of final snapshots. Sent with $process_person_profile false, but uids with a person bill as identified."
+  },
+  "Battery Reading Hidden": {
+   "est_events_per_day": 300,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/battery-reading-hidden.sql"
+   ]
   }
  }
 }

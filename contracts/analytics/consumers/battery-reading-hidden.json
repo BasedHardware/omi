@@ -1,0 +1,13 @@
+{
+  "id": "battery-reading-hidden",
+  "kind": "question",
+  "owner": "dazheng",
+  "events": [
+    "batteryReadingHidden"
+  ],
+  "namespace_property": "$app_namespace",
+  "question": "How often does the app hide an unbelievable Omi battery percentage (low while charging, near-empty on first pairing, after a long charge, or flat near-empty), per reason and build? Support reports of a pendant showing ~1% after charging should fall as this rises.",
+  "zero_policy": "Zero events is expected on builds without the guard, when the mobile-battery-display-guard-off kill switch is true, or when no pendant reports a low reading. Absence is not proof the stale reading stopped.",
+  "query": "contracts/analytics/consumers/battery-reading-hidden.sql",
+  "posthog_query": "SELECT properties['reason'], count() FROM events WHERE event = 'Battery Reading Hidden' AND properties['$app_namespace'] = '{app_namespace}' AND coalesce(properties['app_build'], properties['build_number']) = '{build_number}' GROUP BY properties['reason']"
+}

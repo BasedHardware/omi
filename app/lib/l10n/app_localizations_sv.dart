@@ -15850,4 +15850,7 @@ class AppLocalizationsSv extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Vissa inspelningar finns fortfarande på din enhet. Låt dem slutföra synkroniseringen till telefonen och starta sedan uppdateringen.';
+
+  @override
+  String get batteryRestartToRefresh => 'Starta om Omi för att uppdatera';
 }

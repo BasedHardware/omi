@@ -80,6 +80,7 @@
     "omi-firestore-unattributed-absolute",
     "omi-firestore-batch-reads-audio-hour",
     "omi-firestore-batch-reads-no-output",
-    "omi-firestore-billed-reads-step"
+    "omi-firestore-billed-reads-step",
+    "omi-batch-soniox-daily-hours"
   ]
 }
