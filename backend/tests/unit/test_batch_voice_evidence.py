@@ -331,6 +331,52 @@ def fixture_conversation(units):
     )
 
 
+def v3_source_evidence():
+    store, artifacts, objects, capture = state()
+    item, _ = persist(store, artifacts, capture, upload=False)
+    source_id = 'synthetic-recording'
+    source = {'claims': [{'conversation_id': CID, 'start': capture, 'end': capture + 11}]}
+    store.client.rows[('users', UID, 'conversations', source_id)] = source
+    target = store.client.rows[('users', UID, 'conversations', CID)]
+    target['v3_recording_ids'] = [source_id]
+    result = store.client.rows[(NS + '_results', item.segment_id)]
+    result['projection_parts']['0']['conversation_id'] = source_id
+    uri = artifacts.persist_voice_evidence(item, payload(capture))
+    db.publish(store, item, uri, source_id)
+    conversation = fixture_conversation([item.segment_id])
+    conversation.v3_recording_ids = [source_id]
+    return store, artifacts, objects, conversation, source, target, result, capture
+
+
+@pytest.mark.parametrize('restriction', [None, 'partial', 'sibling', 'deleted_span', 'locked', 'shared', 'unlinked'])
+def test_v3_vectors_require_exclusive_whole_unit_claim(monkeypatch, restriction):
+    monkeypatch.setenv(flags.FINAL_PASS_V3_SOURCES_ENV, 'true')
+    store, artifacts, objects, conversation, source, target, result, capture = v3_source_evidence()
+    if restriction == 'partial':
+        source['claims'][0]['end'] = capture + 5
+    elif restriction == 'sibling':
+        source['claims'].append({'conversation_id': 'sibling', 'start': capture + 1, 'end': capture + 2})
+    elif restriction == 'deleted_span':
+        source['deleted_spans'] = [{'start': capture + 1, 'end': capture + 2}]
+    elif restriction == 'locked':
+        source['is_locked'] = True
+    elif restriction == 'shared':
+        result['projection_parts']['0']['size_rollover_outputs'] = [{'conversation_id': 'sibling'}]
+    elif restriction == 'unlinked':
+        target['v3_recording_ids'] = []
+    vectors, _, _ = evidence.load_vectors(UID, conversation, time.monotonic() + 10, store=store, artifacts=artifacts)
+    assert set(vectors) == ({'s0'} if restriction is None else set())
+    assert objects.downloads == (1 if restriction is None else 0)
+
+
+def test_v3_claim_revoked_during_download_refuses_projection(monkeypatch):
+    monkeypatch.setenv(flags.FINAL_PASS_V3_SOURCES_ENV, 'true')
+    store, artifacts, objects, conversation, source, _, _, _ = v3_source_evidence()
+    objects.after_download = lambda: source.update(claims=[])
+    with pytest.raises(PermissionError, match='voice evidence revoked'):
+        evidence.load_vectors(UID, conversation, time.monotonic() + 10, store=store, artifacts=artifacts)
+
+
 def test_materialized_centroid_copies_are_bounded_by_labels_not_sentence_count(monkeypatch):
     store, artifacts, _, capture = state()
     item, _ = persist(store, artifacts, capture)

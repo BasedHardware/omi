@@ -4,6 +4,7 @@ import hashlib
 from datetime import datetime, timezone
 from typing import NoReturn
 
+from config.batch_conversation_speakers import v3_sources_enabled
 from config.policy import ProjectionPolicy
 from database._client import get_firestore_client
 from utils.batch_pipeline.contracts import WorkItem, ProjectionBinding
@@ -12,12 +13,12 @@ from utils.conversations.final_pass_errors import REFERENCE_REASONS
 SOURCE_FENCE_FIELDS = ('claims', 'deleted_spans', 'deleted', 'is_locked')
 
 
-def source_recording_fence(uid, recording_id, *, firestore_client=None):
+def source_recording_fence(uid, recording_id, *, firestore_client=None, transaction=None):
     """The fields that bound a v3 row's hold on one of its source recordings (claims, deleted spans, deleted,
     locked), read without decoding the transcript. None when the recording is gone."""
     client = firestore_client if firestore_client is not None else get_firestore_client()
     ref = client.collection('users').document(uid).collection('conversations').document(recording_id)
-    snapshot = ref.get(field_paths=list(SOURCE_FENCE_FIELDS))
+    snapshot = ref.get(field_paths=list(SOURCE_FENCE_FIELDS), transaction=transaction)
     return (snapshot.to_dict() or {}) if snapshot.exists else None
 
 
@@ -30,6 +31,23 @@ class ReferenceUnavailable(ValueError):
         self.outcome = outcome
         self.reason = reason or outcome
         super().__init__(self.reason)
+
+
+def receipt_sources(conversation) -> tuple[str, ...]:
+    """Recordings a conversations-v3 row was built from: their projection receipts are this row's (empty when
+    ``BATCH_FINAL_PASS_V3_SOURCES_ENABLED`` is false)."""
+    if not v3_sources_enabled():
+        return ()
+    return tuple(sorted({str(rid) for rid in (getattr(conversation, 'v3_recording_ids', None) or []) if rid}))
+
+
+def source_epoch(value) -> float:
+    if isinstance(value, datetime):
+        return (value if value.tzinfo else value.replace(tzinfo=timezone.utc)).timestamp()
+    if isinstance(value, (int, float)):
+        return float(value)
+    parsed = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+    return (parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)).timestamp()
 
 
 def receipt_owners(conversation_id, source_ids=()) -> frozenset:

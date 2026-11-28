@@ -25,13 +25,18 @@ from config.batch_conversation_speakers import (
     append_conflicting_units_enabled,
     keep_resolved_on_partial_enabled,
     split_mixed_segments_enabled,
-    v3_sources_enabled,
     BATCH_CONVERSATION_SCOPE,
     batch_unit_scope,
     final_pass_enabled_for,
     recurring_enabled_for,
 )
-from database.batch_final_pass import load_reference, ReferenceUnavailable, source_recording_fence
+from database.batch_final_pass import (
+    load_reference,
+    ReferenceUnavailable,
+    receipt_sources,
+    source_epoch,
+    source_recording_fence,
+)
 from database import recurring_voices
 from utils.observability.recurring_voices import identity_speech
 from utils.speakers.recurring_voices import near_misses
@@ -262,23 +267,6 @@ def _assemble(stream):
     return memoryview(pcm)[:used].toreadonly(), words, checks
 
 
-def receipt_sources(conversation) -> tuple[str, ...]:
-    """Recordings a conversations-v3 row was built from: their projection receipts are this row's (empty when
-    ``BATCH_FINAL_PASS_V3_SOURCES_ENABLED`` is false)."""
-    if not v3_sources_enabled():
-        return ()
-    return tuple(sorted({str(rid) for rid in (getattr(conversation, 'v3_recording_ids', None) or []) if rid}))
-
-
-def _epoch(value) -> float:
-    if isinstance(value, datetime):
-        return (value if value.tzinfo else value.replace(tzinfo=timezone.utc)).timestamp()
-    if isinstance(value, (int, float)):
-        return float(value)
-    parsed = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
-    return (parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)).timestamp()
-
-
 def _subtract(start: float, end: float, holes) -> list[tuple[float, float]]:
     pieces = [(start, end)]
     for left, right in sorted(holes):
@@ -308,10 +296,12 @@ def source_scope(uid, conversation) -> SourceScope | None:
         claims = [c for c in recording.get('claims') or [] if c.get('conversation_id') == conversation.id]
         if not claims:
             raise ReferenceUnavailable('skipped_merged')
-        deleted = [(_epoch(d['start']), _epoch(d['end'])) for d in recording.get('deleted_spans') or []]
+        deleted = [(source_epoch(d['start']), source_epoch(d['end'])) for d in recording.get('deleted_spans') or []]
         for claim in claims:
-            intervals.extend(_subtract(_epoch(claim['start']), _epoch(claim['end']), deleted))
-        evidence.append((rid, sorted((_epoch(c['start']), _epoch(c['end'])) for c in claims), sorted(deleted)))
+            intervals.extend(_subtract(source_epoch(claim['start']), source_epoch(claim['end']), deleted))
+        evidence.append(
+            (rid, sorted((source_epoch(c['start']), source_epoch(c['end'])) for c in claims), sorted(deleted))
+        )
     fingerprint = hashlib.sha256(repr(sorted(evidence)).encode()).hexdigest()
     return SourceScope(tuple(sorted(intervals)), fingerprint)
 

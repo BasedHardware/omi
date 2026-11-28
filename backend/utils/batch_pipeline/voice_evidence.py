@@ -7,6 +7,7 @@ import numpy as np
 
 from config.batch_conversation_speakers import sync_off_enabled, vendor_evidence_refused, vendor_speaker_authority
 from database import batch_voice_evidence as storage
+from database.batch_final_pass import receipt_sources
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from utils.batch_pipeline.artifact_policy import artifacts_for
@@ -93,12 +94,13 @@ def load_vectors(uid, conversation, deadline, *, store=None, artifacts=None):
         scope = key[0].split('\0')[-1]
         if scope.startswith('final:batch:') and not scope.startswith('final:batch:conversation:'):
             grouped.setdefault(scope.removeprefix('final:batch:'), []).append((segment, key[1]))
+    source_ids = receipt_sources(conversation)
     vectors, seconds, checks = {}, {}, []
     byte_count, label_count = 0, 0
     for unit, segments in grouped.items():
         if time.monotonic() >= deadline:
             break
-        reference = storage.load_reference(store, uid, unit, conversation.id)
+        reference = storage.load_reference(store, uid, unit, conversation.id, source_ids=source_ids)
         if reference is None:
             continue
         item, uri, due = reference
@@ -123,7 +125,7 @@ def load_vectors(uid, conversation, deadline, *, store=None, artifacts=None):
     # Repeat authority checks after IO, and again at the caller before projection.
     def validate():
         for unit, uri, due in checks:
-            current = storage.load_reference(store, uid, unit, conversation.id)
+            current = storage.load_reference(store, uid, unit, conversation.id, source_ids=source_ids)
             if current is None or current[1] != uri or time.time() >= min(due, current[2]):
                 raise PermissionError('voice evidence revoked or expired')
 
