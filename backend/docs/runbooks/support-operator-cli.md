@@ -161,6 +161,46 @@ through the private support workflow.
 Set `OMI_SUPPORT_CORRECT_PLAN_ENABLED` to `false`, `off`, `0` or `no` to
 disable plan writes from this command.
 
+## Transcription credit
+
+Gives one account extra managed transcription, spent only after the plan's
+monthly allowance runs out, for live and batch alike, until it expires
+(default 30 days, at most 90). Use it when a customer's recordings are parked
+behind the cap and support has decided to process them (ruling: David
+2026-11-27, SCA-5263). There is no size limit; the audit record is the control.
+
+```bash
+cd backend
+source ~/.local/bin/gcp-agent-env.sh prod-operator
+python scripts/support/ops.py --ticket T --actor A --reason R transcription-credit status UID
+python scripts/support/ops.py --ticket T --actor A --reason R transcription-credit grant UID --hours 32
+python scripts/support/ops.py --ticket T --actor A --reason R transcription-credit grant UID --hours 32 --apply
+python scripts/support/ops.py --ticket T --actor A --reason R transcription-credit revoke UID GRANT_ID --apply
+```
+
+- `status` and the dry run print the plan allowance, usage this month, the
+  usable credit, and the account's parked batch units and seconds.
+- The grant records the month's usage at grant time, so usage before the grant
+  never spends it, and a month reset never hands it out again.
+- Held batch work is released all at once per account, at the account's next
+  hold check (about 5 minutes; the command never touches held jobs). Usage is
+  metered after admission, so `--apply` refuses a grant smaller than the parked
+  audio unless `--allow-partial` accepts the overrun.
+- Releasing parked work also runs Omi's summary and memory processing for those
+  conversations (that gate passes the cap by default); the grant covers STT only.
+- Usage displays stay plan-only: the app still shows the plan's minutes as used
+  while recording works on the credit.
+- Each command writes one `support_actions` record; the grant is stored under
+  that record's action id in `users/{uid}.support_transcription_credit`.
+- A retried `--apply` after a timeout makes a second grant. Run `status` first.
+
+### Kill switch
+
+`SUPPORT_TRANSCRIPTION_CREDIT_ENABLED=false` on the admission services
+(backend, backend-sync, backend-integration and the batch workers) makes
+admission ignore every stored credit without erasing it. Work already admitted
+still completes.
+
 ### Apple and Google sign-ins on separate accounts
 
 When Apple and Google sign-ins point to two established Omi account IDs,

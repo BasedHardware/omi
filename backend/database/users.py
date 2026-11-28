@@ -2082,6 +2082,14 @@ def _s4_get_user_subscription_uncached(
     return default_subscription
 
 
+def get_support_transcription_credit(uid: str, *, firestore_client: Any | None = None) -> Any:
+    """The raw support credit map (``None`` when absent). One point read, read only after plan exhaustion."""
+    from config.support_credit import FIELD
+
+    snapshot = (firestore_client or db).collection('users').document(uid).get([FIELD])
+    return (snapshot.to_dict() or {}).get(FIELD) if snapshot.exists else None
+
+
 def get_existing_user_subscription(uid: str, *, firestore_client: Any | None = None) -> Optional[Subscription]:
     """Gets the user's stored subscription without creating a default record."""
     return get_existing_user_subscription_and_fields(uid, (), firestore_client=firestore_client)[0]
