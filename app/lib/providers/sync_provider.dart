@@ -915,11 +915,12 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   /// never blocks the Sync.
   Future<void> syncWalsAfterConfirmation() async {
     DrainedAudioCustody.confirmCloudSync();
-    try {
-      await _walService.getSyncs().phone.releaseDrainedDeviceAudioForUpload();
-    } catch (e) {
-      Logger.debug('SyncProvider: drained audio release failed: $e');
-    }
+    // A failed release is logged, not shown: the Sync below still runs and reports its own errors.
+    await _walService
+        .getSyncs()
+        .phone
+        .releaseDrainedDeviceAudioForUpload()
+        .then<void>((_) {}, onError: (Object e) => Logger.debug('SyncProvider: drained audio release failed: $e'));
     await syncWals();
   }
 
