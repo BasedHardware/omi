@@ -15908,5 +15908,13 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
-  String get checkoutShowsFinalCharge => 'Checkout menunjukkan caj akhir.';
+  String get checkoutShowsFinalCharge => 'Checkout menunjukkan bayaran anda sekarang dan semasa pembaharuan.';
+
+  @override
+  String planAutoRenewTermsBeforeDiscounts(String plan, String price, String path) {
+    return '$plan diperbaharui secara automatik pada harga standard $price sebelum diskaun sehingga anda membatalkannya di $path.';
+  }
+
+  @override
+  String get planOfferChanged => 'Harga telah berubah. Semak dan cuba lagi.';
 }

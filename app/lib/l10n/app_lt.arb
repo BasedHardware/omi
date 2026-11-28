@@ -4775,5 +4775,7 @@
     "onTheWayDayProcessesOn": "Apdorojama {date}",
     "planAutoRenewTerms": "{plan} automatiškai atnaujinamas už {price}, kol neatšauksite skiltyje {path}.",
     "planPriceBeforeDiscounts": "{price} be nuolaidų",
-    "checkoutShowsFinalCharge": "Galutinė suma rodoma atsiskaitant."
+    "checkoutShowsFinalCharge": "Atsiskaitant matysite, kiek mokate dabar ir atnaujinant.",
+    "planAutoRenewTermsBeforeDiscounts": "{plan} automatiškai atnaujinamas už standartinę kainą {price} be nuolaidų, kol neatšauksite skiltyje {path}.",
+    "planOfferChanged": "Kaina pasikeitė. Patikrinkite ją ir bandykite dar kartą."
 }

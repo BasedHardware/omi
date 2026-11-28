@@ -15863,5 +15863,13 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
-  String get checkoutShowsFinalCharge => 'مبلغ نهایی در صفحه پرداخت نمایش داده می‌شود.';
+  String get checkoutShowsFinalCharge => 'صفحه پرداخت نشان می‌دهد اکنون و هنگام تمدید چقدر می‌پردازید.';
+
+  @override
+  String planAutoRenewTermsBeforeDiscounts(String plan, String price, String path) {
+    return '$plan به‌طور خودکار با قیمت عادی $price پیش از تخفیف تمدید می‌شود تا زمانی که در $path لغوش کنید.';
+  }
+
+  @override
+  String get planOfferChanged => 'قیمت تغییر کرد. آن را بررسی کنید و دوباره امتحان کنید.';
 }

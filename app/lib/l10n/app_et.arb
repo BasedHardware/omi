@@ -4775,5 +4775,7 @@
     "onTheWayDayProcessesOn": "Töödeldakse {date}",
     "planAutoRenewTerms": "{plan} uueneb automaatselt hinnaga {price}, kuni tühistad selle jaotises {path}.",
     "planPriceBeforeDiscounts": "{price} enne allahindlusi",
-    "checkoutShowsFinalCharge": "Lõplik summa kuvatakse maksmisel."
+    "checkoutShowsFinalCharge": "Maksmisel näed, mida maksad praegu ja uuenemisel.",
+    "planAutoRenewTermsBeforeDiscounts": "{plan} uueneb automaatselt tavahinnaga {price} enne allahindlusi, kuni tühistad selle jaotises {path}.",
+    "planOfferChanged": "Hind muutus. Vaata see üle ja proovi uuesti."
 }

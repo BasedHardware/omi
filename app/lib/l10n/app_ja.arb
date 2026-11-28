@@ -4775,5 +4775,7 @@
     "onTheWayDayProcessesOn": "{date}に処理予定",
     "planAutoRenewTerms": "{plan}は{price}で自動更新されます。解約は{path}でできます。",
     "planPriceBeforeDiscounts": "割引前 {price}",
-    "checkoutShowsFinalCharge": "最終的な請求額は決済画面に表示されます。"
+    "checkoutShowsFinalCharge": "今回と更新時のお支払い額は決済画面に表示されます。",
+    "planAutoRenewTermsBeforeDiscounts": "{plan}は割引前の通常価格{price}で自動更新されます。解約は{path}でできます。",
+    "planOfferChanged": "価格が変わりました。確認してもう一度お試しください。"
 }

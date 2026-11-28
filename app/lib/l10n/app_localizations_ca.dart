@@ -15950,5 +15950,13 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
-  String get checkoutShowsFinalCharge => 'El pagament mostra l\'import final.';
+  String get checkoutShowsFinalCharge => 'El pagament mostra què pagues ara i en cada renovació.';
+
+  @override
+  String planAutoRenewTermsBeforeDiscounts(String plan, String price, String path) {
+    return '$plan es renova automàticament al preu estàndard de $price abans de descomptes fins que el cancel·lis a $path.';
+  }
+
+  @override
+  String get planOfferChanged => 'El preu ha canviat. Revisa\'l i torna-ho a provar.';
 }

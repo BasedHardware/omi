@@ -4775,5 +4775,7 @@
     "onTheWayDayProcessesOn": "Apstrādās {date}",
     "planAutoRenewTerms": "{plan} automātiski atjaunojas par {price}, līdz to atcelsiet sadaļā {path}.",
     "planPriceBeforeDiscounts": "{price} pirms atlaidēm",
-    "checkoutShowsFinalCharge": "Galīgā summa redzama norēķinoties."
+    "checkoutShowsFinalCharge": "Norēķinoties redzēsiet, cik maksājat tagad un atjaunojot.",
+    "planAutoRenewTermsBeforeDiscounts": "{plan} automātiski atjaunojas par standarta cenu {price} pirms atlaidēm, līdz to atcelsiet sadaļā {path}.",
+    "planOfferChanged": "Cena ir mainījusies. Pārbaudiet to un mēģiniet vēlreiz."
 }

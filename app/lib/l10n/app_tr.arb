@@ -4810,5 +4810,7 @@
     "onTheWayDayProcessesOn": "{date} tarihinde işlenecek",
     "planAutoRenewTerms": "{plan}, {price} ile otomatik yenilenir. {path} bölümünden istediğin zaman iptal edebilirsin.",
     "planPriceBeforeDiscounts": "İndirimler öncesi {price}",
-    "checkoutShowsFinalCharge": "Son tutar ödeme sayfasında gösterilir."
+    "checkoutShowsFinalCharge": "Ödeme sayfası şimdi ve yenilemede ne ödeyeceğini gösterir.",
+    "planAutoRenewTermsBeforeDiscounts": "{plan}, indirimler öncesi standart fiyat olan {price} ile otomatik yenilenir. {path} bölümünden istediğin zaman iptal edebilirsin.",
+    "planOfferChanged": "Fiyat değişti. Kontrol edip tekrar dene."
 }

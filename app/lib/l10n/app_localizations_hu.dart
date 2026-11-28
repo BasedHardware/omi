@@ -15928,5 +15928,13 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String get checkoutShowsFinalCharge => 'A végleges összeget a fizetésnél látod.';
+  String get checkoutShowsFinalCharge => 'A fizetésnél látod, mennyit fizetsz most és megújításkor.';
+
+  @override
+  String planAutoRenewTermsBeforeDiscounts(String plan, String price, String path) {
+    return 'A(z) $plan automatikusan megújul a normál $price áron, kedvezmények előtt, amíg le nem mondod itt: $path.';
+  }
+
+  @override
+  String get planOfferChanged => 'Az ár megváltozott. Ellenőrizd, és próbáld újra.';
 }

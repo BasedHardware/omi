@@ -15922,5 +15922,13 @@ class AppLocalizationsKn extends AppLocalizations {
   }
 
   @override
-  String get checkoutShowsFinalCharge => 'ಅಂತಿಮ ಶುಲ್ಕವನ್ನು ಚೆಕ್‌ಔಟ್‌ನಲ್ಲಿ ತೋರಿಸಲಾಗುತ್ತದೆ.';
+  String get checkoutShowsFinalCharge => 'ಈಗ ಮತ್ತು ನವೀಕರಣದಲ್ಲಿ ನೀವು ಪಾವತಿಸುವ ಮೊತ್ತವನ್ನು ಚೆಕ್‌ಔಟ್ ತೋರಿಸುತ್ತದೆ.';
+
+  @override
+  String planAutoRenewTermsBeforeDiscounts(String plan, String price, String path) {
+    return '$plan ರಿಯಾಯಿತಿಗೆ ಮೊದಲಿನ ಸಾಮಾನ್ಯ ಬೆಲೆ $price ಗೆ ಸ್ವಯಂಚಾಲಿತವಾಗಿ ನವೀಕರಣಗೊಳ್ಳುತ್ತದೆ, $path ನಲ್ಲಿ ರದ್ದುಮಾಡುವವರೆಗೆ.';
+  }
+
+  @override
+  String get planOfferChanged => 'ಬೆಲೆ ಬದಲಾಗಿದೆ. ಪರಿಶೀಲಿಸಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
 }

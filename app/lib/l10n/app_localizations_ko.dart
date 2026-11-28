@@ -15642,5 +15642,13 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get checkoutShowsFinalCharge => '최종 결제 금액은 결제 화면에 표시됩니다.';
+  String get checkoutShowsFinalCharge => '지금과 갱신 시 결제 금액은 결제 화면에 표시됩니다.';
+
+  @override
+  String planAutoRenewTermsBeforeDiscounts(String plan, String price, String path) {
+    return '$plan은(는) 할인 전 정가 $price에 자동 갱신됩니다. 해지는 $path에서 할 수 있습니다.';
+  }
+
+  @override
+  String get planOfferChanged => '가격이 바뀌었습니다. 확인 후 다시 시도하세요.';
 }

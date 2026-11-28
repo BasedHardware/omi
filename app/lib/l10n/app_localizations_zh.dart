@@ -15612,5 +15612,13 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get checkoutShowsFinalCharge => '最终金额以结账页面为准。';
+  String get checkoutShowsFinalCharge => '结账页面会显示本次和续订时的金额。';
+
+  @override
+  String planAutoRenewTermsBeforeDiscounts(String plan, String price, String path) {
+    return '$plan 将按折扣前的标准价格 $price 自动续订，直到你在 $path 中取消。';
+  }
+
+  @override
+  String get planOfferChanged => '价格已变动。请确认后重试。';
 }

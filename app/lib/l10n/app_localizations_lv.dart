@@ -15905,5 +15905,13 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String get checkoutShowsFinalCharge => 'Galīgā summa redzama norēķinoties.';
+  String get checkoutShowsFinalCharge => 'Norēķinoties redzēsiet, cik maksājat tagad un atjaunojot.';
+
+  @override
+  String planAutoRenewTermsBeforeDiscounts(String plan, String price, String path) {
+    return '$plan automātiski atjaunojas par standarta cenu $price pirms atlaidēm, līdz to atcelsiet sadaļā $path.';
+  }
+
+  @override
+  String get planOfferChanged => 'Cena ir mainījusies. Pārbaudiet to un mēģiniet vēlreiz.';
 }

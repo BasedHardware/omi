@@ -4810,5 +4810,7 @@
     "onTheWayDayProcessesOn": "Traitement le {date}",
     "planAutoRenewTerms": "{plan} se renouvelle automatiquement à {price} jusqu'à ce que vous résiliiez dans {path}.",
     "planPriceBeforeDiscounts": "{price} avant réductions",
-    "checkoutShowsFinalCharge": "Le paiement affiche le montant final."
+    "checkoutShowsFinalCharge": "Le paiement indique ce que vous payez maintenant et au renouvellement.",
+    "planAutoRenewTermsBeforeDiscounts": "{plan} se renouvelle automatiquement au prix standard de {price} avant réductions jusqu'à ce que vous résiliiez dans {path}.",
+    "planOfferChanged": "Le prix a changé. Vérifiez-le et réessayez."
 }

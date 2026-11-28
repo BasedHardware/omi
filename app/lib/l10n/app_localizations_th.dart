@@ -15795,5 +15795,13 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String get checkoutShowsFinalCharge => 'ยอดชำระสุดท้ายจะแสดงในหน้าชำระเงิน';
+  String get checkoutShowsFinalCharge => 'หน้าชำระเงินจะแสดงยอดที่คุณจ่ายตอนนี้และเมื่อต่ออายุ';
+
+  @override
+  String planAutoRenewTermsBeforeDiscounts(String plan, String price, String path) {
+    return '$plan ต่ออายุอัตโนมัติในราคามาตรฐาน $price ก่อนส่วนลด จนกว่าคุณจะยกเลิกใน $path';
+  }
+
+  @override
+  String get planOfferChanged => 'ราคาเปลี่ยนแล้ว ตรวจสอบแล้วลองอีกครั้ง';
 }

@@ -15903,5 +15903,13 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
-  String get checkoutShowsFinalCharge => 'Остаточну суму покаже сторінка оплати.';
+  String get checkoutShowsFinalCharge => 'Сторінка оплати покаже, скільки ви платите зараз і під час подовження.';
+
+  @override
+  String planAutoRenewTermsBeforeDiscounts(String plan, String price, String path) {
+    return '$plan подовжується автоматично за стандартною ціною $price без урахування знижок, доки ви не скасуєте в $path.';
+  }
+
+  @override
+  String get planOfferChanged => 'Ціна змінилася. Перевірте її та спробуйте ще раз.';
 }

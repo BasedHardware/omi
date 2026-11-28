@@ -4775,5 +4775,7 @@
     "onTheWayDayProcessesOn": "Es processaran el {date}",
     "planAutoRenewTerms": "{plan} es renova automàticament per {price} fins que el cancel·lis a {path}.",
     "planPriceBeforeDiscounts": "{price} abans de descomptes",
-    "checkoutShowsFinalCharge": "El pagament mostra l'import final."
+    "checkoutShowsFinalCharge": "El pagament mostra què pagues ara i en cada renovació.",
+    "planAutoRenewTermsBeforeDiscounts": "{plan} es renova automàticament al preu estàndard de {price} abans de descomptes fins que el cancel·lis a {path}.",
+    "planOfferChanged": "El preu ha canviat. Revisa'l i torna-ho a provar."
 }

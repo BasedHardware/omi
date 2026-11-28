@@ -15936,5 +15936,13 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String get checkoutShowsFinalCharge => 'Suma finală apare la plată.';
+  String get checkoutShowsFinalCharge => 'La plată vezi cât plătești acum și la reînnoire.';
+
+  @override
+  String planAutoRenewTermsBeforeDiscounts(String plan, String price, String path) {
+    return '$plan se reînnoiește automat la prețul standard de $price înainte de reduceri până când anulezi din $path.';
+  }
+
+  @override
+  String get planOfferChanged => 'Prețul s-a schimbat. Verifică-l și încearcă din nou.';
 }

@@ -12332,5 +12332,7 @@
     "onTheWayDayProcessesOn": "در {date} پردازش می‌شود",
     "planAutoRenewTerms": "{plan} به‌طور خودکار با {price} تمدید می‌شود تا زمانی که در {path} لغوش کنید.",
     "planPriceBeforeDiscounts": "{price} پیش از تخفیف",
-    "checkoutShowsFinalCharge": "مبلغ نهایی در صفحه پرداخت نمایش داده می‌شود."
+    "checkoutShowsFinalCharge": "صفحه پرداخت نشان می‌دهد اکنون و هنگام تمدید چقدر می‌پردازید.",
+    "planAutoRenewTermsBeforeDiscounts": "{plan} به‌طور خودکار با قیمت عادی {price} پیش از تخفیف تمدید می‌شود تا زمانی که در {path} لغوش کنید.",
+    "planOfferChanged": "قیمت تغییر کرد. آن را بررسی کنید و دوباره امتحان کنید."
 }

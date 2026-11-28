@@ -15911,5 +15911,13 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
-  String get checkoutShowsFinalCharge => 'Bij het afrekenen zie je het definitieve bedrag.';
+  String get checkoutShowsFinalCharge => 'Bij het afrekenen zie je wat je nu en bij verlenging betaalt.';
+
+  @override
+  String planAutoRenewTermsBeforeDiscounts(String plan, String price, String path) {
+    return '$plan wordt automatisch verlengd voor de standaardprijs van $price vóór kortingen tot je opzegt via $path.';
+  }
+
+  @override
+  String get planOfferChanged => 'De prijs is gewijzigd. Controleer hem en probeer het opnieuw.';
 }

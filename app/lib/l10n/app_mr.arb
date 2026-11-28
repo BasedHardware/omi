@@ -12332,5 +12332,7 @@
     "onTheWayDayProcessesOn": "{date} रोजी प्रक्रिया",
     "planAutoRenewTerms": "{plan} आपोआप {price} ला नूतनीकरण होते, जोपर्यंत तुम्ही {path} मध्ये रद्द करत नाही.",
     "planPriceBeforeDiscounts": "सवलतीपूर्वी {price}",
-    "checkoutShowsFinalCharge": "अंतिम शुल्क चेकआउटमध्ये दिसेल."
+    "checkoutShowsFinalCharge": "तुम्ही आता आणि नूतनीकरणावेळी किती भरता ते चेकआउटमध्ये दिसेल.",
+    "planAutoRenewTermsBeforeDiscounts": "{plan} सवलतीपूर्वीच्या सामान्य किमतीला, {price} ला आपोआप नूतनीकरण होते, जोपर्यंत तुम्ही {path} मध्ये रद्द करत नाही.",
+    "planOfferChanged": "किंमत बदलली आहे. ती तपासा आणि पुन्हा प्रयत्न करा."
 }

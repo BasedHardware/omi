@@ -4775,5 +4775,7 @@
     "onTheWayDayProcessesOn": "Ще се обработят на {date}",
     "planAutoRenewTerms": "{plan} се подновява автоматично за {price}, докато не откажете в {path}.",
     "planPriceBeforeDiscounts": "{price} преди отстъпки",
-    "checkoutShowsFinalCharge": "Крайната сума се вижда при плащането."
+    "checkoutShowsFinalCharge": "При плащането виждате колко плащате сега и при подновяване.",
+    "planAutoRenewTermsBeforeDiscounts": "{plan} се подновява автоматично на стандартната цена {price} преди отстъпки, докато не откажете в {path}.",
+    "planOfferChanged": "Цената се промени. Проверете я и опитайте отново."
 }

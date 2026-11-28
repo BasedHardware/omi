@@ -9,6 +9,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/pages/settings/widgets/plans/plan_cards.dart';
+import 'package:omi/pages/settings/widgets/plans/prepaid_code_sheet.dart';
 import 'package:omi/pages/settings/widgets/plans_sheet.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
@@ -19,6 +20,7 @@ import 'package:omi/utils/platform/platform_manager.dart';
 
 const _phone = Size(402, 874);
 const _compact = Size(375, 667);
+const _tight = Size(360, 560);
 
 class _Auth extends AuthenticationProvider {
   _Auth() : super(initializeListeners: false);
@@ -37,8 +39,17 @@ class _Usage extends UsageProvider {
   final requests = <(String, String?)>[];
   Completer<Map<String, dynamic>?>? hold;
 
+  /// The plans reload Checkout's return starts: the cards show their loading placeholder.
+  bool loading = false;
+
+  @override
+  bool get isLoadingPlans => loading;
+
   @override
   Future<void> loadAvailablePlans() async {}
+
+  @override
+  Future<void> fetchSubscription({bool fresh = false}) async {}
 
   @override
   Future<Map<String, dynamic>?> createUserCheckoutSession({
@@ -97,10 +108,13 @@ Future<_Auth> _pump(
   double textScale = 1,
   Size size = _phone,
   bool inSheet = false,
+  double keyboard = 0,
+  bool prepaidCodeRedeem = false,
 }) async {
   tester.view.physicalSize = size * 3;
   tester.view.devicePixelRatio = 3;
   tester.view.padding = const FakeViewPadding(top: 62 * 3, bottom: 34 * 3);
+  if (keyboard > 0) tester.view.viewInsets = FakeViewPadding(bottom: keyboard * 3);
   addTearDown(tester.view.reset);
   _usage = _Usage();
   addTearDown(_usage.dispose);
@@ -114,6 +128,7 @@ Future<_Auth> _pump(
     insightsGainedUsed: 0,
     insightsGainedLimit: 0,
     paymentIssue: paymentIssue,
+    prepaidCodeRedeem: prepaidCodeRedeem,
   ));
   _usage.debugSetAvailablePlans({
     'plans': <dynamic>[
@@ -269,8 +284,11 @@ void main() {
     await tester.enterText(find.byKey(const ValueKey('plans_sheet_promo_code')), 'SAVE50');
     await tester.pump();
     expect(_chargeText(tester), r'US$269.91/year before discounts');
-    expect(tester.widget<Text>(find.byKey(const ValueKey('plans_sheet_renewal_terms'))).data,
-        endsWith('Checkout shows the final charge.'));
+    expect(
+        tester.widget<Text>(find.byKey(const ValueKey('plans_sheet_renewal_terms'))).data,
+        r'Omi Pro renews automatically at the standard price of US$269.91/year before discounts until you cancel in '
+        'Settings > Plan & Usage. Checkout shows what you pay now and at renewal.',
+        reason: 'a code can change the renewal charges too');
     await tester.tap(find.byKey(_upgrade));
     await tester.pump();
     expect(_usage.requests.single, ('price_unlimited_v2_year', 'SAVE50'));
@@ -320,6 +338,174 @@ void main() {
     await tester.tap(monthly);
     await tester.pump();
     expect(_chargeText(tester), r'US$29.99/month before discounts', reason: 'selection works again after a refusal');
+  });
+
+  testWidgets('free plan: a plan tap not yet painted refuses Upgrade, then the shown offer is submitted',
+      (tester) async {
+    await _pump(tester);
+    final monthly = find.widgetWithText(PlanOptionCard, 'Omi Pro · Monthly');
+    await tester.ensureVisible(monthly);
+    await tester.pumpAndSettle();
+    expect(_chargeText(tester), r'US$269.91/year');
+    // Both taps land before the next frame: Upgrade still shows the yearly price.
+    await tester.tap(monthly);
+    await tester.tap(find.byKey(_upgrade));
+    await tester.pump();
+    expect(_usage.requests, isEmpty, reason: 'never a different price from the one on screen');
+    expect(find.text('The price changed. Check it and try again.'), findsWidgets);
+    expect(_chargeText(tester), r'US$29.99/month', reason: 'the repaint shows the new offer');
+    _usage.hold = Completer();
+    await tester.tap(find.byKey(_upgrade));
+    await tester.pump();
+    expect(_usage.requests.single, ('price_unlimited_v2_month', null));
+    expect(find.byKey(const ValueKey('plans_sheet_purchase_error')), findsNothing, reason: 'the retry starts clean');
+    _usage.hold!.complete(null);
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('free plan: a catalog refresh not yet painted refuses Upgrade, then the new price is submitted',
+      (tester) async {
+    await _pump(tester);
+    expect(_chargeText(tester), r'US$269.91/year');
+    _usage.debugSetAvailablePlans({
+      'plans': <dynamic>[
+        {..._price('year', 39991), 'id': 'price_unlimited_v2_year_new'},
+        _price('month', 2999),
+      ],
+    });
+    await tester.tap(find.byKey(_upgrade));
+    await tester.pump();
+    expect(_usage.requests, isEmpty);
+    expect(_chargeText(tester), r'US$399.91/year');
+    await tester.tap(find.byKey(_upgrade));
+    await tester.pump();
+    expect(_usage.requests.single, ('price_unlimited_v2_year_new', null));
+  });
+
+  testWidgets('free plan: a code typed but not yet painted refuses Upgrade, then goes with the disclosure',
+      (tester) async {
+    await _pump(tester);
+    await tester.ensureVisible(find.text('Promo code'));
+    await tester.pump();
+    await tester.tap(find.text('Promo code'));
+    await tester.pumpAndSettle();
+    tester.widget<TextField>(find.byKey(const ValueKey('plans_sheet_promo_code'))).controller!.value =
+        const TextEditingValue(text: 'SAVE50');
+    await tester.tap(find.byKey(_upgrade));
+    await tester.pump();
+    expect(_usage.requests, isEmpty);
+    expect(_chargeText(tester), r'US$269.91/year before discounts');
+    await tester.tap(find.byKey(_upgrade));
+    await tester.pump();
+    expect(_usage.requests.single, ('price_unlimited_v2_year', 'SAVE50'));
+  });
+
+  testWidgets('free plan: "Have a code?" and its discount handoff are locked while checkout is pending',
+      (tester) async {
+    await _pump(tester, prepaidCodeRedeem: true);
+    final entry = find.byKey(const ValueKey('prepaid_code_entry'));
+    expect(entry, findsOneWidget);
+    _usage.hold = Completer();
+    await tester.tap(find.byKey(_upgrade));
+    await tester.pump();
+    expect(_usage.requests.single, ('price_unlimited_v2_year', null));
+
+    await tester.ensureVisible(entry);
+    await tester.pump();
+    await tester.tap(entry, warnIfMissed: false);
+    await tester.pump(const Duration(milliseconds: 600)); // the busy Upgrade spins: no settle
+    expect(find.byType(PrepaidCodeSheet), findsNothing, reason: 'the code sheet does not open');
+    tester.widget<PrepaidCodeEntry>(find.byType(PrepaidCodeEntry)).onDiscountCode!('SAVE50');
+    await tester.pump();
+    expect(_chargeText(tester), r'US$269.91/year', reason: 'the disclosure stays the one that was submitted');
+    expect(find.byKey(const ValueKey('plans_sheet_promo_code')), findsNothing);
+
+    _usage.hold!.complete({'error': true, 'detail': 'Your card was declined.'});
+    await tester.pumpAndSettle();
+    await tester.tap(entry);
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(find.byType(PrepaidCodeSheet), findsOneWidget, reason: 'open again once checkout returns');
+  });
+
+  testWidgets('not a confirmed free account: a pending checkout locks nothing new, a partial catalog shows as on main',
+      (tester) async {
+    await _pump(
+      tester,
+      subscription: Subscription(plan: PlanType.basic, status: SubscriptionStatus.active, stripeSubscriptionId: 's'),
+      paymentIssue: const PaymentIssue(status: 'past_due', plan: PlanType.unlimitedV2),
+      plans: [_price('month', 2999)],
+    );
+    expect(tester.takeException(), isNull);
+    expect(find.byType(PlanOptionCard), findsNWidgets(2), reason: 'both legacy cards, as on main');
+    expect(find.byType(PlanBillingPeriodToggle), findsNothing);
+
+    await _pump(
+      tester,
+      subscription: Subscription(plan: PlanType.basic, status: SubscriptionStatus.active, stripeSubscriptionId: 's'),
+      paymentIssue: const PaymentIssue(status: 'past_due', plan: PlanType.unlimitedV2),
+    );
+    await tester.ensureVisible(find.text('Promo code'));
+    await tester.pump();
+    await tester.tap(find.text('Promo code'));
+    await tester.pump();
+    _usage.hold = Completer();
+    await tester.ensureVisible(find.byKey(_upgrade));
+    await tester.pump();
+    await tester.tap(find.byKey(_upgrade));
+    await tester.pump();
+    expect(_usage.requests, hasLength(1));
+    expect(tester.widget<TextField>(find.byKey(const ValueKey('plans_sheet_promo_code'))).enabled, isTrue,
+        reason: 'the promo field behaves as on main');
+    _usage.hold!.complete(null);
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('free plan opened in a tight sheet with the keyboard already up: no overflow on the first frame',
+      (tester) async {
+    await _pump(tester, size: _tight, inSheet: true, keyboard: 310);
+    expect(tester.takeException(), isNull, reason: 'the footer scrolls instead of overflowing');
+    expect(find.byKey(_upgrade), findsNothing, reason: 'not pinned over the few points left above the keyboard');
+    await tester.scrollUntilVisible(find.byKey(_upgrade), 100);
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    expect(_inList(find.byKey(_footer)), findsOneWidget, reason: 'the footer scrolls with the page');
+    _expectOnScreen(tester, find.byKey(_upgrade), 'Upgrade', size: _tight, bottomInset: 310);
+  });
+
+  testWidgets('free plan: back from Checkout with the keyboard closing and plans reloading keeps the code editable',
+      (tester) async {
+    await _pump(tester, size: _compact, inSheet: true);
+    await tester.ensureVisible(find.text('Promo code'));
+    await tester.pump();
+    await tester.tap(find.text('Promo code'));
+    await tester.pump();
+    final promo = find.byKey(const ValueKey('plans_sheet_promo_code'));
+    await tester.ensureVisible(promo);
+    await tester.pump();
+    await tester.tap(promo);
+    tester.view.viewInsets = const FakeViewPadding(bottom: 330 * 3);
+    await tester.pumpAndSettle();
+    await tester.enterText(promo, 'SAVE50');
+    await tester.pumpAndSettle();
+    expect(_inList(find.byKey(_footer)), findsOneWidget, reason: 'keyboard up: the footer is in the list');
+
+    // Checkout's return: the keyboard is gone and the sheet reloads its plans, in the same frame.
+    tester.view.resetViewInsets();
+    _usage.loading = true;
+    _usage.notifyListeners();
+    await tester.pumpAndSettle();
+    expect(_inList(find.byKey(_footer)), findsNothing, reason: 'pinned again');
+    expect(promo, findsOneWidget, reason: 'the promo field stays open with its code');
+    expect(find.text('SAVE50'), findsOneWidget);
+    _usage.loading = false;
+    _usage.notifyListeners();
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextField>(promo).enabled, isTrue);
+    await tester.ensureVisible(find.byTooltip('Clear'));
+    await tester.pump();
+    await tester.tap(find.byTooltip('Clear'));
+    await tester.pump();
+    expect(_chargeText(tester), r'US$269.91/year', reason: 'cleared before the retry');
   });
 
   testWidgets('free plan at accessibility text: the footer scrolls with the page and both links can be tapped',

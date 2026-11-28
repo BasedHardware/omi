@@ -15898,5 +15898,13 @@ class AppLocalizationsSl extends AppLocalizations {
   }
 
   @override
-  String get checkoutShowsFinalCharge => 'Končni znesek vidite pri plačilu.';
+  String get checkoutShowsFinalCharge => 'Pri plačilu vidite, koliko plačate zdaj in ob podaljšanju.';
+
+  @override
+  String planAutoRenewTermsBeforeDiscounts(String plan, String price, String path) {
+    return '$plan se samodejno podaljša po standardni ceni $price pred popusti, dokler ga ne prekličete v $path.';
+  }
+
+  @override
+  String get planOfferChanged => 'Cena se je spremenila. Preverite jo in poskusite znova.';
 }

@@ -4775,5 +4775,7 @@
     "onTheWayDayProcessesOn": "Xử lý vào {date}",
     "planAutoRenewTerms": "{plan} tự động gia hạn với giá {price} cho đến khi bạn hủy trong {path}.",
     "planPriceBeforeDiscounts": "{price} trước giảm giá",
-    "checkoutShowsFinalCharge": "Trang thanh toán hiển thị số tiền cuối cùng."
+    "checkoutShowsFinalCharge": "Trang thanh toán hiển thị số tiền bạn trả bây giờ và khi gia hạn.",
+    "planAutoRenewTermsBeforeDiscounts": "{plan} tự động gia hạn với giá tiêu chuẩn {price} trước giảm giá cho đến khi bạn hủy trong {path}.",
+    "planOfferChanged": "Giá đã thay đổi. Hãy kiểm tra và thử lại."
 }

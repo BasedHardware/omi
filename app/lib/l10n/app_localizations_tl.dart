@@ -15997,5 +15997,13 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String get checkoutShowsFinalCharge => 'Makikita sa checkout ang huling singil.';
+  String get checkoutShowsFinalCharge => 'Makikita sa checkout ang babayaran mo ngayon at sa pag-renew.';
+
+  @override
+  String planAutoRenewTermsBeforeDiscounts(String plan, String price, String path) {
+    return 'Awtomatikong nagre-renew ang $plan sa karaniwang presyong $price bago ang mga diskwento hanggang kanselahin mo sa $path.';
+  }
+
+  @override
+  String get planOfferChanged => 'Nagbago ang presyo. Tingnan ito at subukan ulit.';
 }

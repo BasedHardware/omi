@@ -4775,5 +4775,7 @@
     "onTheWayDayProcessesOn": "{date}에 처리",
     "planAutoRenewTerms": "{plan}은(는) {price}에 자동 갱신됩니다. 해지는 {path}에서 할 수 있습니다.",
     "planPriceBeforeDiscounts": "할인 전 {price}",
-    "checkoutShowsFinalCharge": "최종 결제 금액은 결제 화면에 표시됩니다."
+    "checkoutShowsFinalCharge": "지금과 갱신 시 결제 금액은 결제 화면에 표시됩니다.",
+    "planAutoRenewTermsBeforeDiscounts": "{plan}은(는) 할인 전 정가 {price}에 자동 갱신됩니다. 해지는 {path}에서 할 수 있습니다.",
+    "planOfferChanged": "가격이 바뀌었습니다. 확인 후 다시 시도하세요."
 }

@@ -15861,5 +15861,13 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
-  String get checkoutShowsFinalCharge => 'Det endelige beløb vises ved betaling.';
+  String get checkoutShowsFinalCharge => 'Ved betaling ser du, hvad du betaler nu og ved fornyelse.';
+
+  @override
+  String planAutoRenewTermsBeforeDiscounts(String plan, String price, String path) {
+    return '$plan fornyes automatisk til standardprisen $price før rabatter, indtil du opsiger i $path.';
+  }
+
+  @override
+  String get planOfferChanged => 'Prisen er ændret. Tjek den, og prøv igen.';
 }

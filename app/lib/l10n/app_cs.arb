@@ -4775,5 +4775,7 @@
     "onTheWayDayProcessesOn": "Zpracuje se {date}",
     "planAutoRenewTerms": "{plan} se automaticky obnovuje za {price}, dokud ho nezrušíte v {path}.",
     "planPriceBeforeDiscounts": "{price} před slevami",
-    "checkoutShowsFinalCharge": "Konečnou částku uvidíte při platbě."
+    "checkoutShowsFinalCharge": "Při platbě uvidíte, kolik zaplatíte teď a při obnovení.",
+    "planAutoRenewTermsBeforeDiscounts": "{plan} se automaticky obnovuje za standardní cenu {price} před slevami, dokud ho nezrušíte v {path}.",
+    "planOfferChanged": "Cena se změnila. Zkontrolujte ji a zkuste to znovu."
 }

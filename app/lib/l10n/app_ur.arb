@@ -12332,5 +12332,7 @@
     "onTheWayDayProcessesOn": "{date} کو پروسیس ہوں گے",
     "planAutoRenewTerms": "{plan} خودکار طور پر {price} پر تجدید ہوتا ہے جب تک آپ {path} میں منسوخ نہ کریں۔",
     "planPriceBeforeDiscounts": "رعایت سے پہلے {price}",
-    "checkoutShowsFinalCharge": "حتمی رقم چیک آؤٹ پر دکھائی جائے گی۔"
+    "checkoutShowsFinalCharge": "چیک آؤٹ پر دکھایا جائے گا کہ آپ ابھی اور تجدید پر کتنا ادا کریں گے۔",
+    "planAutoRenewTermsBeforeDiscounts": "{plan} خودکار طور پر رعایت سے پہلے کی معیاری قیمت {price} پر تجدید ہوتا ہے جب تک آپ {path} میں منسوخ نہ کریں۔",
+    "planOfferChanged": "قیمت بدل گئی ہے۔ اسے دیکھیں اور دوبارہ کوشش کریں۔"
 }

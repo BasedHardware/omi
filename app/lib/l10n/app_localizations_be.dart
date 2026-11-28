@@ -15905,5 +15905,13 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
-  String get checkoutShowsFinalCharge => 'Канчатковую суму пакажа старонка аплаты.';
+  String get checkoutShowsFinalCharge => 'Старонка аплаты пакажа, колькі вы плаціце зараз і пры падаўжэнні.';
+
+  @override
+  String planAutoRenewTermsBeforeDiscounts(String plan, String price, String path) {
+    return '$plan падаўжаецца аўтаматычна па стандартнай цане $price без уліку зніжак, пакуль вы не скасуеце ў $path.';
+  }
+
+  @override
+  String get planOfferChanged => 'Цана змянілася. Праверце яе і паспрабуйце зноў.';
 }

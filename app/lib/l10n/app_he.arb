@@ -12332,5 +12332,7 @@
     "onTheWayDayProcessesOn": "ייעבדו ב-{date}",
     "planAutoRenewTerms": "{plan} מתחדש אוטומטית ב-{price} עד שתבטלו ב-{path}.",
     "planPriceBeforeDiscounts": "{price} לפני הנחות",
-    "checkoutShowsFinalCharge": "הסכום הסופי יוצג בתשלום."
+    "checkoutShowsFinalCharge": "בתשלום תראו כמה תשלמו עכשיו ובחידוש.",
+    "planAutoRenewTermsBeforeDiscounts": "{plan} מתחדש אוטומטית במחיר הרגיל של {price} לפני הנחות עד שתבטלו ב-{path}.",
+    "planOfferChanged": "המחיר השתנה. בדקו אותו ונסו שוב."
 }

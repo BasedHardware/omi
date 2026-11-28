@@ -15895,5 +15895,13 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String get checkoutShowsFinalCharge => 'Galutinė suma rodoma atsiskaitant.';
+  String get checkoutShowsFinalCharge => 'Atsiskaitant matysite, kiek mokate dabar ir atnaujinant.';
+
+  @override
+  String planAutoRenewTermsBeforeDiscounts(String plan, String price, String path) {
+    return '$plan automatiškai atnaujinamas už standartinę kainą $price be nuolaidų, kol neatšauksite skiltyje $path.';
+  }
+
+  @override
+  String get planOfferChanged => 'Kaina pasikeitė. Patikrinkite ją ir bandykite dar kartą.';
 }

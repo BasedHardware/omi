@@ -15871,5 +15871,13 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String get checkoutShowsFinalCharge => 'Trang thanh toán hiển thị số tiền cuối cùng.';
+  String get checkoutShowsFinalCharge => 'Trang thanh toán hiển thị số tiền bạn trả bây giờ và khi gia hạn.';
+
+  @override
+  String planAutoRenewTermsBeforeDiscounts(String plan, String price, String path) {
+    return '$plan tự động gia hạn với giá tiêu chuẩn $price trước giảm giá cho đến khi bạn hủy trong $path.';
+  }
+
+  @override
+  String get planOfferChanged => 'Giá đã thay đổi. Hãy kiểm tra và thử lại.';
 }

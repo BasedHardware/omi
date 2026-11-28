@@ -12332,5 +12332,7 @@
     "onTheWayDayProcessesOn": "Maiiproseso sa {date}",
     "planAutoRenewTerms": "Awtomatikong nagre-renew ang {plan} sa {price} hanggang kanselahin mo sa {path}.",
     "planPriceBeforeDiscounts": "{price} bago ang mga diskwento",
-    "checkoutShowsFinalCharge": "Makikita sa checkout ang huling singil."
+    "checkoutShowsFinalCharge": "Makikita sa checkout ang babayaran mo ngayon at sa pag-renew.",
+    "planAutoRenewTermsBeforeDiscounts": "Awtomatikong nagre-renew ang {plan} sa karaniwang presyong {price} bago ang mga diskwento hanggang kanselahin mo sa {path}.",
+    "planOfferChanged": "Nagbago ang presyo. Tingnan ito at subukan ulit."
 }

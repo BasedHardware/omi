@@ -4775,5 +4775,7 @@
     "onTheWayDayProcessesOn": "Behandles {date}",
     "planAutoRenewTerms": "{plan} fornyes automatisk for {price} til du sier opp i {path}.",
     "planPriceBeforeDiscounts": "{price} før rabatter",
-    "checkoutShowsFinalCharge": "Det endelige beløpet vises i kassen."
+    "checkoutShowsFinalCharge": "I kassen ser du hva du betaler nå og ved fornyelse.",
+    "planAutoRenewTermsBeforeDiscounts": "{plan} fornyes automatisk til standardprisen {price} før rabatter til du sier opp i {path}.",
+    "planOfferChanged": "Prisen er endret. Sjekk den og prøv igjen."
 }

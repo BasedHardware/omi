@@ -12332,5 +12332,7 @@
     "onTheWayDayProcessesOn": "Obradit će se {date}",
     "planAutoRenewTerms": "{plan} se automatski obnavlja po cijeni {price} dok ga ne otkažete u {path}.",
     "planPriceBeforeDiscounts": "{price} prije popusta",
-    "checkoutShowsFinalCharge": "Konačni iznos vidite pri plaćanju."
+    "checkoutShowsFinalCharge": "Pri plaćanju vidite koliko plaćate sada i pri obnovi.",
+    "planAutoRenewTermsBeforeDiscounts": "{plan} se automatski obnavlja po standardnoj cijeni {price} prije popusta dok ga ne otkažete u {path}.",
+    "planOfferChanged": "Cijena se promijenila. Provjerite je i pokušajte ponovno."
 }

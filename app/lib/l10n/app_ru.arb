@@ -4810,5 +4810,7 @@
     "onTheWayDayProcessesOn": "Будут обработаны {date}",
     "planAutoRenewTerms": "{plan} продлевается автоматически за {price}, пока вы не отмените в {path}.",
     "planPriceBeforeDiscounts": "{price} без учета скидок",
-    "checkoutShowsFinalCharge": "Итоговую сумму покажет страница оплаты."
+    "checkoutShowsFinalCharge": "Страница оплаты покажет, сколько вы платите сейчас и при продлении.",
+    "planAutoRenewTermsBeforeDiscounts": "{plan} продлевается автоматически по стандартной цене {price} без учета скидок, пока вы не отмените в {path}.",
+    "planOfferChanged": "Цена изменилась. Проверьте ее и попробуйте снова."
 }

@@ -15875,5 +15875,13 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String get checkoutShowsFinalCharge => 'Lopullinen veloitus näkyy kassalla.';
+  String get checkoutShowsFinalCharge => 'Kassalla näet, mitä maksat nyt ja uusiutuessa.';
+
+  @override
+  String planAutoRenewTermsBeforeDiscounts(String plan, String price, String path) {
+    return '$plan uusiutuu automaattisesti normaalihintaan $price ennen alennuksia, kunnes peruutat sen kohdassa $path.';
+  }
+
+  @override
+  String get planOfferChanged => 'Hinta muuttui. Tarkista se ja yritä uudelleen.';
 }

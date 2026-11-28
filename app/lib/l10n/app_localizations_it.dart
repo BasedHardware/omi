@@ -15949,5 +15949,13 @@ class AppLocalizationsIt extends AppLocalizations {
   }
 
   @override
-  String get checkoutShowsFinalCharge => 'Il checkout mostra l\'importo finale.';
+  String get checkoutShowsFinalCharge => 'Il checkout mostra quanto paghi ora e al rinnovo.';
+
+  @override
+  String planAutoRenewTermsBeforeDiscounts(String plan, String price, String path) {
+    return '$plan si rinnova automaticamente al prezzo standard di $price prima degli sconti finché non annulli in $path.';
+  }
+
+  @override
+  String get planOfferChanged => 'Il prezzo è cambiato. Controllalo e riprova.';
 }

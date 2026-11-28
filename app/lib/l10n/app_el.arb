@@ -4775,5 +4775,7 @@
     "onTheWayDayProcessesOn": "Επεξεργασία στις {date}",
     "planAutoRenewTerms": "Το {plan} ανανεώνεται αυτόματα στα {price} μέχρι να το ακυρώσετε στο {path}.",
     "planPriceBeforeDiscounts": "{price} πριν από εκπτώσεις",
-    "checkoutShowsFinalCharge": "Η τελική χρέωση εμφανίζεται στην πληρωμή."
+    "checkoutShowsFinalCharge": "Στην πληρωμή βλέπετε τι πληρώνετε τώρα και στην ανανέωση.",
+    "planAutoRenewTermsBeforeDiscounts": "Το {plan} ανανεώνεται αυτόματα στην κανονική τιμή {price} πριν από εκπτώσεις μέχρι να το ακυρώσετε στο {path}.",
+    "planOfferChanged": "Η τιμή άλλαξε. Ελέγξτε την και δοκιμάστε ξανά."
 }

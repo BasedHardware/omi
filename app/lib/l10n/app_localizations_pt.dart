@@ -15899,5 +15899,13 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
-  String get checkoutShowsFinalCharge => 'O checkout mostra o valor final.';
+  String get checkoutShowsFinalCharge => 'O checkout mostra o que você paga agora e na renovação.';
+
+  @override
+  String planAutoRenewTermsBeforeDiscounts(String plan, String price, String path) {
+    return '$plan renova automaticamente pelo preço padrão de $price antes de descontos até você cancelar em $path.';
+  }
+
+  @override
+  String get planOfferChanged => 'O preço mudou. Confira e tente de novo.';
 }

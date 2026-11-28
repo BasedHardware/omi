@@ -15878,5 +15878,13 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
-  String get checkoutShowsFinalCharge => 'Slutbeloppet visas i kassan.';
+  String get checkoutShowsFinalCharge => 'I kassan ser du vad du betalar nu och vid förnyelse.';
+
+  @override
+  String planAutoRenewTermsBeforeDiscounts(String plan, String price, String path) {
+    return '$plan förnyas automatiskt till standardpriset $price före rabatter tills du säger upp i $path.';
+  }
+
+  @override
+  String get planOfferChanged => 'Priset har ändrats. Kontrollera det och försök igen.';
 }

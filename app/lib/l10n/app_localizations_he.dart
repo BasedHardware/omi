@@ -15756,5 +15756,13 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get checkoutShowsFinalCharge => 'הסכום הסופי יוצג בתשלום.';
+  String get checkoutShowsFinalCharge => 'בתשלום תראו כמה תשלמו עכשיו ובחידוש.';
+
+  @override
+  String planAutoRenewTermsBeforeDiscounts(String plan, String price, String path) {
+    return '$plan מתחדש אוטומטית במחיר הרגיל של $price לפני הנחות עד שתבטלו ב-$path.';
+  }
+
+  @override
+  String get planOfferChanged => 'המחיר השתנה. בדקו אותו ונסו שוב.';
 }

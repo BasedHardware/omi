@@ -4775,5 +4775,7 @@
     "onTheWayDayProcessesOn": "Se procesează {date}",
     "planAutoRenewTerms": "{plan} se reînnoiește automat la {price} până când anulezi din {path}.",
     "planPriceBeforeDiscounts": "{price} înainte de reduceri",
-    "checkoutShowsFinalCharge": "Suma finală apare la plată."
+    "checkoutShowsFinalCharge": "La plată vezi cât plătești acum și la reînnoire.",
+    "planAutoRenewTermsBeforeDiscounts": "{plan} se reînnoiește automat la prețul standard de {price} înainte de reduceri până când anulezi din {path}.",
+    "planOfferChanged": "Prețul s-a schimbat. Verifică-l și încearcă din nou."
 }

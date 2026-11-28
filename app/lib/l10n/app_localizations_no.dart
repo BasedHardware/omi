@@ -15875,5 +15875,13 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
-  String get checkoutShowsFinalCharge => 'Det endelige beløpet vises i kassen.';
+  String get checkoutShowsFinalCharge => 'I kassen ser du hva du betaler nå og ved fornyelse.';
+
+  @override
+  String planAutoRenewTermsBeforeDiscounts(String plan, String price, String path) {
+    return '$plan fornyes automatisk til standardprisen $price før rabatter til du sier opp i $path.';
+  }
+
+  @override
+  String get planOfferChanged => 'Prisen er endret. Sjekk den og prøv igjen.';
 }

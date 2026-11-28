@@ -4775,5 +4775,7 @@
     "onTheWayDayProcessesOn": "将于 {date} 处理",
     "planAutoRenewTerms": "{plan} 将按 {price} 自动续订，直到你在 {path} 中取消。",
     "planPriceBeforeDiscounts": "折扣前 {price}",
-    "checkoutShowsFinalCharge": "最终金额以结账页面为准。"
+    "checkoutShowsFinalCharge": "结账页面会显示本次和续订时的金额。",
+    "planAutoRenewTermsBeforeDiscounts": "{plan} 将按折扣前的标准价格 {price} 自动续订，直到你在 {path} 中取消。",
+    "planOfferChanged": "价格已变动。请确认后重试。"
 }

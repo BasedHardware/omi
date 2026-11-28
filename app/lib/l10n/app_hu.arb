@@ -4871,5 +4871,7 @@
     "onTheWayDayProcessesOn": "Feldolgozás: {date}",
     "planAutoRenewTerms": "A(z) {plan} automatikusan megújul {price} áron, amíg le nem mondod itt: {path}.",
     "planPriceBeforeDiscounts": "{price} kedvezmények előtt",
-    "checkoutShowsFinalCharge": "A végleges összeget a fizetésnél látod."
+    "checkoutShowsFinalCharge": "A fizetésnél látod, mennyit fizetsz most és megújításkor.",
+    "planAutoRenewTermsBeforeDiscounts": "A(z) {plan} automatikusan megújul a normál {price} áron, kedvezmények előtt, amíg le nem mondod itt: {path}.",
+    "planOfferChanged": "Az ár megváltozott. Ellenőrizd, és próbáld újra."
 }

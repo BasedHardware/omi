@@ -4775,5 +4775,7 @@
     "onTheWayDayProcessesOn": "Worden verwerkt op {date}",
     "planAutoRenewTerms": "{plan} wordt automatisch verlengd voor {price} tot je opzegt via {path}.",
     "planPriceBeforeDiscounts": "{price} vóór kortingen",
-    "checkoutShowsFinalCharge": "Bij het afrekenen zie je het definitieve bedrag."
+    "checkoutShowsFinalCharge": "Bij het afrekenen zie je wat je nu en bij verlenging betaalt.",
+    "planAutoRenewTermsBeforeDiscounts": "{plan} wordt automatisch verlengd voor de standaardprijs van {price} vóór kortingen tot je opzegt via {path}.",
+    "planOfferChanged": "De prijs is gewijzigd. Controleer hem en probeer het opnieuw."
 }

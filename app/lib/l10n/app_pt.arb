@@ -4810,5 +4810,7 @@
     "onTheWayDayProcessesOn": "Processa em {date}",
     "planAutoRenewTerms": "{plan} renova automaticamente por {price} até você cancelar em {path}.",
     "planPriceBeforeDiscounts": "{price} antes de descontos",
-    "checkoutShowsFinalCharge": "O checkout mostra o valor final."
+    "checkoutShowsFinalCharge": "O checkout mostra o que você paga agora e na renovação.",
+    "planAutoRenewTermsBeforeDiscounts": "{plan} renova automaticamente pelo preço padrão de {price} antes de descontos até você cancelar em {path}.",
+    "planOfferChanged": "O preço mudou. Confira e tente de novo."
 }

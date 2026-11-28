@@ -15882,5 +15882,13 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
-  String get checkoutShowsFinalCharge => 'حتمی رقم چیک آؤٹ پر دکھائی جائے گی۔';
+  String get checkoutShowsFinalCharge => 'چیک آؤٹ پر دکھایا جائے گا کہ آپ ابھی اور تجدید پر کتنا ادا کریں گے۔';
+
+  @override
+  String planAutoRenewTermsBeforeDiscounts(String plan, String price, String path) {
+    return '$plan خودکار طور پر رعایت سے پہلے کی معیاری قیمت $price پر تجدید ہوتا ہے جب تک آپ $path میں منسوخ نہ کریں۔';
+  }
+
+  @override
+  String get planOfferChanged => 'قیمت بدل گئی ہے۔ اسے دیکھیں اور دوبارہ کوشش کریں۔';
 }

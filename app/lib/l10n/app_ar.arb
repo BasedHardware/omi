@@ -4775,5 +4775,7 @@
     "onTheWayDayProcessesOn": "تتم المعالجة في {date}",
     "planAutoRenewTerms": "يتجدد {plan} تلقائيًا بسعر {price} حتى تلغيه من {path}.",
     "planPriceBeforeDiscounts": "{price} قبل الخصومات",
-    "checkoutShowsFinalCharge": "تعرض صفحة الدفع المبلغ النهائي."
+    "checkoutShowsFinalCharge": "تعرض صفحة الدفع ما تدفعه الآن وعند التجديد.",
+    "planAutoRenewTermsBeforeDiscounts": "يتجدد {plan} تلقائيًا بالسعر العادي {price} قبل الخصومات حتى تلغيه من {path}.",
+    "planOfferChanged": "تغيّر السعر. راجعه وحاول مرة أخرى."
 }

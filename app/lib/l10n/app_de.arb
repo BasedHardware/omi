@@ -4775,5 +4775,7 @@
     "onTheWayDayProcessesOn": "Wird am {date} verarbeitet",
     "planAutoRenewTerms": "{plan} verlängert sich automatisch für {price}, bis du in {path} kündigst.",
     "planPriceBeforeDiscounts": "{price} vor Rabatten",
-    "checkoutShowsFinalCharge": "Den endgültigen Betrag siehst du an der Kasse."
+    "checkoutShowsFinalCharge": "An der Kasse siehst du, was du jetzt und bei Verlängerung zahlst.",
+    "planAutoRenewTermsBeforeDiscounts": "{plan} verlängert sich automatisch zum Standardpreis von {price} vor Rabatten, bis du in {path} kündigst.",
+    "planOfferChanged": "Der Preis hat sich geändert. Prüf ihn und versuch es noch einmal."
 }

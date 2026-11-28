@@ -4775,5 +4775,7 @@
     "onTheWayDayProcessesOn": "{date} को प्रोसेस होगा",
     "planAutoRenewTerms": "{plan} अपने आप {price} पर रिन्यू होता है, जब तक आप {path} में रद्द न करें।",
     "planPriceBeforeDiscounts": "छूट से पहले {price}",
-    "checkoutShowsFinalCharge": "अंतिम शुल्क चेकआउट में दिखेगा।"
+    "checkoutShowsFinalCharge": "चेकआउट में दिखेगा कि आप अभी और रिन्यू होने पर कितना देंगे।",
+    "planAutoRenewTermsBeforeDiscounts": "{plan} अपने आप छूट से पहले की सामान्य कीमत {price} पर रिन्यू होता है, जब तक आप {path} में रद्द न करें।",
+    "planOfferChanged": "कीमत बदल गई है। इसे देखें और फिर से कोशिश करें।"
 }

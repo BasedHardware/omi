@@ -15636,5 +15636,13 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get checkoutShowsFinalCharge => '最終的な請求額は決済画面に表示されます。';
+  String get checkoutShowsFinalCharge => '今回と更新時のお支払い額は決済画面に表示されます。';
+
+  @override
+  String planAutoRenewTermsBeforeDiscounts(String plan, String price, String path) {
+    return '$planは割引前の通常価格$priceで自動更新されます。解約は$pathでできます。';
+  }
+
+  @override
+  String get planOfferChanged => '価格が変わりました。確認してもう一度お試しください。';
 }

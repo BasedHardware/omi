@@ -15862,5 +15862,13 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String get checkoutShowsFinalCharge => 'Lõplik summa kuvatakse maksmisel.';
+  String get checkoutShowsFinalCharge => 'Maksmisel näed, mida maksad praegu ja uuenemisel.';
+
+  @override
+  String planAutoRenewTermsBeforeDiscounts(String plan, String price, String path) {
+    return '$plan uueneb automaatselt tavahinnaga $price enne allahindlusi, kuni tühistad selle jaotises $path.';
+  }
+
+  @override
+  String get planOfferChanged => 'Hind muutus. Vaata see üle ja proovi uuesti.';
 }

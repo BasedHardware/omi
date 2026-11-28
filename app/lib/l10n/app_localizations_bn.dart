@@ -15865,5 +15865,13 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
-  String get checkoutShowsFinalCharge => 'চেকআউটে চূড়ান্ত চার্জ দেখানো হবে।';
+  String get checkoutShowsFinalCharge => 'চেকআউটে দেখানো হবে এখন এবং নবায়নের সময় আপনি কত দেবেন।';
+
+  @override
+  String planAutoRenewTermsBeforeDiscounts(String plan, String price, String path) {
+    return '$plan স্বয়ংক্রিয়ভাবে ছাড়ের আগের সাধারণ মূল্য $price-এ নবায়ন হয়, যতক্ষণ না আপনি $path-এ বাতিল করেন।';
+  }
+
+  @override
+  String get planOfferChanged => 'দাম বদলেছে। দেখে নিয়ে আবার চেষ্টা করুন।';
 }

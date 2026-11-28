@@ -15975,5 +15975,13 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String get checkoutShowsFinalCharge => 'Η τελική χρέωση εμφανίζεται στην πληρωμή.';
+  String get checkoutShowsFinalCharge => 'Στην πληρωμή βλέπετε τι πληρώνετε τώρα και στην ανανέωση.';
+
+  @override
+  String planAutoRenewTermsBeforeDiscounts(String plan, String price, String path) {
+    return 'Το $plan ανανεώνεται αυτόματα στην κανονική τιμή $price πριν από εκπτώσεις μέχρι να το ακυρώσετε στο $path.';
+  }
+
+  @override
+  String get planOfferChanged => 'Η τιμή άλλαξε. Ελέγξτε την και δοκιμάστε ξανά.';
 }

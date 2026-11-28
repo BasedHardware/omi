@@ -15978,5 +15978,13 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
-  String get checkoutShowsFinalCharge => 'இறுதிக் கட்டணம் செக்அவுட்டில் காட்டப்படும்.';
+  String get checkoutShowsFinalCharge => 'இப்போதும் புதுப்பிக்கும்போதும் நீங்கள் செலுத்துவதை செக்அவுட் காட்டும்.';
+
+  @override
+  String planAutoRenewTermsBeforeDiscounts(String plan, String price, String path) {
+    return '$plan தள்ளுபடிக்கு முந்தைய வழக்கமான விலை $price க்கு தானாக புதுப்பிக்கப்படும், $path இல் ரத்து செய்யும் வரை.';
+  }
+
+  @override
+  String get planOfferChanged => 'விலை மாறியுள்ளது. சரிபார்த்து மீண்டும் முயலவும்.';
 }

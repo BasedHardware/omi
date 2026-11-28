@@ -12332,5 +12332,7 @@
     "onTheWayDayProcessesOn": "{date}న ప్రాసెస్ అవుతుంది",
     "planAutoRenewTerms": "{plan} స్వయంచాలకంగా {price}కి పునరుద్ధరించబడుతుంది, {path}లో రద్దు చేసే వరకు.",
     "planPriceBeforeDiscounts": "తగ్గింపులకు ముందు {price}",
-    "checkoutShowsFinalCharge": "చివరి ఛార్జీ చెక్‌అవుట్‌లో కనిపిస్తుంది."
+    "checkoutShowsFinalCharge": "ఇప్పుడు మరియు పునరుద్ధరణ సమయంలో మీరు చెల్లించేది చెక్‌అవుట్‌లో కనిపిస్తుంది.",
+    "planAutoRenewTermsBeforeDiscounts": "{plan} తగ్గింపులకు ముందు సాధారణ ధర {price}కి స్వయంచాలకంగా పునరుద్ధరించబడుతుంది, {path}లో రద్దు చేసే వరకు.",
+    "planOfferChanged": "ధర మారింది. దాన్ని చూసి మళ్లీ ప్రయత్నించండి."
 }

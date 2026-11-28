@@ -4775,5 +4775,7 @@
     "onTheWayDayProcessesOn": "Käsitellään {date}",
     "planAutoRenewTerms": "{plan} uusiutuu automaattisesti hintaan {price}, kunnes peruutat sen kohdassa {path}.",
     "planPriceBeforeDiscounts": "{price} ennen alennuksia",
-    "checkoutShowsFinalCharge": "Lopullinen veloitus näkyy kassalla."
+    "checkoutShowsFinalCharge": "Kassalla näet, mitä maksat nyt ja uusiutuessa.",
+    "planAutoRenewTermsBeforeDiscounts": "{plan} uusiutuu automaattisesti normaalihintaan {price} ennen alennuksia, kunnes peruutat sen kohdassa {path}.",
+    "planOfferChanged": "Hinta muuttui. Tarkista se ja yritä uudelleen."
 }

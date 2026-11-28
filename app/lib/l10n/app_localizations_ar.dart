@@ -15782,5 +15782,13 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String get checkoutShowsFinalCharge => 'تعرض صفحة الدفع المبلغ النهائي.';
+  String get checkoutShowsFinalCharge => 'تعرض صفحة الدفع ما تدفعه الآن وعند التجديد.';
+
+  @override
+  String planAutoRenewTermsBeforeDiscounts(String plan, String price, String path) {
+    return 'يتجدد $plan تلقائيًا بالسعر العادي $price قبل الخصومات حتى تلغيه من $path.';
+  }
+
+  @override
+  String get planOfferChanged => 'تغيّر السعر. راجعه وحاول مرة أخرى.';
 }

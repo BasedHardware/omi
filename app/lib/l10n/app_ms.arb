@@ -4775,5 +4775,7 @@
     "onTheWayDayProcessesOn": "Diproses pada {date}",
     "planAutoRenewTerms": "{plan} diperbaharui secara automatik pada {price} sehingga anda membatalkannya di {path}.",
     "planPriceBeforeDiscounts": "{price} sebelum diskaun",
-    "checkoutShowsFinalCharge": "Checkout menunjukkan caj akhir."
+    "checkoutShowsFinalCharge": "Checkout menunjukkan bayaran anda sekarang dan semasa pembaharuan.",
+    "planAutoRenewTermsBeforeDiscounts": "{plan} diperbaharui secara automatik pada harga standard {price} sebelum diskaun sehingga anda membatalkannya di {path}.",
+    "planOfferChanged": "Harga telah berubah. Semak dan cuba lagi."
 }

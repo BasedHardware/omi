@@ -15934,5 +15934,13 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
-  String get checkoutShowsFinalCharge => 'చివరి ఛార్జీ చెక్‌అవుట్‌లో కనిపిస్తుంది.';
+  String get checkoutShowsFinalCharge => 'ఇప్పుడు మరియు పునరుద్ధరణ సమయంలో మీరు చెల్లించేది చెక్‌అవుట్‌లో కనిపిస్తుంది.';
+
+  @override
+  String planAutoRenewTermsBeforeDiscounts(String plan, String price, String path) {
+    return '$plan తగ్గింపులకు ముందు సాధారణ ధర $priceకి స్వయంచాలకంగా పునరుద్ధరించబడుతుంది, $pathలో రద్దు చేసే వరకు.';
+  }
+
+  @override
+  String get planOfferChanged => 'ధర మారింది. దాన్ని చూసి మళ్లీ ప్రయత్నించండి.';
 }

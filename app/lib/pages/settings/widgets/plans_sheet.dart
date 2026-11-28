@@ -334,6 +334,7 @@ class _PlansSheetState extends State<PlansSheet> {
   Future<void> _handleUpgradeWithSelectedPlan({
     StorefrontPrice? storefrontPrice,
     bool releaseUpgradingLock = true,
+    _ShownOffer? shown,
   }) async {
     if (_isRedeemingCode) return;
     final bool isYearly = selectedPlan == 'yearly';
@@ -374,6 +375,12 @@ class _PlansSheetState extends State<PlansSheet> {
 
     if (selectedPlanData == null) {
       OmiFeedback.error(context, context.l10n.selectedPlanNotAvailable);
+      return;
+    }
+    // The free footer's Upgrade submits only the plan, price and code it showed. A plan tap or catalog refresh
+    // that has not repainted yet refuses here, and the repaint shows the new offer for a fresh tap.
+    if (shown != null && !shown.matches(selectedPlanData, _promoCodeController.text.trim())) {
+      _surfacePurchaseError(context.l10n.planOfferChanged);
       return;
     }
 
@@ -479,6 +486,7 @@ class _PlansSheetState extends State<PlansSheet> {
       storefrontDecision: storefrontDecision,
       confirmedByStorefront:
           isUpgradingFromMonthlyToAnnual && storefrontPrice?.formattedConfirmLines.isNotEmpty == true,
+      shownPromoCode: shown?.promoCode,
     );
   }
 
@@ -489,6 +497,7 @@ class _PlansSheetState extends State<PlansSheet> {
     bool releaseUpgradingLock = true,
     StorefrontCheckoutDecision? storefrontDecision,
     bool confirmedByStorefront = false,
+    String? shownPromoCode,
   }) async {
     final provider = context.read<UsageProvider>();
     final l10n = context.l10n;
@@ -537,8 +546,12 @@ class _PlansSheetState extends State<PlansSheet> {
       }
     }
 
-    setState(() => _isUpgrading = true);
-    final promoCode = _promoCodeController.text.trim();
+    setState(() {
+      _isUpgrading = true;
+      // The free footer's retry starts clean; a new refusal shows again.
+      if (shownPromoCode != null) _purchaseError = null;
+    });
+    final promoCode = shownPromoCode ?? _promoCodeController.text.trim();
     try {
       Map<String, dynamic>? result;
 
@@ -845,18 +858,35 @@ class _PlansSheetState extends State<PlansSheet> {
     super.dispose();
   }
 
-  /// Plan cards, their loading placeholder, or the failure state with Try Again (also for an empty catalog).
+  /// The footer, its locks and its catalog handling are only for a confirmed free account: no Stripe agreement
+  /// (live, past due, unpaid, trial or scheduled), no payment issue, no prepaid plan. Everyone else keeps the sheet
+  /// and recovery path as before.
+  bool _isConfirmedFree(UsageProvider provider) {
+    final sub = provider.subscription?.subscription;
+    return sub != null &&
+        sub.plan == PlanType.basic &&
+        !sub.prepaid &&
+        !sub.cancelAtPeriodEnd &&
+        !sub.billedByPlay &&
+        (sub.stripeSubscriptionId?.isEmpty ?? true) &&
+        provider.subscription?.paymentIssue == null;
+  }
+
+  /// A confirmed free account's pending checkout: its plan, code and code entry cannot change until it returns.
+  bool get _freeCheckoutPending => _isUpgrading && _isConfirmedFree(context.read<UsageProvider>());
+
+  /// Plan cards, their loading placeholder, or the failure state with Try Again (for a confirmed free account also
+  /// an empty catalog).
   Widget _plansOrPlaceholder(UsageProvider usageProvider) {
     if (usageProvider.isLoadingPlans) {
       return const Column(children: [PlanOptionShimmer(), SizedBox(height: 18), PlanOptionShimmer()]);
     }
+    final free = _isConfirmedFree(usageProvider);
     final catalog = usageProvider.availablePlans?['plans'];
-    if (catalog is List && catalog.isNotEmpty) {
+    if (free ? catalog is List && catalog.isNotEmpty : usageProvider.availablePlans != null) {
+      final cards = _buildTierPlanCards(availablePlans: usageProvider.availablePlans!);
       // Like the trial paywall: the selection cannot change while a checkout for it is pending.
-      return IgnorePointer(
-        ignoring: _isUpgrading,
-        child: _buildTierPlanCards(availablePlans: usageProvider.availablePlans!),
-      );
+      return free ? IgnorePointer(ignoring: _isUpgrading, child: cards) : cards;
     }
     return OmiErrorState(
       title: context.l10n.unableToLoadPlans,
@@ -865,8 +895,8 @@ class _PlansSheetState extends State<PlansSheet> {
     );
   }
 
-  /// The main action: Upgrade, Continue or Resubscribe.
-  Widget _primaryAction({Key? key, required String label}) {
+  /// The main action: Upgrade, Continue or Resubscribe. [shown] binds the free footer's Upgrade to what it showed.
+  Widget _primaryAction({Key? key, required String label, _ShownOffer? shown}) {
     return OmiButton(
       key: key,
       label: label,
@@ -874,7 +904,7 @@ class _PlansSheetState extends State<PlansSheet> {
       isLoading: _isUpgrading,
       onPressed: () {
         HapticFeedback.mediumImpact();
-        return _handleUpgradeWithSelectedPlan();
+        return _handleUpgradeWithSelectedPlan(shown: shown);
       },
     );
   }
@@ -973,15 +1003,7 @@ class _PlansSheetState extends State<PlansSheet> {
               currentGrantsDesktop: sub?.plan.grantsDesktop ?? false,
               selectedPriceIsCurrent: _selectedPriceIsCurrent(provider.availablePlans),
             );
-        // The footer is only for a confirmed free account: no Stripe agreement (live, past due, unpaid, trial or
-        // scheduled), no payment issue, no prepaid plan. Everyone else keeps the sheet and recovery path as before.
-        final confirmedFree = sub != null &&
-            sub.plan == PlanType.basic &&
-            !sub.prepaid &&
-            !sub.cancelAtPeriodEnd &&
-            !sub.billedByPlay &&
-            (sub.stripeSubscriptionId?.isEmpty ?? true) &&
-            provider.subscription?.paymentIssue == null;
+        final confirmedFree = _isConfirmedFree(provider);
         if (confirmedFree) WidgetsBinding.instance.addPostFrameCallback((_) => _measureFreeFooter());
         List<Widget> body(bool pinFooter) => <Widget>[
               const SizedBox(height: OmiSpacing.xs),
@@ -1112,12 +1134,20 @@ class _PlansSheetState extends State<PlansSheet> {
                     // One code entry: "Have a code?" redeems a prepaid code; a discount code goes to today's
                     // promo field for checkout.
                     if (provider.canRedeemPrepaidCode && !_showPromoField)
-                      PrepaidCodeEntry(
-                        onDiscountCode: (code) => setState(() {
-                          _promoCodeController.text = code;
-                          _promoCodeError = null;
-                          _showPromoField = true;
-                        }),
+                      IgnorePointer(
+                        key: const ValueKey('plans_sheet_code_entry_slot'),
+                        ignoring: confirmedFree && _isUpgrading,
+                        child: PrepaidCodeEntry(
+                          onDiscountCode: (code) {
+                            // A pending checkout keeps the code it was sent with.
+                            if (_freeCheckoutPending) return;
+                            setState(() {
+                              _promoCodeController.text = code;
+                              _promoCodeError = null;
+                              _showPromoField = true;
+                            });
+                          },
+                        ),
                       )
                     else
                       _buildPromoCodeField(),
@@ -1232,11 +1262,12 @@ class _PlansSheetState extends State<PlansSheet> {
           final height = MediaQuery.sizeOf(context).height * 0.85;
           // Pinned under the plans while the list keeps room for the promo field. With the keyboard up, a
           // wrapped error or accessibility text, the footer scrolls with the page in Upgrade's place.
+          // Inline until the footer has been measured, so the first frame never overflows a tight sheet.
           final pinFooter = confirmedFree &&
               MediaQuery.textScalerOf(context).scale(1) < 1.6 &&
-              (_freeFooterHeight == null ||
-                  (constraints.maxHeight < height ? constraints.maxHeight : height) - _pinnedFooterHeight(context) >=
-                      _minPinnedListHeight);
+              _freeFooterHeight != null &&
+              (constraints.maxHeight < height ? constraints.maxHeight : height) - _pinnedFooterHeight(context) >=
+                  _minPinnedListHeight;
           final list = ListView(padding: const EdgeInsets.only(bottom: OmiSpacing.md), children: body(pinFooter));
           return DecoratedBox(
             // Paints the sheet surface itself too, for hosts that present it without showOmiSheet.
@@ -1292,17 +1323,24 @@ class _PlansSheetState extends State<PlansSheet> {
             offer['title'] as String? ??
             '';
     final show = showUpgrade && price != null;
+    final cancelPath = '${l10n.settings} > ${l10n.planAndUsage}';
     return FreePlanFooter(
       contentKey: _freeFooterKey,
       error: _purchaseError,
       chargeLine: !show ? null : (discounted ? l10n.planPriceBeforeDiscounts(price) : price),
+      // A code can change the renewal charges too: the amount here is the standard price, Checkout shows the rest.
       renewalTerms: !show
           ? null
-          : [
-              l10n.planAutoRenewTerms(planName, price, '${l10n.settings} > ${l10n.planAndUsage}'),
-              if (discounted) l10n.checkoutShowsFinalCharge,
-            ].join(' '),
-      upgrade: show ? _primaryAction(key: const ValueKey('plans_sheet_upgrade_button'), label: l10n.upgrade) : null,
+          : discounted
+              ? '${l10n.planAutoRenewTermsBeforeDiscounts(planName, price, cancelPath)} ${l10n.checkoutShowsFinalCharge}'
+              : l10n.planAutoRenewTerms(planName, price, cancelPath),
+      upgrade: show
+          ? _primaryAction(
+              key: const ValueKey('plans_sheet_upgrade_button'),
+              label: l10n.upgrade,
+              shown: _ShownOffer(offer!, _promoCodeController.text.trim()),
+            )
+          : null,
       locked: _isUpgrading,
       pinned: pinned,
     );
@@ -1358,12 +1396,14 @@ class _PlansSheetState extends State<PlansSheet> {
   }
 
   Widget _buildPromoCodeField() => PlanPromoCodeField(
+        // Keyed: the footer moving in or out of the list beside a plans reload must not reset the field (collapsed).
+        key: const ValueKey('plans_sheet_promo_field'),
         controller: _promoCodeController,
         error: _promoCodeError,
         canApply: context.read<UsageProvider>().canRedeemSubscriptionCode,
         busy: _isRedeemingCode,
         applyEnabled: !_isUpgrading && _codeRetryTimer == null,
-        locked: _isUpgrading,
+        locked: _freeCheckoutPending,
         applied: _promoCodeApplied,
         initiallyExpanded: _showPromoField,
         onApply: _applySubscriptionCode,
@@ -1430,7 +1470,8 @@ class _PlansSheetState extends State<PlansSheet> {
 
     return Column(
       children: [
-        if (plans.any((p) => p['interval'] == 'year') && plans.any((p) => p['interval'] == 'month')) ...[
+        if (!_isConfirmedFree(context.read<UsageProvider>()) ||
+            (plans.any((p) => p['interval'] == 'year') && plans.any((p) => p['interval'] == 'month'))) ...[
           PlanBillingPeriodToggle(
             isYearly: isYearly,
             savePercent: bestAnnualDiscountPercent(grouped.values),
@@ -1472,7 +1513,8 @@ class _PlansSheetState extends State<PlansSheet> {
     );
   }
 
-  /// Fallback for single-tier plan display (old monthly/yearly cards). Only intervals the catalog offers.
+  /// Fallback for single-tier plan display (old monthly/yearly cards). A confirmed free account sees only the
+  /// intervals the catalog offers.
   Widget _buildLegacyPlanCards({required List<Map<String, dynamic>> plans}) {
     _keepCurrentPriceSelected(plans);
     _settleBillingPeriod(plans);
@@ -1483,8 +1525,9 @@ class _PlansSheetState extends State<PlansSheet> {
     Map<String, dynamic> named(Map<String, dynamic> plan) => tierName == null
         ? plan
         : {...plan, 'title': '$tierName · ${plan['interval'] == 'year' ? l10n.billingYearly : l10n.billingMonthly}'};
-    final yearly = plans.firstWhereOrNull((plan) => plan['interval'] == 'year');
-    final monthly = plans.firstWhereOrNull((plan) => plan['interval'] == 'month');
+    final free = _isConfirmedFree(context.read<UsageProvider>());
+    final yearly = plans.firstWhereOrNull((plan) => plan['interval'] == 'year') ?? (free ? null : plans.first);
+    final monthly = plans.firstWhereOrNull((plan) => plan['interval'] == 'month') ?? (free ? null : plans.first);
     return Column(
       children: [
         if (yearly != null)
@@ -1516,9 +1559,10 @@ class _PlansSheetState extends State<PlansSheet> {
     );
   }
 
-  /// A catalog can come back with one interval (a per-price Stripe failure): select the one that exists.
+  /// A catalog can come back with one interval (a per-price Stripe failure): a confirmed free account selects the one
+  /// that exists.
   void _settleBillingPeriod(List<Map<String, dynamic>> plans) {
-    if (_isUpgrading) return;
+    if (_isUpgrading || !_isConfirmedFree(context.read<UsageProvider>())) return;
     final interval = selectedPlan == 'yearly' ? 'year' : 'month';
     if (plans.any((plan) => plan['interval'] == interval)) return;
     if (plans.any((plan) => plan['interval'] == 'year')) {
@@ -1573,4 +1617,16 @@ class _PlansSheetState extends State<PlansSheet> {
   }
 
   String? _monthsFreeLabel(int? months) => months == null ? null : l10n.monthsFreeBadge(months);
+}
+
+/// The offer and code the free footer showed when its Upgrade was built.
+class _ShownOffer {
+  const _ShownOffer(this.plan, this.promoCode);
+  final Map<String, dynamic> plan;
+  final String promoCode;
+
+  /// Same price ID, tier, period, amount and currency, and the same code as the field holds now.
+  bool matches(Map<String, dynamic> offer, String promo) =>
+      promo == promoCode &&
+      const ['id', 'plan_id', 'interval', 'unit_amount', 'currency'].every((field) => offer[field] == plan[field]);
 }

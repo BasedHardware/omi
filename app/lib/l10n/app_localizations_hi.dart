@@ -15852,5 +15852,13 @@ class AppLocalizationsHi extends AppLocalizations {
   }
 
   @override
-  String get checkoutShowsFinalCharge => 'अंतिम शुल्क चेकआउट में दिखेगा।';
+  String get checkoutShowsFinalCharge => 'चेकआउट में दिखेगा कि आप अभी और रिन्यू होने पर कितना देंगे।';
+
+  @override
+  String planAutoRenewTermsBeforeDiscounts(String plan, String price, String path) {
+    return '$plan अपने आप छूट से पहले की सामान्य कीमत $price पर रिन्यू होता है, जब तक आप $path में रद्द न करें।';
+  }
+
+  @override
+  String get planOfferChanged => 'कीमत बदल गई है। इसे देखें और फिर से कोशिश करें।';
 }

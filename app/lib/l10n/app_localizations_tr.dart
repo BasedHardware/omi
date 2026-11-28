@@ -15880,5 +15880,13 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String get checkoutShowsFinalCharge => 'Son tutar ödeme sayfasında gösterilir.';
+  String get checkoutShowsFinalCharge => 'Ödeme sayfası şimdi ve yenilemede ne ödeyeceğini gösterir.';
+
+  @override
+  String planAutoRenewTermsBeforeDiscounts(String plan, String price, String path) {
+    return '$plan, indirimler öncesi standart fiyat olan $price ile otomatik yenilenir. $path bölümünden istediğin zaman iptal edebilirsin.';
+  }
+
+  @override
+  String get planOfferChanged => 'Fiyat değişti. Kontrol edip tekrar dene.';
 }

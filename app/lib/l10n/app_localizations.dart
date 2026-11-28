@@ -27837,11 +27837,23 @@ abstract class AppLocalizations {
   /// **'{price} before discounts'**
   String planPriceBeforeDiscounts(String price);
 
-  /// Under Upgrade when a promo code is entered: the Stripe checkout page shows the discounted amount
+  /// Under Upgrade when a promo code is entered: the Stripe checkout page shows the discounted first charge and renewal terms
   ///
   /// In en, this message translates to:
-  /// **'Checkout shows the final charge.'**
+  /// **'Checkout shows what you pay now and at renewal.'**
   String get checkoutShowsFinalCharge;
+
+  /// Beside Upgrade on the free Plans sheet when a promo code is entered: the renewal amount is the standard catalog price; a code can change it. plan = plan name (Omi Pro), price = recurring price like US$269.91/year, path = where to cancel, e.g. Settings > Plan & Usage
+  ///
+  /// In en, this message translates to:
+  /// **'{plan} renews automatically at the standard price of {price} before discounts until you cancel in {path}.'**
+  String planAutoRenewTermsBeforeDiscounts(String plan, String price, String path);
+
+  /// Free Plans sheet: Upgrade was tapped while the shown plan or price was changing; nothing was submitted
+  ///
+  /// In en, this message translates to:
+  /// **'The price changed. Check it and try again.'**
+  String get planOfferChanged;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

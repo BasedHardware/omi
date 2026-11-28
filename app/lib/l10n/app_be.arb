@@ -12332,5 +12332,7 @@
     "onTheWayDayProcessesOn": "Будуць апрацаваны {date}",
     "planAutoRenewTerms": "{plan} падаўжаецца аўтаматычна за {price}, пакуль вы не скасуеце ў {path}.",
     "planPriceBeforeDiscounts": "{price} без уліку зніжак",
-    "checkoutShowsFinalCharge": "Канчатковую суму пакажа старонка аплаты."
+    "checkoutShowsFinalCharge": "Старонка аплаты пакажа, колькі вы плаціце зараз і пры падаўжэнні.",
+    "planAutoRenewTermsBeforeDiscounts": "{plan} падаўжаецца аўтаматычна па стандартнай цане {price} без уліку зніжак, пакуль вы не скасуеце ў {path}.",
+    "planOfferChanged": "Цана змянілася. Праверце яе і паспрабуйце зноў."
 }

@@ -19413,8 +19413,27 @@
             }
         }
     },
-    "checkoutShowsFinalCharge": "Checkout shows the final charge.",
+    "checkoutShowsFinalCharge": "Checkout shows what you pay now and at renewal.",
     "@checkoutShowsFinalCharge": {
-        "description": "Under Upgrade when a promo code is entered: the Stripe checkout page shows the discounted amount"
+        "description": "Under Upgrade when a promo code is entered: the Stripe checkout page shows the discounted first charge and renewal terms"
+    },
+    "planAutoRenewTermsBeforeDiscounts": "{plan} renews automatically at the standard price of {price} before discounts until you cancel in {path}.",
+    "@planAutoRenewTermsBeforeDiscounts": {
+        "description": "Beside Upgrade on the free Plans sheet when a promo code is entered: the renewal amount is the standard catalog price; a code can change it. plan = plan name (Omi Pro), price = recurring price like US$269.91/year, path = where to cancel, e.g. Settings > Plan & Usage",
+        "placeholders": {
+            "plan": {
+                "type": "String"
+            },
+            "price": {
+                "type": "String"
+            },
+            "path": {
+                "type": "String"
+            }
+        }
+    },
+    "planOfferChanged": "The price changed. Check it and try again.",
+    "@planOfferChanged": {
+        "description": "Free Plans sheet: Upgrade was tapped while the shown plan or price was changing; nothing was submitted"
     }
 }
