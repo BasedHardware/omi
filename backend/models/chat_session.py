@@ -54,12 +54,39 @@ class ChatSessionResponse(BaseModel):
             data['preview'] = None
         if data.get('updated_at') is None and data.get('created_at') is not None:
             data['updated_at'] = data['created_at']
+        elif data.get('created_at') is None and data.get('updated_at') is not None:
+            data['created_at'] = data['updated_at']
         if data.get('message_count') is None:
             data['message_count'] = len(data.get('message_ids') or [])
         if data.get('starred') is None:
             data['starred'] = False
 
         return data
+
+    @classmethod
+    def deserialize_many_safe(
+        cls,
+        records: Any,
+        on_error: Optional[Any] = None,
+    ) -> list['ChatSessionResponse']:
+        """Build ChatSessionResponse objects from raw stored records, skipping any that fail
+        validation so one malformed or legacy session record cannot 500 the chat-sessions list.
+        on_error(record, exception), when provided, is called for each skip.
+        Mirrors Message.deserialize_many_safe and FocusSession.deserialize_many_safe."""
+        if not records:
+            return []
+        parsed: list['ChatSessionResponse'] = []
+        for record in records:
+            if not isinstance(record, dict) or not record.get('id'):
+                if on_error is not None:
+                    on_error(record, ValueError('Missing session id or record is not a dict'))
+                continue
+            try:
+                parsed.append(cls.model_validate(record))
+            except Exception as exc:  # noqa: BLE001 - one bad record must not break session feed
+                if on_error is not None:
+                    on_error(record, exc)
+        return parsed
 
 
 class SaveMessageResponse(BaseModel):
