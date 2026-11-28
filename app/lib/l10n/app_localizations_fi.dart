@@ -14542,12 +14542,12 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String trialUpsellTitle(int days) {
-    return 'Sait $days päivää ilmaiseksi';
+    return 'Kokeile Omi Prota ilmaiseksi $days päivää';
   }
 
   @override
   String trialUpsellBody(int days) {
-    return '$days päivää Omi Prota meidän piikkiimme. Muistutamme ennen veloitusta. Peru milloin vain.';
+    return 'Lisää kortti aloittaaksesi. Tänään et maksa mitään. Muistutamme ennen veloitusta. Peru milloin vain.';
   }
 
   @override

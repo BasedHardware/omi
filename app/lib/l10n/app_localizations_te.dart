@@ -14599,12 +14599,12 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String trialUpsellTitle(int days) {
-    return 'మీకు $days రోజులు ఉచితం';
+    return 'Omi Proను $days రోజులు ఉచితంగా ప్రయత్నించండి';
   }
 
   @override
   String trialUpsellBody(int days) {
-    return '$days రోజుల Omi Pro మా తరఫున. ఛార్జ్‌కు ముందు గుర్తు చేస్తాం. ఎప్పుడైనా రద్దు చేయండి.';
+    return 'ప్రారంభించడానికి కార్డ్ జోడించండి. ఈరోజు మీరు ఏమీ చెల్లించరు. ఛార్జ్‌కు ముందు గుర్తు చేస్తాం. ఎప్పుడైనా రద్దు చేయండి.';
   }
 
   @override

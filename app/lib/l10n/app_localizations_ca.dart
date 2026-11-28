@@ -14611,12 +14611,12 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String trialUpsellTitle(int days) {
-    return 'T\'hem ampliat a $days dies gratis';
+    return 'Prova Omi Pro gratis durant $days dies';
   }
 
   @override
   String trialUpsellBody(int days) {
-    return '$days dies d\'Omi Pro a càrrec nostre. T\'avisarem abans de cobrar. Cancel·la quan vulguis.';
+    return 'Afegeix una targeta per començar. Avui no pagues res. T\'avisarem abans de cobrar. Cancel·la quan vulguis.';
   }
 
   @override

@@ -14652,12 +14652,12 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String trialUpsellTitle(int days) {
-    return 'Na-upgrade ka sa $days araw na libre';
+    return 'Subukan ang Omi Pro nang libre sa loob ng $days araw';
   }
 
   @override
   String trialUpsellBody(int days) {
-    return '$days araw ng Omi Pro, libre mula sa amin. Paalalahanan ka namin bago masingil. Kanselahin anumang oras.';
+    return 'Magdagdag ng card para magsimula. Wala kang babayaran ngayon. Paalalahanan ka namin bago masingil. Kanselahin anumang oras.';
   }
 
   @override

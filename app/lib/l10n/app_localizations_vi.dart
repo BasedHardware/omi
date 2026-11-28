@@ -14538,12 +14538,12 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String trialUpsellTitle(int days) {
-    return 'Bạn được nâng lên $days ngày miễn phí';
+    return 'Dùng thử Omi Pro miễn phí $days ngày';
   }
 
   @override
   String trialUpsellBody(int days) {
-    return '$days ngày Omi Pro miễn phí. Chúng tôi sẽ nhắc trước khi tính phí. Hủy bất cứ lúc nào.';
+    return 'Thêm thẻ để bắt đầu. Hôm nay bạn không phải trả gì. Chúng tôi sẽ nhắc trước khi tính phí. Hủy bất cứ lúc nào.';
   }
 
   @override

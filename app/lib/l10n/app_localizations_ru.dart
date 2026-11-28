@@ -14586,12 +14586,12 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String trialUpsellTitle(int days) {
-    return 'Вам продлили бесплатный период до $days дней';
+    return 'Попробуйте Omi Pro бесплатно $days дней';
   }
 
   @override
   String trialUpsellBody(int days) {
-    return '$days дней Omi Pro за наш счёт. Напомним перед списанием. Отмена в любой момент.';
+    return 'Чтобы начать, добавьте карту. Сегодня вы ничего не платите. Напомним перед списанием. Отмена в любой момент.';
   }
 
   @override

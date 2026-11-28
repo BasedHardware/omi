@@ -14532,12 +14532,12 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String trialUpsellTitle(int days) {
-    return 'به $days روز رایگان ارتقا یافتید';
+    return 'Omi Pro را $days روز رایگان امتحان کنید';
   }
 
   @override
   String trialUpsellBody(int days) {
-    return '$days روز Omi Pro مهمان ما. قبل از هر پرداختی یادآوری می‌کنیم. هر زمان لغو کنید.';
+    return 'برای شروع یک کارت اضافه کنید. امروز چیزی پرداخت نمی‌کنید. قبل از هر پرداختی یادآوری می‌کنیم. هر زمان لغو کنید.';
   }
 
   @override

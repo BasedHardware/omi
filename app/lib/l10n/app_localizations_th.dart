@@ -14466,12 +14466,12 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String trialUpsellTitle(int days) {
-    return 'คุณได้รับฟรี $days วัน';
+    return 'ทดลองใช้ Omi Pro ฟรี $days วัน';
   }
 
   @override
   String trialUpsellBody(int days) {
-    return 'Omi Pro ฟรี $days วัน เราจะเตือนก่อนเรียกเก็บเงิน ยกเลิกได้ทุกเมื่อ';
+    return 'เพิ่มบัตรเพื่อเริ่มต้น วันนี้คุณยังไม่ต้องจ่ายอะไร เราจะเตือนก่อนเรียกเก็บเงิน ยกเลิกได้ทุกเมื่อ';
   }
 
   @override

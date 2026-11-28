@@ -14551,12 +14551,12 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String trialUpsellTitle(int days) {
-    return 'آپ کو $days دن مفت مل گئے';
+    return 'Omi Pro کو $days دن مفت آزمائیں';
   }
 
   @override
   String trialUpsellBody(int days) {
-    return '$days دن Omi Pro ہماری طرف سے۔ کسی بھی چارج سے پہلے یاد دلائیں گے۔ کبھی بھی منسوخ کریں۔';
+    return 'شروع کرنے کے لیے کارڈ شامل کریں۔ آج آپ کچھ ادا نہیں کریں گے۔ کسی بھی چارج سے پہلے یاد دلائیں گے۔ کبھی بھی منسوخ کریں۔';
   }
 
   @override

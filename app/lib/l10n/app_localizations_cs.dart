@@ -14537,12 +14537,12 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String trialUpsellTitle(int days) {
-    return 'Získali jste $days dní zdarma';
+    return 'Vyzkoušejte Omi Pro zdarma na $days dní';
   }
 
   @override
   String trialUpsellBody(int days) {
-    return '$days dní Omi Pro na nás. Připomeneme se před účtováním. Zrušte kdykoli.';
+    return 'Pro začátek přidejte kartu. Dnes nic neplatíte. Připomeneme se před účtováním. Zrušte kdykoli.';
   }
 
   @override

@@ -17717,7 +17717,7 @@
     "@deviceOnboardingPressAgainHint": {
         "description": "Device walkthrough, Ask Omi step: PressAgainHint"
     },
-    "trialUpsellTitle": "You've been upgraded to {days} days free",
+    "trialUpsellTitle": "Try Omi Pro free for {days} days",
     "@trialUpsellTitle": {
         "description": "Pocket onboarding arm: trialUpsellTitle",
         "placeholders": {
@@ -17726,7 +17726,7 @@
             }
         }
     },
-    "trialUpsellBody": "{days} days of Omi Pro, on us. We'll remind you before anything is charged. Cancel anytime.",
+    "trialUpsellBody": "Add a card to start. You pay nothing today. We'll remind you before anything is charged. Cancel anytime.",
     "@trialUpsellBody": {
         "description": "Pocket onboarding arm: trialUpsellBody",
         "placeholders": {

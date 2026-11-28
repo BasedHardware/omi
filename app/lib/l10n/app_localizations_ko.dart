@@ -14335,12 +14335,12 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String trialUpsellTitle(int days) {
-    return '$days일 무료로 업그레이드되었어요';
+    return 'Omi Pro를 $days일 무료로 체험해 보세요';
   }
 
   @override
   String trialUpsellBody(int days) {
-    return 'Omi Pro $days일 무료. 결제 전에 알려드려요. 언제든 취소할 수 있어요.';
+    return '시작하려면 카드를 등록해 주세요. 오늘은 결제되지 않아요. 결제 전에 알려드려요. 언제든 취소할 수 있어요.';
   }
 
   @override

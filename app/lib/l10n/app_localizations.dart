@@ -25752,13 +25752,13 @@ abstract class AppLocalizations {
   /// Pocket onboarding arm: trialUpsellTitle
   ///
   /// In en, this message translates to:
-  /// **'You\'ve been upgraded to {days} days free'**
+  /// **'Try Omi Pro free for {days} days'**
   String trialUpsellTitle(int days);
 
   /// Pocket onboarding arm: trialUpsellBody
   ///
   /// In en, this message translates to:
-  /// **'{days} days of Omi Pro, on us. We\'ll remind you before anything is charged. Cancel anytime.'**
+  /// **'Add a card to start. You pay nothing today. We\'ll remind you before anything is charged. Cancel anytime.'**
   String trialUpsellBody(int days);
 
   /// Pocket onboarding arm: trialUpsellClaim

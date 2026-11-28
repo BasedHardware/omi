@@ -14585,12 +14585,12 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String trialUpsellTitle(int days) {
-    return 'ನಿಮಗೆ $days ದಿನ ಉಚಿತ ಸಿಕ್ಕಿದೆ';
+    return 'Omi Pro ಅನ್ನು $days ದಿನ ಉಚಿತವಾಗಿ ಪ್ರಯತ್ನಿಸಿ';
   }
 
   @override
   String trialUpsellBody(int days) {
-    return '$days ದಿನ Omi Pro ನಮ್ಮಿಂದ ಉಚಿತ. ಶುಲ್ಕಕ್ಕೆ ಮೊದಲು ನೆನಪಿಸುತ್ತೇವೆ. ಯಾವಾಗ ಬೇಕಾದರೂ ರದ್ದು ಮಾಡಿ.';
+    return 'ಪ್ರಾರಂಭಿಸಲು ಕಾರ್ಡ್ ಸೇರಿಸಿ. ಇಂದು ನೀವು ಏನನ್ನೂ ಪಾವತಿಸುವುದಿಲ್ಲ. ಶುಲ್ಕಕ್ಕೆ ಮೊದಲು ನೆನಪಿಸುತ್ತೇವೆ. ಯಾವಾಗ ಬೇಕಾದರೂ ರದ್ದು ಮಾಡಿ.';
   }
 
   @override

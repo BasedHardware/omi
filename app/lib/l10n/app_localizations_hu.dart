@@ -14596,12 +14596,12 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String trialUpsellTitle(int days) {
-    return '$days nap ingyen a tiéd';
+    return 'Próbáld ki az Omi Prót $days napig ingyen';
   }
 
   @override
   String trialUpsellBody(int days) {
-    return '$days nap Omi Pro, a mi vendégünk vagy. Terhelés előtt emlékeztetünk. Bármikor lemondható.';
+    return 'Az indításhoz adj meg egy kártyát. Ma nem fizetsz semmit. Terhelés előtt emlékeztetünk. Bármikor lemondható.';
   }
 
   @override

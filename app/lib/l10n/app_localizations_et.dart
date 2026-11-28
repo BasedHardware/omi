@@ -14531,12 +14531,12 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String trialUpsellTitle(int days) {
-    return 'Said $days päeva tasuta';
+    return 'Proovi Omi Pro\'d tasuta $days päeva';
   }
 
   @override
   String trialUpsellBody(int days) {
-    return '$days päeva Omi Pro meie kulul. Tuletame enne tasu võtmist meelde. Tühista igal ajal.';
+    return 'Alustamiseks lisa kaart. Täna sa midagi ei maksa. Tuletame enne tasu võtmist meelde. Tühista igal ajal.';
   }
 
   @override

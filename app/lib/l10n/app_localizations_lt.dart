@@ -14560,12 +14560,12 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String trialUpsellTitle(int days) {
-    return 'Gavote $days dienas nemokamai';
+    return 'Išbandykite Omi Pro nemokamai $days dienų';
   }
 
   @override
   String trialUpsellBody(int days) {
-    return '$days dienos Omi Pro mūsų sąskaita. Priminsime prieš nuskaitymą. Atšaukite bet kada.';
+    return 'Norėdami pradėti, pridėkite kortelę. Šiandien nieko nemokate. Priminsime prieš nuskaitymą. Atšaukite bet kada.';
   }
 
   @override

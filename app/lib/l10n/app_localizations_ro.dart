@@ -14601,12 +14601,12 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String trialUpsellTitle(int days) {
-    return 'Ai primit $days de zile gratuit';
+    return 'Încearcă Omi Pro gratuit $days de zile';
   }
 
   @override
   String trialUpsellBody(int days) {
-    return '$days de zile de Omi Pro din partea noastră. Te anunțăm înainte de orice plată. Anulezi oricând.';
+    return 'Adaugă un card ca să începi. Astăzi nu plătești nimic. Te anunțăm înainte de orice plată. Anulezi oricând.';
   }
 
   @override

@@ -14655,12 +14655,12 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String trialUpsellTitle(int days) {
-    return 'Tu passes à $days jours gratuits';
+    return 'Essaie Omi Pro gratuitement pendant $days jours';
   }
 
   @override
   String trialUpsellBody(int days) {
-    return '$days jours d\'Omi Pro offerts. On te prévient avant tout prélèvement. Annulable à tout moment.';
+    return 'Ajoute une carte pour commencer. Tu ne paies rien aujourd\'hui. On te prévient avant tout prélèvement. Annulable à tout moment.';
   }
 
   @override

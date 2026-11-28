@@ -14573,12 +14573,12 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String trialUpsellTitle(int days) {
-    return 'Anda dapat $days hari percuma';
+    return 'Cuba Omi Pro percuma selama $days hari';
   }
 
   @override
   String trialUpsellBody(int days) {
-    return '$days hari Omi Pro percuma daripada kami. Kami ingatkan sebelum dicaj. Batal bila-bila masa.';
+    return 'Tambah kad untuk bermula. Anda tidak membayar apa-apa hari ini. Kami ingatkan sebelum dicaj. Batal bila-bila masa.';
   }
 
   @override

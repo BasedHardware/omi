@@ -14310,12 +14310,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String trialUpsellTitle(int days) {
-    return '已升级为 $days 天免费';
+    return '免费试用 Omi Pro $days 天';
   }
 
   @override
   String trialUpsellBody(int days) {
-    return 'Omi Pro 免费 $days 天。扣费前会提醒你。随时可取消。';
+    return '添加银行卡即可开始。今天无需付款。扣费前会提醒你。随时可取消。';
   }
 
   @override

@@ -14432,12 +14432,12 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String trialUpsellTitle(int days) {
-    return 'שודרגת ל‑$days ימים חינם';
+    return 'נסו את Omi Pro בחינם ל‑$days ימים';
   }
 
   @override
   String trialUpsellBody(int days) {
-    return '$days ימים של Omi Pro עלינו. נזכיר לך לפני כל חיוב. ביטול בכל עת.';
+    return 'כדי להתחיל, הוסיפו כרטיס. היום לא תשלמו כלום. נזכיר לכם לפני כל חיוב. ביטול בכל עת.';
   }
 
   @override
