@@ -85,6 +85,8 @@ RETIRING_MODULES: dict[str, str] = {
     'utils.sync.empty_recovery': 'C11',
     'utils.sync.empty_recovery_intent': 'C11',
     'database.sync_empty_recovery': 'C11',
+    # Cap-hold recovery's segment core, moved out of the deleted pipeline.py; the C11 rehome deletes it.
+    'utils.sync.legacy_segment_core': 'C11',
 }
 
 # Retiring modules are frozen (SCA-2965): each carries the RETIRING banner, and a file
@@ -100,6 +102,7 @@ RETIRING_LINE_CEILINGS: dict[str, int] = {
     'utils.sync.empty_recovery': 44,
     'utils.sync.empty_recovery_intent': 29,
     'database.sync_empty_recovery': 40,
+    'utils.sync.legacy_segment_core': 1929,
 }
 RETIRING_BANNER = '# RETIRING: legacy sync is dark in production'
 

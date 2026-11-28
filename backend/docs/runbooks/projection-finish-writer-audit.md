@@ -85,8 +85,8 @@ The registered standalone Cloud Run job entrypoints are messaging maintenance
 (`scripts/messaging_operations.py`), x-connector sync (`modal/x_connector_sync_job.py`),
 frame-request retention, day-3 re-engagement and notifications. None defines a
 batch-result projection_state writer or constructs Projector/ProjectionStore.
-The isolated sync-backfill `utils.sync.worker_job` and record-seal worker/sweep/
-repair entrypoints also introduce no direct finish-state writer: they process
+The record-seal worker/sweep/repair entrypoints also introduce no direct
+finish-state writer: they process
 or admit work and leave result projection to the shared worker RPC/serving paths.
 The GPU batch runtime constructs `Pump(Scheduler(...))` directly
 (`diarizer/batch_pipeline_runtime.py:256`): publication calls Scheduler.complete

@@ -49,13 +49,13 @@ async def test_router_never_creates_a_legacy_job_outside_on(monkeypatch, mode):
     try:
         monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: mode)
         monkeypatch.setattr(legacy_dark, 'read_ledger_row', lambda uid, content_id: None)
-        module.create_sync_job = MagicMock()
+        # Legacy admission is deleted: nothing here can create a legacy job.
+        assert not hasattr(module, 'create_sync_job')
         response = await _upload(module, BytesIO)
         assert response.status_code == 409
         assert json.loads(response.body)['code'] == 'sync_content_in_progress'
         assert json.loads(response.body)['job_id'] is None
         assert int(response.headers['retry-after']) >= 60
-        module.create_sync_job.assert_not_called()
     finally:
         _restore(saved)
 
@@ -69,11 +69,11 @@ async def test_router_acknowledges_completed_legacy_content_in_dark(monkeypatch)
         monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: DARK)
         row = {'status': 'completed', 'result': COMPLETED, 'job_id': 'legacy-job'}
         monkeypatch.setattr(legacy_dark, 'read_ledger_row', lambda uid, content_id: row)
-        module.create_sync_job = MagicMock()
+        # Legacy admission is deleted: nothing here can create a legacy job.
+        assert not hasattr(module, 'create_sync_job')
         response = await _upload(module, BytesIO)
         assert response.status_code == 202
         assert json.loads(response.body)['status'] == 'completed'
-        module.create_sync_job.assert_not_called()
     finally:
         _restore(saved)
 
@@ -93,11 +93,11 @@ async def test_router_acknowledges_a_legacy_final_pass_owner_without_a_ledger_ro
         monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: mode)
         monkeypatch.setattr(legacy_dark, 'read_ledger_row', lambda uid, content_id: None)
         module.registered_record_response = AsyncMock(return_value=RecordUploadRoute.LEGACY)
-        module.create_sync_job = MagicMock()
+        # Legacy admission is deleted: nothing here can create a legacy job.
+        assert not hasattr(module, 'create_sync_job')
         response = await _upload(module, BytesIO)
         assert response.status_code == 409
         assert json.loads(response.body)['code'] == 'sync_content_in_progress'
-        module.create_sync_job.assert_not_called()
     finally:
         _restore(saved)
 
@@ -120,13 +120,13 @@ async def test_router_admits_a_rehomed_final_pass_owner_to_batch(monkeypatch, mo
         module.accept_batch_upload = AsyncMock(
             return_value=module.JSONResponse(status_code=202, content={'job_id': 'bp_1', 'status': 'queued'})
         )
-        module.create_sync_job = MagicMock()
+        # Legacy admission is deleted: nothing here can create a legacy job.
+        assert not hasattr(module, 'create_sync_job')
         response = await _upload(module, BytesIO)
         assert response.status_code == 202
         assert module.registered_record_response.await_args.kwargs['legacy_mode'] is mode
         module.accept_batch_upload.assert_awaited_once()
         assert module.accept_batch_upload.await_args.kwargs['policy'].batch_enabled is True
-        module.create_sync_job.assert_not_called()
     finally:
         _restore(saved)
 
@@ -180,10 +180,10 @@ async def test_router_never_admits_legacy_across_on_then_draining_reads(monkeypa
         reads = iter([ON, DRAINING])
         monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: next(reads))
         monkeypatch.setattr(legacy_dark, 'read_ledger_row', lambda uid, content_id: None)
-        module.create_sync_job = MagicMock()
+        # Legacy admission is deleted: nothing here can create a legacy job.
+        assert not hasattr(module, 'create_sync_job')
         response = await _upload(module, BytesIO)
         assert response.status_code == 409
-        module.create_sync_job.assert_not_called()
     finally:
         _restore(saved)
 

@@ -25,6 +25,15 @@
       "retire_in": "C11",
       "importers": {}
     },
+    "utils.sync.legacy_segment_core": {
+      "retire_in": "C11",
+      "importers": {
+        "scripts/cap_hold_durability_emulator_test.py": "Emulator proof of cap-hold durability drives the retained segment core it protects; retires with the C11 cap-hold rehome.",
+        "testing/pipeline_lab/lanes/sync.py": "Offline sync lane replays the cap-hold segment path the retained core still serves; retires with the C11 cap-hold rehome.",
+        "utils/sync/cap_hold_recovery.py": "Spend-started cap-hold recovery finalizes held segments through this core; the C11 rehome into batch admission removes the edge.",
+        "utils/sync/cap_recovery_audio.py": "Cap-hold recovery audio transcribes held segments through process_segment here; the C11 rehome into batch admission removes the edge."
+      }
+    },
     "utils.sync.safety_wal_coverage": {
       "retire_in": "C11",
       "importers": {
@@ -33,9 +42,7 @@
     },
     "utils.sync.safety_wal_metrics": {
       "retire_in": "C11",
-      "importers": {
-        "utils/sync/legacy_segment_core.py": "Retained cap-hold segment core (moved out of the deleted pipeline.py in C11) keeps the safety-WAL suppression counters it already emitted; both retire with the cap-hold rehome into batch admission."
-      }
+      "importers": {}
     },
     "utils.sync.wal_audio_coverage": {
       "retire_in": "C11",
