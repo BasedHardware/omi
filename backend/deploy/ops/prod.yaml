@@ -108,10 +108,9 @@ cloud_run:
     max_instances: {owner: redis_guard, floor: 8, ceiling: 40}
   backend-integration:
     env:
-      # Margin-40 O1 inverse, 2026-11-17: preserve restored cadence; O3 stays 16.
-      # The former 100/20 source is held. A new lead/Release ruling must supersede this.
+      # SCA-4928: pin the admitted Integration 200/20/class16 cadence.
       BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS: '200'
-      BATCH_PIPELINE_SERVING_TICK_SECONDS: '10'
+      BATCH_PIPELINE_SERVING_TICK_SECONDS: '20'
       # SCA-3120/SCA-4084, 2026-11-26: slots stay at 4. The 20:46-21:46Z window of
       # slots 3 + tick 20 s breached the completion guard (completions per input
       # unit -8%, limit -5%), and Release returned serving to 4. A further step
