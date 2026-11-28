@@ -1,4 +1,4 @@
-"""Account-gate contention is a 409 with Retry-After, never a 500."""
+"""Account-gate contention is retryable (409/503 by route) with Retry-After."""
 
 from types import SimpleNamespace
 

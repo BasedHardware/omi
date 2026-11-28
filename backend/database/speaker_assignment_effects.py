@@ -24,6 +24,10 @@ from utils.person_evidence import person_updates_for_assignment
 from utils.speakers import auto_enroll
 
 
+class AssignmentInvariantError(RuntimeError):
+    """A new-person assignment violates an internal transactional invariant."""
+
+
 @dataclass
 class AssignmentBookkeeping:
     enabled: bool = True
@@ -108,7 +112,7 @@ def persist_assignment_effects(
         new_person_payload = {**person_to_create, 'is_user_created': True}
         new_person_id = new_person_payload.get('id')
         if not isinstance(new_person_id, str) or not new_person_id or new_person_id != person_id:
-            raise ValueError('New person must match the assigned person id')
+            raise AssignmentInvariantError('New person must match the assigned person id')
     people = {}
     for pid in previous | {p for p in (person_id, rejected_person_id) if p}:
         pref = user_ref.collection('people').document(pid)
@@ -116,7 +120,7 @@ def persist_assignment_effects(
         doc = snapshot.to_dict()
         if pid == new_person_id:
             if snapshot.exists:
-                raise ValueError('New person id already exists')
+                raise AssignmentInvariantError('New person id already exists')
             doc = new_person_payload
         people[pid] = (pref, doc)
     if any(not people[pid][1] for pid in (person_id, rejected_person_id) if pid):

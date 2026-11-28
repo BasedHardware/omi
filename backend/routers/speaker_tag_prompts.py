@@ -77,8 +77,8 @@ def answer_speaker_tag_prompt(
     try:
         return service.apply_answer(uid, data, schedule=background_tasks.add_task)
     except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as error:
-        # apply_answer writes speaker assignments through the account fence; while
-        # Clients reserve 409 for stale prompts; keep a gated answer retryable.
+        # The fence keeps writes exclusive. Gate contention is retryable, and
+        # clients reserve 409 for stale prompts.
         raise account_gate_busy_http_exception(status_code=503) from error
     except service.TagPromptInvalid as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
