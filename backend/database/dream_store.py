@@ -13,6 +13,7 @@ from uuid import uuid4
 from typing import Any
 
 from google.cloud import firestore
+from google.api_core.exceptions import DeadlineExceeded as FirestoreDeadlineExceeded
 
 from config.dream_agent import (
     Caps,
@@ -29,6 +30,12 @@ from config.plan_catalog import PAID_PLAN_IDS
 from database import firestore_transaction_retry
 from database.dream_history import review_id
 from database._client import get_firestore_client
+from database.firestore_retry import FIRESTORE_NO_RETRY
+from utils.other.list_budget import (
+    ListReadBudgetExhausted,
+    budgeted_document_get,
+    budgeted_stream_list,
+)
 
 
 def _review_store():
@@ -128,11 +135,26 @@ def mark_dirty(uid, refs, *, canary=False, firestore_client=None):
     return True
 
 
-def dirty_count(uid, *, transaction=None, firestore_client=None):
+def dirty_count(uid, *, transaction=None, firestore_client=None, budget=None):
     # Aggregation reads index entries, not every document's contents. Under the
     # 500-ref cap it costs one billed read and avoids a per-write state transaction.
     query = state_ref(client(firestore_client), uid).collection('dirty')
-    return int(query.count().get(transaction=transaction)[0][0].value)
+    aggregation = query.count()
+    if budget is None:
+        return int(aggregation.get(transaction=transaction)[0][0].value)
+    try:
+        rows = aggregation.get(transaction=transaction, timeout=budget.rpc_timeout(), retry=FIRESTORE_NO_RETRY)
+    except FirestoreDeadlineExceeded as exc:
+        budget.mark_exhausted('deadline')
+        raise ListReadBudgetExhausted('deadline') from exc
+    count = int(rows[0][0].value)
+    try:
+        budget.charge(1)
+    except ListReadBudgetExhausted:
+        # The aggregation already crossed the wire; keep its count and let the
+        # response carry the truncation header.
+        pass
+    return count
 
 
 def dirty_refs(uid, *, limit=DIRTY_LIMIT, newest=True, transaction=None, firestore_client=None):
@@ -685,12 +707,23 @@ def finish(
     report.update(complete(database.transaction()))
 
 
-def own_runs(uid, *, limit=10, firestore_client=None):
+def own_runs(uid, *, limit=10, firestore_client=None, budget=None):
+    """The owner's newest runs, materialized under the request's read budget.
+
+    Without ``budget`` this is the released one-stream read. With one, the
+    stream runs at the budget's per-RPC timeout with no retry, every fetched
+    row is charged, and a blocked or slow stream raises
+    :class:`ListReadBudgetExhausted` with the rows already fetched attached as
+    ``partial_snapshots`` instead of hanging the route to its cutoff.
+    """
     query = client(firestore_client).collection('users').document(uid).collection('dream_runs')
-    return [
-        (s.id, s.to_dict())
-        for s in query.order_by('created_at', direction='DESCENDING').limit(max(1, min(limit, 20))).stream()
-    ]
+    query = query.order_by('created_at', direction='DESCENDING').limit(max(1, min(limit, 20)))
+    try:
+        return [(s.id, s.to_dict()) for s in budgeted_stream_list(query, budget)]
+    except ListReadBudgetExhausted as exc:
+        # A stream cut mid-page keeps its honest prefix in the caller's shape.
+        setattr(exc, 'partial_runs', [(s.id, s.to_dict()) for s in getattr(exc, 'partial_snapshots', [])])
+        raise
 
 
 def own_run(uid, run_id, *, firestore_client=None):
@@ -705,8 +738,9 @@ def own_run(uid, run_id, *, firestore_client=None):
     )
 
 
-def own_state(uid, *, firestore_client=None):
-    return state_ref(client(firestore_client), uid).get().to_dict() or {}
+def own_state(uid, *, firestore_client=None, budget=None):
+    snapshot = budgeted_document_get(state_ref(client(firestore_client), uid), budget)
+    return snapshot.to_dict() or {}
 
 
 def vocabulary(uid, *, firestore_client=None):

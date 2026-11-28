@@ -312,7 +312,7 @@ def test_memory_lock_releases_through_real_reader_and_upgrade_allows_same_answer
     locked = False
     monkeypatch.setattr(reads, 'read_canonical_memory_item', lambda *a, **kw: None)
 
-    def fetch(self, uid, key):
+    def fetch(self, uid, key, **kwargs):
         assert (uid, key) == (UID, 'toy')
         if locked and lock == 'paywall':
             raise HTTPException(402, 'Paid plan required')
@@ -501,7 +501,7 @@ def test_legacy_memory_row_gate_releases_unless_user_rejected(harness, monkeypat
     )
     current = memory
     monkeypatch.setattr(reads, 'read_canonical_memory_item', lambda *a, **kw: None)
-    monkeypatch.setattr(reads.MemoryService, 'fetch', lambda *a: current)
+    monkeypatch.setattr(reads.MemoryService, 'fetch', lambda *a, **kw: current)
     item_id = offer_vocabulary(client, {'memories/toy': reads.read_record(UID, 'memories/toy')})
     changes = {
         'user_rejected': {'user_review': False},

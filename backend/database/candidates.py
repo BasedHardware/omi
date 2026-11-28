@@ -20,6 +20,7 @@ from database.firestore_index_registry import CANDIDATES_COMPATIBILITY_QUERY
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict, parse_snapshots
 from database.summary_task_links import read_summary_task_row, SummaryTaskConflictError, SummaryTaskNotFoundError
+from utils.other.list_budget import ListReadBudget, budgeted_document_get
 from models.action_item import EvidenceRef, TaskChangePayload, TaskCreatePayload, TaskOwner, TaskPriority, TaskStatus
 from models.candidate import (
     CandidateAction,
@@ -731,8 +732,8 @@ def create_candidate(
     return run_with_transaction_contention_retry(db.transaction, apply, operation_name='candidate_create')
 
 
-def get_candidate(uid: str, candidate_id: str) -> Optional[CandidateRecord]:
-    snapshot = _candidate_ref(uid, candidate_id).get()
+def get_candidate(uid: str, candidate_id: str, *, budget: Optional[ListReadBudget] = None) -> Optional[CandidateRecord]:
+    snapshot = budgeted_document_get(_candidate_ref(uid, candidate_id), budget)
     if not snapshot.exists:
         return None
     return parse_snapshot_or_none(CandidateRecord, snapshot)

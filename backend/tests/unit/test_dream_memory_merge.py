@@ -168,6 +168,6 @@ def test_review_change_routes_merge_undo_to_merge_journal(monkeypatch):
 
 def test_dream_reads_do_not_surface_archived_canonical_items(monkeypatch):
     archived = memory('archived', 'Synthetic private archive').model_copy(update={'tier': MemoryTier.archive})
-    monkeypatch.setattr(dream_reads, 'read_canonical_memory_item', lambda *a: archived)
+    monkeypatch.setattr(dream_reads, 'read_canonical_memory_item', lambda *a, **kw: archived)
     monkeypatch.setattr(dream_reads, 'memory_item_to_memorydb', lambda *a: pytest.fail('archive projected'))
     assert dream_reads.read_record(UID, 'memory_items/archived') is None

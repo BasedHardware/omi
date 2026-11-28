@@ -352,6 +352,10 @@ def budgeted_stream_list(query: Any, budget: Optional[ListReadBudget]) -> List[A
         # Test fakes predating the budget seam do not accept a timeout kwarg;
         # the deadline still bites on the next charge/check.
         iterator = query.stream()
+    except _FirestoreDeadlineExceeded as exc:
+        # A client that starts the RPC eagerly raises here instead of mid-iteration.
+        budget.mark_exhausted('deadline')
+        raise ListReadBudgetExhausted('deadline') from exc
     docs: List[Any] = []
     exhausted: Optional[_FirestoreDeadlineExceeded] = None
     try:
@@ -415,9 +419,17 @@ def budgeted_get_all(
     return snapshots
 
 
-def budgeted_document_get(reference: Any, budget: Optional[ListReadBudget], *, transaction: Any = None) -> Any:
+def budgeted_document_get(
+    reference: Any,
+    budget: Optional[ListReadBudget],
+    *,
+    transaction: Any = None,
+    field_paths: Optional[List[str]] = None,
+) -> Any:
     """``reference.get()`` under the budget."""
-    read_options = {'transaction': transaction} if transaction is not None else {}
+    read_options: dict[str, Any] = {'transaction': transaction} if transaction is not None else {}
+    if field_paths is not None:
+        read_options['field_paths'] = field_paths
     if budget is None:
         return reference.get(**read_options)
     timeout = budget.rpc_timeout()
@@ -469,6 +481,9 @@ def budgeted_stream_iter(
         except TypeError:
             # Test fakes predating the budget seam do not accept a timeout kwarg.
             iterator = query.stream()
+    except _FirestoreDeadlineExceeded as exc:
+        budget.mark_exhausted('deadline')
+        raise ListReadBudgetExhausted('deadline') from exc
     iterator = iter(iterator)
     emitted = False
     try:

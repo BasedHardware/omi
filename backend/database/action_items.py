@@ -60,7 +60,7 @@ from ._client import db, get_firestore_client
 from utils.observability.fallback import record_fallback
 from utils.observability.external_lists import observe_action_items_rows
 from utils.observability.firestore_request_reads import ReadComponent, read_component
-from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, budgeted_stream_iter
+from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, budgeted_document_get, budgeted_stream_iter
 
 logger = logging.getLogger(__name__)
 
@@ -341,20 +341,23 @@ def create_action_items_batch(
 # *****************************
 
 
-def get_action_item(uid: str, action_item_id: str) -> Optional[Dict[str, Any]]:
+def get_action_item(
+    uid: str, action_item_id: str, *, budget: Optional[ListReadBudget] = None
+) -> Optional[Dict[str, Any]]:
     """
     Get a single action item by ID.
 
     Args:
         uid: User ID
         action_item_id: Action item ID
+        budget: request read budget; the read then takes its per-RPC timeout
 
     Returns:
         Action item data or None if not found
     """
     user_ref = db.collection('users').document(uid)
     action_item_ref = user_ref.collection(action_items_collection).document(action_item_id)
-    doc = action_item_ref.get()
+    doc = budgeted_document_get(action_item_ref, budget)
 
     if not doc.exists:
         return None

@@ -100,7 +100,12 @@ def entries():
             domains={'after': [None, 'one'], 'limit': [1, 100]},
             neutrals={'transaction': (None, 'transaction does not change query shape')},
         ),
-        DriverEntry('database.dream_store.own_runs', base={'uid': UID}, domains={'limit': [1, 10, 20]}),
+        DriverEntry(
+            'database.dream_store.own_runs',
+            base={'uid': UID},
+            domains={'limit': [1, 10, 20]},
+            neutrals={'budget': (None, 'RPC timeout and read accounting only')},
+        ),
         DriverEntry(
             'database.dream_store.acquire',
             base={'uid': UID},
@@ -119,7 +124,10 @@ def entries():
         DriverEntry(
             'database.dream_store.dirty_count',
             base={'uid': UID},
-            neutrals={'transaction': (None, 'transaction binding does not change query shape')},
+            neutrals={
+                'transaction': (None, 'transaction binding does not change query shape'),
+                'budget': (None, 'RPC timeout and read accounting only'),
+            },
         ),
         DriverEntry(
             'database.dream_store.mark_dirty',

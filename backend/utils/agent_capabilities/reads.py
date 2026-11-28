@@ -4,6 +4,7 @@ from utils.conversations.layer import read_product as read_product_conversation
 from datetime import datetime, timezone
 import copy
 import zlib
+from typing import Any
 
 from fastapi import HTTPException
 from database import conversations, action_items, users, candidates
@@ -79,8 +80,18 @@ def search_hydration_unavailable(error):
     return not unavailable_is_transient(error)
 
 
-def read_record(uid, ref, *, control_cache=None, diagnostics=None, require_available=False):
+def read_record(uid, ref, *, control_cache=None, diagnostics=None, require_available=False, budget=None):
+    """One owner-scoped record, at most one document read.
+
+    With a request ``budget`` the read runs at its per-RPC timeout with no
+    retry and is charged to it, so a blocked read stops the caller's sequence
+    at the budget deadline instead of holding the route to its cutoff.
+    """
     control_cache = {} if control_cache is None else control_cache
+    # Unbudgeted callers (Review, direct reads) keep the released call shape, so
+    # the seam stays compatible with their fakes; a budget is forwarded only
+    # when the Dream path supplies one.
+    budget_kwargs: dict[str, Any] = {'budget': budget} if budget is not None else {}
     collection, separator, key = ref.partition('/')
     if not separator or '/' in key or not key or collection not in READ_COLLECTIONS:
         raise ValueError('Invalid dream read reference')
@@ -88,7 +99,7 @@ def read_record(uid, ref, *, control_cache=None, diagnostics=None, require_avail
         # One full owner-scoped document read, no photo subcollection and no
         # metadata projection. Verify the blob before the tolerant product
         # decoder can silently replace corrupt/wrong-key speech with [].
-        raw = read_product_conversation(conversations.get_conversation_raw_snapshot, uid, key)
+        raw = read_product_conversation(conversations.get_conversation_raw_snapshot, uid, key, **budget_kwargs)
         if not raw or not conversations.is_visible_conversation(raw):
             if require_available and conversations.is_visible_conversation(raw, include_discarded=True):
                 raise AgentRecordUnavailable('Dream conversation temporarily hidden')
@@ -112,40 +123,49 @@ def read_record(uid, ref, *, control_cache=None, diagnostics=None, require_avail
         row.setdefault('id', key)
         return row
     if collection in {'memories', 'memory_items'}:
-        return _read_memory_record(uid, key, require_available=require_available)
+        return _read_memory_record(uid, key, require_available=require_available, **budget_kwargs)
     if collection in {'action_items', 'candidates'}:
         if 'generation' not in control_cache:
-            control_cache['generation'] = get_task_workflow_control(uid).account_generation
+            control_cache['generation'] = get_task_workflow_control(uid, **budget_kwargs).account_generation
     if collection == 'action_items':
-        row = action_items.get_action_item(uid, key)
+        row = action_items.get_action_item(uid, key, **budget_kwargs)
         generation = control_cache['generation']
         return row if row and row.get('account_generation', 0) == generation and not row.get('deleted') else None
     if collection == 'candidates':
-        row = candidates.get_candidate(uid, key)
+        row = candidates.get_candidate(uid, key, **budget_kwargs)
         if row and row.account_generation == control_cache['generation'] and row.status.value == 'pending':
             return row.model_dump(mode='python')
         return None
     if collection == 'people':
-        row = users.get_person(uid, key)
+        row = users.get_person(uid, key, **budget_kwargs)
         return {**row, 'entity_id': 'person:' + key, 'type': 'person'} if row else None
     if collection in {'knowledge_nodes', 'workstreams'}:
-        return resolve_entity(uid, key)
+        return resolve_entity(uid, key, **budget_kwargs)
     return None
 
 
-def _read_memory_record(uid, key, *, require_available=False):
+def _read_memory_record(uid, key, *, require_available=False, budget=None):
     """Owner-visible memory, with explicit temporary unavailability for Review.
 
     Review releases by default. Only the explicit terminal exclusions return None;
     ordinary retrieval continues to omit all unavailable rows.
     Store faults stay exceptions for every caller.
+
+    Under a request ``budget`` the canonical memory document — the one read a
+    Dream-eligible owner's memory target takes — runs at the budget's per-RPC
+    timeout. The same read also decides whether the pre-canonical fallback is
+    admitted, so a canonical miss never re-reads the document; the fallback's
+    own receipt, override and historical reads take the budget too.
     """
+    budget_check = budget.check if budget is not None else None
+    budget_kwargs: dict[str, Any] = {'budget': budget} if budget is not None else {}
     try:
-        canonical = (
-            read_canonical_memory_item(uid, key, include_inactive=True)
-            if require_available
-            else read_canonical_memory_item(uid, key)
-        )
+        if budget_check is not None:
+            budget_check()
+        # One read serves both the item and the absence decision. The default
+        # visibility filter below already rejects a non-active row, so an
+        # inactive canonical item never admits the historical fallback.
+        canonical = read_canonical_memory_item(uid, key, include_inactive=True, **budget_kwargs)
         if canonical:
             # This is the complete terminal allowlist for canonical memory evidence.
             if require_available and (
@@ -161,7 +181,13 @@ def _read_memory_record(uid, key, *, require_available=False):
                 if require_available:
                     raise AgentRecordUnavailable('Dream memory temporarily unavailable')
                 return None
-        row = memory_item_to_memorydb(canonical) if canonical else MemoryService().fetch(uid, key)
+        if budget_check is not None:
+            budget_check()
+        row = (
+            memory_item_to_memorydb(canonical)
+            if canonical
+            else MemoryService().fetch(uid, key, canonical_absent=True, **budget_kwargs)
+        )
     except HTTPException as exc:
         if require_available and exc.status_code == 402:
             raise AgentRecordUnavailable('Dream memory locked') from exc
