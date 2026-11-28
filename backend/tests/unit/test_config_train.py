@@ -46,14 +46,13 @@ def test_fresh_queue_capacity_keeps_concurrency_and_retry_ownership():
 
 
 @pytest.mark.parametrize(
-    'environment,service,tick',
-    [('prod', 'backend-integration', '20'), ('staging', 'backend-integration-staging', '10')],
+    'environment,service', [('prod', 'backend-integration'), ('staging', 'backend-integration-staging')]
 )
-def test_integration_cadence_is_pinned_only_on_its_ops_service(environment, service, tick):
+def test_restored_integration_cadence_is_pinned_only_on_its_ops_service(environment, service):
     services = yaml.safe_load((BACKEND / f'deploy/ops/{environment}.yaml').read_text())['cloud_run']
     expected = {
         'BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS': '200',
-        'BATCH_PIPELINE_SERVING_TICK_SECONDS': tick,
+        'BATCH_PIPELINE_SERVING_TICK_SECONDS': '10',
         'BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT': '16',
     }
     assert service in services
@@ -285,13 +284,10 @@ def test_staging_mirrors_prod_except_names_and_intentional_env_and_capacity_dive
         assert cap not in twin.env
         if svc.name == 'backend-integration':
             assert shared_env.pop(cap) == '8'
-            tick = 'BATCH_PIPELINE_SERVING_TICK_SECONDS'
-            assert (shared_env[tick], twin.env[tick]) == ('20', '10')
-            shared_env[tick] = '10'
         else:
             assert cap not in shared_env
         assert set(twin.env) == set(shared_env)
-        # Queue names carry the staging- prefix; the remaining shared values are identical.
+        # Queue names carry the staging- prefix; every shared ops value is identical.
         assert all(twin.env[k] == (f'staging-{v}' if k.endswith('_QUEUE') else v) for k, v in shared_env.items())
         assert (svc.memory is None) == (twin.memory is None)
         # Scaling (replica counts) is on contract (i)'s staging allowlist; only env must mirror.
