@@ -199,11 +199,22 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
         children: [
           SizedBox(width: 24, height: 24, child: FaIcon(icon, color: OmiColors.textTertiary, size: 18)),
           const SizedBox(width: OmiSpacing.md),
-          Expanded(child: Text(label, style: OmiType.body)),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: 6),
-            decoration: BoxDecoration(color: chipColor ?? OmiColors.surface2, borderRadius: OmiRadius.pillAll),
-            child: Text(version, style: OmiType.footnote.copyWith(fontWeight: FontWeight.w500)),
+          // Label and version share the row; the version drops below when large text needs the width.
+          Expanded(
+            child: Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: OmiSpacing.sm,
+              runSpacing: OmiSpacing.xs,
+              children: [
+                Text(label, style: OmiType.body),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: 6),
+                  decoration: BoxDecoration(color: chipColor ?? OmiColors.surface2, borderRadius: OmiRadius.pillAll),
+                  child: Text(version, style: OmiType.footnote.copyWith(fontWeight: FontWeight.w500)),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -627,6 +638,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
             label: context.l10n.updateGuide,
             leading: const FaIcon(FontAwesomeIcons.circleQuestion),
             expand: true,
+            maxLines: null,
             onPressed: () => IntercomManager.instance.displayFirmwareUpdateArticle(),
           ),
         ],

@@ -26,6 +26,36 @@ class DeviceUtils {
   /// The firmware lookup's answer when the server has nothing newer: the device runs the latest release.
   static const Map<String, dynamic> firmwareUpToDate = {'up_to_date': true};
 
+  static bool isFirmwareUpToDate(Map latestFirmwareDetails) => latestFirmwareDetails['up_to_date'] == true;
+
+  /// The OpenGlass OTA release for a firmware lookup: the release when it has a version and a download URL,
+  /// `{}` when the lookup confirmed nothing newer (clears a stale offer), or null when the lookup has no
+  /// installable release (keep what is known).
+  static Map<String, dynamic>? openGlassOtaRelease(Map latestFirmwareDetails) {
+    if (isFirmwareUpToDate(latestFirmwareDetails)) return {};
+    final version = latestFirmwareDetails['version']?.toString() ?? '';
+    final downloadUrl = latestFirmwareDetails['zip_url']?.toString() ?? '';
+    if (version.isEmpty || downloadUrl.isEmpty) return null;
+    final changelog = latestFirmwareDetails['changelog'];
+    return {
+      'version': version.startsWith('v') ? version.substring(1) : version,
+      'download_url': downloadUrl,
+      'changelog': changelog is List ? changelog.join('\n') : (changelog?.toString() ?? ''),
+    };
+  }
+
+  /// Whether the OpenGlass OTA page may offer an install of [release] over [currentVersion]: only a release
+  /// with a version and a download URL that is newer (or differs, when either version does not parse).
+  static bool openGlassOffersUpdate({required String currentVersion, required Map release}) {
+    final latest = release['version'];
+    final downloadUrl = release['download_url'];
+    if (latest is! String || latest.isEmpty || downloadUrl is! String || downloadUrl.isEmpty) return false;
+    final current = _tryParseVersion(currentVersion);
+    final parsedLatest = _tryParseVersion(latest);
+    if (current == null || parsedLatest == null) return currentVersion != latest;
+    return parsedLatest > current;
+  }
+
   /// Closed, analysis-safe hardware family used by product telemetry.
   static String analyticsHardwareFamily(BtDevice device) {
     switch (device.type) {
@@ -94,7 +124,7 @@ class DeviceUtils {
         version: '',
       );
     }
-    if (latestFirmwareDetails['up_to_date'] == true) {
+    if (isFirmwareUpToDate(latestFirmwareDetails)) {
       return (
         status: FirmwareUpdateCheck.upToDate,
         message: 'You are already on the latest version',

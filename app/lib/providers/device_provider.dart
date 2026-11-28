@@ -1752,22 +1752,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         }
 
         final latestFirmwareVersion = version.isNotEmpty ? version : message;
-        Map<String, dynamic>? latestOmiGlassFirmwareDetails;
-
-        // For OmiGlass devices, populate the firmware details for the OTA UI
-        if (_isOmiGlassDevice && firmwareDetails.isNotEmpty) {
-          // Map backend response to OmiGlass OTA UI expected format
-          final versionStr = firmwareDetails['version']?.toString() ?? '';
-          final cleanVersion = versionStr.startsWith('v') ? versionStr.substring(1) : versionStr;
-          final changelog = firmwareDetails['changelog'];
-          final changelogStr = changelog is List ? changelog.join('\n') : (changelog?.toString() ?? '');
-
-          latestOmiGlassFirmwareDetails = {
-            'version': cleanVersion,
-            'download_url': firmwareDetails['zip_url'] ?? '',
-            'changelog': changelogStr,
-          };
-        }
+        // OmiGlass OTA UI release: set only from an installable release, cleared on a confirmed no-update
+        final latestOmiGlassFirmwareDetails =
+            _isOmiGlassDevice ? DeviceUtils.openGlassOtaRelease(firmwareDetails) : null;
 
         // Fetch latest stable version for rollback comparison
         String? latestStableFirmwareVersion;

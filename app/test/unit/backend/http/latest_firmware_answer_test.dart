@@ -50,4 +50,49 @@ void main() {
     ));
     expect(answer!['version'], '3.0.22');
   });
+
+  group('OpenGlass OTA', () {
+    const noNewer = 'No suitable firmware update found for your device version.';
+
+    test('the "no suitable update" 404 offers no install and clears a stale offer', () async {
+      final answer = latestFirmwareAnswer(_detail(404, noNewer))!;
+
+      final check = await DeviceUtils.checkFirmwareUpdate(currentFirmware: '2.3.2', latestFirmwareDetails: answer);
+      expect(check.status, FirmwareUpdateCheck.upToDate);
+      final release = DeviceUtils.openGlassOtaRelease(answer);
+      expect(release, isEmpty, reason: 'the provider replaces any earlier release with nothing');
+      expect(DeviceUtils.openGlassOffersUpdate(currentVersion: '2.3.2', release: release!), isFalse);
+    });
+
+    test('a release without a version or download URL offers no install', () {
+      expect(DeviceUtils.openGlassOtaRelease({'version': '2.4.0', 'zip_url': ''}), isNull);
+      expect(DeviceUtils.openGlassOtaRelease({'version': '', 'zip_url': 'https://example.test/g.zip'}), isNull);
+      expect(DeviceUtils.openGlassOtaRelease({}), isNull, reason: 'a failed check keeps what is known');
+      for (final release in [
+        {'version': '', 'download_url': '', 'changelog': ''},
+        {'version': '2.4.0', 'download_url': ''},
+        {'version': '', 'download_url': 'https://example.test/g.zip'},
+        <String, dynamic>{},
+      ]) {
+        expect(DeviceUtils.openGlassOffersUpdate(currentVersion: '2.3.2', release: release), isFalse,
+            reason: '$release');
+      }
+    });
+
+    test('a newer release with a download URL is offered', () {
+      final answer = latestFirmwareAnswer(http.Response(
+        '{"version": "v2.4.0", "min_version": "2.0.0", "min_app_version": "1.0.0", "min_app_version_code": "1", '
+        '"device_type": "openglass", "zip_url": "https://example.test/g.zip", "draft": false, '
+        '"ota_update_steps": [], "is_legacy_secure_dfu": false, "changelog": ["Faster photos", "Fixes"]}',
+        200,
+      ))!;
+
+      final release = DeviceUtils.openGlassOtaRelease(answer)!;
+      expect(release,
+          {'version': '2.4.0', 'download_url': 'https://example.test/g.zip', 'changelog': 'Faster photos\nFixes'});
+      expect(DeviceUtils.openGlassOffersUpdate(currentVersion: '2.3.2', release: release), isTrue);
+      expect(DeviceUtils.openGlassOffersUpdate(currentVersion: '2.4.0', release: release), isFalse);
+      expect(DeviceUtils.openGlassOffersUpdate(currentVersion: '2.5.0', release: release), isFalse);
+    });
+  });
 }
