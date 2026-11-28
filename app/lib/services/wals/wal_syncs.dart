@@ -97,6 +97,7 @@ class WalSyncs implements IWalSync {
     bool busy() =>
         _ringPass != null ||
         _singleTransfers.isNotEmpty ||
+        _phoneSync.hasUploadInFlight ||
         ring.isSyncing ||
         _storageSync.isSyncing ||
         _sdcardSync.isSyncing;
@@ -111,14 +112,21 @@ class WalSyncs implements IWalSync {
       }
     }
 
-    if (uploadPass != null) await bounded(uploadPass);
+    // A pass that outlives the deadline is still reading phone files.
+    var passSettled = true;
+    if (uploadPass != null) {
+      passSettled = false;
+      // Never errors, so it is safe to leave unawaited past the deadline.
+      final settled = uploadPass.then<void>((_) => passSettled = true, onError: (Object _) => passSettled = true);
+      await bounded(settled);
+    }
     final ringPass = _ringPass;
     if (ringPass != null) await bounded(ringPass);
     if (_singleTransfers.isNotEmpty) await bounded(Future.wait(_singleTransfers.toList()));
-    while (busy() && DateTime.now().isBefore(deadline)) {
+    while ((!passSettled || busy()) && DateTime.now().isBefore(deadline)) {
       await Future<void>.delayed(poll);
     }
-    return !busy();
+    return passSettled && !busy();
   }
 
   bool get usesIndependentRingDrain =>

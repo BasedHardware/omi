@@ -237,6 +237,37 @@ void main() {
     expect(provider.allWals, isNot(contains(uploaded)));
   });
 
+  test('an upload started outside the coordinator is waited for, and a clear never deletes it', () async {
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    Wal waitingWal(int ago) => Wal(
+        timerStart: now - ago,
+        codec: BleAudioCodec.opus,
+        seconds: 60,
+        status: WalStatus.miss,
+        storage: WalStorage.disk,
+        device: 'phone');
+    final phone = LocalWalSyncImpl(_Listener(), uploadGate: _offlineGate(), persistWals: (_) async {});
+    // A live-session retry calls phone.syncWal directly, outside WalSyncs.
+    final uploading = waitingWal(600)..isSyncing = true;
+    final idle = waitingWal(540);
+    phone.testWals = [uploading, idle];
+    final syncs = WalSyncs(_Listener(), phoneSync: phone, ringSync: _Ring());
+    final provider = SyncProvider(walService: _Service(syncs), uploadGate: _offlineGate(), startBackgroundSync: false);
+    addTearDown(provider.dispose);
+    await provider.initialized;
+
+    final outcome = await provider.clearStorage(
+      StorageClearScope.notUploaded,
+      settleTimeout: const Duration(milliseconds: 200),
+    );
+    expect(outcome.failed, isTrue);
+    expect(phone.testWals, containsAll([uploading, idle]), reason: 'nothing is deleted while an upload runs');
+
+    // Even inside a clear, the bulk delete never removes a recording mid-upload.
+    await phone.deleteAllPendingWals(includeAccepted: false);
+    expect(phone.testWals, [uploading]);
+  });
+
   test('a transfer that will not stop in time aborts the clear and deletes nothing', () async {
     if (!ringDrainRecoveryEnabled) return;
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;

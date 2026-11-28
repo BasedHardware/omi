@@ -925,8 +925,9 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
           releaseHold = syncs.holdTransfersForClear();
           if (_startBackgroundSync) RecordingTransferCoordinator.instance.cancelManualRingSync();
           _endPhaseWork();
+          // isSyncing is left alone: it is each store's reservation on a row
+          // being uploaded, and settling waits for those to clear themselves.
           for (final wal in _allWals) {
-            wal.isSyncing = false;
             wal.syncStartedAt = null;
             wal.syncEtaSeconds = null;
           }

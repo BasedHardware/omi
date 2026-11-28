@@ -109,7 +109,13 @@ void showStorageClearOutcome(BuildContext context, StorageClearOutcome outcome) 
   }
   if (outcome.remainingCount == 0) {
     OmiFeedback.confirm(context, l.storageClearDone(dur(outcome.targetSeconds)));
-  } else if (outcome.remainingOnDeviceSeconds > 0 && outcome.remainingOnDeviceSeconds >= outcome.remainingSeconds) {
+  } else if (outcome.failed && outcome.deletedSeconds == 0) {
+    // Sync would not stop, or a store refused: nothing was tried on the Omi,
+    // so asking the user to reconnect it would send them the wrong way.
+    OmiFeedback.error(context, l.storageClearFailed);
+  } else if (!outcome.failed &&
+      outcome.remainingOnDeviceSeconds > 0 &&
+      outcome.remainingOnDeviceSeconds >= outcome.remainingSeconds) {
     OmiFeedback.error(context, l.storageClearOmiUnreachable(dur(outcome.remainingOnDeviceSeconds)));
   } else if (outcome.deletedSeconds > 0) {
     OmiFeedback.error(context, l.storageClearPartial(dur(outcome.deletedSeconds), dur(outcome.remainingSeconds)));

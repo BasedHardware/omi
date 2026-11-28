@@ -212,6 +212,31 @@ void main() {
       release();
     });
 
+    test('an upload pass that outlives the deadline is not settled', () async {
+      final standalone = WalSyncs(_Listener(), phoneSync: _PhoneSync(), ringSync: _Ring());
+      final pass = Completer<void>();
+      final release = standalone.holdTransfersForClear();
+      expect(
+        await standalone.settleTransfersForClear(
+          timeout: const Duration(milliseconds: 200),
+          uploadPass: pass.future,
+          poll: const Duration(milliseconds: 20),
+        ),
+        isFalse,
+        reason: 'a multipart upload can still be reading the files a clear would delete',
+      );
+      pass.complete();
+      expect(await standalone.settleTransfersForClear(uploadPass: pass.future), isTrue);
+      release();
+    });
+
+    test('a failed upload pass still counts as settled once it ends', () async {
+      final standalone = WalSyncs(_Listener(), phoneSync: _PhoneSync(), ringSync: _Ring());
+      final release = standalone.holdTransfersForClear();
+      expect(await standalone.settleTransfersForClear(uploadPass: Future<void>.error(StateError('cancelled'))), isTrue);
+      release();
+    });
+
     test('a read that will not stop is reported, never cleared over', () async {
       if (!ringDrainRecoveryEnabled) return;
       attach(ignoresCancel: true);

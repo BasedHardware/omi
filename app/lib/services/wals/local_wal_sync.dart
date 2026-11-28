@@ -2406,13 +2406,28 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           ],
       };
 
+  /// True while any recording is being uploaded, whoever started it (the
+  /// coordinator, a row's Sync button, or a live-session retry calling
+  /// [syncWal] directly). A bulk clear waits for this to clear.
+  bool get hasUploadInFlight => _wals.any(_uploadInFlight);
+
+  /// Corrupted, out-of-window and unsupported recordings never upload, so a
+  /// leftover syncing flag on one must not lock it.
+  static bool _uploadInFlight(Wal w) =>
+      w.isSyncing &&
+      w.status != WalStatus.corrupted &&
+      w.status != WalStatus.outsideRecoveryWindow &&
+      w.status != WalStatus.unsupportedAudio;
+
   /// Deletes [wals] one at a time, reporting progress after each. A bulk clear
   /// of thousands of recordings otherwise gives the user nothing to watch.
+  /// A recording still uploading is skipped: the server may accept it, and its
+  /// row is what reconciles that job. The clear's read-back reports it as left.
   Future<void> _deleteEach(List<Wal> wals, int generation, WalDeleteProgress? onProgress) async {
     onProgress?.call(0, wals.length);
     for (var i = 0; i < wals.length; i++) {
       if (!_isCurrent(generation)) break;
-      await _deleteWal(wals[i], generation: generation);
+      if (!_uploadInFlight(wals[i])) await _deleteWal(wals[i], generation: generation);
       onProgress?.call(i + 1, wals.length);
     }
   }
