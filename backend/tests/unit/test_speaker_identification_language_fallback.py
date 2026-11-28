@@ -158,6 +158,7 @@ def test_live_name_detection_receives_session_language(monkeypatch):
     seen = []
     processor = object.__new__(transcripts.TranscriptProcessor)
     processor.suggested_segments = set()
+    processor.introduction_suggestions = set()
     processor.host = SimpleNamespace(
         language='ja',
         state=SimpleNamespace(speaker_id_enabled=False),

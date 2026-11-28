@@ -54,6 +54,7 @@ def _processor(recorder, *, owner_name=None, create_speakers=True, language=None
 
     processor = object.__new__(transcripts.TranscriptProcessor)
     processor.suggested_segments = set()
+    processor.introduction_suggestions = set()
     processor.host = SimpleNamespace(
         language=language,
         state=SimpleNamespace(
@@ -122,7 +123,7 @@ def test_copula_still_resolves_a_person_the_user_already_has():
 
     assert recorder.created == []
     assert recorder.lookups == ['Robin']
-    assert processor.host.speakers.segment_assignments == {'s1': 'person-robin'}
+    assert processor.host.speakers.segment_assignments == {}
 
 
 def test_mixed_case_introduction_resolves_the_existing_person():
@@ -139,7 +140,9 @@ def test_mixed_case_introduction_resolves_the_existing_person():
 
     assert recorder.lookups == ['McDonald']
     assert recorder.created == []
-    assert processor.host.speakers.segment_assignments == {'s1': 'person-mcdonald'}
+    assert processor.host.speakers.segment_assignments == {}
+    assert events[0].suggested_person_id == 'person-mcdonald'
+    assert events[0].person_id == ''
     assert [event.person_name for event in events] == ['McDonald']
 
 

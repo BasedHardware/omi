@@ -53,6 +53,7 @@ async def test_capture_proven_two_two_one_seconds_reaches_owner_comparison_in_re
     host.speakers = matcher
     processor.host = host
     processor.suggested_segments = set()
+    processor.introduction_suggestions = set()
     base = 1_791_800_000.0
     frame = struct.pack('<h', 517) * 320
     frame_index = 0

@@ -87,6 +87,7 @@ def test_no_print_refusal_then_profile_recovery_does_not_replay_or_change_admiss
     host.speakers = matcher
     processor = transcripts.TranscriptProcessor.__new__(transcripts.TranscriptProcessor)
     processor.host, processor.suggested_segments = host, set()
+    processor.introduction_suggestions = set()
     raw = dict(id='s', speaker_id=1, speaker_id_scope='socket:0', start=0, end=65, is_user=False)
     matcher.person_embeddings.clear()
     processor._queue_raw_detections([raw], None, 0)
@@ -104,6 +105,7 @@ def test_admission_refusals_and_repeated_logs_are_bounded(monkeypatch, caplog, r
     host.speakers = matcher
     processor = transcripts.TranscriptProcessor.__new__(transcripts.TranscriptProcessor)
     processor.host, processor.suggested_segments = host, set()
+    processor.introduction_suggestions = set()
     raw = dict(id='s', speaker_id=1, speaker_id_scope='socket:0', start=0, end=65, is_user=False)
     if reason == 'unplaced':
         raw['audio_alignment'] = 'unplaced'

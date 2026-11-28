@@ -544,6 +544,7 @@ async def _persist_collected(stack, store, monkeypatch):
     processor.cache = ConversationCache(loader)
     processor.current_session_segments = {}
     processor.suggested_segments = set()
+    processor.introduction_suggestions = set()
     processor.speaker_id_allocator = transcripts_module.ConversationSpeakerIdAllocator()
     processor.translation_coordinator = None
     processor.translation_language = None

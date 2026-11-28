@@ -530,6 +530,7 @@ def test_speaker_detection_reads_person_embeddings_live():
             request=SimpleNamespace(uid='u', create_speakers=False),
         )
         processor.suggested_segments = set()
+        processor.introduction_suggestions = set()
         segment = TranscriptSegment(
             id='s1',
             speaker='SPEAKER_00',
