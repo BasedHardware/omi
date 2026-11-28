@@ -970,7 +970,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
           Expanded(child: _buildAskBar(context, style: trayStyle)),
         LiveConversationEndButton(
             conversation: widget.conversation!,
-            style: trayStyle,
+            onTray: tray,
             leadingGap: tray ? 6 : 10,
             onEndSuppressionChanged: widget.onLiveEndSuppressionChanged),
       ]);
@@ -1038,7 +1038,11 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
                     raised: true,
                     style: style,
                     onTap: _askOmi,
-                    child: Text(label, style: OmiType.headline)),
+                    // On the live bar's dark tray the label is white in both themes.
+                    child: Text(label,
+                        style: style == FooterGlassStyle.glass
+                            ? OmiType.headline.copyWith(color: Colors.white)
+                            : OmiType.headline)),
               )
             : Ink(
                 height: 56,
@@ -1078,7 +1082,8 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
                     raised: true,
                     style: style,
                     onTap: _askOmi,
-                    child: FaIcon(kAskOmiGlyph, size: 20, color: OmiColors.textPrimary),
+                    child: FaIcon(kAskOmiGlyph,
+                        size: 20, color: style == FooterGlassStyle.glass ? Colors.white : OmiColors.textPrimary),
                   )
                 : SizedBox.square(
                     dimension: 56,

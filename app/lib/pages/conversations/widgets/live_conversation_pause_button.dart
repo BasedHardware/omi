@@ -99,7 +99,8 @@ class LiveConversationPauseButton extends StatelessWidget {
           raised: true,
           style: style,
           onTap: toggle,
-          child: Icon(paused ? Icons.play_arrow_rounded : Icons.pause_rounded, size: 26, color: OmiColors.textPrimary),
+          child: Icon(paused ? Icons.play_arrow_rounded : Icons.pause_rounded,
+              size: 26, color: style == FooterGlassStyle.glass ? Colors.white : OmiColors.textPrimary),
         ),
       ),
     );

@@ -31,14 +31,10 @@ import 'package:omi/widgets/footer_glass.dart';
 /// second finalize, as the pendant's double-tap gate does.
 class LiveConversationEndButton extends StatefulWidget {
   const LiveConversationEndButton(
-      {super.key,
-      required this.conversation,
-      this.leadingGap = 10,
-      this.onEndSuppressionChanged,
-      this.style = FooterGlassStyle.blur});
+      {super.key, required this.conversation, this.leadingGap = 10, this.onEndSuppressionChanged, this.onTray = false});
 
-  /// Experimental design: how the button is drawn.
-  final FooterGlassStyle style;
+  /// Experimental design: on the live bar's dark tray End is a flat red pill with a white label.
+  final bool onTray;
 
   final ServerConversation conversation;
   final double leadingGap;
@@ -141,7 +137,9 @@ class _LiveConversationEndButtonState extends State<LiveConversationEndButton> {
     final text = FittedBox(
       fit: BoxFit.scaleDown,
       child: Text(shown,
-          maxLines: 1, overflow: TextOverflow.ellipsis, style: OmiType.headline.copyWith(color: OmiColors.danger)),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: OmiType.headline.copyWith(color: widget.onTray ? Colors.white : OmiColors.danger)),
     );
     Future<void> end() async {
       final capture = context.read<CaptureProvider>();
@@ -213,13 +211,20 @@ class _LiveConversationEndButtonState extends State<LiveConversationEndButton> {
                 child: ExperimentalDesign.of(context)
                     // As wide as its short label needs, so Ask Omi keeps the middle of the bar.
                     ? IntrinsicWidth(
-                        child: FooterGlassSurface(
-                            height: 56,
-                            raised: true,
-                            style: widget.style,
-                            padding: const EdgeInsets.symmetric(horizontal: 22),
-                            onTap: end,
-                            child: text),
+                        child: widget.onTray
+                            ? Container(
+                                height: 56,
+                                alignment: Alignment.center,
+                                padding: const EdgeInsets.symmetric(horizontal: 22),
+                                decoration: BoxDecoration(color: OmiColors.danger, borderRadius: OmiRadius.pillAll),
+                                child: text,
+                              )
+                            : FooterGlassSurface(
+                                height: 56,
+                                raised: true,
+                                padding: const EdgeInsets.symmetric(horizontal: 22),
+                                onTap: end,
+                                child: text),
                       )
                     : Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: Center(child: text)),
               ),
