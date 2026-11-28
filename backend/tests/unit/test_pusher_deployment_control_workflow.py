@@ -426,6 +426,13 @@ def test_prod_qualifies_an_isolated_config_then_proves_the_shared_config_is_iden
     assert 'backend/scripts/pusher_canary_from_live.py config-map' in MANUAL[proposed:canary]
     assert '--live-config-map prod-omi-backend-config' in MANUAL[proposed:canary]
     assert '--canary-config-map "$PUSHER_CANARY_CONFIG"' in MANUAL[proposed:canary]
+    # SCA-4763: only the isolated canary-only producer copies the live config. An
+    # ordinary full deploy still renders the proposed config its canary exercises.
+    assert (
+        'CONFIG_MAP_NAME_OVERRIDE="$PUSHER_CANARY_CONFIG" backend/scripts/deploy-backend-config.sh'
+        in MANUAL[proposed:canary]
+    )
+    assert 'if [[ "$CANARY_ONLY" == \'true\' ]]' in MANUAL[proposed:canary]
     assert '--config-map-name "$PUSHER_CANARY_CONFIG"' in MANUAL[canary:shared]
     assert "--phase final" in MANUAL[final_verify : final_verify + 2000]
     assert (
@@ -502,12 +509,13 @@ def test_real_config_and_capacity_gates_precede_every_pusher_helm_mutation() -> 
 
 
 def test_prod_canary_reuses_the_workload_identity_bound_shared_ksa() -> None:
-    canary = MANUAL.index('backend/scripts/pusher_canary_from_live.py workload')
+    canary = MANUAL.index('Create isolated production Pusher and listener canary')
     rollout = MANUAL.index('kubectl -n prod-omi-backend rollout status "deployment/$PUSHER_CANARY"')
     install = MANUAL[canary:rollout]
-    # SCA-4763: the canary copies the live PodTemplate, so it inherits the shared
-    # production KSA (the only one with a Workload Identity binding) instead of
-    # creating a release-named KSA that cannot mint tokens.
+    # The ordinary deploy keeps its Helm canary on the shared KSA.
+    assert "--set serviceAccount.create=false" in install
+    assert "--set-string serviceAccount.name=prod-omi-pusher" in install
+    # SCA-4763: the isolated canary copies the live PodTemplate, so it inherits
+    # that same shared KSA instead of creating a release-named one.
+    assert 'backend/scripts/pusher_canary_from_live.py workload' in install
     assert '--live-deployment prod-omi-pusher' in install
-    assert 'serviceAccount.create' not in install
-    assert 'serviceAccount.name' not in install
