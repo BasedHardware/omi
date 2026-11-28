@@ -11851,7 +11851,7 @@
     "deviceOnboardingAskNowSubtitle": "אמור זאת בקול. Omi מקשיב.",
     "deviceOnboardingPressAgainHint": "סיימת? לחץ שוב על הכפתור כדי לשלוח.",
     "trialUpsellTitle": "נסו את Omi Pro בחינם ל‑{days} ימים",
-    "trialUpsellBody": "כדי להתחיל, הוסיפו כרטיס. היום לא תשלמו כלום. אחרי {days} ימים התוכנית בתשלום מתחילה במחיר שלמטה, אלא אם תבטלו לפני כן. ביטול דרך הגדרות > תוכנית ושימוש.",
+    "trialUpsellBody": "כדי להתחיל, הוסיפו כרטיס. היום לא תשלמו כלום. אחרי {days} ימים התוכנית בתשלום מתחילה במחיר שלמטה, אלא אם תבטלו לפני כן. ביטול דרך הגדרות, ואז תוכנית ושימוש.",
     "trialUpsellClaim": "קבל ניסיון של {days} ימים",
     "settingsUpgradeTrialSubtitle": "התחל ניסיון חינם של {days} ימים",
     "pairingPowerOnTitle": "הפעל את ה‑Omi",
