@@ -71,6 +71,122 @@ def test_memory_delete_skips_prompt_with_yes(authed_profile, respx_mock, cli_run
     assert result.exit_code == 0
 
 
+def test_memory_create_batch_posts_body(authed_profile, respx_mock, cli_runner, tmp_path) -> None:
+    batch_file = tmp_path / "batch.json"
+    batch_file.write_text(
+        json.dumps(
+            [
+                {"content": "first", "category": "work", "visibility": "public", "tags": ["a"]},
+                {"content": "second"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    route = respx_mock.post("/v1/dev/user/memories/batch").respond(
+        json={
+            "memories": [{"id": "m1"}, {"id": "m2"}],
+            "created_count": 2,
+        }
+    )
+    result = cli_runner.invoke(app, ["--json", "memory", "create-batch", str(batch_file)])
+    assert result.exit_code == 0, result.output
+    body = json.loads(route.calls.last.request.content)
+    assert body == {
+        "memories": [
+            {"content": "first", "category": "work", "visibility": "public", "tags": ["a"]},
+            {"content": "second", "visibility": "private", "tags": []},
+        ]
+    }
+    payload = json.loads(result.stdout)
+    assert payload["created_count"] == 2
+    assert payload["memories"] == [{"id": "m1"}, {"id": "m2"}]
+
+
+def test_memory_create_batch_accepts_bom_utf8(authed_profile, respx_mock, cli_runner, tmp_path) -> None:
+    batch_file = tmp_path / "bom.json"
+    batch_file.write_text(json.dumps([{"content": "bom content"}]), encoding="utf-8-sig")
+    route = respx_mock.post("/v1/dev/user/memories/batch").respond(
+        json={"memories": [{"id": "m1"}], "created_count": 1}
+    )
+    result = cli_runner.invoke(app, ["--json", "memory", "create-batch", str(batch_file)])
+    assert result.exit_code == 0, result.output
+    body = json.loads(route.calls.last.request.content)
+    assert body == {"memories": [{"content": "bom content", "visibility": "private", "tags": []}]}
+
+
+def test_memory_create_batch_accepts_memories_object(authed_profile, respx_mock, cli_runner, tmp_path) -> None:
+    batch_file = tmp_path / "batch.json"
+    batch_file.write_text(json.dumps({"memories": [{"content": "hello"}]}), encoding="utf-8")
+    route = respx_mock.post("/v1/dev/user/memories/batch").respond(
+        json={"memories": [{"id": "m1"}], "created_count": 1}
+    )
+    result = cli_runner.invoke(app, ["--json", "memory", "create-batch", str(batch_file)])
+    assert result.exit_code == 0, result.output
+    body = json.loads(route.calls.last.request.content)
+    assert body == {"memories": [{"content": "hello", "visibility": "private", "tags": []}]}
+
+
+def test_memory_create_batch_malformed_json_sends_no_request(authed_profile, respx_mock, cli_runner, tmp_path) -> None:
+    batch_file = tmp_path / "bad.json"
+    batch_file.write_text("{ not json", encoding="utf-8")
+    respx_mock.post("/v1/dev/user/memories/batch").respond(json={"memories": [], "created_count": 0})
+    result = cli_runner.invoke(app, ["memory", "create-batch", str(batch_file)])
+    assert result.exit_code == 1
+    assert "not valid json" in result.stderr.lower()
+    assert not respx_mock.calls
+
+
+def test_memory_create_batch_over_25_is_usage_error(authed_profile, respx_mock, cli_runner, tmp_path) -> None:
+    batch_file = tmp_path / "many.json"
+    batch_file.write_text(json.dumps([{"content": f"m{i}"} for i in range(26)]), encoding="utf-8")
+    respx_mock.post("/v1/dev/user/memories/batch").respond(json={"memories": [], "created_count": 0})
+    result = cli_runner.invoke(app, ["memory", "create-batch", str(batch_file)])
+    assert result.exit_code == 1
+    assert "25" in result.stderr
+    assert not respx_mock.calls
+
+
+def test_memory_create_batch_missing_file_is_usage_error(authed_profile, cli_runner, tmp_path) -> None:
+    result = cli_runner.invoke(app, ["memory", "create-batch", str(tmp_path / "nope.json")])
+    assert result.exit_code == 1
+    assert "not found" in result.stderr.lower()
+
+
+def test_memory_create_batch_auth_failure(authed_profile, respx_mock, cli_runner, tmp_path) -> None:
+    batch_file = tmp_path / "batch.json"
+    batch_file.write_text(json.dumps([{"content": "x"}]), encoding="utf-8")
+    respx_mock.post("/v1/dev/user/memories/batch").respond(401, json={"detail": "nope"})
+    result = cli_runner.invoke(app, ["memory", "create-batch", str(batch_file)])
+    assert result.exit_code == 2
+    assert "auth" in result.stderr.lower()
+
+
+@pytest.mark.parametrize(
+    ("entries", "message_fragment"),
+    [
+        ('"just a string"', "array"),
+        ("[]", "no memories"),
+        ("[42]", "not an object"),
+        ('[{"content": "   "}]', "empty content"),
+        ('[{"content": "x", "visibility": "weird"}]', "invalid visibility"),
+        ('[{"content": "x", "category": "not-a-category"}]', "invalid category"),
+        ('[{"content": "x", "tags": "not-a-list"}]', "invalid tags"),
+        ('[{"content": "x", "tags": [1, 2]}]', "invalid tags"),
+        (f'[{{"content": "{chr(97) * 501}"}}]', "500 characters"),
+    ],
+)
+def test_memory_create_batch_invalid_entries_send_no_request(
+    authed_profile, respx_mock, cli_runner, tmp_path, entries, message_fragment
+) -> None:
+    batch_file = tmp_path / "invalid.json"
+    batch_file.write_text(entries, encoding="utf-8")
+    respx_mock.post("/v1/dev/user/memories/batch").respond(json={"memories": [], "created_count": 0})
+    result = cli_runner.invoke(app, ["memory", "create-batch", str(batch_file)])
+    assert result.exit_code == 1
+    assert message_fragment in result.stderr.lower()
+    assert not respx_mock.calls
+
+
 def test_memory_update_requires_at_least_one_field(authed_profile, cli_runner) -> None:
     result = cli_runner.invoke(app, ["memory", "update", "m1"])
     # exit 1 = usage error
