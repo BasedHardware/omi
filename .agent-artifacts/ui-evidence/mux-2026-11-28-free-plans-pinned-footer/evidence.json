@@ -4,7 +4,7 @@
     {
       "file": "001-mobile-ios-free-plans-before-after.png",
       "platform": "mobile-ios",
-      "description": "Free Plans & Billing first screen, light: main has no button or legal links above the fold; this change pins US$269.91/year, Upgrade, the renewal terms and Terms of Use / Privacy Policy.",
+      "description": "Free Plans & Billing first screen, light, opened through Usage: main has no button or legal links above the fold; 39642b5f19 pins US$269.91/year, Upgrade, the renewal terms and Terms of Use / Privacy Policy.",
       "captured_by": "agent",
       "source": "screencapture"
     },
@@ -18,21 +18,21 @@
     {
       "file": "003-mobile-ios-free-plans-largest-text.png",
       "platform": "mobile-ios",
-      "description": "Largest accessibility text: first screen, the inline footer scrolled into view with both links, and Privacy Policy opened from it.",
+      "description": "Largest accessibility text: the first screen, then scrolled so the charge line, Upgrade, the full renewal terms and both legal links show together.",
       "captured_by": "agent",
       "source": "screencapture"
     },
     {
-      "file": "004-mobile-ios-free-plans-keyboard-promo.png",
+      "file": "004-mobile-ios-free-plans-monthly-refusal-retry.png",
       "platform": "mobile-ios",
-      "description": "System keyboard up on the promo field: the footer moves into the list; with a code typed the amount reads before discounts; Upgrade opens the offline Checkout stub.",
+      "description": "Native taps through Usage: Monthly with a bad code, Upgrade refused (Invalid or expired promotion code), Clear and SAVE50P3, retry opens the stub Checkout at US$29.99/month with promo_p3, native Back keeps the code open, Clear works.",
       "captured_by": "agent",
       "source": "screencapture"
     },
     {
       "file": "005-mobile-ios-free-plans-locales.png",
       "platform": "mobile-ios",
-      "description": "German, Japanese and Portuguese (pt-BR uses pt) first screens with the localized charge, renewal terms and legal links.",
+      "description": "Arabic (right to left), German, Japanese and Portuguese (pt-BR uses pt) first screens with the localized charge, renewal terms and legal links.",
       "captured_by": "agent",
       "source": "screencapture"
     }
