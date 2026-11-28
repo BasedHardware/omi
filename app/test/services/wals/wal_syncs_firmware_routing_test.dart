@@ -669,6 +669,40 @@ void main() {
       expect(sdcard.refreshCalls, 1);
     });
 
+    test('tracked previous-device multi-file WAL cannot fall through to legacy SD read', () async {
+      final stale = Wal(
+        timerStart: 1704067200,
+        codec: BleAudioCodec.opus,
+        seconds: 60,
+        status: WalStatus.miss,
+        storage: WalStorage.sdcard,
+        device: 'previous-pendant',
+        fileNum: 0,
+      );
+      final storage = StorageSyncImpl(_Listener())..testWals = [stale];
+      final sdcard = _SpySdcard();
+      final syncs = WalSyncs(
+        _Listener(),
+        sdcardSync: sdcard,
+        storageSync: storage,
+        flashPageSync: _ReadyFlashPage(),
+        phoneSync: _PhoneSync(),
+      )..setDevice(BtDevice(
+          id: 'current-pendant',
+          name: 'Omi',
+          type: DeviceType.omi,
+          rssi: -40,
+          firmwareRevision: '3.0.16',
+        ));
+
+      await expectLater(
+        syncs.syncWal(wal: stale),
+        throwsA(isA<StateError>().having((error) => error.message, 'message', contains('file indexes'))),
+      );
+
+      expect(sdcard.reads, 0, reason: 'cached storage rows must not use the legacy reader for another device');
+    });
+
     test('device disconnect during inventory refresh leaves the result unconfirmed', () async {
       final storage = _PendingInventoryStorage();
       final syncs = WalSyncs(

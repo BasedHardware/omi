@@ -24,6 +24,7 @@ class StorageSyncImpl implements StorageSync {
   List<Wal> _wals = [];
   BtDevice? _device;
   String? _confirmedInventoryDeviceId;
+  String? _inventoryAttemptedDeviceId;
 
   StreamSubscription? _storageStream;
   Completer<bool>? _activeTransfer;
@@ -92,6 +93,7 @@ class StorageSyncImpl implements StorageSync {
   @override
   void setDevice(BtDevice? device) {
     _device = device;
+    _inventoryAttemptedDeviceId = null;
     // A cached index is usable only after this device's current inventory has
     // been read. A device switch or reconnect must not reuse stale indexes.
     _confirmedInventoryDeviceId = null;
@@ -187,22 +189,26 @@ class StorageSyncImpl implements StorageSync {
     }
   }
 
-  /// Returns cached WAL list from memory. Safe to call during sync — never touches BLE.
-  /// Call refreshWalsFromDevice() first to populate the list via BLE.
+  /// Returns cached pending WALs from memory. Safe to call during sync — never
+  /// touches BLE. Rows remain visible across disconnects and device switches;
+  /// sync and delete operations separately require a confirmed owning inventory.
   @override
   Future<List<Wal>> getMissingWals() async {
     final deviceId = _device?.id;
-    if (deviceId == null) return const [];
+    final inventoryAttempted = deviceId != null && _inventoryAttemptedDeviceId == deviceId;
     return _wals
-        .where((w) => w.device == deviceId && w.status == WalStatus.miss && w.storage == WalStorage.sdcard)
+        .where((w) =>
+            w.status == WalStatus.miss &&
+            w.storage == WalStorage.sdcard &&
+            (!inventoryAttempted || deviceId == null || w.device == deviceId))
         .toList();
   }
 
-  /// Whether [wal] is one of the device files this sync listed. Its recordings
-  /// share [WalStorage.sdcard] with the legacy SD card sync, so per-recording
-  /// actions use this to reach the right sync.
-  bool owns(Wal wal) =>
-      _device?.id == wal.device && _confirmedInventoryDeviceId == wal.device && _wals.any((w) => identical(w, wal));
+  /// Whether [wal] is still tracked by this sync. Its recordings share
+  /// [WalStorage.sdcard] with the legacy SD card sync, so per-recording actions
+  /// use this to reach the right sync. This is cache membership only: the
+  /// receiving operation must still validate the active device and inventory.
+  bool owns(Wal wal) => _wals.any((w) => identical(w, wal));
 
   /// Discover files on device via BLE. Must be called BEFORE syncAll() to populate _wals.
   /// Sends STOP command and subscribes to data characteristic — never call during an active sync.
@@ -213,6 +219,7 @@ class StorageSyncImpl implements StorageSync {
       Logger.debug('StorageSync.refreshWalsFromDevice: skipping — sync in progress');
       return false;
     }
+    _inventoryAttemptedDeviceId = device.id;
     _confirmedInventoryDeviceId = null;
 
     try {
@@ -296,6 +303,12 @@ class StorageSyncImpl implements StorageSync {
   @override
   Future deleteWal(Wal wal) async {
     if (wal.storage != WalStorage.sdcard || !_wals.any((w) => w.id == wal.id)) return;
+    if (_device == null) {
+      // Keep the cached row visible while disconnected. The caller can retry
+      // after reconnecting and confirming this row's owning device inventory.
+      listener.onWalUpdated();
+      return;
+    }
     if (_device != null && wal.device != _device!.id) {
       // Not this device's recording (e.g. left by a device this phone no
       // longer pairs with): drop the stale local row, nothing to delete.
