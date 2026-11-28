@@ -1,3 +1,5 @@
+// Terms of Use and Privacy Policy links for every purchase surface (trial paywall, free Plans sheet).
+// Owns the 44pt targets and link semantics App Store guideline 3.1.2 asks for; callers own where the links open.
 import 'package:flutter/material.dart';
 
 import 'package:omi/ui/omi_tokens.dart';
