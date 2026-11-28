@@ -956,7 +956,7 @@ class TestIdentifySpeakersForSegments:
 
     @patch('utils.sync.pipeline.users_db')
     @patch('utils.sync.pipeline.extract_embedding_from_bytes')
-    def test_text_detection_fallback(self, mock_extract, mock_users_db):
+    def test_embedding_failure_does_not_fall_back_to_text(self, mock_extract, mock_users_db):
         from utils.sync.pipeline import identify_speakers_for_segments
 
         # Embedding extraction fails (too short clip), so voice matching skips
@@ -972,11 +972,11 @@ class TestIdentifySpeakersForSegments:
         audio = _make_wav_bytes(duration_sec=5.0)
         identify_speakers_for_segments(segments, audio, cache, 'uid1')
 
-        # Text detection should match "Bob" and assign person_id
-        assert segments[0].person_id == 'p2'
+        mock_users_db.get_person_by_name.assert_not_called()
+        assert segments[0].person_id is None
 
     @patch('utils.sync.pipeline.users_db')
-    def test_empty_cache_still_runs_text_detection(self, mock_users_db):
+    def test_empty_cache_skips_text_detection(self, mock_users_db):
         from utils.sync.pipeline import identify_speakers_for_segments
 
         mock_users_db.get_person_by_name.return_value = {'id': 'p1', 'name': 'Alice'}
@@ -985,10 +985,10 @@ class TestIdentifySpeakersForSegments:
             _make_transcript_segment(speaker_id=1, start=0.0, end=2.0, text='my name is Alice', seg_id='s1'),
         ]
 
-        # Empty cache + no audio — text detection should still run
         identify_speakers_for_segments(segments, None, {}, 'uid1')
 
-        assert segments[0].person_id == 'p1'
+        mock_users_db.get_person_by_name.assert_not_called()
+        assert segments[0].person_id is None
 
     def test_unset_embedding_url_skips_voice_match(self, monkeypatch):
         import utils.sync.pipeline as sync_module
@@ -1008,11 +1008,12 @@ class TestIdentifySpeakersForSegments:
         sync_module.identify_speakers_for_segments(segments, audio, cache, 'uid1')
 
         mock_extract.assert_not_called()
-        assert segments[0].person_id == 'p2'
+        mock_users_db.get_person_by_name.assert_not_called()
+        assert segments[0].person_id is None
         assert not segments[0].is_user
 
     @patch('utils.sync.pipeline.users_db')
-    def test_no_audio_still_runs_text_detection(self, mock_users_db):
+    def test_no_audio_skips_text_detection(self, mock_users_db):
         from utils.sync.pipeline import identify_speakers_for_segments
 
         mock_users_db.get_person_by_name.return_value = {'id': 'p2', 'name': 'Bob'}
@@ -1023,18 +1024,17 @@ class TestIdentifySpeakersForSegments:
             _make_transcript_segment(speaker_id=1, start=0.0, end=2.0, text='I am Bob', seg_id='s1'),
         ]
 
-        # Cache exists but audio is None — voice matching skipped, text detection runs
         identify_speakers_for_segments(segments, None, cache, 'uid1')
 
-        assert segments[0].person_id == 'p2'
+        mock_users_db.get_person_by_name.assert_not_called()
+        assert segments[0].person_id is None
 
     @patch('utils.sync.pipeline.users_db')
-    def test_undiarized_text_detection_assigns_per_segment(self, mock_users_db):
+    def test_undiarized_introduction_remains_unassigned(self, mock_users_db):
         from utils.sync.pipeline import identify_speakers_for_segments
 
         mock_users_db.get_person_by_name.return_value = {'id': 'p1', 'name': 'Alice'}
 
-        # speaker_id=0 (undiarized) — should still get per-segment assignment
         segments = [
             _make_transcript_segment(speaker_id=0, start=0.0, end=2.0, text='my name is Alice', seg_id='s1'),
             _make_transcript_segment(speaker_id=0, start=3.0, end=4.0, text='hello there', seg_id='s2'),
@@ -1042,10 +1042,8 @@ class TestIdentifySpeakersForSegments:
 
         identify_speakers_for_segments(segments, None, {}, 'uid1')
 
-        # First segment matched via text detection
-        assert segments[0].person_id == 'p1'
-        # Second segment has no text match — should remain unassigned
-        # (speaker_to_person_map not updated for speaker_id=0)
+        mock_users_db.get_person_by_name.assert_not_called()
+        assert segments[0].person_id is None
         assert segments[1].person_id is None
 
     @patch('utils.sync.pipeline.extract_embedding_from_bytes')
@@ -1445,8 +1443,7 @@ class TestSpeakerIdBoundaries:
 
     @patch('utils.sync.pipeline.users_db')
     @patch('utils.sync.pipeline.extract_embedding_from_bytes')
-    def test_diarized_text_match_propagates_to_all_speaker_segments(self, mock_extract, mock_users_db):
-        """When text detection matches a diarized speaker, all segments with that speaker_id get assigned."""
+    def test_diarized_introduction_does_not_assign_any_speaker_segment(self, mock_extract, mock_users_db):
         from utils.sync.pipeline import identify_speakers_for_segments
 
         # Embedding doesn't match anyone
@@ -1465,11 +1462,10 @@ class TestSpeakerIdBoundaries:
         audio = _make_wav_bytes(duration_sec=7.0)
         identify_speakers_for_segments(segments, audio, cache, 'uid1')
 
-        # Text detection matched "Bob" on s1 → speaker_to_person_map[2] = p2
-        # All speaker_id=2 segments should be assigned via speaker_to_person_map
-        assert segments[0].person_id == 'p2'
-        assert segments[1].person_id == 'p2'
-        assert segments[2].person_id == 'p2'
+        mock_users_db.get_person_by_name.assert_not_called()
+        assert segments[0].person_id is None
+        assert segments[1].person_id is None
+        assert segments[2].person_id is None
 
 
 def test_soniox_failover_metadata_reaches_sync_segments_and_outcomes(monkeypatch):
