@@ -13,6 +13,7 @@ import { ChatAppPicker } from '../../chat/ChatAppPicker'
 import { HubConnectPanel } from './HubConnectPanel'
 import { preloadHubConnectContent } from './hubConnectSlot'
 import { getHubHomeWidgets } from './hubHomeWidgetsSlot'
+import { getHubKnows, useHubKnowsPresence } from './hubKnowsSlot'
 import { useHubStats } from './useHubStats'
 import { nextStage, isPanelMode } from './hubStage'
 import type { HomeStageEvent, HomeStageMode } from './hubStage'
@@ -66,10 +67,15 @@ export function HomeHub(): React.JSX.Element {
   // Rendered via createElement (not <JSX/>) since it is fetched at render time —
   // mirrors HubConnectPanel's slot pattern and satisfies react-hooks/static-components.
   const homeWidgets = getHubHomeWidgets()
+  const hubKnows = getHubKnows()
+  const knowsHasRows = useHubKnowsPresence()
   const [mode, setMode] = useState<HomeStageMode>('hub')
   // The draft is LOCAL (not in the app-wide chat hook) so typing re-renders only
   // the ask bar, not the shell and every mounted page.
   const [input, setInput] = useState('')
+  // Bumped when a knows question row prefills the draft, so the ask bar grabs
+  // focus without HomeHub reaching into its input element.
+  const [askFocusSignal, setAskFocusSignal] = useState(0)
   const stageRef = useRef<HTMLDivElement>(null)
   const hubRef = useRef<HTMLDivElement>(null)
 
@@ -151,8 +157,14 @@ export function HomeHub(): React.JSX.Element {
       // the very keystrokes the click was inviting. Re-take focus on the way in.
       // SwiftUI's @FocusState survives the equivalent move on Mac; React's does not.
       autoFocus={isPanelMode(mode)}
+      focusSignal={askFocusSignal}
     />
   )
+
+  const prefillAsk = useCallback((text: string): void => {
+    setInput(text)
+    setAskFocusSignal((n) => n + 1)
+  }, [])
 
   return (
     <div ref={hubRef} className="relative h-full overflow-hidden">
@@ -227,6 +239,17 @@ export function HomeHub(): React.JSX.Element {
                       <HubChatHeader />
                     </>
                   }
+                  // Mac's chat-mode rolling knows: the top three rows keep
+                  // rotating over an empty thread until the first message lands.
+                  emptyStateExtra={
+                    hubKnows
+                      ? createElement(hubKnows, {
+                          variant: 'rolling',
+                          onAskPrefill: prefillAsk,
+                          chatSending: chat.sending
+                        })
+                      : undefined
+                  }
                 >
                   {askBar}
                 </HubChatPanel>
@@ -256,15 +279,30 @@ export function HomeHub(): React.JSX.Element {
                 aria-hidden
               />
 
-              {/* Mac hides the wordmark when its `recommendations` array is non-empty.
-                  Windows has no recommendations source at all, so that branch is
-                  unreachable and the wordmark renders unconditionally. */}
-              <h1
-                className="shrink-0 select-none font-display text-[58px] font-bold lowercase leading-none text-home-ink"
-                style={{ textShadow: '0 0 26px rgb(var(--home-stage-glow-rgb) / 0.46)' }}
-              >
-                omi.
-              </h1>
+              {/* Mac hides the wordmark when its `recommendations` array is non-empty
+                  and shows the knows list in its place. The knows slot is that
+                  recommendations source on Windows, so the branch is finally
+                  reachable: rows take the stage centre, the wordmark otherwise.
+                  The list stays MOUNTED either way (it owns its data fetch and
+                  reports presence); only its visibility toggles, so presence
+                  flips cannot unmount-and-remount it into an effect loop. */}
+              {!knowsHasRows && (
+                <h1
+                  className="shrink-0 select-none font-display text-[58px] font-bold lowercase leading-none text-home-ink"
+                  style={{ textShadow: '0 0 26px rgb(var(--home-stage-glow-rgb) / 0.46)' }}
+                >
+                  omi.
+                </h1>
+              )}
+              {hubKnows && (
+                <div
+                  className={knowsHasRows ? 'w-full shrink-0' : 'hidden'}
+                  style={knowsHasRows ? { maxWidth: ASK_MAX_HUB } : undefined}
+                  aria-hidden={!knowsHasRows}
+                >
+                  {createElement(hubKnows, { onAskPrefill: prefillAsk, chatSending: chat.sending })}
+                </div>
+              )}
 
               {/* Mac: Spacer(minLength: 24) — absorbs slack, docking the cluster. The
                   min-height (WORDMARK_GAP) is raised above Mac's 24 on Chris's call; see
