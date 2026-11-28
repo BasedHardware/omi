@@ -26,6 +26,7 @@ from utils.batch_pipeline.serving import Serving
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.scheduler import Scheduler
 from utils.batch_pipeline import admission
+from utils.batch_pipeline.leader import QUEUE_METRICS, SERVING_LEGACY_METRICS, SERVING_MAINTENANCE, LeaderLease
 
 
 @pytest.fixture
@@ -703,8 +704,99 @@ def test_metrics_retains_legacy_drain_until_both_controls_are_on(api, monkeypatc
     service.reconcile_async = AsyncMock()
     monkeypatch.setattr(module, 'serving_for_stage', lambda stage: service)
     assert client.get('/v2/batch-pipeline/metrics').status_code == 200
-    service.reconcile_async.assert_awaited_once_with(periodic=True)
+    service.reconcile_async.assert_awaited_once_with(periodic=True, run_held_expiry=False)
     service.metrics.refresh.assert_not_called()
+
+
+def test_repeated_legacy_metrics_uses_separate_lease_from_held_expiry_supervisor(api, monkeypatch):
+    client, store = api
+    monkeypatch.setenv('BATCH_PIPELINE_SERVING_ENABLED', 'false')
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PUMP_ENABLED', 'false')
+    monkeypatch.setenv('BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED', 'false')
+    monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', 'true')
+
+    cleanup = Mock()
+    enrichment = Mock()
+    fallback = Serving(
+        store,
+        cleanup=cleanup,
+        enrichment_sweep=enrichment,
+        leader=LeaderLease(store, SERVING_MAINTENANCE, ttl_seconds=60, holder='legacy-metrics'),
+        legacy_metrics_leader=LeaderLease(store, SERVING_LEGACY_METRICS, ttl_seconds=60, holder='legacy-metrics'),
+    )
+    monkeypatch.setattr(module, 'serving_for_stage', lambda stage: fallback)
+
+    for _ in range(4):
+        assert client.get('/v2/batch-pipeline/metrics').status_code == 200
+
+    assert store.rows['leases', SERVING_LEGACY_METRICS]['holder'] == 'legacy-metrics'
+    assert ('leases', SERVING_MAINTENANCE) not in store.rows
+    assert cleanup.call_count == 4
+    assert enrichment.call_count == 4
+
+    supervisor = Serving(
+        store,
+        leader=LeaderLease(store, SERVING_MAINTENANCE, ttl_seconds=60, holder='serving-supervisor'),
+    )
+    supervisor.held_dead_letter.tick = Mock()
+    supervisor.sweep_held_dead_letters(periodic=True)
+
+    assert store.rows['leases', SERVING_MAINTENANCE]['holder'] == 'serving-supervisor'
+    supervisor.held_dead_letter.tick.assert_called_once()
+
+
+def test_explicit_reconcile_that_skips_held_expiry_uses_separate_lease():
+    store = MemoryStore()
+    metrics = SimpleNamespace(fresh_guard=Mock(), delivered_share=Mock(), refresh=Mock())
+    cleanup, enrichment = Mock(), Mock()
+    service = Serving(
+        store,
+        metrics=metrics,
+        cleanup=cleanup,
+        enrichment_sweep=enrichment,
+        leader=LeaderLease(store, SERVING_MAINTENANCE, ttl_seconds=60, holder='expiry-supervisor'),
+        legacy_metrics_leader=LeaderLease(store, SERVING_LEGACY_METRICS, ttl_seconds=60, holder='request'),
+    )
+    service.held_dead_letter.tick = Mock()
+
+    service.reconcile(run_held_expiry=False)
+
+    assert store.rows['leases', SERVING_LEGACY_METRICS]['holder'] == 'request'
+    assert ('leases', SERVING_MAINTENANCE) not in store.rows
+    cleanup.assert_called_once()
+    enrichment.assert_called_once()
+    service.held_dead_letter.tick.assert_not_called()
+
+    supervisor = Serving(
+        store,
+        leader=LeaderLease(store, SERVING_MAINTENANCE, ttl_seconds=60, holder='expiry-supervisor'),
+    )
+    supervisor.held_dead_letter.tick = Mock()
+    supervisor.sweep_held_dead_letters(periodic=True)
+    assert store.rows['leases', SERVING_MAINTENANCE]['holder'] == 'expiry-supervisor'
+    supervisor.held_dead_letter.tick.assert_called_once()
+
+
+def test_serving_loop_and_fresh_guard_share_the_skipped_expiry_lease():
+    store = MemoryStore()
+
+    def instance(holder):
+        return Serving(
+            store,
+            metrics=SimpleNamespace(fresh_guard=Mock(), delivered_share=Mock(), refresh=Mock()),
+            leader=LeaderLease(store, SERVING_MAINTENANCE, ttl_seconds=60, holder=holder),
+            legacy_metrics_leader=LeaderLease(store, SERVING_LEGACY_METRICS, ttl_seconds=60, holder=holder),
+        )
+
+    serving_instance, guard_follower = instance('serving'), instance('guard-follower')
+
+    serving_instance.reconcile(periodic=True, run_held_expiry=False)
+
+    assert store.rows['leases', SERVING_LEGACY_METRICS]['holder'] == 'serving'
+    assert ('leases', SERVING_MAINTENANCE) not in store.rows
+    assert not guard_follower.refresh_serving_fresh_guard()
+    guard_follower.metrics.fresh_guard.deactivate.assert_called_once()
+    assert ('leases', SERVING_MAINTENANCE) not in store.rows
 
 
 @pytest.mark.parametrize(
@@ -760,7 +852,10 @@ async def test_recovery_request_awaits_paid_intent_before_response_and_projectio
     assert result == {'status': 'recovered'}
     assert events == ['recognition', ('owner_reconcile', True)]
     service.reconcile_async.assert_awaited_once_with(
-        owner_id=store.rows['jobs', 'synthetic']['owner_id'], recovered='synthetic', owner_only=True
+        owner_id=store.rows['jobs', 'synthetic']['owner_id'],
+        recovered='synthetic',
+        owner_only=True,
+        run_held_expiry=False,
     )
     assert service.recovery.recover_async.await_args.args == ('synthetic', store.rows['jobs', 'synthetic']['owner_id'])
     service.recovery.recover.assert_not_called()
@@ -769,6 +864,41 @@ async def test_recovery_request_awaits_paid_intent_before_response_and_projectio
     assert stages[0].startswith('event=batch_recovery_stage stage=recognition duration_seconds=')
     assert stages[1].startswith('event=batch_recovery_stage stage=post_recovery duration_seconds=')
     assert all('synthetic' not in line and store.rows['jobs', 'synthetic']['owner_id'] not in line for line in stages)
+
+
+@pytest.mark.asyncio
+async def test_recovery_request_disables_held_expiry_when_owner_only_falls_back_to_global_maintenance(api, monkeypatch):
+    from routers import batch_pipeline as routes
+    from utils.batch_pipeline import serving
+
+    _, store = api
+    service = routes.serving_for_stage('dev')
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_MODE', 'on')
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_OWNER_ONLY_ENABLED', 'false')
+    monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', 'true')
+    service.recovery = Mock()
+    service.recovery.recover_async = AsyncMock(return_value='recovered')
+    service.metrics = SimpleNamespace(fresh_guard=Mock(), delivered_share=Mock(), refresh=Mock())
+    service.cleanup = Mock()
+    service.enrichment_sweep = Mock()
+    service.leader = LeaderLease(store, SERVING_MAINTENANCE, ttl_seconds=60, holder='expiry-supervisor')
+    service.legacy_metrics_leader = LeaderLease(store, SERVING_LEGACY_METRICS, ttl_seconds=60, holder='recovery')
+    service.held_dead_letter.tick = Mock()
+    monkeypatch.setattr(serving, 'run_blocking', _inline_serving_call)
+
+    result = await routes.recover_quarantine(
+        routes.RedriveRequest(stage='dev', segment_id='synthetic'), SimpleNamespace(headers={})
+    )
+
+    assert result == {'status': 'recovered'}
+    assert store.rows['leases', SERVING_LEGACY_METRICS]['holder'] == 'recovery'
+    assert ('leases', SERVING_MAINTENANCE) not in store.rows
+    service.cleanup.assert_called_once()
+    service.enrichment_sweep.assert_called_once()
+    service.held_dead_letter.tick.assert_not_called()
+    service.sweep_held_dead_letters(periodic=True)
+    assert store.rows['leases', SERVING_MAINTENANCE]['holder'] == 'expiry-supervisor'
+    service.held_dead_letter.tick.assert_called_once()
 
 
 def test_recovery_task_rejects_foreign_stage_and_missing_oidc(api, monkeypatch):
@@ -1044,6 +1174,69 @@ async def test_held_expiry_supervisor_uses_db_executor_for_lookup_and_sweep(monk
     service.sweep_held_dead_letters.assert_called_once_with(periodic=True)
 
 
+@pytest.mark.asyncio
+async def test_held_expiry_supervisor_skips_lookup_when_disabled(monkeypatch):
+    from utils.batch_pipeline import serving
+
+    stop = asyncio.Event()
+    lookup = Mock(side_effect=AssertionError('disabled expiry must not construct a service'))
+    run_blocking = AsyncMock(side_effect=AssertionError('disabled expiry must not use the DB executor'))
+
+    async def stop_after_poll(awaitable, timeout):
+        stop.set()
+        return await awaitable
+
+    monkeypatch.setattr(serving, 'batch_held_dead_letter_enabled', lambda: False)
+    monkeypatch.setattr(serving, 'serving_for_stage', lookup)
+    monkeypatch.setattr(serving, 'run_blocking', run_blocking)
+    monkeypatch.setattr(serving.asyncio, 'wait_for', stop_after_poll)
+
+    await serving._supervise_held_dead_letters(stop)
+
+    lookup.assert_not_called()
+    run_blocking.assert_not_awaited()
+
+
+def test_request_paths_leave_held_expiry_to_supervisor(api, monkeypatch):
+    client, _ = api
+    service = module.serving_for_stage('dev')
+    service.metrics = Mock()
+    service.reconcile_async = AsyncMock()
+    monkeypatch.setattr(module, 'projection_pump_enabled', lambda: False)
+    monkeypatch.setattr(module, 'read_only_metrics_enabled', lambda: False)
+
+    response = client.post('/v2/batch-pipeline/reconcile', json={'stage': 'dev'})
+    assert response.status_code == 200
+    service.reconcile_async.assert_awaited_once_with(recover_quarantine=True, run_held_expiry=False)
+
+    service.reconcile_async.reset_mock()
+    response = client.get('/v2/batch-pipeline/metrics')
+    assert response.status_code == 200
+    service.reconcile_async.assert_awaited_once_with(periodic=True, run_held_expiry=False)
+
+
+def test_held_expiry_tick_failure_does_not_abort_maintenance(monkeypatch):
+    from utils.batch_pipeline import serving
+
+    service = Serving(MemoryStore())
+    service.held_dead_letter.tick = Mock(side_effect=RuntimeError('synthetic tick failure'))
+    service.projection_held_dead_letter.tick = Mock()
+    recover = Mock()
+    service.queue = Mock(return_value=SimpleNamespace(recover=recover))
+    service.ready_discovery.page = Mock(return_value=None)
+    service._drain_ready_page = Mock()
+    service.merge.reoffer_marked = Mock()
+    service.allowance_hold_due = time.monotonic() + 60
+    monkeypatch.setattr(serving, 'batch_held_dead_letter_enabled', lambda: True)
+
+    assert service.reconcile() == []
+
+    service.held_dead_letter.tick.assert_called_once()
+    service.projection_held_dead_letter.tick.assert_called_once()
+    recover.assert_called_once()
+    service.merge.reoffer_marked.assert_called_once()
+
+
 def test_serving_maintenance_fails_open_when_lease_store_errors():
     from utils.batch_pipeline.leader import SERVING_MAINTENANCE, LeaderLease
 
@@ -1189,7 +1382,6 @@ async def test_full_record_pass_repeats_after_yield_without_idle_wait(monkeypatc
 
 def test_stage_serving_initializes_once_and_keeps_independent_metrics_lease(monkeypatch):
     from utils.batch_pipeline import serving
-    from utils.batch_pipeline.leader import QUEUE_METRICS, SERVING_MAINTENANCE
 
     store = MemoryStore()
     metrics = QueueMetrics(CollectorRegistry(), min_refresh_seconds=30)
@@ -1223,5 +1415,7 @@ def test_stage_serving_initializes_once_and_keeps_independent_metrics_lease(monk
         assert metrics.oldest_leader.ttl_seconds == 20
         assert service.leader.role == SERVING_MAINTENANCE
         assert service.leader.ttl_seconds == 60
+        assert service.legacy_metrics_leader.role == SERVING_LEGACY_METRICS
+        assert service.legacy_metrics_leader.ttl_seconds == 60
     finally:
         serving._serving_for_stage.cache_clear()

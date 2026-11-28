@@ -137,13 +137,23 @@ async def test_renewal_failure_does_not_interrupt_live_audio(world, monkeypatch,
     monkeypatch.setattr(record_audio, 'renew_record_token_lease', failure)
     stored = []
     try:
-        await barrier.renew_recording('record')
+        first = await barrier.renew_recording('record')
         # This is the caller order used by both receive and upload batches:
         # the failed metadata side channel must return to the storage lane.
         stored.append(b'live audio')
-        await barrier.renew_recording('record')
-        assert failure.call_count == 2  # clock not advanced on failure
-        assert barrier.lease_renewed_at['record'] == original_time - 7200
+        second = await barrier.renew_recording('record')
+        if mode == 'serve':
+            # Serve fences: requeue the batch and retry metadata on the next one.
+            assert (first, second) == (False, False)
+            assert failure.call_count == 2  # clock not advanced on failure
+            assert barrier.lease_renewed_at['record'] == original_time - 7200
+        else:
+            # SCA-4463: shadow fences nothing; storage proceeds as in off and the
+            # next attempt waits the normal half-lease interval.
+            assert (first, second) == (True, True)
+            assert failure.call_count == 1
+            assert barrier.lease_renewed_at['record'] > original_time - 7200
+            assert 'record' not in barrier.lease_renewal_failed
         assert stored == [b'live audio']
         assert 'record' not in barrier.failed_recordings
     finally:
@@ -266,6 +276,95 @@ async def test_failure_during_inflight_renewal_cannot_restore_bookkeeping(world,
         await task
     assert not barrier.registered_sessions
     assert not barrier.lease_renewed_at and not barrier.lease_locks and not barrier.late_appends
+    assert metrics.ACTIVE._value.get() == before - 1
+
+
+async def test_failed_shadow_renewal_after_concurrent_drain_cannot_double_decrement(world, monkeypatch):
+    """SCA-4463 P3: a shadow renewal that fails after a concurrent failed drain
+    retired the lease must not restore the clock key that marks gauge ownership."""
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'shadow')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '0')
+    barrier = barrier_module.PusherRecordBarrier('synthetic')
+    await barrier.begin_recording('record')
+    barrier.lease_renewed_at['record'] -= 7200
+    before = metrics.ACTIVE._value.get()
+    shadow_failures = metrics.RENEWAL_FAILURES_SHADOW._value.get()
+    entered, release = asyncio.Event(), asyncio.Event()
+    original = barrier_module.run_blocking
+
+    async def renew(executor, fn, *args, **kwargs):
+        if fn is record_audio.renew_record_token_lease:
+            entered.set()
+            await release.wait()
+            raise ServiceUnavailable('synthetic renewal outage')
+        return await original(executor, fn, *args, **kwargs)
+
+    monkeypatch.setattr(barrier_module, 'run_blocking', renew)
+    task = asyncio.create_task(barrier.renew_recording('record'))
+    try:
+        await asyncio.wait_for(entered.wait(), 5)
+        await barrier.fail_recording('record')
+    finally:
+        release.set()
+        result = await task
+    assert result is True  # shadow fences nothing
+    assert metrics.RENEWAL_FAILURES_SHADOW._value.get() == shadow_failures + 1
+    assert 'record' not in barrier.lease_renewed_at
+    assert metrics.ACTIVE._value.get() == before - 1
+    barrier._forget_lease('record')  # a later retirement finds nothing to release
+    assert metrics.ACTIVE._value.get() == before - 1
+
+
+async def test_failed_shadow_renewal_retries_well_before_persisted_expiry(world, monkeypatch):
+    """SCA-4463 review P3: a shadow renewal timeout just past the half-lease mark
+    must retry after a short backoff, not a full half-lease, so the persisted
+    lease cannot lapse into a false late append. The backoff is measured from the
+    failure's completion, so a slow timeout cannot be followed at once by another
+    stalled attempt."""
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'shadow')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '0')
+    barrier = barrier_module.PusherRecordBarrier('synthetic')
+    await barrier.begin_recording('record')
+    before = metrics.ACTIVE._value.get()
+    half = lease.token_lease_seconds() / 2
+    backoff = barrier_module.SHADOW_RENEWAL_RETRY_SECONDS
+    slow_failure = 75.0
+    clock = [1_000_000.0]
+    # Swap only the barrier's module reference: patching time.monotonic itself
+    # would also move the event loop's clock.
+    real_time = barrier_module.time
+    monkeypatch.setattr(barrier_module, 'time', SimpleNamespace(monotonic=lambda: clock[0], time=real_time.time))
+    last_success = clock[0] - half - 1  # just past the half-lease mark
+    barrier.lease_renewed_at['record'] = last_success
+    calls = []
+    original = barrier_module.run_blocking
+
+    async def renew(executor, fn, *args, **kwargs):
+        if fn is record_audio.renew_record_token_lease:
+            calls.append(clock[0])
+            if len(calls) == 1:
+                clock[0] += slow_failure  # the metadata call takes 75 s to fail
+                raise ServiceUnavailable('synthetic renewal timeout')
+            return True
+        return await original(executor, fn, *args, **kwargs)
+
+    monkeypatch.setattr(barrier_module, 'run_blocking', renew)
+    try:
+        assert await barrier.renew_recording('record') is True  # shadow fences nothing
+        clock[0] += 1  # the very next frame batch after the slow failure
+        assert await barrier.renew_recording('record') is True
+        assert len(calls) == 1  # no back-to-back stalled attempt
+        clock[0] += backoff - 2
+        await barrier.renew_recording('record')
+        assert len(calls) == 1  # still inside the backoff
+        clock[0] += 2
+        assert await barrier.renew_recording('record') is True
+        assert len(calls) == 2  # retried once the backoff from completion elapsed
+        # The retry lands well before the persisted expiry (last success + lease):
+        # about 24 min of margin at the default lease, about 9 min at the 1800 s minimum.
+        assert last_success + 2 * half - calls[1] > 300
+    finally:
+        barrier._forget_lease('record')
     assert metrics.ACTIVE._value.get() == before - 1
 
 

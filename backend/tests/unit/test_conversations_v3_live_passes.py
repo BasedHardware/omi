@@ -18,6 +18,7 @@ from google.api_core.exceptions import InvalidArgument
 import pytest
 
 from database import conversations_v3 as store
+from database.account_deletion_marker import ACCOUNT_DELETION_COLLECTION
 from utils.conversations.v3 import metrics, policy, service
 from utils.home_feed.projection import reveal_display
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreTransaction
@@ -307,6 +308,36 @@ def test_live_title_claim_rechecks_current_privacy(strict, protection):
     assert token
     assert not store.write_live_title_preview(UID, token, cid, 1, firestore_client=strict)
     assert policy.LIVE_TITLE_STATE not in strict.rows[path(cid)]
+
+
+@pytest.mark.parametrize('wipe_status', ['cancelled', 'billing_failed', 'pending'])
+@pytest.mark.parametrize('title', [None, 'Preview'])
+def test_live_title_write_checks_transactional_deletion_marker(strict, wipe_status, title):
+    cid = 'live'
+    row = {
+        'v3_derived': True,
+        'status': 'in_progress',
+        'tile_state': 'live',
+        'sync_content_revision': 1,
+    }
+    if title:
+        row[policy.LIVE_TITLE_STATE] = 'attempted'
+    strict.rows[path(cid)] = deepcopy(row)
+    strict.rows[(ACCOUNT_DELETION_COLLECTION, UID)] = {'wipe_status': wipe_status}
+    token = store.leases.acquire(UID, 'builder', firestore_client=strict)
+
+    written = store.write_live_title_preview(UID, token, cid, 1, title=title, firestore_client=strict)
+    actual = strict.rows[path(cid)]
+    if wipe_status == 'pending':
+        assert not written
+        assert actual == row
+    elif title:
+        assert written
+        assert actual[policy.LIVE_TITLE_STATE] == 'published'
+        assert actual['structured']['title'] == title
+    else:
+        assert written
+        assert actual[policy.LIVE_TITLE_STATE] == 'attempted'
 
 
 @pytest.mark.asyncio

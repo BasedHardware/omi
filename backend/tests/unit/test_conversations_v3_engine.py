@@ -10,6 +10,7 @@ import zlib
 import pytest
 
 from utils.conversations.v3 import outline, planner
+from utils.conversations.v3.live import FINISH_RECORDING_FIELD, FINISH_STAMP_FIELD, FINISH_WINDOW_FIELD
 
 NOW = datetime(2026, 11, 16, 12, tzinfo=timezone.utc)
 
@@ -808,3 +809,64 @@ def test_transcript_size_cap_replans_failed_projection(monkeypatch, cohesion):
     for row in recovered:
         compressed = zlib.compress(json.dumps(row['transcript_segments']).encode())
         assert len(base64.b64encode(bytes(28) + compressed.hex().encode())) < planner.TRANSCRIPT_BUDGET
+
+
+def test_finish_stamp_follows_the_cut_to_its_card_once():
+    """Dual-card Finish: A's window carries A's stamp; B's own card, from an unstamped request, carries none."""
+    stamp = {'at': NOW, 'path': 'newer_dual'}
+    a = recording('a', finished_at=NOW + timedelta(seconds=10), v3_manual_end=True, **{FINISH_WINDOW_FIELD: 'window'})
+    a[FINISH_STAMP_FIELD] = stamp
+    later = NOW + timedelta(minutes=10)
+    b = recording('b', later, finished_at=later + timedelta(seconds=10), v3_manual_end=True)
+    b[FINISH_RECORDING_FIELD] = True
+    prior = {'id': 'window', 'started_at': NOW, 'finished_at': NOW + timedelta(seconds=10)}
+
+    def built(row, existing=None):
+        group = outline.stretches([row], row['finished_at'] + timedelta(seconds=1))[0]
+        return planner.build('u', planner.windows([group], [[entry()]])[0], {row['id']: row}, existing)
+
+    window = built(a, prior)
+    assert window['id'] == 'window' and window[FINISH_WINDOW_FIELD] == 'window'
+    assert window[FINISH_STAMP_FIELD] == stamp
+    b_card = built(b)
+    assert b_card['manual_end'] is True and b_card[FINISH_WINDOW_FIELD] == b_card['id']
+    assert FINISH_STAMP_FIELD not in b_card
+    # A later Finish stamp on the same source never replaces the one the card already carries.
+    a[FINISH_STAMP_FIELD] = {'at': NOW + timedelta(minutes=1), 'path': 'tail'}
+    assert built(a, window)[FINISH_STAMP_FIELD] == stamp
+
+
+def test_a_rebuilt_row_keeps_a_segment_the_final_pass_split_without_duplicating_it():
+    from utils.conversations.final_pass_split import split_segment_id
+
+    line = {'id': 's1', 'text': 'one two three four five six', 'start': 0, 'end': 10, 'is_user': True}
+    row = recording(segments=[line])
+    group = outline.stretches([row], NOW + timedelta(hours=1))[0]
+    window = planner.windows([group], [[entry()]])[0]
+    built = planner.build('u', window, {'r': row})
+    first = {**built['transcript_segments'][0], 'text': 'one two three', 'end': 5}
+    second = {**first, 'id': split_segment_id('s1', 1), 'text': 'four five six', 'start': 5, 'end': 10}
+    published = {**built, 'transcript_segments': [first, second], 'status': 'completed', 'v3_locked': True}
+    assert not planner.is_unlocked(published)
+    rebuilt = planner.build('u', window, {'r': row}, published)
+    assert [s['text'] for s in rebuilt['transcript_segments']] == ['one two three', 'four five six']
+    assert planner._holds_line(published, window['lines'][0])
+
+
+def test_a_split_line_replanned_under_a_new_id_is_not_appended_again():
+    from utils.conversations.final_pass_split import split_segment_id
+
+    text = 'we should ship the speaker fix on friday morning'
+    row = recording(segments=[{'id': 'new-id', 'text': text, 'start': 0, 'end': 10, 'is_user': True}])
+    group = outline.stretches([row], NOW + timedelta(hours=1))[0]
+    window = planner.windows([group], [[entry()]])[0]
+    built = planner.build('u', window, {'r': row})
+    base = {**built['transcript_segments'][0], 'id': 'old-id'}
+    first = {**base, 'text': 'we should ship the speaker', 'end': 5}
+    second = {**base, 'id': split_segment_id('old-id', 1), 'text': 'fix on friday morning', 'start': 5, 'end': 10}
+    published = {**built, 'transcript_segments': [first, second], 'status': 'completed'}
+    rebuilt = planner.build('u', window, {'r': row}, published)
+    assert [s['text'] for s in rebuilt['transcript_segments']] == [
+        'we should ship the speaker',
+        'fix on friday morning',
+    ]

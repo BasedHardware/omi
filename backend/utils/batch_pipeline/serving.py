@@ -38,7 +38,12 @@ from utils.batch_pipeline.projection_outbox import ProjectionOutbox
 from utils.executors import db_executor, run_blocking, start_background_task, sync_executor
 from utils.batch_pipeline.contracts import PoolCapacity, WorkResult
 from config.batch_pipeline_leader import UPLOAD_COALESCING_SCAN, UPLOAD_COALESCING_SCAN_TTL
-from utils.batch_pipeline.leader import QUEUE_METRICS, SERVING_MAINTENANCE, LeaderLease
+from utils.batch_pipeline.leader import (
+    QUEUE_METRICS,
+    SERVING_LEGACY_METRICS,
+    SERVING_MAINTENANCE,
+    LeaderLease,
+)
 from utils.batch_pipeline.held_dead_letter import HeldDeadLetter, ProjectionHeldDeadLetter
 from utils.batch_pipeline.ready_discovery import ReadyDiscovery
 from utils.batch_pipeline.merge import OrderedMerge
@@ -85,6 +90,7 @@ class Serving:
         enrichment_sweep=None,
         recovery=None,
         leader=None,
+        legacy_metrics_leader=None,
         outbox=None,
     ):
         self.store = store
@@ -101,6 +107,9 @@ class Serving:
         self.allowance_hold_due = 0.0
         # Optional single-owner lease for periodic maintenance (see reconcile).
         self.leader = leader
+        # A non-serving legacy /metrics process still runs idempotent maintenance,
+        # but must not hold the lease used by the serving supervisor.
+        self.legacy_metrics_leader = legacy_metrics_leader
         self.held_dead_letter = HeldDeadLetter(store, metrics=metrics)
         self.projection_held_dead_letter = ProjectionHeldDeadLetter(store, metrics=metrics)
         self.merge = OrderedMerge(store, metrics=metrics)
@@ -206,11 +215,23 @@ class Serving:
         if self.projector and getattr(self.projector, 'owes_index', False) is True:
             self.projector.schedule_index_flush(owner_id if owner_only else None)
 
-    def _leads(self, periodic: bool) -> bool:
+    def _leads(self, periodic: bool, *, leader=None) -> bool:
         # Explicit global RPC callers (POST /reconcile) always
         # run. Periodic ticks (supervisor, metrics scrape) run maintenance on
         # one serving instance per lease TTL; the lease fails open.
-        return not periodic or self.leader is None or self.leader.acquire()
+        lease = self.leader if leader is None else leader
+        return not periodic or lease is None or lease.acquire()
+
+    def _maintenance_leader(self, *, run_held_expiry: bool):
+        # The held-expiry supervisor owns SERVING_MAINTENANCE. Any maintenance
+        # pass that skips its inline expiry tick uses the separate lease.
+        if not run_held_expiry and self.legacy_metrics_leader is not None:
+            return self.legacy_metrics_leader
+        return self.leader
+
+    def refresh_serving_fresh_guard(self) -> bool:
+        """Use the same lease as the serving loop, which leaves expiry to its supervisor."""
+        return self.refresh_fresh_guard(leader=self._maintenance_leader(run_held_expiry=False))
 
     def _reconcile_owner(self, owner_id: str, recovered: str | None) -> list[str]:
         # The settled job remains result_ready/merge_pending until the fenced
@@ -241,11 +262,19 @@ class Serving:
             if owner_id is None or recovered is None:
                 raise ValueError('owner-only recovery requires an owner and recovered unit')
             return self._reconcile_owner(owner_id, recovered)
-        if self._leads(periodic):
+        # Metrics and explicit request paths may skip inline expiry. Keep their
+        # maintenance on the separate lease so they cannot retain the
+        # supervisor's expiry lease while omitting its tick.
+        maintenance_leader = self._maintenance_leader(run_held_expiry=run_held_expiry)
+        if self._leads(periodic, leader=maintenance_leader):
+            maintenance_options = {}
+            if maintenance_leader is not self.leader:
+                maintenance_options['maintenance_leader'] = maintenance_leader
             self._maintain(
                 recover_quarantine=recover_quarantine,
                 recovery_caller=RecoveryCaller.SERVING if periodic else RecoveryCaller.RECONCILE,
                 run_held_expiry=run_held_expiry,
+                **maintenance_options,
             )
         elif self.metrics:
             self.metrics.fresh_guard.deactivate()
@@ -350,21 +379,28 @@ class Serving:
             )
             self.held_pass_started = None
 
-    def refresh_fresh_guard(self) -> bool:
-        """Use the maintenance lease, including outside the potentially slow pass."""
+    def refresh_fresh_guard(self, *, leader=None) -> bool:
+        """Use the selected maintenance lease, including outside the potentially slow pass."""
         if not self.metrics:
             return False
         # Explicit reconcile bypasses the periodic lease; the guard never does.
-        leads = self._leads(True)
+        leads = self._leads(True, leader=leader)
         if leads:
             self.metrics.fresh_guard.refresh(self.store)
         else:
             self.metrics.fresh_guard.deactivate()
         return leads
 
-    def _maintain(self, *, recover_quarantine: bool, recovery_caller=None, run_held_expiry=True):
+    def _maintain(
+        self,
+        *,
+        recover_quarantine: bool,
+        recovery_caller=None,
+        run_held_expiry=True,
+        maintenance_leader=None,
+    ):
         """Idempotent, transaction-fenced maintenance: cleanup, sweeps, discovery, recovery, drain."""
-        leads = self.refresh_fresh_guard()
+        leads = self.refresh_fresh_guard(leader=maintenance_leader)
         if self.metrics:
             if leads:
                 self.metrics.delivered_share.refresh(self.store)
@@ -427,7 +463,7 @@ class Serving:
                 'event=batch_projection action=redrive_expired outcome=retry exception_type=%s', type(error).__name__
             )
         self.queue().recover(time.time(), caller=recovery_caller)
-        if time.monotonic() >= self.allowance_hold_due and self._leads(True):
+        if time.monotonic() >= self.allowance_hold_due and self._leads(True, leader=maintenance_leader):
             self.allowance_hold_due = time.monotonic() + 30
             AllowanceHolds(self.store, entitlement).tick(time.time())
         page = self.ready_discovery.page()
@@ -496,6 +532,7 @@ def _serving_for_stage(stage: str) -> Serving:
         enrichment_sweep=reprocess.sweep,
         # Supervisor ticks every 20s; a lapsed holder hands over within 60s.
         leader=LeaderLease(store, SERVING_MAINTENANCE, ttl_seconds=60),
+        legacy_metrics_leader=LeaderLease(store, SERVING_LEGACY_METRICS, ttl_seconds=60),
     )
 
 
@@ -527,12 +564,12 @@ async def _supervise_backlog_heartbeat(stop):
 
 async def _supervise_fresh_guard(stop):
     # General maintenance (and its sync executor) may be occupied for minutes.
-    # Keep the same maintenance leader, but borrow a DB thread only for this
-    # bounded count pair. FreshGuard coalesces overlaps and enforces 60s spacing.
+    # Keep the same lease as the serving loop, but borrow a DB thread only for
+    # this bounded count pair. FreshGuard coalesces overlaps and enforces 60s spacing.
     while not stop.is_set():
         try:
             service = await run_blocking(db_executor, serving_for_stage, current_stage())
-            await run_blocking(db_executor, service.refresh_fresh_guard)
+            await run_blocking(db_executor, service.refresh_serving_fresh_guard)
         except Exception as error:
             logging.getLogger(__name__).error(
                 'event=batch_fresh_guard outcome=retry exception_type=%s', type(error).__name__

@@ -4769,8 +4769,12 @@
     "firmwareNewestSupportedForDevice": "Jūsu ierīcē jau ir jaunākā atbalstītā aparatprogrammatūras versija",
     "firmwareSyncRecordingsFirstTitle": "Vispirms sinhronizējiet savus ierakstus",
     "firmwareSyncRecordingsFirstMessage": "Daži ieraksti vēl atrodas jūsu ierīcē. Ļaujiet tiem pabeigt sinhronizēšanu ar tālruni, pēc tam sāciet atjaunināšanu.",
+    "batteryRestartToRefresh": "Restartējiet Omi, lai atsvaidzinātu",
+    "onTheWayAllowanceHeldTitle": "Tiks apstrādāti {date}, kad atjaunosies jūsu minūtes",
+    "onTheWayAllowanceHeldUpgrade": "Vai jauniniet plānu, lai tos apstrādātu uzreiz",
+    "onTheWayDayProcessesOn": "Apstrādās {date}",
+    "transcriptHoldLineHint": "Nospiediet un turiet rindu, lai nosauktu runātāju.",
     "experimentalDesign": "Eksperimentālais dizains",
     "experimentalDesignDescription": "Izmēģiniet sākuma ekrāna un sarunu jauno izskatu pirms tā izlaišanas.",
-    "endConversationShort": "Beigt",
-    "transcriptHoldLineHint": "Nospiediet un turiet rindu, lai nosauktu runātāju."
+    "endConversationShort": "Beigt"
 }

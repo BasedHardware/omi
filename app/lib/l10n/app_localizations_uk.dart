@@ -15877,6 +15877,25 @@ class AppLocalizationsUk extends AppLocalizations {
       'Деякі записи ще зберігаються на вашому пристрої. Дочекайтеся завершення синхронізації з телефоном, а потім почніть оновлення.';
 
   @override
+  String get batteryRestartToRefresh => 'Перезавантажте Omi, щоб оновити';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Буде оброблено $date, коли відновляться ваші хвилини';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Або обробіть їх одразу, покращивши план';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Буде оброблено $date';
+  }
+
+  @override
+  String get transcriptHoldLineHint => 'Натисніть і утримуйте рядок, щоб указати, хто говорить.';
+
+  @override
   String get experimentalDesign => 'Експериментальний дизайн';
 
   @override
@@ -15884,7 +15903,4 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get endConversationShort => 'Завершити';
-
-  @override
-  String get transcriptHoldLineHint => 'Натисніть і утримуйте рядок, щоб указати, хто говорить.';
 }

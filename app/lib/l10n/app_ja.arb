@@ -4769,8 +4769,12 @@
     "firmwareNewestSupportedForDevice": "お使いのデバイスは、すでにサポートされている最新のファームウェアバージョンで動作しています",
     "firmwareSyncRecordingsFirstTitle": "まず録音を同期してください",
     "firmwareSyncRecordingsFirstMessage": "一部の録音はまだデバイスに残っています。スマートフォンへの同期が完了してから、更新を開始してください。",
+    "batteryRestartToRefresh": "Omiを再起動して更新",
+    "onTheWayAllowanceHeldTitle": "分数が更新される{date}に処理されます",
+    "onTheWayAllowanceHeldUpgrade": "またはプランのアップグレードですぐに処理できます",
+    "onTheWayDayProcessesOn": "{date}に処理予定",
+    "transcriptHoldLineHint": "行を長押しすると、話している人に名前を付けられます。",
     "experimentalDesign": "試験的デザイン",
     "experimentalDesignDescription": "ホームと会話の新しいデザインをリリース前に試せます。",
-    "endConversationShort": "終了",
-    "transcriptHoldLineHint": "行を長押しすると、話している人に名前を付けられます。"
+    "endConversationShort": "終了"
 }

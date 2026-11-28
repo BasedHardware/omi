@@ -15949,6 +15949,25 @@ class AppLocalizationsEl extends AppLocalizations {
       'Μερικές ηχογραφήσεις βρίσκονται ακόμη στη συσκευή σας. Περιμένετε να ολοκληρωθεί ο συγχρονισμός τους στο τηλέφωνό σας και, στη συνέχεια, ξεκινήστε την ενημέρωση.';
 
   @override
+  String get batteryRestartToRefresh => 'Κάντε επανεκκίνηση του Omi για να ανανεωθεί η ένδειξη';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Θα επεξεργαστούν στις $date όταν ανανεωθούν τα λεπτά σας';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Ή επεξεργαστείτε τα αμέσως με μια αναβάθμιση προγράμματος';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Επεξεργασία στις $date';
+  }
+
+  @override
+  String get transcriptHoldLineHint => 'Πατήστε παρατεταμένα μια γραμμή για να ονομάσετε ποιος μιλάει.';
+
+  @override
   String get experimentalDesign => 'Πειραματικός σχεδιασμός';
 
   @override
@@ -15957,7 +15976,4 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get endConversationShort => 'Τέλος';
-
-  @override
-  String get transcriptHoldLineHint => 'Πατήστε παρατεταμένα μια γραμμή για να ονομάσετε ποιος μιλάει.';
 }

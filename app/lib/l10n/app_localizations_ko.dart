@@ -15616,6 +15616,25 @@ class AppLocalizationsKo extends AppLocalizations {
   String get firmwareSyncRecordingsFirstMessage => '일부 녹음이 아직 기기에 남아 있습니다. 휴대폰으로의 동기화가 완료되면 업데이트를 시작해 주세요.';
 
   @override
+  String get batteryRestartToRefresh => '새로고침하려면 Omi를 다시 시작하세요';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return '분이 갱신되는 $date에 처리됩니다';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => '또는 플랜을 업그레이드하여 바로 처리할 수 있습니다';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return '$date에 처리';
+  }
+
+  @override
+  String get transcriptHoldLineHint => '줄을 길게 누르면 말하는 사람의 이름을 지정할 수 있습니다.';
+
+  @override
   String get experimentalDesign => '실험적 디자인';
 
   @override
@@ -15623,7 +15642,4 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get endConversationShort => '종료';
-
-  @override
-  String get transcriptHoldLineHint => '줄을 길게 누르면 말하는 사람의 이름을 지정할 수 있습니다.';
 }

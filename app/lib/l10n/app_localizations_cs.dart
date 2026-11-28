@@ -15843,6 +15843,25 @@ class AppLocalizationsCs extends AppLocalizations {
       'Některé nahrávky jsou stále ve vašem zařízení. Počkejte, až se synchronizují do telefonu, a potom spusťte aktualizaci.';
 
   @override
+  String get batteryRestartToRefresh => 'Restartujte Omi pro obnovení údaje';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Zpracuje se $date, až se obnoví vaše minuty';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Nebo je zpracujte hned upgradem plánu';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Zpracuje se $date';
+  }
+
+  @override
+  String get transcriptHoldLineHint => 'Podržením řádku pojmenujete, kdo mluví.';
+
+  @override
   String get experimentalDesign => 'Experimentální design';
 
   @override
@@ -15850,7 +15869,4 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get endConversationShort => 'Ukončit';
-
-  @override
-  String get transcriptHoldLineHint => 'Podržením řádku pojmenujete, kdo mluví.';
 }

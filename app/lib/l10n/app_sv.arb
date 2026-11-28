@@ -4769,8 +4769,12 @@
     "firmwareNewestSupportedForDevice": "Din enhet har redan den senaste firmwareversionen som stöds",
     "firmwareSyncRecordingsFirstTitle": "Synkronisera dina inspelningar först",
     "firmwareSyncRecordingsFirstMessage": "Vissa inspelningar finns fortfarande på din enhet. Låt dem slutföra synkroniseringen till telefonen och starta sedan uppdateringen.",
+    "batteryRestartToRefresh": "Starta om Omi för att uppdatera",
+    "onTheWayAllowanceHeldTitle": "Bearbetas {date} när dina minuter förnyas",
+    "onTheWayAllowanceHeldUpgrade": "Eller bearbeta dem direkt med en planuppgradering",
+    "onTheWayDayProcessesOn": "Bearbetas {date}",
+    "transcriptHoldLineHint": "Tryck och håll på en rad för att namnge den som talar.",
     "experimentalDesign": "Experimentell design",
     "experimentalDesignDescription": "Testa det nya utseendet för Hem och konversationer innan det släpps.",
-    "endConversationShort": "Avsluta",
-    "transcriptHoldLineHint": "Tryck och håll på en rad för att namnge den som talar."
+    "endConversationShort": "Avsluta"
 }

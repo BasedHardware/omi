@@ -4769,8 +4769,12 @@
     "firmwareNewestSupportedForDevice": "Peranti anda sudah menggunakan versi firmware terbaharu yang disokong",
     "firmwareSyncRecordingsFirstTitle": "Segerakkan rakaman anda terlebih dahulu",
     "firmwareSyncRecordingsFirstMessage": "Sebahagian rakaman masih berada pada peranti anda. Biarkan ia selesai disegerakkan ke telefon anda, kemudian mulakan kemas kini.",
+    "batteryRestartToRefresh": "Mulakan semula Omi untuk memuat semula",
+    "onTheWayAllowanceHeldTitle": "Akan diproses pada {date} apabila minit anda diperbaharui",
+    "onTheWayAllowanceHeldUpgrade": "Atau proses terus dengan naik taraf pelan",
+    "onTheWayDayProcessesOn": "Diproses pada {date}",
+    "transcriptHoldLineHint": "Tekan dan tahan satu baris untuk menamakan siapa yang bercakap.",
     "experimentalDesign": "Reka bentuk percubaan",
     "experimentalDesignDescription": "Cuba rupa baharu Laman Utama dan perbualan sebelum ia dikeluarkan.",
-    "endConversationShort": "Tamat",
-    "transcriptHoldLineHint": "Tekan dan tahan satu baris untuk menamakan siapa yang bercakap."
+    "endConversationShort": "Tamat"
 }

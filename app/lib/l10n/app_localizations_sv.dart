@@ -15852,6 +15852,25 @@ class AppLocalizationsSv extends AppLocalizations {
       'Vissa inspelningar finns fortfarande på din enhet. Låt dem slutföra synkroniseringen till telefonen och starta sedan uppdateringen.';
 
   @override
+  String get batteryRestartToRefresh => 'Starta om Omi för att uppdatera';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Bearbetas $date när dina minuter förnyas';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Eller bearbeta dem direkt med en planuppgradering';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Bearbetas $date';
+  }
+
+  @override
+  String get transcriptHoldLineHint => 'Tryck och håll på en rad för att namnge den som talar.';
+
+  @override
   String get experimentalDesign => 'Experimentell design';
 
   @override
@@ -15859,7 +15878,4 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get endConversationShort => 'Avsluta';
-
-  @override
-  String get transcriptHoldLineHint => 'Tryck och håll på en rad för att namnge den som talar.';
 }

@@ -4769,8 +4769,12 @@
     "firmwareNewestSupportedForDevice": "Vaše zařízení už používá nejnovější podporovanou verzi firmwaru",
     "firmwareSyncRecordingsFirstTitle": "Nejprve synchronizujte své nahrávky",
     "firmwareSyncRecordingsFirstMessage": "Některé nahrávky jsou stále ve vašem zařízení. Počkejte, až se synchronizují do telefonu, a potom spusťte aktualizaci.",
+    "batteryRestartToRefresh": "Restartujte Omi pro obnovení údaje",
+    "onTheWayAllowanceHeldTitle": "Zpracuje se {date}, až se obnoví vaše minuty",
+    "onTheWayAllowanceHeldUpgrade": "Nebo je zpracujte hned upgradem plánu",
+    "onTheWayDayProcessesOn": "Zpracuje se {date}",
+    "transcriptHoldLineHint": "Podržením řádku pojmenujete, kdo mluví.",
     "experimentalDesign": "Experimentální design",
     "experimentalDesignDescription": "Vyzkoušejte nový vzhled domovské obrazovky a konverzací před vydáním.",
-    "endConversationShort": "Ukončit",
-    "transcriptHoldLineHint": "Podržením řádku pojmenujete, kdo mluví."
+    "endConversationShort": "Ukončit"
 }

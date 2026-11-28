@@ -15854,6 +15854,25 @@ class AppLocalizationsTr extends AppLocalizations {
       'Bazı kayıtlar hâlâ cihazınızda. Telefonunuza senkronize edilmelerini bekleyin, ardından güncellemeyi başlatın.';
 
   @override
+  String get batteryRestartToRefresh => 'Yenilemek için Omi\'yi yeniden başlatın';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Dakikalarınız yenilendiğinde $date tarihinde işlenecek';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Ya da plan yükseltmesiyle bunları hemen işleme alın';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return '$date tarihinde işlenecek';
+  }
+
+  @override
+  String get transcriptHoldLineHint => 'Kimin konuştuğunu adlandırmak için bir satıra basılı tutun.';
+
+  @override
   String get experimentalDesign => 'Deneysel tasarım';
 
   @override
@@ -15861,7 +15880,4 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get endConversationShort => 'Bitir';
-
-  @override
-  String get transcriptHoldLineHint => 'Kimin konuştuğunu adlandırmak için bir satıra basılı tutun.';
 }

@@ -15880,6 +15880,25 @@ class AppLocalizationsHr extends AppLocalizations {
       'Neke snimke još su na tvojem uređaju. Pričekaj da se sinkroniziraju na tvoj telefon, a zatim pokreni ažuriranje.';
 
   @override
+  String get batteryRestartToRefresh => 'Ponovno pokrenite Omi za osvježavanje';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Bit će obrađene $date kada se obnove tvoje minute';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Ili ih odmah obradi uz nadogradnju plana';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Obradit će se $date';
+  }
+
+  @override
+  String get transcriptHoldLineHint => 'Pritisnite i držite redak da imenujete tko govori.';
+
+  @override
   String get experimentalDesign => 'Eksperimentalni dizajn';
 
   @override
@@ -15887,7 +15906,4 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get endConversationShort => 'Završi';
-
-  @override
-  String get transcriptHoldLineHint => 'Pritisnite i držite redak da imenujete tko govori.';
 }

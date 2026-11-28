@@ -4804,8 +4804,12 @@
     "firmwareNewestSupportedForDevice": "Seu dispositivo já está na versão de firmware mais recente suportada",
     "firmwareSyncRecordingsFirstTitle": "Sincronize suas gravações primeiro",
     "firmwareSyncRecordingsFirstMessage": "Algumas gravações ainda estão no seu dispositivo. Deixe-as concluir a sincronização com seu telefone e, em seguida, inicie a atualização.",
+    "batteryRestartToRefresh": "Reinicie o Omi para atualizar",
+    "onTheWayAllowanceHeldTitle": "Serão processados em {date} quando seus minutos renovarem",
+    "onTheWayAllowanceHeldUpgrade": "Ou processe-os imediatamente com um upgrade de plano",
+    "onTheWayDayProcessesOn": "Processa em {date}",
+    "transcriptHoldLineHint": "Toque e segure uma linha para dar nome a quem fala.",
     "experimentalDesign": "Design experimental",
     "experimentalDesignDescription": "Experimente o novo visual do Início e das conversas antes do lançamento.",
-    "endConversationShort": "Encerrar",
-    "transcriptHoldLineHint": "Toque e segure uma linha para dar nome a quem fala."
+    "endConversationShort": "Encerrar"
 }

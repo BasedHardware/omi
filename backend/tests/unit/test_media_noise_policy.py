@@ -73,6 +73,8 @@ def classify(segments=None, *, seconds=120, owner=0, screen_rows=(), **kwargs):
 def clean_env(monkeypatch):
     for suffix in ('', '_SERVE_PERCENT', '_SERVE_UID_SHA256S'):
         monkeypatch.delenv(FLAG + suffix, raising=False)
+    # Stage 1 of the 2026-11-28 retirement: an unset mode is off now, so bind the shadow under test.
+    monkeypatch.setenv(FLAG, 'shadow')
 
 
 @pytest.mark.parametrize(

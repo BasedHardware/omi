@@ -15971,6 +15971,26 @@ class AppLocalizationsTl extends AppLocalizations {
       'May mga recording pa na nasa iyong device. Hayaang matapos munang i-sync ang mga ito sa iyong phone, pagkatapos ay simulan ang pag-update.';
 
   @override
+  String get batteryRestartToRefresh => 'I-restart ang Omi upang i-refresh';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Ipo-proseso sa $date kapag mag-renew na ang iyong mga minuto';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'O mag-plan upgrade para maiproseso agad ang mga ito';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Maiiproseso sa $date';
+  }
+
+  @override
+  String get transcriptHoldLineHint =>
+      'Pindutin nang matagal ang isang linya para pangalanan kung sino ang nagsasalita.';
+
+  @override
   String get experimentalDesign => 'Eksperimental na disenyo';
 
   @override
@@ -15978,8 +15998,4 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get endConversationShort => 'Tapusin';
-
-  @override
-  String get transcriptHoldLineHint =>
-      'Pindutin nang matagal ang isang linya para pangalanan kung sino ang nagsasalita.';
 }

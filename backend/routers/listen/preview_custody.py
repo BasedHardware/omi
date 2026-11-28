@@ -8,18 +8,30 @@ from prometheus_client import Counter
 from config.live_stt_preview_custody import preview_batch_custody_enabled
 from config.server_batch import capture_language, SUPPORTED as SERVER_BATCH_LANGUAGES
 from config.batch_live_preview import capture_snapshot
+from database.reason_labels import ReasonFamily
 from database.server_batch_audio import claim_server_batch_lane
 from utils.episodes.batch_close import attach_admitted_batch_capture
 from utils.executors import db_executor, run_blocking, start_background_task
 from utils.observability.fallback import record_fallback
+from utils.observability.reasons import PreviewCustodyFallbackReason, reason_label
 
 logger = logging.getLogger(__name__)
 
 OMI_LISTEN_PREVIEW_BATCH_CUSTODY_TOTAL = Counter(
     'omi_listen_preview_batch_custody_total',
-    'Local-preview audio custody promotion attempts by bounded outcome',
-    ['outcome'],
+    'Local-preview audio custody promotion attempts by bounded outcome and fallback reason',
+    ['outcome', 'reason'],
 )
+
+
+def _note_fallback_reason(receiver, reason: str) -> None:
+    """Carry the fallback reason onto the session so its live transports can meter it."""
+    try:
+        telemetry = getattr(getattr(receiver, 'host', None), 'demand_telemetry', None)
+        if telemetry is not None:
+            telemetry.note_fallback_reason(reason)
+    except Exception:
+        pass
 
 
 def _needs_claim(receiver) -> bool:
@@ -47,18 +59,25 @@ async def claim_preview_batch_custody(receiver) -> bool:
         attempted = receiver._preview_batch_claims = set()
     attempted.add(conversation_id)
     row = None
+    # Which of the three reasons the promotion did not happen. Outcome counts
+    # alone cannot price a recoverable claim miss, so the reason travels with
+    # the fallback and onto the live transport it opens.
+    reason = 'claim'
     try:
         # Without durable original-audio custody, keep the live transcript.
         language = capture_language(receiver.host)
-        if (
-            getattr(getattr(receiver, 'raw_archive', None), 'durable', False)
-            and getattr(receiver.host, 'private_cloud_sync_enabled', False)
+        if not getattr(getattr(receiver, 'raw_archive', None), 'durable', False):
+            reason = 'archive'
+        elif not (
+            getattr(receiver.host, 'private_cloud_sync_enabled', False)
             and not getattr(receiver.host, 'use_custom_stt', False)
             and not getattr(receiver.host, 'server_batch_byok', False)
             and not getattr(receiver.host, 'is_multi_channel', False)
             and getattr(receiver.host, 'pusher_enabled', False)
             and language in SERVER_BATCH_LANGUAGES | {'multi'}
         ):
+            reason = 'policy'
+        else:
             row = await run_blocking(
                 db_executor,
                 claim_server_batch_lane,
@@ -68,8 +87,13 @@ async def claim_preview_batch_custody(receiver) -> bool:
             )
     except Exception as error:
         logger.warning('Preview batch custody claim failed type=%s', type(error).__name__)
+        reason = 'claim'
     if row is None:
-        OMI_LISTEN_PREVIEW_BATCH_CUSTODY_TOTAL.labels(outcome='live_fallback').inc()
+        OMI_LISTEN_PREVIEW_BATCH_CUSTODY_TOTAL.labels(
+            outcome='live_fallback',
+            reason=reason_label(ReasonFamily.PREVIEW_CUSTODY, reason, PreviewCustodyFallbackReason),
+        ).inc()
+        _note_fallback_reason(receiver, reason)
         record_fallback(
             component='stt_selection',
             from_mode='none',
@@ -95,7 +119,10 @@ async def claim_preview_batch_custody(receiver) -> bool:
         ),
         name='listen_batch_admission_attach',
     )
-    OMI_LISTEN_PREVIEW_BATCH_CUSTODY_TOTAL.labels(outcome='promoted').inc()
+    OMI_LISTEN_PREVIEW_BATCH_CUSTODY_TOTAL.labels(
+        outcome='promoted',
+        reason=reason_label(ReasonFamily.PREVIEW_CUSTODY, 'none', PreviewCustodyFallbackReason),
+    ).inc()
     return True
 
 

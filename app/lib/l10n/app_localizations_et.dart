@@ -15836,6 +15836,25 @@ class AppLocalizationsEt extends AppLocalizations {
       'Mõned salvestised on veel teie seadmes. Oodake, kuni need on telefonisse sünkroonitud, ja seejärel alustage uuendust.';
 
   @override
+  String get batteryRestartToRefresh => 'Taaskäivitage Omi värskendamiseks';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Töödeldakse $date, kui teie minutid uuenevad';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Või töödelge need kohe plaani täiendusega';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Töödeldakse $date';
+  }
+
+  @override
+  String get transcriptHoldLineHint => 'Vajuta ja hoia rida, et anda kõnelejale nimi.';
+
+  @override
   String get experimentalDesign => 'Eksperimentaalne kujundus';
 
   @override
@@ -15843,7 +15862,4 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get endConversationShort => 'Lõpeta';
-
-  @override
-  String get transcriptHoldLineHint => 'Vajuta ja hoia rida, et anda kõnelejale nimi.';
 }

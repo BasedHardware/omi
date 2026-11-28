@@ -66,7 +66,7 @@ textPayload. Widening filters alone does not preserve these label series: their
 producer/extractor transition needs a separate verified compatibility gate before
 notifications-job migration. Do not silently accept empty label values.
 
-`sync_backfill_uid_sequencer_scheduler_failure` selects Cloud Scheduler platform
+(Retired with the sequencer job, SCA-2965; kept for history.) `sync_backfill_uid_sequencer_scheduler_failure` selected Cloud Scheduler platform
 AttemptFinished records, not application messages. Preserve `severity>=ERROR`,
 `jsonPayload."@type"`, job ID and resource predicates unchanged.
 

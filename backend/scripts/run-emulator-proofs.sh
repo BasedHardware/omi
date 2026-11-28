@@ -59,6 +59,9 @@ run_proof() {
 # ordinary unit shards intentionally do not stand up emulator services.
 run_proof "v3 Finish (bounded source query and concurrent window fence)" \
   "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_conversations_v3_finish_emulator.py
+run_proof "PL-158 quiet discovery and admission speech clock" \
+  env GOOGLE_CLOUD_PROJECT=demo-pl158-quiet-clock GCLOUD_PROJECT=demo-pl158-quiet-clock FIREBASE_PROJECT_ID=demo-pl158-quiet-clock \
+  "$PYTHON" -m scripts.quiet_speech_clock_emulator_test
 run_proof "record custody append (committed reply loss, retries, privacy)" \
   "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_record_custody_append_emulator.py
 run_proof "LLM gateway idempotency (claim, replay, expiry, stale settlement)" \
@@ -76,6 +79,8 @@ run_proof "sync/live overlap admission race (coarse hint, contention retry, no t
   "$PYTHON" scripts/sync_live_overlap_contention_emulator_test.py
 run_proof "canonical apply-control read retry (transient / exhausted / wipe race)" \
   "$PYTHON" scripts/canonical_apply_control_retry_emulator_test.py
+run_proof "memory visibility contention (materialization, fresh transactions and commit readback)" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider scripts/memory_visibility_contention_emulator_test.py
 run_proof "destructive gate contention (same-kind block / stale takeover fence)" \
   "$PYTHON" scripts/destructive_gate_contention_emulator_test.py
 # Purge fixtures deliberately refuse cloud fallback. Make a wrong proof host a
@@ -139,8 +144,8 @@ run_proof "privacy cache replay (120-transition smoke and catch proofs)" \
 
 # Job-store conformance (legacy-retire lane 12): sim + Firestore emulator legs here; the Postgres leg
 # skips in CI (no Postgres service, decision S6) and is proven locally/staging.
-# Includes PL-141/142/143 scheduler pull ownership, expiry and abort/restart recovery.
-run_proof "job-store conformance (fenced pulls, projection scan fallback and custody)" \
+# Includes PL-141/142/143 scheduler pull ownership, expiry and abort/restart recovery, and committed projection debt (PL-665/666/667).
+run_proof "job-store conformance (fenced pulls, projection scan fallback, custody and projection obligations)" \
   env "OMI_REQUIRE_STORE_BACKENDS=${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" \
   "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_store_conformance.py \
   tests/integration/test_recovery_custody_conformance.py

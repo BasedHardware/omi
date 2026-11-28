@@ -260,7 +260,13 @@ def test_surface_uses_source_and_scopes():
 
 def test_process_conversation_observes_every_successful_persist():
     text = (BACKEND / 'utils' / 'conversations' / 'process_conversation.py').read_text()
-    body = text[text.index('def process_conversation(') :]
+    process = next(
+        node
+        for node in ast.parse(text).body
+        if isinstance(node, ast.FunctionDef) and node.name == '_process_conversation_steps'
+    )
+    body = ast.get_source_segment(text, process)
+    assert body is not None
     assert body.count('_observe_owner_recognition_completion(') == 2
     report = body[body.index('def report_persistence(') : body.index('is_initial_creation')]
     # Backfilled v3 rows skip owner-recognition telemetry (legacy processing observed them); recovery keeps it.
@@ -268,11 +274,6 @@ def test_process_conversation_observes_every_successful_persist():
     assert '_observe_owner_recognition_completion(completed)' in report
     fence = body.index('if not persisted:')
     assert body.index('report_persistence(persisted, completed=conversation)') < fence
-    process = next(
-        node
-        for node in ast.parse(text).body
-        if isinstance(node, ast.FunctionDef) and node.name == 'process_conversation'
-    )
     fence_node = next(
         node
         for node in process.body

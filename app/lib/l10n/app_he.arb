@@ -12326,8 +12326,12 @@
     "firmwareNewestSupportedForDevice": "המכשיר שלך כבר נמצא בגרסת הקושחה החדשה ביותר הנתמכת עבורו",
     "firmwareSyncRecordingsFirstTitle": "סנכרן תחילה את ההקלטות שלך",
     "firmwareSyncRecordingsFirstMessage": "חלק מההקלטות עדיין נמצאות במכשיר שלך. תן להן להשלים את הסינכרון לטלפון, ואז התחל את העדכון.",
+    "batteryRestartToRefresh": "הפעל מחדש את Omi כדי לרענן",
+    "onTheWayAllowanceHeldTitle": "ייעבדו ב-{date} כשהדקות שלך יתחדשו",
+    "onTheWayAllowanceHeldUpgrade": "או עבד אותן מיד עם שדרוג תוכנית",
+    "onTheWayDayProcessesOn": "ייעבדו ב-{date}",
+    "transcriptHoldLineHint": "לחצו לחיצה ארוכה על שורה כדי לתת שם למי שמדבר.",
     "experimentalDesign": "עיצוב ניסיוני",
     "experimentalDesignDescription": "נסו את המראה החדש של מסך הבית והשיחות לפני שהוא משוחרר.",
-    "endConversationShort": "סיום",
-    "transcriptHoldLineHint": "לחצו לחיצה ארוכה על שורה כדי לתת שם למי שמדבר."
+    "endConversationShort": "סיום"
 }

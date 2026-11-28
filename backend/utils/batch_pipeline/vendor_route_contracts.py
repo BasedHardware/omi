@@ -52,9 +52,9 @@ MODULATE: Final = 'modulate'
 SONIOX: Final = 'soniox'
 ROUTES: Final[frozenset[str]] = frozenset({GPU, MODULATE, SONIOX})
 VENDOR_SERVICES: Final[frozenset[str]] = frozenset({MODULATE, SONIOX})
-# Lead requirement (11-01): Soniox async lists $0.10/h, so it is failover capacity only and
-# selection never picks it as cheapest. A table that clears the flag is malformed.
-FAILOVER_ONLY_SERVICES: Final[frozenset[str]] = frozenset({SONIOX})
+# Soniox may start a unit when a table lists it as a primary (David 2026-11-27: Soniox first for languages
+# Parakeet cannot serve, from a measured eval). This replaces the 11-01 lead rule that made it failover capacity
+# only. ``failover_only`` stays a per-table choice for any vendor.
 
 Selection = Literal['cheapest', 'ordered']
 SELECTIONS: Final[frozenset[str]] = frozenset({'cheapest', 'ordered'})
@@ -88,10 +88,8 @@ def route_capable(route: str, language: str | None) -> bool:
     Vendors identify the language themselves (Modulate auto-detect, Soniox unified model), so
     vendor capability is surface admission only; tables narrow it per language class.
 
-    Soniox is not admitted on ``prerecorded`` today (only ``streaming`` and ``held_recovery``), so
-    it is never capable here and failover has no Soniox candidate until slice D adds that
-    admission to ``config.stt_provider_policy`` alongside its prerecorded adapter. That
-    reviewed policy change, not a table edit, is what enables Soniox failover.
+    Soniox is admitted on ``prerecorded`` (``config.stt_provider_policy``), so it is capable here;
+    the table's ``failover_only`` decides whether it may start a unit or only replace one.
     """
     if route == GPU:
         return parakeet_supports_language(STTServingSurface.PRERECORDED, normalized_language(language))
@@ -150,8 +148,6 @@ class RouteConfig:
             config.daily_audio_hours_cap is not None or config.monthly_budget_usd is not None or config.failover_only
         ):
             raise RouteTableInvalid('gpu takes no spend cap and is never failover-only')
-        if route in FAILOVER_ONLY_SERVICES and not config.failover_only:
-            raise RouteTableInvalid('this vendor is failover capacity only')
         return config
 
 

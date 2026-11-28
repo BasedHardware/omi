@@ -21,11 +21,15 @@ class DeviceStatsRow extends StatelessWidget {
     this.catchUpCaption,
     this.onOpenCatchUp,
     this.showUnknownBattery = false,
+    this.batteryStuck = false,
   });
 
   /// Battery percent, or -1 while the reading is unavailable.
   final int batteryLevel;
   final bool showUnknownBattery;
+
+  /// The pendant's near-empty reading looks stuck; the tile suggests a restart.
+  final bool batteryStuck;
   final bool isCharging;
   final int heardTodaySeconds;
   final int onDeviceSeconds;
@@ -53,7 +57,11 @@ class DeviceStatsRow extends StatelessWidget {
           label: l10n.battery,
           value: batteryLevel >= 0 ? '$batteryLevel%' : '—',
           semanticValue: batteryLevel < 0 ? l10n.unknown : null,
-          caption: isCharging ? l10n.charging : null,
+          caption: isCharging
+              ? l10n.charging
+              : batteryStuck
+                  ? l10n.batteryRestartToRefresh
+                  : null,
         ),
       _StatTile(
         key: const Key('device_stat_heard_today'),

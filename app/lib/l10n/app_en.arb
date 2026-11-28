@@ -19361,6 +19361,38 @@
     "@firmwareSyncRecordingsFirstMessage": {
         "description": "Dialog body explaining that recordings must finish syncing from the pendant to the phone before the firmware update can start."
     },
+    "batteryRestartToRefresh": "Restart Omi to refresh",
+    "@batteryRestartToRefresh": {
+        "description": "Short caption under the Battery value (shown as a dash) in Omi device settings when the pendant's near-empty battery reading looks stuck after charging. Tells the user that restarting the Omi pendant refreshes the reading. Omi is the product name; keep it untranslated."
+    },
+    "onTheWayAllowanceHeldTitle": "Will process on {date} when your minutes renew",
+    "@onTheWayAllowanceHeldTitle": {
+        "description": "On the Way row title: uploaded recordings are waiting for the monthly transcription minutes to renew on the given short date (for example 'Dec 1'). Says when, never what the user cannot do.",
+        "placeholders": {
+            "date": {
+                "type": "String",
+                "example": "Dec 1"
+            }
+        }
+    },
+    "onTheWayAllowanceHeldUpgrade": "Or process them right away with a plan upgrade",
+    "@onTheWayAllowanceHeldUpgrade": {
+        "description": "Subtitle under the waiting-for-minutes row on On the Way; tapping the row opens the plans page."
+    },
+    "onTheWayDayProcessesOn": "Processes {date}",
+    "@onTheWayDayProcessesOn": {
+        "description": "Short status at the right of one day's row on On the Way: that day's uploaded recordings will process on the given short date when monthly minutes renew.",
+        "placeholders": {
+            "date": {
+                "type": "String",
+                "example": "Dec 1"
+            }
+        }
+    },
+    "transcriptHoldLineHint": "Press and hold a line to name who's speaking.",
+    "@transcriptHoldLineHint": {
+        "description": "Shown above a conversation transcript: how to open the menu on a transcript line. Must read naturally on both iOS and Android."
+    },
     "experimentalDesign": "Experimental Design",
     "@experimentalDesign": {
         "description": "Developer Settings toggle title: turn on the experimental look of Home and conversations"
@@ -19372,9 +19404,5 @@
     "endConversationShort": "End",
     "@endConversationShort": {
         "description": "Short label of the button that ends the conversation in progress, in a bar beside Pause and Ask Omi; keep it to one short word"
-    },
-    "transcriptHoldLineHint": "Press and hold a line to name who's speaking.",
-    "@transcriptHoldLineHint": {
-        "description": "Shown above a conversation transcript: how to open the menu on a transcript line. Must read naturally on both iOS and Android."
     }
 }

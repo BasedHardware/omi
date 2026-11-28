@@ -12326,8 +12326,12 @@
     "firmwareNewestSupportedForDevice": "మీ డివైస్ ఇప్పటికే మద్దతు ఉన్న అత్యంత కొత్త ఫర్మ్‌వేర్ వెర్షన్‌లో ఉంది",
     "firmwareSyncRecordingsFirstTitle": "ముందుగా మీ రికార్డింగ్‌లను సమకాలీకరించండి",
     "firmwareSyncRecordingsFirstMessage": "కొన్ని రికార్డింగ్‌లు ఇంకా మీ డివైస్‌లో ఉన్నాయి. అవి మీ ఫోన్‌కు పూర్తిగా సమకాలీకరించనివ్వండి, తర్వాత నవీకరణను ప్రారంభించండి.",
+    "batteryRestartToRefresh": "రిఫ్రెష్ చేయడానికి Omi ను రీస్టార్ట్ చేయండి",
+    "onTheWayAllowanceHeldTitle": "మీ నిమిషాలు రిన్యూ అయ్యే {date}న ప్రాసెస్ అవుతుంది",
+    "onTheWayAllowanceHeldUpgrade": "లేదా ప్లాన్ అప్‌గ్రేడ్‌తో వెంటనే ప్రాసెస్ చేయించండి",
+    "onTheWayDayProcessesOn": "{date}న ప్రాసెస్ అవుతుంది",
+    "transcriptHoldLineHint": "ఎవరు మాట్లాడుతున్నారో పేరు పెట్టడానికి ఒక పంక్తిని నొక్కి పట్టుకోండి.",
     "experimentalDesign": "ప్రయోగాత్మక డిజైన్",
     "experimentalDesignDescription": "విడుదలకు ముందే హోమ్ మరియు సంభాషణల కొత్త రూపాన్ని ప్రయత్నించండి.",
-    "endConversationShort": "ముగించు",
-    "transcriptHoldLineHint": "ఎవరు మాట్లాడుతున్నారో పేరు పెట్టడానికి ఒక పంక్తిని నొక్కి పట్టుకోండి."
+    "endConversationShort": "ముగించు"
 }

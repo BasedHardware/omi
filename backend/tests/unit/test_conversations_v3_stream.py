@@ -33,6 +33,7 @@ def outline_gateway(monkeypatch, stall):
     import openai.resources  # noqa: F401
 
     from utils.conversations.v3 import models
+    from utils.llm.prompt_cache import prefix_cache_key
 
     class GatewayStream(httpx.AsyncByteStream):
         closed = False
@@ -53,7 +54,9 @@ def outline_gateway(monkeypatch, stall):
     stream = GatewayStream()
 
     async def gateway(request):
-        assert json.loads(request.content)['stream'] is True
+        payload = json.loads(request.content)
+        assert payload['stream'] is True
+        assert payload['prompt_cache_key'] == prefix_cache_key('v3-outline', models.OUTLINE_CACHE_PREFIX, owner_uid='u')
         assert request.extensions['timeout']['read'] == 30
         return httpx.Response(200, headers={'Content-Type': 'text/event-stream'}, stream=stream)
 
@@ -69,7 +72,8 @@ def outline_gateway(monkeypatch, stall):
 @pytest.mark.parametrize('stall', [False, True])
 def test_paid_outline_stream_deadline_discards_partial_reply_and_closes_stream(outline_gateway, stall):
     models, stream = outline_gateway
-    assert models.outline('u', [('human', 'synthetic speech')]) == ('' if stall else 'outline')
+    messages = [('system', models.OUTLINE_CACHE_PREFIX), ('human', 'synthetic speech')]
+    assert models.outline('u', messages) == ('' if stall else 'outline')
     assert stream.closed
 
 
@@ -1122,12 +1126,13 @@ async def test_background_outline_sends_same_lane_and_explicit_cache_prefix(monk
     from openai import AsyncOpenAI
     from utils.conversations.v3 import models, outline
     from utils.llm.gateway_client import GatewayContextChatOpenAI
+    from utils.llm.prompt_cache import prefix_cache_key
 
-    calls = []
+    cache_keys = []
 
     async def gateway(request):
-        calls.append(request)
         payload = json.loads(request.content)
+        cache_keys.append(payload['prompt_cache_key'])
         assert request.headers['x-omi-background-flex-budget-ms'] == '83000'
         assert not payload.get('stream')
         assert payload['model'] == 'omi:auto:conversation-v3-outline'
@@ -1179,8 +1184,13 @@ async def test_background_outline_sends_same_lane_and_explicit_cache_prefix(monk
         async def claim():
             return 83_000
 
-        assert await models.background_outline('u', messages, claim=claim) == ('' if gateway_timeout else '{}')
-        assert len(calls) == 1
+        owners = ('u1', 'u2', 'u1')
+        for uid in owners:
+            assert await models.background_outline(uid, messages, claim=claim) == ('' if gateway_timeout else '{}')
+        assert cache_keys == [
+            prefix_cache_key('v3-outline', outline.OUTLINE_CACHE_PREFIX, owner_uid=uid) for uid in owners
+        ]
+        assert cache_keys[0] != cache_keys[1]
 
 
 def test_outline_only_budgets_finished_automatic_stretches_with_publication_headroom():

@@ -15837,6 +15837,25 @@ class AppLocalizationsFa extends AppLocalizations {
       'برخی ضبط‌ها هنوز روی دستگاه شما هستند. اجازه دهید همگام‌سازی آن‌ها به گوشی شما کامل شود، سپس بروزرسانی را شروع کنید.';
 
   @override
+  String get batteryRestartToRefresh => 'برای بازخوانی، Omi را دوباره راه‌اندازی کنید';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'وقتی دقیقه‌های شما تمدید می‌شوند، در $date پردازش می‌شود';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'یا با ارتقای طرح، فوراً آن‌ها را پردازش کنید';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'در $date پردازش می‌شود';
+  }
+
+  @override
+  String get transcriptHoldLineHint => 'برای نام‌گذاری گوینده، روی یک خط فشار دهید و نگه دارید.';
+
+  @override
   String get experimentalDesign => 'طراحی آزمایشی';
 
   @override
@@ -15844,7 +15863,4 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get endConversationShort => 'پایان';
-
-  @override
-  String get transcriptHoldLineHint => 'برای نام‌گذاری گوینده، روی یک خط فشار دهید و نگه دارید.';
 }

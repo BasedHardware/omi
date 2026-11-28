@@ -7,8 +7,12 @@ mode here, so one parser decides what an env value means:
 - ``shadow``: the old path serves; the new path also runs and logs disagreements.
 - ``serve``: the new path serves for the cohort (see :func:`serving_for`).
 
-A mode env holds one of those words. An unknown value keeps the documented default
-and is logged once, so a typo never silently flips a path. The serve cohort is
+A mode env holds one of those words. An unset mode is ``off`` (ruling: R-20261128-01,
+proposed): a shadow runs only where runtime env says so, so it is visible in config and
+in the registry. ``_LEGACY_SHADOW_DEFAULT`` keeps the old ``shadow`` default for the
+families that relied on it before 2026-11-28; that set may only shrink, as each family is
+bound, served or retired. A caller's explicit ``default`` still wins. An unknown value
+keeps the default and is logged once, so a typo never silently flips a path. The serve cohort is
 ``<NAME>_SERVE_PERCENT`` (salted uid bucket) plus ``<NAME>_SERVE_UID_SHA256S``
 (comma-separated sha256 hex digests of uids, kept in runtime env or Secret Manager,
 never a raw uid in the repository).
@@ -20,15 +24,30 @@ import hashlib
 import logging
 import math
 import os
+from datetime import date, datetime, timezone
 from typing import Literal
 from collections.abc import Mapping
 
 from config.policy.batch import cohort_bucket
+from config.shadow_expiry import SHADOW_EXPIRES
 
 logger = logging.getLogger(__name__)
 
 Mode = Literal['off', 'shadow', 'serve']
 _MODES: frozenset[str] = frozenset(('off', 'shadow', 'serve'))
+
+# Families that ran as implicit shadows (no env binding) before the default became off.
+# Frozen: tests/unit/test_refactor_modes.py fails if a name is added. Remove a name when
+# its family is bound in env, ramped to serve or retired; never add one.
+_LEGACY_SHADOW_DEFAULT: frozenset[str] = frozenset(
+    {
+        'CALLS_RECAP_MODE',
+        'CAPTURE_COVERAGE_MODE',
+        'LIFECYCLE_V2_MODE',
+        'NOTES_PACKET_V2_MODE',
+        'SPEAKER_EVIDENCE_MODE',
+    }
+)
 _TRUE = frozenset(('1', 'true', 'on', 'yes'))
 _FALSE = frozenset(('0', 'false', 'off', 'no'))
 _warned: set[str] = set()
@@ -59,6 +78,9 @@ PUSHER_RECORD_CLOSE_NOTIFY_SERVE_UID_SHA256S_ENV = 'PUSHER_RECORD_CLOSE_NOTIFY_E
 RECORD_TOKEN_LEASE_MODE_ENV = 'RECORD_TOKEN_LEASE_MODE'
 RECORD_TOKEN_LEASE_SERVE_PERCENT_ENV = 'RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT'
 RECORD_TOKEN_LEASE_SERVE_UID_SHA256S_ENV = 'RECORD_TOKEN_LEASE_MODE_SERVE_UID_SHA256S'
+FROM_SEGMENTS_CONTINUED_PROCESSING_MODE_ENV = 'FROM_SEGMENTS_CONTINUED_PROCESSING_MODE'
+FROM_SEGMENTS_CONTINUED_PROCESSING_SERVE_PERCENT_ENV = 'FROM_SEGMENTS_CONTINUED_PROCESSING_MODE_SERVE_PERCENT'
+FROM_SEGMENTS_CONTINUED_PROCESSING_SERVE_UID_SHA256S_ENV = 'FROM_SEGMENTS_CONTINUED_PROCESSING_MODE_SERVE_UID_SHA256S'
 CAPTURE_COVERAGE_MODE_ENV = 'CAPTURE_COVERAGE_MODE'
 CAPTURE_COVERAGE_SERVE_PERCENT_ENV = 'CAPTURE_COVERAGE_MODE_SERVE_PERCENT'
 CAPTURE_COVERAGE_SERVE_UID_SHA256S_ENV = 'CAPTURE_COVERAGE_MODE_SERVE_UID_SHA256S'
@@ -72,6 +94,10 @@ _COHORT_ENVS = {
     PUSHER_RECORD_CLOSE_NOTIFY_ENV: (
         PUSHER_RECORD_CLOSE_NOTIFY_SERVE_PERCENT_ENV,
         PUSHER_RECORD_CLOSE_NOTIFY_SERVE_UID_SHA256S_ENV,
+    ),
+    FROM_SEGMENTS_CONTINUED_PROCESSING_MODE_ENV: (
+        FROM_SEGMENTS_CONTINUED_PROCESSING_SERVE_PERCENT_ENV,
+        FROM_SEGMENTS_CONTINUED_PROCESSING_SERVE_UID_SHA256S_ENV,
     ),
     RECORD_TOKEN_LEASE_MODE_ENV: (RECORD_TOKEN_LEASE_SERVE_PERCENT_ENV, RECORD_TOKEN_LEASE_SERVE_UID_SHA256S_ENV),
     'CALLS_RECAP_MODE': (CALLS_RECAP_SERVE_PERCENT_ENV, CALLS_RECAP_SERVE_UID_SHA256S_ENV),
@@ -95,9 +121,39 @@ def _warn_once(name: str, raw: str) -> None:
         logger.warning('event=config_value_unrecognized name=%s', name)
 
 
-def mode(name: str, default: Mode = 'shadow', *, environ: Mapping[str, str] | None = None) -> Mode:
+def implicit_default(name: str) -> Mode:
+    """The mode an unset or unrecognised binding resolves to when the caller names no default."""
+    return 'shadow' if name in _LEGACY_SHADOW_DEFAULT else 'off'
+
+
+_expired_logged: set[str] = set()
+
+
+def _shadow_expired(name: str, today: date | None = None) -> bool:
+    """True once a registry shadow row is past readout_by + grace (config/shadow_expiry.py)."""
+    expires = SHADOW_EXPIRES.get(name)
+    if expires is None:
+        return False
+    if (today or datetime.now(timezone.utc).date()) < date.fromisoformat(expires):
+        return False
+    if name not in _expired_logged:
+        _expired_logged.add(name)
+        logger.warning('event=shadow_expired name=%s expires=%s', name, expires)
+    return True
+
+
+def mode(name: str, default: Mode | None = None, *, environ: Mapping[str, str] | None = None) -> Mode:
+    resolved = _parse_mode(name, default, environ)
+    if resolved == 'shadow' and _shadow_expired(name):
+        return 'off'
+    return resolved
+
+
+def _parse_mode(name: str, default: Mode | None, environ: Mapping[str, str] | None) -> Mode:
     if name == RECORD_TOKEN_LEASE_MODE_ENV:
         default = 'off'
+    if default is None:
+        default = implicit_default(name)
     raw = (os.environ if environ is None else environ).get(name, '').strip().lower()
     if not raw:
         return default
@@ -181,11 +237,12 @@ def uid_digest(uid: str) -> str:
 
 
 def serving_for(
-    name: str, uid: str | None, default: Mode = 'shadow', *, environ: Mapping[str, str] | None = None
+    name: str, uid: str | None, default: Mode | None = None, *, environ: Mapping[str, str] | None = None
 ) -> bool:
     """Whether the new path serves this uid. ``off`` and ``shadow`` serve only the cohort."""
     env = os.environ if environ is None else environ
-    current = mode(name, default, environ=env)
+    # Not mode(): shadow expiry stops the shadow run, never a configured serve cohort.
+    current = _parse_mode(name, default, env)
     if current == 'off':
         return False
     if name == RECORD_TOKEN_LEASE_MODE_ENV:
@@ -216,7 +273,7 @@ def serving_for(
     return percent > 0 and cohort_bucket(uid, salt) < percent
 
 
-def shadow_or_serve(name: str, default: Mode = 'shadow') -> bool:
+def shadow_or_serve(name: str, default: Mode | None = None) -> bool:
     """Whether the new path runs at all (to log in shadow, or to serve)."""
     return mode(name, default) != 'off'
 
@@ -242,7 +299,7 @@ def cohort_configured(name: str, *, environ: Mapping[str, str] | None = None) ->
         return False
 
 
-def shadow_sampled(name: str, uid: str | None, default_percent: float, default: Mode = 'shadow') -> bool:
+def shadow_sampled(name: str, uid: str | None, default_percent: float, default: Mode | None = None) -> bool:
     """Whether a costly shadow path runs for this uid: always for the serve cohort, else a uid sample.
 
     Shadow exists to measure; paying a database write for every user is not needed for that.

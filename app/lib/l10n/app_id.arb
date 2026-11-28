@@ -4804,8 +4804,12 @@
     "firmwareNewestSupportedForDevice": "Perangkat Anda sudah menggunakan versi firmware terbaru yang didukung",
     "firmwareSyncRecordingsFirstTitle": "Sinkronkan rekaman Anda terlebih dahulu",
     "firmwareSyncRecordingsFirstMessage": "Beberapa rekaman masih berada di perangkat Anda. Biarkan rekaman tersebut selesai disinkronkan ke ponsel Anda, lalu mulai pembaruan.",
+    "batteryRestartToRefresh": "Mulai ulang Omi untuk menyegarkan",
+    "onTheWayAllowanceHeldTitle": "Akan diproses pada {date} saat menit Anda diperbarui",
+    "onTheWayAllowanceHeldUpgrade": "Atau proses langsung dengan upgrade paket",
+    "onTheWayDayProcessesOn": "Diproses pada {date}",
+    "transcriptHoldLineHint": "Tekan dan tahan sebuah baris untuk menamai siapa yang berbicara.",
     "experimentalDesign": "Desain eksperimental",
     "experimentalDesignDescription": "Coba tampilan baru Beranda dan percakapan sebelum dirilis.",
-    "endConversationShort": "Akhiri",
-    "transcriptHoldLineHint": "Tekan dan tahan sebuah baris untuk menamai siapa yang berbicara."
+    "endConversationShort": "Akhiri"
 }

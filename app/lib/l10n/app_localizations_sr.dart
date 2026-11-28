@@ -15851,6 +15851,25 @@ class AppLocalizationsSr extends AppLocalizations {
       'Неки снимци се још увек налазе на вашем уређају. Сачекајте да заврше синхронизовање са телефоном, а затим покрените ажурирање.';
 
   @override
+  String get batteryRestartToRefresh => 'Поново покрените Omi да освежите податке';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Обрадиће се $date када се обнове ваши минути';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Или их одмах обрадите уз надоградњу плана';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Обрадиће се $date';
+  }
+
+  @override
+  String get transcriptHoldLineHint => 'Притисните и држите ред да именујете ко говори.';
+
+  @override
   String get experimentalDesign => 'Експериментални дизајн';
 
   @override
@@ -15858,7 +15877,4 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get endConversationShort => 'Заврши';
-
-  @override
-  String get transcriptHoldLineHint => 'Притисните и држите ред да именујете ко говори.';
 }

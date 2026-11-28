@@ -10,6 +10,7 @@ import pytest
 from fastapi import HTTPException
 
 from config import conversations_v3 as switch
+from config import rollout_cohorts as policy
 from database import conversations as db
 from routers import conversations as routes, episodes
 from utils.conversations.v3 import service, audio, triggers
@@ -313,7 +314,7 @@ def test_existing_v3_work_drains_for_a_held_out_owner(monkeypatch):
     monkeypatch.setattr(finish, 'finish_no_pointer_enabled', lambda: True)
     monkeypatch.setattr(finish, 'conversations_v3_enabled', switch.conversations_v3_enabled)
     monkeypatch.setattr(finish.conversations_v3_live, 'live_window', lambda uid, **kw: window)
-    monkeypatch.setattr(finish.conversations_v3_live, 'request_finish', lambda uid, wid, **kw: ('cut', 'rec'))
+    monkeypatch.setattr(finish.conversations_v3_live, 'request_finish', lambda uid, wid, **kw: ('cut', 'rec', None))
     monkeypatch.setattr(finish, '_acknowledge', lambda *a: acknowledged.append(a) or 'answer')
     assert finish.finish_live_window('synthetic') == 'answer'
     assert acknowledged == [('synthetic', window, 'cut', 'rec')]
@@ -350,7 +351,7 @@ class _MixedFinish:
         live_db = finish.conversations_v3_live
         monkeypatch.setattr(live_db, 'live_window_by_id', lambda uid, wid, **kw: window if window_live else None)
         monkeypatch.setattr(
-            live_db, 'request_finish', lambda uid, wid, **kw: self.finished.append(wid) or ('cut', 'rec')
+            live_db, 'request_finish', lambda uid, wid, **kw: self.finished.append(wid) or ('cut', 'rec', None)
         )
         monkeypatch.setattr(
             live_db,
@@ -464,6 +465,55 @@ def test_runtime_resolver_reports_unknown_holdout_membership(monkeypatch):
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     monkeypatch.setattr(runtime._cache, 'get', lambda uid: {'prod': {'conversations-v3-holdout': True}})
     assert runtime._in_rollout_cohort('synthetic', 'conversations-v3-holdout') is True
+    # An invalid rollout environment is unknown membership for the holdout, a plain miss elsewhere.
+    monkeypatch.setenv('OMI_ENV_STAGE', 'not-a-stage')
+    with pytest.raises(runtime.policy.RolloutCohortUnavailable):
+        runtime._in_rollout_cohort('synthetic', 'conversations-v3-holdout')
+    assert runtime._in_rollout_cohort('synthetic', 'conversations-v3') is False
+
+
+def test_unbound_resolver_reports_unknown_holdout_membership(monkeypatch):
+    monkeypatch.setattr(policy, '_membership_resolver', None)
+    with pytest.raises(policy.RolloutCohortUnavailable):
+        policy.in_rollout_cohort('synthetic', policy.V3_HOLDOUT_COHORT)
+    # Every other unbound cohort keeps reading as a plain miss.
+    raising = {'dream-agent', 'go-finalization', policy.V3_HOLDOUT_COHORT}
+    for name in sorted(set(policy.COHORT_ENVS) - raising):
+        assert policy.in_rollout_cohort('synthetic', name) is False, name
+
+
+def test_unbound_resolver_admits_holdout_with_fallback(monkeypatch):
+    fallbacks = []
+    monkeypatch.delenv('CONVERSATIONS_V3_HOLDOUT', raising=False)
+    monkeypatch.setattr(policy, '_membership_resolver', None)
+    monkeypatch.setattr(switch, 'in_rollout_cohort', policy.in_rollout_cohort)
+    monkeypatch.setattr(switch, 'record_fallback', lambda **kw: fallbacks.append(kw))
+    assert switch.v3_intake_held_out('synthetic') is False
+    assert fallbacks == [
+        {
+            'component': 'feature_flags',
+            'from_mode': 'v3_holdout',
+            'to_mode': 'admitted',
+            'reason': 'unavailable',
+            'outcome': 'degraded',
+            'log': switch.logger,
+        }
+    ]
+
+
+def test_invalid_rollout_environment_admits_holdout_with_fallback(monkeypatch):
+    from utils import rollout_cohorts as runtime
+
+    fallbacks = []
+    monkeypatch.delenv('CONVERSATIONS_V3_HOLDOUT', raising=False)
+    monkeypatch.setenv('OMI_ENV_STAGE', 'not-a-stage')
+    monkeypatch.setattr(runtime._cache, 'get', lambda uid: {'prod': {'conversations-v3-holdout': True}})
+    monkeypatch.setattr(switch, 'in_rollout_cohort', runtime._in_rollout_cohort)
+    monkeypatch.setattr(switch, 'record_fallback', lambda **kw: fallbacks.append(kw))
+    assert switch.v3_intake_held_out('synthetic') is False
+    assert [(f['from_mode'], f['to_mode'], f['reason']) for f in fallbacks] == [
+        ('v3_holdout', 'admitted', 'unavailable')
+    ]
 
 
 def test_rollout_cohort_script_accepts_holdout_cohort(tmp_path, capsys):

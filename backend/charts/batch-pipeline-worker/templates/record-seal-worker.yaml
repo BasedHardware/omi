@@ -61,6 +61,7 @@ spec:
             {{- else }}
             - {name: RECORD_SEAL_REPAIR_FRESH_ENABLED, value: {{ if hasKey .Values.recordSealRepair "freshEnabled" }}{{ .Values.recordSealRepair.freshEnabled | quote }}{{ else }}"true"{{ end }}}
             {{- end }}
+            - {name: FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED, value: {{ .Values.firstWeekSummaryGuaranteeEnabled | quote }}}
             - {name: RECORD_SEAL_REPAIR_ENABLED, value: {{ .Values.recordSealWorker.runtimeEnabled | quote }}}
             - {name: RECORD_AUDIO_PARTIAL_ENABLED, value: {{ .Values.recordSealRules.partialEnabled | quote }}}
             - {name: RECORD_SEAL_OVERLAP_TRIM_ENABLED, value: {{ .Values.recordSealRules.overlapTrimEnabled | quote }}}

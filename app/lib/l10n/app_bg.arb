@@ -4769,8 +4769,12 @@
     "firmwareNewestSupportedForDevice": "Вашето устройство вече работи с най-новата поддържана версия на фърмуера",
     "firmwareSyncRecordingsFirstTitle": "Първо синхронизирайте записите си",
     "firmwareSyncRecordingsFirstMessage": "Някои записи все още са на устройството. Оставете ги да приключат със синхронизирането към телефона, след което започнете актуализацията.",
+    "batteryRestartToRefresh": "Рестартирайте Omi, за да опресните стойността",
+    "onTheWayAllowanceHeldTitle": "Ще се обработят на {date}, когато се подновят минутите ви",
+    "onTheWayAllowanceHeldUpgrade": "Или ги обработете веднага с надграждане на плана",
+    "onTheWayDayProcessesOn": "Ще се обработят на {date}",
+    "transcriptHoldLineHint": "Натиснете и задръжте ред, за да посочите кой говори.",
     "experimentalDesign": "Експериментален дизайн",
     "experimentalDesignDescription": "Изпробвайте новия вид на началния екран и разговорите преди пускането му.",
-    "endConversationShort": "Край",
-    "transcriptHoldLineHint": "Натиснете и задръжте ред, за да посочите кой говори."
+    "endConversationShort": "Край"
 }

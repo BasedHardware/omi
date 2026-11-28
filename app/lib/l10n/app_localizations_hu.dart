@@ -15902,6 +15902,25 @@ class AppLocalizationsHu extends AppLocalizations {
       'Néhány felvétel még az eszközödön van. Várd meg, amíg a telefonodra szinkronizálásuk befejeződik, majd indítsd el a frissítést.';
 
   @override
+  String get batteryRestartToRefresh => 'Indítsa újra az Omit a frissítéshez';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Feldolgozás: $date, amikor megújulnak a perceid';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Vagy dolgozd fel őket azonnal csomagfrissítéssel';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Feldolgozás: $date';
+  }
+
+  @override
+  String get transcriptHoldLineHint => 'Tartsd lenyomva a sort, hogy elnevezd a beszélőt.';
+
+  @override
   String get experimentalDesign => 'Kísérleti dizájn';
 
   @override
@@ -15910,7 +15929,4 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get endConversationShort => 'Befejezés';
-
-  @override
-  String get transcriptHoldLineHint => 'Tartsd lenyomva a sort, hogy elnevezd a beszélőt.';
 }

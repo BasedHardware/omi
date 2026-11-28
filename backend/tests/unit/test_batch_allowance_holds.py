@@ -17,6 +17,7 @@ from utils import backfill_hours_cap, stt_cap_dispatch
 from utils import subscription as _subscription  # noqa: F401
 from utils.batch_pipeline.scheduler import Scheduler
 from utils.referral_campaign import CAMPAIGN_ID, GRANT_FIELD, effective_subscription_payload
+from config.support_credit import FIELD as SUPPORT_CREDIT_FIELD
 from utils.transcription_allowance import TranscriptionAllowance
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore, item
 
@@ -77,12 +78,14 @@ def discovery(monkeypatch):
     client.collection.return_value.document.return_value = document
     monkeypatch.setattr(allowance_hold, 'get_data_plane_firestore_client', lambda: client)
 
-    def funding(uid, *, lane):
+    def funding(uid, *, lane, support_credit=None):
         assert lane == 'batch'
+        # The controller passes the credit it read with the generation, never a second read.
+        assert support_credit == user.get(SUPPORT_CREDIT_FIELD)
         effective = effective_subscription_payload(
             user['subscription'], user.get(GRANT_FIELD), now=datetime.fromtimestamp(clock[0], timezone.utc)
         )
-        managed = effective['plan'] == 'unlimited_v2'
+        managed = effective['plan'] == 'unlimited_v2' or bool(support_credit)
         return TranscriptionAllowance('managed' if managed else 'on_device', None if managed else 0, 'resolved')
 
     funded = Mock(side_effect=funding)
@@ -131,7 +134,44 @@ def test_actual_discovery_resolver_releases_acknowledged_owner_after_referral_cl
     assert controller.tick(discovery.clock[0]) == 1
     assert store.rows['jobs', 'held']['state'] == 'ready'
     assert discovery.funded.call_count == 2
-    assert discovery.document.get.call_args.kwargs['field_paths'] == ['subscription', GRANT_FIELD]
+    assert discovery.document.get.call_args.kwargs['field_paths'] == ['subscription', GRANT_FIELD, SUPPORT_CREDIT_FIELD]
+
+
+def support_grant(now, seconds=108_000):
+    return {
+        'synthetic-action': {
+            'seconds': seconds,
+            'granted_at': int(now),
+            'expires_at': int(now) + 30 * 86400,
+            'baseline_seconds': 18_000,
+            'allowance_seconds': 18_000,
+        }
+    }
+
+
+def test_support_credit_grant_changes_generation_and_releases_held_work(discovery):
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item('held', owner='synthetic-owner'), 0)
+    lease = queue.pull(1)[0]
+    assert queue.defer('held', lease.token, 2, held_reason='allowance_exhausted')
+    controller = allowance_hold.AllowanceHolds(store, allowance_hold.entitlement)
+    assert controller.tick(discovery.now) == 0
+    discovery.user[SUPPORT_CREDIT_FIELD] = support_grant(discovery.now)
+    discovery.clock[0] = discovery.now + 301
+    assert controller.tick(discovery.clock[0]) == 1
+    assert store.rows['jobs', 'held']['state'] == 'ready'
+
+
+def test_support_credit_is_part_of_the_generation_but_its_absence_changes_nothing():
+    now = stamp('2026-11-28')
+    user = {'subscription': {'plan': 'basic', 'status': 'active'}}
+    base = generation(user, now)
+    assert generation({**user, SUPPORT_CREDIT_FIELD: {}}, now) == base
+    assert generation({**user, SUPPORT_CREDIT_FIELD: None}, now) == base
+    credited = generation({**user, SUPPORT_CREDIT_FIELD: support_grant(now)}, now)
+    assert credited != base
+    assert generation({**user, SUPPORT_CREDIT_FIELD: support_grant(now, seconds=1)}, now) != credited
 
 
 def test_referral_extension_is_acknowledged_once_without_commercial_or_usage_changes(discovery):
@@ -184,3 +224,41 @@ def test_switch_is_on_unless_explicitly_off(monkeypatch, value, expected):
     else:
         monkeypatch.setenv('BATCH_ALLOWANCE_PARK_ENABLED', value)
     assert enabled() is expected
+
+
+def test_turning_the_credit_switch_back_on_changes_the_generation(monkeypatch):
+    now = stamp('2026-11-28')
+    user = {'subscription': {'plan': 'basic', 'status': 'active'}, SUPPORT_CREDIT_FIELD: support_grant(now)}
+    on = generation(user, now)
+    monkeypatch.setenv('SUPPORT_TRANSCRIPTION_CREDIT_ENABLED', 'false')
+    off = generation(user, now)
+    assert off == generation({'subscription': user['subscription']}, now)
+    monkeypatch.delenv('SUPPORT_TRANSCRIPTION_CREDIT_ENABLED')
+    # Off -> on re-offers parked work credited while the switch was off.
+    assert generation(user, now) == on != off
+
+
+def test_an_owner_without_credit_keeps_the_generation_it_had_before_the_credit_existed(monkeypatch):
+    # The pre-credit formula, byte for byte: a deploy must not re-offer every parked owner.
+    # Promotions off and the credit switch on, pinned so the expected list never depends on the env.
+    monkeypatch.delenv('OMI_REFERRAL_CAMPAIGN_ENABLED', raising=False)
+    monkeypatch.delenv('SUPPORT_TRANSCRIPTION_CREDIT_ENABLED', raising=False)
+    import hashlib
+    import json
+
+    from utils.referral_campaign import effective_subscription_payload
+
+    now = stamp('2026-11-28')
+    subscription = {'plan': 'basic', 'status': 'active'}
+    clock = datetime.fromtimestamp(now, timezone.utc)
+    legacy = [
+        subscription,
+        False,
+        False,
+        None,
+        effective_subscription_payload(subscription, None, now=clock),
+        clock.strftime('%Y-%m'),
+    ]
+    expected = hashlib.sha256(json.dumps(legacy, sort_keys=True, default=str).encode()).hexdigest()
+    assert generation({'subscription': subscription}, now) == expected
+    assert generation({'subscription': subscription, SUPPORT_CREDIT_FIELD: {}}, now) == expected

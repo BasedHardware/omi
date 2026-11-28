@@ -4,7 +4,7 @@
 # See README.md for the qualified scope, train order, ramp and rollback.
 schema_version: 2
 environment_shared:
-  conversations_v3_stage: beta
+  conversations_v3_stage: all
   conversations_v3_first_app_build: ''
   llm_gateway:
     namespace: '{env}-omi-backend'
@@ -178,7 +178,7 @@ environment_shared:
           value: 'off'
           category: ops_kill
         CAPTURE_GROUP_CONTAINMENT_MODE:
-          value: shadow
+          value: 'off'
           category: rollout
         TRANSLATION_DEMAND_GATE_ENABLED:
           value: 'true'
@@ -656,7 +656,7 @@ environment_shared:
           value: 'true'
           category: ops_kill
         CAPTURE_GROUP_CONTAINMENT_MODE:
-          value: shadow
+          value: 'off'
           category: rollout
         CLIENT_SUMMARIES_AT_CAP_ENABLED:
           value: 'true'
@@ -1129,7 +1129,7 @@ environment_shared:
             value: 'true'
             category: ops_kill
           CAPTURE_GROUP_CONTAINMENT_MODE:
-            value: shadow
+            value: 'off'
             category: rollout
           SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
             value: 'true'
@@ -1540,7 +1540,7 @@ environment_shared:
             value: 'true'
             category: ops_kill
           CAPTURE_GROUP_CONTAINMENT_MODE:
-            value: shadow
+            value: 'off'
             category: rollout
           SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
             value: 'true'
@@ -1915,7 +1915,7 @@ environment_shared:
             value: 'true'
             category: ops_kill
           CAPTURE_GROUP_CONTAINMENT_MODE:
-            value: shadow
+            value: 'off'
             category: rollout
           SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
             value: 'true'
@@ -2268,7 +2268,7 @@ environment_shared:
             value: 'true'
             category: ops_kill
           CAPTURE_GROUP_CONTAINMENT_MODE:
-            value: shadow
+            value: 'off'
             category: rollout
           SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
             value: 'true'

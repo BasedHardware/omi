@@ -85,10 +85,11 @@ def test_real_soniox_config_shadow_serve_and_off_preserve_language(monkeypatch, 
     assert 'PrivateSpelling' not in caplog.text and 'synthetic-owner' not in caplog.text
 
 
-def test_invalid_flags_keep_shadow(monkeypatch):
-    for name in ('CALLS_RECAP_MODE', 'ACTION_ITEMS_V2_MODE', 'STT_VOCAB_MODE'):
+def test_invalid_flags_keep_the_family_default(monkeypatch):
+    # CALLS_RECAP is a frozen legacy shadow; the retired families default to off (2026-11-28).
+    for name, default in (('CALLS_RECAP_MODE', 'shadow'), ('ACTION_ITEMS_V2_MODE', 'off'), ('STT_VOCAB_MODE', 'off')):
         monkeypatch.setenv(name, 'srve')
-        assert refactor_modes.mode(name) == 'shadow'
+        assert refactor_modes.mode(name) == default
         assert not refactor_modes.serving_for(name, 'synthetic-owner')
 
 
@@ -128,6 +129,7 @@ def test_sources_use_the_memory_authority_and_bounded_reads(monkeypatch):
 
 
 def test_shadow_source_work_cannot_delay_the_soniox_dial(monkeypatch):
+    monkeypatch.setenv(vocab.FLAG, 'shadow')
     monkeypatch.setenv(vocab.STT_VOCAB_SHADOW_PERCENT_ENV, '100')
     pending = []
     from utils import executors

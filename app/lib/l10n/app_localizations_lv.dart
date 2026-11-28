@@ -15879,6 +15879,25 @@ class AppLocalizationsLv extends AppLocalizations {
       'Daži ieraksti vēl atrodas jūsu ierīcē. Ļaujiet tiem pabeigt sinhronizēšanu ar tālruni, pēc tam sāciet atjaunināšanu.';
 
   @override
+  String get batteryRestartToRefresh => 'Restartējiet Omi, lai atsvaidzinātu';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Tiks apstrādāti $date, kad atjaunosies jūsu minūtes';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Vai jauniniet plānu, lai tos apstrādātu uzreiz';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Apstrādās $date';
+  }
+
+  @override
+  String get transcriptHoldLineHint => 'Nospiediet un turiet rindu, lai nosauktu runātāju.';
+
+  @override
   String get experimentalDesign => 'Eksperimentālais dizains';
 
   @override
@@ -15886,7 +15905,4 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get endConversationShort => 'Beigt';
-
-  @override
-  String get transcriptHoldLineHint => 'Nospiediet un turiet rindu, lai nosauktu runātāju.';
 }

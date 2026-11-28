@@ -4769,8 +4769,12 @@
     "firmwareNewestSupportedForDevice": "อุปกรณ์ของคุณใช้เฟิร์มแวร์เวอร์ชันล่าสุดที่รองรับอยู่แล้ว",
     "firmwareSyncRecordingsFirstTitle": "ซิงค์ไฟล์บันทึกเสียงของคุณก่อน",
     "firmwareSyncRecordingsFirstMessage": "ไฟล์บันทึกเสียงบางส่วนยังอยู่ในอุปกรณ์ของคุณ รอให้ซิงค์ไปยังโทรศัพท์เสร็จก่อน แล้วจึงเริ่มการอัปเดต",
+    "batteryRestartToRefresh": "รีสตาร์ท Omi เพื่อรีเฟรช",
+    "onTheWayAllowanceHeldTitle": "จะประมวลผลในวันที่ {date} เมื่อจำนวนนาทีของคุณต่ออายุ",
+    "onTheWayAllowanceHeldUpgrade": "หรืออัปเกรดแพ็กเกจเพื่อประมวลผลทันที",
+    "onTheWayDayProcessesOn": "ประมวลผลในวันที่ {date}",
+    "transcriptHoldLineHint": "แตะบรรทัดค้างไว้เพื่อตั้งชื่อผู้พูด",
     "experimentalDesign": "ดีไซน์ทดลอง",
     "experimentalDesignDescription": "ลองใช้หน้าตาใหม่ของหน้าหลักและบทสนทนาก่อนเปิดตัว",
-    "endConversationShort": "จบ",
-    "transcriptHoldLineHint": "แตะบรรทัดค้างไว้เพื่อตั้งชื่อผู้พูด"
+    "endConversationShort": "จบ"
 }

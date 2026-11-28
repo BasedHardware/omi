@@ -71,7 +71,7 @@ class HomeWidgetsPublisher with WidgetsBindingObserver {
           saved: SharedPreferencesUtil().btDevices,
           connected: devices.connectedDevice,
           isConnected: devices.isConnected,
-          battery: devices.batteryLevel,
+          battery: devices.displayBatteryLevel,
           charging: devices.isCharging,
         ),
       ),

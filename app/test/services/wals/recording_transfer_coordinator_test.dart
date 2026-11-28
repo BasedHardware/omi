@@ -209,6 +209,39 @@ void main() {
       expect(harness.coordinator.nextCooldownAt, DateTime.utc(2026, 1, 1, 0, 0, 5));
     });
 
+    test('a held-only drain preserves the failure backoff without scheduling a retry', () async {
+      final results = [
+        const RecordingTransferDrainResult(attempted: true, failed: true, needsReconciliation: false),
+        const RecordingTransferDrainResult(
+          attempted: false,
+          failed: false,
+          needsReconciliation: false,
+          heldOnly: true,
+        ),
+        const RecordingTransferDrainResult(attempted: true, failed: true, needsReconciliation: false),
+      ].iterator;
+      final cooldowns = <Duration>[];
+      final coordinator = RecordingTransferCoordinator(
+        reconcile: () async {},
+        discover: () async {},
+        refreshPending: () async {},
+        drain: () async {
+          expect(results.moveNext(), isTrue);
+          return results.current;
+        },
+        autoUploadEnabled: () => true,
+        scheduleCooldown: (delay, _) => cooldowns.add(delay),
+      );
+      addTearDown(coordinator.dispose);
+
+      await coordinator.wake(WakeTrigger.startup);
+      await coordinator.wake(WakeTrigger.userRetry);
+      expect(cooldowns, [const Duration(seconds: 5)]);
+
+      await coordinator.wake(WakeTrigger.userRetry);
+      expect(cooldowns, [const Duration(seconds: 5), const Duration(seconds: 10)]);
+    });
+
     test('a scheduled cooldown wake still runs after the app is backgrounded', () async {
       final harness = _TransferHarness()..drainFails = true;
       addTearDown(harness.dispose);

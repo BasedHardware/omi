@@ -57,6 +57,7 @@ OUTCOMES = frozenset(
         'degraded',
         'cancelled',
         'unknown',
+        'abstained',
     }
 )
 SOURCES = frozenset({'none', 'client', 'import', 'extract', 'integration', 'live', 'sync', 'desktop'})
@@ -103,14 +104,15 @@ def sanitize_label(value: object) -> str:
     return value if _SAFE_LABEL.fullmatch(value) else 'unknown'
 
 
-def sanitize_app_build(*raw_values: object) -> str:
+def sanitize_app_build(*raw_values: object, build_allowlist: frozenset[str] | None = None) -> str:
     """Normalize client version headers to a bounded ``app_build`` label.
 
     Prefers ``parse_client_build`` (numeric Flutter ``version+build`` suffix or a
     dedicated build header). Dotted release versions that are not integers
     (desktop ``0.12.365``) stay as the sanitized version string. Anything else,
     including raw User-Agent text, collapses to ``unknown``. A process-lifetime
-    cap bounds cardinality; overflow shares ``unknown``.
+    cap bounds cardinality; overflow shares ``unknown``. A fixed allowlist instead
+    bands numeric builds before they reach the process-lifetime cache.
     """
     parsed_build: int | None = None
     version_fallback: str | None = None
@@ -124,6 +126,11 @@ def sanitize_app_build(*raw_values: object) -> str:
         label = sanitize_label(raw)
         if _VERSION.fullmatch(label) and version_fallback is None:
             version_fallback = label
+    if build_allowlist is not None:
+        if parsed_build is None:
+            return 'unknown'
+        candidate = str(parsed_build)
+        return candidate if candidate in build_allowlist else 'older'
     if parsed_build is not None:
         candidate = str(parsed_build)
     elif version_fallback is not None:
@@ -139,14 +146,17 @@ def sanitize_app_build(*raw_values: object) -> str:
     return candidate
 
 
-def extract_app_build(request: object | None) -> str:
+def extract_app_build(request: object | None, *, build_allowlist: frozenset[str] | None = None) -> str:
     """Flutter shared.dart, macOS OmiHTTPTransport, Windows apiClient use X-App-Version.
 
     X-App-Build is preferred when present. User-Agent is never a version source.
+    A fixed allowlist returns an exact numeric build, ``older``, or ``unknown``.
     """
     try:
         headers = _headers_mapping(request)
-        return sanitize_app_build(headers.get('x-app-build'), headers.get('x-app-version'))
+        return sanitize_app_build(
+            headers.get('x-app-build'), headers.get('x-app-version'), build_allowlist=build_allowlist
+        )
     except Exception:
         return 'unknown'
 

@@ -18,6 +18,7 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from google.cloud.firestore import DELETE_FIELD
 
 from database import conversation_batch_purge_jobs as purge_jobs
 from database import conversation_tombstones, legal_holds
@@ -65,11 +66,17 @@ class _Ref:
     def set(self, payload, merge=False):
         with self.client.lock:
             current = dict(self.client.docs.get(self.path, {})) if merge else {}
-            self.client.docs[self.path] = {**current, **payload}
+            self.client.docs[self.path] = {
+                key: value for key, value in {**current, **payload}.items() if value is not DELETE_FIELD
+            }
 
     def update(self, payload):
         with self.client.lock:
-            self.client.docs[self.path] = {**self.client.docs[self.path], **payload}
+            self.client.docs[self.path] = {
+                key: value
+                for key, value in {**self.client.docs[self.path], **payload}.items()
+                if value is not DELETE_FIELD
+            }
 
     def delete(self):
         with self.client.lock:

@@ -8,6 +8,7 @@ import {
   GOOD_MARK,
   headlineDelta,
   GROWTH_WEEKS,
+  growthFrames,
   MARGIN_DAYS,
   MARGIN_PLANS,
   marginFrames,
@@ -2279,4 +2280,37 @@ describe("funnelFrames", () => {
       funnelWeekly: [],
     });
   });
+});
+
+it("publishes weighted weekly totals but withholds sampling-sensitive growth details", () => {
+  const result = growthFrames(
+    {
+      growth: [
+        [0, "ios", 51, 6, 1, 1],
+        [0, "__churned", 5],
+        [0, "__days_3", 2],
+        [1, "ios", 7, 12, 2, 3],
+        [1, "__churned", 2],
+        [1, "__days_3", 4],
+      ],
+    },
+    null,
+    new Date("2026-11-25T12:00Z")
+  );
+  expect(result.weekly.at(-1)).toMatchObject({
+    total: 51,
+    new: null,
+    retained: null,
+    churned: null,
+    resurrected: null,
+    quickRatio: null,
+    stickiness: null,
+  });
+  expect(result.weekly.at(-2)).toMatchObject({
+    total: 7,
+    new: 3,
+    retained: 2,
+    churned: -2,
+  });
+  expect(result.power).toEqual([]);
 });

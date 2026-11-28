@@ -15910,6 +15910,25 @@ class AppLocalizationsRo extends AppLocalizations {
       'Unele înregistrări sunt încă pe dispozitivul tău. Lasă-le să termine de sincronizat cu telefonul tău, apoi pornește actualizarea.';
 
   @override
+  String get batteryRestartToRefresh => 'Repornește Omi pentru a actualiza valoarea';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Vor fi procesate pe $date când se reînnoiesc minutele tale';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Sau procesează-le imediat cu un upgrade de plan';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Se procesează $date';
+  }
+
+  @override
+  String get transcriptHoldLineHint => 'Ține apăsat pe un rând pentru a numi cine vorbește.';
+
+  @override
   String get experimentalDesign => 'Design experimental';
 
   @override
@@ -15918,7 +15937,4 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get endConversationShort => 'Încheie';
-
-  @override
-  String get transcriptHoldLineHint => 'Ține apăsat pe un rând pentru a numi cine vorbește.';
 }

@@ -12326,8 +12326,12 @@
     "firmwareNewestSupportedForDevice": "Vaš uređaj već koristi najnoviju podržanu verziju firmvera",
     "firmwareSyncRecordingsFirstTitle": "Prvo sinhronizujte svoje snimke",
     "firmwareSyncRecordingsFirstMessage": "Neki snimci su još uvijek na vašem uređaju. Sačekajte da se sinhronizuju s telefonom, a zatim pokrenite ažuriranje.",
+    "batteryRestartToRefresh": "Ponovo pokrenite Omi radi osvježavanja",
+    "onTheWayAllowanceHeldTitle": "Obradit će se {date} kada se obnove vaši minuti",
+    "onTheWayAllowanceHeldUpgrade": "Ili ih obradite odmah nadogradnjom plana",
+    "onTheWayDayProcessesOn": "Obradit će se {date}",
+    "transcriptHoldLineHint": "Pritisnite i držite red da imenujete ko govori.",
     "experimentalDesign": "Eksperimentalni dizajn",
     "experimentalDesignDescription": "Isprobajte novi izgled početnog ekrana i razgovora prije objave.",
-    "endConversationShort": "Završi",
-    "transcriptHoldLineHint": "Pritisnite i držite red da imenujete ko govori."
+    "endConversationShort": "Završi"
 }

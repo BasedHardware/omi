@@ -109,7 +109,13 @@ def final_pass(uid: str, conversation: Any, receipt: Mapping[str, Any]) -> dict[
                 'reason': str(reason or '')[:60],
                 'location': str(details.get('location') or '')[:120],
             }
-    outcome = {k: v for k, v in outcome.items() if isinstance(v, (str, int, float, bool)) or v is None}
+    scalar = (str, int, float, bool, type(None))
+    # Counts (coverage, coverage_reasons, split_refusals) are kept: aggregates, never text or ids.
+    outcome = {
+        k: v
+        for k, v in outcome.items()
+        if isinstance(v, scalar) or (isinstance(v, dict) and all(isinstance(x, (int, float)) for x in v.values()))
+    }
     return {**outcome, 'applied': 'segments' in captured, 'segments': captured.get('segments')}
 
 
@@ -212,6 +218,9 @@ def main(argv: Optional[list[str]] = None) -> int:
                 if args.final_pass:
                     totals['final_pass:' + str(final.get('outcome'))] += 1
                     totals['final_pass_applied'] += bool(final.get('applied'))
+                    totals['final_pass_split_segments'] += int(final.get('split_segments') or 0)
+                    for reason, count in (final.get('split_refusals') or {}).items():
+                        totals['split_refused:' + reason] += count
                 print(
                     json.dumps(
                         {
@@ -221,7 +230,17 @@ def main(argv: Optional[list[str]] = None) -> int:
                             'abstentions': result['abstentions'][-3:],
                             'error': result['error'],
                             'owner_segments': sum(1 for s in result['segments'] if s.get('is_user')),
-                            'final_pass': {k: final.get(k) for k in ('outcome', 'reason', 'location', 'applied')}
+                            'final_pass': {
+                                k: final.get(k)
+                                for k in (
+                                    'outcome',
+                                    'reason',
+                                    'location',
+                                    'applied',
+                                    'split_segments',
+                                    'split_refusals',
+                                )
+                            }
                             or None,
                             'final_owner_segments': sum(1 for s in final.get('segments') or [] if s.get('is_user')),
                         }

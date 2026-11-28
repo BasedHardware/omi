@@ -15885,6 +15885,25 @@ class AppLocalizationsNl extends AppLocalizations {
       'Sommige opnames staan nog op je apparaat. Laat ze eerst volledig synchroniseren naar je telefoon en start daarna de update.';
 
   @override
+  String get batteryRestartToRefresh => 'Start Omi opnieuw op om te vernieuwen';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Worden verwerkt op $date wanneer je minuten vernieuwen';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Of verwerk ze direct met een upgrade van je plan';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Worden verwerkt op $date';
+  }
+
+  @override
+  String get transcriptHoldLineHint => 'Houd een regel ingedrukt om de spreker een naam te geven.';
+
+  @override
   String get experimentalDesign => 'Experimenteel ontwerp';
 
   @override
@@ -15893,7 +15912,4 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get endConversationShort => 'Beëindig';
-
-  @override
-  String get transcriptHoldLineHint => 'Houd een regel ingedrukt om de spreker een naam te geven.';
 }

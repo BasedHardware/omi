@@ -141,6 +141,7 @@ spec:
           ports:
             - {name: http, containerPort: 8080}
           env:
+            - {name: FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED, value: {{ .Values.firstWeekSummaryGuaranteeEnabled | quote }}}
             {{- if not (has "ROLLOUT_POD_TEMPLATE_HASH" $preserveLiveEnv) }}
             # Immutable rollout exporter identity, including supervised GPU children.
             - name: ROLLOUT_POD_TEMPLATE_HASH
@@ -276,6 +277,17 @@ spec:
                   name: {{ .Values.secretName }}
                   key: SONIOX_API_KEY
                   optional: true
+            {{- if .Values.privacyDecisionRedisSecret }}
+            {{- $secret := .Values.privacyDecisionRedisSecret }}
+            {{- range $key := list "REDIS_DB_HOST" "REDIS_DB_PORT" "REDIS_DB_PASSWORD" }}
+            - name: {{ replace "REDIS_DB_" "BPP_WRITE_REDIS_" $key }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secret | quote }}
+                  key: {{ $key }}
+                  optional: true
+            {{- end }}
+            {{- end }}
             {{- if $preserveLiveEnv }}
             {{- $liveEnv := include "batch-pipeline-worker.liveEnv" (dict "deployment" $current "container" "worker" "names" $preserveLiveEnv) | fromYamlArray }}
             {{- with $liveEnv }}

@@ -85,7 +85,7 @@ export function dailyExtractQuery(
     mcp: `SELECT actor,'mcp' kind,'integrations' p,${epoch} a,min(mcp_days.latest) first_at,max(mcp_days.latest) latest,
       '${day}' activity_day,0 age_day,false saved,'' family,false phone,false mac,1 n FROM mcp_days GROUP BY actor`,
     marker: `SELECT '' actor,'marker' kind,'unknown' p,${epoch} a,${epoch} first_at,${epoch} latest,
-      '${day}' activity_day,0 age_day,false saved,'' family,false phone,false mac,count() n FROM mcp_raw`,
+      '${day}' activity_day,0 age_day,false saved,'' family,false phone,false mac,count() n FROM mcp_marker`,
   };
   // Separate feature queries keep the cadence joins out of app extraction.
   const raw = `raw AS (

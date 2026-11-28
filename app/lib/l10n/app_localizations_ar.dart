@@ -15756,6 +15756,25 @@ class AppLocalizationsAr extends AppLocalizations {
       'لا تزال بعض التسجيلات على جهازك. دعها تكمل المزامنة إلى هاتفك، ثم ابدأ التحديث.';
 
   @override
+  String get batteryRestartToRefresh => 'أعد تشغيل Omi لتحديث القراءة';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'ستتم المعالجة في $date عندما تتجدد دقائقك';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'أو عالجها فورًا بترقية خطتك';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'تتم المعالجة في $date';
+  }
+
+  @override
+  String get transcriptHoldLineHint => 'اضغط مطولاً على أي سطر لتسمية المتحدث.';
+
+  @override
   String get experimentalDesign => 'التصميم التجريبي';
 
   @override
@@ -15763,7 +15782,4 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get endConversationShort => 'إنهاء';
-
-  @override
-  String get transcriptHoldLineHint => 'اضغط مطولاً على أي سطر لتسمية المتحدث.';
 }

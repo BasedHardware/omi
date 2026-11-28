@@ -14,7 +14,9 @@ import 'package:omi/utils/l10n_extensions.dart';
 
 /// Same eligibility as the on-device overflow offer: this phone can run the engine.
 bool heldAudioPhoneEligible(OnDeviceTranscriptionController controller) {
-  if (!controller.isActive || !controller.model.engineResolved || controller.model.detectionFailed) return false;
+  if (!controller.storefrontActive || !controller.model.engineResolved || controller.model.detectionFailed) {
+    return false;
+  }
   return controller.model.status.isSupported;
 }
 

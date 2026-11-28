@@ -7,6 +7,7 @@ import time
 import uuid
 
 from config import enrichment as enrichment_config
+from config.summary_guarantee import first_week_open
 
 logger = logging.getLogger(__name__)
 REASON = 'age_gate_72h'
@@ -40,6 +41,10 @@ def timestamp(value) -> float | None:
 
 
 def expired(row, created_at=None, *, now: float) -> bool:
+    # A stamped first-week window is not historical history: parking it would
+    # silently end a new payer's guarantee days before the window closes.
+    if first_week_open(row, now=now):
+        return False
     seconds = max_age_seconds()
     if seconds == 0:
         return False
@@ -107,6 +112,10 @@ def park_if_expired(row_id: str, token: str | None, *, now: float | None = None,
         if old.get('dormant') or (token is not None and old.get('task_token') != token):
             return old, False
         if old.get('lease_until', 0) > current:
+            return old, False
+        # Open first-week rows are exempt without needing the conversation's
+        # creation timestamp. Avoid a point read on every 3–7 day sweep visit.
+        if first_week_open(old, now=current):
             return old, False
         created = None if expired(old, now=current) else conversation_created_at(old, resolved)
         if not expired(old, created, now=current):

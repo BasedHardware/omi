@@ -15769,6 +15769,25 @@ class AppLocalizationsTh extends AppLocalizations {
       'ไฟล์บันทึกเสียงบางส่วนยังอยู่ในอุปกรณ์ของคุณ รอให้ซิงค์ไปยังโทรศัพท์เสร็จก่อน แล้วจึงเริ่มการอัปเดต';
 
   @override
+  String get batteryRestartToRefresh => 'รีสตาร์ท Omi เพื่อรีเฟรช';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'จะประมวลผลในวันที่ $date เมื่อจำนวนนาทีของคุณต่ออายุ';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'หรืออัปเกรดแพ็กเกจเพื่อประมวลผลทันที';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'ประมวลผลในวันที่ $date';
+  }
+
+  @override
+  String get transcriptHoldLineHint => 'แตะบรรทัดค้างไว้เพื่อตั้งชื่อผู้พูด';
+
+  @override
   String get experimentalDesign => 'ดีไซน์ทดลอง';
 
   @override
@@ -15776,7 +15795,4 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get endConversationShort => 'จบ';
-
-  @override
-  String get transcriptHoldLineHint => 'แตะบรรทัดค้างไว้เพื่อตั้งชื่อผู้พูด';
 }

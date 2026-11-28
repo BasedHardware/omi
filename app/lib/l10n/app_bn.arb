@@ -12326,8 +12326,12 @@
     "firmwareNewestSupportedForDevice": "আপনার ডিভাইস ইতিমধ্যেই ফার্মওয়্যারের সর্বশেষ সমর্থিত সংস্করণে রয়েছে",
     "firmwareSyncRecordingsFirstTitle": "প্রথমে আপনার রেকর্ডিং সিঙ্ক করুন",
     "firmwareSyncRecordingsFirstMessage": "কিছু রেকর্ডিং এখনও আপনার ডিভাইসে রয়েছে। সেগুলিকে আপনার ফোনে সিঙ্ক শেষ হতে দিন, তারপর আপডেট শুরু করুন।",
+    "batteryRestartToRefresh": "রিফ্রেশ করতে Omi পুনরায় চালু করুন",
+    "onTheWayAllowanceHeldTitle": "আপনার মিনিট নবায়ন হলে {date} তারিখে প্রসেস হবে",
+    "onTheWayAllowanceHeldUpgrade": "অথবা প্ল্যান আপগ্রেড করে সেগুলো এখনই প্রসেস করুন",
+    "onTheWayDayProcessesOn": "{date} তারিখে প্রসেস হবে",
+    "transcriptHoldLineHint": "কে কথা বলছেন তার নাম দিতে যেকোনো লাইনে চেপে ধরে রাখুন।",
     "experimentalDesign": "পরীক্ষামূলক ডিজাইন",
     "experimentalDesignDescription": "প্রকাশের আগেই হোম ও কথোপকথনের নতুন চেহারা ব্যবহার করে দেখুন।",
-    "endConversationShort": "শেষ",
-    "transcriptHoldLineHint": "কে কথা বলছেন তার নাম দিতে যেকোনো লাইনে চেপে ধরে রাখুন।"
+    "endConversationShort": "শেষ"
 }

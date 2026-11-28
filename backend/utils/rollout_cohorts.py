@@ -152,6 +152,9 @@ def _in_rollout_cohort(
     try:
         members = members.get(rollout_environment(), {})
     except ValueError:
+        if name == policy.V3_HOLDOUT_COHORT:
+            # An invalid OMI_ENV_STAGE is unknown membership too: admit and count it, never a plain miss.
+            raise policy.RolloutCohortUnavailable('conversations v3 holdout rollout environment invalid')
         return False
     if name in members:
         return members[name] is True

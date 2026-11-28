@@ -178,6 +178,18 @@ class LivePreflightTest(unittest.TestCase):
             with self.subTest(change=change), self.assertRaisesRegex(lp.MixedWrite, 'mixed_write'):
                 lp.widens_exposure(before, change)
 
+    def test_exposure_predicate_classifies_platform_changes(self):
+        classify = lp.widens_exposure
+        zero = {'active': True, 'rollout_percentage': 0}
+        self.assertTrue(classify(zero, {'rollout_percentage': 5, 'platforms': ['ios']}))
+        full = {**zero, 'rollout_percentage': 100}
+        self.assertFalse(classify(full, {'platforms': ['ios']}))
+        self.assertTrue(classify({**full, 'platforms': ['ios']}, None))
+        with self.assertRaises(lp.MixedWrite):
+            classify({**full, 'platforms': ['ios']}, {'platforms': ['android']})
+        canary = {**zero, 'allow_uids': ['allowed'], 'platforms': ['ios']}
+        self.assertTrue(classify(canary, {'platforms': []}))
+
     def test_pass_real_git_and_first_prose_metric(self):
         ok, token, detail = self.check()
         self.assertTrue(ok)

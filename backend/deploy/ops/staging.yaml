@@ -139,6 +139,14 @@ cloud_tasks:
     max_attempts: -1
     min_backoff: 10s
     max_backoff: 300s
+  staging-enrichment-first-week:
+    # Mirrors prod 4/2: a new payer's open first-week summary gets its own slots,
+    # never a share of staging-enrichment-fresh.
+    max_concurrent_dispatches: 4
+    max_dispatches_per_second: 2
+    max_attempts: -1
+    min_backoff: 10s
+    max_backoff: 300s
   staging-provider-stt:
     # Staging keeps its lower dispatch capacity (SCA-3552).
     max_concurrent_dispatches: 48

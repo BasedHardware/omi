@@ -4804,8 +4804,12 @@
     "firmwareNewestSupportedForDevice": "На вашем устройстве уже установлена последняя поддерживаемая версия прошивки",
     "firmwareSyncRecordingsFirstTitle": "Сначала синхронизируйте записи",
     "firmwareSyncRecordingsFirstMessage": "Некоторые записи всё ещё находятся на устройстве. Дождитесь завершения их синхронизации с телефоном, а затем начните обновление.",
+    "batteryRestartToRefresh": "Перезапустите Omi, чтобы обновить данные",
+    "onTheWayAllowanceHeldTitle": "Будут обработаны {date}, когда обновятся ваши минуты",
+    "onTheWayAllowanceHeldUpgrade": "Или обработайте их сразу, улучшив тариф",
+    "onTheWayDayProcessesOn": "Будут обработаны {date}",
+    "transcriptHoldLineHint": "Нажмите и удерживайте строку, чтобы указать, кто говорит.",
     "experimentalDesign": "Экспериментальный дизайн",
     "experimentalDesignDescription": "Попробуйте новый вид главного экрана и разговоров до выпуска.",
-    "endConversationShort": "Завершить",
-    "transcriptHoldLineHint": "Нажмите и удерживайте строку, чтобы указать, кто говорит."
+    "endConversationShort": "Завершить"
 }

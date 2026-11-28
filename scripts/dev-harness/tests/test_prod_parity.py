@@ -22,7 +22,7 @@ pytest.importorskip("croniter")
 pytest.importorskip("cryptography")
 
 from dev_harness import cli, config, edge_router, local_scheduler, local_task_queue, parity_report  # noqa: E402
-from dev_harness import parity_stack, prod_snapshot  # noqa: E402
+from dev_harness import parity_stack, prod_snapshot, voice_embedding  # noqa: E402
 from dev_harness import prod_parity as profile  # noqa: E402
 
 
@@ -202,7 +202,89 @@ def test_stack_runs_one_process_per_production_service_behind_the_edge_router(mo
     # No model runtime or access token in this checkout: the worker is left out and the developer is told.
     assert not any(name.startswith("batch-worker") for name in processes)
     assert any("batch-worker: not started" in note for note in parity_stack.start_notes(cfg))
+    # The speaker-embedding service needs the same runtime: left out, announced, and its address stays unreachable.
+    assert "voice-embedding" not in processes
+    assert any("voice-embedding: not started" in note for note in parity_stack.start_notes(cfg))
+    assert processes["svc-backend"].env[profile.VOICE_EMBEDDING_ENV] == profile.BLACKHOLE
     assert "record-seal-worker" not in processes  # described only by a production snapshot
+
+
+def test_speaker_embedding_is_served_locally_when_the_model_runtime_is_installed(monkeypatch, tmp_path):
+    cfg = _cfg(monkeypatch, tmp_path)
+    monkeypatch.setattr(parity_stack, "batch_worker_python", lambda _cfg: Path("/model-runtime/bin/python"))
+    monkeypatch.setattr(parity_stack, "model_access_token", lambda _cfg: "model-token")
+    processes = {process.name: process for process in parity_stack.processes(cfg)}
+
+    service = processes["voice-embedding"]
+    assert service.command == ["/model-runtime/bin/python", "-m", "dev_harness.voice_embedding"]
+    assert service.env is not None and service.env[voice_embedding.PORT_ENV] == str(service.port)
+    assert parity_stack.is_process("voice-embedding")
+    # Every production service that declares the route is pointed at the local one, and at nothing else.
+    callers = [
+        name
+        for name in parity_stack.SERVICE_PROCESSES.values()
+        if profile.VOICE_EMBEDDING_ENV in (processes[name].env or {})
+    ]
+    assert "svc-backend" in callers and "svc-sync" in callers
+    for name in callers:
+        assert processes[name].env[profile.VOICE_EMBEDDING_ENV] == f"http://127.0.0.1:{service.port}", name
+        # The other hosted model services stay unreachable.
+        assert processes[name].env.get("HOSTED_DIARIZATION_API_URL", profile.BLACKHOLE) == profile.BLACKHOLE, name
+    assert not any("voice-embedding" in note for note in parity_stack.start_notes(cfg))
+
+
+def test_speaker_embedding_route_answers_like_the_diarizer(tmp_path):
+    import json
+    import threading
+    import urllib.error
+    import urllib.request
+
+    class TooShort(Exception):
+        status_code = 422
+        detail = {"error": "audio_too_short"}
+
+    def embed(filename, data):
+        if len(data) < 4:
+            raise TooShort()
+        return [[float(len(filename)), float(len(data))]]
+
+    ready = threading.Event()
+    server = voice_embedding.build_server(0, embed, ready)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    url = f"http://127.0.0.1:{server.server_address[1]}"
+
+    def post(data: bytes, path: str = voice_embedding.ROUTE):
+        boundary = "harness-boundary"
+        body = (
+            (
+                f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="clip.wav"\r\n'
+                "Content-Type: audio/wav\r\n\r\n"
+            ).encode()
+            + data
+            + f"\r\n--{boundary}--\r\n".encode()
+        )
+        request = urllib.request.Request(
+            url + path, data=body, headers={"Content-Type": f"multipart/form-data; boundary={boundary}"}
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=5) as response:
+                return response.status, json.loads(response.read())
+        except urllib.error.HTTPError as error:
+            return error.code, json.loads(error.read())
+
+    try:
+        assert post(b"RIFF....")[0] == 503  # the model is still loading: the caller takes its unavailable path
+        ready.set()
+        # Binary audio survives the form parsing byte for byte.
+        audio = bytes(range(256)) * 4 + b"\r\n--not-the-boundary\r\n"
+        assert post(audio) == (200, [[8.0, float(len(audio))]])
+        assert post(b"abc") == (422, {"detail": {"error": "audio_too_short"}})
+        assert post(audio, "/v1/diarization")[0] == 404
+        with urllib.request.urlopen(url + "/health", timeout=5) as response:
+            assert json.loads(response.read()) == {"status": "healthy"}
+    finally:
+        server.shutdown()
+        server.server_close()
 
 
 def test_no_process_receives_cloud_credentials_or_a_production_project(monkeypatch, tmp_path):
@@ -243,7 +325,8 @@ def test_report_without_a_snapshot_says_what_the_source_is(monkeypatch, tmp_path
     assert "this checkout's deploy files" in report
     assert "settings that differ from the source: 0" in report
     assert "batch speech worker: NOT RUNNING" in report
-    assert findings == 2  # no snapshot, no batch worker; nothing else
+    assert "speaker embedding: NOT RUNNING" in report
+    assert findings == 3  # no snapshot, no batch worker, no speaker embedding; nothing else
 
 
 def test_a_worker_that_exited_is_reported_not_counted_as_running(monkeypatch, tmp_path):

@@ -2806,12 +2806,12 @@ def get_canonical_audio_bucket() -> Any:
 
 
 def delete_privacy_conversation_audio(uid: str, conversation_id: str, *, source_ids: List[str] | None = None) -> None:
-    """Only the explicit privacy endpoint may erase canonical conversation bytes."""
-    if os.getenv('BUCKET_CANONICAL_AUDIO'):
-        with destructive_operation_gate(uid, kind='audio_conversation_deletion'):
+    """Erase conversation audio under one legal-hold gate for packs and prefixes."""
+    with destructive_operation_gate(uid, kind='audio_conversation_deletion'):
+        if os.getenv('BUCKET_CANONICAL_AUDIO'):
             canonical = get_canonical_audio_bucket()
             conversation_ids: List[str] = [conversation_id]
             conversation_ids.extend(source_ids or [])
             for cid in set(conversation_ids):
                 audio_packs.delete_conversation(canonical, uid, cid)
-    delete_conversation_audio_files(uid, conversation_id)
+        delete_conversation_audio_files(uid, conversation_id)

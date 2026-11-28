@@ -15976,6 +15976,25 @@ class AppLocalizationsFr extends AppLocalizations {
       'Certains enregistrements sont encore sur votre appareil. Laissez-les terminer leur synchronisation vers votre téléphone, puis lancez la mise à jour.';
 
   @override
+  String get batteryRestartToRefresh => 'Redémarrez Omi pour actualiser';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Seront traités le $date au renouvellement de vos minutes';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Ou traitez-les tout de suite en passant à un forfait supérieur';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Traitement le $date';
+  }
+
+  @override
+  String get transcriptHoldLineHint => 'Maintenez une ligne appuyée pour nommer la personne qui parle.';
+
+  @override
   String get experimentalDesign => 'Design expérimental';
 
   @override
@@ -15984,7 +16003,4 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get endConversationShort => 'Terminer';
-
-  @override
-  String get transcriptHoldLineHint => 'Maintenez une ligne appuyée pour nommer la personne qui parle.';
 }

@@ -15839,6 +15839,25 @@ class AppLocalizationsBn extends AppLocalizations {
       'কিছু রেকর্ডিং এখনও আপনার ডিভাইসে রয়েছে। সেগুলিকে আপনার ফোনে সিঙ্ক শেষ হতে দিন, তারপর আপডেট শুরু করুন।';
 
   @override
+  String get batteryRestartToRefresh => 'রিফ্রেশ করতে Omi পুনরায় চালু করুন';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'আপনার মিনিট নবায়ন হলে $date তারিখে প্রসেস হবে';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'অথবা প্ল্যান আপগ্রেড করে সেগুলো এখনই প্রসেস করুন';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return '$date তারিখে প্রসেস হবে';
+  }
+
+  @override
+  String get transcriptHoldLineHint => 'কে কথা বলছেন তার নাম দিতে যেকোনো লাইনে চেপে ধরে রাখুন।';
+
+  @override
   String get experimentalDesign => 'পরীক্ষামূলক ডিজাইন';
 
   @override
@@ -15846,7 +15865,4 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get endConversationShort => 'শেষ';
-
-  @override
-  String get transcriptHoldLineHint => 'কে কথা বলছেন তার নাম দিতে যেকোনো লাইনে চেপে ধরে রাখুন।';
 }

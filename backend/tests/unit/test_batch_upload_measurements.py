@@ -102,31 +102,54 @@ def test_upload_latency_labels_are_closed(monkeypatch, state, expected):
 
 @pytest.mark.parametrize(
     'age_ms,state,expected_label,seconds',
-    [('0', 'fg60', 'fg60', 0), ('360123', 'bg300', 'bg300', 360.123), ('86400000', 'invalid', 'unknown', 86400)],
+    [
+        ('0', 'fg60', 'fg60', 0),
+        ('0' * 100, 'fg60', 'fg60', 0),
+        ('360123', 'bg300', 'bg300', 360.123),
+        ('000086400', 'bg300', 'bg300', 86.4),
+        ('00086400000', 'invalid', 'unknown', 86400),
+    ],
 )
 @pytest.mark.parametrize('recovered,label', [(True, 'true'), (False, 'false'), ('private', 'false')])
 def test_hold_age_observes_bounded_milliseconds(monkeypatch, age_ms, state, expected_label, seconds, recovered, label):
     histogram = Mock()
     monkeypatch.setattr(sync_upload, 'HOLD_AGE', histogram)
-    sync_upload.observe_hold_age(age_ms, state, recovered)
-    histogram.labels.assert_called_once_with(expected_label, label)
+    sync_upload.observe_hold_age(age_ms, state, recovered, upload_trace='sealed=100;gate=offline', received_at=400)
+    histogram.labels.assert_called_once_with(expected_label, label, 'offline')
     histogram.labels.return_value.observe.assert_called_once_with(seconds)
 
 
-@pytest.mark.parametrize('age_ms', [None, '', '1.5', ' 10', '-1', '+1', '١', '86400001', '1' * 100, 1000])
+@pytest.mark.parametrize('age_ms', [None, '', '1.5', ' 10', '-1', '+1', '١', '00086400001', '1' * 100, 1000])
 def test_malformed_hold_age_is_not_observed(monkeypatch, age_ms):
     histogram = Mock()
     monkeypatch.setattr(sync_upload, 'HOLD_AGE', histogram)
-    sync_upload.observe_hold_age(age_ms, 'bg300')
+    sync_upload.observe_hold_age(age_ms, 'bg300', False, upload_trace=None, received_at=400)
     histogram.labels.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    'trace,expected',
+    [
+        ('sealed=100;gate=retries_exhausted', 'retries_exhausted'),
+        ('sealed=100;gate=none', 'none'),
+        ('sealed=100;gate=synthetic-private-value', 'other'),
+        ('sealed=invalid;gate=offline', 'other'),
+        (None, 'other'),
+    ],
+)
+def test_hold_age_reuses_the_bounded_upload_trace_gate(monkeypatch, trace, expected):
+    histogram = Mock()
+    monkeypatch.setattr(sync_upload, 'HOLD_AGE', histogram)
+    sync_upload.observe_hold_age('60000', 'fg60', False, upload_trace=trace, received_at=400)
+    histogram.labels.assert_called_once_with('fg60', 'false', expected)
+
+
 def test_hold_age_is_exported_from_sync_with_guard_buckets():
-    sync_upload.observe_hold_age('60000', 'fg60', True)
+    sync_upload.observe_hold_age('60000', 'fg60', True, upload_trace='sealed=100;gate=none', received_at=400)
     samples = metrics_response().body
     for boundary in ('60.0', '300.0', '360.0', '600.0', '900.0', '1800.0'):
         assert (
-            f'omi_batch_pipeline_upload_hold_age_seconds_bucket{{hold_state="fg60",le="{boundary}",recovered="true"}}'.encode()
+            f'omi_batch_pipeline_upload_hold_age_seconds_bucket{{gate="none",hold_state="fg60",le="{boundary}",recovered="true"}}'.encode()
             in samples
         )
 

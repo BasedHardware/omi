@@ -30,6 +30,9 @@ def _run_scripts(workflow: dict) -> str:
     return '\n'.join(str(step.get('run', '')) for step in steps)
 
 
+MAIN_DEPLOY_CONDITION = "github.ref == 'refs/heads/main' && inputs.pager_only != true"
+
+
 def test_workflow_owns_dev_auto_deploy_and_manual_production() -> None:
     workflow = _workflow()
     triggers = workflow['on']
@@ -54,7 +57,7 @@ def test_workflow_owns_dev_auto_deploy_and_manual_production() -> None:
         'cancel-in-progress': 'false',
     }
     assert workflow['jobs']['deploy']['steps'][0]['with']['ref'] == '${{ github.sha }}'
-    assert workflow['jobs']['deploy']['if'] == "github.ref == 'refs/heads/main'"
+    assert workflow['jobs']['deploy']['if'] == MAIN_DEPLOY_CONDITION
     assert workflow['jobs']['deploy']['environment'] == (
         "${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}"
     )
@@ -189,7 +192,7 @@ def test_workflow_provisions_live_stt_alerts_independently_of_helm() -> None:
     assert 'Import allowlisted live-STT Grafana alerts' not in deploy_names
     assert 'Verify imported live-STT Grafana alert coverage' not in deploy_names
 
-    assert provision['if'] == "github.ref == 'refs/heads/main' && github.event.inputs.import_grafana != 'false'"
+    assert provision['if'] == f"{MAIN_DEPLOY_CONDITION} && github.event.inputs.import_grafana != 'false'"
     assert provision['environment'] == deploy['environment']
     assert provision['permissions'] == {'contents': 'read'}
     assert 'needs' not in provision
@@ -227,6 +230,45 @@ def test_workflow_provisions_live_stt_alerts_independently_of_helm() -> None:
     assert 'backend/charts/monitoring/alerts/live-stt.json' in push_paths
     assert 'backend/charts/monitoring/alerts/resilience.json' in push_paths
     assert 'backend/charts/monitoring/live-alert-gate.json' in push_paths
+
+
+def test_pager_dispatch_can_only_run_the_protected_read_job() -> None:
+    workflow = _workflow()
+    pager_input = workflow['on']['workflow_dispatch']['inputs']['pager_only']
+    assert pager_input['type'] == 'boolean'
+    assert pager_input['default'] == 'false'
+
+    jobs = workflow['jobs']
+    assert set(jobs) == {'deploy', 'provision-live-alerts', 'batch-pager-receipt'}
+    assert jobs['deploy']['if'] == MAIN_DEPLOY_CONDITION
+    assert jobs['provision-live-alerts']['if'] == (
+        f"{MAIN_DEPLOY_CONDITION} && github.event.inputs.import_grafana != 'false'"
+    )
+    pager = jobs['batch-pager-receipt']
+    assert pager['if'] == (
+        "github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'"
+        " && inputs.pager_only && inputs.environment == 'prod'"
+    )
+    assert pager['environment'] == 'prod'
+    assert pager['permissions'] == {'contents': 'read'}
+    assert 'needs' not in pager
+    assert 'env' not in pager
+    assert 'secrets' not in str(workflow.get('env', {}))
+    checkout, receipt = pager['steps']
+    assert set(checkout) == {'name', 'uses', 'with'}
+    assert checkout['uses'] == 'actions/checkout@v7'
+    assert checkout['with'] == {'ref': '${{ github.sha }}', 'persist-credentials': 'false'}
+    assert set(receipt) == {'name', 'env', 'run'}
+    assert receipt['env'] == {'MONITOR_GRAFANA_VIEWER_TOKEN': '${{ secrets.MONITOR_GRAFANA_VIEWER_TOKEN }}'}
+    assert WORKFLOW.read_text(encoding='utf-8').count('secrets.MONITOR_GRAFANA_VIEWER_TOKEN') == 1
+    script = receipt['run']
+    for command in ('helm ', 'kubectl ', 'gcloud ', '--mode import', 'toJSON(secrets)'):
+        assert command not in script
+    assert 'python3 backend/scripts/verify_pusher_live_alert_route.py' in script
+    assert '--grafana-url https://monitor.omi.me' in script
+    assert '--mode fleet' in script
+    assert '--fail-on gated' in script
+    assert '--batch-pager-receipt' in script
 
 
 def test_workflow_values_exist_for_every_environment() -> None:

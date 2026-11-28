@@ -578,7 +578,7 @@ WITNESSES: dict[str, CallerWitness] = {
             _run_support_trace,
         ),
         CallerWitness(
-            'routers/conversations.py:get_conversations:database.conversations.get_conversations_without_photos',
+            'routers/conversations.py:get_conversations.read_page:database.conversations.get_conversations_without_photos',
             'database.conversations.get_conversations_without_photos',
             'database.conversations.get_conversations_without_photos',
             ('main-list-single-status', 'main-list-default-or-multi-status', 'main-list-indexed-home'),

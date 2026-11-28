@@ -28,6 +28,9 @@ enum OnDeviceRunReason {
 
   /// The battery is too low to spend on transcription; waiting for a charger.
   batteryTooLow,
+
+  /// The app is open and the user chose on-device transcription for drained pendant audio.
+  foreground,
 }
 
 /// What the policy sees. Pure data: no clocks, plugins or prefs are read inside the policy.
@@ -41,6 +44,7 @@ class OnDeviceRunInputs {
     this.batteryPercent,
     this.lastRunAt,
     this.transcribeNowRequested = false,
+    this.isForeground = false,
   });
 
   final OnDeviceSchedule schedule;
@@ -59,6 +63,10 @@ class OnDeviceRunInputs {
 
   /// The reader asked to transcribe now, whatever the schedule.
   final bool transcribeNowRequested;
+
+  /// The app is in the foreground with drained pendant audio queued; runs on battery above
+  /// [OnDeviceSchedulePolicy.minBatteryPercent], whatever the schedule.
+  final bool isForeground;
 }
 
 @immutable
@@ -120,6 +128,12 @@ class OnDeviceSchedulePolicy {
         return const OnDeviceRunDecision.wait(OnDeviceRunReason.batteryTooLow);
       }
       return const OnDeviceRunDecision.run(OnDeviceRunReason.userRequested);
+    }
+    if (inputs.isForeground) {
+      if (battery != null && battery < minBatteryPercent) {
+        return const OnDeviceRunDecision.wait(OnDeviceRunReason.batteryTooLow);
+      }
+      return const OnDeviceRunDecision.run(OnDeviceRunReason.foreground);
     }
     switch (inputs.schedule) {
       case OnDeviceSchedule.whileCharging:

@@ -27801,6 +27801,36 @@ abstract class AppLocalizations {
   /// **'Some recordings are still on your device. Let them finish syncing to your phone, then start the update.'**
   String get firmwareSyncRecordingsFirstMessage;
 
+  /// Short caption under the Battery value (shown as a dash) in Omi device settings when the pendant's near-empty battery reading looks stuck after charging. Tells the user that restarting the Omi pendant refreshes the reading. Omi is the product name; keep it untranslated.
+  ///
+  /// In en, this message translates to:
+  /// **'Restart Omi to refresh'**
+  String get batteryRestartToRefresh;
+
+  /// On the Way row title: uploaded recordings are waiting for the monthly transcription minutes to renew on the given short date (for example 'Dec 1'). Says when, never what the user cannot do.
+  ///
+  /// In en, this message translates to:
+  /// **'Will process on {date} when your minutes renew'**
+  String onTheWayAllowanceHeldTitle(String date);
+
+  /// Subtitle under the waiting-for-minutes row on On the Way; tapping the row opens the plans page.
+  ///
+  /// In en, this message translates to:
+  /// **'Or process them right away with a plan upgrade'**
+  String get onTheWayAllowanceHeldUpgrade;
+
+  /// Short status at the right of one day's row on On the Way: that day's uploaded recordings will process on the given short date when monthly minutes renew.
+  ///
+  /// In en, this message translates to:
+  /// **'Processes {date}'**
+  String onTheWayDayProcessesOn(String date);
+
+  /// Shown above a conversation transcript: how to open the menu on a transcript line. Must read naturally on both iOS and Android.
+  ///
+  /// In en, this message translates to:
+  /// **'Press and hold a line to name who\'s speaking.'**
+  String get transcriptHoldLineHint;
+
   /// Developer Settings toggle title: turn on the experimental look of Home and conversations
   ///
   /// In en, this message translates to:
@@ -27818,12 +27848,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'End'**
   String get endConversationShort;
-
-  /// Shown above a conversation transcript: how to open the menu on a transcript line. Must read naturally on both iOS and Android.
-  ///
-  /// In en, this message translates to:
-  /// **'Press and hold a line to name who\'s speaking.'**
-  String get transcriptHoldLineHint;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

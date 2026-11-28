@@ -15827,6 +15827,25 @@ class AppLocalizationsEn extends AppLocalizations {
       'Some recordings are still on your device. Let them finish syncing to your phone, then start the update.';
 
   @override
+  String get batteryRestartToRefresh => 'Restart Omi to refresh';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Will process on $date when your minutes renew';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Or process them right away with a plan upgrade';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Processes $date';
+  }
+
+  @override
+  String get transcriptHoldLineHint => 'Press and hold a line to name who\'s speaking.';
+
+  @override
   String get experimentalDesign => 'Experimental Design';
 
   @override
@@ -15834,7 +15853,4 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get endConversationShort => 'End';
-
-  @override
-  String get transcriptHoldLineHint => 'Press and hold a line to name who\'s speaking.';
 }

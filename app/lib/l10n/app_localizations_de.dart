@@ -15961,6 +15961,25 @@ class AppLocalizationsDe extends AppLocalizations {
       'Einige Aufnahmen sind noch auf Ihrem Gerät. Warten Sie, bis sie vollständig mit Ihrem Telefon synchronisiert wurden, und starten Sie dann die Aktualisierung.';
 
   @override
+  String get batteryRestartToRefresh => 'Starten Sie Omi neu, um den Wert zu aktualisieren';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Wird am $date verarbeitet, wenn sich Ihre Minuten erneuern';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Oder verarbeiten Sie sie sofort mit einem Plan-Upgrade';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Wird am $date verarbeitet';
+  }
+
+  @override
+  String get transcriptHoldLineHint => 'Halte eine Zeile gedrückt, um zu benennen, wer spricht.';
+
+  @override
   String get experimentalDesign => 'Experimentelles Design';
 
   @override
@@ -15969,7 +15988,4 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get endConversationShort => 'Beenden';
-
-  @override
-  String get transcriptHoldLineHint => 'Halte eine Zeile gedrückt, um zu benennen, wer spricht.';
 }

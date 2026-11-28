@@ -80,26 +80,29 @@ def test_metadata_cannot_change_between_continuations(store):
 def test_assembly_exceeds_wire_cap_without_merging_speakers(store, monkeypatch):
     owner = uuid4().hex
     monkeypatch.setenv(intake.CONTINUATION_FLAG_KEY, 'serve')
-    calls = []
+    results = []
     for index in range(3):
         body = chunk(index, count=3).model_dump()
         body['transcript_segments'] = [
             Segment(speaker=i % 2, start=i, end=i + 1).model_dump()
             for i in range(index * 500, min((index + 1) * 500, 1100))
         ]
-        intake.continuation(owner, Request.model_validate(body), 'c', calls.append, lambda **kw: kw)
-    assert len(calls) == 1
-    assert len(calls[0].transcript_segments) == 1100
-    assert [s.speaker for s in calls[0].transcript_segments] == [i % 2 for i in range(1100)]
+        results.append(intake.assemble_continuation(owner, Request.model_validate(body), 'c'))
+    assert results[:2] == [None, None]
+    assembled = results[2]
+    assert assembled is not None
+    assert len(assembled.transcript_segments) == 1100
+    assert [s.speaker for s in assembled.transcript_segments] == [i % 2 for i in range(1100)]
 
 
 @pytest.mark.parametrize('value', ['off', 'shadow', 'typo'])
 def test_nonserving_server_explicitly_rejects_chunks(monkeypatch, value):
     monkeypatch.setenv(intake.CONTINUATION_FLAG_KEY, value)
     with pytest.raises(HTTPException) as error:
-        intake.continuation(uuid4().hex, chunk(), 'c', lambda r: None, dict)
+        intake.assemble_continuation(uuid4().hex, chunk(), 'c')
     assert error.value.status_code == 409
-    assert mode(intake.CONTINUATION_FLAG_KEY) == ('shadow' if value == 'typo' else value)
+    # An unrecognised value keeps the family default, off since 2026-11-28.
+    assert mode(intake.CONTINUATION_FLAG_KEY) == ('off' if value == 'typo' else value)
 
 
 @pytest.mark.parametrize(

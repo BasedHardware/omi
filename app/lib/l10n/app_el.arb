@@ -4769,8 +4769,12 @@
     "firmwareNewestSupportedForDevice": "Η συσκευή σας έχει ήδη την πιο πρόσφατη υποστηριζόμενη έκδοση υλικολογισμικού",
     "firmwareSyncRecordingsFirstTitle": "Συγχρονίστε πρώτα τις ηχογραφήσεις σας",
     "firmwareSyncRecordingsFirstMessage": "Μερικές ηχογραφήσεις βρίσκονται ακόμη στη συσκευή σας. Περιμένετε να ολοκληρωθεί ο συγχρονισμός τους στο τηλέφωνό σας και, στη συνέχεια, ξεκινήστε την ενημέρωση.",
+    "batteryRestartToRefresh": "Κάντε επανεκκίνηση του Omi για να ανανεωθεί η ένδειξη",
+    "onTheWayAllowanceHeldTitle": "Θα επεξεργαστούν στις {date} όταν ανανεωθούν τα λεπτά σας",
+    "onTheWayAllowanceHeldUpgrade": "Ή επεξεργαστείτε τα αμέσως με μια αναβάθμιση προγράμματος",
+    "onTheWayDayProcessesOn": "Επεξεργασία στις {date}",
+    "transcriptHoldLineHint": "Πατήστε παρατεταμένα μια γραμμή για να ονομάσετε ποιος μιλάει.",
     "experimentalDesign": "Πειραματικός σχεδιασμός",
     "experimentalDesignDescription": "Δοκιμάστε τη νέα εμφάνιση της Αρχικής και των συνομιλιών πριν κυκλοφορήσει.",
-    "endConversationShort": "Τέλος",
-    "transcriptHoldLineHint": "Πατήστε παρατεταμένα μια γραμμή για να ονομάσετε ποιος μιλάει."
+    "endConversationShort": "Τέλος"
 }

@@ -3,18 +3,18 @@
 SCA-4247 uses the existing Luna lanes.
 Cloud Tasks CAPTURE_END structure and L1 fanout opt in using the recording
 close time. An admitted phase has at most 57 seconds of gateway time, with
-Standard reserves of 40 seconds for structure and 24 for L1. A phase with less
-than its full Standard reserve uses its existing realtime deadline. V3 summary
+Standard reserves of 40 seconds for structure and 24 for L1. A phase with a
+positive budget too short for Flex uses Standard within that budget. V3 summary
 uses Standard by default, following main commit `8b3cc87cef7`.
 With the default-on switch, interactive, catch-up, pusher socket, sync
 finalization, silent backfill, server recovery and derive calls use Standard
 unless they enter an eligible durable scope with time remaining. Tool turns,
 streaming requests, BYOK, and caller-selected tiers are excluded from scoped
 Flex. The gateway can retry one receipt-free upstream Flex HTTP 429 when another
-useful attempt fits. Only a confirmed receipt-free 429 can use the Standard
-reserve. Standard retries and failover share the original deadline. Flex
-timeouts stop dispatch because usage may be indeterminate and the provider may
-bill the timed-out call. A Flex failure with a usage receipt also ends dispatch.
+useful attempt fits. In scoped mode, only a confirmed receipt-free 429 can use
+the Standard reserve. Any other Flex failure ends scoped dispatch. Standard
+retries and failover share the caller's original deadline. Flex timeouts end
+dispatch in both modes because the provider may bill the timed-out call.
 
 Only an authenticated builder task can request nonstreaming Flex for a finished,
 non-manual outline with headroom before close + 2 hours. It reserves 45 seconds
@@ -26,9 +26,12 @@ leaves both realtime attempts available. On a background gateway timeout the
 builder can publish the deterministic outline within its publication budget.
 The fallback stays out of the result cache so an open can try Standard.
 
-Set `LLM_GATEWAY_BACKGROUND_FLEX_RETRY=off` in the gateway and backend to restore
-the previous Flex behavior. The gateway's `LLM_GATEWAY_FLEX_FIRST_LANES` can override
-the default lane set after readback, including adding V3 summary without a deploy. The outline experiments default off.
+Set `LLM_GATEWAY_BACKGROUND_FLEX_RETRY=off` in the gateway and backend to disable
+scoped Flex and use legacy Flex-first for configured lanes. Legacy Flex-first
+can fall back to Standard on non-timeout failures. To roll a lane back to
+Standard, exclude it from `LLM_GATEWAY_FLEX_FIRST_LANES`. Set the lane list to
+`off` to disable every listed lane and turn off the separate outline Flex arm
+for an all-Standard rollback. The outline experiments default off.
 Release owns enabling `LLM_GATEWAY_BACKGROUND_OUTLINE_FLEX=on` in the backend and
 gateway and `OMI_OUTLINE_CACHE_PREFIX=on` in the backend after Margin GO and the
 paired replay. Enable each arm independently, starting on the approved replay

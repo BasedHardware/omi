@@ -1,5 +1,30 @@
 part of 'local_wal_sync.dart';
 
+/// Custody of drained pendant audio, decided once at persist time (a mode switch never rewrites
+/// it). Chunks are phone-only under on-device STT, except during the short window after the user
+/// confirms a manual cloud Sync, so audio that Sync drains also goes to the cloud. In memory only:
+/// after a restart the window is closed, which keeps audio on the phone (the safe side).
+abstract final class DrainedAudioCustody {
+  static const cloudSyncWindow = Duration(minutes: 15);
+  static DateTime? _cloudUntil;
+
+  @visibleForTesting
+  static DateTime Function() now = DateTime.now;
+
+  static void confirmCloudSync() => _cloudUntil = now().add(cloudSyncWindow);
+
+  static bool phoneOnlyAtPersist() {
+    final until = _cloudUntil;
+    return SharedPreferencesUtil().onDeviceSttSelected && (until == null || !now().isBefore(until));
+  }
+
+  @visibleForTesting
+  static void debugReset() {
+    _cloudUntil = null;
+    now = DateTime.now;
+  }
+}
+
 /// All device drains use this transaction: admission, identical length-prefixed
 /// bytes, flushed file, indexed WAL, then proof of durability before device ACK.
 /// Naming callbacks preserve the producer's existing collision sequence.
@@ -75,6 +100,9 @@ extension DeviceChunkPersistence on LocalWalSync {
     int? downloadRingId,
     int? downloadSeqStart,
     int? downloadSeqEnd,
+    // Phone-only custody for audio the on-device runner transcribes. Both fields are stamped so
+    // repairLegacyImportedCustody keeps the flag and no upload path ever selects the chunk.
+    bool phoneOnly = false,
   }) async {
     if (frames.isEmpty) throw StateError('refusing to persist an empty chunk');
     final data = encodeWalFrames(frames);
@@ -122,7 +150,9 @@ extension DeviceChunkPersistence on LocalWalSync {
           downloadSeqEnd: downloadSeqEnd,
           downloadFileBytes: downloadRingId != null ? data.length : null,
           fileSha256: downloadRingId != null ? sha256.convert(data).toString() : null,
-          clockRun: clockRun);
+          clockRun: clockRun,
+          onDeviceOnly: phoneOnly,
+          capturedOnDeviceOnly: phoneOnly ? true : null);
       await addExternalWal(wal, admittedGeneration: admittedGeneration);
       if (!await hasDurableWal(wal, admittedGeneration: admittedGeneration)) {
         throw StateError('WAL not durable after registration');
