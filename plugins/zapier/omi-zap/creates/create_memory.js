@@ -116,6 +116,11 @@ module.exports = {
     ],
     perform: {
       body: body,
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        Authorization: 'Bearer {{bundle.authData.token}}',
+      },
       method: 'POST',
       removeMissingValuesFrom: { body: true, params: true },
       url: 'https://based-hardware--plugins-api.modal.run/zapier/action/memories',

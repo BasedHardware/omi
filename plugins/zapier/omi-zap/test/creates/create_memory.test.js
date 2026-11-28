@@ -13,7 +13,11 @@ const API_HOST = 'https://based-hardware--plugins-api.modal.run';
 // JSON body so assertions run after the call, not inside nock's predicate.
 const mockCreateMemory = () => {
   let postedBody;
-  const scope = nock(API_HOST)
+  const scope = nock(API_HOST, {
+    reqheaders: {
+      authorization: 'Bearer tok-test',
+    },
+  })
     .post('/zapier/action/memories', (body) => {
       postedBody = body;
       return true;
@@ -25,7 +29,7 @@ const mockCreateMemory = () => {
 
 const runCreateMemory = (inputData) =>
   appTester(App.creates['create_memory'].operation.perform, {
-    authData: { uid: 'u-test' },
+    authData: { uid: 'u-test', token: 'tok-test' },
     inputData,
   });
 
