@@ -1099,6 +1099,7 @@ def _run_fleet_coverage(
         committed = load_live_stt_import_rules(production=grafana_url == "https://monitor.omi.me")
         canary_uids = tuple(uid for uid in DATASOURCE_CANARY_UIDS if uid in committed)
         gated_uids = tuple(dict.fromkeys((*canary_uids, *(uid for uid in gated_uids if uid in committed))))
+    live_by_uid: dict[str, dict[str, Any]] = {}
     coverage: FleetCoverage | None = None
     last_error: str | None = None
     for attempt in range(attempts):
