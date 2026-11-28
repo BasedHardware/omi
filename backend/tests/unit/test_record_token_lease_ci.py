@@ -308,7 +308,7 @@ def test_pusher_override_replaces_only_the_four_lease_entries_and_keeps_envfrom(
     assert override_docs == plain_docs
 
 
-def test_listen_chart_and_shared_configmap_source_are_byte_identical_with_the_override(monkeypatch, tmp_path):
+def test_listen_chart_render_is_byte_identical_with_the_override(tmp_path):
     override_file = _override_file(tmp_path)
     chart = ROOT / 'backend/charts/backend-listen'
     listen = [
@@ -326,16 +326,28 @@ def test_listen_chart_and_shared_configmap_source_are_byte_identical_with_the_ov
     assert mispassed.stdout == plain.stdout
     assert 'recordTokenLeaseOverride' not in (chart / 'templates').joinpath('deployment.yaml').read_text()
 
+
+@pytest.fixture
+def shared_config_map_source(monkeypatch):
+    """Parse the real runtime manifest once, in setup, and bind its prod ConfigMap inputs."""
     from scripts import render_gke_backend_config as config_renderer
 
-    manifest = yaml.safe_load((ROOT / 'backend/deploy/runtime_env.yaml').read_text())
+    manifest = config_renderer._load_yaml(config_renderer.DEFAULT_MANIFEST)
+    monkeypatch.setattr(config_renderer, '_load_yaml', lambda path: manifest)
     entries = manifest['environments']['prod']['gke']['config_map']['entries']
-    assert not [key for key in entries if 'OVERRIDE' in key and 'LEASE' in key]
     for key, entry in entries.items():
         if entry.get('source') == 'environment':
             monkeypatch.setenv(key, str(entry.get('default') or 'synthetic-gke-value'))
     for key, value in LEASE_FALLBACKS.items():
         monkeypatch.setenv(key, value)
+    return config_renderer, entries
+
+
+def test_shared_configmap_source_is_byte_identical_with_the_bound_override(
+    monkeypatch, tmp_path, shared_config_map_source
+):
+    config_renderer, entries = shared_config_map_source
+    assert not [key for key in entries if 'OVERRIDE' in key and 'LEASE' in key]
 
     def rendered():
         name, values = config_renderer.config_map_entries('prod')
