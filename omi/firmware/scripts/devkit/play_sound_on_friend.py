@@ -13,14 +13,18 @@ load_dotenv()
 
 filename = "output2.wav"
 
-remaining_bytes = 0
-remaining_bytes_b = bytearray()
-packet_size = 400
-total_offset = 0
+PACKET_SIZE = 400
+# <= 7 blocks * 5000 mono bytes/block = 2.1875 s @ 8 kHz mono int16. The
+# queue-before-START firmware accepts one continuous stream per transmission up
+# to this window; longer audio must be split, or the driver's TX queue overflows
+# and every block past the window is dropped (-EAGAIN). Sentence-boundary
+# splitting of the *source text* (synthesize per sentence) would land the gaps
+# on natural pauses; this reference script chunks the PCM at the size limit.
+MAX_MONO_BYTES_PER_TRANSMISSION = 35000
+
 device_id = "3CE1CE0A-A629-2E92-D708-E49E71045D07" #Please enter the id of your device (that is, the device id used to connect to your BT device here)
 deepgram_api_id="f2e9ebf2f223ae423c88bf601ce1a157699d3005" #enter your deepgram id here
 audio_write_characteristic_uuid = "19B10003-E8F2-537E-4F6C-D104768A1214" #dont change this
-MAX_ALLOWED_SAMPLES = 50000
 
 gain = 5
 
@@ -102,56 +106,55 @@ async def main():
     f = open('every_third_sample2.txt','r').read()
     f = np.array(list(map(int,f.split('\n')[:-1]))).astype(np.int16).tobytes()
 
-    remaining_bytes = np.array([len(f)]).astype(np.uint32)[0]
-    remaining_bytes_b = np.array([len(f)]).astype(np.uint32).tobytes()
-    if (remaining_bytes> MAX_ALLOWED_SAMPLES):
-        print("Array too large to play. Exiting")
-        exit()
-    print("Number of samples about to be sent: ",remaining_bytes)
-    print("about to start...")
+    def pad_for_firmware(pcm: bytes) -> bytes:
+        # The firmware's handler stalls on a total that's a multiple of PACKET_SIZE
+        # and misreads a 4-byte tail as a new length header; pad with silence to
+        # escape both cases (same rule the phone client uses).
+        r = len(pcm) % PACKET_SIZE
+        add = 8 if r == 0 else (2 if r == 4 else 0)
+        return pcm + (b"\x00" * add) if add else pcm
+
+    pcm = bytes(f)
+    transmissions = [
+        pad_for_firmware(pcm[o:o + MAX_MONO_BYTES_PER_TRANSMISSION])
+        for o in range(0, len(pcm), MAX_MONO_BYTES_PER_TRANSMISSION)
+    ]
+    print(f"Mono PCM bytes: {len(pcm)} -> {len(transmissions)} transmission(s)")
+
     async with BleakClient(device_id) as client:
         print(client.address)
-        offset_ = client.mtu_size
-        print(offset_)
-        temp = client.services
-        for service in temp:
+        print(f"MTU: {client.mtu_size}")
+        for service in client.services:
             print(service)
 
+        pump = asyncio.Event()
+
         async def on_notify(sender: bleak.BleakGATTCharacteristic, data: bytearray):
-            global remaining_bytes
-            global total_offset
-            global remaining_bytes_b
-            global packet_size
-            global audio_write_characteristic_uuid
-            print(np.frombuffer(data,dtype=np.int16)[0])
-            if (remaining_bytes > packet_size):
+            pump.set()
 
-                final_offset = total_offset
-                total_offset = packet_size + total_offset
-                remaining_bytes = remaining_bytes - packet_size
-                print("sending indexes %d to %d",final_offset,final_offset+packet_size)
-                await client.write_gatt_char(audio_write_characteristic_uuid, f[final_offset:(final_offset+packet_size)], response=True)
-
-            elif (remaining_bytes > 0 and remaining_bytes <= packet_size):
-                print('almost done')
-                print(remaining_bytes)
-                start_idx = total_offset
-                total_offset = remaining_bytes+ total_offset
-                offset_ = remaining_bytes
-                remaining_bytes = 0
-                print("sending indexes",start_idx,start_idx+offset_)
-                await client.write_gatt_char(audio_write_characteristic_uuid, f[start_idx:(start_idx+offset_)], response=True)
-            else:
-                print('done')
-                print(total_offset)
-                print('Shutting down')
-                exit()
         await client.start_notify(audio_write_characteristic_uuid, on_notify)
-        await asyncio.sleep(1)
-        await client.write_gatt_char(audio_write_characteristic_uuid, remaining_bytes_b, response=True)
-        await asyncio.sleep(1)
-        while True:
-           await asyncio.sleep(1)
+        await asyncio.sleep(0.5)
+
+        for i, mono in enumerate(transmissions, 1):
+            header = np.array([len(mono)], dtype="<u4").tobytes()
+            pump.clear()
+            await client.write_gatt_char(audio_write_characteristic_uuid, header, response=True)
+            await asyncio.wait_for(pump.wait(), timeout=10)
+            print(f"[{i}/{len(transmissions)}] {len(mono)} bytes")
+            for off in range(0, len(mono), PACKET_SIZE):
+                chunk = mono[off:off + PACKET_SIZE]
+                pump.clear()
+                await client.write_gatt_char(audio_write_characteristic_uuid, chunk, response=True)
+                if len(chunk) < PACKET_SIZE:
+                    break  # final chunk; no pump notify follows a short write
+                await asyncio.wait_for(pump.wait(), timeout=10)
+            # Let the device drain this stream before starting the next
+            # transmission (each stream DRAINs itself; back-to-back headers re-arm
+            # cleanly, and the gap is a natural pause between chunks).
+            await asyncio.sleep(0.4)
+
+        await client.stop_notify(audio_write_characteristic_uuid)
+        print("done")
 
 if __name__ == "__main__":
     asyncio.run(main())

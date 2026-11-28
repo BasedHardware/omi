@@ -234,6 +234,12 @@ void check_button_level(struct k_work *work_item)
         LOG_PRINTK("double tap detected\n");
         btn_last_event = event;
         notify_double_tap();
+#ifdef CONFIG_OMI_ENABLE_SPEAKER
+        // Audible "speak now": the BLE DOUBLE_TAP notify above is the signal
+        // for the app to open a voice-agent turn; the cue is what tells the
+        // human to start talking.
+        play_talk_cue();
+#endif
     }
 
     // Long press, one time event
