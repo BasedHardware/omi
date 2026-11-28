@@ -360,8 +360,9 @@ async def test_failed_shadow_renewal_retries_well_before_persisted_expiry(world,
         clock[0] += 2
         assert await barrier.renew_recording('record') is True
         assert len(calls) == 2  # retried once the backoff from completion elapsed
-        # The retry lands well before the persisted expiry (last success + lease).
-        assert calls[1] < last_success + 2 * half - 600
+        # The retry lands well before the persisted expiry (last success + lease):
+        # about 24 min of margin at the default lease, about 9 min at the 1800 s minimum.
+        assert last_success + 2 * half - calls[1] > 300
     finally:
         barrier._forget_lease('record')
     assert metrics.ACTIVE._value.get() == before - 1
