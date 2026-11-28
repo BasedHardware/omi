@@ -130,9 +130,11 @@ void main() {
     final release = List.generate(2, (_) => Completer<void>());
     var write = entered.length;
     final telemetry = <WalStopDrain>[];
+    final lifecycleCounts = <int>[];
     final sync = LocalWalSyncImpl(
       _MockListener(),
       stopDrainTelemetry: telemetry.add,
+      lifecycleHeldTailCount: lifecycleCounts.add,
       freeDiskBytes: () async => 1 << 40,
       persistWals: (wals) async {
         if (write < entered.length) {
@@ -177,6 +179,7 @@ void main() {
     expect(lateFrames.every(sync.isFrameDurable), isTrue);
     expect(telemetry.single.result, WalStopDrainResult.drained);
     expect(telemetry.single.lateFramesIndexed, 10);
+    expect(lifecycleCounts, isEmpty);
     sync.onFrameCaptured(frame(60, 0));
     expect(sync.lastFrameAccepted, isFalse);
 
@@ -259,9 +262,85 @@ void main() {
     });
   }
 
-  test('lifecycle drain before stop keeps the already-sent pendant tail for recovery', () async {
+  for (final failFirstSave in [false, true]) {
+    test('lifecycle held-tail count commits once (index failure: $failFirstSave)', () async {
+      const countDisabled = bool.fromEnvironment('OMI_WAL_LIFECYCLE_HELD_TAIL_COUNT_OFF');
+      final lifecycleCounts = <int>[];
+      var failSave = failFirstSave;
+      var failed = false;
+      var heldIndexCommitted = false;
+      final sync = LocalWalSyncImpl(
+        _MockListener(),
+        lifecycleHeldTailCount: lifecycleCounts.add,
+        freeDiskBytes: () async => 1 << 40,
+        persistWals: (wals) async {
+          final hasHeldTail = wals.any((wal) => wal.holdForUser);
+          if (hasHeldTail && !heldIndexCommitted) {
+            expect(lifecycleCounts, isEmpty, reason: 'no count before the index commits');
+          }
+          if (failSave && hasHeldTail) {
+            failSave = false;
+            failed = true;
+            throw const FileSystemException('injected lifecycle index failure');
+          }
+          expect(await WalFileManager.saveWals(wals), isTrue);
+          heldIndexCommitted |= hasHeldTail;
+        },
+      );
+      sync.start();
+      await sync.walReady;
+      sync.setDeviceInfo('devkit-1', 'Omi DevKit');
+      final captured = sync.onFrameCaptured(frame(0, 0));
+      sync.markFrameSynced(captured.syncKey);
+
+      sync.didChangeAppLifecycleState(AppLifecycleState.inactive);
+      sync.didChangeAppLifecycleState(AppLifecycleState.paused);
+      sync.didChangeAppLifecycleState(AppLifecycleState.detached);
+      await sync.stop();
+
+      expect(failed, failFirstSave);
+      expect(sync.isFrameDurable(captured), isTrue);
+      final indexed = (await WalFileManager.loadWals()).single;
+      expect(indexed.totalFrames, 1);
+      expect(indexed.status, WalStatus.miss);
+      expect(indexed.syncedAt, 0);
+      expect(indexed.holdForUser, isTrue);
+      expect(lifecycleCounts, countDisabled ? isEmpty : [1]);
+    });
+  }
+
+  test('one lifecycle drain counts each held evidence run', () async {
+    const countDisabled = bool.fromEnvironment('OMI_WAL_LIFECYCLE_HELD_TAIL_COUNT_OFF');
+    final lifecycleCounts = <int>[];
     final sync = LocalWalSyncImpl(
       _MockListener(),
+      lifecycleHeldTailCount: lifecycleCounts.add,
+      freeDiskBytes: () async => 1 << 40,
+      persistWals: (wals) async {
+        expect(await WalFileManager.saveWals(wals), isTrue);
+      },
+    );
+    sync.start();
+    await sync.walReady;
+    await sync.onAudioCodecChanged(BleAudioCodec.opus);
+    sync.setDeviceInfo('devkit-1', 'Omi DevKit');
+    final sent = sync.onFrameCaptured(frame(0, 0), captureRoot: '12345678-1234-4234-8234-123456789abc');
+    final nextSent = sync.onFrameCaptured(frame(1, 0), captureRoot: 'aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa');
+    sync.markFrameSynced(sent.syncKey);
+    sync.markFrameSynced(nextSent.syncKey);
+
+    sync.didChangeAppLifecycleState(AppLifecycleState.paused);
+    await sync.stop();
+
+    expect((await WalFileManager.loadWals()).map((wal) => wal.holdForUser), [true, true]);
+    expect(lifecycleCounts, countDisabled ? isEmpty : [2]);
+  });
+
+  test('empty and unsent pendant lifecycle drains do not create held tails', () async {
+    final lifecycleCounts = <int>[];
+    final sync = LocalWalSyncImpl(
+      _MockListener(),
+      lifecycleHeldTailCount: lifecycleCounts.add,
       freeDiskBytes: () async => 1 << 40,
       persistWals: (wals) async {
         expect(await WalFileManager.saveWals(wals), isTrue);
@@ -270,18 +349,15 @@ void main() {
     sync.start();
     await sync.walReady;
     sync.setDeviceInfo('devkit-1', 'Omi DevKit');
+    sync.didChangeAppLifecycleState(AppLifecycleState.inactive);
+    await sync.finalizeCurrentSession();
     final captured = sync.onFrameCaptured(frame(0, 0));
-    sync.markFrameSynced(captured.syncKey);
-
-    sync.didChangeAppLifecycleState(AppLifecycleState.detached);
+    sync.didChangeAppLifecycleState(AppLifecycleState.paused);
     await sync.stop();
 
     expect(sync.isFrameDurable(captured), isTrue);
-    final indexed = (await WalFileManager.loadWals()).single;
-    expect(indexed.totalFrames, 1);
-    expect(indexed.status, WalStatus.miss);
-    expect(indexed.syncedAt, 0);
-    expect(indexed.holdForUser, isTrue);
+    expect((await WalFileManager.loadWals()).single.holdForUser, isFalse);
+    expect(lifecycleCounts, isEmpty);
   });
 
   test('stopped ledger retries a refused write automatically after free space returns', () async {

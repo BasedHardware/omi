@@ -193,6 +193,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   Future<void>? _stopDrain;
   Timer? _stopRetryTimer;
   final void Function(WalStopDrain)? _stopDrainTelemetry;
+  static const _heldTailCountOff = bool.fromEnvironment('OMI_WAL_LIFECYCLE_HELD_TAIL_COUNT_OFF');
+  final void Function(int)? _lifecycleHeldTailCount;
+  final _pendingLifecycleHeldTails = Expando<bool>();
 
   Future<void> _bufferQueue = Future.value();
   Future<void>? _initializationInFlight;
@@ -541,6 +544,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     WalCoverageTelemetryEmitter? coverageTelemetry,
     WalCoverageTelemetryEmitter? staleWalTelemetry,
     void Function(WalStopDrain)? stopDrainTelemetry,
+    void Function(int)? lifecycleHeldTailCount,
     Future<int?> Function()? freeDiskBytes,
     Future<void> Function(Duration duration)? sleep,
     PendantRingCustody? custody,
@@ -565,6 +569,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         _coverageTelemetryOverride = coverageTelemetry,
         _staleWalTelemetry = staleWalTelemetry,
         _stopDrainTelemetry = stopDrainTelemetry,
+        _lifecycleHeldTailCount = _heldTailCountOff ? null : lifecycleHeldTailCount,
         _freeDiskBytesOverride = freeDiskBytes,
         _sleepOverride = sleep,
         _custody = custody ?? PendantRingCustody.shared,
@@ -742,7 +747,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         state == AppLifecycleState.detached) {
       final generation = _sessionGeneration;
       unawaited(
-        _drainPendantTail(generation, retainUnconfirmed: stopTailDrainEnabled).catchError((e) {
+        _drainPendantTail(generation, retainUnconfirmed: stopTailDrainEnabled, fromLifecycle: true).catchError((e) {
           Logger.debug('LocalWalSync: lifecycle pendant drain failed: ${e.runtimeType}');
         }),
       );
@@ -1226,6 +1231,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     bool retainUnconfirmed = false,
     bool? onDeviceOnly,
     bool notifyListeners = true,
+    bool countLifecycleHeldTail = false,
   }) {
     for (final run in walEvidenceRunRanges(selection)) {
       final runFrames = selection.sublist(run.start, run.end);
@@ -1286,6 +1292,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         if (run.claimable) {
           wal.filePath = walEvidenceRunFileName(wal, selectionStartSeconds, run.start, _framesPerSecond);
         }
+        if (countLifecycleHeldTail && holdTransportTail) _pendingLifecycleHeldTails[wal] = true;
         _wals.add(wal);
       } else {
         wal = _wals[walIdx];
@@ -1340,8 +1347,13 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     }
   }
 
-  Future<void> _drainPendantTail(int generation, {bool retainUnconfirmed = false}) => _enqueueBuffer(() async {
-        if (_sealPendantTail(generation, retainUnconfirmed: retainUnconfirmed)) await _flush(generation);
+  Future<void> _drainPendantTail(int generation, {bool retainUnconfirmed = false, bool fromLifecycle = false}) =>
+      _enqueueBuffer(() async {
+        if (_sealPendantTail(generation,
+            retainUnconfirmed: retainUnconfirmed,
+            countLifecycleHeldTail: fromLifecycle && _lifecycleHeldTailCount != null)) {
+          await _flush(generation);
+        }
       });
 
   /// The phone-mic twin of the pendant 10-second drain: a process death must
@@ -1355,7 +1367,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       });
 
   /// Move the complete pendant tail into WAL custody before any I/O yields.
-  bool _sealPendantTail(int generation, {bool retainUnconfirmed = false}) {
+  bool _sealPendantTail(int generation, {bool retainUnconfirmed = false, bool countLifecycleHeldTail = false}) {
     if (!_isCurrent(generation)) return false;
     final indices = <int>[];
     for (var i = 0; i < _frames.length; i++) {
@@ -1389,6 +1401,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         extendMemWal: false,
         legacySelectionTimerStart: timerStart,
         retainUnconfirmed: retainUnconfirmed,
+        countLifecycleHeldTail: countLifecycleHeldTail,
       );
     } else {
       final holdTransportTail = _holdNewTransportTail(retainUnconfirmed, syncedOffset, frameCount);
@@ -1418,6 +1431,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         liveOrdinalEnd: live.end,
       );
       wal.liveConnectionEpoch = live.epoch;
+      if (countLifecycleHeldTail && holdTransportTail) _pendingLifecycleHeldTails[wal] = true;
       _wals.add(wal);
     }
     _removeFrameIndices(indices);
