@@ -7,6 +7,9 @@ export type Language = { code: string; label: string }
 export const LANGUAGES: Language[] = [
   { code: 'en', label: 'English' },
   { code: 'es', label: 'Spanish' },
+  // Latin American Spanish: the backend (utils/user_language.py) and the macOS
+  // list both offer it, so the same account resolves to the same code everywhere.
+  { code: 'es-419', label: 'Spanish (Latin America)' },
   { code: 'fr', label: 'French' },
   { code: 'de', label: 'German' },
   { code: 'pt', label: 'Portuguese' },
@@ -54,6 +57,12 @@ const ALIASES: Record<string, string> = {
   espanol: 'es',
   español: 'es',
   castellano: 'es',
+  'latin american spanish': 'es-419',
+  'spanish (latin america)': 'es-419',
+  'español latino': 'es-419',
+  'espanol latino': 'es-419',
+  'español latinoamericano': 'es-419',
+  'espanol latinoamericano': 'es-419',
   french: 'fr',
   francais: 'fr',
   français: 'fr',
