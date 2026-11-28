@@ -1275,7 +1275,6 @@ def _reprocess_conversation_after_update(
             language_code=language or 'en',
             conversation=conversation,
             trigger=processing_trigger,
-            defer_memory_extraction=first_week_forced,
             defer_derived_effects=silent_redrive or first_week_forced,
             first_party_only=first_week_forced,
             user_kept=is_user_curated(conversation_data) or REPAIR_CONTEXT.get() is not None,

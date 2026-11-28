@@ -3387,7 +3387,12 @@ def _process_conversation_steps(
                     'template-only reprocess: keeping derived effects uid=%s conversation=%s', uid, conversation.id
                 )
             memories_ran = False
-            if not lazy_effects and not defer_memory_extraction and not template_only:
+            if (
+                not lazy_effects
+                and not defer_memory_extraction
+                and trigger is not ProcessingTrigger.FIRST_WEEK_FORCED_CLOSE
+                and not template_only
+            ):
                 # Canonical source replacement is universal and intentionally
                 # fail-closed. Do not hide a retryable apply/store failure in an
                 # unobserved future while reporting finalization as successful.

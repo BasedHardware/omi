@@ -1027,7 +1027,6 @@ def test_first_week_forced_summary_clears_budget_hold_without_derived_effects(mo
             conversation,
             trigger=pc.ProcessingTrigger.FIRST_WEEK_FORCED_CLOSE,
             first_party_only=True,
-            defer_memory_extraction=True,
             defer_derived_effects=True,
         )
 
