@@ -21,6 +21,8 @@
 
 name: Deploy Backend to Cloud RUN
 
+# The immutable Select title records the dispatch input before jobs run. Deploy
+# and rollback use only the validated boundary outputs.
 run-name: >-
   ${{ inputs.mode == 'recover-split' && format('Recover split from run {0}/1 by {1}', inputs.split_recovery_run_id, inputs.requested_by) ||
     inputs.mode == 'probe-app-icon' && format('Probe Backend app icon revision={0} sha={1} by {2}',
@@ -100,6 +102,7 @@ on:
         default: 'all'
         type: choice
         options: [all, backend, backend-sync, backend-sync-backfill, backend-integration, backend-projection-pump]
+      # Named standard Integration and Sync dispatches may append ` max=<n>` to the revision.
       selected_rollback_revision:
         description: 'Named standard deploy only. Exact revision admitted at 100% serving before dispatch.'
         required: false
@@ -121,11 +124,6 @@ on:
         type: string
       split_recovery_run_id:
         description: 'recover-split only. Run ID of the terminal failed or cancelled production hold-back deployment (attempt 1).'
-        required: false
-        default: ''
-        type: string
-      selected_registered_max_instances:
-        description: 'Registered max instances already admitted for a named production integration or sync deploy.'
         required: false
         default: ''
         type: string
@@ -247,6 +245,7 @@ jobs:
       integration_image: ${{ steps.boundary.outputs.integration_image }}
       post_wrap_guard: ${{ steps.boundary.outputs.post_wrap_guard }}
       rollback_revision: ${{ steps.boundary.outputs.rollback_revision }}
+      registered_max_instances: ${{ steps.boundary.outputs.registered_max_instances }}
     if: >-
       github.event.inputs.mode == 'deploy' ||
       github.event.inputs.mode == 'build-only' ||
@@ -295,7 +294,7 @@ jobs:
             fi
             if [[ "$DEPLOY_ENVIRONMENT" != prod || "$DEPLOY_TARGETS" != cloud-run-only ||
                   "$CLOUD_RUN_SERVICE" != all || "$SERVICE" != backend || "$DEPLOY_GATEWAY" != false ||
-                  -n "$SERVICE_IMAGES" || -n "$SELECTED_ROLLBACK_REVISION" ||
+                  -n "$SERVICE_IMAGES" || -n "${SELECTED_ROLLBACK_REVISION:-}" ||
                   "$SKIP_ELIGIBILITY" != false || "$BREAK_GLASS_LOCK" != false ]]; then
               echo '::error::Digest promotion requires the four-service Cloud Run scope and normal admission.' >&2
               exit 1
@@ -344,6 +343,7 @@ jobs:
           INTEGRATION_IMAGE=''
           POST_WRAP_GUARD=internal
           ROLLBACK_REVISION=backend-integration-provfix-off1114
+          REGISTERED_MAX_INSTANCES=''
           if [[ "$SERVICE_IMAGES" == integration-canary=* ]]; then
             INTEGRATION_IMAGE="${SERVICE_IMAGES#integration-canary=}"
             if [[ "$INTEGRATION_IMAGE" == *,rollback_revision=* ]]; then
@@ -385,17 +385,40 @@ jobs:
             fi
             ROLLBACK_REVISION="$donor"
           elif [[ "$CLOUD_RUN_SERVICE" != all && "$CLOUD_RUN_SERVICE" != backend-projection-pump && "$INTEGRATION_ONLY" != true ]]; then
-            if [[ ! "$SELECTED_ROLLBACK_REVISION" =~ ^${CLOUD_RUN_SERVICE}-[a-z0-9]([a-z0-9-]*[a-z0-9])?$ ||
-                  ${#SELECTED_ROLLBACK_REVISION} -gt 63 ]]; then
+            selected_revision="$SELECTED_ROLLBACK_REVISION"
+            if [[ "$SELECTED_ROLLBACK_REVISION" == *$'\n'* || "$SELECTED_ROLLBACK_REVISION" == *$'\r'* ]]; then
+              echo 'selected_rollback_revision must be on one line.' >&2
+              exit 1
+            fi
+            if [[ "$SELECTED_ROLLBACK_REVISION" == *' '* ]]; then
+              cap_pattern='^([^ ]+) +max=([1-9][0-9]{0,2})$'
+              if [[ ! "$SELECTED_ROLLBACK_REVISION" =~ $cap_pattern ]]; then
+                echo 'selected_rollback_revision must be a revision followed by an optional max=<n> token.' >&2
+                exit 1
+              fi
+              selected_revision="${BASH_REMATCH[1]}"
+              REGISTERED_MAX_INSTANCES="${BASH_REMATCH[2]}"
+              if (( REGISTERED_MAX_INSTANCES > 500 )); then
+                echo 'The registered max instances must be between 1 and 500.' >&2
+                exit 1
+              fi
+              # Source admission binds this same release_sha as admitted_sha for the composite.
+              if [[ ( "$CLOUD_RUN_SERVICE" != backend-integration && "$CLOUD_RUN_SERVICE" != backend-sync ) ||
+                    "$RELEASE_SHA" == 0714c5198be8f0183c8fd7dd3810d53c91af17a4 ]]; then
+                echo 'max=<n> applies only to named standard Integration and Sync deploys.' >&2
+                exit 1
+              fi
+            fi
+            if [[ ! "$selected_revision" =~ ^${CLOUD_RUN_SERVICE}-[a-z0-9]([a-z0-9-]*[a-z0-9])?$ ||
+                  ${#selected_revision} -gt 63 ]]; then
               echo 'Named deploy requires the admitted selected_rollback_revision.' >&2
               exit 1
             fi
-            ROLLBACK_REVISION="$SELECTED_ROLLBACK_REVISION"
+            ROLLBACK_REVISION="$selected_revision"
           elif [[ -n "$SELECTED_ROLLBACK_REVISION" ]]; then
             echo 'selected_rollback_revision applies only to a named standard deploy.' >&2
             exit 1
           fi
-          printf 'integration_only=%s\nintegration_image=%s\npost_wrap_guard=%s\nrollback_revision=%s\n' "$INTEGRATION_ONLY" "$INTEGRATION_IMAGE" "$POST_WRAP_GUARD" "$ROLLBACK_REVISION" >> "$GITHUB_OUTPUT"
           if [[ "$DEPLOY_ENVIRONMENT" == prod && "$WORKFLOW_MODE" == deploy &&
                 "$RELEASE_SHA" == 0714c5198be8f0183c8fd7dd3810d53c91af17a4 ]]; then
             [[ "$DEPLOY_TARGETS" == cloud-run-only && "$SKIP_ELIGIBILITY" != true &&
@@ -439,6 +462,8 @@ jobs:
             echo "service_images applies only to mode=deploy." >&2
             exit 1
           fi
+          printf 'integration_only=%s\nintegration_image=%s\npost_wrap_guard=%s\nrollback_revision=%s\nregistered_max_instances=%s\n' \
+            "$INTEGRATION_ONLY" "$INTEGRATION_IMAGE" "$POST_WRAP_GUARD" "$ROLLBACK_REVISION" "$REGISTERED_MAX_INSTANCES" >> "$GITHUB_OUTPUT"
 
       - name: Bind SCA-3318 recovery approval inputs
         if: inputs.mode == 'recover-pump-cap'
@@ -1412,7 +1437,7 @@ jobs:
           integration_only: ${{ needs.validate-production-boundary.outputs.integration_only || 'false' }}
           integration_image: ${{ needs.validate-production-boundary.outputs.integration_image }}
           post_wrap_guard: ${{ needs.validate-production-boundary.outputs.post_wrap_guard || 'internal' }}
-          rollback_revision: ${{ needs.validate-production-boundary.outputs.rollback_revision || 'backend-integration-provfix-off1114' }}
+          rollback_revision: ${{ needs.validate-production-boundary.outputs.rollback_revision }}
           selected_split_plan: ${{ inputs.selected_split_plan }}
           selected_split_binding: ${{ inputs.selected_split_binding }}
           # 2026-10-24 costcut (live 22:45Z): prod backend-sync runs 6Gi; dev keeps 8Gi.
@@ -1422,7 +1447,7 @@ jobs:
           environment: ${{ github.event.inputs.environment }}
           deploy_targets: ${{ github.event.inputs.deploy_targets }}
           cloud_run_service: ${{ github.event.inputs.cloud_run_service || 'all' }}
-          selected_registered_max_instances: ${{ inputs.selected_registered_max_instances }}
+          selected_registered_max_instances: ${{ needs.validate-production-boundary.outputs.registered_max_instances }}
           deploy_gateway: ${{ github.event.inputs.deploy_gateway }}
           service_images: ${{ github.event.inputs.service_images }}
           release_version: ${{ github.event.inputs.release_version }}
