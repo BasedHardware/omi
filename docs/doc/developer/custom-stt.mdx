@@ -19,6 +19,25 @@ flowchart LR
 |---------|--------|---------|
 | Audio frames | Binary | Raw PCM: signed 16-bit little-endian, mono, no WAV header. The sample rate matches the device (16 kHz on current hardware). The app decodes Opus before sending, so your service never receives Opus packets. |
 | `{"type": "CloseStream"}` | JSON | The audio stream has ended |
+| `{"type": "ButtonEvent", "state": 1, "timestamp": 1731542400000}` | JSON | The Omi device button was pressed. See [Button events](#button-events). |
+
+### Button events
+
+Every press of the Omi device button reaches your service as a `ButtonEvent` text frame, sent between the audio frames
+in the order it happened. Your service can act on the button on its own, for example to treat what is said between
+two taps as a command.
+
+| Field | Meaning |
+|-------|---------|
+| `state` | The code the device sent, unchanged: `1` single tap, `2` double tap. Current firmware also sends `5` when a press held past a tap is released, and older firmware sent `3` when a long press started. |
+| `timestamp` | When the app received the press, in milliseconds since the Unix epoch (phone clock). |
+
+Act on the states you use and ignore the rest, since future firmware may add codes. A service that doesn't use the
+button can ignore `ButtonEvent` frames entirely.
+
+The app sends button events even when **Omi button actions** are turned off. Turn those off if your service should be
+the only one acting on the button. Only the **Custom** live provider receives button events, because built-in
+providers speak a fixed protocol and may drop the connection on a message they don't know.
 
 ## What your service sends
 
