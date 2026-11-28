@@ -12,6 +12,7 @@ struct ContentView: View {
     
     @State var audioEngine = AVAudioEngine()
     @ObservedObject var bleManager = BLEManager()
+    private let sendQueue = DispatchQueue(label: "audioSendQueue")
    
     @State var recording = false
     var body: some View {
@@ -72,12 +73,14 @@ struct ContentView: View {
                 else {
                     var dataLeft = pcmBuffer!.dataInt()
                     
-                    // TODO: this is ugly, must implement proper background sending
-                    while !dataLeft.isEmpty {
-                        let block = dataLeft.prefix(160)
-                        bleManager.writeAudio(block)
-                        usleep(7_000)
-                        dataLeft = dataLeft.dropFirst(160)
+                    sendQueue.async {
+                        var asyncDataLeft = dataLeft
+                        while !asyncDataLeft.isEmpty {
+                            let block = asyncDataLeft.prefix(160)
+                            bleManager.writeAudio(block)
+                            usleep(7_000)
+                            asyncDataLeft = asyncDataLeft.dropFirst(160)
+                        }
                     }
                 }
             }
