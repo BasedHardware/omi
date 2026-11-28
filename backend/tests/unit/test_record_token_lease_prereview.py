@@ -315,6 +315,44 @@ async def test_failed_shadow_renewal_after_concurrent_drain_cannot_double_decrem
     assert metrics.ACTIVE._value.get() == before - 1
 
 
+async def test_failed_shadow_renewal_retries_well_before_persisted_expiry(world, monkeypatch):
+    """SCA-4463 review P3: a shadow renewal timeout just past the half-lease mark
+    must retry after a short backoff, not a full half-lease, so the persisted
+    lease cannot lapse and surface as a false late append on the next commit."""
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'shadow')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '0')
+    barrier = barrier_module.PusherRecordBarrier('synthetic')
+    await barrier.begin_recording('record')
+    half = lease.token_lease_seconds() / 2
+    clock = [1_000_000.0]
+    # Swap only the barrier's module reference: patching time.monotonic itself
+    # would also move the event loop's clock.
+    real_time = barrier_module.time
+    monkeypatch.setattr(barrier_module, 'time', SimpleNamespace(monotonic=lambda: clock[0], time=real_time.time))
+    barrier.lease_renewed_at['record'] = clock[0] - half - 1  # just past the half-lease mark
+    calls = []
+    original = barrier_module.run_blocking
+
+    async def renew(executor, fn, *args, **kwargs):
+        if fn is record_audio.renew_record_token_lease:
+            calls.append(clock[0])
+            if len(calls) == 1:
+                raise ServiceUnavailable('synthetic renewal timeout')
+            return True
+        return await original(executor, fn, *args, **kwargs)
+
+    monkeypatch.setattr(barrier_module, 'run_blocking', renew)
+    assert await barrier.renew_recording('record') is True  # shadow fences nothing
+    clock[0] += barrier_module.SHADOW_RENEWAL_RETRY_SECONDS - 1
+    await barrier.renew_recording('record')
+    assert len(calls) == 1  # still inside the backoff: no metadata stall per batch
+    clock[0] += 2
+    assert await barrier.renew_recording('record') is True
+    assert len(calls) == 2  # retried after the short backoff
+    # The retry lands long before the persisted expiry (last success + full lease).
+    assert calls[1] - (calls[0] - half - 1) < 2 * half
+
+
 def test_active_repair_promotion_does_not_depend_on_enabling_the_idle_worker():
     from pathlib import Path
     import yaml
