@@ -1486,6 +1486,11 @@ class CaptureController extends ChangeNotifier
     if (activeRecordingId case final id?) onMobileBatchCaptureEnded?.call(id);
     _localPreview.end(send: _openSocketSender);
     _captureEvidenceIdentity.reset();
+    // A pending retry carries the session token it was scheduled for. Retire
+    // it with that session, but keep attempt history and the shared cooldown so
+    // the next session still respects the authorization rate limit.
+    _liveRecovery.kickTimer?.cancel();
+    _liveRecovery.kickTimer = null;
     _sessionOwner?.replaceSession(identity);
   }
 
@@ -2050,6 +2055,10 @@ class CaptureController extends ChangeNotifier
       return;
     }
     _transcriptionSocketRecovered();
+    // A pooled socket can be republished after a queued close cleared the
+    // synchronous readiness flag. Reuse has no new onConnected event, so every
+    // successful publication must restore readiness.
+    _transcriptServiceReady = true;
     if (!identical(_socket, socket)) {
       _socket?.unsubscribe(this);
       _socket = socket;
@@ -2057,7 +2066,6 @@ class CaptureController extends ChangeNotifier
       _lastPublishedSocketCustomStt = socket.customSttMode;
       _localPreview.socketPublished(declared: socket.localPreview, send: _sendPendantToSocket);
       _socket?.subscribe(this, this);
-      _transcriptServiceReady = true;
       _beginWedgeSession(socket);
       if (_sessionStartSeconds == 0) {
         liveHeldAudio.reset();

@@ -933,6 +933,62 @@ void main() {
     }
   });
 
+  test('real provider restores readiness when it republishes the same connected socket', () async {
+    final dir = await Directory.systemTemp.createTemp('c1-socket-readiness-');
+    final world = await CaptureReplayWorld.boot(tempDir: dir);
+    try {
+      world.disposeController();
+      var opens = 0;
+      ScriptedPureSocket? transport;
+      TranscriptSegmentSocketService? published;
+      final deps = _deps(
+        world: world,
+        open: ({
+          required codec,
+          required sampleRate,
+          required language,
+          required force,
+          source,
+          clientConversationId,
+          customSttConfig,
+          geolocation,
+        }) async {
+          opens++;
+          if (published != null) return published;
+          transport = ScriptedPureSocket();
+          published = TranscriptSegmentSocketService.withSocket(sampleRate, codec, language, transport!);
+          await published!.start();
+          return published;
+        },
+      );
+      final p = composeCaptureProvider(deps);
+      p.updateRecordingState(RecordingState.systemAudioRecord);
+      await p.reconnectActiveCaptureForTesting();
+      await pumpEventQueue();
+      expect(opens, 1);
+      expect(p.transcriptServiceReady, isTrue);
+
+      // The callback clears readiness while the transport stays connected;
+      // reconnect then republishes the same service without a new onConnected.
+      p.onClosed();
+      await pumpEventQueue();
+      expect(p.transcriptServiceReady, isFalse);
+      await p.reconnectActiveCaptureForTesting();
+      await pumpEventQueue();
+      expect(opens, 2);
+      expect(p.transcriptServiceReady, isTrue);
+
+      p.dispose();
+      await pumpEventQueue();
+      await world.wal.stop();
+      expect(world.scheduler.pendingTimers, isEmpty);
+      expect(transport!.closeCalls, 1);
+    } finally {
+      await world.dispose();
+      await dir.delete(recursive: true);
+    }
+  });
+
   test('codec fetch started under generation N does not open after same-id ABA', () async {
     final dir = await Directory.systemTemp.createTemp('c1-aba-');
     final world = await CaptureReplayWorld.boot(tempDir: dir);
