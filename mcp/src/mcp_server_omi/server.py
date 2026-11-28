@@ -69,6 +69,11 @@ base_url = os.getenv("OMI_API_BASE_URL", "https://api.omi.me/v1/mcp/")
 if not base_url or base_url == "":
     raise Exception("Base URL not found")
 
+# requests has no default timeout, and the tools run on the server's event loop: an API that
+# accepts the connection and stops answering would hold every tool call. 5 s to connect, 30 s
+# between bytes.
+REQUEST_TIMEOUT = (5, 30)
+
 
 class OmiTools(str, Enum):
     GET_MEMORIES = "get_memories"
@@ -198,6 +203,7 @@ def get_memories(
             f"{base_url}memories",
             params=params,
             headers={"Authorization": f"Bearer {api_key}"},
+            timeout=REQUEST_TIMEOUT,
         )
         return _response_json(response)
     except Exception as e:
@@ -209,6 +215,7 @@ def create_memory(api_key: str, content: str, category: MemoryCategory) -> dict:
     response = requests.post(
         f"{base_url}memories",
         headers={"Authorization": f"Bearer {api_key}"},
+        timeout=REQUEST_TIMEOUT,
         json={"content": content, "category": category},
     )
     return _response_json(response)
@@ -218,6 +225,7 @@ def delete_memory(api_key: str, memory_id: str) -> dict:
     response = requests.delete(
         f"{base_url}memories/{memory_id}",
         headers={"Authorization": f"Bearer {api_key}"},
+        timeout=REQUEST_TIMEOUT,
     )
     return _response_json(response)
 
@@ -226,6 +234,7 @@ def edit_memory(api_key: str, memory_id: str, content: str) -> dict:
     response = requests.patch(
         f"{base_url}memories/{memory_id}",
         headers={"Authorization": f"Bearer {api_key}"},
+        timeout=REQUEST_TIMEOUT,
         params={"value": content},
     )
     return _response_json(response)
@@ -242,6 +251,7 @@ def search_memories(
         f"{base_url}memories/search",
         params={"query": query, "limit": limit},
         headers={"Authorization": f"Bearer {api_key}"},
+        timeout=REQUEST_TIMEOUT,
     )
     return _response_json(response)
 
@@ -269,6 +279,7 @@ def get_conversations(
         f"{base_url}conversations",
         params=params,
         headers={"Authorization": f"Bearer {api_key}"},
+        timeout=REQUEST_TIMEOUT,
     )
     return _response_json(response)
 
@@ -277,6 +288,7 @@ def get_conversation_by_id(api_key: str, conversation_id: str) -> dict:
     response = requests.get(
         f"{base_url}conversations/{conversation_id}",
         headers={"Authorization": f"Bearer {api_key}"},
+        timeout=REQUEST_TIMEOUT,
     )
     return _response_json(response)
 
@@ -303,6 +315,7 @@ def search_conversations(
         f"{base_url}conversations/search",
         params=params,
         headers={"Authorization": f"Bearer {api_key}"},
+        timeout=REQUEST_TIMEOUT,
     )
     return _response_json(response)
 
