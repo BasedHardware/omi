@@ -11,6 +11,9 @@ import 'package:omi/utils/analytics/analytics_manager.dart';
 ///   a soft shadow that show the content scrolling behind them, and the page-coloured block those
 ///   screens paint under the row is left out or softened;
 /// - conversation rows have no card behind them, a larger icon tile and larger title and subtitle.
+/// - a conversation in progress has one page, whether or not the server has made it yet: the live
+///   page draws the conversation page's layout (Summary and Transcript) and becomes the
+///   conversation's page in place once the server lists it (`LiveEpisodePage`).
 ///
 /// On for a person who turns it on in Developer Settings, and for an account the Omi flag
 /// [enabledFlag] admits. Lifecycle: rollout; default off; off while the flag is unknown.

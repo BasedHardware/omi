@@ -1630,6 +1630,107 @@ void main() {
     });
   });
 
+  testWidgets('experimental design: before the server lists the conversation, the live page has the tabbed layout',
+      (tester) async {
+    ExperimentalDesign.debugOverride = true;
+    addTearDown(() => ExperimentalDesign.debugOverride = null);
+    await withClock(Clock.fixed(_now), () async {
+      final home = await _pumpHome(tester, v3: true);
+      home.liveOpen = false;
+      await home.conversationsV3.refresh();
+      await tester.pump();
+      await tester.pump();
+      await tester.tap(find.byType(V3LivePlaceholderRow));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.byKey(const Key('live_conversation_shell')), findsOneWidget);
+      expect(find.byType(ConversationDetailPage), findsNothing);
+      final title = find.byKey(const Key('live_page_v3_title'));
+      expect(find.descendant(of: title, matching: find.text('Listening')), findsOneWidget);
+      // Summary and Transcript, opened on Transcript; Summary says when it comes.
+      expect(find.byKey(const Key('conversation_tab_summary')), findsOneWidget);
+      expect(find.byKey(const Key('conversation_tab_transcript')), findsOneWidget);
+      expect(find.text('Summary when this conversation ends').hitTestable(), findsNothing);
+      await tester.tap(find.byKey(const Key('conversation_tab_summary')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.text('Summary when this conversation ends').hitTestable(), findsOneWidget);
+      // Pause on glass at the start, a flat red End at the end.
+      final pause = find.byKey(const Key('capture_pause_button'));
+      expect(tester.getSize(pause), const Size(56, 56));
+      expect(find.descendant(of: pause, matching: find.byType(BackdropFilter)), findsOneWidget);
+      expect(tester.getRect(pause).right, lessThan(tester.getRect(finishButton).left));
+      expect(find.bySemanticsLabel('End Conversation'), findsOneWidget);
+      await tester.tap(pause);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(home.capture.pauseCalls, 1);
+      await tester.tap(finishButton);
+      await settleDetailTab(tester);
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(home.capture.finishCalls, 1);
+      expect(find.byType(LiveEpisodePage), findsNothing);
+      await _dispose(tester, home);
+    });
+  });
+
+  testWidgets('experimental design: the live page becomes the conversation page when the server lists it',
+      (tester) async {
+    ExperimentalDesign.debugOverride = true;
+    addTearDown(() => ExperimentalDesign.debugOverride = null);
+    await withClock(Clock.fixed(_now), () async {
+      final home = await _pumpHome(tester, v3: true);
+      home.liveOpen = false;
+      home.publishManualEnds();
+      await home.conversationsV3.refresh();
+      await tester.pump();
+      await tester.pump();
+      await tester.tap(find.byType(V3LivePlaceholderRow));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.byKey(const Key('live_conversation_shell')), findsOneWidget);
+      final route = ModalRoute.of(tester.element(find.byType(LiveEpisodePage)));
+
+      // The page's own re-read finds the conversation: same route, now its conversation page.
+      home.liveOpen = true;
+      await tester.pump(const Duration(seconds: 15));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.byKey(const Key('live_conversation_shell')), findsNothing);
+      expect(find.byType(ConversationDetailPage), findsOneWidget);
+      expect(ModalRoute.of(tester.element(find.byType(ConversationDetailPage))), same(route));
+      expect(find.byKey(const Key('live_conversation_end')), findsOneWidget);
+      expect(find.byKey(const ValueKey('detail_ask_omi')), findsOneWidget);
+
+      // It stays that conversation's page when the server stops listing it as in progress.
+      home.liveOpen = false;
+      await home.conversationsV3.refresh();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.byType(ConversationDetailPage), findsOneWidget);
+      expect(find.byKey(const Key('live_conversation_shell')), findsNothing);
+      await _dispose(tester, home);
+    });
+  });
+
+  testWidgets('experimental design: the live page opens as the conversation page when the server already lists it',
+      (tester) async {
+    ExperimentalDesign.debugOverride = true;
+    addTearDown(() => ExperimentalDesign.debugOverride = null);
+    await withClock(Clock.fixed(_now), () async {
+      final home = await _pumpHome(tester, v3: true);
+      final context = tester.element(find.byType(ConversationsPage));
+      unawaited(Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const LiveEpisodePage())));
+      await tester.pump();
+      expect(find.byKey(const Key('live_conversation_shell')), findsNothing, reason: 'no frame of the other layout');
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.byType(ConversationDetailPage), findsOneWidget);
+      expect(find.byKey(const Key('live_page_v3_title')), findsNothing);
+      await _dispose(tester, home);
+    });
+  });
+
   testWidgets('experimental design: End is a frosted button that fits a 320pt bar and ends the capture',
       (tester) async {
     ExperimentalDesign.debugOverride = true;
