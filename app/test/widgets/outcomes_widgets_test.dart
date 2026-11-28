@@ -5,10 +5,12 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/app_globals.dart';
+import 'package:omi/backend/http/api/device.dart';
 import 'package:omi/backend/http/api/goals.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
@@ -168,6 +170,42 @@ void main() {
     await tester.tap(find.text('Try Again'));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('firmware_check_failed')), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump();
+  });
+
+  testWidgets('D1: a check that finds nothing newer says up to date, without Try Again', (tester) async {
+    debugLatestFirmwareLookup = ({
+      required deviceModelNumber,
+      required firmwareRevision,
+      required hardwareRevision,
+      required manufacturerName,
+      serialNumber,
+    }) async =>
+        latestFirmwareAnswer(http.Response(
+          '{"detail": "No suitable firmware update found for your device version."}',
+          404,
+        ));
+    addTearDown(() => debugLatestFirmwareLookup = null);
+    final device = BtDevice(
+      id: 'd',
+      name: 'Omi',
+      type: DeviceType.omi,
+      rssi: -40,
+      modelNumber: 'Omi CV 1',
+      firmwareRevision: '3.0.21',
+      hardwareRevision: '1',
+      manufacturerName: 'Based Hardware',
+    );
+    await tester.pumpWidget(_app(
+      FirmwareUpdate(device: device),
+      providers: [ChangeNotifierProvider<DeviceProvider>.value(value: _Device())],
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Your device is up to date'), findsOneWidget);
+    expect(find.byKey(const Key('firmware_check_failed')), findsNothing);
+    expect(find.text('Try Again'), findsNothing);
     await tester.pumpWidget(const SizedBox());
     await tester.pump();
   });

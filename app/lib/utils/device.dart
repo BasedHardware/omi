@@ -23,6 +23,9 @@ enum FirmwareUpdateCheck {
 }
 
 class DeviceUtils {
+  /// The firmware lookup's answer when the server has nothing newer: the device runs the latest release.
+  static const Map<String, dynamic> firmwareUpToDate = {'up_to_date': true};
+
   /// Closed, analysis-safe hardware family used by product telemetry.
   static String analyticsHardwareFamily(BtDevice device) {
     switch (device.type) {
@@ -89,6 +92,13 @@ class DeviceUtils {
         status: FirmwareUpdateCheck.currentVersionUnknown,
         message: 'Unable to determine current firmware version',
         version: '',
+      );
+    }
+    if (latestFirmwareDetails['up_to_date'] == true) {
+      return (
+        status: FirmwareUpdateCheck.upToDate,
+        message: 'You are already on the latest version',
+        version: currentFirmware,
       );
     }
     if (latestFirmwareDetails.isEmpty || latestFirmwareDetails['version'] == null) {

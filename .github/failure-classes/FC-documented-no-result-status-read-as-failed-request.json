@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-documented-no-result-status-read-as-failed-request",
+  "family": "cross-boundary-contract",
+  "violated_contract": "When a released server answers a legitimate no-result outcome with an error status (the firmware lookup's 404 \"No suitable firmware update found for your device version.\" for a device already on the newest release), the client must read that specific answer as the outcome it states. Treating every non-200 as a failed request tells a correct state as an error and sends owners to support or to manual workarounds, while other statuses and details stay failures.",
+  "canonical_prevention": "Classify the response once at the API boundary into result, documented no-result, and failure, matching the no-result answer on status plus its exact detail, and test the no-result answer beside adjacent statuses and details (offline, 5xx, other 404s, 400) that must remain failures.",
+  "canonical_prevention_artifact": [
+    "app/lib/backend/http/api/device.dart",
+    "app/test/unit/backend/http/latest_firmware_answer_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/backend/http/api/**"
+  ],
+  "status": "open"
+}
