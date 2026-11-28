@@ -1,0 +1,8 @@
+minimumReleaseAge: 0
+overrides:
+  postcss: 8.5.17
+  "@expo/metro-config": 56.0.17
+  "@expo/cli": 56.1.20
+onlyBuiltDependencies:
+  - "@firebase/util"
+  - protobufjs

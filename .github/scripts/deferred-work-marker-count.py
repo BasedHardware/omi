@@ -66,6 +66,7 @@ NORMALIZED_EXCLUDED_FILES = {
     # reordering a row silently renumbers every token after it and changes what
     # the tokenizer produces.
     "app/android/app/src/main/assets/vocab.txt",
+    "app/react-native/modules/local-brain/android/src/main/assets/vocab.txt",
 }
 
 
