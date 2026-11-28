@@ -27,9 +27,11 @@ PRODUCER_PENDING_RETRY_BUDGET = 6
 CLOSE_RETRY_MAX_SECONDS = 60.0
 CLOSE_RETRY_MAX_IN_FLIGHT = 4
 CLOSE_METADATA_DEADLINE_SECONDS = 30.0
-# Outside serve, a failed frame renewal retries after this backoff instead of
-# a full half-lease, so a transient timeout cannot let the persisted lease lapse.
-SHADOW_RENEWAL_RETRY_SECONDS = 60.0
+# Outside serve, a failed frame renewal waits this long after the failure
+# completes before retrying, instead of a full half-lease, so a transient
+# timeout cannot let the persisted lease lapse. Measured from completion so a
+# slow failure cannot be followed immediately by another stalled attempt.
+SHADOW_RENEWAL_RETRY_SECONDS = 300.0
 # Bound all outstanding writes, including abandoned ones, below pool capacity.
 # Leave one quarter of workers (four by default) for begin/failure markers.
 CLOSE_METADATA_MAX_OUTSTANDING = min(
@@ -396,14 +398,15 @@ class PusherRecordBarrier:
                     # Shadow, or serve outside this uid's cohort: the lease is
                     # observation only and fences nothing, so a failed renewal
                     # must not hold storage or the audio ACK. Return what the
-                    # off path returns and back off briefly before the next
-                    # attempt, so an outage does not stall every frame batch
-                    # on a metadata timeout. The backoff is short, not a full
-                    # half-lease: retrying well inside the persisted expiry
-                    # keeps a transient timeout from lapsing the lease and
-                    # surfacing as a false late append on the next commit.
+                    # off path returns. Back off from the failure's completion,
+                    # so a slow timeout is never followed straight away by
+                    # another stalled attempt, but only briefly rather than a
+                    # full half-lease: retrying well inside the persisted
+                    # expiry keeps a transient timeout from lapsing the lease
+                    # and surfacing as a false late append on the next commit.
                     half = lease.token_lease_seconds() / 2
-                    self._stamp_lease(conversation_id, now - half + min(SHADOW_RENEWAL_RETRY_SECONDS, half))
+                    failed_at = time.monotonic()
+                    self._stamp_lease(conversation_id, failed_at - half + min(SHADOW_RENEWAL_RETRY_SECONDS, half))
                     lease_metrics.RENEWAL_FAILURES_SHADOW.inc()
                     logger.warning('record token lease renewal failed outside serve; storage continues', exc_info=True)
                     return conversation_id not in self.lease_renewal_failed
