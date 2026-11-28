@@ -1,5 +1,5 @@
 // Derived by python3 tool/perf_shell.py from main.dart. Do not hand edit.
-// Extracted shell SHA256 (imports, telemetry field, builder chain): b0d1682ba2bc5d10ef3ada62b90bba12fb95af1729c9875300b6b82c03147eac
+// Extracted shell SHA256 (imports, telemetry field, builder chain): 25f19f1152573f12f7974c5754d800e7f0af1d3f412c23bfb70d0e786bce8ee8
 // ignore_for_file: unused_import, unnecessary_import
 import 'package:omi/services/on_device/on_device_background.dart';
 import 'package:omi/services/onboarding_sync_runtime.dart';
@@ -122,6 +122,7 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/notification_channel_strings.dart';
+import 'package:omi/services/experiments/live_conversation_page_gate.dart';
 import 'package:omi/main.dart' show MyApp, CustomErrorWidget;
 
 /// The exact production builder chain, with an inert seeded page boundary.
