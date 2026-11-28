@@ -12327,6 +12327,9 @@
     "firmwareSyncRecordingsFirstTitle": "סנכרן תחילה את ההקלטות שלך",
     "firmwareSyncRecordingsFirstMessage": "חלק מההקלטות עדיין נמצאות במכשיר שלך. תן להן להשלים את הסינכרון לטלפון, ואז התחל את העדכון.",
     "batteryRestartToRefresh": "הפעל מחדש את Omi כדי לרענן",
+    "onTheWayAllowanceHeldTitle": "ייעבדו ב-{date} כשהדקות שלך יתחדשו",
+    "onTheWayAllowanceHeldUpgrade": "או עבד אותן מיד עם שדרוג תוכנית",
+    "onTheWayDayProcessesOn": "ייעבדו ב-{date}",
     "pendantReconnectNudgeTitle": "ה־Omi שלך לא התחבר כבר 3 ימים",
     "pendantReconnectNudgeBody": "כדאי לענוד אותו שוב ולחבר אותו כדי ש־Omi ימשיך להקליט.",
     "pendantReconnectNudgeAction": "חיבור מחדש"

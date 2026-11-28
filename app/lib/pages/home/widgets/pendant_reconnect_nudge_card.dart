@@ -35,7 +35,7 @@ class PendantReconnectNudgeCard extends StatefulWidget {
   final bool? paying;
   final bool homeSelected;
   final bool pendantConnected;
-  final Future<bool> Function(String uid) readFlag;
+  final Future<bool?> Function(String uid) readFlag;
   final void Function(RegisteredEvent event)? emit;
   final Widget devicePage;
 
@@ -44,10 +44,18 @@ class PendantReconnectNudgeCard extends StatefulWidget {
 }
 
 class _PendantReconnectNudgeCardState extends State<PendantReconnectNudgeCard> with WidgetsBindingObserver {
+  static const _flagRetryDelay = Duration(seconds: 1);
+  static const _flagRefreshInterval = Duration(seconds: 30);
+
   final _preferences = SharedPreferencesUtil();
+  late final StreamSubscription<void> _deviceChanges;
+  Timer? _flagRetry;
+  DateTime? _nextFlagReadAt;
   bool _scheduled = false;
+  bool _checking = false;
   bool _evaluated = false;
   bool _routeCurrent = true;
+  bool _retried = false;
   int _generation = 0;
   PendantReconnectNudgeEligible? _card;
 
@@ -58,14 +66,25 @@ class _PendantReconnectNudgeCardState extends State<PendantReconnectNudgeCard> w
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _deviceChanges = _preferences.deviceChanges.listen((_) {
+      setState(() {
+        if (!_preferences.btDevice.isPendant) _card = null;
+        _resetEvaluation();
+      });
+    });
   }
 
   @override
   void didUpdateWidget(PendantReconnectNudgeCard oldWidget) {
     super.didUpdateWidget(oldWidget);
     final uidChanged = oldWidget.uid != widget.uid;
+    if (uidChanged) _nextFlagReadAt = null;
     if (uidChanged || widget.pendantConnected) _card = null;
-    if (uidChanged || (!oldWidget.homeSelected && widget.homeSelected)) _resetEvaluation();
+    if (uidChanged ||
+        oldWidget.pendantConnected != widget.pendantConnected ||
+        (!oldWidget.homeSelected && widget.homeSelected)) {
+      _resetEvaluation();
+    }
   }
 
   @override
@@ -83,13 +102,18 @@ class _PendantReconnectNudgeCardState extends State<PendantReconnectNudgeCard> w
 
   void _resetEvaluation() {
     if (_card != null) return;
+    _flagRetry?.cancel();
+    _flagRetry = null;
     _generation++;
     _evaluated = false;
+    _retried = false;
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    unawaited(_deviceChanges.cancel());
+    _flagRetry?.cancel();
     super.dispose();
   }
 
@@ -98,38 +122,63 @@ class _PendantReconnectNudgeCardState extends State<PendantReconnectNudgeCard> w
 
   void _emit(RegisteredEvent event) => (widget.emit ?? const TypedEvents().emit)(event);
 
+  Duration? _eligibleGap(DateTime now) => PendantReconnectNudge.eligibleGap(
+        hasPairedPendant: _preferences.btDevice.isPendant,
+        now: now,
+        lastConnectedAt: _preferences.lastPendantConnectedAt,
+        lastShownAt: _preferences.pendantReconnectNudgeLastShownAt,
+        lastEnrolledAt: _preferences.pendantReconnectNudgeLastEnrolledAt,
+        lastDropoffSurfaceDay: _preferences.pendantDropoffSurfaceLastDay,
+        lastSyncAlertAt: _preferences.lastSyncAlertTimestamp,
+      );
+
   Future<void> _evaluate(String uid) async {
-    if (!_canEvaluate(uid)) return;
-    _evaluated = true;
+    if (!_canEvaluate(uid) || widget.pendantConnected) return;
+    final nextFlagReadAt = _nextFlagReadAt;
+    final beforeRead = DateTime.now();
+    if ((nextFlagReadAt != null && beforeRead.isBefore(nextFlagReadAt)) || _eligibleGap(beforeRead) == null) return;
+
+    _checking = true;
     final generation = _generation;
-    bool enabled;
+    bool? enabled;
     try {
       enabled = await widget.readFlag(uid).timeout(const Duration(seconds: 3));
     } catch (_) {
-      enabled = false;
+      enabled = null;
     }
-    if (!mounted || generation != _generation) return;
-    if (!_canEvaluate(uid)) {
+    _checking = false;
+    if (!mounted) return;
+    if (generation != _generation) {
+      setState(() {});
+      return;
+    }
+    if (!_canEvaluate(uid)) return;
+    if (enabled == null && !_retried) {
+      _retried = true;
+      _flagRetry = Timer(_flagRetryDelay, () => setState(() => _flagRetry = null));
+      return;
+    }
+
+    _evaluated = true;
+    if (enabled != true) {
+      // Throttle definitive off answers and exhausted retries. Never reuse a true answer.
+      _nextFlagReadAt = DateTime.now().add(_flagRefreshInterval);
+      return;
+    }
+
+    final now = DateTime.now();
+    final gap = widget.pendantConnected ? null : _eligibleGap(now);
+    if (gap == null) {
       _evaluated = false;
       return;
     }
-    if (!enabled || widget.pendantConnected) return;
-
-    final now = DateTime.now();
-    final enrollment = PendantReconnectNudge.evaluate(
-      enabled: enabled,
+    final enrollment = PendantReconnectNudge.enrollment(
       uid: uid,
-      hasPairedPendant: _preferences.btDevice.isPendant,
       now: now,
-      lastConnectedAt: _preferences.lastPendantConnectedAt,
-      lastShownAt: _preferences.pendantReconnectNudgeLastShownAt,
-      lastEnrolledAt: _preferences.pendantReconnectNudgeLastEnrolledAt,
-      lastDropoffSurfaceDay: _preferences.pendantDropoffSurfaceLastDay,
-      lastSyncAlertAt: _preferences.lastSyncAlertTimestamp,
+      gap: gap,
       createdAt: widget.createdAt,
       paying: widget.paying,
     );
-    if (enrollment == null) return;
     _preferences.pendantReconnectNudgeLastEnrolledAt = now.millisecondsSinceEpoch;
     _emit(enrollment);
     if (enrollment.arm == PendantReconnectNudgeEligibleArm.holdout) return;
@@ -150,7 +199,14 @@ class _PendantReconnectNudgeCardState extends State<PendantReconnectNudgeCard> w
   @override
   Widget build(BuildContext context) {
     final uid = widget.uid;
-    if (uid != null && _foreground && _homeVisible && _card == null && !_evaluated && !_scheduled) {
+    if (uid != null &&
+        _foreground &&
+        _homeVisible &&
+        _card == null &&
+        !_evaluated &&
+        !_scheduled &&
+        !_checking &&
+        _flagRetry == null) {
       _scheduled = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _scheduled = false;

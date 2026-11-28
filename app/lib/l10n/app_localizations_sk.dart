@@ -15842,6 +15842,19 @@ class AppLocalizationsSk extends AppLocalizations {
   String get batteryRestartToRefresh => 'Pre obnovenie údajov reštartujte Omi';
 
   @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Spracuje sa $date, keď sa obnovia vaše minúty';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Alebo ich spracujte hneď s upgradom plánu';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Spracuje sa $date';
+  }
+
+  @override
   String get pendantReconnectNudgeTitle => 'Tvoje Omi sa už 3 dni nepripojilo';
 
   @override

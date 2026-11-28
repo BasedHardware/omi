@@ -189,6 +189,20 @@ def _segments_of(record: Any):
     )
 
 
+def _fresh_stored_window(record: CaptureRecord, row: Any) -> tuple[Any, Any] | None:
+    """The row's stored (started_at, finished_at), only while its recorded span still equals ``record``'s.
+
+    Overlap is proven on the recorded span; ``join_capture_group`` re-checks the stored lifecycle window.
+    """
+    if not isinstance(row, Mapping):
+        return None
+    fresh = capture_record({**row, 'id': record.conversation_id})
+    if fresh is None or (fresh.started_at, fresh.finished_at) != (record.started_at, record.finished_at):
+        return None
+    start, finish = row.get('started_at'), row.get('finished_at')
+    return (start, finish) if start is not None and finish is not None else None
+
+
 def _group_confirmed_captures(uid: str, conversation: Any, candidate: CaptureRecord, matches: list) -> None:
     """Group window matches that also share speech; never block finalization.
 
@@ -203,6 +217,7 @@ def _group_confirmed_captures(uid: str, conversation: Any, candidate: CaptureRec
         _record_degraded(to_mode='separate_captures')
         return
     own_segments = _segments_of(own_row or {})
+    own_window = _fresh_stored_window(candidate, own_row)
     containment_mode = capture_group_containment_mode()
     for other in matches:
         try:
@@ -231,14 +246,20 @@ def _group_confirmed_captures(uid: str, conversation: Any, candidate: CaptureRec
             else:
                 record_product_event('capture_group_joined', outcome='none')
                 continue
+            other_window = _fresh_stored_window(other, other_row)
+            if own_window is None or other_window is None:
+                # Evidence confirms, but a recorded span moved since discovery (or a row is gone):
+                # abstain rather than group on stale evidence.
+                record_product_event('capture_group_joined', outcome='abstained')
+                continue
             group_id = capture_groups_db.join_capture_group(
                 uid,
                 candidate.conversation_id,
                 other.conversation_id,
                 evidence,
-                expected_windows={
-                    record.conversation_id: (record.started_at, record.finished_at) for record in (candidate, other)
-                },
+                # The join transaction fences on the stored lifecycle window, not the recorded span the
+                # overlap was measured on; the two differ on most phone and desktop rows.
+                expected_windows={candidate.conversation_id: own_window, other.conversation_id: other_window},
                 expected_fingerprints={
                     candidate.conversation_id: own_fingerprint,
                     other.conversation_id: other_fingerprint,

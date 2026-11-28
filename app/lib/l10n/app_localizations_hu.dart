@@ -15905,6 +15905,19 @@ class AppLocalizationsHu extends AppLocalizations {
   String get batteryRestartToRefresh => 'Indítsa újra az Omit a frissítéshez';
 
   @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Feldolgozás: $date, amikor megújulnak a perceid';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Vagy dolgozd fel őket azonnal csomagfrissítéssel';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Feldolgozás: $date';
+  }
+
+  @override
   String get pendantReconnectNudgeTitle => 'Az Omi 3 napja nem kapcsolódott';
 
   @override

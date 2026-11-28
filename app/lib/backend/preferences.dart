@@ -111,6 +111,7 @@ class SharedPreferencesUtil {
     _appsListRevision++;
     if (!PhysicalQualification.enabled) await _quarantineBootSettings();
     await _migrateAppearanceDefault();
+    await _migratePendantReconnectNudgeCap(_preferences!);
     _mirrorNativeAuthToken = mirrorNativeAuthToken ?? Platform.isAndroid;
     await _loadCapturePolicy();
     await _reconcileNativeCapturePolicy();
@@ -749,6 +750,11 @@ class SharedPreferencesUtil {
 
   bool get useCustomStt => customSttConfig.isEnabled;
 
+  /// The user chose on-device transcription (not another custom provider). Pendant audio
+  /// stored while offline then drains to the phone as phone-only custody and is transcribed
+  /// there; other custom providers keep today's behaviour (no automatic drain or upload).
+  bool get onDeviceSttSelected => useCustomStt && customSttConfig.provider == SttProvider.onDeviceWhisper;
+
   /// sttConfigId of the on-device config the paywall's "switch to free" saved, or ''.
   /// Lets a later paid plan release exactly that pin and never a user's own Custom STT.
   String get paywallOnDeviceSttConfigId => getString('paywallOnDeviceSttConfigId');
@@ -793,11 +799,20 @@ class SharedPreferencesUtil {
     if (uid.isNotEmpty) unawaited(saveInt(_userScopedKey('lastPendantConnectedAt', uid), value));
   }
 
-  int get pendantReconnectNudgeLastShownAt =>
-      uid.isEmpty ? 0 : getInt(_userScopedKey('pendant_reconnect_nudge_last_shown_at', uid));
+  static const _pendantReconnectNudgeLastShownKey = 'pendant_reconnect_nudge_last_shown_at';
 
-  set pendantReconnectNudgeLastShownAt(int value) {
-    if (uid.isNotEmpty) unawaited(saveInt(_userScopedKey('pendant_reconnect_nudge_last_shown_at', uid), value));
+  int get pendantReconnectNudgeLastShownAt => getInt(_pendantReconnectNudgeLastShownKey);
+
+  set pendantReconnectNudgeLastShownAt(int value) => unawaited(saveInt(_pendantReconnectNudgeLastShownKey, value));
+
+  static Future<void> _migratePendantReconnectNudgeCap(SharedPreferences prefs) async {
+    if (prefs.containsKey(_pendantReconnectNudgeLastShownKey)) return;
+    var latest = 0;
+    for (final key in prefs.getKeys().where((key) => key.startsWith('$_pendantReconnectNudgeLastShownKey:'))) {
+      final value = prefs.get(key);
+      if (value is int && value > latest) latest = value;
+    }
+    if (latest > 0) await prefs.setInt(_pendantReconnectNudgeLastShownKey, latest);
   }
 
   int get pendantReconnectNudgeLastEnrolledAt =>
@@ -1790,6 +1805,13 @@ class SharedPreferencesUtil {
     _authTokenCache = '';
     await _deleteSecureAuthToken();
     _appsListRevision++;
-    return await _preferences?.clear() ?? false;
+    final prefs = _preferences;
+    if (prefs == null) return false;
+    // Account resets preserve the installation's reconnect reminder cooldown.
+    final lastShown = pendantReconnectNudgeLastShownAt;
+    final cleared = await prefs.clear();
+    if (lastShown == 0) return cleared;
+    final saved = await prefs.setInt(_pendantReconnectNudgeLastShownKey, lastShown);
+    return cleared && saved;
   }
 }

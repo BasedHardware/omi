@@ -15839,6 +15839,19 @@ class AppLocalizationsEt extends AppLocalizations {
   String get batteryRestartToRefresh => 'Taaskäivitage Omi värskendamiseks';
 
   @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Töödeldakse $date, kui teie minutid uuenevad';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Või töödelge need kohe plaani täiendusega';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Töödeldakse $date';
+  }
+
+  @override
   String get pendantReconnectNudgeTitle => 'Sinu Omi pole 3 päeva ühendust loonud';
 
   @override

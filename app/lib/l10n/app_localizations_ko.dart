@@ -15619,6 +15619,19 @@ class AppLocalizationsKo extends AppLocalizations {
   String get batteryRestartToRefresh => '새로고침하려면 Omi를 다시 시작하세요';
 
   @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return '분이 갱신되는 $date에 처리됩니다';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => '또는 플랜을 업그레이드하여 바로 처리할 수 있습니다';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return '$date에 처리';
+  }
+
+  @override
   String get pendantReconnectNudgeTitle => 'Omi가 3일 동안 연결되지 않았어요';
 
   @override

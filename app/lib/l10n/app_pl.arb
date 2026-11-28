@@ -4805,6 +4805,9 @@
     "firmwareSyncRecordingsFirstTitle": "Najpierw zsynchronizuj nagrania",
     "firmwareSyncRecordingsFirstMessage": "Niektóre nagrania wciąż znajdują się na urządzeniu. Poczekaj, aż zostaną zsynchronizowane z telefonem, a następnie rozpocznij aktualizację.",
     "batteryRestartToRefresh": "Uruchom ponownie Omi, aby odświeżyć odczyt",
+    "onTheWayAllowanceHeldTitle": "Zostaną przetworzone {date}, gdy odnowią się Twoje minuty",
+    "onTheWayAllowanceHeldUpgrade": "Albo przetwórz je od razu, ulepszając plan",
+    "onTheWayDayProcessesOn": "Zostaną przetworzone {date}",
     "pendantReconnectNudgeTitle": "Twój Omi nie łączył się od 3 dni",
     "pendantReconnectNudgeBody": "Załóż go i połącz ponownie, aby Omi nadal nagrywał.",
     "pendantReconnectNudgeAction": "Połącz ponownie"

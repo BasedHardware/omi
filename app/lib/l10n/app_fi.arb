@@ -4770,6 +4770,9 @@
     "firmwareSyncRecordingsFirstTitle": "Synkronoi nauhoituksesi ensin",
     "firmwareSyncRecordingsFirstMessage": "Osaa nauhoituksista on vielä laitteella. Anna niiden synkronoitua puhelimeen loppuun ja käynnistä sitten päivitys.",
     "batteryRestartToRefresh": "Käynnistä Omi uudelleen päivittämiseksi",
+    "onTheWayAllowanceHeldTitle": "Käsitellään {date}, kun minuittisi uudistuvat",
+    "onTheWayAllowanceHeldUpgrade": "Tai käsittele ne heti tilauksen päivityksellä",
+    "onTheWayDayProcessesOn": "Käsitellään {date}",
     "pendantReconnectNudgeTitle": "Omisi ei ole muodostanut yhteyttä 3 päivään",
     "pendantReconnectNudgeBody": "Pue se takaisin ja yhdistä se uudelleen, jotta Omi jatkaa tallentamista.",
     "pendantReconnectNudgeAction": "Yhdistä uudelleen"

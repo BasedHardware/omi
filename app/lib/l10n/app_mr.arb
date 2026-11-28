@@ -12327,6 +12327,9 @@
     "firmwareSyncRecordingsFirstTitle": "आधी तुमची रेकॉर्डिंग सिंक करा",
     "firmwareSyncRecordingsFirstMessage": "काही रेकॉर्डिंग अजून तुमच्या डिव्हाइसवर आहेत. त्या तुमच्या फोनवर पूर्णपणे सिंक होऊ द्या, नंतर अपडेट सुरू करा.",
     "batteryRestartToRefresh": "रिफ्रेश करण्यासाठी Omi पुनः सुरू करा",
+    "onTheWayAllowanceHeldTitle": "आपले मिनिटे नूतनीकृत झाल्यावर {date} रोजी प्रक्रिया होईल",
+    "onTheWayAllowanceHeldUpgrade": "किंवा प्लॅन अपग्रेड करून त्यांची लगेच प्रक्रिया करा",
+    "onTheWayDayProcessesOn": "{date} रोजी प्रक्रिया",
     "pendantReconnectNudgeTitle": "तुमचा Omi 3 दिवसांपासून कनेक्ट झालेला नाही",
     "pendantReconnectNudgeBody": "Omi ने रेकॉर्डिंग सुरू ठेवावे म्हणून तो पुन्हा घाला आणि कनेक्ट करा.",
     "pendantReconnectNudgeAction": "पुन्हा कनेक्ट करा"

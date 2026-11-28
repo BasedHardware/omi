@@ -32,6 +32,16 @@ release name the rollout will use and sends it to the API server as a server-sid
 manager `helm`. That is the same request as the real apply without the write, so it reports the
 conflict the real apply would hit.
 
+Helm 4's default `--server-side=auto` reuses the release's previous apply method, and not every
+release applies server-side. One that was applied client-side is owned by `helm` with operation
+`Update` (dev's gateway on 2026-11-27), and a server-side dry-run against it reports Helm's own entry
+as a conflict on the image, `OMI_LLM_GATEWAY_BUILD_IDENTITY` and the CPU limit. The deploy therefore
+reads the live Deployment's managed fields first. When Helm owns it only through `Update`, the
+preflight dry-runs a client-side apply. In every other case (a server-side release, mixed `Apply`
+and `Update` entries, no Helm entry, or a fresh install) it keeps the strict server-side dry-run.
+`helm upgrade` is pinned to the same method with `--server-side=true|false`, so the check and the
+rollout always match. A failed read of the Deployment fails the deploy before anything is changed.
+
 The check runs before the shared backend secret reapply and again right before `helm upgrade
 --install`. The first check exits before anything is mutated: no secret write, no Helm release
 change, no rollout. The re-check runs after the secret reapply and after the ingress and

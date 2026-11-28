@@ -15854,6 +15854,19 @@ class AppLocalizationsSr extends AppLocalizations {
   String get batteryRestartToRefresh => 'Поново покрените Omi да освежите податке';
 
   @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Обрадиће се $date када се обнове ваши минути';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Или их одмах обрадите уз надоградњу плана';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Обрадиће се $date';
+  }
+
+  @override
   String get pendantReconnectNudgeTitle => 'Твој Omi није био повезан 3 дана';
 
   @override

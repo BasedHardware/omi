@@ -35,6 +35,7 @@ from database import (
 from database.account_deletion_marker import account_deletion_blocks_user_work
 from database._client import get_customer_firestore_client
 from database.go_queue_erase import ERASE_LEASE_SECONDS
+from database.legal_holds import DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable
 from services.users.go_queue_erase import go_queue_erase_required
 from database.sync_jobs import release_job_run_lock, try_acquire_job_run_lock
 from services.users.data_export import iter_user_data_export, iter_user_data_export_streaming
@@ -184,6 +185,7 @@ from utils.other.daily_recap import delivery_allowed as daily_summary_delivery_a
 from utils.memory.learned_today import memories_learned_payload, memory_review_card_block
 from utils.memory.recap_review import refresh_recap_learning_refs
 from utils.other import endpoints as auth
+from utils.other.account_gate_http import account_gate_busy_http_exception
 from utils.other.list_budget import finish_list_budget
 from utils.other.storage import (
     delete_all_conversation_recordings,
@@ -781,7 +783,10 @@ def update_person_name(
 
 @router.delete('/v1/users/people/{person_id}', tags=['v1'], status_code=204)
 def delete_person_endpoint(person_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    delete_person(uid, person_id)
+    try:
+        delete_person(uid, person_id)
+    except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as error:
+        raise account_gate_busy_http_exception() from error
     delete_user_person_speech_samples(uid, person_id)
 
 

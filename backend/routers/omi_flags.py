@@ -2,7 +2,7 @@
 
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
 
 from utils import omi_flags
@@ -27,11 +27,14 @@ class ClientFlagsResponse(BaseModel):
 
 @router.get('/v1/flags', response_model=ClientFlagsResponse)
 def client_flags(
+    request: Request,
     surface: Literal['macos', 'mobile', 'web-app', 'windows'] = Query(...),
     uid: str = Depends(get_current_user_uid),
 ) -> ClientFlagsResponse:
     # In-memory evaluation; the snapshot refresh is bounded by the store read timeout.
-    version, resolved = omi_flags.resolve_surface(uid, surface)
+    platforms = request.headers.getlist('X-App-Platform')
+    platform = platforms[0] if len(platforms) == 1 else None
+    version, resolved = omi_flags.resolve_surface(uid, surface, platform)
     return ClientFlagsResponse(
         version=version,
         flags=[

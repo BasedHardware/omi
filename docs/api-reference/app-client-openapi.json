@@ -92862,6 +92862,16 @@
           "404": {
             "$ref": "#/components/responses/Error404"
           },
+          "409": {
+            "description": "Visibility write contention exhausted its retry budget",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
           "422": {
             "content": {
               "application/json": {
@@ -92871,6 +92881,16 @@
               }
             },
             "description": "Validation Error"
+          },
+          "503": {
+            "description": "Visibility write temporarily unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
           }
         },
         "security": [

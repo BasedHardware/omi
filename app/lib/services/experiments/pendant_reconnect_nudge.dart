@@ -1,5 +1,5 @@
-// Owns EXP-005 assignment and eligibility. The flag must resolve on before
-// the client evaluates an account, and only bucketed context leaves this decision.
+// Owns EXP-005 assignment and eligibility. Enrollment requires a fresh
+// enabled flag answer, and only bucketed context leaves this decision.
 import 'dart:convert';
 import 'dart:math';
 
@@ -15,15 +15,17 @@ abstract final class PendantReconnectNudge {
 
   // Mobile's existing flag path reads the authenticated Omi flag store.
   // A failed refresh can leave a cached true, so use the cache only after success.
-  static Future<bool> readFlag(String uid) async {
+  static Future<bool?> readFlag(String uid) async {
     final auth = AuthService.instance;
     final session = auth.captureSessionSnapshot(expectedUid: uid);
-    if (session == null || AnalyticsManager.currentIdentity != uid) return false;
+    if (session == null || AnalyticsManager.currentIdentity != uid) return null;
     final analytics = AnalyticsManager();
-    return await analytics.reloadFeatureFlags() &&
-        auth.isSessionSnapshotCurrent(session) &&
-        AnalyticsManager.currentIdentity == uid &&
-        analytics.isBooleanFeatureEnabledCached(enabledFlag);
+    if (!await analytics.reloadFeatureFlags() ||
+        !auth.isSessionSnapshotCurrent(session) ||
+        AnalyticsManager.currentIdentity != uid) {
+      return null;
+    }
+    return analytics.isBooleanFeatureEnabledCached(enabledFlag);
   }
 
   static String localDay(DateTime time) => time.toLocal().toIso8601String().split('T').first;
@@ -33,9 +35,7 @@ abstract final class PendantReconnectNudge {
           ? PendantReconnectNudgeEligibleArm.treatment
           : PendantReconnectNudgeEligibleArm.holdout;
 
-  static PendantReconnectNudgeEligible? evaluate({
-    required bool enabled,
-    required String uid,
+  static Duration? eligibleGap({
     required bool hasPairedPendant,
     required DateTime now,
     required int lastConnectedAt,
@@ -43,10 +43,8 @@ abstract final class PendantReconnectNudge {
     required int lastEnrolledAt,
     required String lastDropoffSurfaceDay,
     required int lastSyncAlertAt,
-    required DateTime? createdAt,
-    required bool? paying,
   }) {
-    if (!enabled || uid.isEmpty || !hasPairedPendant || lastConnectedAt <= 0) return null;
+    if (!hasPairedPendant || lastConnectedAt <= 0) return null;
 
     final gap = now.difference(DateTime.fromMillisecondsSinceEpoch(lastConnectedAt));
     if (gap < const Duration(hours: 72)) return null;
@@ -62,6 +60,42 @@ abstract final class PendantReconnectNudge {
       return null;
     }
 
+    return gap;
+  }
+
+  static PendantReconnectNudgeEligible? evaluate({
+    required bool enabled,
+    required String uid,
+    required bool hasPairedPendant,
+    required DateTime now,
+    required int lastConnectedAt,
+    required int lastShownAt,
+    required int lastEnrolledAt,
+    required String lastDropoffSurfaceDay,
+    required int lastSyncAlertAt,
+    required DateTime? createdAt,
+    required bool? paying,
+  }) {
+    if (!enabled || uid.isEmpty) return null;
+    final gap = eligibleGap(
+      hasPairedPendant: hasPairedPendant,
+      now: now,
+      lastConnectedAt: lastConnectedAt,
+      lastShownAt: lastShownAt,
+      lastEnrolledAt: lastEnrolledAt,
+      lastDropoffSurfaceDay: lastDropoffSurfaceDay,
+      lastSyncAlertAt: lastSyncAlertAt,
+    );
+    return gap == null ? null : enrollment(uid: uid, now: now, gap: gap, createdAt: createdAt, paying: paying);
+  }
+
+  static PendantReconnectNudgeEligible enrollment({
+    required String uid,
+    required DateTime now,
+    required Duration gap,
+    required DateTime? createdAt,
+    required bool? paying,
+  }) {
     return PendantReconnectNudgeEligible(
       arm: armFor(uid),
       daysSinceConnection: switch (gap.inDays) {

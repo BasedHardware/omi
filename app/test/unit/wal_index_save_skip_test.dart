@@ -67,6 +67,7 @@ Wal _fullyPopulated() => Wal(
       jobId: 'job',
       uploadedAt: 3,
       syncedAt: 4,
+      allowanceHeldUntil: 5,
       keptForTranscriptRecovery: true,
       clockRun: 'run',
       clockRecoveryValidBatches: 11,
@@ -122,6 +123,7 @@ final _mutations = <String, void Function(Wal)>{
   'upload_refusal_last_attempt_at': (w) => w.uploadRefusalLastAttemptAt = 44,
   'clock_recovery_valid_batches': (w) => w.clockRecoveryValidBatches = 12,
   'synced_at': (w) => w.syncedAt = 8,
+  'allowance_held_until': (w) => w.allowanceHeldUntil = 9,
   'kept_for_transcript_recovery': (w) => w.keptForTranscriptRecovery = false,
   'clock_run': (w) => w.clockRun = 'run-2',
 };

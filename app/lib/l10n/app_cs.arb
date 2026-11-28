@@ -4770,6 +4770,9 @@
     "firmwareSyncRecordingsFirstTitle": "Nejprve synchronizujte své nahrávky",
     "firmwareSyncRecordingsFirstMessage": "Některé nahrávky jsou stále ve vašem zařízení. Počkejte, až se synchronizují do telefonu, a potom spusťte aktualizaci.",
     "batteryRestartToRefresh": "Restartujte Omi pro obnovení údaje",
+    "onTheWayAllowanceHeldTitle": "Zpracuje se {date}, až se obnoví vaše minuty",
+    "onTheWayAllowanceHeldUpgrade": "Nebo je zpracujte hned upgradem plánu",
+    "onTheWayDayProcessesOn": "Zpracuje se {date}",
     "pendantReconnectNudgeTitle": "Tvoje Omi se už 3 dny nepřipojilo",
     "pendantReconnectNudgeBody": "Znovu si ho nasaď a připoj, aby Omi dál nahrávalo.",
     "pendantReconnectNudgeAction": "Znovu připojit"

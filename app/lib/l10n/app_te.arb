@@ -12327,6 +12327,9 @@
     "firmwareSyncRecordingsFirstTitle": "ముందుగా మీ రికార్డింగ్‌లను సమకాలీకరించండి",
     "firmwareSyncRecordingsFirstMessage": "కొన్ని రికార్డింగ్‌లు ఇంకా మీ డివైస్‌లో ఉన్నాయి. అవి మీ ఫోన్‌కు పూర్తిగా సమకాలీకరించనివ్వండి, తర్వాత నవీకరణను ప్రారంభించండి.",
     "batteryRestartToRefresh": "రిఫ్రెష్ చేయడానికి Omi ను రీస్టార్ట్ చేయండి",
+    "onTheWayAllowanceHeldTitle": "మీ నిమిషాలు రిన్యూ అయ్యే {date}న ప్రాసెస్ అవుతుంది",
+    "onTheWayAllowanceHeldUpgrade": "లేదా ప్లాన్ అప్‌గ్రేడ్‌తో వెంటనే ప్రాసెస్ చేయించండి",
+    "onTheWayDayProcessesOn": "{date}న ప్రాసెస్ అవుతుంది",
     "pendantReconnectNudgeTitle": "మీ Omi 3 రోజులుగా కనెక్ట్ కాలేదు",
     "pendantReconnectNudgeBody": "Omi రికార్డింగ్ కొనసాగించడానికి దాన్ని మళ్లీ ధరించి కనెక్ట్ చేయండి.",
     "pendantReconnectNudgeAction": "మళ్లీ కనెక్ట్ చేయండి"

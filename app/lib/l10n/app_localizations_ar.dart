@@ -15759,6 +15759,19 @@ class AppLocalizationsAr extends AppLocalizations {
   String get batteryRestartToRefresh => 'أعد تشغيل Omi لتحديث القراءة';
 
   @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'ستتم المعالجة في $date عندما تتجدد دقائقك';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'أو عالجها فورًا بترقية خطتك';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'تتم المعالجة في $date';
+  }
+
+  @override
   String get pendantReconnectNudgeTitle => 'لم يتصل جهاز Omi منذ 3 أيام';
 
   @override

@@ -13,6 +13,7 @@ import '../../support/surface_render.dart';
 
 void main() {
   const treatment = 'fixture-1';
+  const otherTreatment = 'fixture-2';
   const holdout = 'fixture-0';
   const cardKey = ValueKey('pendant_reconnect_nudge');
   const eligibleName = 'Pendant Reconnect Nudge Eligible';
@@ -46,7 +47,7 @@ void main() {
     WidgetTester tester, {
     String? uid = treatment,
     bool homeSelected = true,
-    bool enabled = true,
+    bool? enabled = true,
     bool unreadable = false,
   }) async {
     if (tester.binding.lifecycleState != AppLifecycleState.resumed) {
@@ -138,6 +139,7 @@ void main() {
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pumpAndSettle();
     expect(eventNames(), [eligibleName]);
+    expect(flagReads, 1);
     expect(preferences.pendantReconnectNudgeLastEnrolledAt, greaterThan(0));
     expect(preferences.pendantReconnectNudgeLastShownAt, 0);
     expect(preferences.pendantDropoffSurfaceLastDay, isEmpty);
@@ -148,6 +150,7 @@ void main() {
     await pumpHome(tester);
     expect(find.byKey(cardKey), findsNothing);
     expect(emitted, isEmpty);
+    expect(flagReads, 0);
   });
 
   testWidgets('a pending card survives switching away from and back to Home', (tester) async {
@@ -190,21 +193,21 @@ void main() {
     seed(gap: const Duration(hours: 71));
     await pumpHome(tester);
     expect(find.byKey(cardKey), findsNothing);
-    expect(flagReads, 1);
+    expect(flagReads, 0);
 
     await pumpHome(tester, homeSelected: false);
     preferences.lastPendantConnectedAt = DateTime.now().subtract(const Duration(hours: 73)).millisecondsSinceEpoch;
     await pumpHome(tester);
     expect(find.byKey(cardKey), findsOneWidget);
     expect(eventNames(), [eligibleName, shownName]);
-    expect(flagReads, 2);
+    expect(flagReads, 1);
   });
 
   testWidgets('returning to the Home route reevaluates eligibility', (tester) async {
     seed(gap: const Duration(hours: 71));
     await pumpHome(tester);
     expect(find.byKey(cardKey), findsNothing);
-    expect(flagReads, 1);
+    expect(flagReads, 0);
 
     final navigator = Navigator.of(tester.element(find.byType(PendantReconnectNudgeCard)));
     final routeClosed =
@@ -216,7 +219,7 @@ void main() {
     await routeClosed;
     expect(find.byKey(cardKey), findsOneWidget);
     expect(eventNames(), [eligibleName, shownName]);
-    expect(flagReads, 2);
+    expect(flagReads, 1);
   });
 
   testWidgets('the persisted cap suppresses treatment on Home', (tester) async {
@@ -226,9 +229,47 @@ void main() {
     await pumpHome(tester);
     expect(find.byKey(cardKey), findsNothing);
     expect(emitted, isEmpty);
+    expect(flagReads, 0);
   });
 
-  testWidgets('disabled and unreadable flags are silent', (tester) async {
+  testWidgets('a second account on the installation shares the shown cooldown', (tester) async {
+    seed();
+    await pumpHome(tester);
+    final shownAt = preferences.pendantReconnectNudgeLastShownAt;
+    expect(shownAt, greaterThan(0));
+
+    seed(uid: otherTreatment);
+    preferences.pendantDropoffSurfaceLastDay = '';
+    expect(preferences.pendantReconnectNudgeLastEnrolledAt, 0);
+    await pumpHome(tester, uid: otherTreatment);
+    expect(find.byKey(cardKey), findsNothing);
+    expect(preferences.pendantReconnectNudgeLastShownAt, shownAt);
+    expect(eventNames(), [eligibleName, shownName]);
+    expect(flagReads, 1);
+  });
+
+  testWidgets('a missing pendant skips the flag and a saved pairing reevaluates Home', (tester) async {
+    preferences.uid = treatment;
+    preferences.lastPendantConnectedAt = DateTime.now().subtract(const Duration(days: 4)).millisecondsSinceEpoch;
+    await pumpHome(tester);
+    expect(flagReads, 0);
+
+    preferences.btDevice = BtDevice(id: 'paired', name: 'Omi', type: DeviceType.omi, rssi: 0);
+    await tester.pumpAndSettle();
+    expect(find.byKey(cardKey), findsOneWidget);
+    expect(flagReads, 1);
+  });
+
+  testWidgets('same-day suppression skips the flag', (tester) async {
+    seed();
+    preferences.pendantDropoffSurfaceLastDay = DateTime.now().toIso8601String().split('T').first;
+    await pumpHome(tester);
+    expect(find.byKey(cardKey), findsNothing);
+    expect(emitted, isEmpty);
+    expect(flagReads, 0);
+  });
+
+  testWidgets('a definitive off answer is silent and throttles immediate resumes', (tester) async {
     seed();
     await pumpHome(tester, enabled: false);
     expect(find.byKey(cardKey), findsNothing);
@@ -236,10 +277,33 @@ void main() {
     expect(flagReads, 1);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
-    await pumpHome(tester, unreadable: true);
+    await pumpHome(tester, enabled: false);
     expect(find.byKey(cardKey), findsNothing);
     expect(emitted, isEmpty);
     expect(preferences.pendantReconnectNudgeLastShownAt, 0);
+    expect(flagReads, 1);
+  });
+
+  testWidgets('an unavailable flag retries once after identity can settle', (tester) async {
+    seed();
+    await pumpHome(tester, enabled: null);
+    expect(emitted, isEmpty);
+    expect(flagReads, 1);
+    await pumpHome(tester);
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+    expect(eventNames(), [eligibleName, shownName]);
+    expect(flagReads, 2);
+  });
+
+  testWidgets('an unreadable flag fails closed after the bounded retry', (tester) async {
+    seed();
+    await pumpHome(tester, unreadable: true);
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+    await pumpHome(tester);
+    expect(find.byKey(cardKey), findsNothing);
+    expect(emitted, isEmpty);
     expect(flagReads, 2);
   });
 

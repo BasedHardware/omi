@@ -29,6 +29,11 @@ on:
         required: false
         default: true
         type: boolean
+      pager_only:
+        description: 'Read the nine production batch pager rules. Select prod. Skips Helm deploy and Grafana import.'
+        required: false
+        default: false
+        type: boolean
 
 # Monitoring releases share one mutation domain per environment. Do not cancel
 # an in-flight Helm upgrade because --atomic rollback must be allowed to finish.
@@ -49,7 +54,7 @@ jobs:
   deploy:
     # workflow_dispatch can be started from any ref in the UI. Only reviewed
     # main configuration may receive deployment credentials.
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && inputs.pager_only != true
     environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
     permissions:
       contents: read
@@ -306,9 +311,8 @@ jobs:
   provision-live-alerts:
     # Grafana alert provisioning is independent of Helm deploy health: a
     # Helm failure must not suppress live-STT alert updates.
-    # Only an explicit import_grafana=false dispatch skips it; push runs and
-    # dispatches that leave the input unset keep the existing behavior.
-    if: github.ref == 'refs/heads/main' && github.event.inputs.import_grafana != 'false'
+    # Skip imports for pager-only dispatches or explicit import_grafana=false.
+    if: github.ref == 'refs/heads/main' && inputs.pager_only != true && github.event.inputs.import_grafana != 'false'
     environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
     concurrency:
       group: grafana-alert-provisioning-${{ github.event.inputs.environment == 'prod' && 'prod' || 'dev' }}
@@ -366,3 +370,35 @@ jobs:
             --mode fleet \
             --alert-set live-stt \
             --fail-on gated
+
+  batch-pager-receipt:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.pager_only && inputs.environment == 'prod'
+    environment: prod
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout reviewed monitoring configuration
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Read production batch pager rules and evaluated state
+        env:
+          MONITOR_GRAFANA_VIEWER_TOKEN: ${{ secrets.MONITOR_GRAFANA_VIEWER_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$MONITOR_GRAFANA_VIEWER_TOKEN"
+          umask 077
+          token_file="$(mktemp "$RUNNER_TEMP/omi-grafana-viewer.XXXXXX")"
+          trap 'rm -f "$token_file"' EXIT
+          printf '%s' "$MONITOR_GRAFANA_VIEWER_TOKEN" > "$token_file"
+          unset MONITOR_GRAFANA_VIEWER_TOKEN
+          python3 backend/scripts/verify_pusher_live_alert_route.py \
+            --grafana-url https://monitor.omi.me \
+            --token-file "$token_file" \
+            --mode fleet \
+            --fail-on gated \
+            --batch-pager-receipt

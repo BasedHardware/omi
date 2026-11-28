@@ -2167,7 +2167,7 @@ all three of these, each overridable:
 - at least 15 shared trigrams (`CROSS_DEVICE_GROUP_MIN_SHARED_TRIGRAMS`);
 - containment of at least 0.25 (`CROSS_DEVICE_GROUP_MIN_CONTAINMENT`).
 
-**Complementary containment (`CAPTURE_GROUP_CONTAINMENT_MODE`, default `shadow`).**
+**Complementary containment (`CAPTURE_GROUP_CONTAINMENT_MODE`, default `off`; retired 2026-11-28, was `shadow`).**
 Sparse ASR substitutions and interleaved turns can break enough exact trigrams
 to reject a complementary pair. The
 containment detector (`utils/conversations/capture_containment.py`) covers that
@@ -2285,8 +2285,9 @@ The group `id` is minted independently of any member, so the primary (the
 longest window) can move without changing the event identity. A capture joins
 an existing group through any member. Two different groups are never bridged
 by one pair. The group is capped at 12 members. Every member is re-read inside
-the transaction, so a discard, a deletion, a separation or a window change
-fences the join.
+the transaction, so a discard, a deletion, a separation or a stored-window
+change after the confirming read fences the join. A recorded span that moved
+since discovery abstains before the join (`abstained`).
 
 Processing writes (`upsert_conversation_with_lifecycle`,
 `persist_processing_result_with_lifecycle`) strip `capture_group`, so a stale
@@ -2299,7 +2300,9 @@ Grouping is presentation metadata only. Transcripts, discard state
 and membership stay per capture. Clients render one row per group from
 the members they have loaded and keep every member reachable.
 `omi_product_event_total{event="capture_group_joined"}` counts the outcomes:
-`applied`, `none` (window match without shared speech) and `conflict`. A
+`applied`, `none` (window match without shared speech), `abstained` (a
+member's recorded span moved after discovery, so the pair is not grouped on
+stale evidence) and `conflict`. A
 failure records `duplicate_capture_check → separate_captures` and never blocks
 finalization.
 

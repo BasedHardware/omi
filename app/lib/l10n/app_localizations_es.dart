@@ -15894,6 +15894,19 @@ class AppLocalizationsEs extends AppLocalizations {
   String get batteryRestartToRefresh => 'Reinicia Omi para actualizar';
 
   @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Se procesarán el $date cuando se renueven tus minutos';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'O procésalas de inmediato con una mejora de plan';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Se procesan el $date';
+  }
+
+  @override
   String get pendantReconnectNudgeTitle => 'Tu Omi lleva 3 días sin conectarse';
 
   @override

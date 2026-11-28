@@ -79,7 +79,7 @@ overlay:
           secret:
             name: prod-omi-backend-listen-private-env
             key: MEDIA_NOISE_MODE_SERVE_UID_SHA256S
-        MEDIA_NOISE_MODE: {value: shadow, category: rollout}
+        MEDIA_NOISE_MODE: {value: 'off', category: rollout}
         MEDIA_NOISE_MODE_SERVE_PERCENT: {value: '0', category: rollout}
         NOTES_SHORT_CLIP_FLOOR: {value: 'true', category: rollout}
         # Pinned false on listen (SCA-3516): the listen roll preserves live behaviour; activation is its own one-key step.
@@ -152,7 +152,7 @@ overlay:
         LISTEN_FINALIZATION_TASKS_MAX_ATTEMPTS: {value: '5', category: reliability}
         OMI_FLAGS_FIRESTORE_PROJECT: {value: based-hardware, category: service_discovery}
         OMI_FLAGS_FIRESTORE_DATABASE: {value: omi-flags, category: service_discovery}
-        OMI_FLAGS_SOURCE: {value: dual, category: rollout}
+        OMI_FLAGS_SOURCE: {value: posthog, category: rollout}
         BATCH_PIPELINE_ENABLED:
           value: "true"
           category: rollout
@@ -240,10 +240,10 @@ overlay:
           value: cohort
           category: rollout
         SPEAKER_GROUPING_SHADOW:
-          value: cohort
+          value: 'off'
           category: rollout
         SPEAKER_GROUPING_SHADOW_PERCENT:
-          value: '10'
+          value: '0'
           category: rollout
         SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST:
           value: vi7SA9ckQCe4ccobWNxlbdcNdC23
@@ -387,7 +387,7 @@ overlay:
         PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
         OMI_FLAGS_FIRESTORE_PROJECT: {value: based-hardware, category: service_discovery}
         OMI_FLAGS_FIRESTORE_DATABASE: {value: omi-flags, category: service_discovery}
-        OMI_FLAGS_SOURCE: {value: dual, category: rollout}
+        OMI_FLAGS_SOURCE: {value: posthog, category: rollout}
         AUDIO_ARCHIVE_PERCENT:
           value: '100'
         AUDIO_ARCHIVE_STOP_PCM_PERCENT:
@@ -426,10 +426,10 @@ overlay:
           value: 'true'
           category: rollout
         TRANSCRIPTION_SHADOW_ENABLED:
-          value: 'true'
+          value: 'false'
           category: rollout
         TRANSCRIPTION_SHADOW_KILL_SWITCH:
-          value: 'false'
+          value: 'true'
           category: rollout
         TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
           value: vi7SA9ckQCe4ccobWNxlbdcNdC23
@@ -479,10 +479,10 @@ overlay:
           value: cohort
           category: rollout
         SPEAKER_GROUPING_SHADOW:
-          value: cohort
+          value: 'off'
           category: rollout
         SPEAKER_GROUPING_SHADOW_PERCENT:
-          value: '10'
+          value: '0'
           category: rollout
         SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST:
           value: vi7SA9ckQCe4ccobWNxlbdcNdC23
@@ -741,7 +741,7 @@ overlay:
             category: rollout
           OMI_FLAGS_FIRESTORE_PROJECT: {value: based-hardware, category: service_discovery}
           OMI_FLAGS_FIRESTORE_DATABASE: {value: omi-flags, category: service_discovery}
-          OMI_FLAGS_SOURCE: {value: dual, category: rollout}
+          OMI_FLAGS_SOURCE: {value: posthog, category: rollout}
           # Margin-40 O2b stage 2, 2026-11-17: API owner-memo enforcement 100,
           # shadow 0; decision/negative/TTL60 caches 0. Preserve all other map entries.
           # Runtime inverse: enforce 0 + shadow 10 via the existing Release route,
@@ -751,9 +751,9 @@ overlay:
           FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
           # Batch ladder 2026-10-29 (lead ruling 12:15Z): pin shadow 25 so a Cloud Run deploy
           # cannot reset the hand-applied ladder state again (11:13Z deploy reset incident);
-          # paid recovery keeps the shared base cap of 200. Base, dev and the GKE hosts stay
-          # 0/200; rollback is setting this back to 0.
-          BATCH_PIPELINE_SHADOW_PERCENT: {value: '25', category: rollout}
+          # superseded 2026-11-28 (David, card:prod-shadows-settled-retire-the-dead): retired to 0,
+          # since batch serves at 100 and no non-serving owner remains. Rollback: '25'.
+          BATCH_PIPELINE_SHADOW_PERCENT: {value: '0', category: rollout}
           # Enforce funded STT cap dispatch admission (cohort- and lane-gated); the cap cohort is runtime-doc driven.
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'true', category: rollout}
           # Explicit shared-speech rollback; GKE hosts remain off.
@@ -803,10 +803,10 @@ overlay:
             value: 'true'
             category: rollout
           TRANSCRIPTION_SHADOW_ENABLED:
-            value: 'true'
+            value: 'false'
             category: rollout
           TRANSCRIPTION_SHADOW_KILL_SWITCH:
-            value: 'false'
+            value: 'true'
             category: rollout
           TRANSCRIPTION_SHADOW_PERCENT:
             value: '5'
@@ -890,10 +890,10 @@ overlay:
             value: cohort
             category: rollout
           SPEAKER_GROUPING_SHADOW:
-            value: cohort
+            value: 'off'
             category: rollout
           SPEAKER_GROUPING_SHADOW_PERCENT:
-            value: '10'
+            value: '0'
             category: rollout
           OMI_SHAPED_AGENT_MODE:
             value: 'on'
@@ -1175,7 +1175,7 @@ overlay:
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           OMI_FLAGS_FIRESTORE_PROJECT: {value: based-hardware, category: service_discovery}
           OMI_FLAGS_FIRESTORE_DATABASE: {value: omi-flags, category: service_discovery}
-          OMI_FLAGS_SOURCE: {value: dual, category: rollout}
+          OMI_FLAGS_SOURCE: {value: posthog, category: rollout}
           # Margin-40 O2b stage 2, 2026-11-17: API owner-memo enforcement 100,
           # shadow 0; decision/negative/TTL60 caches 0. Preserve all other map entries.
           # Runtime inverse: enforce 0 + shadow 10 via the existing Release route,
@@ -1185,9 +1185,9 @@ overlay:
           FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
           # Batch ladder 2026-10-29 (lead ruling 12:15Z): pin shadow 25 so a Cloud Run deploy
           # cannot reset the hand-applied ladder state again (11:13Z deploy reset incident);
-          # paid recovery keeps the shared base cap of 200. Base, dev and the GKE hosts stay
-          # 0/200; rollback is setting this back to 0.
-          BATCH_PIPELINE_SHADOW_PERCENT: {value: '25', category: rollout}
+          # superseded 2026-11-28 (David, card:prod-shadows-settled-retire-the-dead): retired to 0,
+          # since batch serves at 100 and no non-serving owner remains. Rollback: '25'.
+          BATCH_PIPELINE_SHADOW_PERCENT: {value: '0', category: rollout}
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'true', category: rollout}
           SUMMARY_DEBT_REPAIR_ENABLED: {value: 'false', category: rollout}
           # Explicit shared-speech rollback; GKE hosts remain off.
@@ -1247,10 +1247,10 @@ overlay:
             value: 'true'
             category: rollout
           TRANSCRIPTION_SHADOW_ENABLED:
-            value: 'true'
+            value: 'false'
             category: rollout
           TRANSCRIPTION_SHADOW_KILL_SWITCH:
-            value: 'false'
+            value: 'true'
             category: rollout
           TRANSCRIPTION_SHADOW_PERCENT:
             value: '5'
@@ -1304,10 +1304,10 @@ overlay:
             value: cohort
             category: rollout
           SPEAKER_GROUPING_SHADOW:
-            value: cohort
+            value: 'off'
             category: rollout
           SPEAKER_GROUPING_SHADOW_PERCENT:
-            value: '10'
+            value: '0'
             category: rollout
           LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED:
             value: 'true'
@@ -1571,7 +1571,7 @@ overlay:
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
           OMI_FLAGS_FIRESTORE_PROJECT: {value: based-hardware, category: service_discovery}
           OMI_FLAGS_FIRESTORE_DATABASE: {value: omi-flags, category: service_discovery}
-          OMI_FLAGS_SOURCE: {value: dual, category: rollout}
+          OMI_FLAGS_SOURCE: {value: posthog, category: rollout}
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
           HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
@@ -1620,9 +1620,9 @@ overlay:
           FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
           # Batch ladder 2026-10-29 (lead ruling 12:15Z): pin shadow 25 so a Cloud Run deploy
           # cannot reset the hand-applied ladder state again (11:13Z deploy reset incident);
-          # paid recovery keeps the shared base cap of 200. Base, dev and the GKE hosts stay
-          # 0/200; rollback is setting this back to 0.
-          BATCH_PIPELINE_SHADOW_PERCENT: {value: '25', category: rollout}
+          # superseded 2026-11-28 (David, card:prod-shadows-settled-retire-the-dead): retired to 0,
+          # since batch serves at 100 and no non-serving owner remains. Rollback: '25'.
+          BATCH_PIPELINE_SHADOW_PERCENT: {value: '0', category: rollout}
           # Explicit shared-speech rollback; GKE hosts remain off.
           BATCH_PIPELINE_ENABLED:
             value: 'true'
@@ -1674,10 +1674,10 @@ overlay:
             value: 'true'
             category: rollout
           TRANSCRIPTION_SHADOW_ENABLED:
-            value: 'true'
+            value: 'false'
             category: rollout
           TRANSCRIPTION_SHADOW_KILL_SWITCH:
-            value: 'false'
+            value: 'true'
             category: rollout
           TRANSCRIPTION_SHADOW_PERCENT:
             value: '5'
@@ -1713,10 +1713,10 @@ overlay:
             value: cohort
             category: rollout
           SPEAKER_GROUPING_SHADOW:
-            value: cohort
+            value: 'off'
             category: rollout
           SPEAKER_GROUPING_SHADOW_PERCENT:
-            value: '10'
+            value: '0'
             category: rollout
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
@@ -1994,7 +1994,7 @@ overlay:
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
           OMI_FLAGS_FIRESTORE_PROJECT: {value: based-hardware, category: service_discovery}
           OMI_FLAGS_FIRESTORE_DATABASE: {value: omi-flags, category: service_discovery}
-          OMI_FLAGS_SOURCE: {value: dual, category: rollout}
+          OMI_FLAGS_SOURCE: {value: posthog, category: rollout}
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
           HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
@@ -2057,9 +2057,9 @@ overlay:
           FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
           # Batch ladder 2026-10-29 (lead ruling 12:15Z): pin shadow 25 so a Cloud Run deploy
           # cannot reset the hand-applied ladder state again (11:13Z deploy reset incident);
-          # paid recovery keeps the shared base cap of 200. Base, dev and the GKE hosts stay
-          # 0/200; rollback is setting this back to 0.
-          BATCH_PIPELINE_SHADOW_PERCENT: {value: '25', category: rollout}
+          # superseded 2026-11-28 (David, card:prod-shadows-settled-retire-the-dead): retired to 0,
+          # since batch serves at 100 and no non-serving owner remains. Rollback: '25'.
+          BATCH_PIPELINE_SHADOW_PERCENT: {value: '0', category: rollout}
           # 2026-11-09 David (relay 3e764e): enable the scheduled repair owner until the long-term fix.
           SUMMARY_DEBT_REPAIR_ENABLED: {value: 'true', category: rollout}
           # lead2 8b9c8f (2026-11-10): 8/tick spend cap; rollback 10.
@@ -2149,10 +2149,10 @@ overlay:
             value: cohort
             category: rollout
           SPEAKER_GROUPING_SHADOW:
-            value: cohort
+            value: 'off'
             category: rollout
           SPEAKER_GROUPING_SHADOW_PERCENT:
-            value: '10'
+            value: '0'
             category: rollout
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware

@@ -12327,6 +12327,9 @@
     "firmwareSyncRecordingsFirstTitle": "Prvo sinhronizujte svoje snimke",
     "firmwareSyncRecordingsFirstMessage": "Neki snimci su još uvijek na vašem uređaju. Sačekajte da se sinhronizuju s telefonom, a zatim pokrenite ažuriranje.",
     "batteryRestartToRefresh": "Ponovo pokrenite Omi radi osvježavanja",
+    "onTheWayAllowanceHeldTitle": "Obradit će se {date} kada se obnove vaši minuti",
+    "onTheWayAllowanceHeldUpgrade": "Ili ih obradite odmah nadogradnjom plana",
+    "onTheWayDayProcessesOn": "Obradit će se {date}",
     "pendantReconnectNudgeTitle": "Tvoj Omi nije bio povezan 3 dana",
     "pendantReconnectNudgeBody": "Ponovo ga stavi i poveži da Omi nastavi snimati.",
     "pendantReconnectNudgeAction": "Poveži ponovo"

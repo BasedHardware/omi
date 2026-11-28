@@ -95,6 +95,7 @@ List<String> _dayTexts(WidgetTester tester, String date) =>
     [for (final t in tester.widgetList<Text>(find.descendant(of: _day(date), matching: find.byType(Text)))) t.data!];
 
 void main() {
+  _heldAllowanceGroup();
   testWidgets('old unresolved upload shows waiting-on-server with details action, never transcribing', (tester) async {
     await _pump(tester, [
       _wal(_now.subtract(const Duration(days: 40)), 120, WalStatus.uploaded)..uploadedAt = 0,
@@ -230,5 +231,27 @@ void main() {
     ]);
     expect(_dayTexts(tester, '2026-10-18')[1], '1 recording · 15s');
     expect(find.textContaining('2m 5s'), findsNothing);
+  });
+}
+
+void _heldAllowanceGroup() {
+  testWidgets('uploads parked behind the monthly allowance say when and how, never Transcribing', (tester) async {
+    final renewal = DateTime(2026, 11, 1).millisecondsSinceEpoch ~/ 1000;
+    await _pump(tester, [
+      _wal(DateTime(2026, 10, 18, 8, 15), 40 * 60, WalStatus.uploaded)..allowanceHeldUntil = renewal,
+      _wal(DateTime(2026, 10, 17, 10), 20 * 60, WalStatus.uploaded),
+    ]);
+    expect(find.text('Will process on Nov 1 when your minutes renew'), findsOneWidget);
+    expect(find.text('Or process them right away with a plan upgrade'), findsOneWidget);
+    expect(_dayTexts(tester, '2026-10-18').last, 'Processes Nov 1');
+    expect(_dayTexts(tester, '2026-10-17').last, isNot('Processes Nov 1'));
+  });
+
+  testWidgets('a held date already past shows no allowance row', (tester) async {
+    await _pump(tester, [
+      _wal(DateTime(2026, 10, 18, 8, 15), 60, WalStatus.uploaded)
+        ..allowanceHeldUntil = _now.subtract(const Duration(hours: 1)).millisecondsSinceEpoch ~/ 1000,
+    ]);
+    expect(find.byKey(const Key('on_the_way_allowance_held')), findsNothing);
   });
 }

@@ -16,7 +16,14 @@ from pathlib import Path
 from git_test_env import clean_git_env
 
 from check_feature_flag_registry import MAX_UNRAMPED_PER_OWNER, check, normalize_owner, owner_backlog, owner_tokens
-from feature_flag_registry import effective_due, ramp_due, load_registry, validate_registry
+from feature_flag_registry import (
+    effective_due,
+    load_registry,
+    ramp_due,
+    render_shadow_expiry,
+    shadow_expiry,
+    validate_registry,
+)
 from render_feature_flag_registry import render, _deploy_index, _parse_mapping
 from report_feature_flag_deadlines import TITLE, render_deadlines, sync_issue
 
@@ -558,6 +565,56 @@ class RegistryFixture(unittest.TestCase):
         entry = flag(created="2026-10-21", terminal="undecided")
         errors = "\n".join(validate_registry({"flags": [entry], "ignore": [], "retired": []}, root=self.root))
         self.assertIn("ramp is required", errors)
+
+    def _shadow_errors(self, entry: dict[str, object]) -> str:
+        return "\n".join(validate_registry({"flags": [entry], "ignore": [], "retired": []}, root=self.root))
+
+    def test_new_mode_row_requires_shadow_block(self) -> None:
+        entry = flag("NEW_PATH_MODE", created="2026-11-28", review_by="2026-12-10", ramp=ramp_plan(done_by="2026-12-10"))
+        self.assertIn("shadow is required", self._shadow_errors(entry))
+        older = flag("OLD_PATH_MODE", created="2026-11-27", review_by="2026-12-10", ramp=ramp_plan(done_by="2026-12-10"))
+        self.assertNotIn("shadow is required", self._shadow_errors(older))
+        killed = flag("DEAD_PATH_MODE", created="2026-11-28", review_by="2026-12-10", decision="kill")
+        self.assertNotIn("shadow is required", self._shadow_errors(killed))
+        direct = flag("NEW_THING_SHADOW_ENABLED", created="2026-11-28", review_by="2026-12-10", ramp=ramp_plan(done_by="2026-12-10"))
+        self.assertNotIn("shadow is required", self._shadow_errors(direct))
+        direct["shadow"] = {"readout_by": "2026-12-01", "metric": "omi_thing_total"}
+        self.assertIn("only for config.refactor_modes", self._shadow_errors(direct))
+
+    def test_shadow_block_bounds_readout_and_names_metric(self) -> None:
+        base = dict(created="2026-11-28", review_by="2026-12-20", ramp=ramp_plan(done_by="2026-12-20"))
+        ok = flag("NEW_PATH_MODE", shadow={"readout_by": "2026-12-19", "metric": "omi_new_path_agree_total"}, **base)
+        self.assertEqual("", self._shadow_errors(ok))
+        late = flag("NEW_PATH_MODE", shadow={"readout_by": "2026-12-20", "metric": "omi_new_path_agree_total"}, **base)
+        self.assertIn("0 to 21 days after created", self._shadow_errors(late))
+        unnamed = flag("NEW_PATH_MODE", shadow={"readout_by": "2026-12-01", "metric": "the agree rate"}, **base)
+        self.assertIn("shadow.metric", self._shadow_errors(unnamed))
+        extra = flag("NEW_PATH_MODE", shadow={"readout_by": "2026-12-01", "metric": "m", "forever": True}, **base)
+        self.assertIn("exactly readout_by and metric", self._shadow_errors(extra))
+        switch = flag("NEW_PATH_MODE", lifecycle="config_switch", shadow={"readout_by": "2026-12-01", "metric": "m"})
+        switch.pop("review_by")
+        self.assertIn("shadow requires rollout or experiment", self._shadow_errors(switch))
+
+    def test_shadow_expiry_table_covers_aliases_and_drift_fails_check(self) -> None:
+        entry = flag(
+            "NEW_PATH_MODE",
+            aliases=["NEW_PATH_LEGACY_MODE"],
+            created="2026-11-28",
+            review_by="2026-12-20",
+            ramp=ramp_plan(done_by="2026-12-20"),
+            shadow={"readout_by": "2026-12-10", "metric": "omi_new_path_agree_total"},
+        )
+        registry = {"flags": [entry], "ignore": [], "retired": []}
+        self.assertEqual(
+            {"NEW_PATH_LEGACY_MODE": "2026-12-17", "NEW_PATH_MODE": "2026-12-17"}, shadow_expiry(registry)
+        )
+        self.write_flags([entry])
+        self.write("backend/service.py", "import os\nos.getenv('NEW_PATH_MODE')\nos.getenv('NEW_PATH_LEGACY_MODE')\n")
+        errors, _ = check(self.root, check_render=False, as_of=date(2026, 11, 28))
+        self.assertIn("shadow expiry table drift", "\n".join(errors))
+        self.write("backend/config/shadow_expiry.py", render_shadow_expiry(load_registry(self.root / "config/feature-flags.yaml")))
+        errors, _ = check(self.root, check_render=False, as_of=date(2026, 11, 28))
+        self.assertNotIn("shadow expiry table drift", "\n".join(errors))
 
     def test_ramp_requires_all_fields(self) -> None:
         entry = flag(

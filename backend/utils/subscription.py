@@ -50,6 +50,7 @@ from config import ladder_v1 as ladder_policy
 from config import prepaid_code_redeem
 from config.refactor_modes import default_on as refactor_default_on
 from utils import ladder_v1
+from utils.support_credit import UNREAD as SUPPORT_CREDIT_UNREAD, after_plan as support_credit_after_plan
 
 logger = logging.getLogger(__name__)
 
@@ -1562,6 +1563,7 @@ def resolve_transcription_allowance(
     usage_cache: Any = None,
     provision_subscription: bool = True,
     ready_usage_only: bool = False,
+    support_credit: Any = SUPPORT_CREDIT_UNREAD,
 ) -> TranscriptionAllowance:
     """Resolve the managed-transcription allowance for one uid, once. Never raises.
 
@@ -1639,9 +1641,11 @@ def resolve_transcription_allowance(
             return TranscriptionAllowance(
                 TRANSCRIPTION_MODE_MANAGED, remaining, 'plan_within_allowance', limit_seconds=allowance
             )
-        return TranscriptionAllowance(
+        # Spent finite plan: a support credit may fund it (utils/support_credit.py); none keeps today's answer.
+        exhausted = TranscriptionAllowance(
             TRANSCRIPTION_MODE_ON_DEVICE, 0, 'plan_allowance_exhausted', limit_seconds=allowance
         )
+        return support_credit_after_plan(uid, support_credit, used=used, allowance=allowance) or exhausted
     except Exception as exc:  # fail closed: a billed socket is never the default
         logger.warning('transcription allowance unavailable for uid=%s: %s', uid, type(exc).__name__)
         return _closed('allowance_unavailable', limit_seconds=known_limit_seconds)

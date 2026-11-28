@@ -12327,6 +12327,9 @@
     "firmwareSyncRecordingsFirstTitle": "I-sync muna ang iyong mga recording",
     "firmwareSyncRecordingsFirstMessage": "May mga recording pa na nasa iyong device. Hayaang matapos munang i-sync ang mga ito sa iyong phone, pagkatapos ay simulan ang pag-update.",
     "batteryRestartToRefresh": "I-restart ang Omi upang i-refresh",
+    "onTheWayAllowanceHeldTitle": "Ipo-proseso sa {date} kapag mag-renew na ang iyong mga minuto",
+    "onTheWayAllowanceHeldUpgrade": "O mag-plan upgrade para maiproseso agad ang mga ito",
+    "onTheWayDayProcessesOn": "Maiiproseso sa {date}",
     "pendantReconnectNudgeTitle": "Hindi nakakonekta ang Omi mo sa loob ng 3 araw",
     "pendantReconnectNudgeBody": "Isuot at ikonekta itong muli para patuloy na makapag-record ang Omi.",
     "pendantReconnectNudgeAction": "Kumonekta muli"

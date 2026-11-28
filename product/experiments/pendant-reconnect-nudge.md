@@ -39,7 +39,7 @@ significant and meaningless number. The 50% holdout is what makes the estimate c
 ## Suppression scope (v1)
 
 The 30-day suppression window is enforced per installation in v1: the cap lives in
-the device's local preferences under the uid-scoped key, so a reinstall or a second
+the device's installation-wide local preferences, so a reinstall or a second
 phone signed into the same uid can see a second card inside 30 days. Assignment does
 not change (the arm is a hash of the uid), and a duplicate can only attenuate the
 estimate because it exists only in treatment. The readback counts one enrollment per

@@ -101,6 +101,7 @@ JOB_PREFIX = 'bp_'
 # Every failed unit settled its one paid recovery without words and waits for a
 # reviewed operator decision server-side. Released apps ACK `completed`.
 HELD_REASON_CODE = 'batch_unit_held'
+ALLOWANCE_HELD_REASON_CODE = 'allowance_held'
 
 
 SAMPLE_SCAN_SECONDS = 600  # a sampled upload is held and classified whole up to this much audio; larger stays legacy
@@ -213,6 +214,12 @@ def _terminally_held(job: dict) -> bool:
     return (job.get('state') == 'quarantined' and job.get('recovery_state') == 'failed_held') or (
         job.get('state') == 'dead' and job.get('dead_letter_reason') == 'held_expired'
     )
+
+
+def _waiting_on_allowance(jobs: list[dict]) -> bool:
+    """Every unit not yet committed is parked behind the monthly allowance, and at least one is."""
+    waiting = [job for job in jobs if job.get('state') != 'committed']
+    return bool(waiting) and all(job.get('state') == 'allowance_held' for job in waiting)
 
 
 def _held_status(jobs: list[dict]) -> tuple[str, str | None] | None:
@@ -462,7 +469,7 @@ def durable_status(store, uid: str, job_id: str, *, poll: bool = False) -> dict 
             # intake and unit rows this read already holds; a held, failed or unattributable
             # unit gets no verdict, and a copy keeps the ledger's own result untouched.
             result = frame_outcomes.attach(result, intake, jobs)
-        return {
+        answer = {
             'job_id': job_id,
             'status': status,
             'lane': intake['lane'],
@@ -476,6 +483,19 @@ def durable_status(store, uid: str, job_id: str, *, poll: bool = False) -> dict 
             'completed_at': ledger.get('completed_at') if completed else None,
             'poll_after_ms': 0 if completed or failed else 3000,
         }
+        if status in {'queued', 'processing'} and not recovering and _waiting_on_allowance(jobs):
+            # Read-only projection of rows this read already holds: the upload waits for the
+            # monthly allowance. The phone shows when (retry_after, seconds to the next UTC month
+            # reset, when the hold controller re-offers it at the latest) and how (upgrade). A
+            # grant or plan change can release it sooner; nothing here writes job or hold state.
+            from utils.sync.held_audio_summary import next_utc_month_start
+
+            answer.update(
+                reason_code=ALLOWANCE_HELD_REASON_CODE,
+                retry_after=max(0, next_utc_month_start() - int(time.time())),
+                poll_after_ms=300000,
+            )
+        return answer
 
     status = store.run(read)
     if status is not None and '_coalescing_intake' in status:

@@ -12327,6 +12327,9 @@
     "firmwareSyncRecordingsFirstTitle": "Спачатку сінхранізуйце свае запісы",
     "firmwareSyncRecordingsFirstMessage": "Некаторыя запісы ўсё яшчэ на вашай прыладзе. Дайце ім завяршыць сінхранізацыю на тэлефон, а потым пачніце абнаўленне.",
     "batteryRestartToRefresh": "Перазагрузіце Omi, каб абнавіць паказанне",
+    "onTheWayAllowanceHeldTitle": "Будуць апрацаваны {date}, калі абновяцца вашыя хвіліны",
+    "onTheWayAllowanceHeldUpgrade": "Або апрацуйце іх адразу з абнаўленнем плана",
+    "onTheWayDayProcessesOn": "Будуць апрацаваны {date}",
     "pendantReconnectNudgeTitle": "Ваша Omi не падключалася 3 дні",
     "pendantReconnectNudgeBody": "Надзеньце яе зноў і падключыце, каб Omi працягвала запісваць.",
     "pendantReconnectNudgeAction": "Падключыць зноў"

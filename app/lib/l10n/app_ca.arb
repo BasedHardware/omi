@@ -4770,6 +4770,9 @@
     "firmwareSyncRecordingsFirstTitle": "Primer sincronitzeu els enregistraments",
     "firmwareSyncRecordingsFirstMessage": "Alguns enregistraments encara són al vostre dispositiu. Deixeu que acabin de sincronitzar-se al telèfon i, després, inicieu l'actualització.",
     "batteryRestartToRefresh": "Reinicieu Omi per actualitzar el valor",
+    "onTheWayAllowanceHeldTitle": "Es processaran el {date} quan es renovin els vostres minuts",
+    "onTheWayAllowanceHeldUpgrade": "O processa'ls de seguida amb una actualització del pla",
+    "onTheWayDayProcessesOn": "Es processaran el {date}",
     "pendantReconnectNudgeTitle": "El teu Omi fa 3 dies que no es connecta",
     "pendantReconnectNudgeBody": "Torna-te'l a posar i connecta'l perquè Omi continuï gravant.",
     "pendantReconnectNudgeAction": "Torna a connectar"

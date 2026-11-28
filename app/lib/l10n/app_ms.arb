@@ -4770,6 +4770,9 @@
     "firmwareSyncRecordingsFirstTitle": "Segerakkan rakaman anda terlebih dahulu",
     "firmwareSyncRecordingsFirstMessage": "Sebahagian rakaman masih berada pada peranti anda. Biarkan ia selesai disegerakkan ke telefon anda, kemudian mulakan kemas kini.",
     "batteryRestartToRefresh": "Mulakan semula Omi untuk memuat semula",
+    "onTheWayAllowanceHeldTitle": "Akan diproses pada {date} apabila minit anda diperbaharui",
+    "onTheWayAllowanceHeldUpgrade": "Atau proses terus dengan naik taraf pelan",
+    "onTheWayDayProcessesOn": "Diproses pada {date}",
     "pendantReconnectNudgeTitle": "Omi anda belum bersambung selama 3 hari",
     "pendantReconnectNudgeBody": "Pakai semula dan sambungkan supaya Omi terus merakam.",
     "pendantReconnectNudgeAction": "Sambung semula"

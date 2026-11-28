@@ -4805,6 +4805,9 @@
     "firmwareSyncRecordingsFirstTitle": "Synchronisez d'abord vos enregistrements",
     "firmwareSyncRecordingsFirstMessage": "Certains enregistrements sont encore sur votre appareil. Laissez-les terminer leur synchronisation vers votre téléphone, puis lancez la mise à jour.",
     "batteryRestartToRefresh": "Redémarrez Omi pour actualiser",
+    "onTheWayAllowanceHeldTitle": "Seront traités le {date} au renouvellement de vos minutes",
+    "onTheWayAllowanceHeldUpgrade": "Ou traitez-les tout de suite en passant à un forfait supérieur",
+    "onTheWayDayProcessesOn": "Traitement le {date}",
     "pendantReconnectNudgeTitle": "Ton Omi ne s’est pas connecté depuis 3 jours",
     "pendantReconnectNudgeBody": "Remets-le et reconnecte-le pour qu’Omi continue d’enregistrer.",
     "pendantReconnectNudgeAction": "Reconnecter"

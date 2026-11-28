@@ -15589,6 +15589,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get batteryRestartToRefresh => '重启 Omi 以刷新';
 
   @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return '将在您的分钟数于 $date 刷新时处理';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => '或升级套餐以立即处理';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return '将于 $date 处理';
+  }
+
+  @override
   String get pendantReconnectNudgeTitle => '你的 Omi 已有 3 天未连接';
 
   @override

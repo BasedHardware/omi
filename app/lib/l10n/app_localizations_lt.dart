@@ -15872,6 +15872,19 @@ class AppLocalizationsLt extends AppLocalizations {
   String get batteryRestartToRefresh => 'Paleiskite Omi iš naujo, kad atnaujintumėte';
 
   @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Bus apdorojama $date, kai atsinaujins jūsų minutės';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Arba apdorokite juos nedelsiant atnaujinę planą';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Apdorojama $date';
+  }
+
+  @override
   String get pendantReconnectNudgeTitle => 'Tavo „Omi“ neprisijungė jau 3 dienas';
 
   @override

@@ -4770,6 +4770,9 @@
     "firmwareSyncRecordingsFirstTitle": "Vispirms sinhronizējiet savus ierakstus",
     "firmwareSyncRecordingsFirstMessage": "Daži ieraksti vēl atrodas jūsu ierīcē. Ļaujiet tiem pabeigt sinhronizēšanu ar tālruni, pēc tam sāciet atjaunināšanu.",
     "batteryRestartToRefresh": "Restartējiet Omi, lai atsvaidzinātu",
+    "onTheWayAllowanceHeldTitle": "Tiks apstrādāti {date}, kad atjaunosies jūsu minūtes",
+    "onTheWayAllowanceHeldUpgrade": "Vai jauniniet plānu, lai tos apstrādātu uzreiz",
+    "onTheWayDayProcessesOn": "Apstrādās {date}",
     "pendantReconnectNudgeTitle": "Tavs Omi nav pieslēdzies jau 3 dienas",
     "pendantReconnectNudgeBody": "Uzliec to atkal un savieno no jauna, lai Omi turpinātu ierakstīt.",
     "pendantReconnectNudgeAction": "Savienot no jauna"

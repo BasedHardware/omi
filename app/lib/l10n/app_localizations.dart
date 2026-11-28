@@ -27807,6 +27807,24 @@ abstract class AppLocalizations {
   /// **'Restart Omi to refresh'**
   String get batteryRestartToRefresh;
 
+  /// On the Way row title: uploaded recordings are waiting for the monthly transcription minutes to renew on the given short date (for example 'Dec 1'). Says when, never what the user cannot do.
+  ///
+  /// In en, this message translates to:
+  /// **'Will process on {date} when your minutes renew'**
+  String onTheWayAllowanceHeldTitle(String date);
+
+  /// Subtitle under the waiting-for-minutes row on On the Way; tapping the row opens the plans page.
+  ///
+  /// In en, this message translates to:
+  /// **'Or process them right away with a plan upgrade'**
+  String get onTheWayAllowanceHeldUpgrade;
+
+  /// Short status at the right of one day's row on On the Way: that day's uploaded recordings will process on the given short date when monthly minutes renew.
+  ///
+  /// In en, this message translates to:
+  /// **'Processes {date}'**
+  String onTheWayDayProcessesOn(String date);
+
   /// Title of a Home reminder after three days without a pendant connection.
   ///
   /// In en, this message translates to:

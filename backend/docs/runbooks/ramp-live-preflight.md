@@ -10,9 +10,12 @@ not perform production preflight reads.
 All writers use `widens_exposure` before invoking liveness evidence. Percent
 increases, activation, allow UID additions and deny UID removals widen exposure.
 Percent decreases, deactivation, allow UID removals and deny UID additions
-narrow it. Deletion returns the key to PostHog and requires preflight for a
-possible 100% exposure, unless the current rule is active at 100% with no deny
-UIDs. Use deactivation or a decrease for emergency rollback. `_ramp` and the
+narrow it. Changes to an exposed rule's platform eligibility widen or narrow
+exposure as platforms are admitted or excluded. An empty platform list admits
+every platform, including missing and unknown headers. Deletion returns the
+key to PostHog and requires preflight for a possible 100% exposure, unless the
+current rule is active at 100% with no deny UIDs or platform restrictions.
+Use deactivation or a decrease for emergency rollback. `_ramp` and the
 controller merge percent changes without deleting overrides; clearing an
 operator lock leaves serving percentages intact.
 A mixed write refuses with `RAMP_PREFLIGHT REFUSE mixed_write`

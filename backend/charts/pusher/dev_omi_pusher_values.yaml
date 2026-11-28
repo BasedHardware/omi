@@ -283,7 +283,7 @@ env:
   - name: CONVERSATION_SMART_MERGE_FLATTEN_ENABLED
     value: "true"
   - name: CAPTURE_GROUP_CONTAINMENT_MODE
-    value: "shadow"
+    value: "off"
   - name: TRANSCRIPTION_SHADOW_ENABLED
     value: "true"
   - name: TRANSCRIPTION_SHADOW_KILL_SWITCH

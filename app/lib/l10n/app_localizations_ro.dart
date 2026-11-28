@@ -15913,6 +15913,19 @@ class AppLocalizationsRo extends AppLocalizations {
   String get batteryRestartToRefresh => 'Repornește Omi pentru a actualiza valoarea';
 
   @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Vor fi procesate pe $date când se reînnoiesc minutele tale';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Sau procesează-le imediat cu un upgrade de plan';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Se procesează $date';
+  }
+
+  @override
   String get pendantReconnectNudgeTitle => 'Dispozitivul tău Omi nu s-a conectat de 3 zile';
 
   @override

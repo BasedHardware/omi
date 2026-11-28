@@ -4770,6 +4770,9 @@
     "firmwareSyncRecordingsFirstTitle": "Sünkroonige oma salvestised esmalt",
     "firmwareSyncRecordingsFirstMessage": "Mõned salvestised on veel teie seadmes. Oodake, kuni need on telefonisse sünkroonitud, ja seejärel alustage uuendust.",
     "batteryRestartToRefresh": "Taaskäivitage Omi värskendamiseks",
+    "onTheWayAllowanceHeldTitle": "Töödeldakse {date}, kui teie minutid uuenevad",
+    "onTheWayAllowanceHeldUpgrade": "Või töödelge need kohe plaani täiendusega",
+    "onTheWayDayProcessesOn": "Töödeldakse {date}",
     "pendantReconnectNudgeTitle": "Sinu Omi pole 3 päeva ühendust loonud",
     "pendantReconnectNudgeBody": "Pane see uuesti külge ja ühenda, et Omi saaks salvestamist jätkata.",
     "pendantReconnectNudgeAction": "Ühenda uuesti"

@@ -151,10 +151,24 @@ jobs:
     steps:
       - name: Validate Environment Input
         if: github.event_name == 'workflow_dispatch'
+        env:
+          DISPATCH_MODE: ${{ inputs.mode }}
+          DISPATCH_ENVIRONMENT: ${{ inputs.environment }}
         run: |
-          if [[ "${{ github.event.inputs.environment }}" != "development" && "${{ github.event.inputs.environment }}" != "prod" ]]; then
-            echo "Invalid environment: ${{ github.event.inputs.environment }}. Must be 'development' or 'prod'."
-            exit 1
+          set -euo pipefail
+          case "$DISPATCH_ENVIRONMENT" in development|prod) ;; *) exit 1 ;; esac
+          case "$DISPATCH_MODE" in deploy|rollback|image-only|private-env-migrate|evidence) ;; *) exit 1 ;; esac
+          # Validate the raw dispatch before any checkout, auth or fromJSON expression.
+          jq -e --arg mode "$DISPATCH_MODE" --arg env "$DISPATCH_ENVIRONMENT"             '.inputs | .mode == $mode and .environment == $env' "$GITHUB_EVENT_PATH" >/dev/null 2>&1
+          if [[ "$DISPATCH_MODE" == evidence ]]; then
+            [[ "$GITHUB_REF" == refs/heads/main && "$GITHUB_RUN_ATTEMPT" == 1 ]]
+            jq -e '.inputs | .environment == "prod" and .branch == "main"
+              and (.expected_sha | test("^[0-9a-f]{40}$") and . != ("0" * 40))
+              and (.evidence_request_id | test("^[0-9a-f]{32}$"))
+              and (.control_sha // "") == "" and .helm_revision == ""
+              and .listen_edge_image_digest == "" and .break_glass_lock == "false"
+              and (.evidence_request | fromjson | type == "object" and
+                (if has("image_only") then .overlay_state == "references" else true end))' "$GITHUB_EVENT_PATH" >/dev/null 2>&1
           fi
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -225,10 +239,11 @@ jobs:
         id: admit-deploy-source
         env:
           EXPECTED_SHA: ${{ github.event.inputs.expected_sha }}
+          DEPLOY_ENV: ${{ inputs.environment }}
         run: |
           set -euo pipefail
           CHECKED_OUT_SHA=$(git rev-parse HEAD)
-          if [[ "${{ github.event.inputs.environment }}" == prod ]]; then
+          if [[ "$DEPLOY_ENV" == prod ]]; then
             git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
             if ! git merge-base --is-ancestor "$CHECKED_OUT_SHA" origin/main; then
               echo "ERROR: checked-out HEAD $CHECKED_OUT_SHA is not an ancestor of fresh origin/main $(git rev-parse origin/main)." >&2
@@ -283,7 +298,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          reviewed_scripts_tree=c9cc79160418038884fc99286730784297d61793
+          reviewed_scripts_tree=686d4a44e3041439050d65e39c2aca271f562386
           test "$(git rev-parse HEAD)" = "$GITHUB_WORKFLOW_SHA"
           test "$(git rev-parse HEAD:.github/scripts)" = "$reviewed_scripts_tree"
           changed=$(git status --porcelain=v1 --untracked-files=all --ignored -- .github/scripts)
@@ -341,7 +356,6 @@ jobs:
       - name: Produce private-overlay effect receipt without mutation
         if: ${{ inputs.mode == 'evidence' }}
         env:
-          EVIDENCE_REQUEST: ${{ inputs.evidence_request }}
           LISTEN_PRIVATE_VALUES_YAML: ${{ fromJSON(inputs.evidence_request).overlay_state != 'references' && secrets.LISTEN_PRIVATE_VALUES_YAML || '' }}
         run: |
           set -euo pipefail
@@ -536,7 +550,7 @@ jobs:
       # force-syncs it and reports per key only same/changed. No agent or log sees
       # a value. Delete this mode once the secret is retired.
       - name: Install private-env parser before secret injection
-        if: ${{ inputs.mode == 'private-env-migrate' }}
+        if: ${{ inputs.mode != 'evidence' && inputs.mode == 'private-env-migrate' }}
         run: |
           set -euo pipefail
           if [[ "${{ github.event.inputs.environment }}" != prod ]]; then
@@ -546,7 +560,7 @@ jobs:
           python3 -m pip install -q pyyaml
 
       - name: Write private listen values to Secret Manager (no roll)
-        if: ${{ inputs.mode == 'private-env-migrate' }}
+        if: ${{ inputs.mode != 'evidence' && inputs.mode == 'private-env-migrate' }}
         env:
           LISTEN_PRIVATE_VALUES_YAML: ${{ secrets.LISTEN_PRIVATE_VALUES_YAML }}
         run: |
@@ -558,7 +572,7 @@ jobs:
             --deployment ${{ vars.ENV }}-omi-backend-listen
 
       - name: Apply the listen private-env ExternalSecret (no roll)
-        if: ${{ inputs.mode == 'private-env-migrate' }}
+        if: ${{ inputs.mode != 'evidence' && inputs.mode == 'private-env-migrate' }}
         env:
           ENVIRONMENT: ${{ vars.ENV }}
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
@@ -575,7 +589,7 @@ jobs:
             --show-only templates/listen-private-env.yaml | kubectl -n "$namespace" apply -f -
 
       - name: Force-sync and verify private listen env against live (no roll)
-        if: ${{ inputs.mode == 'private-env-migrate' }}
+        if: ${{ inputs.mode != 'evidence' && inputs.mode == 'private-env-migrate' }}
         run: |
           set -euo pipefail
           VALUES_FILE=./backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml

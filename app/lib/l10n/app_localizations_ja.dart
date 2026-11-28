@@ -15613,6 +15613,19 @@ class AppLocalizationsJa extends AppLocalizations {
   String get batteryRestartToRefresh => 'Omiを再起動して更新';
 
   @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return '分数が更新される$dateに処理されます';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'またはプランのアップグレードですぐに処理できます';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return '$dateに処理予定';
+  }
+
+  @override
   String get pendantReconnectNudgeTitle => 'Omi が 3 日間接続されていません';
 
   @override
