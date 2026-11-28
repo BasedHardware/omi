@@ -224,3 +224,15 @@ def test_switch_is_on_unless_explicitly_off(monkeypatch, value, expected):
     else:
         monkeypatch.setenv('BATCH_ALLOWANCE_PARK_ENABLED', value)
     assert enabled() is expected
+
+
+def test_turning_the_credit_switch_back_on_changes_the_generation(monkeypatch):
+    now = stamp('2026-11-28')
+    user = {'subscription': {'plan': 'basic', 'status': 'active'}, SUPPORT_CREDIT_FIELD: support_grant(now)}
+    on = generation(user, now)
+    monkeypatch.setenv('SUPPORT_TRANSCRIPTION_CREDIT_ENABLED', 'false')
+    off = generation(user, now)
+    assert off == generation({'subscription': user['subscription']}, now)
+    monkeypatch.delenv('SUPPORT_TRANSCRIPTION_CREDIT_ENABLED')
+    # Off -> on re-offers parked work credited while the switch was off.
+    assert generation(user, now) == on != off

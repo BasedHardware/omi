@@ -18,6 +18,7 @@ parked seconds, or ``--allow-partial`` says the overrun is accepted.
 from __future__ import annotations
 
 import argparse
+import os
 import time
 from datetime import datetime, timezone
 from typing import Any
@@ -87,6 +88,11 @@ def _held(client: Any, uid: str, namespace: str) -> dict[str, Any]:
     from database.batch_pipeline_store import FirestoreStore
     from utils.batch_pipeline.scheduler import owner_key
 
+    stage = os.getenv('OMI_ENV_STAGE', '').strip().lower()
+    if namespace != f'batch_pipeline_{stage}':
+        raise CreditCommandError(
+            f'reading {namespace} needs OMI_ENV_STAGE={namespace.removeprefix("batch_pipeline_")} (now {stage or "unset"})'
+        )
     store = FirestoreStore(namespace, firestore_client=client)
     jobs = client.collection(f'{namespace}_jobs')
     key = owner_key(uid)
@@ -134,6 +140,11 @@ def _expires_days(args: argparse.Namespace) -> int:
 
 
 def _view(raw: Any, now: float) -> list[dict[str, Any]]:
+    try:
+        grants = support_credit.parse_grants(raw)
+    except support_credit.CreditUnreadable as exc:
+        keys = sorted(raw) if isinstance(raw, dict) else []
+        return [{'malformed': str(exc), 'stored_keys': keys, 'repair': 'revoke the bad key'}]
     return [
         {
             'action_id': grant.action_id,
@@ -141,7 +152,7 @@ def _view(raw: Any, now: float) -> list[dict[str, Any]]:
             'expired': grant.expires_at <= now,
             'expires': datetime.fromtimestamp(grant.expires_at, timezone.utc).isoformat(),
         }
-        for grant in support_credit.parse_grants(raw)
+        for grant in grants
     ]
 
 
@@ -151,12 +162,14 @@ def status(args: argparse.Namespace, ctx: ActionContext, record: ActionRecord) -
     exists, raw = _stored(client, args.uid)
     if not exists:
         raise CreditCommandError('account not found')
-    record.summary = {'grants': len(support_credit.parse_grants(raw)), 'switch_enabled': enabled()}
+    grants = _view(raw, now)
+    readable = not (grants and 'malformed' in grants[0])
+    record.summary = {'grants': len(grants) if readable else None, 'switch_enabled': enabled()}
     return {
         'uid': args.uid,
         'switch_enabled': enabled(),
-        'grants': _view(raw, now),
-        **_allowance(args.uid, raw, now),
+        'grants': grants,
+        **(_allowance(args.uid, raw, now) if readable else {}),
         **_held(client, args.uid, args.namespace),
     }
 
@@ -171,20 +184,28 @@ def grant(args: argparse.Namespace, ctx: ActionContext, record: ActionRecord) ->
         raise CreditCommandError('account not found')
     if account_deletion_document(args.uid, firestore_client=client).get().exists:
         raise CreditCommandError('account deletion is pending')
-    before = _allowance(args.uid, raw, now)
+    try:
+        before = _allowance(args.uid, raw, now)
+    except support_credit.CreditUnreadable as exc:
+        raise CreditCommandError(f'the stored credit is unreadable ({exc}); see status, revoke the bad key') from exc
     held = _held(client, args.uid, args.namespace)
     if before['allowance_seconds'] is None:
         raise CreditCommandError('the plan is unlimited; a credit would never be spent')
+    if before['plan'] is None or before['used_seconds'] is None:
+        # The baseline must be trustworthy, or later usage could spend the credit on
+        # transcription that happened before the grant.
+        raise CreditCommandError('this month\'s usage is unreadable; no baseline to grant against')
     grant_seconds = int(now)
     entry = support_credit.Grant(
         action_id=record.action_id,
         seconds=seconds,
         granted_at=grant_seconds,
         expires_at=grant_seconds + days * 86400,
-        baseline_seconds=before['used_seconds'] or 0,
-        allowance_seconds=before['allowance_seconds'] or 0,
+        baseline_seconds=before['used_seconds'],
+        allowance_seconds=before['allowance_seconds'],
     )
-    covers_held = before['credit_usable_seconds'] + seconds >= held['held_seconds']
+    # A truncated scan undercounts the parked audio, so it never proves coverage.
+    covers_held = not held['held_scan_truncated'] and before['credit_usable_seconds'] + seconds >= held['held_seconds']
     record.before_digest = digest(raw)
     record.summary = {
         'grant_seconds': seconds,
@@ -208,8 +229,8 @@ def grant(args: argparse.Namespace, ctx: ActionContext, record: ActionRecord) ->
         return {**plan, 'dry_run': True, 'apply_would_refuse': refused}
     if refused:
         raise CreditCommandError(
-            'the grant is smaller than the parked audio, which would all be released; '
-            'raise it or pass --allow-partial'
+            'the grant does not cover the parked audio (or the scan was truncated), which would all be '
+            'released; raise it or pass --allow-partial'
         )
     user_ref = client.collection('users').document(args.uid)
 
@@ -240,13 +261,14 @@ def revoke(args: argparse.Namespace, ctx: ActionContext, record: ActionRecord) -
     exists, raw = _stored(client, args.uid)
     if not exists:
         raise CreditCommandError('account not found')
-    grants = {item.action_id: item for item in support_credit.parse_grants(raw)}
-    if args.grant not in grants:
+    # By raw key, without parsing the map, so a malformed entry can be removed too.
+    if not isinstance(raw, dict) or args.grant not in raw:
         raise CreditCommandError('no such grant on this account')
+    seconds = raw[args.grant].get('seconds') if isinstance(raw[args.grant], dict) else None
     record.before_digest = digest(raw)
-    record.summary = {'revoked_seconds': grants[args.grant].seconds}
+    record.summary = {'revoked_seconds': seconds}
     if not ctx.apply:
-        return {'uid': args.uid, 'dry_run': True, 'would_revoke': _view({args.grant: raw[args.grant]}, now)}
+        return {'uid': args.uid, 'dry_run': True, 'would_revoke': {args.grant: raw[args.grant]}}
     user_ref = client.collection('users').document(args.uid)
 
     def write(tx) -> None:

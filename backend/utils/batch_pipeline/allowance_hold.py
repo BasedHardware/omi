@@ -11,7 +11,7 @@ import logging
 import uuid
 
 from config.referral_campaign import GRANT_FIELD, campaign_enabled
-from config.support_credit import FIELD as SUPPORT_CREDIT_FIELD
+from config.support_credit import FIELD as SUPPORT_CREDIT_FIELD, enabled as support_credit_enabled
 from database._client import get_data_plane_firestore_client
 from database.batch_pipeline_allowance_hold import STATE, OWNERS, enabled, restore_retry
 from utils.batch_pipeline.scheduler import Scheduler
@@ -46,7 +46,8 @@ def generation(snapshot: dict, now: float) -> str:
     reset_period = clock.strftime('%Y-%m')
     # A support grant or revoke changes the generation, so held work is
     # re-offered to admission at the owner's next check, not the next month.
-    support_credit = snapshot.get(SUPPORT_CREDIT_FIELD) or None
+    # Like promotions, the kill switch gates it: re-enabling re-offers once.
+    support_credit = (snapshot.get(SUPPORT_CREDIT_FIELD) or None) if support_credit_enabled() else None
     value = [subscription, valid, promotions, grant_authority, effective, reset_period, support_credit]
     return hashlib.sha256(json.dumps(value, sort_keys=True, default=str).encode()).hexdigest()
 

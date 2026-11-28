@@ -172,6 +172,7 @@ behind the cap and support has decided to process them (ruling: David
 ```bash
 cd backend
 source ~/.local/bin/gcp-agent-env.sh prod-operator
+export OMI_ENV_STAGE=prod  # the parked-audio scan reads batch_pipeline_prod and refuses without it
 python scripts/support/ops.py --ticket T --actor A --reason R transcription-credit status UID
 python scripts/support/ops.py --ticket T --actor A --reason R transcription-credit grant UID --hours 32
 python scripts/support/ops.py --ticket T --actor A --reason R transcription-credit grant UID --hours 32 --apply
@@ -181,7 +182,11 @@ python scripts/support/ops.py --ticket T --actor A --reason R transcription-cred
 - `status` and the dry run print the plan allowance, usage this month, the
   usable credit, and the account's parked batch units and seconds.
 - The grant records the month's usage at grant time, so usage before the grant
-  never spends it, and a month reset never hands it out again.
+  never spends it, and a month reset never hands it out again. `grant` refuses
+  when this month's usage is unreadable (no baseline), or when the parked scan
+  was truncated, unless `--allow-partial`.
+- A malformed stored credit counts as no credit. `status` lists its keys;
+  `revoke UID KEY` removes the bad key without parsing the rest.
 - Held batch work is released all at once per account, at the account's next
   hold check (about 5 minutes; the command never touches held jobs). Usage is
   metered after admission, so `--apply` refuses a grant smaller than the parked

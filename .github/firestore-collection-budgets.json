@@ -460,10 +460,10 @@
       "collection_pattern": "batch_pipeline_*_jobs",
       "owner": "Goal: Churn support transcription credit (SCA-5263, operator-run)",
       "unit": "one transcription-credit status or grant invocation for one account",
-      "reads_per_unit_budget": 20000,
-      "reads_per_day_budget": 40000,
+      "reads_per_unit_budget": 40000,
+      "reads_per_day_budget": 160000,
       "basis": "planning-bound",
-      "source": "SCA-5263: operator-invoked only, never on a serving path. Pages the existing allowance_held + owner_key + capture_at + segment_id index (the hold controller's allowance_page query) 100 rows at a time for one owner, capped at 20,000 rows; a parked backlog is tens of units. A handful of support invocations a day.",
+      "source": "SCA-5263: operator-invoked only, never on a serving path. Pages the existing allowance_held + owner_key + capture_at + segment_id index (the hold controller's allowance_page query) 100 rows at a time for one owner, capped at 20,000 rows, and point-reads each row's duration: at most 40,000 reads per invocation (2 per row); a parked backlog is tens of units. At most four capped invocations a day (status, dry run, apply, check).",
       "reviewed": "2026-11-28"
     }
   ],

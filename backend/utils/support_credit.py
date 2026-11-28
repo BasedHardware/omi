@@ -10,10 +10,13 @@ when the grant was made, so usage before the grant never consumes it;
 is no longer known.
 
 Nothing is written at usage time. The balance is derived from the existing
-monthly usage totals: in each UTC month a grant was live, usage over the
-month's base (the plan allowance, or the grant baseline in the month a grant
-started with no earlier grant carrying in) is allocated to live grants in
-grant order. A month boundary therefore never re-grants spent seconds.
+monthly usage totals. Within a UTC month, each grant's baseline is a known
+point (usage at ``granted_at``), so usage above it happened after that grant
+started. Usage over the plan allowance is split at those points, and each
+segment is charged only to grants already granted and not yet expired when it
+began, grants still usable now first. Where a grant expired inside a segment
+the split is unknown, so the usable grant pays: the balance can understate a
+credit, never overstate it. A month boundary never re-grants spent seconds.
 
 Usage is metered after admission, so concurrent admissions can overrun a
 grant by one meter lag, the same property the plan cap has today.
@@ -31,7 +34,7 @@ from config.support_credit import FIELD, MAX_EXPIRES_DAYS, enabled
 
 
 class CreditUnreadable(ValueError):
-    """A stored grant is malformed; callers treat the lookup as transient."""
+    """A stored grant is malformed, or a usage total the balance needs is untrusted."""
 
 
 @dataclass(frozen=True)
@@ -105,7 +108,9 @@ def remaining_by_grant(
     """Unspent seconds per grant, including expired ones (whose balance is no longer usable).
 
     ``month_used`` returns a past month's ``transcription_seconds`` and raises
-    when it cannot be read; it is called at most once per past month.
+    when it cannot be read; it is called at most once per past month. A past
+    month's plan is unknown, so it uses the smallest allowance recorded by a
+    grant live that month (more overage, never less).
     """
     remaining = {grant.action_id: grant.seconds for grant in grants}
     if not grants:
@@ -114,24 +119,38 @@ def remaining_by_grant(
     for month in _months(month_of(grants[0].granted_at), current):
         start, end = month_bounds(month)
         live = [grant for grant in grants if grant.granted_at < end and grant.expires_at > start]
-        if not live or month > current:
+        if not live:
             continue
         if month == current:
             used, allowance = current_used, current_allowance
         else:
-            used, allowance = month_used(month), live[0].allowance_seconds
-        if any(grant.granted_at < start for grant in live):
-            base = allowance
-        else:
-            base = max(allowance, min(grant.baseline_seconds for grant in live))
-        over = max(0, used - base)
-        for grant in live:
+            used, allowance = month_used(month), min(grant.allowance_seconds for grant in live)
+        _charge(live, remaining, used=used, allowance=allowance, month_start=start, now=now)
+    return remaining
+
+
+def _charge(
+    live: list[Grant], remaining: dict[str, int], *, used: int, allowance: int, month_start: int, now: float
+) -> None:
+    # Known (usage level, time) points in the month, in time order: the month start for
+    # grants carried in, each in-month grant's baseline at its grant time.
+    points: list[tuple[int, int]] = []
+    for grant in sorted(live, key=lambda item: (max(item.granted_at, month_start), item.action_id)):
+        when = max(grant.granted_at, month_start)
+        level = 0 if grant.granted_at < month_start else grant.baseline_seconds
+        points.append((max(level, points[-1][0]) if points else level, when))
+    for index, (level, when) in enumerate(points):
+        low = max(allowance, level)
+        high = points[index + 1][0] if index + 1 < len(points) else used
+        over = max(0, min(high, used) - low)
+        eligible = [grant for grant in live if grant.granted_at <= when < grant.expires_at]
+        eligible.sort(key=lambda grant: (not grant.granted_at <= now < grant.expires_at, grant.granted_at))
+        for grant in eligible:
             if over <= 0:
                 break
             take = min(over, remaining[grant.action_id])
             remaining[grant.action_id] -= take
             over -= take
-    return remaining
 
 
 def usable_seconds(grants: list[Grant], remaining: Mapping[str, int], now: float) -> int:
@@ -203,10 +222,11 @@ def after_plan(uid: str, raw: Any = UNREAD, *, used: int, allowance: int, now: f
     ``raw`` is the stored map when the caller already read it (the hold
     controller does). ``limit_seconds`` stays the plan's: batch capacity and
     usage displays are plan-only. A read failure is no credit, so a blip keeps
-    today's parking answer for the whole exhausted cohort. A credit that exists
-    but cannot be evaluated is transient (``allowance_unavailable``): the user
-    was already on the local path, and the hold controller retries instead of
-    acknowledging a generation.
+    today's parking answer for the whole exhausted cohort, and so does a
+    malformed map (logged as an error). A well-formed credit whose usage cannot
+    be read is transient (``allowance_unavailable``): the user was already on
+    the local path, and the hold controller retries instead of acknowledging a
+    generation.
     """
     from utils.transcription_allowance import TranscriptionAllowance
 
@@ -219,10 +239,17 @@ def after_plan(uid: str, raw: Any = UNREAD, *, used: int, allowance: int, now: f
             logger.warning('support credit read failed for uid=%s: %s', uid, type(exc).__name__)
             return None
     try:
-        grants = parse_grants(raw)
-        if not grants:
-            return None
-        at = time.time() if now is None else now
+        parsed = parse_grants(raw)
+    except CreditUnreadable as exc:
+        # A data defect, not a blip: no credit, so today's answer stands and the hold
+        # controller acknowledges it; repairing the map changes the generation.
+        logger.error('support credit malformed for uid=%s: %s', uid, exc)
+        return None
+    at = time.time() if now is None else now
+    grants = retained(parsed, at)
+    if not grants:
+        return None
+    try:
         left = remaining_by_grant(
             grants,
             now=at,

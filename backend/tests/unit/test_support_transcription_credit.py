@@ -97,6 +97,46 @@ def test_overage_is_allocated_once_in_grant_order():
     assert left == {'first': 0, 'later': 5_800}
 
 
+def test_a_later_grant_never_regains_seconds_from_one_that_expired_before_it():
+    # 'old' expires Nov 10; 'new' starts Nov 20 at 18,050 used. The 100 seconds over that
+    # baseline happened after 'old' expired, so only 'new' can pay for them.
+    old = entry('2026-11-01T00:00', seconds=100, days=9, baseline=BASIC)
+    new = entry('2026-11-20T00:00', seconds=1_000, baseline=BASIC + 50)
+    grants = parse_grants({'old': old, 'new': new})
+    now = at('2026-11-28T00:00')
+    left = remaining_by_grant(grants, now=now, current_used=BASIC + 150, current_allowance=BASIC, month_used=no_past)
+    assert left == {'old': 50, 'new': 900}
+    assert support_credit.usable_seconds(grants, left, now) == 900
+
+
+def test_where_expiry_falls_inside_a_segment_the_usable_grant_pays_first():
+    # Both are live from the month start; 'old' expires mid-month with an unknown split.
+    old = entry('2026-10-25T00:00', seconds=100, days=20)
+    new = entry('2026-10-26T00:00', seconds=1_000)
+    grants = parse_grants({'old': old, 'new': new})
+    now = at('2026-11-20T00:00')
+    left = remaining_by_grant(
+        grants, now=now, current_used=BASIC + 150, current_allowance=BASIC, month_used=lambda m: 0
+    )
+    assert left['new'] == 850
+    assert support_credit.usable_seconds(grants, left, now) == 850
+
+
+def test_a_past_month_uses_the_smallest_recorded_plan_allowance():
+    grants = parse_grants(
+        {
+            # Granted on a 90,000-second plan, then the owner moved to Basic.
+            'a': entry('2026-11-20T00:00', seconds=100_000, allowance=90_000, baseline=5_000),
+            'b': entry('2026-11-21T00:00', seconds=100_000, baseline=6_000),
+        }
+    )
+    left = remaining_by_grant(
+        grants, now=at('2026-12-02T00:00'), current_used=0, current_allowance=BASIC, month_used=lambda m: BASIC + 1_000
+    )
+    # November is charged against 18,000 (the smaller), not 90,000.
+    assert left == {'a': 99_000, 'b': 100_000}
+
+
 def test_expired_grants_are_not_usable_and_pruned_when_nothing_live_needs_them():
     grants = parse_grants({'old': entry('2026-10-01T00:00', days=10)})
     now = at('2026-11-28T00:00')
@@ -190,11 +230,27 @@ def test_a_failed_credit_read_keeps_todays_exhausted_answer(monkeypatch, sub):
     assert sub.resolve_transcription_allowance('uid').reason == 'plan_allowance_exhausted'
 
 
-def test_a_malformed_credit_is_transient_not_exhausted(monkeypatch, sub):
+def test_a_malformed_credit_is_no_credit_so_the_exhausted_answer_stands(monkeypatch, sub):
     situate(monkeypatch, sub, used=BASIC, credit={'a': 'oops'})
+    allowance = sub.resolve_transcription_allowance('uid')
+    assert (allowance.mode, allowance.reason) == ('on_device', 'plan_allowance_exhausted')
+
+
+def test_unreadable_past_usage_for_a_valid_credit_is_transient(monkeypatch, sub):
+    situate(monkeypatch, sub, used=BASIC, credit={'a': entry('2026-11-20T00:00')})
+    monkeypatch.setattr(support_credit.time, 'time', lambda: at('2026-12-02T00:00'))
+    monkeypatch.setattr(
+        support_credit, 'past_month_used', lambda uid, month: (_ for _ in ()).throw(CreditUnreadable('x'))
+    )
     allowance = sub.resolve_transcription_allowance('uid')
     assert (allowance.mode, allowance.reason) == ('on_device', 'allowance_unavailable')
     assert allowance.reason in sub.TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS
+
+
+def test_grants_the_balance_no_longer_needs_cost_no_past_reads(monkeypatch, sub):
+    situate(monkeypatch, sub, used=BASIC, credit={'old': entry('2026-09-01T00:00', days=10)})
+    monkeypatch.setattr(support_credit, 'past_month_used', lambda uid, month: pytest.fail('read a past month'))
+    assert sub.resolve_transcription_allowance('uid').reason == 'plan_allowance_exhausted'
 
 
 def test_the_kill_switch_ignores_stored_credit(monkeypatch, sub):
@@ -332,3 +388,70 @@ def test_the_command_is_registered_in_the_operator_cli():
         ['--ticket', 'T', '--actor', 'A', '--reason', 'R', 'transcription-credit', 'grant', 'uid', '--hours', '2']
     )
     assert args.handler.__name__ == 'grant' and args.hours == 2.0 and args.expires_days == 30
+
+
+def test_unreadable_usage_is_refused_because_there_is_no_baseline(cli):
+    cli.state.allowance['used_seconds'] = None
+    with pytest.raises(cli.command.CreditCommandError, match='baseline'):
+        run(cli)
+
+
+def test_a_truncated_parked_scan_never_proves_coverage(cli):
+    cli.state.held.update(held_scan_truncated=True, held_seconds=1)
+    result, _ = run(cli)
+    assert result['apply_would_refuse'] and result['covers_held'] is False
+    with pytest.raises(cli.command.CreditCommandError):
+        run(cli, apply=True)
+    assert run(cli, apply=True, allow_partial=True)[0]['granted']
+
+
+def test_the_parked_scan_names_the_stage_it_needs(monkeypatch):
+    from utils.support import transcription_credit as command
+
+    monkeypatch.delenv('OMI_ENV_STAGE', raising=False)
+    with pytest.raises(command.CreditCommandError, match='OMI_ENV_STAGE=prod'):
+        command._held(MagicMock(), 'uid-1', 'batch_pipeline_prod')
+
+
+def revoke(cli, grant, *, apply=False):
+    args = argparse.Namespace(uid='uid-1', grant=grant)
+    record = SimpleNamespace(action_id='20261129T000000Z-def', summary={}, before_digest=None, after_digest=None)
+    return cli.command.revoke(args, SimpleNamespace(apply=apply), record), record
+
+
+def test_revoke_dry_runs_then_deletes_only_that_grant(cli):
+    from google.cloud import firestore
+    from google.cloud.firestore_v1.field_path import FieldPath
+
+    cli.state.stored = {'keep': entry('2026-11-20T00:00'), 'drop': entry('2026-11-27T00:00')}
+    result, record = revoke(cli, 'drop')
+    assert result['dry_run'] and cli.state.tx.updates == []
+    assert record.summary['revoked_seconds'] == 108_000
+
+    def apply_delete(client, body):
+        body(cli.state.tx)
+        ((_, patch),) = cli.state.tx.updates
+        ((key, value),) = patch.items()
+        assert FieldPath.from_string(key).parts == (FIELD, 'drop') and value is firestore.DELETE_FIELD
+        cli.state.stored = {name: row for name, row in cli.state.stored.items() if name != 'drop'}
+
+    cli.command._transact = apply_delete
+    result, record = revoke(cli, 'drop', apply=True)
+    assert result['revoked'] == 'drop' and list(cli.state.stored) == ['keep']
+
+
+def test_revoke_removes_a_malformed_entry_and_refuses_unknown_keys(cli):
+    cli.state.stored = {'bad': 'oops'}
+    result, _ = revoke(cli, 'bad')
+    assert result['would_revoke'] == {'bad': 'oops'}
+    with pytest.raises(cli.command.CreditCommandError):
+        revoke(cli, 'missing')
+
+
+def test_status_reports_a_malformed_map_instead_of_failing(cli):
+    cli.state.stored = {'bad': 'oops'}
+    args = argparse.Namespace(uid='uid-1', namespace='ns')
+    record = SimpleNamespace(action_id='x', summary={})
+    result = cli.command.status(args, SimpleNamespace(apply=False), record)
+    assert result['grants'][0]['stored_keys'] == ['bad'] and 'plan' not in result
+    assert result['held_units'] == 6
