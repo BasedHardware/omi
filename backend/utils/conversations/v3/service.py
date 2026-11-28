@@ -69,7 +69,7 @@ from utils.conversations.v3 import (
 )
 from utils.conversations.v3 import manual_cuts, refinement, preview_wakes, rederive_plan, summary_wake
 from utils.conversations.v3 import live_tail
-from utils.conversations.v3 import capture_device
+from utils.conversations.v3 import capture_device, finish_rewake
 from utils.conversations.v3.word_floor import MIN_TASK_WORDS, has_unspaced_script, text_word_count
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.meeting_treatment import deduplicated_transcribed_speech_seconds
@@ -1073,6 +1073,8 @@ async def reconcile(
     parked = None
     moved = set()
     deferred: dict[str, datetime] = {}
+    recordings: dict[str, Any] = {}
+    rewake = None
     if not on_open and not derive:
         backoff, parked = await run_blocking(db_executor, store.backoff_state, uid)
         # A batch-cap retry (_seed_ceiling) belongs to a pass that already got past this gate. Its own early attempt
@@ -1385,6 +1387,8 @@ async def reconcile(
             lock_delay=lock_delay,
             now=now,
         )
+        if moved and not derive and not on_open:
+            rewake = partial(finish_rewake.after_moved, uid, recordings, moved)
         metrics.safe_metric(lambda: metrics.RECONCILES.labels('committed').inc())
         deferred = preview_wakes(rows, recordings)
     except Conflict as error:
@@ -1403,6 +1407,8 @@ async def reconcile(
                     lambda: logger.warning('v3 reconcile race wake failed exception_type=%s', type(dispatch).__name__)
                 )
                 raise error from dispatch
+            if not on_open:
+                rewake = partial(finish_rewake.after_raced, uid, recordings)
             metrics.safe_metric(lambda: metrics.RECONCILES.labels('raced').inc())
             metrics.safe_metric(lambda: metrics.RACES.labels(reason).inc())
             metrics.safe_metric(lambda: logger.info('v3 reconcile raced reason=%s', reason))
@@ -1453,6 +1459,9 @@ async def reconcile(
         raise
     finally:
         await _release_reconcile_lease(uid, key, token, primary_failed=primary_failed)
+        if rewake is not None:
+            # After the release, so the follow-up finds the builder lease free instead of answering busy.
+            await rewake()
     if smaller_seeds is not None:
         # Nothing was written and pending is still owed; the lease is released, so the retry can take it.
         return await reconcile(

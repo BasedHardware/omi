@@ -152,6 +152,13 @@ FINISH_HELD = Counter(
     'Builder passes that kept a manual-end cut open while its own or a preceding batch transcript was pending',
 )
 
+FINISH_REWAKES = Counter(
+    'omi_conversations_v3_finish_rewakes_total',
+    'Seconds-scale Finish re-wakes after a pass committed (moved) or raced while a recent Finish recording changed;'
+    ' outcome capped: that Finish recording had used its re-wakes; outcome error: the marker read or task create failed',
+    ['reason', 'outcome'],
+)
+
 SUMMARY_LATENCY = Histogram('omi_conversations_v3_end_to_summary_seconds', 'End to stored summary')
 SUMMARY_WRITES = Counter('omi_conversations_v3_summary_writes_total', 'First writes and late rewrites', ['kind'])
 WORD_FLOOR_COMPLETIONS = Counter(

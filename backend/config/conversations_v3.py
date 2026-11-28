@@ -150,6 +150,12 @@ def manual_end_home_visible_enabled() -> bool:
     }
 
 
+def finish_fast_rewake_enabled() -> bool:
+    """Default on. A builder pass that committed or raced while a recent Finish's recording changed under
+    it wakes the owner again in seconds instead of at the next minute. Off keeps only the minute wake."""
+    return os.getenv('CONVERSATIONS_V3_FINISH_FAST_REWAKE', 'on').strip().lower() not in {'off', 'false', '0', 'no'}
+
+
 def capture_continuity_enabled() -> bool:
     """Default on. A stream gap inside one capture origin is not silence, and a manual-end cut waits
     (bounded) for the batch transcript of its own or a preceding sealed recording. Off restores the
