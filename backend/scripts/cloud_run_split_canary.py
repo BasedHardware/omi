@@ -228,7 +228,8 @@ def release_floor(targets, *, script, project, region, run=subprocess.run):
             text=True,
         )
         if completed.returncode:
-            raise ValueError(f'release_floor_refused:{revision}')
+            reason = ' '.join((completed.stderr or '').split())[:400]
+            raise ValueError(f'release_floor_refused:{revision}:{reason}')
 
 
 def recovery_plan(receipt, run, run_id):
@@ -460,7 +461,7 @@ def main(argv=None):
             command.add_argument('--region', required=True)
             command.add_argument('--promotion-receipt', type=Path, required=True)
         if mode == 'restore-completed':
-            command.add_argument('--release-floor-check', type=Path)
+            command.add_argument('--release-floor-check', type=Path, required=True)
         if mode == 'promote':
             command.add_argument('--candidate', required=True)
             command.add_argument('--source', required=True)
@@ -474,7 +475,7 @@ def main(argv=None):
     recovery.add_argument('--run-id', type=int, required=True)
     recovery.add_argument('--run-metadata', type=Path, required=True)
     recovery.add_argument('--promotion-receipt', type=Path, required=True)
-    recovery.add_argument('--release-floor-check', type=Path)
+    recovery.add_argument('--release-floor-check', type=Path, required=True)
     args = parser.parse_args(argv)
     floor = None
     if getattr(args, 'release_floor_check', None) is not None:

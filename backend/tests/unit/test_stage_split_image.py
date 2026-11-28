@@ -3,7 +3,7 @@ from copy import deepcopy
 import pytest
 
 from scripts.integration_canary_metrics import Refused
-from scripts.stage_split_image import STAMP, stage_body
+from scripts.stage_split_image import STAMP, require_inherited_env, stage_body
 
 BASE, SHADOW, CANDIDATE = 'backend-base', 'backend-shadow', 'backend-new'
 SOURCE = 'a' * 40
@@ -88,3 +88,57 @@ def test_split_clone_refuses_changes_to_admitted_traffic(split, mismatch):
         service['status']['traffic'][1]['percent'] = 20
     with pytest.raises(Refused):
         stage_body(service, donor, plan, CANDIDATE, IMAGE, SOURCE)
+
+
+def inherited_entries():
+    return [
+        {'name': STAMP, 'value': SOURCE},
+        {'name': 'LEASE_MODE', 'value': 'shadow'},
+        {'name': 'SERVICE_TOKEN', 'valueFrom': {'secretKeyRef': {'name': 'service-token', 'key': 'latest'}}},
+    ]
+
+
+def expected_state():
+    return {
+        'services': {
+            'backend': {
+                'env': [
+                    {'name': 'LEASE_MODE', 'value': 'shadow'},
+                    {
+                        'name': 'SERVICE_TOKEN',
+                        'valueFrom': {'secretKeyRef': {'name': 'service-token', 'key': 'latest'}},
+                    },
+                ]
+            }
+        }
+    }
+
+
+def test_image_only_split_plan_accepts_its_own_rendered_runtime_env():
+    require_inherited_env(inherited_entries(), expected_state())
+
+
+@pytest.mark.parametrize(
+    'mutate,reason',
+    [
+        (lambda state: state['services']['backend']['env'][0].update(value='other'), '~LEASE_MODE'),
+        (lambda state: state['services']['backend']['env'].pop(), '+SERVICE_TOKEN'),
+        (lambda state: state['services']['backend']['env'].append({'name': 'NEW', 'value': '1'}), '-NEW'),
+        (
+            lambda state: state['services']['backend']['env'][1]['valueFrom']['secretKeyRef'].update(key='3'),
+            '~SERVICE_TOKEN',
+        ),
+    ],
+)
+def test_env_changing_split_plan_is_refused_before_promotion(mutate, reason):
+    state = expected_state()
+    mutate(state)
+    with pytest.raises(Refused) as refused:
+        require_inherited_env(inherited_entries(), state)
+    assert 'split_plan_changes_runtime_env' in str(refused.value)
+    assert reason in str(refused.value)
+
+
+def test_split_plan_without_a_rendered_state_is_refused():
+    with pytest.raises(Refused, match='split_plan_expected_state_incomplete'):
+        require_inherited_env(inherited_entries(), {'services': {}})

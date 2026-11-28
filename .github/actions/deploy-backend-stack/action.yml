@@ -1432,7 +1432,8 @@ runs:
         CANDIDATE: backend-${{ steps.image-tag.outputs.revision_suffix }}
       run: |
         python3 -I "$DEPLOY_CONTROL_SCRIPTS/stage_split_image.py" \
-          --verify --plan "$PLAN" --candidate "$CANDIDATE" --image "$IMAGE" --source "$SOURCE"
+          --verify --plan "$PLAN" --candidate "$CANDIDATE" --image "$IMAGE" --source "$SOURCE" \
+          --expected-state "$RUNNER_TEMP/backend-runtime-env-state.json"
 
     - name: Verify ${{ inputs.service }} release provenance
       if: ${{ inputs.integration_only != 'true' && success() }}

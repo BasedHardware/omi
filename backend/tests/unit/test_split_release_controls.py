@@ -5,6 +5,8 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import subprocess
+import sys
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -119,10 +121,120 @@ def test_bound_rollback_paths_request_the_published_release_floor():
     )
     workflow = yaml.safe_load((repo / '.github/workflows/gcp_backend.yml').read_text())
     recovery = workflow['jobs']['recover-bound-split']['steps']
-    assert any(
-        '--release-floor-check .github/scripts/verify_backend_release_floor.py' in step.get('run', '')
-        for step in recovery
+    restore_index = next(i for i, step in enumerate(recovery) if 'recover-run' in step.get('run', ''))
+    history_index = next(i for i, step in enumerate(recovery) if 'refs/remotes/origin/main' in step.get('run', ''))
+    # The floor verifier needs commit objects and ancestry, so the recovery
+    # checkout must deepen history before the restore and never fetch depth 1.
+    assert history_index < restore_index
+    history_run = recovery[history_index]['run']
+    assert '--unshallow' in history_run
+    assert '--depth' not in history_run
+    assert '--release-floor-check .github/scripts/verify_backend_release_floor.py' in recovery[restore_index]['run']
+
+
+def test_release_floor_check_is_required_and_its_reason_is_kept(tmp_path, monkeypatch):
+    service, wire, transport, _ = rollback_fixture()
+    binding = hashlib.sha256(wire.encode()).hexdigest()
+    receipt_path = tmp_path / 'backend-holdback-promotion.json'
+    receipt_path.write_text(
+        json.dumps(
+            dict(
+                target=transport.name,
+                binding=binding,
+                candidate='backend-candidate',
+                uid='uid',
+                etag='etag',
+                tags=[['shadow', 'backend-shadow']],
+                final_map={'backend-candidate': 90, 'backend-shadow': 10},
+            )
+        )
     )
+    base = [
+        'restore-completed',
+        '--service',
+        service,
+        '--plan',
+        wire,
+        '--binding',
+        binding,
+        '--project',
+        'example',
+        '--region',
+        'us-central1',
+        '--promotion-receipt',
+        str(receipt_path),
+    ]
+    with pytest.raises(SystemExit):
+        canary.main(base)
+
+    floor = tmp_path / 'verify_backend_release_floor.py'
+    floor.write_text(
+        'import sys\n'
+        'print("ERROR: Backend release floor rejected the target. below floor", file=sys.stderr)\n'
+        'sys.exit(1)\n'
+    )
+    monkeypatch.setattr(canary, 'CloudRunTraffic', Mock(return_value=transport))
+    assert canary.main([*base, '--release-floor-check', str(floor)]) == 1
+    transport.replace.assert_not_called()
+
+
+def test_recovery_checkout_needs_history_to_resolve_an_eligible_release(tmp_path):
+    """The recover-bound-split checkout must deepen history before the floor check."""
+    verifier = Path(__file__).resolve().parents[3] / '.github/scripts/verify_backend_release_floor.py'
+    origin = tmp_path / 'origin'
+    origin.mkdir()
+    git = ['git', '-C', str(origin), '-c', 'user.name=t', '-c', 'user.email=t@example.com']
+
+    def git_run(*args):
+        subprocess.run([*git, *args], check=True, capture_output=True, text=True)
+
+    git_run('init', '-q', '--initial-branch=main')
+    (origin / 'backend' / 'deploy').mkdir(parents=True)
+    (origin / 'README.md').write_text('base\n')
+    git_run('add', '.')
+    git_run('commit', '-qm', 'base')
+    floor_sha = subprocess.run(
+        ['git', '-C', str(origin), 'rev-parse', 'HEAD'], check=True, capture_output=True, text=True
+    ).stdout.strip()
+    (origin / 'backend' / 'deploy' / 'release_floor.json').write_text(
+        json.dumps({'floor': floor_sha, 'reason': 'test floor', 'since': '2026-11-01'})
+    )
+    git_run('add', '.')
+    git_run('commit', '-qm', 'floor')
+    (origin / 'README.md').write_text('later\n')
+    git_run('add', '.')
+    git_run('commit', '-qm', 'later')
+
+    shallow = tmp_path / 'shallow'
+    subprocess.run(
+        ['git', 'clone', '-q', '--depth=1', '--branch', 'main', origin.as_uri(), str(shallow)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert (
+        subprocess.run(
+            ['git', '-C', str(shallow), 'rev-parse', '--is-shallow-repository'],
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        == 'true'
+    )
+
+    def verify():
+        return subprocess.run(
+            [sys.executable, str(verifier), '--sha', floor_sha],
+            cwd=shallow,
+            capture_output=True,
+            text=True,
+        )
+
+    refused = verify()
+    assert refused.returncode == 1 and 'release floor rejected' in refused.stderr
+
+    subprocess.run(['git', '-C', str(shallow), 'fetch', '-q', '--unshallow', 'origin'], check=True)
+    admitted = verify()
+    assert admitted.returncode == 0, admitted.stderr
 
 
 def test_bound_deploys_keep_the_live_runtime_env_and_drift_preflights():
@@ -189,7 +301,9 @@ def test_completed_receipt_can_be_restored_from_another_run(tmp_path, monkeypatc
         display_title=f'Holdback prod/{service} sha={source} by selection:{"0" * 32} plan={binding}',
     )
     run_path.write_text(json.dumps(run))
-    recover = ['recover-run', *target, *identity, '--run-metadata', str(run_path)]
+    floor = tmp_path / 'floor.py'
+    floor.write_text('import sys\nsys.exit(0)\n')
+    recover = ['recover-run', *target, *identity, '--run-metadata', str(run_path), '--release-floor-check', str(floor)]
     assert canary.main(recover) == 0
     transport.replace.assert_called_once_with(transport.read.return_value, {'backend-donor': 90, 'backend-shadow': 10})
 
