@@ -1862,7 +1862,16 @@ class CaptureController extends ChangeNotifier
         }
         await _publishTranscriptionSocket(socket, sessionToken, deviceRevision: deviceRevision);
       } on _TranscriptionSocketSkipped {
-        _startKeepAliveServices();
+        if (_shouldReconnectTranscriptionSocket && !_transcriptServiceReady) {
+          _kickLiveRecovery('socket_open_skipped');
+        } else {
+          _startKeepAliveServices();
+        }
+      } catch (error) {
+        if (_shouldReconnectTranscriptionSocket && !_transcriptServiceReady) {
+          _kickLiveRecovery('socket_owner_connect_failed');
+        }
+        rethrow;
       }
       return;
     }
@@ -3426,6 +3435,7 @@ class CaptureController extends ChangeNotifier
           if (!_admitsCapture(revision)) return;
           updateRecordingState(RecordingState.record);
           _markCaptureStarted();
+          if (!_transcriptServiceReady) _kickLiveRecovery('phone_capture_started');
         },
         onStop: () {
           if (!_micInterrupted && !_phoneMicPaused) {

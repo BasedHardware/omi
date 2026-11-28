@@ -84,6 +84,25 @@ void main() {
   });
 
   group('live socket recovery', () {
+    Future<int> reachPendingLongBackoff() async {
+      world.setConnected(false);
+      world.socket!.emitClose(1002);
+      await world.settle();
+      for (final delay in [1, 20, 40, 80]) {
+        await world.elapse(Duration(seconds: delay));
+      }
+      return world.sockets.length;
+    }
+
+    Future<void> expectExpeditedRetry(int before, String signal, {bool connected = true}) async {
+      await world.settle();
+      await world.elapse(const Duration(seconds: 19));
+      expect(world.sockets.length, before, reason: '$signal still respects the 20s attempt floor');
+      await world.elapse(const Duration(seconds: 1));
+      expect(world.sockets.length, before + 1, reason: '$signal replaces the pending 160s backoff');
+      expect(world.socket!.status == PureSocketStatus.connected, connected);
+    }
+
     test('a normal server close reconnects without waiting for the 15 s keep-alive', () async {
       final before = world.sockets.length;
       world.socket!.emitClose(1000);
@@ -124,6 +143,25 @@ void main() {
 
       await world.elapse(const Duration(seconds: 1));
       expect(world.sockets.length, before + 3);
+    });
+
+    test('connectivity restoration shortens a pending long backoff within the reconnect floor', () async {
+      final beforeRestore = await reachPendingLongBackoff();
+      world.setConnected(true);
+      await expectExpeditedRetry(beforeRestore, 'connectivity restoration');
+    });
+
+    test('network handover shortens a pending long backoff within the reconnect floor', () async {
+      final beforeHandover = await reachPendingLongBackoff();
+      world.setConnected(true);
+      world.emitNetworkChange();
+      await expectExpeditedRetry(beforeHandover, 'network handover');
+    });
+
+    test('app resume shortens a pending long backoff within the reconnect floor', () async {
+      final beforeResume = await reachPendingLongBackoff();
+      world.controller.onAppResumed();
+      await expectExpeditedRetry(beforeResume, 'app resume', connected: false);
     });
 
     test('a network handover re-arms a keep-alive that had cancelled itself', () async {

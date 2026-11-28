@@ -98,21 +98,23 @@ extension _CaptureLiveRecovery on CaptureController {
       }
     }
     if (!_shouldReconnectTranscriptionSocket || _transcriptServiceReady) return;
-    if (_liveRecovery.kickTimer?.isActive ?? false) {
+    final pendingKick = _liveRecovery.kickTimer?.isActive ?? false;
+    final expedite = reason == 'network_change' || reason == 'connectivity_restored' || reason == 'app_resumed';
+    if (pendingKick && !expedite) {
       return;
     }
     if (recordingState == RecordingState.deviceRecord) _socketReconnectPending = true;
     if (!(_keepAliveTimer?.isActive ?? false)) _startKeepAliveServices();
     final now = _now();
     final kicks = _liveRecovery.kicks..removeWhere((at) => now.difference(at) > _kickWindow);
-    final backoff = _kickBackoff[kicks.length.clamp(0, _kickBackoff.length - 1)];
+    final backoff = expedite ? Duration.zero : _kickBackoff[kicks.length.clamp(0, _kickBackoff.length - 1)];
     final lastAttempt = _keepAliveLastExecutedAt;
     final untilRateLimit =
         lastAttempt == null ? Duration.zero : lastAttempt.add(_minimumReconnectInterval).difference(now);
     final delay = backoff > untilRateLimit ? backoff : untilRateLimit;
     Logger.debug('[Capture] live recovery ($reason) in ${delay.inSeconds}s');
     final token = _sessionOwner?.token;
-    _liveRecovery.kickTimer?.cancel();
+    if (pendingKick) _liveRecovery.kickTimer?.cancel();
     _liveRecovery.kickTimer = _scheduling.once(delay, () => unawaited(_runKickedReconnect(token)));
   }
 
