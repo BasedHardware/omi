@@ -117,7 +117,7 @@ def funded_allowance(
     every managed backfill answer, independent of the legacy dispatch scope, so
     the same refusal reaches sync and batch admission.
     """
-    kwargs = {'ready_usage_only': True} if ready_usage_only else {}
+    kwargs: dict[str, Any] = {'ready_usage_only': True} if ready_usage_only else {}
     if support_credit is not _UNRESOLVED:
         kwargs['support_credit'] = support_credit
     allowance = _funded_allowance(

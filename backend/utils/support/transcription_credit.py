@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from google.cloud import firestore
+from google.cloud.firestore_v1.field_path import FieldPath
 
 from config.support_credit import DEFAULT_EXPIRES_DAYS, FIELD, MAX_EXPIRES_DAYS, enabled
 from database.account_deletion_marker import account_deletion_document, account_deletion_firestore_client
@@ -56,7 +57,7 @@ def _allowance(uid: str, raw: Any, now: float) -> dict[str, Any]:
         return {'plan': None, 'allowance_seconds': 0, 'used_seconds': None, 'credit_usable_seconds': 0}
     allowance = subscription_utils.transcription_allowance_seconds(plan.plan)
     usage = subscription_utils.get_monthly_usage_for_subscription(uid)
-    used = subscription_utils._usage_seconds(usage)
+    used = support_credit.usage_seconds(usage)
     grants = support_credit.parse_grants(raw)
     usable = 0
     if grants and allowance is not None and used is not None:
@@ -252,7 +253,7 @@ def revoke(args: argparse.Namespace, ctx: ActionContext, record: ActionRecord) -
         _, current = _stored(client, args.uid, tx)
         if digest(current) != record.before_digest:
             raise CreditCommandError('the credit changed since it was read; rerun')
-        tx.update(user_ref, {firestore.FieldPath(FIELD, args.grant).to_api_repr(): firestore.DELETE_FIELD})
+        tx.update(user_ref, {FieldPath(FIELD, args.grant).to_api_repr(): firestore.DELETE_FIELD})
 
     _transact(client, write)
     _, after_raw = _stored(client, args.uid)

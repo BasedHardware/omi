@@ -179,10 +179,21 @@ def past_month_used(uid: str, month: tuple[int, int]) -> int:
 
     year, number = month
     usage = user_usage_db.get_monthly_usage_stats(uid, datetime(year, number, 15, tzinfo=timezone.utc))
-    value = usage.get('transcription_seconds', 0) if isinstance(usage, dict) else None
-    value = 0 if value is None else value
-    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+    value = usage_seconds(usage)
+    if value is None:
         raise CreditUnreadable('past month usage is untrusted')
+    return value
+
+
+def usage_seconds(usage: Any) -> int | None:
+    """``transcription_seconds`` of a monthly usage record, or ``None`` when it is not trustworthy."""
+    if not isinstance(usage, Mapping):
+        return None
+    value = usage.get('transcription_seconds', 0)
+    if value is None:
+        return 0
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return None
     return value
 
 
