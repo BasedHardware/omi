@@ -35,6 +35,7 @@ from database import (
 from database.account_deletion_marker import account_deletion_blocks_user_work
 from database._client import get_customer_firestore_client
 from database.go_queue_erase import ERASE_LEASE_SECONDS
+from database.legal_holds import DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable
 from services.users.go_queue_erase import go_queue_erase_required
 from database.sync_jobs import release_job_run_lock, try_acquire_job_run_lock
 from services.users.data_export import iter_user_data_export, iter_user_data_export_streaming
@@ -73,6 +74,8 @@ from database.users import (
 )
 from utils import ai_profile_refresh, billing_recovery, screen_vector_entitlements
 from utils.observability.fallback import record_fallback
+from utils.observability.reasons import RetryReason
+from utils.workers.retry import retry_response
 from config import play_billing as play_billing_config
 from config import prepaid_code_redeem as prepaid_code_config
 import database.play_subscriptions as play_subscriptions_db
@@ -146,11 +149,17 @@ from database import user_usage as user_usage_db
 from utils import stripe as stripe_utils
 from utils.cloud_tasks import (
     AccountDeletionTaskAuthentication,
+    account_deletion_queue_path,
     get_account_deletion_tasks_max_attempts,
     verify_account_deletion_cloud_tasks_oidc,
     verify_conversation_batch_purge_cloud_tasks_oidc,
 )
-from database import batch_pipeline_conversation_purge_scans, conversation_batch_purge_jobs
+from database import (
+    batch_pipeline_conversation_purge_scans,
+    conversation_batch_purge_jobs,
+    speaker_evidence_verification as evidence_verification,
+)
+from database.speaker_evidence_verification import observe_sweep
 from utils.executors import db_executor, erasure_executor, llm_executor, run_blocking
 from utils.http_client import UnsafeWebhookURLError, safe_request_target
 from utils.log_sanitizer import sanitize
@@ -176,6 +185,7 @@ from utils.other.daily_recap import delivery_allowed as daily_summary_delivery_a
 from utils.memory.learned_today import memories_learned_payload, memory_review_card_block
 from utils.memory.recap_review import refresh_recap_learning_refs
 from utils.other import endpoints as auth
+from utils.other.account_gate_http import account_gate_busy_http_exception
 from utils.other.list_budget import finish_list_budget
 from utils.other.storage import (
     delete_all_conversation_recordings,
@@ -363,6 +373,22 @@ async def run_account_deletion_wipe(
             status_code=200, content={'status': 'dropped', 'reason': resolution_outcome or 'invalid_job'}
         )
 
+    receipt = None
+    if verification_token := payload.get(evidence_verification.TASK_FIELD):
+        defer, receipt = await run_blocking(
+            db_executor,
+            evidence_verification.admit_task,
+            uid,
+            wipe_job_id,
+            verification_token,
+            account_deletion_queue_path(),
+            request.headers.get('x-cloudtasks-queuename', ''),
+            request.headers.get('x-cloudtasks-taskname', ''),
+            task_authentication.retry_count,
+        )
+        if defer:
+            return retry_response(RetryReason.CALLBACK_PENDING)
+
     lock_key = f'account-deletion:{uid}'
     needs_erase = resolution.get('erase_armed') is True or go_queue_erase_required()
     lease = (ERASE_LEASE_SECONDS,) if needs_erase else ()
@@ -391,8 +417,13 @@ async def run_account_deletion_wipe(
         max_attempts = get_account_deletion_tasks_max_attempts()
         terminal = task_authentication.retry_count >= max_attempts - 1
         erase_args = (wipe_job_id,) if needs_erase else ()
-        ok = await run_deletion_wipe_with_lease(uid, task_authentication.retry_count, terminal, lock_token, *erase_args)
+        with observe_sweep(receipt):
+            ok = await run_deletion_wipe_with_lease(
+                uid, task_authentication.retry_count, terminal, lock_token, *erase_args
+            )
         if ok:
+            if receipt is not None:
+                await run_blocking(db_executor, evidence_verification.complete_task, receipt)
             return JSONResponse(status_code=200, content={'status': 'done'})
 
         if terminal:
@@ -752,7 +783,10 @@ def update_person_name(
 
 @router.delete('/v1/users/people/{person_id}', tags=['v1'], status_code=204)
 def delete_person_endpoint(person_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    delete_person(uid, person_id)
+    try:
+        delete_person(uid, person_id)
+    except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as error:
+        raise account_gate_busy_http_exception() from error
     delete_user_person_speech_samples(uid, person_id)
 
 

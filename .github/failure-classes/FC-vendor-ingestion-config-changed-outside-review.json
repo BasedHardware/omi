@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-vendor-ingestion-config-changed-outside-review",
+  "family": "config-value-change",
+  "status": "open",
+  "violated_contract": "A billed vendor ingestion setting (PostHog sampling rate, keep-list, warehouse sync) must change only through a reviewed config with a measured cost. Agents PATCHed PostHog Hog functions and warehouse schemas through the API with guessed volumes 2-6x low; debugging events went to 100% and a 31M-row table full-refreshed weekly, taking PostHog from about $500 to $2.8k a month (SCA-3665).",
+  "canonical_prevention": "Keep the live config in contracts/analytics/posthog.json; CI (scripts/check_posthog_config.py) prices every change from measured 7-day volume and rejects unread 100% events, debug events above 2% without a signed waiver, over-budget configs and large full-refresh syncs; scripts/posthog/apply.py applies it after merge and `apply.py drift` reports out-of-band edits (run by the release owner after each apply; a daily schedule is a follow-up on SCA-3665).",
+  "evidence_prs": [],
+  "scope_hints": [
+    "contracts/analytics/posthog.json",
+    "scripts/check_posthog_config.py",
+    "scripts/posthog/*.py"
+  ]
+}

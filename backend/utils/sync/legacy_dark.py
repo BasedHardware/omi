@@ -3,7 +3,8 @@
 One runtime switch, ``rollout_cohorts/_ramp.envs.<env>.legacy_sync``, moves the
 legacy sync lane through ``on`` -> ``draining`` -> ``dark`` without a deploy.
 The value is read through ``utils.rollout.runtime_percent.legacy_sync_mode``
-(contract (f): 30s TTL, legacy mode fails safe to on on read errors). This module owns what
+(contract (f): 30s TTL; a read error keeps the last-known-good mode, a process that
+never read the document serves on). This module owns what
 the legacy call sites do with it:
 
 * ``on``: today's behaviour, byte for byte.
@@ -11,10 +12,10 @@ the legacy call sites do with it:
   legacy work (running tasks, ``sync_backfill_pending`` entries) finishes.
 * ``dark``: as ``draining``, and the sequencer sweep stops claiming.
 
-Fail-safe direction. Any failure to read the mode serves ``on``. While the soak
-runs the legacy image, queues and jobs are untouched, so ``on`` is the one-write
-rollback (h, "Reversibility window"); a read failure therefore degrades to the
-known-good path instead of refusing uploads.
+Fail-safe direction. A read error keeps the last-known-good mode (SCA-2965:
+serving ``on`` there re-created legacy jobs after legacy went dark). A process
+with no mode at all (reader absent, or an exception here) serves ``on``. Writing
+``on`` to ``_ramp`` remains the one-write rollback (h, "Reversibility window").
 
 The double-processing fence (h, invariant 4) is decided here from the content
 ledger row the batch intake already reads. Call sites only translate the

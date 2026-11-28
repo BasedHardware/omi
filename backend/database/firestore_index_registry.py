@@ -42,6 +42,20 @@ def _contains(field_path: str) -> FirestoreIndexField:
 # callers migrate one compound serving query at a time into QUERY_SPECS.
 INDEX_ONLY_REQUIREMENTS = (
     FirestoreIndexRequirement(
+        'enrichment_age_gate_unpark_newest',
+        'sync_reprocess_outbox',
+        'COLLECTION',
+        (_asc('age_gate_parked'), _desc('deferred_since'), _desc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        # SCA-4790 close-out: an open first-week row is scanned by outcome and its
+        # stored window end; nothing is inferred from a document's age.
+        'first_week_summary_closeout',
+        'conversations',
+        'COLLECTION_GROUP',
+        (_asc('first_week_outcome'), _asc('first_week_summary.window_end_at'), _asc('__name__')),
+    ),
+    FirestoreIndexRequirement(
         'conversations_v3_home_list_visible_page',
         'conversations',
         'COLLECTION',

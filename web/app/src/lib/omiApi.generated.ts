@@ -13380,7 +13380,9 @@ export interface OmiApiPaths {
         "200": MemoryMutationResponse;
         "401": void;
         "404": void;
+        "409": void;
         "422": HTTPValidationError;
+        "503": void;
       };
     };
   };

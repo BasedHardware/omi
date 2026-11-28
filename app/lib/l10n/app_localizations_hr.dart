@@ -15897,4 +15897,20 @@ class AppLocalizationsHr extends AppLocalizations {
   @override
   String get deleteRecordingKeepsConversation =>
       'Brisanjem ovdje uklanjaš kopiju s telefona. Razgovori za već transkribirane snimke ostaju.';
+
+  @override
+  String get batteryRestartToRefresh => 'Ponovno pokrenite Omi za osvježavanje';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Bit će obrađene $date kada se obnove tvoje minute';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Ili ih odmah obradi uz nadogradnju plana';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Obradit će se $date';
+  }
 }

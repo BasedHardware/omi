@@ -12330,5 +12330,9 @@
     "deleteFromServerMessage": "Ova je snimka prenesena, ali još nije transkribirana. Brisanjem se trajno briše i kopija na Omi poslužiteljima, pa nikada neće biti transkribirana. Ovo se ne može poništiti.",
     "deletedRecordingAlreadyTranscribed": "Već je transkribirana. Izbrišite njezin razgovor da biste je uklonili.",
     "deletedRecordingWillBeProcessed": "Obrada ove snimke će se nastaviti. Razgovor možeš izbrisati kad se pojavi.",
-    "deleteRecordingKeepsConversation": "Brisanjem ovdje uklanjaš kopiju s telefona. Razgovori za već transkribirane snimke ostaju."
+    "deleteRecordingKeepsConversation": "Brisanjem ovdje uklanjaš kopiju s telefona. Razgovori za već transkribirane snimke ostaju.",
+    "batteryRestartToRefresh": "Ponovno pokrenite Omi za osvježavanje",
+    "onTheWayAllowanceHeldTitle": "Bit će obrađene {date} kada se obnove tvoje minute",
+    "onTheWayAllowanceHeldUpgrade": "Ili ih odmah obradi uz nadogradnju plana",
+    "onTheWayDayProcessesOn": "Obradit će se {date}"
 }

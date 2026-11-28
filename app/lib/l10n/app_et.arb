@@ -4773,5 +4773,9 @@
     "deleteFromServerMessage": "See salvestis on üles laaditud, kuid veel transkribeerimata. Kustutamine eemaldab jäädavalt ka koopia Omi serveritest, nii et seda ei transkribeerita kunagi. Seda ei saa tagasi võtta.",
     "deletedRecordingAlreadyTranscribed": "Juba transkribeeritud. Eemaldamiseks kustuta selle vestlus.",
     "deletedRecordingWillBeProcessed": "Selle salvestise töötlemine jätkub. Saad vestluse kustutada, kui see ilmub.",
-    "deleteRecordingKeepsConversation": "Siin kustutades eemaldad koopia telefonist. Juba transkribeeritud salvestiste vestlused jäävad alles."
+    "deleteRecordingKeepsConversation": "Siin kustutades eemaldad koopia telefonist. Juba transkribeeritud salvestiste vestlused jäävad alles.",
+    "batteryRestartToRefresh": "Taaskäivitage Omi värskendamiseks",
+    "onTheWayAllowanceHeldTitle": "Töödeldakse {date}, kui teie minutid uuenevad",
+    "onTheWayAllowanceHeldUpgrade": "Või töödelge need kohe plaani täiendusega",
+    "onTheWayDayProcessesOn": "Töödeldakse {date}"
 }

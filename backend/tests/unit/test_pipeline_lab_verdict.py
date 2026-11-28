@@ -10,7 +10,8 @@ import pytest
 
 from testing.pipeline_lab import cli
 from testing.pipeline_lab.scenario import stack, verdict as verdicts
-from testing.pipeline_lab.scenario.spec import load_scenario
+from testing.pipeline_lab.scenario.compare import committed_scenarios
+from testing.pipeline_lab.scenario.spec import load_scenario, parse_scenario
 
 FAST = stack.SCENARIO_DIR / 'finish_single_recording_fast.json'
 CONV = {
@@ -61,6 +62,51 @@ def test_scenario_verdict_rows_carry_expected_and_actual():
     assert first['actual']['conversation']['words'] == 100
     assert 'handle' not in first['actual']['conversation']
     assert hidden['expected'] == {'no_hidden_with': 'B'} and hidden['actual']['hidden'] == []
+
+
+def test_timed_fact_rows_show_the_facts_seen_at_their_checkpoint():
+    # #26395: a timed ``recording`` / ``finish_response`` check passes on the facts at its instant; its verdict
+    # row must show those facts, not the run's end (fast_finish "none" at 30 s, "written" by the end).
+    fill = [{'fill': [0, 40], 'every': 4, 'words': 10}]
+    parsed = parse_scenario(
+        {
+            'name': 'timed_facts',
+            'origins': [{'id': 'O'}],
+            'recordings': [
+                {'id': 'B', 'origin': 'O', 'session': 'S1', 'audio': [0, 40], 'transcript_at': 90, 'speech': fill}
+            ],
+            'finish': {'at': 38, 'again_at': [38.5]},
+            'expect': [
+                {'label': 'early', 'recording': 'B', 'fast_finish': 'none', 'at': 30},
+                {'label': 'tap_early', 'finish_response': 1, 'outcome': 'in_progress', 'at': 38.2},
+                {'label': 'late', 'recording': 'B', 'fast_finish': 'written'},
+            ],
+        }
+    )
+    early_tap = {'outcome': 'in_progress'}
+    end_taps = [{'outcome': 'cut', 'titled': True}, {'outcome': 'no_pointer'}]
+    run = {
+        'outcome': 'passed',
+        'finish_target': 'B',
+        'checks': [{'check': c.describe(), 'ok': True, 'detail': ''} for c in parsed.checks],
+        'conversations': [],
+        'checkpoints': {
+            '0': {'t': 30, 'conversations': [], 'facts': {'fast_finish': {}, 'finish_taps': []}},
+            '1': {'t': 38.2, 'conversations': [], 'facts': {'fast_finish': {}, 'finish_taps': [early_tap]}},
+        },
+        'fast_finish': {'B': 'written'},
+        'finish_taps': end_taps,
+    }
+    early, tap_early, late = verdicts.scenario_verdict('timed_facts', run, parsed)['checks']
+    assert early['actual'] == {'recording': 'B', 'fast_finish': 'none'}  # was "written" (the run's end)
+    assert tap_early['actual'] == {'tap': early_tap}  # was the end's first tap, "cut"
+    assert late['actual'] == {'recording': 'B', 'fast_finish': 'written'}  # untimed rows still read the end
+
+    # A result.json from before checkpoints carried facts falls back to the run's end, as before.
+    for seen in run['checkpoints'].values():
+        del seen['facts']
+    early, tap_early, _ = verdicts.scenario_verdict('timed_facts', run, parsed)['checks']
+    assert early['actual']['fast_finish'] == 'written' and tap_early['actual'] == {'tap': end_taps[0]}
 
 
 def test_scenario_verdict_of_an_error_has_no_checks():
@@ -249,3 +295,47 @@ def test_duplicate_scenarios_are_refused(tmp_path, fake_runs, capsys):
     copy_path = tmp_path / 'copy.json'
     copy_path.write_text(copy.deepcopy(FAST.read_text()))
     assert cli.main(['scenario', 'run', str(FAST), str(copy_path), '--keep', str(tmp_path / 'r')]) == 2
+
+
+def write_run(root, names, *, repeat=1, checks=True):
+    root.mkdir(mode=0o700)
+    rows = [
+        {
+            'name': n,
+            'outcome': 'passed',
+            'checks': [{'label': 'x', 'passed': True}] if checks else [],
+            'repeats': repeat,
+        }
+        for n in names
+    ]
+    verdicts.write_json(root / 'verdict.json', {'schema': 1, 'outcome': 'passed', 'scenarios': rows})
+    verdicts.write_json(root / 'run.json', {'schema': 1, 'repeat': repeat, 'scenarios': list(names)})
+    return root
+
+
+def test_coverage_requires_every_committed_scenario_with_its_repeats(tmp_path):
+    committed = ['a', 'b']
+    assert verdicts.coverage_problems(write_run(tmp_path / 'ok', ['a', 'b', 'extra'], repeat=2), committed, 2) == []
+    # Green without executing: nothing ran, one scenario skipped, too few repeats, no check evaluated.
+    assert (
+        verdicts.coverage_problems(write_run(tmp_path / 'none', []), committed, 2)[0] == 'the verdict lists no scenario'
+    )
+    missing = verdicts.coverage_problems(write_run(tmp_path / 'one', ['a'], repeat=2), committed, 2)
+    assert missing == ['1 committed scenario(s) did not run: b']
+    short = verdicts.coverage_problems(write_run(tmp_path / 'short', ['a', 'b']), committed, 2)
+    assert short[0] == 'run.json repeat 1 (want 2)' and 'a: 1 repeat(s) (want 2)' in short
+    empty = verdicts.coverage_problems(write_run(tmp_path / 'empty', ['a', 'b'], checks=False), committed)
+    assert empty == ['a: no check was evaluated', 'b: no check was evaluated']
+    assert verdicts.coverage_problems(write_run(tmp_path / 'nothing', ['a']), [], 1)[0].startswith('no committed')
+
+
+def test_summary_require_committed_fails_closed(tmp_path, capsys):
+    names = committed_scenarios()
+    full = write_run(tmp_path / 'full', names, repeat=2)
+    assert cli.main(['scenario', 'summary', str(full), '--require-committed', '--repeat', '2']) == 0
+    assert f'all {len(names)} committed scenario(s) ran x2' in capsys.readouterr().out
+    partial = write_run(tmp_path / 'partial', names[1:], repeat=2)
+    assert cli.main(['scenario', 'summary', str(partial)]) == 0  # without the flag: the summary as before
+    capsys.readouterr()
+    assert cli.main(['scenario', 'summary', str(partial), '--require-committed', '--repeat', '2']) == 1
+    assert f'did not run: {names[0]}' in capsys.readouterr().out

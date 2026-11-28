@@ -48,7 +48,7 @@ from tests.support.firestore_caller_witnesses import (
     witness_completeness_errors,
 )
 from tests.support.firestore_conversation_profiles import PROFILES, discover_conversation_callers
-from tests.support.firestore_query_driver_registry import COVERED_BY, DRIVERS, SKIPS
+from tests.support.firestore_query_driver_registry import COVERED_BY, DRIVERS, RECEIPT_PAYLOAD_BODY_DIGESTS, SKIPS
 from tests.support.firestore_outside_query_drivers import BODY_DIGEST as OUTSIDE_BODY_DIGEST
 from tests.support.firestore_serving_query_inventory import (
     discover_serving_query_functions,
@@ -334,6 +334,9 @@ def test_covered_by_helpers_observed_in_named_driver(driver_results):
 @pytest.fixture(scope='module')
 def pinned_entry_review_errors():
     bad = []
+    for key, digest in RECEIPT_PAYLOAD_BODY_DIGESTS.items():
+        if digest != function_body_digest(key):
+            bad.append(f'{key}: body changed since receipt retirement review')
     for key, entry in COVERED_BY.items():
         if entry.expect_observed:
             continue
@@ -351,7 +354,7 @@ def pinned_entry_review_errors():
 
 @pytest.mark.slow
 def test_digest_pinned_entries_unchanged(pinned_entry_review_errors):
-    """Reviewed bodies of non-observed covered-by helpers and skips are digest-pinned."""
+    """Query coverage exceptions and the payload-only retirement helper are digest-pinned."""
     assert not pinned_entry_review_errors, '; '.join(pinned_entry_review_errors)
 
 

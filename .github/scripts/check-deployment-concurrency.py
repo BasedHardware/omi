@@ -74,7 +74,7 @@ LOCK_CONTRACTS = {
         "${{ github.event.inputs.environment == 'prod' && github.event.inputs.break_glass_lock != 'true' && 'prod-train' || format('deploy-backend-stack-{0}', github.event.inputs.environment || 'development') }}"
     ),
     "gcp_backend_pusher.yml": LockContract(
-        "${{ github.event.inputs.environment == 'prod' && github.event.inputs.break_glass_lock != 'true' && 'prod-train' || (github.event.inputs.service || 'pusher') == 'llm-gateway' && format('deploy-backend-stack-{0}', github.event.inputs.environment) || format('deploy-gke-pusher-{0}', github.event.inputs.environment) }}"
+        "${{ github.event.inputs.environment == 'prod' && github.event.inputs.break_glass_lock != 'true' && (github.event.inputs.service || 'pusher') != 'llm-gateway' && (github.event.inputs.pusher_canary_only == 'true' || (github.event.inputs.pusher_image_only || 'disabled') != 'disabled') && 'deploy-gke-pusher-prod' || github.event.inputs.environment == 'prod' && github.event.inputs.break_glass_lock != 'true' && 'prod-train' || (github.event.inputs.service || 'pusher') == 'llm-gateway' && format('deploy-backend-stack-{0}', github.event.inputs.environment) || format('deploy-gke-pusher-{0}', github.event.inputs.environment) }}"
     ),
     "gcp_backend_pusher_auto_deploy.yml": LockContract("deploy-gke-pusher-development"),
     "gcp_diarizer.yml": LockContract(
@@ -585,7 +585,15 @@ DISPATCH_OR_DEFAULT_ENVIRONMENT = re.compile(
 )
 
 
-def resolve_environment(group: str, environment: str, *, break_glass: bool = False, service: str = "") -> str:
+def resolve_environment(
+    group: str,
+    environment: str,
+    *,
+    break_glass: bool = False,
+    service: str = "",
+    pusher_canary_only: bool = False,
+    pusher_image_only: str = "disabled",
+) -> str:
     rendered = DISPATCH_OR_DEFAULT_ENVIRONMENT.sub(environment, group)
     rendered = rendered.replace("${{ github.event.inputs.environment || 'development' }}", environment).replace(
         "${{ github.event.inputs.environment }}", environment
@@ -596,6 +604,8 @@ def resolve_environment(group: str, environment: str, *, break_glass: bool = Fal
         "github.event.inputs.environment": environment,
         "github.event.inputs.break_glass_lock": "true" if break_glass else "false",
         "github.event.inputs.service": service,
+        "github.event.inputs.pusher_canary_only": "true" if pusher_canary_only else "false",
+        "github.event.inputs.pusher_image_only": pusher_image_only,
         "github.event_name": "workflow_dispatch",
         "github.run_id": "RUN_ID",
     }
@@ -722,7 +732,18 @@ def render_expressions(text: str, context: dict[str, str]) -> str:
 # the GPU services shares one lock. lane 6's ramp controller and the lead's tools read it
 # through backend/scripts/prod_train_lock.py. Break-glass must fall back to the
 # workflow's pre-B5 per-target lock, never to an unserialized group.
+#
+# David's 2026-11-28 protected-Pusher-slot ruling (SCA-4763) adds one audited lane
+# that keeps every admission gate but not the prod-train lock: the isolated Pusher
+# canary and the protected image-only preview/canary/promote/rollback, which only
+# read or patch the Pusher release. They serialize on the same per-target Pusher
+# lock as break-glass, so a Cloud Run train can run while Pusher qualifies.
 PROD_TRAIN_GROUP = "prod-train"
+PUSHER_ISOLATED_LANES = (
+    ("isolated canary", "pusher_canary_only", {"pusher_canary_only": True}),
+    ("image-only preview", "pusher_image_only", {"pusher_image_only": "preview"}),
+    ("image-only rollback", "pusher_image_only", {"pusher_image_only": "rollback"}),
+)
 PROD_TRAIN_WRITERS = {
     # Break-glass config-train shares the backend stack lock: both mutate the same Cloud Run services and queues.
     "config_train.yml": "deploy-backend-stack-prod",
@@ -756,8 +777,36 @@ def validate_prod_train_lock(groups: dict[str, str], workflow_text: dict[str, st
             errors.append(f"{name}: development must never take the prod-train lock")
         if "      break_glass_lock:\n" not in workflow_text.get(name, ""):
             errors.append(f"{name}: prod-train writers must declare the break_glass_lock dispatch input")
+        if "pusher_image_only" in group or "pusher_canary_only" in group:
+            errors.extend(validate_pusher_isolated_lanes(name, group))
     for name in sorted(set(PROD_TRAIN_WRITERS) - set(groups)):
         errors.append(f"{name}: audited prod-train writer has no concurrency group")
+    return errors
+
+
+def validate_pusher_isolated_lanes(name: str, group: str) -> list[str]:
+    """The isolated Pusher lanes leave prod-train without leaving the audited lock graph.
+
+    They must land on the writer's per-target lock -- never prod-train (the slot
+    exists to run beside a Cloud Run train) and never a run-scoped group (that
+    would unserialize two writers of the same GKE release). Break-glass must not
+    move them anywhere else, and the ordinary full Pusher deploy must keep
+    prod-train, which the caller already asserts.
+    """
+
+    errors: list[str] = []
+    per_target = PROD_TRAIN_WRITERS[name]
+    for label, _input_name, lane in PUSHER_ISOLATED_LANES:
+        resolved = resolve_environment(group, "prod", **lane)
+        if resolved != per_target:
+            errors.append(
+                f"{name}: the {label} lane must serialize on the per-target lock {per_target!r}, "
+                f"got {resolved!r}"
+            )
+        if resolve_environment(group, "prod", break_glass=True, **lane) != per_target:
+            errors.append(f"{name}: break-glass must not move the {label} lane off {per_target!r}")
+        if resolve_environment(group, "development", **lane) == PROD_TRAIN_GROUP:
+            errors.append(f"{name}: the development {label} lane must never take the prod-train lock")
     return errors
 
 
@@ -1418,6 +1467,41 @@ def _self_test_prod_train_lock() -> None:
     )
     if resolve_environment(pusher, "prod", break_glass=True, service="llm-gateway") != "deploy-backend-stack-prod":
         raise PolicyError("pusher llm-gateway break-glass did not keep the backend-stack lock")
+
+    # SCA-4763: the isolated Pusher lanes take the per-target lock, the ordinary
+    # full deploy keeps prod-train, and llm-gateway never leaves the stack lock.
+    isolated = (
+        "${{ github.event.inputs.environment == 'prod' && github.event.inputs.break_glass_lock != 'true' && "
+        "(github.event.inputs.service || 'pusher') != 'llm-gateway' && "
+        "(github.event.inputs.pusher_canary_only == 'true' || "
+        "(github.event.inputs.pusher_image_only || 'disabled') != 'disabled') && 'deploy-gke-pusher-prod' || "
+        "github.event.inputs.environment == 'prod' && github.event.inputs.break_glass_lock != 'true' && 'prod-train' || "
+        "(github.event.inputs.service || 'pusher') == 'llm-gateway' && "
+        "format('deploy-backend-stack-{0}', github.event.inputs.environment) || "
+        "format('deploy-gke-pusher-{0}', github.event.inputs.environment) }}"
+    )
+    isolated_cases = (
+        (("prod", {}), "prod-train"),
+        (("prod", {"pusher_canary_only": True}), "deploy-gke-pusher-prod"),
+        (("prod", {"pusher_image_only": "preview"}), "deploy-gke-pusher-prod"),
+        (("prod", {"pusher_image_only": "promote"}), "deploy-gke-pusher-prod"),
+        (("prod", {"pusher_image_only": "rollback"}), "deploy-gke-pusher-prod"),
+        (("prod", {"service": "llm-gateway"}), "prod-train"),
+        (("development", {}), "deploy-gke-pusher-development"),
+    )
+    for (environment, lane), expected in isolated_cases:
+        if resolve_environment(isolated, environment, **lane) != expected:
+            raise PolicyError(f"pusher isolated lane {lane!r} did not resolve to {expected!r}")
+    for lane in ({"pusher_canary_only": True}, {"pusher_image_only": "preview"}):
+        if resolve_environment(isolated, "prod", break_glass=True, **lane) != "deploy-gke-pusher-prod":
+            raise PolicyError("break-glass moved an isolated Pusher lane off its per-target lock")
+        if resolve_environment(isolated, "development", **lane) == "prod-train":
+            raise PolicyError("an isolated Pusher lane took prod-train in development")
+    if validate_pusher_isolated_lanes("gcp_backend_pusher.yml", isolated):
+        raise PolicyError("a correct pusher isolated-lane group was rejected")
+    unserialized_pusher = isolated.replace("'deploy-gke-pusher-prod'", "format('pusher-{0}', github.run_id)")
+    if not validate_pusher_isolated_lanes("gcp_backend_pusher.yml", unserialized_pusher):
+        raise PolicyError("a run-scoped pusher isolated lane satisfied the per-target contract")
 
 
 def run_self_test() -> None:

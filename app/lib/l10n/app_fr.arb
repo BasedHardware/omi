@@ -4808,5 +4808,9 @@
     "deleteFromServerMessage": "Cet enregistrement a été envoyé mais pas encore transcrit. Le supprimer efface aussi définitivement la copie sur les serveurs d'Omi, il ne sera donc jamais transcrit. Cette action est irréversible.",
     "deletedRecordingAlreadyTranscribed": "Déjà transcrit. Supprimez sa conversation pour le retirer.",
     "deletedRecordingWillBeProcessed": "Le traitement de cet enregistrement va se poursuivre. Tu pourras supprimer la conversation dès qu’elle apparaîtra.",
-    "deleteRecordingKeepsConversation": "La suppression retire la copie du téléphone. Les conversations des enregistrements déjà transcrits sont conservées."
+    "deleteRecordingKeepsConversation": "La suppression retire la copie du téléphone. Les conversations des enregistrements déjà transcrits sont conservées.",
+    "batteryRestartToRefresh": "Redémarrez Omi pour actualiser",
+    "onTheWayAllowanceHeldTitle": "Seront traités le {date} au renouvellement de vos minutes",
+    "onTheWayAllowanceHeldUpgrade": "Ou traitez-les tout de suite en passant à un forfait supérieur",
+    "onTheWayDayProcessesOn": "Traitement le {date}"
 }

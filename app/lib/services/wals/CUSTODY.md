@@ -38,6 +38,7 @@ Native recordings, by marker (the marker is parsed in exactly one place, `BatchR
 | `omibatchlimitless` | Limitless flash drained in batch mode | auto (it may be the only copy) |
 | `omibatchwatch` | Apple Watch recovery copy, one per minute | dropped when the live safety copy already covers it; otherwise auto |
 | `omibatchoverflow` | on-device overflow | admitted by `services/on_device/on_device_overflow_intake.dart` as `onDeviceOnly` custody |
+| pendant ring drain (on-device STT) | drained device audio while the user chose on-device transcription | `persistDeviceChunk(phoneOnly: true)` from `ring_storage_sync.dart`; stamps `onDeviceOnly` and `capturedOnDeviceOnly` |
 
 Overflow discovery runs before native migration retires the legacy owners file, and also in
 `OnDeviceRunner` (foreground and background). This replaces the old dependency on the Home
@@ -179,8 +180,9 @@ both go there; the server erases a legacy upload's cap holds.
 
 HTTP 503 `record_capture_pending` asks the app to retain the submitted WALs.
 The upload gate applies the response body's `retry_after_seconds` to that recording,
-using the WAL upload group (conversation, session, batch family, location)
-and bounded backoff with jitter on repeated refusals. WALs without a session
+using the WAL upload group (conversation, session, batch family, location).
+The body can defer that recording for up to 30 minutes. Local backoff and the
+legacy Retry-After header fallback stay bounded to five minutes. WALs without a session
 ID are paced by the submitted file names. The wait survives an app restart for
 the signed-in account. Automatic and single-file
 uploads both respect it. Subsequent sync passes can send the WAL when the
@@ -518,3 +520,44 @@ reclaim; deleted bytes cannot be restored. This PR does not create or enable the
 pass result; no filenames, paths, owners or tombstones. Missing events are unknown,
 not zero deletions. Device timing, actual reclaimed space and ramp outcomes require
 physical-device acceptance. Guard: `test/unit/wal_orphan_reclaim_test.dart`.
+
+
+## Drained pendant audio under on-device transcription (SCA-5264)
+
+Ruling David 2026-11-27 (anx `ev-87eac038a79c0e03e470`). With on-device STT selected
+(`SharedPreferencesUtil().onDeviceSttSelected`: custom provider `onDeviceWhisper` only), the ring
+drain runs as it does in cloud mode, and each chunk is persisted phone-only at persist time
+(`onDeviceOnly` plus `capturedOnDeviceOnly`, so `repairLegacyImportedCustody` keeps it), decided by
+`DrainedAudioCustody.phoneOnlyAtPersist`. Automatic upload stays off for every custom provider. A
+later mode switch never rewrites custody.
+
+- The on-device runner transcribes these chunks newest first, while the app is open (above the
+  battery floor) or on a charger. Choosing on-device STT is the consent; the overflow setting and
+  `shouldKeepAudioLocal` are unchanged. Contiguous 60 s chunks from one device (gaps up to 2 min,
+  spans up to 1 h, `groupOnDeviceWork`) are one conversation and one `from-segments` upload. A 429
+  pauses the runner until Retry-After (1 min to 1 h); the audio stays put.
+- Rule 2 (release only on confirmation): after `from-segments` succeeds and the conversation reads
+  back by id, `persistOnDeviceConversation(serverConfirmed: true)` writes the conversation and moves
+  every chunk of the group to `synced` with `syncedAt` in one save, so a crash never strands audio
+  outside retention or splits a group. Only the existing synced-copy retention deletes the bytes.
+  Keep-everything-on-device never posts, so it never releases.
+- A manual Sync the user confirmed (after the custom-STT and SD-card warnings) calls
+  `SyncProvider.syncWalsAfterConfirmation`. Whatever mode is selected now, it returns drained device
+  audio that is still waiting (no on-device conversation, no prepared upload, not claimed by the
+  runner) to the ordinary upload path, and for 15 minutes chunks drained by that Sync are persisted
+  uploadable. A cancelled warning releases nothing. Phone-captured on-device audio is never
+  released there.
+- The runner claims the WALs it is transcribing (`claimForOnDevice`), and re-checks custody before
+  posting, so a manual Sync and the runner never both process the same audio.
+- Drained chunks keep their drain-time consent: after a switch back to cloud STT the runner still
+  transcribes them on the phone (a confirmed manual Sync sends them to the cloud instead). Phone
+  overflow audio still needs the overflow setting.
+- A group whose own audio cannot be transcribed (no speech, unreadable or missing bytes) waits
+  30 min, doubling to a day, and never blocks other groups; its audio stays untouched. A chunk with
+  an unknown device clock (`timerStart` 0) is always its own conversation.
+- The runner kill switch (`mobile-on-device-runner-disabled`) is checked on every run, in the app
+  and in the Android background worker. Killed, nothing is transcribed, the controller and native
+  overflow configuration turn off, and custody is unchanged.
+- Scope: the drain runs on ring-buffer firmware (3.0.20+). Multi-file firmware keeps today's
+  behaviour under any custom STT.
+- Other custom providers keep today's behaviour: no automatic drain or upload.

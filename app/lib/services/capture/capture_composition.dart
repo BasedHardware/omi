@@ -233,13 +233,17 @@ bool _captureActive(CaptureProvider provider) {
 LiveWordsCoordinator _composeLiveWords(CaptureProvider provider, LivePreviewController livePreview) {
   final vendor = VendorLiveWords(
     onLines: livePreview.onVendorLines,
+    onAudioSent: livePreview.noteAudioSent,
     log: (event, fields) => LiveWordsLog.event('vendor_$event', fields),
   );
   void onPendant(List<int> packet) => vendor.onPendantPacket(packet, provider.pendantTapCodec);
   provider.addDeviceAudioListener(onPendant);
   provider.addPhoneMicAudioListener(vendor.onPhonePcm);
   final coordinator = LiveWordsCoordinator(capture: provider, preview: livePreview, vendor: vendor)..start();
+  // Reliability experiment live_words_cascade: an End cuts the live words and takes them for its request.
+  provider.liveWordsOnEnd = coordinator.onEnd;
   provider.lifetime.own(() {
+    provider.liveWordsOnEnd = null;
     provider.removeDeviceAudioListener(onPendant);
     provider.removePhoneMicAudioListener(vendor.onPhonePcm);
     coordinator.dispose();
@@ -370,7 +374,7 @@ Future<void> _installMobileStandardBatch(CaptureProvider provider) async {
       phone.onRecordingUploadAccepted = reporter.uploadAccepted;
     }
     provider.lifetime.own(() {
-      hold.clear();
+      hold.dispose();
       if (phone is LocalWalSyncImpl && identical(phone.mobileBatchUploadHold, hold)) {
         phone.mobileBatchUploadHold = null;
         phone.onRecordingUploadAccepted = null;

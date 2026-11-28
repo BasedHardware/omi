@@ -12330,5 +12330,9 @@
     "deleteFromServerMessage": "Na-upload na ang recording na ito pero hindi pa naita-transcribe. Kapag binura mo ito, permanente ring mabubura ang kopya sa mga server ng Omi, kaya hindi na ito kailanman maita-transcribe. Hindi na ito maaaring bawiin.",
     "deletedRecordingAlreadyTranscribed": "Naita-transcribe na. Burahin ang usapan nito para alisin ito.",
     "deletedRecordingWillBeProcessed": "Patuloy na ipoproseso ang recording na ito. Maaari mong burahin ang pag-uusap kapag lumabas na ito.",
-    "deleteRecordingKeepsConversation": "Aalisin ng pagbura rito ang kopya sa telepono. Mananatili ang mga pag-uusap para sa mga recording na na-transcribe na."
+    "deleteRecordingKeepsConversation": "Aalisin ng pagbura rito ang kopya sa telepono. Mananatili ang mga pag-uusap para sa mga recording na na-transcribe na.",
+    "batteryRestartToRefresh": "I-restart ang Omi upang i-refresh",
+    "onTheWayAllowanceHeldTitle": "Ipo-proseso sa {date} kapag mag-renew na ang iyong mga minuto",
+    "onTheWayAllowanceHeldUpgrade": "O mag-plan upgrade para maiproseso agad ang mga ito",
+    "onTheWayDayProcessesOn": "Maiiproseso sa {date}"
 }

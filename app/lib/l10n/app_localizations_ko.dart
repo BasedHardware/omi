@@ -15630,4 +15630,20 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get deleteRecordingKeepsConversation => '여기서 삭제하면 휴대전화의 사본이 제거됩니다. 이미 텍스트로 변환된 녹음의 대화는 유지됩니다.';
+
+  @override
+  String get batteryRestartToRefresh => '새로고침하려면 Omi를 다시 시작하세요';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return '분이 갱신되는 $date에 처리됩니다';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => '또는 플랜을 업그레이드하여 바로 처리할 수 있습니다';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return '$date에 처리';
+  }
 }

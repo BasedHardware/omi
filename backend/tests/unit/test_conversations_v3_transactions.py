@@ -26,6 +26,7 @@ from config.record_wal_duplicate import (
 )
 from database import batch_pipeline_purge, conversation_batch_purge_jobs as purge_jobs, legal_holds
 from database import conversations_v3 as store
+from database.account_deletion_marker import ACCOUNT_DELETION_COLLECTION
 from utils import cloud_tasks
 from utils.other import storage
 from utils.conversations.v3 import bind_request_log_trace, metrics, service, summary
@@ -93,13 +94,17 @@ def test_expired_worker_cannot_release_successor(strict):
 
 
 @pytest.mark.parametrize('mode', ['default', 'off'])
-def test_atomic_projection_and_claim(strict, monkeypatch, mode):
+@pytest.mark.parametrize('wipe_status', [None, 'cancelled', 'billing_failed', 'pending'])
+def test_atomic_projection_and_claim(strict, monkeypatch, mode, wipe_status):
     monkeypatch.delenv('CONVERSATIONS_V3_BATCH_COMMIT_READS', raising=False)
     if mode == 'off':
         monkeypatch.setenv('CONVERSATIONS_V3_BATCH_COMMIT_READS', 'off')
     batch_get = Mock(wraps=strict.get_all)
     monkeypatch.setattr(strict, 'get_all', batch_get)
-    strict.rows[R] = {'recording': True, 'v3_pending': True}
+    recording = {'recording': True, 'v3_pending': True}
+    strict.rows[R] = recording.copy()
+    if wipe_status is not None:
+        strict.rows[(ACCOUNT_DELETION_COLLECTION, 'synthetic')] = {'wipe_status': wipe_status}
     token = leases.acquire('synthetic', 'builder', firestore_client=strict)
     source = {'id': 'r', 'recording': True, '_v3_revision': 1}
     row = {
@@ -111,6 +116,14 @@ def test_atomic_projection_and_claim(strict, monkeypatch, mode):
         'transcript_segments': [],
         'structured': {},
     }
+    card = R[:-1] + ('c',)
+    if wipe_status == 'pending':
+        with pytest.raises(store.Conflict, match='^account_deletion$'):
+            store.commit_projection('synthetic', token, {'r': source}, {}, [row], [], firestore_client=strict)
+        assert strict.rows[R] == recording
+        assert card not in strict.rows
+        return
+
     store.commit_projection('synthetic', token, {'r': source}, {}, [row], [], firestore_client=strict)
     if mode == 'default':
         assert batch_get.call_count == 3  # inputs, tombstone, and new target
@@ -119,7 +132,7 @@ def test_atomic_projection_and_claim(strict, monkeypatch, mode):
         batch_get.assert_not_called()
     assert strict.rows[R]['v3_pending'] is False
     assert strict.rows[R]['claims'] == [{'conversation_id': 'c', 'start': AT, 'end': AT}]
-    assert strict.rows[('users', 'synthetic', 'conversations', 'c')]['id'] == 'c'
+    assert strict.rows[card]['id'] == 'c'
 
 
 @pytest.mark.parametrize('missing', [False, True])
@@ -283,6 +296,8 @@ async def test_two_concurrent_reconciles_publish_one_copy(strict, monkeypatch):
     monkeypatch.setattr(store, 'get_firestore_client', lambda: strict)
 
     async def blocking(pool, fn, *args, **kwargs):
+        if fn is store.clear_terminal_pending:
+            return None
         if fn is original_load:
             entered.set()
             await resume.wait()
@@ -856,6 +871,8 @@ def test_projection_partitions_bytes_and_keeps_pending_until_last_batch(
         wrapped = original(body)
 
         def run(tx, *args):
+            if body.__name__ != 'commit':  # lease renewals between batches are transactions too
+                return wrapped(tx, *args)
             if abort_second_batch and len(observations) == 1:
                 raise Aborted('cross-transaction contention')
             result = wrapped(tx, *args)
@@ -1260,6 +1277,26 @@ def test_full_builder_prunes_stale_provisional_lease_ids(strict):
     assert strict.rows[live]['v3_unlocked']
 
 
+@pytest.mark.parametrize('wipe_status', ['cancelled', 'billing_failed', 'pending'])
+def test_summary_commit_respects_account_deletion_marker(strict, wipe_status):
+    card = R[:-1] + ('card',)
+    original = {'id': 'card', 'status': 'processing', 'v3_derived': True}
+    strict.rows[card] = original.copy()
+    strict.rows[(ACCOUNT_DELETION_COLLECTION, 'synthetic')] = {'wipe_status': wipe_status}
+    token = leases.acquire('synthetic', 'summary-card', firestore_client=strict)
+    structured = {'title': 'Synthetic'}
+
+    if wipe_status == 'pending':
+        with pytest.raises(store.Conflict, match='^account_deletion$'):
+            writers.store_summary('synthetic', 'card', token, 1, structured, AT, firestore_client=strict)
+        assert strict.rows[card] == original
+        return
+
+    writers.store_summary('synthetic', 'card', token, 1, structured, AT, firestore_client=strict)
+    assert strict.rows[card]['structured'] == structured
+    assert strict.rows[card]['summary_covers_through'] == AT
+
+
 @pytest.mark.parametrize('already_open_locked', [False, True])
 def test_on_open_summary_commit_finalizes_provisional_snapshot(strict, already_open_locked):
     card = R[:-1] + ('card',)
@@ -1422,6 +1459,239 @@ async def test_queued_processing_skips_foreign_candidate_before_lease(monkeypatc
     pending.assert_called_once_with('synthetic')
     acquire.assert_not_called()
     created_delivery.assert_awaited_once_with('synthetic')
+
+
+@pytest.mark.parametrize(
+    'change',
+    [
+        {'record_upload_revision': 8, 'record_audio_closed': False},
+        {'record_sealed_at': AT.timestamp() + 1},
+        {'record_upload_sessions': {'producer': True}},
+        {'record_audio_partial': {'generation': 1}},
+    ],
+)
+def test_native_notes_recheck_source_custody_during_the_write(strict, change, monkeypatch):
+    from database import conversations_v3_fence as fence
+    from tests.unit.test_conversations_v3_engine import native_ready_fields
+    from utils.conversations.v3 import policy
+
+    source = {'id': 'r', 'recording': True, 'started_at': AT - timedelta(seconds=20), **native_ready_fields(AT)}
+    strict.rows[R] = source
+    binding = policy.native_manual_binding(source)
+    assert binding
+    path = ('users', 'synthetic', 'conversations', 'native-derived')
+    derived = {
+        'id': path[-1],
+        'v3_derived': True,
+        'v3_recording_ids': ['r'],
+        'manual_end': True,
+        'v3_native_manual_binding': binding,
+        'sync_content_revision': 3,
+        'status': 'processing',
+        'transcript_segments': [{'text': 'Synthetic notes input'}],
+    }
+    strict.rows[path] = derived
+    from utils.conversations.v3 import triggers
+
+    wakes = []
+
+    def wake(uid, source_id, revision, *, rearm):
+        assert strict.rows[R]['v3_pending'] is True
+        wakes.append((uid, source_id, revision, rearm))
+
+    monkeypatch.setattr(triggers, 'wake_native_manual_ready', wake)
+    token = leases.acquire('synthetic', 'summary-' + path[-1], firestore_client=strict)
+    assert writers.begin_processing('synthetic', derived, token, firestore_client=strict)
+    with fence.writer('synthetic', path[-1], token, native_binding=binding):
+        assert fence.permits(strict.transaction(), strict, 'synthetic', path[-1], strict.rows[path])
+        # The builder has not updated the derived row; only the raw custody facts moved.
+        strict.rows[R].update(change)
+        with pytest.raises(store.Conflict, match='summary_source_changed'):
+            writers.store_summary(
+                'synthetic', path[-1], token, 1, {'overview': 'Stale content'}, AT, firestore_client=strict
+            )
+        assert strict.rows[R]['v3_pending'] is True  # The refusal is raised after the rearm transaction commits.
+        pending_since = strict.rows[R]['v3_pending_since']
+        assert not fence.permits(strict.transaction(), strict, 'synthetic', path[-1], strict.rows[path])
+        assert not writers.begin_processing('synthetic', derived, token, firestore_client=strict)
+        assert strict.rows[R]['v3_pending_since'] == pending_since
+        with pytest.raises(store.Conflict, match='processing_source_changed'):
+            writers.settle_processing('synthetic', path[-1], token, 3, AT, notes=True, firestore_client=strict)
+    assert not strict.rows[path].get('structured')
+    assert not strict.rows[path].get('v3_notes_written')
+    assert wakes == [('synthetic', 'r', 7, True)]
+
+
+@pytest.mark.parametrize('change', [{'deleted': True}, {'is_locked': True}, {'recording': False}])
+def test_stale_native_proof_does_not_rearm_an_ineligible_source(strict, change):
+    from database import conversations_v3_fence as fence
+    from tests.unit.test_conversations_v3_engine import native_ready_fields
+    from utils.conversations.v3 import policy
+
+    source = {'id': 'r', 'recording': True, 'started_at': AT - timedelta(seconds=20), **native_ready_fields(AT)}
+    binding = policy.native_manual_binding(source)
+    strict.rows[R] = {**source, **change}
+    tx = strict.transaction()
+    assert not fence.permits_native_source(
+        tx, strict, 'synthetic', {'v3_recording_ids': ['r'], 'v3_native_manual_binding': binding}
+    )
+    assert not tx.has_written
+    assert 'v3_pending' not in strict.rows[R]
+
+
+@pytest.mark.parametrize('change', [{'deleted': True}, {'is_locked': True}, {'recording': False}])
+def test_stale_native_ineligible_source_settles_pending_tile(strict, change, monkeypatch):
+    from tests.unit.test_conversations_v3_engine import native_ready_fields
+    from utils.conversations.v3 import policy, triggers
+
+    source = {'id': 'r', 'recording': True, 'started_at': AT - timedelta(seconds=20), **native_ready_fields(AT)}
+    strict.rows[R] = source
+    path = ('users', 'synthetic', 'conversations', 'native-derived')
+    derived = {
+        'id': path[-1],
+        'v3_derived': True,
+        'v3_recording_ids': ['r'],
+        'v3_native_manual_binding': policy.native_manual_binding(source),
+        'manual_end': True,
+        'status': 'in_progress',
+        'sync_content_revision': 3,
+        'transcript_segments': [{'text': 'Synthetic notes input'}],
+    }
+    strict.rows[path] = derived
+    token = leases.acquire('synthetic', 'summary-' + path[-1], firestore_client=strict)
+    assert writers.begin_processing('synthetic', derived, token, firestore_client=strict)
+    strict.rows[R].update(change)
+    source_before = dict(strict.rows[R])
+    monkeypatch.setattr(triggers, 'wake_native_manual_ready', lambda *a, **kw: pytest.fail('unexpected task'))
+    with pytest.raises(store.Conflict, match='summary_source_changed'):
+        writers.store_summary(
+            'synthetic', path[-1], token, 1, {'overview': 'Stale content'}, AT, firestore_client=strict
+        )
+    settled = strict.rows[path]
+    assert strict.rows[R] == source_before
+    assert settled['status'] == 'completed'
+    assert settled['tile_state'] == 'failed'
+    assert settled['v3_process_pending'] is False
+    assert settled['sync_content_revision'] == 4
+    assert not settled.get('v3_native_manual_binding')
+    assert not settled.get('structured')
+
+
+def test_open_takes_preemptible_outline_lease_and_old_provider_cannot_publish(strict):
+    uid, key, fingerprint = 'synthetic', 'builder', 'synthetic-revision'
+    token = leases.acquire(uid, key, firestore_client=strict)
+    assert store.outline_attempt(uid, token, fingerprint, preemptible=True, firestore_client=strict)
+    assert leases.acquire(uid, key, firestore_client=strict) is None
+    foreground = leases.acquire(uid, key, promote_llm=True, firestore_client=strict)
+    assert foreground and foreground != token
+    with pytest.raises(store.Conflict, match='lease_lost'):
+        leases.mark_llm_preemptible(uid, key, token, False, firestore_client=strict)
+    with pytest.raises(store.Conflict, match='lease_lost'):
+        store.save_outline(uid, token, fingerprint, [], firestore_client=strict)
+    assert store.outline_attempt(uid, foreground, fingerprint, firestore_client=strict)
+    assert store.outline_attempt(uid, foreground, fingerprint, firestore_client=strict)
+    assert not store.outline_attempt(uid, foreground, fingerprint, firestore_client=strict)
+    assert leases.acquire(uid, key, promote_llm=True, firestore_client=strict) is None
+
+
+def test_open_can_promote_summary_only_until_background_result_returns(strict):
+    uid, key = 'synthetic', 'summary-conversation'
+    token = leases.acquire(uid, key, firestore_client=strict)
+    assert leases.acquire(uid, key, promote_llm=True, firestore_client=strict) is None
+    leases.mark_llm_preemptible(uid, key, token, True, firestore_client=strict)
+    leases.mark_llm_preemptible(uid, key, token, False, firestore_client=strict)
+    assert leases.acquire(uid, key, promote_llm=True, firestore_client=strict) is None
+    leases.mark_llm_preemptible(uid, key, token, True, firestore_client=strict)
+    assert leases.acquire(uid, key, promote_llm=True, firestore_client=strict) is not None
+    with pytest.raises(store.Conflict, match='lease_lost'):
+        leases.mark_llm_preemptible(uid, key, token, False, firestore_client=strict)
+
+
+@pytest.mark.asyncio
+async def test_preempted_notes_pass_refunds_only_its_attempt(strict, monkeypatch):
+    monkeypatch.setenv('OMI_V3_SUMMARY_FIRST_OPEN_GATING', 'true')
+    from utils.conversations.v3 import models
+
+    uid, cid = 'synthetic', 'conversation'
+    key = 'summary-' + cid
+    path = ('users', uid, 'conversations', cid)
+    row = {'id': cid, 'status': 'processing', 'v3_process_pending': True}
+    row['v3_process_fingerprint'] = writers.processing_hash(row)
+    row['v3_process_attempts'] = 1
+    strict.rows[path] = row.copy()
+    monkeypatch.setattr(leases, 'get_firestore_client', lambda: strict)
+    token = leases.acquire(uid, key)
+    assert writers.begin_processing(uid, row, token, firestore_client=strict)
+    assert strict.rows[path]['v3_process_attempts'] == 2
+    with models.notes_mode(uid, background_lease=(cid, token, datetime.now(timezone.utc))):
+        with pytest.raises(store.Conflict, match='lease_lost'):
+            async with models.summary_model_attempt():
+                foreground = writers.acquire_open_summary(uid, cid)
+                assert foreground and foreground != token
+                assert writers.acquire_open_summary(uid, cid) is None
+
+    assert strict.rows[path]['v3_process_attempts'] == 1
+    assert strict.rows[path]['v3_process_pending'] is True
+    leases.release(uid, key, foreground)
+    token = leases.acquire(uid, key)
+    assert writers.begin_processing(uid, row, token, firestore_client=strict)
+
+
+@pytest.mark.asyncio
+async def test_notes_drain_reloads_foreground_coverage_after_acquiring_lease(monkeypatch, created_delivery):
+    scanned = {'id': 'c', 'v3_process_pending': True}
+    written = {**scanned, 'summary_covers_through': AT, 'finished_at': AT, 'structured': {'title': 'On open'}}
+    monkeypatch.setattr(service, 'pending_processing', lambda _: [scanned])
+    monkeypatch.setattr(service, '_load_processing_row', lambda *_: written)
+    monkeypatch.setattr(leases, 'acquire', lambda *_: 'token')
+    monkeypatch.setattr(leases, 'release', lambda *_: None)
+    process = AsyncMock()
+    monkeypatch.setattr(service, '_process_leased', process)
+    await service.drain_processing('synthetic')
+    process.assert_awaited_once_with('synthetic', written, 'token')
+
+
+@pytest.mark.asyncio
+async def test_outline_takeover_after_attempt_claim_skips_provider_dispatch(strict, monkeypatch):
+    from utils.conversations.v3 import models
+
+    uid, key = 'synthetic', 'builder'
+    token = leases.acquire(uid, key, firestore_client=strict)
+    real_attempt = store.outline_attempt
+    calls = []
+
+    def claim(*args, **kwargs):
+        assert real_attempt(*args, **kwargs, firestore_client=strict)
+        assert leases.acquire(uid, key, promote_llm=True, firestore_client=strict)
+
+    def promote_after_claim(*args, **kwargs):
+        claim(*args, **kwargs)
+        return True
+
+    class Model:
+        async def ainvoke(self, *_args, **_kwargs):
+            calls.append('dispatch')
+
+    monkeypatch.setattr(leases, 'get_firestore_client', lambda: strict)
+    monkeypatch.setattr(store, 'outline_attempt', promote_after_claim)
+    monkeypatch.setattr(models, 'require_current_generated_compute', lambda *a, **kw: None)
+    monkeypatch.setattr(models, 'get_or_create_omi_gateway_llm', lambda *a, **kw: Model())
+    group = {'finished': True, 'manual_end': False, 'end': datetime.now(timezone.utc)}
+    with pytest.raises(store.Conflict, match='lease_lost'):
+        await service._derive_outline(
+            uid,
+            key,
+            token,
+            group,
+            [],
+            'fingerprint',
+            {},
+            cohesion=False,
+            silence_gap=timedelta(minutes=5),
+            preview_key=None,
+            flex_owner_deadline=service.time.monotonic() + 90,
+        )
+    assert not calls
 
 
 def _processed(basis):

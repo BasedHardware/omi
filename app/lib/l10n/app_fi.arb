@@ -4773,5 +4773,9 @@
     "deleteFromServerMessage": "Tämä tallenne on ladattu, mutta sitä ei ole vielä litteroitu. Poistaminen poistaa pysyvästi myös kopion Omin palvelimilta, joten sitä ei koskaan litteroida. Tätä ei voi kumota.",
     "deletedRecordingAlreadyTranscribed": "Jo litteroitu. Poista sen keskustelu poistaaksesi sen.",
     "deletedRecordingWillBeProcessed": "Tallenteen käsittely jatkuu. Voit poistaa keskustelun, kun se tulee näkyviin.",
-    "deleteRecordingKeepsConversation": "Poistaminen tässä poistaa kopion puhelimesta. Jo litteroitujen tallenteiden keskustelut säilyvät."
+    "deleteRecordingKeepsConversation": "Poistaminen tässä poistaa kopion puhelimesta. Jo litteroitujen tallenteiden keskustelut säilyvät.",
+    "batteryRestartToRefresh": "Käynnistä Omi uudelleen päivittämiseksi",
+    "onTheWayAllowanceHeldTitle": "Käsitellään {date}, kun minuittisi uudistuvat",
+    "onTheWayAllowanceHeldUpgrade": "Tai käsittele ne heti tilauksen päivityksellä",
+    "onTheWayDayProcessesOn": "Käsitellään {date}"
 }

@@ -57,6 +57,45 @@ PURGE_ROWS = Counter(
     'Rows handled by completed batch owner privacy sweeps',
     ['scope'],
 )
+POST_WINDOW_SWEEPS = Counter(
+    'omi_batch_pipeline_privacy_post_window_sweeps_total',
+    'Delayed privacy sweeps that durably completed',
+    ['reason'],
+)
+POST_WINDOW_DEAD_LETTERS = Counter(
+    'omi_batch_pipeline_privacy_post_window_dead_letters_total',
+    'Permanent delayed erasure failures retained for recovery',
+    ['error'],
+)
+# Expose a baseline before the first failure so an increase alert sees it.
+for error in (
+    'artifact_address',
+    'artifact_identity',
+    'malformed_intent',
+    'recording_lane_unproven',
+    'scope_history_unavailable',
+):
+    POST_WINDOW_DEAD_LETTERS.labels(error)
+POST_WINDOW_OPERATIONS = Counter(
+    'omi_batch_pipeline_privacy_post_window_operations_total',
+    'Delayed sweep erasure or reconciliation operations, including retry work',
+    ['reason', 'sink'],
+)
+POST_WINDOW_PENDING = Gauge(
+    'omi_batch_pipeline_privacy_post_window_pending',
+    'Durable delayed erasure work by phase, capped at 10001 (10001 means at least that many)',
+    ['phase'],
+)
+
+
+def observe_post_window_pending(collection, schedule_field: str, phase: str) -> None:
+    try:
+        result = collection.order_by(schedule_field).limit(10001).count().get(timeout=5, retry=None)
+        POST_WINDOW_PENDING.labels(phase).set(result[0][0].value)
+    except (google_errors.GoogleAPICallError, TimeoutError, IndexError, TypeError, ValueError, AttributeError) as error:
+        logger.warning('delayed privacy backlog count unavailable phase=%s error_type=%s', phase, type(error).__name__)
+
+
 ACCOUNT_AUTHORITY_WRITES = Counter(
     'omi_batch_pipeline_account_privacy_writes_total',
     'Committed account authority writes observed by the Firestore interceptor',

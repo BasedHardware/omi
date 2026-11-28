@@ -92,6 +92,15 @@ exercise per-case trigger behavior, repeat-admission, final-attempt handling,
 uncovered until the real driver swap. Missing rows are materialized from their synthetic
 recording for this diagnostic. The target does not change `test.sh` or the cohort gate.
 
+Set `ORACLE_DIAG_PAIRED_LIFECYCLE=1` and use a worker revision with the replay
+checkpoint protocol to exercise the missing-row fence and paired erasure. On the
+Go side, the fixture deletes the conversation after dispatch and before the worker
+starts. For erasure, it waits for finalization and captures both pre-wipe views
+before erasing account data. The Go side runs the serving queue-erase handler with
+a synthetic authorization token and an emulator-backed wipe marker. The shared
+Firestore wipe path runs on both sides. The comparator reports pre-wipe findings
+under `/before_erasure`.
+
 To examine the active corpus interactively:
 
 ```sh

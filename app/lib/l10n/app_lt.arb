@@ -4773,5 +4773,9 @@
     "deleteFromServerMessage": "Šis įrašas įkeltas, bet dar nepaverstas tekstu. Jį ištrynus visam laikui ištrinama ir kopija Omi serveriuose, todėl jis niekada nebus paverstas tekstu. To negalima atšaukti.",
     "deletedRecordingAlreadyTranscribed": "Jau paverstas tekstu. Norėdami pašalinti, ištrinkite jo pokalbį.",
     "deletedRecordingWillBeProcessed": "Šis įrašas ir toliau bus apdorojamas. Galėsi ištrinti pokalbį, kai jis pasirodys.",
-    "deleteRecordingKeepsConversation": "Ištrynus čia, kopija pašalinama iš telefono. Jau transkribuotų įrašų pokalbiai išlieka."
+    "deleteRecordingKeepsConversation": "Ištrynus čia, kopija pašalinama iš telefono. Jau transkribuotų įrašų pokalbiai išlieka.",
+    "batteryRestartToRefresh": "Paleiskite Omi iš naujo, kad atnaujintumėte",
+    "onTheWayAllowanceHeldTitle": "Bus apdorojama {date}, kai atsinaujins jūsų minutės",
+    "onTheWayAllowanceHeldUpgrade": "Arba apdorokite juos nedelsiant atnaujinę planą",
+    "onTheWayDayProcessesOn": "Apdorojama {date}"
 }

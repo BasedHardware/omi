@@ -33,6 +33,7 @@ FULL_TASKS = [
     'held_content_cohort_refresh',
     'executor_health',
     'episode_compose_settle',
+    'mcp_daily_rollup',
     'startup_deletion_wipe_reconcile',
     'periodic_deletion_wipe_reconcile',
     'startup_listen_finalization_reconcile',
@@ -105,7 +106,8 @@ def startup(monkeypatch):
     monkeypatch.setattr(main, 'retry_settled_composes', Mock(return_value='compose'))
     monkeypatch.setattr(main, 'run_blocking', calls['run_blocking'])
     monkeypatch.setattr(main, 'proactive_message_dispatcher', calls['proactive_message_dispatcher'])
-    for name in (process_role.PROCESS_ROLE_ENV, PUMP_FLAG, SERVING_FLAG):
+    monkeypatch.setattr(main, 'OMI_APP_ROLE', AppRole.ALL)
+    for name in (process_role.PROCESS_ROLE_ENV, PUMP_FLAG, SERVING_FLAG, 'MCP_DAILY_ROLLUP_ENABLED'):
         monkeypatch.delenv(name, raising=False)
 
     def run():
@@ -125,6 +127,21 @@ def test_default_role_starts_todays_full_set_in_order(startup, monkeypatch, raw)
     assert startup.calls['run_blocking'].call_count == 6
     assert main.app.state.batch_pipeline_serving is None
     assert main.app.state.messaging_runtime is None
+
+
+@pytest.mark.parametrize(
+    'role, enabled, starts',
+    [
+        (AppRole.API, 'true', True),
+        (AppRole.API, 'false', False),
+        (AppRole.REALTIME, 'true', False),
+        (AppRole.WORKERS, 'true', False),
+    ],
+)
+def test_mcp_sweeper_follows_service_role_and_kill_switch(startup, monkeypatch, role, enabled, starts):
+    monkeypatch.setattr(main, 'OMI_APP_ROLE', role)
+    monkeypatch.setenv('MCP_DAILY_ROLLUP_ENABLED', enabled)
+    assert ('mcp_daily_rollup' in startup.run()) is starts
 
 
 def test_dark_pump_role_starts_only_the_pump_keep_set(startup, monkeypatch):

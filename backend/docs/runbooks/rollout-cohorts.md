@@ -52,7 +52,13 @@ admission is snapshotted at first use after listen warmup and remains stable
 for that admitted connection; cohort changes affect it on reconnect. This
 avoids packet gaps during a cache refresh. Other cohort checks retain the
 60-second cache contract. Saturation and read errors
-deny membership; neither an SDK error nor the UID/document path is logged.
+deny membership for ordinary cohorts; neither an SDK error nor the UID/document path is logged.
+`dream-agent`, `go-finalization` and `conversations-v3-holdout` instead raise
+`RolloutCohortUnavailable` and each caller decides: the holdout admits and counts
+`omi_fallback_total{component="feature_flags",from_mode="v3_holdout",reason="unavailable"}`.
+For the holdout, an invalid `OMI_ENV_STAGE` (not `prod`, `dev`, `local` or `offline`) is also unknown
+membership and is counted under the same `reason="unavailable"`: check `OMI_ENV_STAGE` before
+chasing a membership-store outage.
 
 A warm check costs **0 document reads per request**, regardless of flag count.
 An active resident UID costs approximately one document read per process per

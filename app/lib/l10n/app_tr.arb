@@ -4808,5 +4808,9 @@
     "deleteFromServerMessage": "Bu kayıt yüklendi ancak henüz metne dönüştürülmedi. Silmek, Omi sunucularındaki kopyayı da kalıcı olarak siler; böylece asla metne dönüştürülmez. Bu işlem geri alınamaz.",
     "deletedRecordingAlreadyTranscribed": "Zaten metne dönüştürüldü. Kaldırmak için konuşmasını silin.",
     "deletedRecordingWillBeProcessed": "Bu kayıt işlenmeye devam edecek. Konuşma göründüğünde onu silebilirsin.",
-    "deleteRecordingKeepsConversation": "Buradan silmek telefondaki kopyayı kaldırır. Metne dönüştürülmüş kayıtların konuşmaları kalır."
+    "deleteRecordingKeepsConversation": "Buradan silmek telefondaki kopyayı kaldırır. Metne dönüştürülmüş kayıtların konuşmaları kalır.",
+    "batteryRestartToRefresh": "Yenilemek için Omi'yi yeniden başlatın",
+    "onTheWayAllowanceHeldTitle": "Dakikalarınız yenilendiğinde {date} tarihinde işlenecek",
+    "onTheWayAllowanceHeldUpgrade": "Ya da plan yükseltmesiyle bunları hemen işleme alın",
+    "onTheWayDayProcessesOn": "{date} tarihinde işlenecek"
 }

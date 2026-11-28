@@ -15861,4 +15861,20 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get deleteRecordingKeepsConversation =>
       'Xóa tại đây sẽ xóa bản sao trên điện thoại. Cuộc trò chuyện của những bản ghi đã được chép lời vẫn được giữ lại.';
+
+  @override
+  String get batteryRestartToRefresh => 'Khởi động lại Omi để làm mới';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Sẽ xử lý vào $date khi số phút của bạn được gia hạn';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Hoặc xử lý ngay bằng cách nâng cấp gói';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Xử lý vào $date';
+  }
 }

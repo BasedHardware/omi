@@ -4773,5 +4773,9 @@
     "deleteFromServerMessage": "Rakaman ini telah dimuat naik tetapi belum ditranskripsi. Memadamnya turut memadam salinan pada pelayan Omi secara kekal, jadi ia tidak akan ditranskripsi. Tindakan ini tidak boleh dibuat asal.",
     "deletedRecordingAlreadyTranscribed": "Sudah ditranskripsi. Padam perbualannya untuk mengalih keluarnya.",
     "deletedRecordingWillBeProcessed": "Rakaman ini akan terus diproses. Anda boleh memadamkan perbualan selepas ia muncul.",
-    "deleteRecordingKeepsConversation": "Pemadaman di sini membuang salinan pada telefon. Perbualan daripada rakaman yang sudah ditranskripsikan akan kekal."
+    "deleteRecordingKeepsConversation": "Pemadaman di sini membuang salinan pada telefon. Perbualan daripada rakaman yang sudah ditranskripsikan akan kekal.",
+    "batteryRestartToRefresh": "Mulakan semula Omi untuk memuat semula",
+    "onTheWayAllowanceHeldTitle": "Akan diproses pada {date} apabila minit anda diperbaharui",
+    "onTheWayAllowanceHeldUpgrade": "Atau proses terus dengan naik taraf pelan",
+    "onTheWayDayProcessesOn": "Diproses pada {date}"
 }

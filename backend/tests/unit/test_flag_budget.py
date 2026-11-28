@@ -68,6 +68,7 @@ HELPER_KILL_SWITCHES = {
     'RECORD_FOLLOWUP_WAKE_ENABLED',
     'RECORD_SEAL_WAKE_PRESERVED_ENABLED',
     'BATCH_PIPELINE_FRESH_GUARD_ENABLED',
+    'ENRICHMENT_AGE_GATE_UNPARK_ENABLED',
     'BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED',
     'BATCH_PIPELINE_DELIVERED_SHARE_ENABLED',
     'BATCH_PROJECTION_OUTBOX',
@@ -255,6 +256,11 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
         FEATURE_FLAGS_PATH.read_text(encoding='utf-8'), Loader=getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
     )
     flags = {flag['key']: flag for flag in registry['flags']}
+    first_week = flags['FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED']
+    assert first_week['kind'] == 'env'
+    assert first_week['lifecycle'] == 'ops_kill'
+    assert first_week['fail'] == 'open'
+    assert first_week['summary'].startswith('Code default on')
     # Registry lanes are assigned independently of the budget exception owners.
     # The ad1268 sweep replaces account ownership; don't freeze the former account
     # or require a test edit whenever a lane takes ownership of a registry row.
@@ -344,6 +350,7 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
             'SUMMARY_PROJECTION_DEBT_ENABLED',
             'HOME_EMPTY_OUTPUT_NOISE',
             'EPISODE_COMPOSER_REUSE',
+            'ENRICHMENT_AGE_GATE_UNPARK_ENABLED',
         }:
             assert entry['owner'] == 'refactor-lead'
             assert entry['review_by'] == '2026-12-10'

@@ -13,6 +13,16 @@ OPERATIONS = frozenset({'create', 'set', 'update', 'delete'})
 # Count sites by enclosing function so adding a raw call to an existing writer
 # still needs review. See the reason on every admitted site.
 KNOWN_RAW = {
+    ('utils/support/transcription_credit.py', 'grant.write', 'users', 'update'): (
+        1,
+        'Operator-only support credit grant: one field (support_transcription_credit) in a transaction that '
+        'rereads the stored map and refuses a concurrent change; audited in support_actions (SCA-5263).',
+    ),
+    ('utils/support/transcription_credit.py', 'revoke.write', 'users', 'update'): (
+        1,
+        'Operator-only support credit revoke: deletes one grant key of support_transcription_credit in a '
+        'transaction guarded by the stored digest; audited in support_actions (SCA-5263).',
+    ),
     ('database/dream_canary.py', 'ensure_synthetic_owner.ensure', 'users', 'set'): (
         1,
         'Provisioning only for the synthetic Dream canary.',
@@ -76,6 +86,11 @@ KNOWN_RAW = {
     ('database/users.py', 'set_user_cancellation_feedback', 'users', 'set'): (
         1,
         'Feedback can provision a profile. Existing observer records the upsert.',
+    ),
+    ('database/users.py', 'update_user_subscription.apply_paid_subscription', 'users', 'update'): (
+        1,
+        'Subscription updates may also write the top-level first-paid epoch when the first-week flag is enabled; '
+        'with the flag off the existing subscription-only update remains. The real writer regression is covered.',
     ),
     ('database/users.py', 'clear_byok_active', 'users', 'set'): (
         1,

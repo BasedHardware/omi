@@ -4808,5 +4808,9 @@
     "deleteFromServerMessage": "Rekaman ini sudah diunggah tetapi belum ditranskripsi. Menghapusnya juga menghapus salinannya di server Omi secara permanen, sehingga tidak akan pernah ditranskripsi. Tindakan ini tidak dapat dibatalkan.",
     "deletedRecordingAlreadyTranscribed": "Sudah ditranskripsi. Hapus percakapannya untuk menghapusnya.",
     "deletedRecordingWillBeProcessed": "Rekaman ini akan tetap diproses. Kamu bisa menghapus percakapan setelah muncul.",
-    "deleteRecordingKeepsConversation": "Menghapus di sini menghapus salinan di ponsel. Percakapan dari rekaman yang sudah ditranskripsikan tetap tersimpan."
+    "deleteRecordingKeepsConversation": "Menghapus di sini menghapus salinan di ponsel. Percakapan dari rekaman yang sudah ditranskripsikan tetap tersimpan.",
+    "batteryRestartToRefresh": "Mulai ulang Omi untuk menyegarkan",
+    "onTheWayAllowanceHeldTitle": "Akan diproses pada {date} saat menit Anda diperbarui",
+    "onTheWayAllowanceHeldUpgrade": "Atau proses langsung dengan upgrade paket",
+    "onTheWayDayProcessesOn": "Diproses pada {date}"
 }

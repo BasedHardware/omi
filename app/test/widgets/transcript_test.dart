@@ -730,6 +730,38 @@ void main() {
       expect(find.byKey(const ValueKey('transcript_jump_to_latest')), findsOneWidget);
     });
 
+    testWidgets('dragging back to the latest segment by hand resumes the follow', (tester) async {
+      await pumpTranscript(tester);
+      await tester.drag(find.bySubtype<CustomScrollView>(), const Offset(0, 260));
+      await tester.pumpAndSettle();
+      expect(scrollState.isAtBottom, isFalse);
+
+      // A slow drag, not a fling: the finger is still down when the list reaches its end.
+      await tester.drag(find.bySubtype<CustomScrollView>(), const Offset(0, -600));
+      await tester.pumpAndSettle();
+      expect(controller.offset, closeTo(controller.position.maxScrollExtent, 0.1));
+      expect(find.byKey(const ValueKey('transcript_jump_to_latest')), findsNothing);
+
+      segments = [
+        ...segments,
+        TranscriptSegment(
+          id: 'live-after-return',
+          text: List.filled(80, 'new live words').join(' '),
+          speaker: 'SPEAKER_00',
+          isUser: false,
+          personId: null,
+          start: segments.length.toDouble(),
+          end: segments.length + 1.0,
+          translations: const [],
+        ),
+      ];
+      contentVersion++;
+      await pumpTranscript(tester);
+
+      expect(controller.offset, closeTo(controller.position.maxScrollExtent, 0.1));
+      expect(scrollState.isAtBottom, isTrue);
+    });
+
     testWidgets('manual scrolling up stays put when live content arrives mid-gesture', (tester) async {
       await pumpTranscript(tester);
       final gestureStart = tester.getCenter(find.bySubtype<CustomScrollView>());

@@ -15624,4 +15624,20 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get deleteRecordingKeepsConversation => 'ここで削除すると、スマートフォン上のコピーが消去されます。文字起こし済みの録音の会話は残ります。';
+
+  @override
+  String get batteryRestartToRefresh => 'Omiを再起動して更新';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return '分数が更新される$dateに処理されます';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'またはプランのアップグレードですぐに処理できます';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return '$dateに処理予定';
+  }
 }

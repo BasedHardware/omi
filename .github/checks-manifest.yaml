@@ -129,7 +129,7 @@ checks:
     reason: "The 2026-09-24 inventory found an incorrect notes-v2 default and missing calendar, memory and JIT gates in the handwritten catalog; code reads and deploy declarations now require reviewed registry entries and a deterministic rendered doc"
   - id: feature-flag-registry-fixtures
     command: ["python3", "scripts/test_check_feature_flag_registry.py"]
-    triggers: ["config/feature-flags.yaml", "scripts/feature_flag_registry.py", "scripts/check_feature_flag_registry.py", "scripts/test_check_feature_flag_registry.py", "scripts/git_test_env.py", "scripts/render_feature_flag_registry.py", ".github/scripts/run_checks.py", ".github/checks-manifest.yaml"]
+    triggers: ["config/feature-flags.yaml", "scripts/feature_flag_registry.py", "scripts/check_feature_flag_registry.py", "scripts/test_check_feature_flag_registry.py", "scripts/report_feature_flag_deadlines.py", "scripts/git_test_env.py", "scripts/render_feature_flag_registry.py", ".github/workflows/feature-flag-deadlines.yml", ".github/scripts/run_checks.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Registry extraction, uniqueness, date warnings, retirement and rendered-doc drift must remain covered by hermetic fixtures"
   - id: posthog-flag-sync-fixtures
@@ -2027,10 +2027,10 @@ checks:
     lanes: ["local", "ci"]
     reason: "a merge-forward helper that claims to union keyed registry entries must not land new checks inside exempt: or revert main's edit to a shared id"
   - id: mobile-event-registry
-    command: ["python3", "scripts/check_event_registry.py", "--base", "{base}"]
-    triggers: ["app/lib/**/*.dart", "contracts/analytics/**", "scripts/check_event_registry.py", ".github/checks-manifest.yaml"]
+    command: ["python3", "scripts/check_event_registry.py", "--base", "{base}", "--posthog-tests"]
+    triggers: ["app/lib/**/*.dart", "contracts/analytics/**", "scripts/check_event_registry.py", "scripts/check_posthog_config.py", "scripts/test_check_posthog_config.py", "scripts/posthog/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "#12271 restored silently missing instrumentation; immutable wire names, executable consumers and adopted-file raw-call checks keep migrated mobile signals usable"
+    reason: "#12271 restored silently missing instrumentation; immutable wire names, executable consumers and adopted-file raw-call checks keep migrated mobile signals usable. SCA-3665: PostHog drifted from about $500 to $2.8k/mo through API-only sampling changes with 2-6x low estimates; contracts/analytics/posthog.json is the source of truth and the guard prints each PR's cost and rejects unread 100% events, debug events above 2% without a David waiver, over-budget configs and large full-refresh syncs"
   - id: mobile-client-compat-catalog
     command: ["python3", "scripts/check_client_compat.py", "--base", "{base}"]
     triggers: ["backend/**", "contracts/client-compat/**", "docs/api-reference/app-client-openapi.json", "scripts/check_client_compat.py", ".github/checks-manifest.yaml"]

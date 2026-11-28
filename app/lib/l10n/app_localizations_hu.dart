@@ -15918,4 +15918,20 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get deleteRecordingKeepsConversation =>
       'Az itteni törlés eltávolítja a másolatot a telefonról. A már átírt felvételekhez tartozó beszélgetések megmaradnak.';
+
+  @override
+  String get batteryRestartToRefresh => 'Indítsa újra az Omit a frissítéshez';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Feldolgozás: $date, amikor megújulnak a perceid';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Vagy dolgozd fel őket azonnal csomagfrissítéssel';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Feldolgozás: $date';
+  }
 }

@@ -15969,4 +15969,20 @@ class AppLocalizationsTa extends AppLocalizations {
   @override
   String get deleteRecordingKeepsConversation =>
       'இங்கு நீக்கினால் மொபைலில் உள்ள நகல் அகற்றப்படும். ஏற்கெனவே எழுத்தாக்கப்பட்ட பதிவுகளின் உரையாடல்கள் தொடர்ந்து இருக்கும்.';
+
+  @override
+  String get batteryRestartToRefresh => 'புதுப்பிக்க Omi ஐ மறுதொடக்கம் செய்யவும்';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'உங்கள் நிமிடங்கள் புதுப்பிக்கப்படும்போது $date அன்று செயலாக்கப்படும்';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'அல்லது திட்ட மேம்பாடு மூலம் அவற்றை உடனடியாகச் செயலாக்குங்கள்';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return '$date அன்று செயலாக்கம்';
+  }
 }

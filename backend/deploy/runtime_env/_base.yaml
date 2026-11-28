@@ -4,7 +4,7 @@
 # See README.md for the qualified scope, train order, ramp and rollback.
 schema_version: 2
 environment_shared:
-  conversations_v3_stage: beta
+  conversations_v3_stage: all
   conversations_v3_first_app_build: ''
   llm_gateway:
     namespace: '{env}-omi-backend'
@@ -38,8 +38,6 @@ environment_shared:
         UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
         UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
         PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
-        SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
-        SYNC_POLL_BACKOFF_PERCENT: {value: '0', category: rollout}
         SYNC_RECORD_COVERAGE_WAIT_MEMO: {value: 'true', category: ops_kill}
         SYNC_RECORD_WAIT_MEMO_FIRST: {value: 'true', category: ops_kill}
         SYNC_RECORD_DECODE_FAILURE_MEMO: {value: 'true', category: ops_kill}
@@ -180,7 +178,7 @@ environment_shared:
           value: 'off'
           category: ops_kill
         CAPTURE_GROUP_CONTAINMENT_MODE:
-          value: shadow
+          value: 'off'
           category: rollout
         TRANSLATION_DEMAND_GATE_ENABLED:
           value: 'true'
@@ -580,8 +578,6 @@ environment_shared:
         BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
         BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
         PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
-        SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
-        SYNC_POLL_BACKOFF_PERCENT: {value: '0', category: rollout}
         SYNC_RECORD_COVERAGE_WAIT_MEMO: {value: 'true', category: ops_kill}
         SYNC_RECORD_WAIT_MEMO_FIRST: {value: 'true', category: ops_kill}
         SYNC_RECORD_DECODE_FAILURE_MEMO: {value: 'true', category: ops_kill}
@@ -660,7 +656,7 @@ environment_shared:
           value: 'true'
           category: ops_kill
         CAPTURE_GROUP_CONTAINMENT_MODE:
-          value: shadow
+          value: 'off'
           category: rollout
         CLIENT_SUMMARIES_AT_CAP_ENABLED:
           value: 'true'
@@ -980,7 +976,6 @@ environment_shared:
             env_var: LADDER_V1_ARCHITECT_YEAR_PRICE_ID
             provisional: true
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
-          SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
           SYNC_RECORD_COVERAGE_WAIT_MEMO: {value: 'true', category: ops_kill}
           SYNC_RECORD_WAIT_MEMO_FIRST: {value: 'true', category: ops_kill}
           SYNC_RECORD_DECODE_FAILURE_MEMO: {value: 'true', category: ops_kill}
@@ -1134,7 +1129,7 @@ environment_shared:
             value: 'true'
             category: ops_kill
           CAPTURE_GROUP_CONTAINMENT_MODE:
-            value: shadow
+            value: 'off'
             category: rollout
           SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
             value: 'true'
@@ -1386,8 +1381,6 @@ environment_shared:
           UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
           UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
-          SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
-          SYNC_POLL_BACKOFF_PERCENT: {value: '0', category: rollout}
           SYNC_RECORD_COVERAGE_WAIT_MEMO: {value: 'true', category: ops_kill}
           SYNC_RECORD_WAIT_MEMO_FIRST: {value: 'true', category: ops_kill}
           SYNC_RECORD_DECODE_FAILURE_MEMO: {value: 'true', category: ops_kill}
@@ -1547,7 +1540,7 @@ environment_shared:
             value: 'true'
             category: ops_kill
           CAPTURE_GROUP_CONTAINMENT_MODE:
-            value: shadow
+            value: 'off'
             category: rollout
           SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
             value: 'true'
@@ -1767,8 +1760,6 @@ environment_shared:
           SYNC_BACKFILL_OWNER_CONCURRENCY: {value: '2', category: reliability}
           SYNC_BACKFILL_OWNER_CONCURRENCY_THRESHOLD: {value: '8', category: reliability}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
-          SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
-          SYNC_POLL_BACKOFF_PERCENT: {value: '0', category: rollout}
           SYNC_RECORD_COVERAGE_WAIT_MEMO: {value: 'true', category: ops_kill}
           SYNC_RECORD_WAIT_MEMO_FIRST: {value: 'true', category: ops_kill}
           SYNC_RECORD_DECODE_FAILURE_MEMO: {value: 'true', category: ops_kill}
@@ -1924,7 +1915,7 @@ environment_shared:
             value: 'true'
             category: ops_kill
           CAPTURE_GROUP_CONTAINMENT_MODE:
-            value: shadow
+            value: 'off'
             category: rollout
           SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
             value: 'true'
@@ -2124,8 +2115,6 @@ environment_shared:
           UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
           UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
-          SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
-          SYNC_POLL_BACKOFF_PERCENT: {value: '0', category: rollout}
           SYNC_RECORD_COVERAGE_WAIT_MEMO: {value: 'true', category: ops_kill}
           SYNC_RECORD_WAIT_MEMO_FIRST: {value: 'true', category: ops_kill}
           SYNC_RECORD_DECODE_FAILURE_MEMO: {value: 'true', category: ops_kill}
@@ -2279,7 +2268,7 @@ environment_shared:
             value: 'true'
             category: ops_kill
           CAPTURE_GROUP_CONTAINMENT_MODE:
-            value: shadow
+            value: 'off'
             category: rollout
           SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
             value: 'true'

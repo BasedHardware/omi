@@ -28,7 +28,6 @@ from typing import Any, Callable, Mapping
 JOBS_ENV = "OMI_HARNESS_SCHEDULER_JOBS"
 PLAN_ENV = "OMI_HARNESS_SCHEDULER_PLAN"
 RECORDING_JOBS = (
-    "sync-backfill-uid-sequencer",
     "enrichment-maintenance",
     "cap-hold-durable-redrive",
     "batch-stock-census",

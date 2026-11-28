@@ -137,6 +137,7 @@ def env(monkeypatch):
     monkeypatch.setattr(monthly_usage_observation, '_observer', None)
     install_month_shadow()
     monkeypatch.setenv('OMI_USAGE_MONTH_TOTAL_SHADOW_RATE', '0')
+    monkeypatch.setenv('FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED', 'false')
     store = Store()
     redis = fakeredis.FakeRedis()
     monkeypatch.setattr(cache, '_redis', lambda: redis)

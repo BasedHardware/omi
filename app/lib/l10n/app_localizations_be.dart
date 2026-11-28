@@ -15895,4 +15895,20 @@ class AppLocalizationsBe extends AppLocalizations {
   @override
   String get deleteRecordingKeepsConversation =>
       'Выдаленне тут прыбірае копію з тэлефона. Размовы для ўжо транскрыбаваных запісаў застаюцца.';
+
+  @override
+  String get batteryRestartToRefresh => 'Перазагрузіце Omi, каб абнавіць паказанне';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Будуць апрацаваны $date, калі абновяцца вашыя хвіліны';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Або апрацуйце іх адразу з абнаўленнем плана';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Будуць апрацаваны $date';
+  }
 }

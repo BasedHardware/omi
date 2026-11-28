@@ -506,7 +506,7 @@ class _SyncPageState extends State<SyncPage> {
     if (sdCardWals.isNotEmpty) {
       _showSdCardWarningDialog(context, syncProvider, sdCardWals.length);
     } else {
-      syncProvider.syncWals();
+      syncProvider.syncWalsAfterConfirmation();
     }
   }
 
@@ -532,7 +532,7 @@ class _SyncPageState extends State<SyncPage> {
       message: context.l10n.sdCardProcessingMessage(sdCardCount),
       confirmLabel: context.l10n.process,
     );
-    if (process) syncProvider.syncWals();
+    if (process) syncProvider.syncWalsAfterConfirmation();
   }
 
   Widget _buildProcessCard(SyncProvider syncProvider) {

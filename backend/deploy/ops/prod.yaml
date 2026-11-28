@@ -38,7 +38,7 @@ region: us-central1
 # live_only.yaml instead; they belong in runtime_env.
 cloud_run:
   backend:
-    memory: 3Gi
+    memory: 4Gi
     env:
       # live-only, 2026-10-20 inventory
       AUDIO_MERGE_DISPATCH_MODE: cloud_tasks
@@ -54,7 +54,7 @@ cloud_run:
       OMI_LANGSMITH_PROMPT_CACHE_TTL_SECONDS: '3600'
       TYPESENSE_HOST_PORT: '443'
   backend-sync:
-    memory: 3Gi
+    memory: 6Gi
     env:
       # 10-18 18:59Z stall: sync-jobs went into Cloud Tasks system backoff after
       # fast 500s. Root fix is the 409 retry contract (#22371).
@@ -108,10 +108,14 @@ cloud_run:
     max_instances: {owner: redis_guard, floor: 8, ceiling: 40}
   backend-integration:
     env:
-      # Margin-40 O1 inverse, 2026-11-17: preserve restored cadence; O3 stays 16.
-      # The former 100/20 source is held. A new lead/Release ruling must supersede this.
+      # SCA-4928: pin the admitted Integration 200/20/class16 cadence.
       BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS: '200'
-      BATCH_PIPELINE_SERVING_TICK_SECONDS: '10'
+      BATCH_PIPELINE_SERVING_TICK_SECONDS: '20'
+      # SCA-3120/SCA-4084, 2026-11-26: slots stay at 4. The 20:46-21:46Z window of
+      # slots 3 + tick 20 s breached the completion guard (completions per input
+      # unit -8%, limit -5%), and Release returned serving to 4. A further step
+      # needs a new proposal on SCA-4454 with an explicit drain-rate guard.
+      BATCH_PIPELINE_PROJECTION_FOLLOWUP_SLOTS: '4'
       BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT: '16'
       SYNC_TASKS_QUEUE: sync-jobs-fresh
       # C4 (lane 9): enrichment-maintenance targets backend-integration.
@@ -197,6 +201,16 @@ cloud_tasks:
     # Re-evaluate the 168h age gate after the backlog drains; this changes no admission policy.
     max_concurrent_dispatches: 30
     max_dispatches_per_second: 10
+    max_attempts: -1
+    min_backoff: 10s
+    max_backoff: 300s
+  enrichment-first-week:
+    # SCA-4790: reserved capacity for a new payer's open first-week summary. This is
+    # additional to enrichment-fresh (30) and the primary queue (300), never a
+    # re-partition of either; unset ENRICHMENT_FIRST_WEEK_TASKS_QUEUE keeps the fresh
+    # binding and leaves this queue idle.
+    max_concurrent_dispatches: 4
+    max_dispatches_per_second: 2
     max_attempts: -1
     min_backoff: 10s
     max_backoff: 300s

@@ -27,6 +27,7 @@ import 'package:omi/services/sockets/pure_socket.dart';
 class VendorLiveWords implements IPureSocketListener {
   VendorLiveWords({
     required this.onLines,
+    this.onAudioSent,
     IPureSocket Function(String url)? connect,
     DateTime Function()? now,
     String Function()? baseUrl,
@@ -42,6 +43,10 @@ class VendorLiveWords implements IPureSocketListener {
 
   /// New or longer lines, timed on the phone's capture clock.
   final void Function(List<LivePreviewLine> lines) onLines;
+
+  /// Each frame the connection carried: when capture saw its first sample, and its length in
+  /// milliseconds. Reliability experiment `live_words_cascade` counts from it; nobody else listens.
+  final void Function(DateTime capturedAt, double ms)? onAudioSent;
   final void Function(String event, Map<String, Object?> fields)? log;
   final Duration leadIn;
 
@@ -207,6 +212,32 @@ class VendorLiveWords implements IPureSocketListener {
     _carriedUntil = frame.capturedAt;
     _sentMs += frame.ms;
     totalSentMs += frame.ms;
+    onAudioSent?.call(frame.capturedAt, frame.ms);
+  }
+
+  // ---------------------------------------------------------------- the End --
+
+  DateTime? _endPending;
+  int endsSentForTesting = 0;
+
+  /// Reliability experiment `live_words_cascade`: the person ended the conversation at [endedAt]. The
+  /// server is told in the audio's own order (a text message between two frames), so it breaks the line
+  /// in progress exactly there and no line spans two conversations. With no connection open the next
+  /// one is told at the first frame captured after [endedAt]. A server without the experiment ignores
+  /// the message.
+  void markEnd(DateTime endedAt) {
+    if (_disposed) return;
+    if (_connected && _socket != null) {
+      _sendEnd();
+    } else {
+      _endPending = endedAt;
+    }
+  }
+
+  void _sendEnd() {
+    _endPending = null;
+    endsSentForTesting++;
+    _socket?.send(jsonEncode(const {'type': 'end'}));
   }
 
   /// The capture time of the audio [seconds] into this connection.
@@ -298,8 +329,14 @@ class VendorLiveWords implements IPureSocketListener {
     // The lead-in first: the sentence in progress, from its start.
     final carried = _carriedUntil;
     for (final frame in _ring) {
-      if (carried == null || frame.capturedAt.isAfter(carried)) _send(frame);
+      if (carried != null && !frame.capturedAt.isAfter(carried)) continue;
+      // An End pressed while no connection was open falls inside the lead-in: tell the server where.
+      final end = _endPending;
+      if (end != null && !frame.capturedAt.isBefore(end)) _sendEnd();
+      _send(frame);
     }
+    // Every frame sent was captured before the End: the line breaks before the next one.
+    if (_endPending != null) _sendEnd();
   }
 
   @override

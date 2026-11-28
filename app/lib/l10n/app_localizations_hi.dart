@@ -15843,4 +15843,20 @@ class AppLocalizationsHi extends AppLocalizations {
   @override
   String get deleteRecordingKeepsConversation =>
       'यहाँ हटाने से फ़ोन की कॉपी हट जाती है। जिन रिकॉर्डिंग का लिप्यंतरण हो चुका है, उनकी बातचीत बनी रहेगी।';
+
+  @override
+  String get batteryRestartToRefresh => 'रीफ़्रेश करने के लिए Omi पुनः प्रारंभ करें';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'आपके मिनट रिन्यू होने पर $date को प्रोसेस होगा';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'या प्लान अपग्रेड के साथ उन्हें तुरंत प्रोसेस करें';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return '$date को प्रोसेस होगा';
+  }
 }

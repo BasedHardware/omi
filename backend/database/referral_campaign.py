@@ -16,6 +16,14 @@ from google.cloud import firestore
 from database._client import get_customer_firestore_client, get_data_plane_firestore_client, run_transactional
 from database.account_deletion_policy import account_deletion_marker_blocks_access
 from database.fsr_read_cache import writing
+from config.summary_guarantee import first_week_enabled
+from database.users import (
+    FIRST_WEEK_PENDING_PAID_START_FIELD,
+    FIRST_WEEK_TRIALING_FIELD,
+    first_week_trialing_patch,
+    paid_since_patch,
+    pending_paid_start_patch,
+)
 from utils.referral_campaign import (
     CampaignPolicy,
     GRANT_FIELD,
@@ -359,11 +367,14 @@ def claim_months(uid: str, *, client=None, policy=None, now=None) -> tuple[dict,
         return run_transactional(client, apply, transient=True)
 
 
-def write_commercial_subscription(uid: str, subscription: dict, *, client=None, policy=None, now=None):
+def write_commercial_subscription(
+    uid: str, subscription: dict, *, client=None, policy=None, now=None, paid_since_context: dict | None = None
+):
     """Serialize billing installation with claims and preserve paid-overlap promo time."""
     client = _client(client)
     policy = policy or current_policy()
     now = now or datetime.now(timezone.utc)
+    feature_enabled = first_week_enabled()
     user_ref = client.collection('users').document(uid)
     state_ref = _ref(client, 'accounts', policy, uid)
 
@@ -373,7 +384,31 @@ def write_commercial_subscription(uid: str, subscription: dict, *, client=None, 
         state = _data(state_ref, transaction)
         grant = user.get(GRANT_FIELD)
         requeued = requeue_grant_for_paid_period(grant, subscription, now=now)
-        patch = {'subscription': subscription}
+        paid_patch: dict[str, Any] = {}
+        if feature_enabled:
+            # Commercial first-paid epoch: set once on the free->paid transition
+            # in the same write that installs the paid subscription (SCA-4790).
+            context = paid_since_context or subscription
+            paid_patch = paid_since_patch(
+                user.get('subscription'),
+                context,
+                stored_user_paid_since=user.get('paid_since'),
+                stored_user_first_week_trialing=user.get(FIRST_WEEK_TRIALING_FIELD),
+                stored_user_pending_paid_start=user.get(FIRST_WEEK_PENDING_PAID_START_FIELD),
+                now=now.timestamp(),
+            )
+            paid_patch.update(
+                pending_paid_start_patch(
+                    user.get('subscription'),
+                    context,
+                    stored_user_paid_since=user.get('paid_since'),
+                    stored_user_pending_paid_start=user.get(FIRST_WEEK_PENDING_PAID_START_FIELD),
+                )
+            )
+            payment_status = context.get('_first_week_payment_status')
+            paid_patch.update(first_week_trialing_patch(user.get(FIRST_WEEK_TRIALING_FIELD), payment_status))
+        patch: dict[str, Any] = {'subscription': subscription}
+        patch.update(paid_patch)
         if requeued is not None and requeued != grant:
             patch[GRANT_FIELD] = requeued
         transaction.update(user_ref, patch)

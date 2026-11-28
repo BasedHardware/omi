@@ -15885,4 +15885,20 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String get deleteRecordingKeepsConversation =>
       'Ištrynus čia, kopija pašalinama iš telefono. Jau transkribuotų įrašų pokalbiai išlieka.';
+
+  @override
+  String get batteryRestartToRefresh => 'Paleiskite Omi iš naujo, kad atnaujintumėte';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Bus apdorojama $date, kai atsinaujins jūsų minutės';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Arba apdorokite juos nedelsiant atnaujinę planą';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Apdorojama $date';
+  }
 }

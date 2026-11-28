@@ -4773,5 +4773,9 @@
     "deleteFromServerMessage": "Dette opptaket er lastet opp, men ikke transkribert ennå. Når du sletter det, slettes også kopien på Omis servere permanent, så det blir aldri transkribert. Dette kan ikke angres.",
     "deletedRecordingAlreadyTranscribed": "Allerede transkribert. Slett samtalen for å fjerne det.",
     "deletedRecordingWillBeProcessed": "Opptaket blir fortsatt behandlet. Du kan slette samtalen når den vises.",
-    "deleteRecordingKeepsConversation": "Hvis du sletter her, fjernes kopien fra telefonen. Samtaler fra opptak som allerede er transkribert, beholdes."
+    "deleteRecordingKeepsConversation": "Hvis du sletter her, fjernes kopien fra telefonen. Samtaler fra opptak som allerede er transkribert, beholdes.",
+    "batteryRestartToRefresh": "Start Omi på nytt for å oppdatere verdien",
+    "onTheWayAllowanceHeldTitle": "Behandles på {date} når minuttene dine fornyes",
+    "onTheWayAllowanceHeldUpgrade": "Eller behandle dem umiddelbart med en planoppgradering",
+    "onTheWayDayProcessesOn": "Behandles {date}"
 }

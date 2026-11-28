@@ -15868,4 +15868,20 @@ class AppLocalizationsSv extends AppLocalizations {
   @override
   String get deleteRecordingKeepsConversation =>
       'Om du raderar här tas kopian bort från telefonen. Konversationer från inspelningar som redan har transkriberats finns kvar.';
+
+  @override
+  String get batteryRestartToRefresh => 'Starta om Omi för att uppdatera';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Bearbetas $date när dina minuter förnyas';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Eller bearbeta dem direkt med en planuppgradering';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Bearbetas $date';
+  }
 }

@@ -4773,5 +4773,9 @@
     "deleteFromServerMessage": "Questa registrazione è stata caricata ma non è ancora stata trascritta. Eliminarla cancella in modo permanente anche la copia sui server di Omi, quindi non verrà mai trascritta. L'operazione non può essere annullata.",
     "deletedRecordingAlreadyTranscribed": "Già trascritta. Elimina la sua conversazione per rimuoverla.",
     "deletedRecordingWillBeProcessed": "Questa registrazione verrà comunque elaborata. Puoi eliminare la conversazione quando compare.",
-    "deleteRecordingKeepsConversation": "Eliminando qui rimuovi la copia dal telefono. Le conversazioni delle registrazioni già trascritte vengono conservate."
+    "deleteRecordingKeepsConversation": "Eliminando qui rimuovi la copia dal telefono. Le conversazioni delle registrazioni già trascritte vengono conservate.",
+    "batteryRestartToRefresh": "Riavvia Omi per aggiornare",
+    "onTheWayAllowanceHeldTitle": "Verranno elaborate il {date} quando si rinnovano i tuoi minuti",
+    "onTheWayAllowanceHeldUpgrade": "Oppure elaborale subito con un upgrade del piano",
+    "onTheWayDayProcessesOn": "Elaborazione il {date}"
 }

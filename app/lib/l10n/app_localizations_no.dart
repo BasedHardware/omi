@@ -15865,4 +15865,20 @@ class AppLocalizationsNo extends AppLocalizations {
   @override
   String get deleteRecordingKeepsConversation =>
       'Hvis du sletter her, fjernes kopien fra telefonen. Samtaler fra opptak som allerede er transkribert, beholdes.';
+
+  @override
+  String get batteryRestartToRefresh => 'Start Omi på nytt for å oppdatere verdien';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Behandles på $date når minuttene dine fornyes';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Eller behandle dem umiddelbart med en planoppgradering';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Behandles $date';
+  }
 }

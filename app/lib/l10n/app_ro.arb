@@ -4773,5 +4773,9 @@
     "deleteFromServerMessage": "Această înregistrare a fost încărcată, dar nu a fost încă transcrisă. Ștergerea ei elimină definitiv și copia de pe serverele Omi, așa că nu va fi transcrisă niciodată. Acțiunea nu poate fi anulată.",
     "deletedRecordingAlreadyTranscribed": "Deja transcrisă. Șterge conversația ei pentru a o elimina.",
     "deletedRecordingWillBeProcessed": "Această înregistrare va fi procesată în continuare. Poți șterge conversația când apare.",
-    "deleteRecordingKeepsConversation": "Ștergerea de aici elimină copia de pe telefon. Conversațiile înregistrărilor deja transcrise rămân."
+    "deleteRecordingKeepsConversation": "Ștergerea de aici elimină copia de pe telefon. Conversațiile înregistrărilor deja transcrise rămân.",
+    "batteryRestartToRefresh": "Repornește Omi pentru a actualiza valoarea",
+    "onTheWayAllowanceHeldTitle": "Vor fi procesate pe {date} când se reînnoiesc minutele tale",
+    "onTheWayAllowanceHeldUpgrade": "Sau procesează-le imediat cu un upgrade de plan",
+    "onTheWayDayProcessesOn": "Se procesează {date}"
 }

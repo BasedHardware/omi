@@ -31,12 +31,26 @@ def max_age_hours() -> str:
     return os.getenv('ENRICHMENT_MAX_AGE_HOURS', '72')
 
 
+def age_gate_unpark_enabled() -> bool:
+    # Operator-local apply switch. Dry-run remains available when this is false.
+    return os.getenv('ENRICHMENT_AGE_GATE_UNPARK_ENABLED', 'true').strip().lower() != 'false'
+
+
 def primary_queue() -> str:
     return os.getenv('ENRICHMENT_TASKS_QUEUE', '').strip()
 
 
 def fresh_queue() -> str:
     return os.getenv('ENRICHMENT_FRESH_TASKS_QUEUE', '').strip()
+
+
+def first_week_queue() -> str:
+    """Reserved queue for a new payer's open first-week summaries (SCA-4790).
+
+    Empty keeps today's binding: those rows fall back to the fresh queue and are
+    protected from demotion by their stored window instead of by a reserved lane.
+    """
+    return os.getenv('ENRICHMENT_FIRST_WEEK_TASKS_QUEUE', '').strip()
 
 
 def fresh_max_age_seconds() -> float:
@@ -83,15 +97,23 @@ def recently_finished(value: object, *, now: float) -> bool:
         return False
 
 
-def dispatch_binding(*, backfill: bool = False, effects_only: bool = False, recent: bool = False) -> dict[str, str]:
+def dispatch_binding(
+    *, backfill: bool = False, effects_only: bool = False, recent: bool = False, first_week: bool = False
+) -> dict[str, str]:
     # Share the worker/auth binding; the outbox owns fenced promotion of
     # existing unleased first-summary obligations. Callers admit only pending
-    # first summaries through ``recent``.
+    # first summaries through ``recent``/``first_week``.
     queue = primary_queue()
     if backfill and os.getenv('ENRICHMENT_BACKFILL_ROUTING_ENABLED', 'true').strip().lower() != 'false':
         queue = os.getenv('SYNC_BACKFILL_TASKS_QUEUE', '').strip() or queue
-    if recent and not backfill and not effects_only:
-        queue = fresh_queue() or queue
+    if not backfill and not effects_only:
+        if first_week:
+            # A stamped first-week window is its own admission gate; it does not
+            # depend on the 30-minute freshness clock. An unset queue keeps the
+            # fresh binding this row would get today.
+            queue = first_week_queue() or fresh_queue() or queue
+        elif recent:
+            queue = fresh_queue() or queue
     handler = os.getenv('ENRICHMENT_TASKS_HANDLER_URL', '').strip()
     return {
         'queue': queue,

@@ -3,11 +3,18 @@
 ``nvidia/parakeet-tdt-0.6b-v3`` at the production revision (``ASR_REVISION`` in
 ``diarizer/batch_pipeline_startup.py``), fp32 on CPU, decoded by the product's own
 ``diarizer.batch_pipeline_models.pin_parakeet_decoding(model, cuda_graphs=False)`` and
-``ParakeetWords.transcribe_batch`` (``greedy_batch``, word timestamps on, CUDA graphs off), over fixed
-30 s windows cut the way ``ParakeetBatchAdapter`` cuts them (``adapters.windowed_words``).
+``ParakeetWords.transcribe_batch`` (``greedy_batch``, word timestamps on, CUDA graphs off).
 
-Its cassettes are keyed ``parakeet_local`` / ``parakeet-tdt-0.6b-v3@<revision[:8]>/cpu-fp32`` with
-``source: local`` and cost zero, so a CPU fp32 result is never filed or read as a production GPU result.
+Windows (``--windows``): ``vad`` (default) transcribes production's local Silero VAD spans packed into windows of
+at most 30 s (:func:`speech_windows`), the way the batch worker cuts speech before ASR; ``fixed`` cuts plain 30 s
+windows the way ``ParakeetBatchAdapter`` does (``adapters.windowed_words``). Fixed windows that mix speech with
+exact digital silence make the CPU model return no words for the whole window (measured 2026-11-26 on a two-voice
+LibriSpeech mix: 38 of 102 words fixed, 102 of 102 with VAD spans). The recorder never adds noise to the audio.
+
+Its cassettes are keyed ``parakeet_local`` / ``parakeet-tdt-0.6b-v3@<revision[:8]>/cpu-fp32`` (fixed windows;
+VAD spans add ``/vad``, so a cassette recorded one way is never read as the other) with ``source: local`` and
+cost zero, so a CPU fp32 result is never filed or read as a production GPU result. The cassette's
+``source_detail`` records the windowing mode and the VAD model and parameters.
 Parakeet gives no speaker labels and no language: words carry neither, and the scenario's diarization
 then has one anonymous speaker.
 
@@ -53,6 +60,11 @@ PROVIDER = 'parakeet_local'
 ADAPTER = 'parakeet_local'
 PYTHON_ENV = 'OMI_PIPELINE_LAB_LOCAL_STT_PYTHON'
 WINDOW_SECONDS = 30.0
+WINDOW_MODES = ('vad', 'fixed')
+DEFAULT_WINDOWS = 'vad'
+VAD_JOIN_GAP = 0.3  # seconds: neighbouring speech spans closer than this share a window
+VAD_PAD = 0.2  # seconds of context kept on each side of a speech span
+VAD_MODEL = 'silero_vad.onnx (utils/stt/local_vad.py, threshold 0.5)'
 
 INSTALL = (
     'the local Parakeet recorder needs the optional local-STT extra, in its own venv outside the repository '
@@ -71,8 +83,23 @@ def asr_revision(startup: Path = STARTUP) -> str:
     return match.group(1)
 
 
-def model_key(revision: str) -> str:
-    return f'parakeet-tdt-0.6b-v3@{revision[:8]}/cpu-fp32'
+def model_key(revision: str, windows: str = 'fixed') -> str:
+    """The cassette model key. Fixed windows keep the original key (every cassette recorded before VAD spans
+    existed used them); VAD spans add ``/vad``."""
+    if windows not in WINDOW_MODES:
+        raise ValueError(f'windows must be one of {WINDOW_MODES}')
+    base = f'parakeet-tdt-0.6b-v3@{revision[:8]}/cpu-fp32'
+    return base + '/vad' if windows == 'vad' else base
+
+
+def windowing_detail(windows: str) -> dict[str, Any]:
+    """What a cassette records about how its audio was cut (``Cassette.source_detail``)."""
+    if windows == 'fixed':
+        return {'windows': 'fixed', 'window_seconds': WINDOW_SECONDS}
+    return {
+        'windows': 'vad',
+        'vad': {'model': VAD_MODEL, 'max_seconds': WINDOW_SECONDS, 'join_gap': VAD_JOIN_GAP, 'pad': VAD_PAD},
+    }
 
 
 def _has_extra() -> bool:
@@ -121,15 +148,80 @@ def transcribe_pcm(
     return windowed_words(pcm16, language, window_seconds, engine.window)[0]
 
 
+def transcribe_spans(pcm16: bytes, language: Optional[str], spans: list, *, engine: Any) -> list[Word]:
+    """Each ``[start, end]`` window on its own, words shifted onto the recording clock."""
+    words: list[Word] = []
+    for start, end in spans:
+        left, right = int(start * 16000) * 2, int(end * 16000) * 2
+        found, _ = engine.window(pcm16[left:right], language)
+        words.extend(Word(w.start + start, w.end + start, w.text) for w in found)
+    return words
+
+
+def speech_windows(
+    pcm16: bytes,
+    *,
+    max_seconds: float = WINDOW_SECONDS,
+    join_gap: float = VAD_JOIN_GAP,
+    pad: float = VAD_PAD,
+    segments: Optional[Callable[[bytes], list]] = None,
+) -> list[list[float]]:
+    """Production's local Silero VAD spans packed into windows of at most ``max_seconds``, the way the batch
+    worker cuts speech before ASR. Fixed 30 s windows that mix speech with digital silence or abrupt level
+    changes make the CPU model return no words for the whole window (measured 2026-11-26: 38 of 102 words on a
+    two-voice LibriSpeech mix); VAD-packed windows return all of them."""
+    if segments is None:
+        from utils.stt.local_vad import offline_pcm_speech_segments as segments
+
+    duration = len(pcm16) / 32000
+    windows: list[list[float]] = []
+    for span in segments(pcm16):
+        start, end = max(0.0, span['start'] - pad), min(duration, span['end'] + pad)
+        if windows:
+            # Windows never overlap: a word in shared padding would be transcribed by both and recorded twice.
+            start = max(start, windows[-1][1])
+            if end <= start:
+                continue
+        if windows and start - windows[-1][1] <= join_gap and end - windows[-1][0] <= max_seconds:
+            windows[-1][1] = end
+            continue
+        while end - start > max_seconds:
+            windows.append([start, start + max_seconds])
+            start += max_seconds
+        windows.append([start, end])
+    return [[round(a, 3), round(b, 3)] for a, b in windows if b > a]
+
+
 # ---- recognizers ----------------------------------------------------------------------------------
 
 
+def transcribe(
+    pcm16: bytes,
+    language: Optional[str],
+    *,
+    engine: Any,
+    windows: str = DEFAULT_WINDOWS,
+    spans: Optional[list] = None,
+    vad: Optional[Callable[[bytes], list]] = None,
+) -> list[Word]:
+    """Words for ``pcm16`` the way ``windows`` says: VAD-packed spans (``spans`` when given, else
+    :func:`speech_windows`) or fixed 30 s windows."""
+    if windows not in WINDOW_MODES:
+        raise ValueError(f'windows must be one of {WINDOW_MODES}')
+    if windows == 'fixed':
+        return transcribe_pcm(pcm16, language, engine=engine)
+    if spans is None:
+        spans = speech_windows(pcm16, segments=vad)
+    return transcribe_spans(pcm16, language, spans, engine=engine)
+
+
 class InProcess:
-    def __init__(self, revision: str):
+    def __init__(self, revision: str, windows: str = DEFAULT_WINDOWS):
         self.engine = ParakeetCPU(revision)
+        self.windows = windows
 
     def __call__(self, pcm16: bytes, language: Optional[str]) -> list[Word]:
-        return transcribe_pcm(pcm16, language, engine=self.engine)
+        return transcribe(pcm16, language, engine=self.engine, windows=self.windows)
 
 
 def _private_work_root() -> Path:
@@ -151,11 +243,22 @@ class Worker:
         *,
         run: Callable[..., Any] = subprocess.run,
         work_root: Optional[Path] = None,
+        windows: str = 'fixed',
+        vad: Optional[Callable[[bytes], list]] = None,
     ):
+        if windows not in WINDOW_MODES:
+            raise ValueError(f'windows must be one of {WINDOW_MODES}')
         self.python, self.revision, self._run, self._work_root = python, revision, run, work_root
+        self.windows, self._vad = windows, vad
 
-    def __call__(self, pcm16: bytes, language: Optional[str]) -> list[LocalWord]:
+    def __call__(self, pcm16: bytes, language: Optional[str], spans: Optional[list] = None) -> list[LocalWord]:
         from testing.pipeline_lab.store import ensure_private_dir
+
+        if spans is None and self.windows == 'vad':
+            # VAD runs here (the backend venv has the product's Silero model); the worker gets the spans.
+            spans = speech_windows(pcm16, segments=self._vad)
+        if spans is not None and not spans:
+            return []  # no speech: nothing to transcribe
 
         base = ensure_private_dir(self._work_root) if self._work_root is not None else _private_work_root()
         with tempfile.TemporaryDirectory(prefix='plab-local-stt-', dir=base) as work:
@@ -167,6 +270,10 @@ class Worker:
             command += ['--pcm', str(pcm_path), '--out', str(out_path), '--revision', self.revision]
             if language:
                 command += ['--language', language]
+            if spans is not None:
+                spans_path = Path(work, 'spans.json')
+                spans_path.write_text(json.dumps(spans))
+                command += ['--spans', str(spans_path)]
             timeout = 600 + 4 * len(pcm16) / BYTES_PER_SECOND
             done = self._run(command, cwd=BACKEND, capture_output=True, text=True, timeout=timeout)
             if done.returncode != 0:
@@ -184,19 +291,21 @@ def _not_installed(pcm16: bytes, language: Optional[str]) -> list[Word]:
     raise LocalRecorderNotInstalled(INSTALL)
 
 
-def recorder() -> LocalRecorder:
+def recorder(windows: str = DEFAULT_WINDOWS) -> LocalRecorder:
     """Parakeet on this machine: the worker venv when ``$OMI_PIPELINE_LAB_LOCAL_STT_PYTHON`` names one, else
-    this interpreter when it has the extra, else a not-installed recorder that explains how to install."""
+    this interpreter when it has the extra, else a not-installed recorder that explains how to install.
+    ``windows``: ``vad`` (default, VAD-packed speech spans) or ``fixed`` (30 s windows)."""
     revision = asr_revision()
-    model = model_key(revision)
+    model = model_key(revision, windows)
+    detail = windowing_detail(windows)
     python = os.environ.get(PYTHON_ENV, '').strip()
     if python:
         if not os.access(python, os.X_OK):
-            return LocalRecorder(PROVIDER, model, _missing_python(python), installed=False)
-        return LocalRecorder(PROVIDER, model, Worker(python, revision))
+            return LocalRecorder(PROVIDER, model, _missing_python(python), installed=False, detail=detail)
+        return LocalRecorder(PROVIDER, model, Worker(python, revision, windows=windows), detail=detail)
     if _has_extra():
-        return LocalRecorder(PROVIDER, model, InProcess(revision))
-    return LocalRecorder(PROVIDER, model, _not_installed, installed=False)
+        return LocalRecorder(PROVIDER, model, InProcess(revision, windows), detail=detail)
+    return LocalRecorder(PROVIDER, model, _not_installed, installed=False, detail=detail)
 
 
 def _missing_python(python: str) -> Callable[[bytes, Optional[str]], list[Word]]:
@@ -216,14 +325,23 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument('--revision', default=None)
     parser.add_argument('--language', default=None)
     parser.add_argument('--window-seconds', type=float, default=WINDOW_SECONDS)
+    parser.add_argument('--spans', default=None, help='JSON [[start, end], ...] seconds: transcribe only these windows')
+    parser.add_argument(
+        '--windows', choices=WINDOW_MODES, default='fixed', help='without --spans: fixed 30 s windows or VAD spans'
+    )
     args = parser.parse_args(argv)
     revision = asr_revision()
     if args.revision not in (None, revision):
         raise SystemExit('--revision differs from ASR_REVISION in this checkout')
     started = time.perf_counter()
-    words = transcribe_pcm(
-        Path(args.pcm).read_bytes(), args.language, engine=ParakeetCPU(revision), window_seconds=args.window_seconds
-    )
+    pcm16 = Path(args.pcm).read_bytes()
+    engine = ParakeetCPU(revision)
+    if args.spans:
+        words = transcribe_spans(pcm16, args.language, json.loads(Path(args.spans).read_text()), engine=engine)
+    elif args.windows == 'vad':
+        words = transcribe(pcm16, args.language, engine=engine, windows='vad')
+    else:
+        words = transcribe_pcm(pcm16, args.language, engine=engine, window_seconds=args.window_seconds)
     value = {
         'revision': revision,
         'model': model_key(revision),

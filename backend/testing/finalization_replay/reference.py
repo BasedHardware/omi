@@ -11,7 +11,7 @@ from unittest.mock import patch
 from urllib.parse import urlsplit
 
 
-async def _finalize(state, intent, claim, trigger):
+async def _finalize(state, intent, claim, trigger, before_worker_delete):
     from database import conversation_finalization_jobs as jobs
     from utils.conversations import finalizer, lifecycle
 
@@ -28,6 +28,8 @@ async def _finalize(state, intent, claim, trigger):
             and (uid, cid) == (state.uid, state.cid)
             and kwargs.get('read_site') == finalizer.FirestoreReadSite.FINALIZER_JOB_REPLAY
         ):
+            if before_worker_delete is not None:
+                before_worker_delete()
             state.conversation.delete()
             deleted = True
         return get_conversation(uid, cid, **kwargs)
@@ -61,7 +63,7 @@ async def _finalize(state, intent, claim, trigger):
     return disposition.value
 
 
-def _run(state):
+def _run(state, *, before_worker_delete=None):
     from database import conversation_finalization_jobs as jobs
     from utils.conversations import lifecycle
     from utils.conversations.processing_trigger import ProcessingTrigger
@@ -84,7 +86,7 @@ def _run(state):
     )
     status = claim['status']
     if status == 'claimed':
-        status = asyncio.run(_finalize(state, intent, claim, trigger))
+        status = asyncio.run(_finalize(state, intent, claim, trigger, before_worker_delete))
     state.queue_fanout_key = jobs.get_finalization_job(job_id).get('fanout_key')
     return status
 

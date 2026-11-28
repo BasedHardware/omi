@@ -127,12 +127,16 @@ OPERATED_OUTSIDE_GIT = {
 }
 
 BLACKHOLE = "http://127.0.0.1:9"
+# The diarizer's speaker-embedding route. The stack serves it on CPU when the model
+# runtime is installed (dev_harness/voice_embedding.py); otherwise it is unreachable
+# like the other hosted model services.
+VOICE_EMBEDDING_ENV = "HOSTED_SPEAKER_EMBEDDING_API_URL"
 # Hosted GPU and model services with no local counterpart. Staging points the
 # same names at a closed port so the callers take their production fallback.
 HOSTED_WITHOUT_LOCAL_COUNTERPART = (
     "HOSTED_PARAKEET_API_URL",
     "HOSTED_DIARIZATION_API_URL",
-    "HOSTED_SPEAKER_EMBEDDING_API_URL",
+    VOICE_EMBEDDING_ENV,
     "HOSTED_LID_API_URL",
     "HOSTED_VAD_API_URL",
 )
@@ -160,6 +164,8 @@ class Topology:
     llm_gateway_url: str
     redis_host: str
     redis_port: int
+    # Local speaker-embedding service, when this stack runs one; empty leaves the address unreachable.
+    voice_embedding_url: str = ""
 
     def url(self, service: str) -> str:
         # Cloud Run services are HTTPS-only and the code checks it for several
@@ -325,6 +331,8 @@ def _localize(name: str, value: str, topology: Topology) -> str | None:
         return "off"
     if name.endswith("_TOKEN") or name.endswith("_API_KEY"):
         return ""  # telemetry write keys: a harness stack reports nowhere
+    if name == VOICE_EMBEDDING_ENV and value and topology.voice_embedding_url:
+        return topology.voice_embedding_url
     if name in HOSTED_WITHOUT_LOCAL_COUNTERPART:
         return BLACKHOLE if value else ""
     if name == "OMI_LLM_GATEWAY_URL":

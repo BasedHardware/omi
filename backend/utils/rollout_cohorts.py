@@ -145,10 +145,16 @@ def _in_rollout_cohort(
             # The caller (utils/rollout/go_finalization_admission.py) fails closed and records
             # the fallback; a silent False would hide a membership-store outage during a ramp.
             raise policy.RolloutCohortUnavailable('go finalization membership unavailable')
+        if name == policy.V3_HOLDOUT_COHORT:
+            # config.conversations_v3 admits (fails open) and records the fallback.
+            raise policy.RolloutCohortUnavailable('conversations v3 holdout membership unavailable')
         return False
     try:
         members = members.get(rollout_environment(), {})
     except ValueError:
+        if name == policy.V3_HOLDOUT_COHORT:
+            # An invalid OMI_ENV_STAGE is unknown membership too: admit and count it, never a plain miss.
+            raise policy.RolloutCohortUnavailable('conversations v3 holdout rollout environment invalid')
         return False
     if name in members:
         return members[name] is True

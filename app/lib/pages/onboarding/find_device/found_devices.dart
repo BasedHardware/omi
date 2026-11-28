@@ -27,9 +27,6 @@ import 'package:omi/widgets/apple_watch_setup_bottom_sheet.dart';
 import 'package:omi/widgets/connection_guide_sheet.dart';
 import 'pairing_failure_card.dart';
 
-@visibleForTesting
-Future<void> retryOfflineSavedDevice(Future<void> Function() connect) => connect();
-
 class FoundDevices extends StatefulWidget {
   final bool isFromOnboarding;
   final VoidCallback goNext;
@@ -46,7 +43,7 @@ class FoundDevices extends StatefulWidget {
   /// nothing found, where the page shows its own empty state instead.
   final bool showStatus;
 
-  /// Scans again; offered on an offline saved device's "Try Again".
+  /// Scans again; offered by the pairing failure card's retry.
   final Future<void> Function()? onRescan;
 
   @override
@@ -303,15 +300,6 @@ class _FoundDevicesState extends State<FoundDevices> with WidgetsBindingObserver
     );
   }
 
-  void _showOffline(BtDevice device) {
-    OmiFeedback.error(
-      context,
-      context.l10n.deviceOfflineWakeHint(device.name),
-      actionLabel: context.l10n.tryAgain,
-      onAction: widget.onRescan == null ? null : () => unawaited(widget.onRescan!()),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final (liveDeviceId, liveType, liveBattery, charging) =
@@ -442,7 +430,6 @@ class _FoundDevicesState extends State<FoundDevices> with WidgetsBindingObserver
   _devicesList(OnboardingProvider provider) {
     return (provider.visibleDeviceList.mapIndexed((index, device) {
       bool isConnecting = provider.connectingToDeviceId == device.id;
-      final isOfflineSavedDevice = provider.isSavedDevice(device) && !provider.isDeviceOnline(device);
 
       final label = () {
         final sameNameCount = provider.visibleDeviceList.where((d) => d.name == device.name).length;
@@ -451,10 +438,6 @@ class _FoundDevicesState extends State<FoundDevices> with WidgetsBindingObserver
       final onTap = !provider.isClicked
           ? () async {
               OmiHaptics.selection();
-              if (isOfflineSavedDevice) {
-                _showOffline(device);
-                return;
-              }
               if (device.type == DeviceType.appleWatch) {
                 await _handleAppleWatchOnboarding(device, provider);
               } else if (device.type == DeviceType.raybanMeta) {
@@ -482,7 +465,7 @@ class _FoundDevicesState extends State<FoundDevices> with WidgetsBindingObserver
         child: Semantics(
           button: true,
           enabled: onTap != null,
-          label: isOfflineSavedDevice ? '$label, ${context.l10n.offline}' : label,
+          label: label,
           excludeSemantics: true,
           child: Material(
             color: OmiColors.accent,
@@ -528,7 +511,7 @@ class _FoundDevicesState extends State<FoundDevices> with WidgetsBindingObserver
                                 borderRadius: OmiRadius.smAll,
                               ),
                               child: Text(
-                                isOfflineSavedDevice ? context.l10n.offline : context.l10n.saved,
+                                context.l10n.saved,
                                 style: OmiType.footnote.copyWith(
                                   fontWeight: FontWeight.w600,
                                   color: OmiColors.onAccent.withValues(alpha: 0.6),

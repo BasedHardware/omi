@@ -92,7 +92,9 @@ void main() {
       addTearDown(controller.dispose);
       await Future.wait([controller.ensureLoaded(), controller.ensureLoaded()]);
       expect(reads, 1);
-      expect(controller.isActive, isTrue);
+      expect(controller.runnerEnabled, isTrue);
+      // Surfaces need a consent too: neither on-device STT nor the storefront flag here.
+      expect(controller.isActive, isFalse);
       expect(controller.settings.schedule, OnDeviceSchedule.everyFewHours);
     });
 

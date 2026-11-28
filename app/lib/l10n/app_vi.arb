@@ -4773,5 +4773,9 @@
     "deleteFromServerMessage": "Bản ghi này đã được tải lên nhưng chưa được chép lời. Xóa bản ghi cũng sẽ xóa vĩnh viễn bản sao trên máy chủ của Omi, nên nó sẽ không bao giờ được chép lời. Không thể hoàn tác thao tác này.",
     "deletedRecordingAlreadyTranscribed": "Đã được chép lời. Hãy xóa cuộc trò chuyện của nó để gỡ bỏ.",
     "deletedRecordingWillBeProcessed": "Bản ghi này vẫn sẽ được xử lý. Bạn có thể xóa cuộc trò chuyện khi nó xuất hiện.",
-    "deleteRecordingKeepsConversation": "Xóa tại đây sẽ xóa bản sao trên điện thoại. Cuộc trò chuyện của những bản ghi đã được chép lời vẫn được giữ lại."
+    "deleteRecordingKeepsConversation": "Xóa tại đây sẽ xóa bản sao trên điện thoại. Cuộc trò chuyện của những bản ghi đã được chép lời vẫn được giữ lại.",
+    "batteryRestartToRefresh": "Khởi động lại Omi để làm mới",
+    "onTheWayAllowanceHeldTitle": "Sẽ xử lý vào {date} khi số phút của bạn được gia hạn",
+    "onTheWayAllowanceHeldUpgrade": "Hoặc xử lý ngay bằng cách nâng cấp gói",
+    "onTheWayDayProcessesOn": "Xử lý vào {date}"
 }

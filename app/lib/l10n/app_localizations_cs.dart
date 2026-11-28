@@ -15859,4 +15859,20 @@ class AppLocalizationsCs extends AppLocalizations {
   @override
   String get deleteRecordingKeepsConversation =>
       'Smazáním zde odstraníte kopii z telefonu. Konverzace již přepsaných záznamů zůstanou zachovány.';
+
+  @override
+  String get batteryRestartToRefresh => 'Restartujte Omi pro obnovení údaje';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Zpracuje se $date, až se obnoví vaše minuty';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Nebo je zpracujte hned upgradem plánu';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Zpracuje se $date';
+  }
 }

@@ -4773,5 +4773,9 @@
     "deleteFromServerMessage": "تم رفع هذا التسجيل ولكن لم يتم تحويله إلى نص بعد. حذفه يمسح أيضًا نسخته على خوادم Omi نهائيًا، فلن يتم تحويله إلى نص أبدًا. لا يمكن التراجع عن ذلك.",
     "deletedRecordingAlreadyTranscribed": "تم تحويله إلى نص بالفعل. احذف محادثته لإزالته.",
     "deletedRecordingWillBeProcessed": "ستستمر معالجة هذا التسجيل. يمكنك حذف المحادثة عند ظهورها.",
-    "deleteRecordingKeepsConversation": "يؤدي الحذف هنا إلى إزالة النسخة من الهاتف. وتبقى محادثات التسجيلات التي تم تفريغها بالفعل."
+    "deleteRecordingKeepsConversation": "يؤدي الحذف هنا إلى إزالة النسخة من الهاتف. وتبقى محادثات التسجيلات التي تم تفريغها بالفعل.",
+    "batteryRestartToRefresh": "أعد تشغيل Omi لتحديث القراءة",
+    "onTheWayAllowanceHeldTitle": "ستتم المعالجة في {date} عندما تتجدد دقائقك",
+    "onTheWayAllowanceHeldUpgrade": "أو عالجها فورًا بترقية خطتك",
+    "onTheWayDayProcessesOn": "تتم المعالجة في {date}"
 }

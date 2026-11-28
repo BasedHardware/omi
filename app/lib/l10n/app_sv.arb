@@ -4773,5 +4773,9 @@
     "deleteFromServerMessage": "Den här inspelningen är uppladdad men har inte transkriberats än. Om du raderar den tas även kopian på Omis servrar bort permanent, så den transkriberas aldrig. Detta kan inte ångras.",
     "deletedRecordingAlreadyTranscribed": "Redan transkriberad. Radera dess konversation för att ta bort den.",
     "deletedRecordingWillBeProcessed": "Inspelningen kommer fortfarande att bearbetas. Du kan radera konversationen när den visas.",
-    "deleteRecordingKeepsConversation": "Om du raderar här tas kopian bort från telefonen. Konversationer från inspelningar som redan har transkriberats finns kvar."
+    "deleteRecordingKeepsConversation": "Om du raderar här tas kopian bort från telefonen. Konversationer från inspelningar som redan har transkriberats finns kvar.",
+    "batteryRestartToRefresh": "Starta om Omi för att uppdatera",
+    "onTheWayAllowanceHeldTitle": "Bearbetas {date} när dina minuter förnyas",
+    "onTheWayAllowanceHeldUpgrade": "Eller bearbeta dem direkt med en planuppgradering",
+    "onTheWayDayProcessesOn": "Bearbetas {date}"
 }

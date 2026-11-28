@@ -21,6 +21,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from config.policy.sweep_age import PROVIDER_RUNNING_RECOVERY_SECONDS
+
 COLLECTION = 'COLLECTION'
 COLLECTION_GROUP = 'COLLECTION_GROUP'
 
@@ -439,7 +441,7 @@ JOB_ENTRIES = (
         reasons=DEAD_REASONS,
     ),
     _job('provider_pending', ceiling=400_000, alarm=_FRESH_ALARM, age_alarm_seconds=604800),
-    _job('provider_running', ceiling=50_000, alarm=_FRESH_ALARM, age_alarm_seconds=21600),
+    _job('provider_running', ceiling=50_000, alarm=_FRESH_ALARM, age_alarm_seconds=PROVIDER_RUNNING_RECOVERY_SECONDS),
     _job('provider_superseded', clock='superseded_at', ceiling=50_000),
     _job(
         'record_recovery_waiting',

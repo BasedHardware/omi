@@ -12330,5 +12330,9 @@
     "deleteFromServerMessage": "এই রেকর্ডিংটি আপলোড হয়েছে কিন্তু এখনও ট্রান্সক্রাইব হয়নি। এটি মুছলে Omi-র সার্ভারের কপিটিও স্থায়ীভাবে মুছে যাবে, তাই এটি আর কখনও ট্রান্সক্রাইব হবে না। এটি পূর্বাবস্থায় ফেরানো যাবে না।",
     "deletedRecordingAlreadyTranscribed": "ইতিমধ্যে ট্রান্সক্রাইব হয়েছে। সরাতে এর কথোপকথনটি মুছুন।",
     "deletedRecordingWillBeProcessed": "এই রেকর্ডিং প্রক্রিয়াকরণ চলবে। কথোপকথনটি দেখা গেলে আপনি সেটি মুছে ফেলতে পারবেন।",
-    "deleteRecordingKeepsConversation": "এখানে মুছলে ফোনের কপি সরবে। ইতিমধ্যে প্রতিলিখিত রেকর্ডিংয়ের কথোপকথন থেকে যাবে।"
+    "deleteRecordingKeepsConversation": "এখানে মুছলে ফোনের কপি সরবে। ইতিমধ্যে প্রতিলিখিত রেকর্ডিংয়ের কথোপকথন থেকে যাবে।",
+    "batteryRestartToRefresh": "রিফ্রেশ করতে Omi পুনরায় চালু করুন",
+    "onTheWayAllowanceHeldTitle": "আপনার মিনিট নবায়ন হলে {date} তারিখে প্রসেস হবে",
+    "onTheWayAllowanceHeldUpgrade": "অথবা প্ল্যান আপগ্রেড করে সেগুলো এখনই প্রসেস করুন",
+    "onTheWayDayProcessesOn": "{date} তারিখে প্রসেস হবে"
 }

@@ -424,6 +424,23 @@ def _build_subscription_from_stripe_object(
     return project_subscription(stripe_sub, plan, get_plan_limits(plan))
 
 
+def _subscription_write_data(
+    subscription: Subscription,
+    stripe_sub: dict,
+    previous_attributes: Mapping | None = None,
+) -> dict:
+    """Add private, provider-authoritative first-week payment context to a write."""
+    result = subscription.model_dump()
+    status = stripe_sub.get('status')
+    if isinstance(status, str):
+        result['_first_week_payment_status'] = status
+        if status == 'active':
+            result['_first_week_paid_since'] = stripe_sub.get('current_period_start') or stripe_sub.get('trial_end')
+            if isinstance(previous_attributes, Mapping) and previous_attributes.get('status') == 'trialing':
+                result['_first_week_trial_conversion'] = True
+    return result
+
+
 def _update_subscription_from_session(uid: str, session: stripe.checkout.Session) -> bool:
     with fresh_reads():
         customer_id = session.get('customer')
@@ -439,7 +456,10 @@ def _update_subscription_from_session(uid: str, session: stripe.checkout.Session
                     new_subscription = _build_subscription_from_stripe_object(stripe_sub.to_dict())
                     if new_subscription is None:
                         return False
-                    users_db.update_user_subscription(uid, new_subscription.model_dump())
+                    users_db.update_user_subscription(
+                        uid,
+                        _subscription_write_data(new_subscription, stripe_sub.to_dict()),
+                    )
                     logger.info(f"Subscription for user {uid} updated from session {session.id}.")
         except FirestoreNotFound:
             logger.warning(
@@ -966,7 +986,7 @@ def _store_modified_subscription(
 
     new_subscription = _build_subscription_from_stripe_object(updated_sub_dict)
     if new_subscription:
-        users_db.update_user_subscription(uid, new_subscription.model_dump())
+        users_db.update_user_subscription(uid, _subscription_write_data(new_subscription, updated_sub_dict))
         set_credits_invalidation_signal(uid)
         if is_paid_plan(new_subscription.plan):
             conversations_db.unlock_all_conversations(uid)
@@ -1889,7 +1909,14 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                         await run_blocking(db_executor, memories_db.unlock_all_memories, uid)
                         await run_blocking(db_executor, action_items_db.unlock_all_action_items, uid)
                     await run_blocking(
-                        db_executor, users_db.update_user_subscription, uid, new_subscription.model_dump()
+                        db_executor,
+                        users_db.update_user_subscription,
+                        uid,
+                        _subscription_write_data(
+                            new_subscription,
+                            subscription_obj,
+                            event.get('data', {}).get('previous_attributes'),
+                        ),
                     )
                     await _schedule_payment_recovery_notification(
                         background_tasks,

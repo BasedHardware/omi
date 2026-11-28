@@ -15744,4 +15744,20 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get deleteRecordingKeepsConversation => 'המחיקה כאן מסירה את העותק מהטלפון. שיחות מהקלטות שכבר תומללו נשארות.';
+
+  @override
+  String get batteryRestartToRefresh => 'הפעל מחדש את Omi כדי לרענן';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'ייעבדו ב-$date כשהדקות שלך יתחדשו';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'או עבד אותן מיד עם שדרוג תוכנית';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'ייעבדו ב-$date';
+  }
 }

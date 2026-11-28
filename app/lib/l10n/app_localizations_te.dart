@@ -15925,4 +15925,20 @@ class AppLocalizationsTe extends AppLocalizations {
   @override
   String get deleteRecordingKeepsConversation =>
       'ఇక్కడ తొలగిస్తే ఫోన్‌లోని కాపీ తొలగిపోతుంది. ఇప్పటికే లిప్యంతరీకరించిన రికార్డింగ్‌ల సంభాషణలు అలాగే ఉంటాయి.';
+
+  @override
+  String get batteryRestartToRefresh => 'రిఫ్రెష్ చేయడానికి Omi ను రీస్టార్ట్ చేయండి';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'మీ నిమిషాలు రిన్యూ అయ్యే $dateన ప్రాసెస్ అవుతుంది';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'లేదా ప్లాన్ అప్‌గ్రేడ్‌తో వెంటనే ప్రాసెస్ చేయించండి';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return '$dateన ప్రాసెస్ అవుతుంది';
+  }
 }

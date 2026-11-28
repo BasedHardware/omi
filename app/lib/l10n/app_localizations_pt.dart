@@ -15889,4 +15889,20 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get deleteRecordingKeepsConversation =>
       'Ao eliminar aqui, remove a cópia do telefone. As conversas das gravações já transcritas são mantidas.';
+
+  @override
+  String get batteryRestartToRefresh => 'Reinicie o Omi para atualizar';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Serão processados em $date quando seus minutos renovarem';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Ou processe-os imediatamente com um upgrade de plano';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Processa em $date';
+  }
 }

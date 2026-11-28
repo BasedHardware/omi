@@ -15940,4 +15940,20 @@ class AppLocalizationsCa extends AppLocalizations {
   @override
   String get deleteRecordingKeepsConversation =>
       'Si suprimeixes aquí, s’elimina la còpia del telèfon. Es conserven les converses de les gravacions ja transcrites.';
+
+  @override
+  String get batteryRestartToRefresh => 'Reinicieu Omi per actualitzar el valor';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Es processaran el $date quan es renovin els vostres minuts';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'O processa\'ls de seguida amb una actualització del pla';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Es processaran el $date';
+  }
 }

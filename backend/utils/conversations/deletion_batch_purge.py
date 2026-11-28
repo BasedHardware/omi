@@ -24,6 +24,7 @@ from typing import Any, Iterator
 
 from google.api_core.exceptions import NotFound
 
+from config.firestore_read_levers import lever_enabled
 from database import conversation_batch_purge_jobs as purge_jobs
 from database import conversation_tombstones
 from utils.observability.fallback import record_fallback
@@ -72,6 +73,8 @@ def reconcile_conversation_batch_purges(limit: int = 50) -> dict[str, int]:
     if not is_conversation_batch_purge_dispatch_configured():
         return {}
     due = purge_jobs.due_jobs(limit=limit)
+    if lever_enabled('bpp_late_erasure_execute'):
+        due += purge_jobs.due_jobs(limit=min(limit, 4), post_window=True)
     erasures = purge_jobs.due_jobs(limit=limit * ERASURE_SCAN_FACTOR, collection=purge_jobs.ERASURE_COLLECTION)
     if not due and not erasures:
         return {}
@@ -159,6 +162,10 @@ def _dispatch(snapshot: Any, collection: str, counts: dict[str, int]) -> bool:
     job = snapshot.id
     erasure = collection == purge_jobs.ERASURE_COLLECTION
     row = snapshot.to_dict() or {}
+    if row.get('post_window') is True and not lever_enabled('bpp_late_erasure_execute'):
+        purge_jobs.claim_dispatch(job, collection=collection)  # migrate legacy due_at without dispatching
+        counts['skipped'] += 1
+        return False
     if purge_jobs.lease_held(row):
         counts['skipped'] += 1  # a run owns it; claim_dispatch would refuse too
         return False

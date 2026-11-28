@@ -50,6 +50,7 @@ def users():
             get_data_plane_firestore_client=MagicMock(),
             get_customer_firestore_client=MagicMock(),
             data_plane_db=MagicMock(),
+            run_transactional=MagicMock(),
         ),
         "database.firestore_cache": _module(
             "database.firestore_cache", CachePolicy=MagicMock(), get_or_fetch=MagicMock(), invalidate=MagicMock()

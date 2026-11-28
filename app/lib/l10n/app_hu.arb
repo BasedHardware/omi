@@ -4869,5 +4869,9 @@
     "deleteFromServerMessage": "Ez a felvétel fel van töltve, de még nincs átírva. A törlés az Omi szerverein lévő példányt is véglegesen eltávolítja, így soha nem lesz átírva. Ez nem vonható vissza.",
     "deletedRecordingAlreadyTranscribed": "Már át lett írva. Az eltávolításhoz töröld a beszélgetését.",
     "deletedRecordingWillBeProcessed": "A felvétel feldolgozása folytatódik. A beszélgetést törölheted, miután megjelent.",
-    "deleteRecordingKeepsConversation": "Az itteni törlés eltávolítja a másolatot a telefonról. A már átírt felvételekhez tartozó beszélgetések megmaradnak."
+    "deleteRecordingKeepsConversation": "Az itteni törlés eltávolítja a másolatot a telefonról. A már átírt felvételekhez tartozó beszélgetések megmaradnak.",
+    "batteryRestartToRefresh": "Indítsa újra az Omit a frissítéshez",
+    "onTheWayAllowanceHeldTitle": "Feldolgozás: {date}, amikor megújulnak a perceid",
+    "onTheWayAllowanceHeldUpgrade": "Vagy dolgozd fel őket azonnal csomagfrissítéssel",
+    "onTheWayDayProcessesOn": "Feldolgozás: {date}"
 }

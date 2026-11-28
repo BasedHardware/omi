@@ -8,6 +8,14 @@ inputs:
     description: 'Exact admitted predecessor for a named deploy or integration canary'
     required: false
     default: 'backend-integration-provfix-off1114'
+  selected_split_plan:
+    description: 'Canonical selected hold-back plan'
+    required: false
+    default: ''
+  selected_split_binding:
+    description: 'SHA-256 of the selected hold-back plan'
+    required: false
+    default: ''
   post_wrap_guard:
     description: 'internal fails closed without a trusted adapter; explicit external delegates the post-wrap guard to Pipeline under SCA-2283 08:22 ruling'
     required: false
@@ -304,6 +312,22 @@ runs:
         rm -rf "$RUNNER_TEMP/backend-deploy-control-source"
         printf 'DEPLOY_CONTROL_SCRIPTS=%s\n' "$control_scripts" >> "$GITHUB_ENV"
         printf 'DEPLOY_WORKFLOW_ROOT=%s\n' "$workflow_root" >> "$GITHUB_ENV"
+
+    - name: Validate the bound hold-back plan before deployment
+      if: inputs.selected_split_plan != '' || inputs.selected_split_binding != ''
+      shell: bash
+      env:
+        SERVICE: ${{ inputs.cloud_run_service }}
+        PLAN: ${{ inputs.selected_split_plan }}
+        BINDING: ${{ inputs.selected_split_binding }}
+      run: |
+        set -euo pipefail
+        [[ "${{ inputs.environment }}" == prod && "${{ inputs.deploy_profile }}" == manual &&
+           "${{ inputs.runtime_env }}" == prod && "${{ inputs.project_id }}" == based-hardware &&
+           "${{ inputs.region }}" == us-central1 &&
+           "${{ inputs.integration_only }}" == false && "${{ inputs.integration_canary }}" == false ]] || exit 1
+        python3 "$DEPLOY_CONTROL_SCRIPTS/cloud_run_split_canary.py" validate-plan \
+          --service "$SERVICE" --plan "$PLAN" --binding "$BINDING"
 
     - name: Validate GCP auth inputs
       shell: bash
@@ -606,6 +630,8 @@ runs:
         tags: |
           gcr.io/${{ inputs.project_id }}/${{ inputs.service }}:latest
           gcr.io/${{ inputs.project_id }}/${{ inputs.service }}:${{ steps.image-tag.outputs.short_sha }}
+        labels: |
+          org.opencontainers.image.revision=${{ inputs.admitted_sha }}
         cache-from: type=registry,ref=gcr.io/${{ inputs.project_id }}/${{ inputs.service }}:buildcache
         cache-to: type=registry,ref=gcr.io/${{ inputs.project_id }}/${{ inputs.service }}:buildcache,mode=max
 
@@ -894,6 +920,12 @@ runs:
       env:
         SYNC_LEDGER_FENCE_MODE: ${{ env.SYNC_LEDGER_FENCE_MODE }}
       run: |
+        # The selected carrier's manifest and Helm values are one source snapshot.
+        # Workflow validation still reads the immutable deploy control.
+        chart_args=()
+        if [[ "${{ inputs.cloud_run_service }}" != all ]]; then
+          chart_args=(--chart-root "$GITHUB_WORKSPACE")
+        fi
         canary_args=()
         if [[ "${{ inputs.integration_canary }}" == true ]]; then
           canary_args=(--integration-canary-state "$RUNNER_TEMP/integration-canary-private.json"
@@ -904,12 +936,13 @@ runs:
           --manifest "$GITHUB_WORKSPACE/backend/deploy/runtime_env.yaml" \
           --check-workflows \
           --workflow-root "$DEPLOY_WORKFLOW_ROOT" \
+          "${chart_args[@]}" \
           "${canary_args[@]}" \
           --cloud-run-state "$RUNNER_TEMP/backend-runtime-env-state.json"
 
     - name: Migrate legacy public Cloud Run bindings
       if: >-
-        ${{ inputs.integration_only != 'true' && (success()) }}
+        ${{ !(inputs.selected_split_binding != '' && contains(inputs.selected_split_plan, ',')) && (inputs.integration_only != 'true' && (success())) }}
       shell: bash
       run: |
         set -euo pipefail
@@ -930,7 +963,7 @@ runs:
         --check-runtime-bindings
 
     - name: Deploy ${{ inputs.service }} to Cloud Run
-      if: ${{ (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend') && (inputs.integration_only != 'true' && (success())) }}
+      if: ${{ (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend') && !(inputs.selected_split_binding != '' && contains(inputs.selected_split_plan, ',')) && (inputs.integration_only != 'true' && (success())) }}
       id: deploy-backend
       uses: google-github-actions/deploy-cloudrun@v3
       with:
@@ -955,7 +988,7 @@ runs:
         secrets: ${{ steps.runtime-env.outputs.backend_secrets }}
 
     - name: Attach Managed Prometheus sidecar to ${{ inputs.service }} candidate
-      if: ${{ (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend') && (inputs.integration_only != 'true' && (success())) }}
+      if: ${{ (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend') && !(inputs.selected_split_binding != '' && contains(inputs.selected_split_plan, ',')) && (inputs.integration_only != 'true' && (success())) }}
       id: attach-backend-gmp-sidecar
       shell: bash
       env:
@@ -977,6 +1010,18 @@ runs:
           args+=(--tag="$GMP_CANDIDATE_TAG")
         fi
         python3 "$DEPLOY_CONTROL_SCRIPTS/attach_cloud_run_gmp_sidecar.py" "${args[@]}"
+
+    - name: Stage image-only Backend candidate from the admitted split donor
+      if: ${{ inputs.cloud_run_service == 'backend' && inputs.selected_split_binding != '' && contains(inputs.selected_split_plan, ',') }}
+      shell: bash
+      env:
+        PLAN: ${{ inputs.selected_split_plan }}
+        IMAGE: ${{ steps.service-images.outputs.backend }}
+        SOURCE: ${{ inputs.admitted_sha }}
+        CANDIDATE: backend-${{ steps.image-tag.outputs.revision_suffix }}
+      run: |
+        python3 -I "$DEPLOY_CONTROL_SCRIPTS/stage_split_image.py" \
+          --plan "$PLAN" --candidate "$CANDIDATE" --image "$IMAGE" --source "$SOURCE"
 
     - name: Capture ${{ inputs.service }} revision
       if: ${{ (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend') && (inputs.integration_only != 'true' && (success())) }}
@@ -1377,6 +1422,19 @@ runs:
           --project ${{ inputs.project_id }} \
           --region ${{ inputs.region }}
 
+    - name: Verify the split candidate preserves the admitted donor configuration
+      if: ${{ inputs.cloud_run_service == 'backend' && inputs.selected_split_binding != '' && contains(inputs.selected_split_plan, ',') }}
+      shell: bash
+      env:
+        PLAN: ${{ inputs.selected_split_plan }}
+        IMAGE: ${{ steps.service-images.outputs.backend }}
+        SOURCE: ${{ inputs.admitted_sha }}
+        CANDIDATE: backend-${{ steps.image-tag.outputs.revision_suffix }}
+      run: |
+        python3 -I "$DEPLOY_CONTROL_SCRIPTS/stage_split_image.py" \
+          --verify --plan "$PLAN" --candidate "$CANDIDATE" --image "$IMAGE" --source "$SOURCE" \
+          --expected-state "$RUNNER_TEMP/backend-runtime-env-state.json"
+
     - name: Verify ${{ inputs.service }} release provenance
       if: ${{ inputs.integration_only != 'true' && success() }}
       shell: bash
@@ -1458,6 +1516,10 @@ runs:
       env:
         SYNC_LEDGER_FENCE_MODE: ${{ env.SYNC_LEDGER_FENCE_MODE }}
       run: |
+        chart_args=()
+        if [[ "${{ inputs.cloud_run_service }}" != all ]]; then
+          chart_args=(--chart-root "$GITHUB_WORKSPACE")
+        fi
         canary_args=()
         if [[ "${{ inputs.integration_canary }}" == true ]]; then
           canary_args=(--integration-canary-state "$RUNNER_TEMP/integration-canary-private.json"
@@ -1472,6 +1534,7 @@ runs:
           --manifest "$GITHUB_WORKSPACE/backend/deploy/runtime_env.yaml" \
           --check-workflows \
           --workflow-root "$DEPLOY_WORKFLOW_ROOT" \
+          "${chart_args[@]}" \
           "${canary_args[@]}" "${routing_args[@]}" \
           --cloud-run-service "${{ inputs.cloud_run_service }}" \
           --check-live-cloud-run
@@ -1682,6 +1745,7 @@ runs:
       env:
         CLOUD_RUN_SERVICE: ${{ inputs.cloud_run_service }}
         ROLLBACK_REVISION: ${{ inputs.rollback_revision }}
+        HOLDBACK_BINDING: ${{ inputs.selected_split_binding }}
       run: |
         set -euo pipefail
         scope_args=()
@@ -1689,7 +1753,8 @@ runs:
         if [[ " $SELECTED_CLOUD_RUN_SERVICES " == *" backend-sync "* ]]; then scope_args+=(--service backend-sync); fi
         if [[ " $SELECTED_CLOUD_RUN_SERVICES " == *" backend-sync-backfill "* ]]; then scope_args+=(--service backend-sync-backfill); fi
         if [[ " $SELECTED_CLOUD_RUN_SERVICES " == *" backend-integration "* ]]; then scope_args+=(--service backend-integration); fi
-        if [[ "${{ inputs.deploy_profile }}" == manual && "$CLOUD_RUN_SERVICE" != all ]]; then
+        if [[ "${{ inputs.deploy_profile }}" == manual && "$CLOUD_RUN_SERVICE" != all &&
+              -z "${HOLDBACK_BINDING:-}" ]]; then
           scope_args+=(--expected-serving-revision "$ROLLBACK_REVISION")
         fi
         python3 "$DEPLOY_CONTROL_SCRIPTS/cloud_run_traffic_snapshot.py" capture \
@@ -1734,8 +1799,70 @@ runs:
         ${{ inputs.integration_only != 'true' && (success()) }}
       id: shift-cloud-run-traffic
       shell: bash
+      env:
+        SERVICE: ${{ inputs.cloud_run_service }}
+        PLAN: ${{ inputs.selected_split_plan }}
+        BINDING: ${{ inputs.selected_split_binding }}
+        PROJECT: ${{ inputs.project_id }}
+        REGION: ${{ inputs.region }}
+        ADMITTED_SOURCE: ${{ inputs.admitted_sha }}
+        WORKFLOW_CONTROL: ${{ github.workflow_sha }}
+        BACKEND: ${{ steps.capture-backend-revision.outputs.revision }}
+        SYNC: ${{ steps.capture-backend-sync-revision.outputs.revision }}
+        BACKFILL: ${{ steps.sync-backfill.outputs.revision }}
+        INTEGRATION: ${{ steps.capture-backend-integration-revision.outputs.revision }}
       run: |
         set -euo pipefail
+        if [[ -n "${BINDING:-}" ]]; then
+          case "$SERVICE" in
+            backend) candidate="$BACKEND" ;;
+            backend-sync) candidate="$SYNC" ;;
+            backend-sync-backfill) candidate="$BACKFILL" ;;
+            backend-integration) candidate="$INTEGRATION" ;;
+            *) exit 1 ;;
+          esac
+          # The published floor must cover every inverse target before the
+          # executor moves traffic and again before a failed guard restores it.
+          history_args=()
+          if [[ "$(git rev-parse --is-shallow-repository)" == true ]]; then
+            history_args=(--unshallow)
+          fi
+          git fetch --no-tags "${history_args[@]}" origin +refs/heads/main:refs/remotes/origin/main
+          # Verify the recovery snapshot before the executor changes traffic.
+          python3 -I - "$DEPLOY_CONTROL_SCRIPTS" <<'PYTHON'
+        import json, os, sys
+        sys.path.insert(0, sys.argv[1])
+        from cloud_run_split_canary import decode_plan
+        from cloud_run_traffic_snapshot import restore_targets
+        service = os.environ['SERVICE']
+        expected = decode_plan(service, os.environ['PLAN'])['inverse']
+        with open('artifacts/backend-cloud-run-pre-promotion-traffic-snapshot.json') as stream:
+            snapshot = json.load(stream)['services'][service]
+        if (dict(restore_targets(snapshot)) != expected or
+            dict(restore_targets(snapshot, traffic_source='status')) != expected):
+            raise SystemExit('snapshot differs from the declared inverse')
+        PYTHON
+          result="$(python3 "$DEPLOY_CONTROL_SCRIPTS/cloud_run_split_canary.py" promote \
+            --service "$SERVICE" --plan "$PLAN" --binding "$BINDING" \
+            --candidate "$candidate" --project "$PROJECT" --region "$REGION" \
+            --source "$ADMITTED_SOURCE" --control "$WORKFLOW_CONTROL" \
+            --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --promotion-receipt "$RUNNER_TEMP/backend-holdback-promotion.json" \
+            --release-floor-check "$DEPLOY_WORKFLOW_ROOT/.github/scripts/verify_backend_release_floor.py" \
+            --refresh-floor \
+            --guard-command python3 -I "$DEPLOY_CONTROL_SCRIPTS/cloud_run_split_canary.py" workflow-guard)" || {
+              rc=$?
+              if ((rc == 75)); then
+                echo 'held=true' >> "$GITHUB_OUTPUT"
+                echo 'Cloud Run guard held the partial traffic map. Release retains custody.' >> "$GITHUB_STEP_SUMMARY"
+              fi
+              exit "$rc"
+          }
+          echo 'promoted=true' >> "$GITHUB_OUTPUT"
+          percent="$(jq -er --arg candidate "$candidate" '.[$candidate] | select(type == "number")' <<< "$result")"
+          printf 'serving_percent=%s\n' "$percent" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
         if [[ " $SELECTED_CLOUD_RUN_SERVICES " == *" backend "* ]]; then
           gcloud run services update-traffic backend --project=${{ inputs.project_id }} --region=${{ inputs.region }} --to-revisions=${{ steps.capture-backend-revision.outputs.revision }}=100 --quiet
         fi
@@ -1754,10 +1881,29 @@ runs:
         fi
         fi
 
+    - name: Persist completed bound promotion receipt
+      id: persist-bound-promotion-receipt
+      if: ${{ always() && inputs.selected_split_binding != '' && steps.shift-cloud-run-traffic.outputs.promoted == 'true' }}
+      uses: actions/upload-artifact@v7
+      with:
+        name: backend-holdback-promotion-${{ github.run_id }}-${{ github.run_attempt }}
+        path: ${{ runner.temp }}/backend-holdback-promotion.json
+        if-no-files-found: error
+
     - name: Verify serving backend release vector
       id: verify-serving-release-vector
+      if: ${{ success() && !cancelled() && (inputs.selected_split_binding == '' || steps.persist-bound-promotion-receipt.outcome == 'success') }}
       shell: bash
+      env:
+        SERVING_PERCENT: ${{ steps.shift-cloud-run-traffic.outputs.serving_percent }}
+        BINDING: ${{ inputs.selected_split_binding }}
       run: |
+        set -euo pipefail
+        share_args=()
+        if [[ -n "${BINDING:-}" ]]; then
+          [[ "$SERVING_PERCENT" =~ ^[1-9][0-9]?$|^100$ ]] || exit 1
+          share_args=(--expected-serving-percent "$SERVING_PERCENT")
+        fi
         CLOUD_RUN_ONLY=""
         if [[ "${{ inputs.deploy_profile }}" == "manual" && "${{ inputs.deploy_targets }}" == "cloud-run-only" ]]; then
           CLOUD_RUN_ONLY="--cloud-run-only"
@@ -1774,11 +1920,11 @@ runs:
           --region "${{ inputs.region }}" \
           --environment "${{ inputs.runtime_env }}" \
           --evidence-path ${{ inputs.deploy_profile == 'auto-dev' && 'artifacts/dev-backend-serving-release-vector.json' || 'artifacts/backend-serving-release-vector.json' }} \
-          $CLOUD_RUN_ONLY
+          $CLOUD_RUN_ONLY "${share_args[@]}"
 
     - name: Smoke promoted production serving API
       id: smoke-promoted-production-serving-api
-      if: ${{ (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend') && (inputs.deploy_profile == 'manual' && inputs.environment == 'prod') }}
+      if: ${{ success() && !cancelled() && (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend') && (inputs.deploy_profile == 'manual' && inputs.environment == 'prod') }}
       shell: bash
       env:
         PROBE_SECRET_PROJECT: ${{ inputs.project_id }}
@@ -1872,6 +2018,37 @@ runs:
     # SCA-3681: The manual dev datastore smoke is suspended pending a verified
     # dev endpoint. api.omiapi.com forwards Beta clients to production.
 
+    - name: Restore admitted inverse after a failed bound acceptance gate
+      if: >-
+        ${{ (failure() || cancelled()) && inputs.selected_split_binding != '' &&
+            steps.shift-cloud-run-traffic.outputs.promoted == 'true' &&
+            steps.shift-cloud-run-traffic.outputs.held != 'true' &&
+            (steps.persist-bound-promotion-receipt.outcome != 'success' ||
+             steps.verify-serving-release-vector.outcome == 'failure' ||
+             steps.verify-serving-release-vector.outcome == 'cancelled' ||
+             steps.smoke-promoted-production-serving-api.outcome == 'failure' ||
+             steps.smoke-promoted-production-serving-api.outcome == 'cancelled' ||
+             (cancelled() && (steps.verify-serving-release-vector.outcome != 'success' ||
+              (inputs.cloud_run_service == 'backend' && steps.smoke-promoted-production-serving-api.outcome != 'success')))) }}
+      shell: bash
+      env:
+        SERVICE: ${{ inputs.cloud_run_service }}
+        PLAN: ${{ inputs.selected_split_plan }}
+        BINDING: ${{ inputs.selected_split_binding }}
+        PROJECT: ${{ inputs.project_id }}
+        REGION: ${{ inputs.region }}
+      run: |
+        set -euo pipefail
+        history_args=()
+        if [[ "$(git rev-parse --is-shallow-repository)" == true ]]; then
+          history_args=(--unshallow)
+        fi
+        git fetch --no-tags "${history_args[@]}" origin +refs/heads/main:refs/remotes/origin/main
+        python3 "$DEPLOY_CONTROL_SCRIPTS/cloud_run_split_canary.py" restore-completed \
+          --service "$SERVICE" --plan "$PLAN" --binding "$BINDING" --project "$PROJECT" --region "$REGION" \
+          --promotion-receipt "$RUNNER_TEMP/backend-holdback-promotion.json" \
+          --release-floor-check "$DEPLOY_WORKFLOW_ROOT/.github/scripts/verify_backend_release_floor.py"
+
     - name: Restore Cloud Run traffic snapshot after failed promotion
       if: >-
         ${{ inputs.integration_only != 'true' && (inputs.deploy_profile == 'auto-dev' && (failure() || cancelled()) && steps.cloud-run-traffic-snapshot.outcome == 'success' && (steps.shift-cloud-run-traffic.outcome == 'failure' || steps.verify-serving-release-vector.outcome == 'failure')) }}
@@ -1890,7 +2067,7 @@ runs:
 
     - name: Restore Cloud Run traffic snapshot after failed promotion
       if: >-
-        ${{ inputs.integration_only != 'true' && (inputs.deploy_profile == 'manual' && (failure() || cancelled()) && steps.cloud-run-traffic-snapshot.outcome == 'success' && (steps.shift-cloud-run-traffic.outcome == 'failure' || steps.shift-cloud-run-traffic.outcome == 'cancelled' || steps.verify-serving-release-vector.outcome == 'failure' || steps.verify-serving-release-vector.outcome == 'cancelled' || steps.smoke-promoted-production-serving-api.outcome == 'failure' || steps.smoke-promoted-production-serving-api.outcome == 'cancelled')) }}
+        ${{ inputs.selected_split_binding == '' && inputs.integration_only != 'true' && (inputs.deploy_profile == 'manual' && (failure() || cancelled()) && steps.cloud-run-traffic-snapshot.outcome == 'success' && (steps.shift-cloud-run-traffic.outcome == 'failure' || steps.shift-cloud-run-traffic.outcome == 'cancelled' || steps.verify-serving-release-vector.outcome == 'failure' || steps.verify-serving-release-vector.outcome == 'cancelled' || steps.smoke-promoted-production-serving-api.outcome == 'failure' || steps.smoke-promoted-production-serving-api.outcome == 'cancelled')) }}
       shell: bash
       run: |
         set -euo pipefail
@@ -1962,16 +2139,21 @@ runs:
       if: >-
         ${{ inputs.integration_only != 'true' && (always()) }}
       shell: bash
+      env:
+        HOLDBACK_BINDING: ${{ inputs.selected_split_binding }}
+        SERVING_PERCENT: ${{ steps.shift-cloud-run-traffic.outputs.serving_percent }}
       run: |
         scope_args=()
         if [[ " $SELECTED_CLOUD_RUN_SERVICES " == *" backend "* ]]; then scope_args+=(--cloud-run-service backend); fi
         if [[ " $SELECTED_CLOUD_RUN_SERVICES " == *" backend-sync "* ]]; then scope_args+=(--cloud-run-service backend-sync); fi
         if [[ " $SELECTED_CLOUD_RUN_SERVICES " == *" backend-sync-backfill "* ]]; then scope_args+=(--cloud-run-service backend-sync-backfill); fi
         if [[ " $SELECTED_CLOUD_RUN_SERVICES " == *" backend-integration "* ]]; then scope_args+=(--cloud-run-service backend-integration); fi
-        if [[ "${{ steps.shift-cloud-run-traffic.outcome }}" == success && " $SELECTED_CLOUD_RUN_SERVICES " == *" backend "* ]]; then scope_args+=(--expect-cloud-run-traffic backend=${{ steps.capture-backend-revision.outputs.revision }}); fi
-        if [[ "${{ steps.shift-cloud-run-traffic.outcome }}" == success && " $SELECTED_CLOUD_RUN_SERVICES " == *" backend-sync "* ]]; then scope_args+=(--expect-cloud-run-traffic backend-sync=${{ steps.capture-backend-sync-revision.outputs.revision }}); fi
-        if [[ "${{ steps.shift-cloud-run-traffic.outcome }}" == success && " $SELECTED_CLOUD_RUN_SERVICES " == *" backend-sync-backfill "* ]]; then scope_args+=(--expect-cloud-run-traffic backend-sync-backfill=${{ steps.sync-backfill.outputs.revision }}); fi
-        if [[ "${{ steps.shift-cloud-run-traffic.outcome }}" == success && " $SELECTED_CLOUD_RUN_SERVICES " == *" backend-integration "* ]]; then scope_args+=(--expect-cloud-run-traffic backend-integration=${{ steps.capture-backend-integration-revision.outputs.revision }}); fi
+        if [[ -z "$HOLDBACK_BINDING" || "$SERVING_PERCENT" == 100 ]]; then
+          if [[ "${{ steps.shift-cloud-run-traffic.outcome }}" == success && " $SELECTED_CLOUD_RUN_SERVICES " == *" backend "* ]]; then scope_args+=(--expect-cloud-run-traffic backend=${{ steps.capture-backend-revision.outputs.revision }}); fi
+          if [[ "${{ steps.shift-cloud-run-traffic.outcome }}" == success && " $SELECTED_CLOUD_RUN_SERVICES " == *" backend-sync "* ]]; then scope_args+=(--expect-cloud-run-traffic backend-sync=${{ steps.capture-backend-sync-revision.outputs.revision }}); fi
+          if [[ "${{ steps.shift-cloud-run-traffic.outcome }}" == success && " $SELECTED_CLOUD_RUN_SERVICES " == *" backend-sync-backfill "* ]]; then scope_args+=(--expect-cloud-run-traffic backend-sync-backfill=${{ steps.sync-backfill.outputs.revision }}); fi
+          if [[ "${{ steps.shift-cloud-run-traffic.outcome }}" == success && " $SELECTED_CLOUD_RUN_SERVICES " == *" backend-integration "* ]]; then scope_args+=(--expect-cloud-run-traffic backend-integration=${{ steps.capture-backend-integration-revision.outputs.revision }}); fi
+        fi
         set -o pipefail
         if [[ "${{ steps.verify-cloud-run-candidate.outcome }}" != "success" ]]; then
           echo "Cloud Run candidate verification failed before traffic promotion; candidate evidence follows."
@@ -2018,6 +2200,7 @@ runs:
         ADMITTED_SOURCE: ${{ inputs.admitted_sha }}
         WORKFLOW_CONTROL: ${{ github.workflow_sha }}
         CLOUD_RUN_SELECTION: ${{ inputs.cloud_run_service }}
+        SPLIT_BINDING: ${{ inputs.selected_split_binding }}
       run: |
         python3 - <<'PYTHON'
         import json, os, re
@@ -2029,8 +2212,14 @@ runs:
             raise ValueError('invalid selection')
         target = Path('artifacts/cloud-run-selection.json')
         target.parent.mkdir(exist_ok=True)
-        target.write_text(json.dumps(dict(schema=1, source=source, control=control, selection=selection,
-            run_id=int(os.environ['GITHUB_RUN_ID']), run_attempt=int(os.environ['GITHUB_RUN_ATTEMPT'])), sort_keys=True)+'\n')
+        receipt = dict(schema=1, source=source, control=control, selection=selection,
+                       run_id=int(os.environ['GITHUB_RUN_ID']), run_attempt=int(os.environ['GITHUB_RUN_ATTEMPT']))
+        binding = os.environ['SPLIT_BINDING']
+        if binding:
+            if not re.fullmatch('[0-9a-f]{64}', binding):
+                raise ValueError('invalid hold-back binding')
+            receipt.update(schema=2, split_binding=binding)
+        target.write_text(json.dumps(receipt, sort_keys=True) + '\n')
         PYTHON
 
     - name: Upload verified Cloud Run selection custody

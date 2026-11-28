@@ -4808,5 +4808,9 @@
     "deleteFromServerMessage": "Esta gravação foi enviada, mas ainda não foi transcrita. Excluí-la também apaga permanentemente a cópia nos servidores do Omi, então ela nunca será transcrita. Isso não pode ser desfeito.",
     "deletedRecordingAlreadyTranscribed": "Já foi transcrita. Exclua a conversa dela para removê-la.",
     "deletedRecordingWillBeProcessed": "Esta gravação continuará a ser processada. Pode eliminar a conversa quando aparecer.",
-    "deleteRecordingKeepsConversation": "Ao eliminar aqui, remove a cópia do telefone. As conversas das gravações já transcritas são mantidas."
+    "deleteRecordingKeepsConversation": "Ao eliminar aqui, remove a cópia do telefone. As conversas das gravações já transcritas são mantidas.",
+    "batteryRestartToRefresh": "Reinicie o Omi para atualizar",
+    "onTheWayAllowanceHeldTitle": "Serão processados em {date} quando seus minutos renovarem",
+    "onTheWayAllowanceHeldUpgrade": "Ou processe-os imediatamente com um upgrade de plano",
+    "onTheWayDayProcessesOn": "Processa em {date}"
 }

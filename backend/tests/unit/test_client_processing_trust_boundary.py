@@ -211,14 +211,15 @@ _ALLOWED_SCOPES: FrozenSet[tuple[str, str]] = frozenset(
         ('routers/developer_segments_models.py', 'CreateConversationFromTranscriptRequest'),
         ('routers/developer.py', '_accepted_client_projection'),
         ('routers/developer.py', '_ingest_conversation_from_segments'),
+        ('routers/developer.py', '_process_validated_from_segments'),
         # Encrypted continuation custody carries only the display projection;
         # admission clears it when the underlying transcript is filtered.
         ('routers/developer_segments.py', 'admit_segments'),
         ('routers/developer_segments.py', 'common'),
-        ('routers/developer_segments.py', 'continuation'),
+        ('routers/developer_segments.py', 'assemble_continuation'),
         ('routers/developer_segments.py', 'stage_chunk'),
         ('utils/conversations/process_conversation.py', '<module>'),
-        ('utils/conversations/process_conversation.py', 'process_conversation'),
+        ('utils/conversations/process_conversation.py', '_process_conversation_steps'),
         ('utils/conversations/process_conversation.py', '_attach_client_projection'),
         ('utils/conversations/process_conversation.py', '_store_deferred_conversation'),
         # Model-free backlog persistence: display projection never enters canonical structure.
@@ -287,9 +288,11 @@ PINNED_REFERENCES: FrozenSet[Reference] = frozenset(
         Reference('routers/developer.py', '_bind_projection_to_segments', 'ClientProcessing'),
         Reference('routers/developer.py', '_bind_late_client_projection', 'client_processing'),
         Reference('routers/developer.py', '_ingest_conversation_from_segments', 'client_projection'),
+        Reference('routers/developer.py', '_process_validated_from_segments', 'ClientProcessing'),
+        Reference('routers/developer.py', '_process_validated_from_segments', 'client_projection'),
         Reference('routers/developer_segments.py', 'admit_segments', 'client_processing'),
         Reference('routers/developer_segments.py', 'common', 'client_processing'),
-        Reference('routers/developer_segments.py', 'continuation', 'client_processing'),
+        Reference('routers/developer_segments.py', 'assemble_continuation', 'client_processing'),
         Reference('routers/developer_segments.py', 'stage_chunk', 'client_processing'),
         Reference('routers/conversations.py', '<module>', 'ClientProcessing'),
         Reference('models/conversation.py', 'ProcessConversationRequest', 'client_processing'),
@@ -302,8 +305,8 @@ PINNED_REFERENCES: FrozenSet[Reference] = frozenset(
         Reference('routers/conversations.py', 'process_in_progress_conversation', 'client_processing'),
         Reference('routers/conversations.py', 'process_in_progress_conversation', 'client_projection'),
         Reference('utils/conversations/process_conversation.py', '<module>', 'ClientProcessing'),
-        Reference('utils/conversations/process_conversation.py', 'process_conversation', 'ClientProcessing'),
-        Reference('utils/conversations/process_conversation.py', 'process_conversation', 'client_projection'),
+        Reference('utils/conversations/process_conversation.py', '_process_conversation_steps', 'ClientProcessing'),
+        Reference('utils/conversations/process_conversation.py', '_process_conversation_steps', 'client_projection'),
         Reference('utils/conversations/process_conversation.py', '_store_budget_waiting', 'client_processing'),
         Reference('utils/conversations/process_conversation.py', '_attach_client_projection', 'ClientProcessing'),
         Reference('utils/conversations/process_conversation.py', '_attach_client_projection', 'client_processing'),
@@ -507,6 +510,7 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
         # field allowlist and feeds a hash, never a client or intelligence view.
         DumpSite('routers/developer.py', '_derived_client_session_id', 'model_dump'),
         DumpSite('routers/developer.py', '_ingest_conversation_from_segments', 'model_dump'),
+        DumpSite('routers/developer.py', '_process_validated_from_segments', 'model_dump'),
         # Blank-session retry identity hashes only fixed recording facts;
         # client_processing and other display projections are excluded. This
         # serialization derives the digest only; it is not persisted or sent
@@ -545,7 +549,7 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
         # CalendarMeetingContext only; derived member context is
         # persisted separately from Conversation.external_data.calendar_meeting_context.
         DumpSite('utils/conversations/process_conversation.py', '_enrich_meeting_context', 'model_dump'),
-        DumpSite('utils/conversations/process_conversation.py', '_emit_derived_effects', 'dict'),
+        DumpSite('utils/conversations/process_conversation.py', 'derived_effects_steps', 'dict'),
         DumpSite('utils/conversations/process_conversation.py', 'process_user_emotion', 'dict'),
         DumpSite(
             'utils/conversations/process_conversation.py',

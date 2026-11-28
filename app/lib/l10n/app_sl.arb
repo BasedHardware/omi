@@ -12330,5 +12330,9 @@
     "deleteFromServerMessage": "Ta posnetek je naložen, vendar še ni prepisan. Z brisanjem se trajno izbriše tudi kopija na Omijevih strežnikih, zato ne bo nikoli prepisan. Tega ni mogoče razveljaviti.",
     "deletedRecordingAlreadyTranscribed": "Že prepisano. Če ga želite odstraniti, izbrišite njegov pogovor.",
     "deletedRecordingWillBeProcessed": "Obdelava tega posnetka se bo nadaljevala. Pogovor lahko izbrišeš, ko se prikaže.",
-    "deleteRecordingKeepsConversation": "Brisanje tukaj odstrani kopijo s telefona. Pogovori že prepisanih posnetkov se ohranijo."
+    "deleteRecordingKeepsConversation": "Brisanje tukaj odstrani kopijo s telefona. Pogovori že prepisanih posnetkov se ohranijo.",
+    "batteryRestartToRefresh": "Ponovno zaženite Omi, da osvežite podatke",
+    "onTheWayAllowanceHeldTitle": "Obdelani bodo {date}, ko se obnovijo vaše minute",
+    "onTheWayAllowanceHeldUpgrade": "Ali pa jih obdelajte takoj z nadgradnjo paketa",
+    "onTheWayDayProcessesOn": "Obdelani bodo {date}"
 }

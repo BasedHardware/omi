@@ -1,6 +1,42 @@
 {
   "indexes": [
     {
+      "collectionGroup": "sync_reprocess_outbox",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "age_gate_parked",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "deferred_since",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "conversations",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "first_week_outcome",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "first_week_summary.window_end_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "conversations",
       "queryScope": "COLLECTION",
       "fields": [

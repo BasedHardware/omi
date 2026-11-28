@@ -4808,5 +4808,9 @@
     "deleteFromServerMessage": "To nagranie zostało przesłane, ale nie zostało jeszcze przetranskrybowane. Usunięcie go trwale usuwa również kopię na serwerach Omi, więc nigdy nie zostanie przetranskrybowane. Tej operacji nie można cofnąć.",
     "deletedRecordingAlreadyTranscribed": "Już przetranskrybowane. Usuń jego rozmowę, aby je usunąć.",
     "deletedRecordingWillBeProcessed": "Przetwarzanie tego nagrania będzie kontynuowane. Możesz usunąć rozmowę, gdy się pojawi.",
-    "deleteRecordingKeepsConversation": "Usunięcie w tym miejscu usuwa kopię z telefonu. Rozmowy z nagrań, które już przepisano, pozostaną dostępne."
+    "deleteRecordingKeepsConversation": "Usunięcie w tym miejscu usuwa kopię z telefonu. Rozmowy z nagrań, które już przepisano, pozostaną dostępne.",
+    "batteryRestartToRefresh": "Uruchom ponownie Omi, aby odświeżyć odczyt",
+    "onTheWayAllowanceHeldTitle": "Zostaną przetworzone {date}, gdy odnowią się Twoje minuty",
+    "onTheWayAllowanceHeldUpgrade": "Albo przetwórz je od razu, ulepszając plan",
+    "onTheWayDayProcessesOn": "Zostaną przetworzone {date}"
 }

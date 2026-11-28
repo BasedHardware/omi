@@ -4773,5 +4773,9 @@
     "deleteFromServerMessage": "Tento záznam je nahraný, ale ešte nebol prepísaný. Odstránením sa natrvalo vymaže aj kópia na serveroch Omi, takže nikdy nebude prepísaný. Túto akciu nie je možné vrátiť späť.",
     "deletedRecordingAlreadyTranscribed": "Už bol prepísaný. Ak ho chcete odstrániť, odstráňte jeho konverzáciu.",
     "deletedRecordingWillBeProcessed": "Spracovanie tejto nahrávky bude pokračovať. Konverzáciu môžeš odstrániť, keď sa zobrazí.",
-    "deleteRecordingKeepsConversation": "Odstránením sa vymaže kópia z telefónu. Konverzácie z už prepísaných nahrávok zostanú zachované."
+    "deleteRecordingKeepsConversation": "Odstránením sa vymaže kópia z telefónu. Konverzácie z už prepísaných nahrávok zostanú zachované.",
+    "batteryRestartToRefresh": "Pre obnovenie údajov reštartujte Omi",
+    "onTheWayAllowanceHeldTitle": "Spracuje sa {date}, keď sa obnovia vaše minúty",
+    "onTheWayAllowanceHeldUpgrade": "Alebo ich spracujte hneď s upgradom plánu",
+    "onTheWayDayProcessesOn": "Spracuje sa {date}"
 }

@@ -146,10 +146,18 @@ extension _WalJobCompletion on LocalWalSyncImpl {
             if (terminalPolicy == SyncJobTerminalPolicy.wait) {
               // Only an authoritative pending reply renews the card's span.
               // Transient/missing replies retain custody without claiming active work.
+              // Parked behind the monthly allowance: keep when it will process for the UI.
+              final heldUntil =
+                  s.reasonCode == 'allowance_held' && (s.retryAfter ?? 0) > 0 ? nowSecs + s.retryAfter! : 0;
               for (final w in members) {
                 if (!_stillUploadedUnder(w, jobId)) continue;
                 if (nowSecs - w.jobPendingConfirmedAt >= 60) {
                   w.jobPendingConfirmedAt = nowSecs;
+                  changed = true;
+                }
+                if ((w.allowanceHeldUntil - heldUntil).abs() > 3600 ||
+                    (heldUntil == 0) != (w.allowanceHeldUntil == 0)) {
+                  w.allowanceHeldUntil = heldUntil;
                   changed = true;
                 }
               }

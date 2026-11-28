@@ -63,7 +63,7 @@ class ArtifactStore:
         namespace: str,
         authorize: Callable[[WorkItem], ProtectionContext],
         key_for_owner: Callable[[str], bytes],
-        register_artifact: Callable[[WorkItem, str, str, ProtectionContext], None],
+        register_artifact: Callable[..., None],
         shadow_result: Callable | None = None,
         authorize_read: Callable | None = None,
     ) -> None:
@@ -126,7 +126,17 @@ class ArtifactStore:
         sealed = leaf_timings.call('encrypt', AESGCM(key).encrypt, nonce, body, self._aad(item, kind, context))
         return MAGIC + nonce + sealed
 
-    def _write(self, item: WorkItem, kind: str, body: bytes, limit: int, *, result_key: str | None = None) -> str:
+    def _write(
+        self,
+        item: WorkItem,
+        kind: str,
+        body: bytes,
+        limit: int,
+        *,
+        result_key: str | None = None,
+        record_origin: bool | None = None,
+        record_lane_owner: str | None = None,
+    ) -> str:
         if not body or len(body) > limit:
             raise ValueError('batch artifact exceeds bounded payload size')
         context = self.authorize(item)
@@ -141,7 +151,14 @@ class ArtifactStore:
         # may erase this unique name before the provider returns its generation.
         registered_at = time.monotonic()
         leaf_timings.call(
-            'artifact_register', self.register_artifact, item, f'gs://{self.bucket_name}/{name}', kind, context
+            'artifact_register',
+            self.register_artifact,
+            item,
+            f'gs://{self.bucket_name}/{name}',
+            kind,
+            context,
+            **({'record_origin': record_origin} if record_origin is not None else {}),
+            **({'record_lane_owner': record_lane_owner} if record_lane_owner is not None else {}),
         )
         self._unchanged(item, context)
         if kind == 'voice_evidence':
@@ -324,18 +341,22 @@ class ArtifactStore:
             raise PermissionError('voice evidence expired or unbound')
         return payload
 
-    def stage_audio(self, item: WorkItem, wav: bytes) -> str:
+    def stage_audio(
+        self, item: WorkItem, wav: bytes, *, record_origin: bool | None = None, record_lane_owner: str | None = None
+    ) -> str:
         """Admission calls this before enqueue; audio AAD excludes its own URI."""
-        return self._write(item, 'audio', wav, AUDIO_LIMIT)
+        return self._write(
+            item, 'audio', wav, AUDIO_LIMIT, record_origin=record_origin, record_lane_owner=record_lane_owner
+        )
 
-    def stage_record_plan(self, item: WorkItem, plan: dict) -> str:
+    def stage_record_plan(self, item: WorkItem, plan: dict, *, record_lane_owner: str | None = None) -> str:
         """Small encrypted continuation, attached to the record coordinator.
 
         Uses the normal owner/privacy-fenced staging outbox. It contains only
         immutable source slices and is never sent to a compute worker.
         """
         body = json.dumps(plan, allow_nan=False, separators=(',', ':')).encode()
-        return self._write(item, 'audio', body, RESULT_LIMIT)
+        return self._write(item, 'audio', body, RESULT_LIMIT, record_origin=True, record_lane_owner=record_lane_owner)
 
     def load_record_plan(self, item: WorkItem, uri: str) -> dict:
         return json.loads(self._read(item, uri, 'audio', RESULT_LIMIT))
@@ -393,7 +414,7 @@ class ArtifactStore:
             return wav
         return body
 
-    def persist_result(self, item: WorkItem, payload: dict[str, Any]) -> str:
+    def persist_result(self, item: WorkItem, payload: dict[str, Any], *, record_origin: bool | None = None) -> str:
         if item.shadow:
             # Shadow transcripts/diarization never enter durable storage.
             if self.shadow_result is None:
@@ -402,7 +423,7 @@ class ArtifactStore:
             self.shadow_result(item, payload)
             return 'shadow:' + item.segment_id
         body = json.dumps(payload, allow_nan=False, separators=(',', ':')).encode()
-        return self._write(item, 'results', body, RESULT_LIMIT)
+        return self._write(item, 'results', body, RESULT_LIMIT, record_origin=record_origin)
 
     def persist_recovery_result(self, item: WorkItem, payload: dict[str, Any], token: str) -> str:
         if item.shadow:

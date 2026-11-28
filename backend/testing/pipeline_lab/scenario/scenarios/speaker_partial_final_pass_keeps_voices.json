@@ -1,0 +1,76 @@
+{
+  "name": "speaker_partial_final_pass_keeps_voices",
+  "description": "One batch-lane recording of three real voices taking short turns (public LibriSpeech, 35 s): the owner, an enrolled person and an unenrolled stranger; Finish is tapped while capturing. The resolver groups the voices and marks the conversation resolved; the whole-conversation final pass then cannot place two one-word segments (diarizer-gap words) and applies the rest (failed_unassigned_words). Before BATCH_FINAL_PASS_KEEP_RESOLVED_ON_PARTIAL_ENABLED the applied segments took new speaker ids beside the resolver's and the conversation became unavailable, which the app shows as plain \"Speaker\" for every unnamed voice (measured 2026-11-26). With it each final-pass voice reuses the resolver voice holding most of its words, one to one, and the conversation stays resolved. voices allows one extra: the two one-word fragments are the resolver's own abstentions (unit scope), left as they were by both passes.",
+  "origins": [
+    {
+      "id": "O",
+      "source": "omi"
+    }
+  ],
+  "recordings": [
+    {
+      "id": "B",
+      "origin": "O",
+      "session": "S1",
+      "audio_file": "../../speakers/fixtures/public-libri/conversations/three_speakers_short_turns/audio.wav",
+      "transcript_at": 60
+    }
+  ],
+  "finish": {
+    "at": 34.4,
+    "fast_finish": false
+  },
+  "speakers": {
+    "peer": true,
+    "gallery": {
+      "user": "../../speakers/fixtures/public-libri/gallery_audio/user.wav",
+      "person-a": "../../speakers/fixtures/public-libri/gallery_audio/person-a.wav"
+    },
+    "truth": "../../speakers/fixtures/public-libri/conversations/three_speakers_short_turns/truth.json"
+  },
+  "expect": [
+    {
+      "label": "finished_visible",
+      "conversation_of": "@finish",
+      "recordings": [
+        "B"
+      ],
+      "visible": true,
+      "manual_end": true,
+      "min_words": 50
+    },
+    {
+      "label": "voices_consistent",
+      "conversation_of": "@finish",
+      "speakers": {
+        "attribution_min": 0.9,
+        "owner_recall_min": 0.8,
+        "owner_precision_min": 0.9,
+        "named_accuracy_min": 0.8,
+        "wrong_name_max": 0.05,
+        "voices": [
+          3,
+          1
+        ],
+        "resolution": "resolved",
+        "final_pass": "failed_unassigned_words"
+      }
+    }
+  ],
+  "budget": {
+    "reads": 175,
+    "writes": 61,
+    "deletes": 1,
+    "noop_writes": 4,
+    "vendor_calls": {
+      "stt": 1,
+      "llm": 6
+    },
+    "note": "Measured 2026-11-26 on the lab host, --stt replay --speakers replay (159 reads, 55 writes, 1 delete(s), 4 no-op, 1 STT cassette play, 5 LLM; caps about +10%). Gallery enrollment runs before the first event and is not counted. noop_writes=4 is the current count, the same two sites as speaker_owner_and_person_finish: 2 database/conversations_v3_leases.py renew (lab-clock repeat), 2 database/dream_store.py:126 mark_dirty."
+  },
+  "env": {
+    "BATCH_FINAL_PASS_V3_SOURCES_ENABLED": "true",
+    "BATCH_FINAL_PASS_APPEND_CONFLICTING_UNITS_ENABLED": "true",
+    "BATCH_FINAL_PASS_KEEP_RESOLVED_ON_PARTIAL_ENABLED": "true"
+  }
+}

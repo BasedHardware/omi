@@ -36,6 +36,14 @@ ROOT = Path(__file__).resolve().parents[3]
 NOW = 1794700800.0
 
 
+def without_retiring_banner(text):
+    # SCA-2965 added a five-line RETIRING comment banner to the retiring legacy modules.
+    lines = text.splitlines(keepends=True)
+    if lines and lines[0] == '# LIFECYCLE: one-time\n' and any('# RETIRING:' in line for line in lines[:5]):
+        return ''.join(lines[5:])
+    return text
+
+
 def main_source(path):
     return subprocess.check_output(['git', 'show', f'{MAIN}:{path}'], cwd=ROOT, text=True)
 
@@ -131,7 +139,7 @@ def test_early_upload_job_and_context_documents_equal_main(
 
         monkeypatch.setattr(module, 'with_context', freeze)
 
-        def stage(item, wav):
+        def stage(item, wav, *, record_origin=None):
             uri = 'gs://synthetic/audio#1'
             store.rows['artifacts', artifact_id(item.segment_id, uri)] = {
                 'owner_id': item.owner_id,
@@ -168,6 +176,7 @@ def test_early_upload_job_and_context_documents_equal_main(
         if hold is not None:
             headers['X-Omi-Upload-Hold'] = hold
             headers['X-Omi-Upload-Hold-Age-Ms'] = '300500' if hold == 'bg300' else 'invalid'
+            headers['X-Omi-Upload-Trace'] = 'sealed=1794700500;gate=retries_exhausted'
         if recovery_header is not None:
             headers['X-Omi-Upload-Recovered'] = recovery_header
         with TestClient(app, raise_server_exceptions=False) as routed:
@@ -200,7 +209,9 @@ def test_early_upload_job_and_context_documents_equal_main(
                 row['upload_recovered'] = True
     assert expected == records[1]
     if hold == 'bg300':
-        histogram.labels.assert_called_once_with('bg300', 'true' if recovery_header == '1' else 'false')
+        histogram.labels.assert_called_once_with(
+            'bg300', 'true' if recovery_header == '1' else 'false', 'retries_exhausted'
+        )
         histogram.labels.return_value.observe.assert_called_once_with(300.5)
     else:
         histogram.labels.assert_not_called()
@@ -213,7 +224,7 @@ def test_early_placement_and_coverage_implementations_are_main_bytes():
         'backend/utils/sync/pipeline.py',
         'backend/utils/sync/wal_audio_coverage.py',
     ]:
-        actual = (ROOT / path).read_text()
+        actual = without_retiring_banner((ROOT / path).read_text())
         if path.endswith('/capture_decode.py'):
             # Exclude only the export and source-frame telemetry. Every byte
             # involved in the actual early-clock decode and placement stays pinned.
@@ -390,7 +401,7 @@ async def test_unmarked_rpc_and_coalescing_documents_equal_main_and_old_readers_
         'client_platform': 'ios',
         'intake_context': {'recording_session_id': 'session'},
     }
-    artifacts = types.SimpleNamespace(stage_audio=lambda *a: 'gs://synthetic/audio#1')
+    artifacts = types.SimpleNamespace(stage_audio=lambda *a, **kw: 'gs://synthetic/audio#1')
     for module, seed in ((previous_coalescing, old), (upload_coalescing, current)):
         assert (
             await module.offer(

@@ -59,6 +59,7 @@ class LocalRecorder:
     model: str
     recognize: Recognize
     installed: bool = True
+    detail: Optional[Mapping[str, Any]] = None  # how the audio was cut (windows, VAD): ``Cassette.source_detail``
 
 
 INSTALL_HINT = (
@@ -85,15 +86,16 @@ def register_local_recorder(recorder: Optional[LocalRecorder]) -> None:
     _registered = recorder
 
 
-def local_recorder() -> LocalRecorder:
-    """The registered recorder, else the one ``$OMI_PIPELINE_LAB_LOCAL_STT`` names, else local Parakeet."""
+def local_recorder(windows: Optional[str] = None) -> LocalRecorder:
+    """The registered recorder, else the one ``$OMI_PIPELINE_LAB_LOCAL_STT`` names, else local Parakeet
+    (``windows``: ``vad`` spans, its default, or ``fixed`` 30 s windows; the other two choose their own)."""
     if _registered is not None:
         return _registered
     spec = os.environ.get(LOCAL_STT_ENV, '').strip()
     if not spec:
-        from testing.pipeline_lab.cassette.local_parakeet import recorder
+        from testing.pipeline_lab.cassette.local_parakeet import DEFAULT_WINDOWS, recorder
 
-        return recorder()
+        return recorder(windows or DEFAULT_WINDOWS)
     module_name, _, attr = spec.partition(':')
     if not module_name or not attr:
         raise LocalRecorderNotInstalled(f'{LOCAL_STT_ENV} must be module:factory, not {spec!r}')
@@ -132,6 +134,7 @@ class LocalAdapter:
     def __init__(self, recorder: LocalRecorder):
         self.recorder = recorder
         self.provider, self.model = recorder.provider, recorder.model
+        self.source_detail = dict(recorder.detail) if recorder.detail else None
         self.destination = f'local model {recorder.provider}:{recorder.model} (this machine)'
 
     def estimate_usd(self, request: STTRequest) -> float:

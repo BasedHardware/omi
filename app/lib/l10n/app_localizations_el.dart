@@ -15966,4 +15966,20 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get deleteRecordingKeepsConversation =>
       'Η διαγραφή εδώ αφαιρεί το αντίγραφο από το τηλέφωνο. Οι συνομιλίες από ήδη απομαγνητοφωνημένες εγγραφές διατηρούνται.';
+
+  @override
+  String get batteryRestartToRefresh => 'Κάντε επανεκκίνηση του Omi για να ανανεωθεί η ένδειξη';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Θα επεξεργαστούν στις $date όταν ανανεωθούν τα λεπτά σας';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Ή επεξεργαστείτε τα αμέσως με μια αναβάθμιση προγράμματος';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Επεξεργασία στις $date';
+  }
 }

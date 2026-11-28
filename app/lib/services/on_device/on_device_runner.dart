@@ -15,6 +15,7 @@ import 'package:omi/services/on_device/on_device_overflow_intake.dart';
 import 'on_device_segment_upload.dart';
 import 'on_device_segment_snapshot.dart';
 import 'package:omi/services/experiments/client_refactor_flags.dart';
+import 'package:omi/services/experiments/on_device_runner_gate.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/services/on_device/on_device_engine.dart';
 import 'package:omi/services/on_device/on_device_projection.dart';
@@ -57,6 +58,49 @@ Stream<List<Uint8List>> readOnDeviceChunks(File file, int framesPerSecond) async
 
 class PreparedContinuationDisabled implements Exception {}
 
+/// The audio decoded but held no recognizable speech; it stays on the phone, untouched.
+class OnDeviceNoSpeech implements Exception {
+  const OnDeviceNoSpeech();
+}
+
+/// Drained pendant audio arrives as 60 s chunks. Contiguous chunks from one device (gaps up to
+/// [maxGapSeconds], spans up to [maxSpanSeconds]) are one conversation and one from-segments
+/// upload. Everything else stays one WAL per conversation. Groups run newest first.
+const maxGapSeconds = 120;
+const maxSpanSeconds = 3600;
+
+List<List<Wal>> groupOnDeviceWork(List<Wal> pending) {
+  bool drained(Wal wal) =>
+      wal.onDevicePreparedUpload == null &&
+      (wal.originalStorage == WalStorage.sdcard || wal.originalStorage == WalStorage.flashPage);
+  final groups = <List<Wal>>[];
+  List<Wal>? current;
+  for (final wal in pending.where(drained).toList()..sort((a, b) => a.timerStart.compareTo(b.timerStart))) {
+    final group = current;
+    final previous = group?.last;
+    // An unknown device clock (timerStart 0) or overlapping starts never join a group.
+    final joins = group != null &&
+        previous != null &&
+        previous.timerStart > 0 &&
+        wal.timerStart >= previous.timerStart + previous.seconds - 2 &&
+        previous.device == wal.device &&
+        previous.codec == wal.codec &&
+        previous.sampleRate == wal.sampleRate &&
+        previous.channel == wal.channel &&
+        wal.timerStart - (previous.timerStart + previous.seconds) <= maxGapSeconds &&
+        wal.timerStart + wal.seconds - group.first.timerStart <= maxSpanSeconds;
+    if (joins) {
+      group.add(wal);
+    } else {
+      current = [wal];
+      groups.add(current);
+    }
+  }
+  groups.addAll(pending.where((wal) => !drained(wal)).map((wal) => [wal]));
+  groups.sort((a, b) => b.first.timerStart.compareTo(a.first.timerStart));
+  return groups;
+}
+
 /// Owns only finalized phone-only WALs. The WAL generation fences every asynchronous publish.
 class OnDeviceRunner with WidgetsBindingObserver {
   OnDeviceRunner(
@@ -82,11 +126,21 @@ class OnDeviceRunner with WidgetsBindingObserver {
   int? _publishedGeneration;
   String? lastError;
   int pendingSeconds = 0;
+  // A from-segments 429 pauses every run until the server's Retry-After (bounded).
+  DateTime? _backoffUntil;
+  // Per-group retry backoff (in memory) for groups that failed for any other reason.
+  final _groupFailures = <String, int>{};
+  final _groupRetryAt = <String, DateTime>{};
+
+  static bool _drainedDevice(Wal wal) =>
+      wal.capturedOnDeviceOnly == true &&
+      (wal.originalStorage == WalStorage.sdcard || wal.originalStorage == WalStorage.flashPage);
+  DateTime Function() now = DateTime.now;
   static const channel = MethodChannel('com.omi/on_device');
 
   Future<void> start() async {
     await controller.ensureLoaded();
-    if (!controller.isActive) return;
+    if (!controller.runnerEnabled) return;
     WidgetsBinding.instance.addObserver(this);
     controller.runPending = (now) => run(transcribeNow: now);
     controller.deleteLocalConversation = deleteLocal;
@@ -124,7 +178,14 @@ class OnDeviceRunner with WidgetsBindingObserver {
   }
 
   Future<void> run({bool transcribeNow = false}) async {
-    if (!controller.isActive) return;
+    if (!controller.runnerEnabled) return;
+    final backoff = _backoffUntil;
+    if (backoff != null && now().isBefore(backoff)) return;
+    // Rechecked every run (cached for ten minutes), here and in the Android background worker.
+    if (!await OnDeviceRunnerGate.enabled()) {
+      await controller.deactivateForKill();
+      return;
+    }
     if (_busy) {
       await _runDone?.future;
       return;
@@ -158,9 +219,21 @@ class OnDeviceRunner with WidgetsBindingObserver {
               w.status == WalStatus.miss &&
               w.onDeviceConversation == null)
           .toList();
+      // Newest first: the conversation the user just had appears before an old backlog.
+      pending.sort((a, b) => b.timerStart.compareTo(a.timerStart));
       pendingSeconds = pending.fold(0, (sum, w) => sum + w.seconds);
       controller.setPendingSeconds(pendingSeconds);
-      if (!controller.settings.enabled) return;
+      // Drained pendant audio carries its consent from drain time (on-device STT was selected), so
+      // it keeps transcribing after a mode switch. Phone overflow audio needs the overflow setting.
+      final work = <Wal>[];
+      for (final wal in pending) {
+        if (!controller.settings.enabled && !_drainedDevice(wal)) continue;
+        final path = await Wal.getFilePath(wal.filePath);
+        // A missing file is skipped, never a reason to stall its neighbours.
+        if (path != null && await File(path).exists()) work.add(wal);
+      }
+      if (work.isEmpty) return;
+      final drainedWork = work.any(_drainedDevice);
       if (pending.any((w) => w.onDevicePreparedUpload != null) && !await ClientRefactorFlags.chunkUploads()) {
         for (final wal in pending.where((w) => w.onDevicePreparedUpload != null)) {
           await sync.rejectDisabledPreparedUpload(wal, generation);
@@ -169,21 +242,53 @@ class OnDeviceRunner with WidgetsBindingObserver {
       }
       final hasModel = controller.model.status.isInstalled;
       final resumePrepared = !hasModel && await ClientRefactorFlags.chunkUploads();
-      if (!hasModel && !(resumePrepared && pending.any((w) => w.onDevicePreparedUpload != null))) return;
-      final decision =
-          await controller.evaluate(pendingAudio: Duration(seconds: pendingSeconds), transcribeNow: transcribeNow);
+      if (!hasModel && !(resumePrepared && work.any((w) => w.onDevicePreparedUpload != null))) return;
+      final decision = await controller.evaluate(
+          pendingAudio: Duration(seconds: pendingSeconds),
+          transcribeNow: transcribeNow,
+          foreground: drainedWork && WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed);
       if (!decision.shouldRun) return;
       controller.markRunFailure(false);
       controller.markRun(running: true);
-      for (final wal in pending) {
-        if (!hasModel && (!resumePrepared || wal.onDevicePreparedUpload == null)) continue;
+      String? groupError;
+      for (final group in groupOnDeviceWork(work)) {
+        if (!hasModel && (!resumePrepared || group.first.onDevicePreparedUpload == null)) continue;
         if (_cancelled || generation != sync.sessionGeneration) return;
-        await _process(wal, generation);
+        final key = group.first.id;
+        final retryAt = _groupRetryAt[key];
+        if (retryAt != null && now().isBefore(retryAt)) continue;
+        sync.claimForOnDevice(group);
+        try {
+          await _process(group, generation);
+          _groupFailures.remove(key);
+          _groupRetryAt.remove(key);
+        } on Exception catch (error) {
+          // A group whose own audio cannot be transcribed (no speech, unreadable or missing bytes)
+          // never blocks the rest: it waits 30 min, doubling to a day, with its audio untouched.
+          // Anything else (network, server, cancellation) ends the run as before.
+          if (error is! OnDeviceNoSpeech && error is! FormatException && error is! FileSystemException) rethrow;
+          final failures = (_groupFailures[key] ?? 0) + 1;
+          _groupFailures[key] = failures;
+          _groupRetryAt[key] = now().add(Duration(minutes: (30 << (failures - 1).clamp(0, 6)).clamp(30, 1440)));
+          groupError = error.runtimeType.toString();
+        } finally {
+          sync.unclaimForOnDevice(group);
+        }
       }
-      lastError = null;
+      lastError = groupError;
+      if (groupError != null) controller.markRunFailure(true);
     } catch (error) {
       // Keep original bytes and retry from them. No transcript content in error logs.
-      if (_cancelled || (error is PlatformException && error.code == 'CANCELLED')) {
+      if (error is OnDeviceUploadRateLimited) {
+        final wait = error.retryAfter ?? const Duration(minutes: 5);
+        _backoffUntil = now().add(wait < const Duration(minutes: 1)
+            ? const Duration(minutes: 1)
+            : wait > const Duration(hours: 1)
+                ? const Duration(hours: 1)
+                : wait);
+        lastError = 'rate_limited';
+        controller.markRunFailure(true);
+      } else if (_cancelled || (error is PlatformException && error.code == 'CANCELLED')) {
         lastError = null;
         controller.markRunFailure(false);
       } else {
@@ -198,16 +303,25 @@ class OnDeviceRunner with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _process(Wal wal, int generation) async {
-    final path = await Wal.getFilePath(wal.filePath);
-    if (path == null) throw StateError('Missing WAL path');
+  /// One conversation from [group]: a single WAL, or contiguous drained chunks in capture order
+  /// (see [groupOnDeviceWork]). Only single WALs keep a prepared-upload snapshot.
+  Future<void> _process(List<Wal> group, int generation) async {
+    final wal = group.first;
+    final paths = <String>[];
+    for (final member in group) {
+      final path = await Wal.getFilePath(member.filePath);
+      if (path == null) throw StateError('Missing WAL path');
+      paths.add(path);
+    }
+    final single = group.length == 1;
+    final totalSeconds = group.fold<int>(0, (sum, member) => sum + member.seconds);
     final chunked = await ClientRefactorFlags.chunkUploads();
     if (_cancelled || generation != sync.sessionGeneration) return;
     if (!chunked && wal.onDevicePreparedUpload != null) {
       await sync.rejectDisabledPreparedUpload(wal, generation);
       throw PreparedContinuationDisabled();
     }
-    final prepared = chunked && wal.onDevicePreparedUpload != null
+    final prepared = single && chunked && wal.onDevicePreparedUpload != null
         ? OnDeviceSegmentSnapshot.fromJson(wal.onDevicePreparedUpload!)
         : null;
     final source = wal.device.contains('phone')
@@ -231,48 +345,54 @@ class OnDeviceRunner with WidgetsBindingObserver {
     final segments = prepared?.segments ?? <TranscriptSegment>[];
     var offset = prepared?.duration ?? 0.0;
     var engine = prepared?.engine ?? 'whisper_tiny';
+    var done = 0.0;
     if (prepared == null) {
       try {
-        await for (final frames in readOnDeviceChunks(File(path), wal.codec.getFramesPerSecond())) {
-          if (_cancelled || generation != sync.sessionGeneration) return;
-          final wav = transcoder.transcodeFrames(frames);
-          final duration = frames.length / wal.codec.getFramesPerSecond();
-          List<OnDeviceWord> words;
-          if (Platform.isIOS || transcribeChunk != null) {
-            final result = transcribeChunk != null
-                ? await transcribeChunk!(wav, language)
-                : await apple.transcribe(wav, language: language.isEmpty ? 'en' : language);
-            engine = result.engine;
-            words = result.words.isNotEmpty ? result.words : [OnDeviceWord(result.text, 0, duration)];
-          } else {
-            final result = await whisper!.transcribe(wav);
-            if (result == null) throw StateError('Whisper returned no transcript');
-            words = result.segments.map((s) => OnDeviceWord(s.text, s.start, s.end)).toList();
+        for (var index = 0; index < group.length; index++) {
+          // Each chunk starts at its capture offset from the first, so gaps stay gaps.
+          offset = (group[index].timerStart - wal.timerStart).toDouble();
+          await for (final frames in readOnDeviceChunks(File(paths[index]), wal.codec.getFramesPerSecond())) {
+            if (_cancelled || generation != sync.sessionGeneration) return;
+            final wav = transcoder.transcodeFrames(frames);
+            final duration = frames.length / wal.codec.getFramesPerSecond();
+            List<OnDeviceWord> words;
+            if (Platform.isIOS || transcribeChunk != null) {
+              final result = transcribeChunk != null
+                  ? await transcribeChunk!(wav, language)
+                  : await apple.transcribe(wav, language: language.isEmpty ? 'en' : language);
+              engine = result.engine;
+              words = result.words.isNotEmpty ? result.words : [OnDeviceWord(result.text, 0, duration)];
+            } else {
+              final result = await whisper!.transcribe(wav);
+              if (result == null) throw StateError('Whisper returned no transcript');
+              words = result.segments.map((s) => OnDeviceWord(s.text, s.start, s.end)).toList();
+            }
+            // Phrase groups bound endpoint segment count. Every native word's times are retained
+            // within the chunk and group ends always come from recognized audio, not invented speakers.
+            for (var i = 0; i < words.length; i += 30) {
+              final group = words.skip(i).take(30).where((w) => w.text.trim().isNotEmpty).toList();
+              if (group.isEmpty) continue;
+              segments.add(TranscriptSegment(
+                  id: '${segments.length}',
+                  text: group.map((w) => w.text.trim()).join(' '),
+                  speaker: 'SPEAKER_00',
+                  isUser: false,
+                  personId: null,
+                  start: offset + group.first.start,
+                  end: offset + group.last.end,
+                  translations: const [],
+                  sttProvider: 'on_device:$engine'));
+            }
+            offset += duration;
+            done += duration;
+            controller.setProgress(totalSeconds > 0 ? (done / totalSeconds).clamp(0, 1) : 0);
           }
-          // Phrase groups bound endpoint segment count. Every native word's times are retained
-          // within the chunk and group ends always come from recognized audio, not invented speakers.
-          for (var i = 0; i < words.length; i += 30) {
-            final group = words.skip(i).take(30).where((w) => w.text.trim().isNotEmpty).toList();
-            if (group.isEmpty) continue;
-            segments.add(TranscriptSegment(
-                id: '${segments.length}',
-                text: group.map((w) => w.text.trim()).join(' '),
-                speaker: 'SPEAKER_00',
-                isUser: false,
-                personId: null,
-                start: offset + group.first.start,
-                end: offset + group.last.end,
-                translations: const [],
-                sttProvider: 'on_device:$engine'));
-          }
-          offset += duration;
-          controller.setProgress(wal.seconds > 0 ? (offset / wal.seconds).clamp(0, 1) : 0);
         }
       } finally {
         whisper?.dispose();
       }
     }
-    if (segments.isEmpty) throw StateError('No speech recognized; audio retained');
+    if (segments.isEmpty) throw const OnDeviceNoSpeech();
     // refactor: superseded by on_device_segment_upload when clients_from_segments_chunks=serve
     if (!chunked && segments.length > 500) throw StateError('Transcript exceeds ingestion limit; audio retained');
     if (_cancelled || generation != sync.sessionGeneration) return;
@@ -310,13 +430,15 @@ class OnDeviceRunner with WidgetsBindingObserver {
         recordFallback(const ApiFallbackEvent(reason: ApiFallbackReason.error, outcome: ApiFallbackOutcome.degraded));
       }
     }
-    if (chunked && prepared == null && !controller.settings.keepEverythingOnDevice) {
+    if (single && chunked && prepared == null && !controller.settings.keepEverythingOnDevice) {
       final frozen = OnDeviceSegmentSnapshot(
           segments: segments, duration: offset, language: language, engine: engine, projection: projection);
       if (!await sync.persistPreparedSegmentUpload(wal, frozen.toJson(), generation)) return;
     }
     if (_cancelled || generation != sync.sessionGeneration) return;
-    var id = 'ondevice-${wal.id}';
+    // A manual cloud Sync handed custody back: the ordinary upload path owns these bytes now.
+    if (group.any((member) => !member.onDeviceOnly)) return;
+    var id = single ? 'ondevice-${wal.id}' : 'ondevice-${wal.id}-n${group.length}';
     ServerConversation? server;
     if (!controller.settings.keepEverythingOnDevice) {
       final baseUrl = cloudBaseUrl ?? Env.apiBaseUrl;
@@ -366,20 +488,31 @@ class OnDeviceRunner with WidgetsBindingObserver {
             transcriptSegments: segments,
             source: source);
     final json = row.toJson();
+    // Drained audio under on-device STT (overflow setting off) is the reader's own choice of
+    // on-device transcription, not live hours running out.
+    final chose =
+        controller.settings.saveLiveHours || (!controller.settings.enabled && source != ConversationSource.phone);
     json['on_device_provenance'] = {
       'engine': engine,
       'summary': summary.name,
-      'reason':
-          controller.settings.saveLiveHours ? OnDeviceReason.savingLiveHours.name : OnDeviceReason.liveHoursUsed.name
+      'reason': chose ? OnDeviceReason.savingLiveHours.name : OnDeviceReason.liveHoursUsed.name
     };
-    if (!await sync.persistOnDeviceConversation(wal, json, generation)) return;
+    // The server holds the transcript (from-segments, then read back by id): drained pendant
+    // audio enters synced retention in the same save, and the auto-remove policy deletes its bytes.
+    final confirmed = server != null && source != ConversationSource.phone;
+    if (!await sync.persistOnDeviceConversation(wal, json, generation,
+        serverConfirmed: confirmed, alsoFor: group.sublist(1))) {
+      return;
+    }
     OnDeviceUsageTracker(route: OnDeviceUsageRoute.offlineBatch, emit: emitUsage)
-      ..record(audioMs: wal.seconds * 1000, segmentCount: segments.length)
+      ..record(audioMs: totalSeconds * 1000, segmentCount: segments.length)
       ..flush();
     final stored = ServerConversation.fromJson(json);
     controller.recordProvenance(id, OnDeviceProvenance.fromConversation(stored)!);
-    if (wal.filePath != null) controller.completedRecordingNames.add(wal.filePath!);
-    controller.setPendingSeconds((controller.pendingSeconds - wal.seconds).clamp(0, controller.pendingSeconds));
+    for (final member in group) {
+      if (member.filePath != null) controller.completedRecordingNames.add(member.filePath!);
+    }
+    controller.setPendingSeconds((controller.pendingSeconds - totalSeconds).clamp(0, controller.pendingSeconds));
     _published.add(id);
     publish(stored);
   }

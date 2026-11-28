@@ -94,6 +94,40 @@ def test_reads_are_counted_per_document_including_missing_and_empty_queries():
     stack.close()
 
 
+def test_query_offset_skips_are_billed_as_reads_of_the_queried_collection():
+    # #26395: the legacy Home offset path (``.offset(n)``) skips documents Firestore still bills as reads.
+    class OffsetApi(FakeApi):
+        def __init__(self, responses):
+            super().__init__()
+            self.responses = responses
+
+        def run_query(self, request=None, **kwargs):
+            yield from self.responses
+
+    returned = firestore_types.RunQueryResponse(
+        document=document.Document(name=doc('users/u/conversations/z')), skipped_results=50
+    )
+    wrapped, counter, _, stack = counted(OffsetApi([returned]))
+    assert len(list(wrapped.run_query(request=query(doc('users/u'), 'conversations')))) == 1
+    summary = counter.summary()
+    assert summary['reads'] == 51  # one returned after 50 skipped, not 1
+    assert summary['by_path']['users/conversations']['reads'] == 51
+    stack.close()
+
+    # Skips reported across responses add up; a skip-only result is not also billed the empty-query minimum.
+    split = [firestore_types.RunQueryResponse(skipped_results=20), firestore_types.RunQueryResponse(skipped_results=5)]
+    wrapped, counter, _, stack = counted(OffsetApi(split))
+    assert len(list(wrapped.run_query(request=query(doc('users/u'), 'conversations')))) == 2
+    assert counter.summary()['reads'] == 25
+    stack.close()
+
+    # Nothing returned and nothing skipped: still the one-read minimum.
+    wrapped, counter, _, stack = counted(OffsetApi([firestore_types.RunQueryResponse()]))
+    list(wrapped.run_query(request=query(doc('users/u'), 'conversations')))
+    assert counter.summary()['by_path']['users/conversations']['reads'] == 1
+    stack.close()
+
+
 def test_commit_counts_writes_and_deletes_and_flags_no_op_writes():
     wrapped, counter, api, stack = counted()
     # The second update kept the document's previous update_time: the write changed nothing.

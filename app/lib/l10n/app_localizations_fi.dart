@@ -15865,4 +15865,20 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get deleteRecordingKeepsConversation =>
       'Poistaminen tässä poistaa kopion puhelimesta. Jo litteroitujen tallenteiden keskustelut säilyvät.';
+
+  @override
+  String get batteryRestartToRefresh => 'Käynnistä Omi uudelleen päivittämiseksi';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Käsitellään $date, kun minuittisi uudistuvat';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Tai käsittele ne heti tilauksen päivityksellä';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Käsitellään $date';
+  }
 }

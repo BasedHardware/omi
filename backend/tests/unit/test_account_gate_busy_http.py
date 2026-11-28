@@ -182,9 +182,10 @@ def test_conversation_delete_route_maps_takeover_to_409(monkeypatch, conversatio
     monkeypatch.setattr(conversation_routes, 'destructive_operation_gate', lambda *args, **kwargs: nullcontext())
     monkeypatch.setattr(conversation_routes, '_legal_hold_defers_delete', lambda uid: False)
     monkeypatch.setattr(conversation_routes.conversation_tombstones, "is_deleted", lambda *args: False)
-    monkeypatch.setattr(conversation_routes.conversation_tombstones, "record_deletion", lambda *args: None)
+    monkeypatch.setattr(conversation_routes.conversation_tombstones, "record_deletion", lambda *args, **kwargs: None)
     # #25610 short-circuits an already-tombstoned delete; this conversation is live.
     monkeypatch.setattr(conversation_routes.conversation_tombstones, "is_deleted", lambda *args, **kwargs: False)
+    monkeypatch.setattr(conversation_routes.conversations_db, "get_conversation_raw_snapshot", lambda *a, **k: {})
     monkeypatch.setattr(conversation_routes, "delete_owner_prompt_embedding_cache", lambda *args: None)
     monkeypatch.setattr(conversation_routes, "retraction_can_be_skipped", lambda *args, **kwargs: False)
     app = FastAPI()
@@ -263,3 +264,52 @@ def test_review_answer_route_maps_destructive_gate_to_409(monkeypatch):
     assert response.status_code == 409
     assert response.json() == {"detail": ACCOUNT_GATE_BUSY_DETAIL}
     assert response.headers["Retry-After"] == str(ACCOUNT_GATE_BUSY_RETRY_AFTER_SECONDS)
+
+
+@pytest.fixture
+def person_delete_route(monkeypatch):
+    from unittest.mock import Mock
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from routers import users as users_router
+
+    writes = Mock()
+    monkeypatch.setattr(users_router, "delete_person", writes.delete_person)
+    monkeypatch.setattr(users_router, "delete_user_person_speech_samples", writes.delete_user_person_speech_samples)
+    app = FastAPI()
+    app.include_router(users_router.router)
+    app.dependency_overrides[users_router.auth.get_current_user_uid] = lambda: "uid"
+    with TestClient(app, raise_server_exceptions=False) as client:
+        yield client, writes
+
+
+@pytest.mark.parametrize(
+    "error_type", [DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable]
+)
+def test_person_delete_route_maps_destructive_gate_to_409(person_delete_route, error_type):
+    client, writes = person_delete_route
+    writes.delete_person.side_effect = error_type("external data write blocked by destructive operation")
+
+    response = client.delete("/v1/users/people/person-1")
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": "account_gate_busy"}
+    assert response.headers["Retry-After"] == "2"
+    writes.delete_person.assert_called_once_with("uid", "person-1")
+    writes.delete_user_person_speech_samples.assert_not_called()
+
+
+def test_person_delete_route_returns_204_after_speech_sample_cleanup(person_delete_route):
+    from unittest.mock import call
+
+    client, writes = person_delete_route
+
+    response = client.delete("/v1/users/people/person-1")
+
+    assert response.status_code == 204
+    assert response.content == b""
+    assert writes.mock_calls == [
+        call.delete_person("uid", "person-1"),
+        call.delete_user_person_speech_samples("uid", "person-1"),
+    ]

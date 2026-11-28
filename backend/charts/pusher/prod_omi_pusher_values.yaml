@@ -250,10 +250,6 @@ env:
     value: "0"
   - name: PLAYBACK_ON_DEMAND_ENABLED
     value: "true"
-  - name: SYNC_POLL_BACKOFF_ENABLED
-    value: "true"
-  - name: SYNC_POLL_BACKOFF_PERCENT
-    value: "5"
   - name: AUDIO_ARCHIVE_LIVE_ENABLED
     value: "true"
   - name: AUDIO_ARCHIVE_READ_ENABLED
@@ -295,7 +291,7 @@ env:
   - name: OMI_FLAGS_FIRESTORE_DATABASE
     value: "omi-flags"
   - name: OMI_FLAGS_SOURCE
-    value: "dual"
+    value: "posthog"
   - name: FIRESTORE_READ_LEDGER
     value: "1"
   - name: FIRESTORE_READ_LEVERS
@@ -356,7 +352,11 @@ env:
   - name: CONVERSATION_SMART_MERGE_FLATTEN_ENABLED
     value: "true"
   - name: CAPTURE_GROUP_CONTAINMENT_MODE
+    value: "off"
+  - name: LIFECYCLE_V2_MODE
     value: "shadow"
+  - name: LIFECYCLE_V2_MODE_SERVE_PERCENT
+    value: "1"
   - name: CLIENT_SUMMARIES_AT_CAP_ENABLED
     value: "true"
   - name: BUCKET_SPEECH_PROFILES
@@ -417,9 +417,9 @@ env:
   # environment — pusher hosts the same finalizer after 2026-08-30.
   # Cached-evidence shadow only; authoritative grouping stays incumbent.
   - name: SPEAKER_GROUPING_SHADOW
-    value: "cohort"
+    value: "off"
   - name: SPEAKER_GROUPING_SHADOW_PERCENT
-    value: "10"
+    value: "0"
   - name: SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST
     value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
   - name: OMI_SHAPED_AGENT_MODE
@@ -459,11 +459,11 @@ env:
     value: "15000"
   - name: TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED
     value: "true"
-  # Complete stage E: 5% cohort plus the owner UID, bounded by the daily cap.
+  # Complete stage F: stage E with the shadow retired (2026-11-28, kill switch on).
   - name: TRANSCRIPTION_SHADOW_ENABLED
-    value: "true"
-  - name: TRANSCRIPTION_SHADOW_KILL_SWITCH
     value: "false"
+  - name: TRANSCRIPTION_SHADOW_KILL_SWITCH
+    value: "true"
   - name: TRANSCRIPTION_SHADOW_UID_ALLOWLIST
     value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
   - name: TRANSCRIPTION_SHADOW_PERCENT
@@ -825,4 +825,4 @@ affinity:
 # Set bulkInterval to 60s to restore the prior bulk cadence.
 podMonitoring:
   bulkInterval: 120s
-  fastMetrics: 'omi_usage_month_total_shadow_total|backend_listen_active_ws_connections|pusher_active_ws_connections|privacy_.*|omi_audio_.*|omi_record_.*|omi_firestore_billed_reads_by_caller_total|omi_firestore_billed_writes_by_(caller|origin)_total|omi_firestore_caller_label_overflow_total|omi_batch_pipeline_completed_audio_seconds_total|.*_(timestamp|refreshed_at|observed_at)_seconds'
+  fastMetrics: 'omi_usage_month_total_shadow_total|backend_listen_active_ws_connections|pusher_active_ws_connections|privacy_.*|omi_audio_.*|omi_record_.*|omi_firestore_billed_reads_by_caller_total|omi_firestore_billed_writes_by_(caller|origin)_total|omi_firestore_caller_label_overflow_total|omi_batch_pipeline_(completed_audio_seconds|privacy_post_window_dead_letters)_total|.*_(timestamp|refreshed_at|observed_at)_seconds'

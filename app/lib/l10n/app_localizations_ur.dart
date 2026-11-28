@@ -15873,4 +15873,20 @@ class AppLocalizationsUr extends AppLocalizations {
   @override
   String get deleteRecordingKeepsConversation =>
       'یہاں حذف کرنے سے فون پر موجود کاپی ہٹ جاتی ہے۔ جن ریکارڈنگز کو پہلے ہی متن میں تبدیل کیا جا چکا ہے ان کی گفتگو برقرار رہے گی۔';
+
+  @override
+  String get batteryRestartToRefresh => 'ریفریش کرنے کے لیے Omi کو دوبارہ شروع کریں';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'آپ کے منٹ تجدید ہونے پر $date کو پروسیس ہوں گے';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'یا پلان اپ گریڈ کے ساتھ انہیں فوراً پروسیس کریں';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return '$date کو پروسیس ہوں گے';
+  }
 }

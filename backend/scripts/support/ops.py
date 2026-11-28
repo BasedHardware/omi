@@ -12,6 +12,9 @@ cloud credentials, for holds, retention checks, DSAR exports and account operati
     python scripts/support/ops.py --ticket T --actor A --reason R retention check UID [--conversation CID] [--month 2025-08]
     python scripts/support/ops.py --ticket T --actor A --reason R dsar export UID --approval NOTE_ID --apply
     python scripts/support/ops.py --ticket T --actor A --reason R account summary UID
+    python scripts/support/ops.py --ticket T --actor A --reason R transcription-credit status UID
+    python scripts/support/ops.py --ticket T --actor A --reason R transcription-credit grant UID --hours 30 [--expires-days 30] --apply
+    python scripts/support/ops.py --ticket T --actor A --reason R transcription-credit revoke UID GRANT_ID --apply
 
 Hold, retention, export and summary commands first write ``support_actions/{id}`` (ticket,
 actor, agent, reason, command, argument digest) and finishes it with the outcome;
@@ -44,10 +47,10 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from database import support_actions  # noqa: E402
-from utils.support import account, dsar_export, holds, plan_correction, retention  # noqa: E402
+from utils.support import account, dsar_export, holds, plan_correction, retention, transcription_credit  # noqa: E402
 
 Handler = Callable[[argparse.Namespace, support_actions.ActionContext, support_actions.ActionRecord], dict[str, Any]]
-MODULES = (holds, retention, dsar_export, account)
+MODULES = (holds, retention, dsar_export, account, transcription_credit)
 
 
 def _adc_principal() -> str | None:

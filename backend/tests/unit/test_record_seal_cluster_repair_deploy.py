@@ -17,6 +17,29 @@ def documents(*args):
     return {(doc['kind'], doc['metadata']['name']): doc for doc in yaml.safe_load_all(result.stdout) if doc}
 
 
+def test_first_week_flag_is_off_in_every_production_batch_worker_workload():
+    docs = documents()
+    seen = set()
+    worker_deployment_seen = False
+
+    for (kind, name), doc in docs.items():
+        if kind == 'Deployment':
+            pod = doc['spec']['template']['spec']
+        elif kind == 'CronJob':
+            pod = doc['spec']['jobTemplate']['spec']['template']['spec']
+        else:
+            continue
+        if name in {'record-seal-worker', 'record-seal-sweeper', 'record-seal-repair'}:
+            seen.add(name)
+        for container in pod['containers']:
+            env = {entry['name']: entry.get('value') for entry in container.get('env', [])}
+            assert env['FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED'] == 'false', (kind, name, container['name'])
+            worker_deployment_seen |= container['name'] == 'worker'
+
+    assert worker_deployment_seen
+    assert seen == {'record-seal-worker', 'record-seal-sweeper', 'record-seal-repair'}
+
+
 def test_independent_job_uses_worker_identity_and_has_separate_deadline():
     docs = documents()
     repair = docs[('CronJob', 'record-seal-repair')]['spec']

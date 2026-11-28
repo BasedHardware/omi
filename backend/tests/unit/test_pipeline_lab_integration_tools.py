@@ -30,6 +30,8 @@ environments:
           HOSTED_THING_URL: {value: 'http://10.0.0.1:80', category: rollout}
           OMI_ENV_STAGE: {value: prod, category: rollout}
           FROM_SECRET: {valueFrom: {secretKeyRef: {name: s, key: k}}}
+          FULL: {value: shadow, category: rollout}
+          HALF: {value: shadow, category: rollout}
           FULL_SERVE_PERCENT: {value: '100', category: rollout}
           HALF_SERVE_PERCENT: {value: '50', category: rollout}
           NONE_SERVE_PERCENT: {value: '0', category: rollout}
@@ -40,7 +42,13 @@ def test_overlay_from_runtime_env_keeps_flags_drops_secrets_and_pins_cohorts(tmp
     path = tmp_path / 'runtime_env.yaml'
     path.write_text(RUNTIME_ENV)
     overlay, report = overlay_from_runtime_env(path, service='backend-listen')
-    assert overlay['env'] == {'NOTES_MODE': 'serve', 'OMI_SHAPED_AGENT_MODE': 'on', 'SOME_FLAG_ENABLED': 'true'}
+    assert overlay['env'] == {
+        'FULL': 'shadow',
+        'HALF': 'shadow',
+        'NOTES_MODE': 'serve',
+        'OMI_SHAPED_AGENT_MODE': 'on',
+        'SOME_FLAG_ENABLED': 'true',
+    }
     cohorts = {k: overlay['serving'][k] for k in ('FULL', 'HALF', 'NONE')}
     assert cohorts == {'FULL': True, 'HALF': False, 'NONE': False}
     # *_MODE env without cohort env is pinned too (uid-independent), so no decision stays unpinned

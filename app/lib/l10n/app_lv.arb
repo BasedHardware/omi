@@ -4773,5 +4773,9 @@
     "deleteFromServerMessage": "Šis ieraksts ir augšupielādēts, bet vēl nav transkribēts. Dzēšot to, neatgriezeniski tiek izdzēsta arī kopija Omi serveros, tāpēc tas nekad netiks transkribēts. Šo darbību nevar atsaukt.",
     "deletedRecordingAlreadyTranscribed": "Jau transkribēts. Lai to noņemtu, izdzēsiet tā sarunu.",
     "deletedRecordingWillBeProcessed": "Šī ieraksta apstrāde turpināsies. Kad saruna parādīsies, to varēsi dzēst.",
-    "deleteRecordingKeepsConversation": "Dzēšot šeit, tiek noņemta kopija no tālruņa. Jau transkribēto ierakstu sarunas saglabājas."
+    "deleteRecordingKeepsConversation": "Dzēšot šeit, tiek noņemta kopija no tālruņa. Jau transkribēto ierakstu sarunas saglabājas.",
+    "batteryRestartToRefresh": "Restartējiet Omi, lai atsvaidzinātu",
+    "onTheWayAllowanceHeldTitle": "Tiks apstrādāti {date}, kad atjaunosies jūsu minūtes",
+    "onTheWayAllowanceHeldUpgrade": "Vai jauniniet plānu, lai tos apstrādātu uzreiz",
+    "onTheWayDayProcessesOn": "Apstrādās {date}"
 }

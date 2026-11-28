@@ -80,13 +80,18 @@ from utils.other.request_deadline import (
 )
 from utils.llm.notes_identity import notes_identity, screen_speaker_bindings
 from utils.llm.notes_output import NotesOutput, OpenLoopNotesOutput
-from utils.llm.notes_observability import current_run, observe_notes
+from utils.llm.notes_observability import current_run, notes_observation, observe_notes_output
+from utils.conversations.processing_steps import AsyncStep, Steps, run_inline
 from utils.llm.notes_effort import bind_notes_effort
 
 try:
-    from utils.llm.notes_agent_serving import agentic_notes_payload as _serve_agentic_notes
+    from utils.llm.notes_agent_serving import (
+        agentic_notes_payload as _serve_agentic_notes,
+        agentic_notes_steps as _serve_agentic_notes_steps,
+    )
 except ImportError:  # pragma: no cover - file-loading harnesses exec this module with stubbed packages
     _serve_agentic_notes = None
+    _serve_agentic_notes_steps = None
 from utils.llm.shaped_agent import Budget, Mount, Turn, route_for_uid, run_loop
 from utils.llm.shaped_notes_transport import isolated_notes_model
 from utils.llm.model_config import FOREGROUND_REQUEST_TIMEOUT_SECONDS
@@ -488,14 +493,31 @@ def get_conversation_notes(
     return _get_shaped_conversation_notes(prefix, uid=uid, open_loop_out=open_loop_out, **kwargs)
 
 
-@observe_notes
-def _get_shaped_conversation_notes(
+def _get_shaped_conversation_notes(prefix: ConversationPromptPrefix, **kwargs: Any) -> Structured:
+    return run_inline(_observed_notes_steps(prefix, **kwargs))
+
+
+def conversation_notes_steps(prefix: ConversationPromptPrefix, *, uid: Optional[str] = None, **kwargs: Any):
+    if route_for_uid(uid) != 'new':
+        raise RuntimeError('Shaped notes disabled; restore the previous image for legacy serving')
+    return (yield from _observed_notes_steps(prefix, uid=uid, async_agent=True, **kwargs))
+
+
+def _observed_notes_steps(prefix: ConversationPromptPrefix, **kwargs: Any) -> Steps[Structured]:
+    with notes_observation() as run:
+        result = yield from _shaped_conversation_notes_steps(prefix, **kwargs)
+        observe_notes_output(run, result)
+        return result
+
+
+def _shaped_conversation_notes_steps(
     prefix: ConversationPromptPrefix,
     *,
     uid: Optional[str] = None,
     open_loop_out: Optional[dict[str, Any]] = None,
+    async_agent: bool = False,
     **kwargs: Any,
-) -> Structured:
+) -> Steps[Structured]:
     frames = kwargs.get('screen_frames') or ()
     # Never reuse the old prefix metadata: it may already have bound a roster.
     context = prefix.shaped_context or ('FULL TRANSCRIPT\n' + prefix.context.split('FULL TRANSCRIPT\n', 1)[-1])
@@ -569,13 +591,15 @@ def _get_shaped_conversation_notes(
     )
     # Long or meeting-like conversations get the agentic writer; it returns None
     # (one-shot below, unchanged) when ineligible, disabled, or on any failure.
-    agent_payload = (
-        None
-        if v3_models.active()
-        else agentic_notes_payload(
+    agent_payload = None
+    if not v3_models.active():
+        agent_inputs = dict(
             uid=uid, prefix=prefix, model=model, capture_evidence=context, words=words, frames=frames, kwargs=kwargs
         )
-    )
+        if async_agent and _serve_agentic_notes_steps is not None:
+            agent_payload = yield from _serve_agentic_notes_steps(**agent_inputs)
+        elif not async_agent:
+            agent_payload = agentic_notes_payload(**agent_inputs)
     if agent_payload is not None:
         validated_agent_output = _notes_output_schema(uid, agent=True).model_validate(agent_payload)
         # The agent's submit tool does not request open-loop fields yet: leave the
@@ -620,7 +644,8 @@ def _get_shaped_conversation_notes(
                 call_model = isolated_model
 
             async def model_turn(shape: Mount, messages: list[Any]) -> Turn:
-                response = await call_model.ainvoke(messages)
+                async with v3_models.summary_model_attempt():
+                    response = await call_model.ainvoke(messages)
                 content = getattr(response, 'content', response)
                 if isinstance(content, list):
                     content = ''.join(part.get('text', '') if isinstance(part, dict) else str(part) for part in content)
@@ -628,7 +653,15 @@ def _get_shaped_conversation_notes(
 
             return await run_loop(_bounded_notes_mount(mount), evidence, model_turn)
 
-    result = asyncio.run(invoke())
+    async def invoke_with_admission():
+        return await v3_models.within_notes_admission(invoke)
+
+    result = yield AsyncStep(
+        invoke_with_admission,
+        # The synchronous v3 backfill path starts the model under its
+        # account-deletion transaction. Continued from-segments uses legacy notes.
+        run_sync=lambda: v3_models.dispatch_notes_model(lambda: asyncio.run(invoke_with_admission())),
+    )
     output_schema = _notes_output_schema(uid)
     validated_output = output_schema.model_validate(result.value)
     capture_into_sink(validated_output, open_loop_out)

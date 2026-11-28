@@ -4773,5 +4773,9 @@
     "deleteFromServerMessage": "Цей запис завантажено, але ще не розшифровано. Видалення також назавжди зітре копію на серверах Omi, тож його ніколи не буде розшифровано. Цю дію не можна скасувати.",
     "deletedRecordingAlreadyTranscribed": "Уже розшифровано. Щоб прибрати запис, видаліть його розмову.",
     "deletedRecordingWillBeProcessed": "Обробка цього запису триватиме. Коли розмова з’явиться, її можна буде видалити.",
-    "deleteRecordingKeepsConversation": "Видалення тут прибирає копію з телефона. Розмови з уже транскрибованих записів залишаються."
+    "deleteRecordingKeepsConversation": "Видалення тут прибирає копію з телефона. Розмови з уже транскрибованих записів залишаються.",
+    "batteryRestartToRefresh": "Перезавантажте Omi, щоб оновити",
+    "onTheWayAllowanceHeldTitle": "Буде оброблено {date}, коли відновляться ваші хвилини",
+    "onTheWayAllowanceHeldUpgrade": "Або обробіть їх одразу, покращивши план",
+    "onTheWayDayProcessesOn": "Буде оброблено {date}"
 }

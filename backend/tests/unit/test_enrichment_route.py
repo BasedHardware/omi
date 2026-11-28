@@ -17,8 +17,10 @@ from unittest.mock import Mock
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
+from google.api_core.exceptions import Aborted
 
 from database import _client as firestore_client
+from database import firestore_transaction_retry
 from database.outbox_firestore import ENRICHMENT_OUTBOX
 from database.summary_processing import EmptyFailureOutcome
 import database.summary_processing as summary_processing
@@ -40,6 +42,7 @@ SUMMARY = SimpleNamespace(structured={'overview': 'Synthetic committed summary'}
 @pytest.fixture
 def rows(state, monkeypatch):  # noqa: F811
     monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'false')
+    monkeypatch.setenv('FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED', 'false')
     monkeypatch.setattr(custody, 'discard_blocked', lambda _row_id: False)
     from database import conversations as conversations_db
 
@@ -819,7 +822,11 @@ def test_priority_lookup_reads_only_conversation_clocks(state, monkeypatch, fini
     monkeypatch.setenv('ENRICHMENT_ROUTE', 'enrichment_queue')
     monkeypatch.setenv('ENRICHMENT_FRESH_TASKS_QUEUE', 'enrichment-fresh')
     assert outbox._recent_conversation('u', 'c', 10_000)
-    document.get.assert_called_once_with(field_paths=['finished_at', 'created_at'], timeout=2, retry=None)
+    document.get.assert_called_once_with(
+        field_paths=['finished_at', 'created_at', 'started_at', 'first_week_summary', 'processing_tier'],
+        timeout=2,
+        retry=None,
+    )
 
 
 def test_priority_metadata_failure_leaves_new_work_on_existing_queue(split_binding, monkeypatch):
@@ -977,6 +984,23 @@ async def test_legacy_handler_retries_processing_dependency_failures_without_5xx
     assert response.status_code == code
     if code == 409:
         assert json.loads(response.body) == {'status': 'retry', 'reason': 'dependency_warming'}
+
+
+@pytest.mark.asyncio
+async def test_legacy_sync_handler_retries_wrapped_firestore_contention(monkeypatch):
+    monkeypatch.setenv('ENRICHMENT_ROUTE', 'sync_handler')
+    monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
+    error = ValueError('Failed to commit transaction in 1 attempts.')
+    error.__cause__ = Aborted('transaction contention')
+    monkeypatch.setattr(route, 'run_enrichment', Mock(side_effect=error))
+
+    async def run(_executor, func, *args):
+        return func(*args)
+
+    monkeypatch.setattr(route, 'run_blocking', run)
+    response = await route.enrichment_response({'kind': 'sync_reprocess', 'key': KEY, 'task_token': 'b' * 32})
+    assert response.status_code == 409
+    assert json.loads(response.body) == {'status': 'retry', 'reason': 'dependency_warming'}
 
 
 def test_consumer_retries_a_processing_dependency_failure_and_keeps_the_wake(rows):
@@ -1275,12 +1299,12 @@ def test_non_transient_gateway_status_stays_5xx_and_keeps_the_lease(rows, client
     assert rows[0][KEY]['lease_until'] > 0
 
 
-def _provider_sweep(monkeypatch, sweep):
-    """Stub the C8 provider-STT outbox that maintain() also sweeps (M3 review); never touches Firestore."""
-    import database.outbox as outbox_module
-    from types import SimpleNamespace
-
-    monkeypatch.setattr(outbox_module, 'outbox_for', lambda kind: SimpleNamespace(sweep=sweep))
+def _provider_sweep(monkeypatch, sweep, sweep_running=lambda *, now: (3, 0), sweep_held=lambda *, now: (5, 0, 1)):
+    monkeypatch.setattr(
+        route,
+        'provider_stt_outbox',
+        lambda: SimpleNamespace(sweep=sweep, sweep_running=sweep_running, sweep_held=sweep_held),
+    )
 
 
 @pytest.mark.parametrize('near_expiry', [2, None], ids=['current', 'legacy'])
@@ -1305,6 +1329,11 @@ def test_maintenance_sweeps_the_outbox_and_admits_summary_debt(rows, monkeypatch
         'provider_stt_rewoken': 4,
         'provider_stt_discarded': 2,
         'provider_stt_sweep_errors': 1,
+        'provider_stt_running_rewoken': 3,
+        'provider_stt_running_errors': 0,
+        'provider_stt_held_rewoken': 5,
+        'provider_stt_held_errors': 0,
+        'provider_stt_held_expired': 1,
         'summary_debt_scanned': 5,
         'summary_debt_expired_seen': 2,
         'summary_debt_admitted': 3,
@@ -1339,7 +1368,33 @@ def test_maintenance_isolates_a_provider_stt_sweep_failure(rows, monkeypatch):
     )
     counts = route.maintain(1000.0)
     assert counts['rewoken'] == 1 and counts['provider_stt_sweep_errors'] == 1
+    assert counts['provider_stt_running_rewoken'] == 3
+    assert counts['provider_stt_held_rewoken'] == 5
     assert counts['summary_debt_admitted'] == 1
+
+
+def test_maintenance_isolates_a_held_sweep_failure_and_honours_its_kill_switch(rows, monkeypatch):
+    """The held sweep's failure is counted without blocking the rest; its kill switch skips it."""
+    from services import summary_debt_repair
+    from database.outbox import SweepCounts
+
+    monkeypatch.setattr(ENRICHMENT_OUTBOX, 'sweep', lambda *, now, limit=100: SweepCounts(0, 0, 0, 0))
+    held = Mock(side_effect=RuntimeError('synthetic'))
+    _provider_sweep(monkeypatch, lambda *, now, limit=100: SweepCounts(0, 0, 0, 0), sweep_held=held)
+    monkeypatch.setattr(
+        summary_debt_repair,
+        'tick',
+        lambda *, now: {'scanned': 1, 'admitted': 1, 'near_expiry_admitted': 0, 'errors': 0, 'expired_seen': 0},
+    )
+    counts = route.maintain(1000.0)
+    assert counts['provider_stt_held_errors'] == 1 and counts['provider_stt_held_rewoken'] == 0
+    assert counts['provider_stt_running_rewoken'] == 3 and counts['summary_debt_admitted'] == 1
+
+    held.reset_mock()
+    monkeypatch.setenv('BATCH_VENDOR_HELD_REDRIVE_ENABLED', 'false')
+    counts = route.maintain(1000.0)
+    held.assert_not_called()
+    assert counts['provider_stt_held_errors'] == 0 and counts['summary_debt_admitted'] == 1
 
 
 def _oversized_write_rejection():
@@ -1475,3 +1530,23 @@ def test_enrichment_early_abort_and_streak_metrics_pass_the_gmp_sync_allowlist()
         'omi_enrichment_early_abort',
     ):
         assert not any(re.fullmatch(pattern, name) for pattern in keep), name
+
+
+@pytest.mark.parametrize('budget', ['0', '300'])
+def test_claim_contention_is_409_and_leaves_custody_untouched(rows, client, monkeypatch, budget):
+
+    state = deepcopy(rows[0][KEY])
+    monkeypatch.setenv('ENRICHMENT_DELIVERY_BUDGET_SECONDS', budget)
+
+    def contended(_row_id):
+        deadline = firestore_transaction_retry._retry_deadline.get()
+        assert (deadline is not None) == (budget != '0')
+        raise Aborted('privacy read contention')
+
+    monkeypatch.setattr(custody, 'discard_blocked', contended)
+    response = client.post(
+        '/v2/enrichment/run', json={'kind': 'enrichment', 'key': KEY, 'task_token': state['task_token']}
+    )
+    assert response.status_code == 409
+    assert response.json() == {'status': 'retry', 'reason': 'dependency_warming'}
+    assert rows[0][KEY] == state

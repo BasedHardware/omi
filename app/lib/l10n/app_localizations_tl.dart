@@ -15987,4 +15987,20 @@ class AppLocalizationsTl extends AppLocalizations {
   @override
   String get deleteRecordingKeepsConversation =>
       'Aalisin ng pagbura rito ang kopya sa telepono. Mananatili ang mga pag-uusap para sa mga recording na na-transcribe na.';
+
+  @override
+  String get batteryRestartToRefresh => 'I-restart ang Omi upang i-refresh';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Ipo-proseso sa $date kapag mag-renew na ang iyong mga minuto';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'O mag-plan upgrade para maiproseso agad ang mga ito';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Maiiproseso sa $date';
+  }
 }
