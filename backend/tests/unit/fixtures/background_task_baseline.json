@@ -454,6 +454,13 @@
       "kind": "threading.Thread",
       "count": 1,
       "why": "Flag commit_wake: one daemon thread per worker posts owner ids to the serving backend. The wake is a hint held in memory; a wake lost at SIGKILL leaves the committed row where the serving sweep finds it, as without the flag."
+    },
+    {
+      "path": "utils/sync/record_token_lease.py",
+      "function": "_Fence._schedule",
+      "kind": "executor.submit",
+      "count": 1,
+      "why": "SCA-3748 custody fence completion (temp-file cleanup, then the exact-token record_custody_append.finish), submitted by the last settling storage worker so the request's cancellation cannot release the fence. A live request awaits its outcome and answers from it; only a cancelled request has no waiter. Losing it at SIGKILL leaves the custody:<job_id> token for lease expiry and seal repair: every fenced commit starts within CUSTODY_STORAGE_BUDGET_SECONDS and lands within CUSTODY_WRITE_SECONDS, well under half the custody lease (test_record_custody_fence.py), so repair never races a live writer, and the phone, never ACKed, retries idempotently."
     }
   ]
 }
