@@ -2978,6 +2978,10 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           'filesInBatch': files.length,
           'statusCode': e.statusCode,
           'terminal': definitive,
+          // Server-supplied tokens only; an absent reasonCode marks a platform 5xx.
+          if (e.reasonCode != null) 'reasonCode': e.reasonCode,
+          if (e.retryAfterSeconds != null) 'retryAfterSeconds': e.retryAfterSeconds,
+          if (e.recordingWaitSeconds != null) 'recordingWaitSeconds': e.recordingWaitSeconds,
         });
         if (e.statusCode >= 500 && !scopedWait && (e.retryAfterSeconds ?? 0) <= 0) {
           // Unscoped 5xx (e.g. platform shedding under load): the server gave
