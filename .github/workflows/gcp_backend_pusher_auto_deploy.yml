@@ -36,6 +36,8 @@ on:
       - 'backend/testing/release_fixtures/transcription-release-probe.wav'
       - '.github/scripts/pusher_canary_inverse.py'
       - '.github/scripts/pusher_image_rehearsal.py'
+      - '.github/scripts/pusher_image_only.py'
+      - 'backend/scripts/pusher_canary_from_live.py'
       - '.github/workflows/gcp_backend_pusher_auto_deploy.yml'
       - '.github/workflows/gcp_backend_pusher.yml'
 
