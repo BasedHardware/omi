@@ -2032,12 +2032,7 @@ async def sync_local_files_v2(
             detail='Sync upload could not be accepted; local audio remains available.',
         )
     finally:
-        try:
-            # A cancelled request's started archive worker may still read these
-            # files; wait for it (never re-raising a cancel) before removing them.
-            await custody_lease.settle_upload()
-        finally:
-            _cleanup_files(paths)
+        await custody_lease.settle_then(_cleanup_files, paths)
 
 
 @router.post('/v2/sync-local-files/{job_id}/release-hold', response_model=SyncUploadHoldReleaseResponse)

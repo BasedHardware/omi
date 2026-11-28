@@ -182,6 +182,18 @@ async def settle_upload() -> None:
         state['unsettled'] = True
 
 
+async def settle_then(cleanup: Callable[..., None], *args: Any) -> None:
+    """Run route cleanup (temp files) only after every fenced worker settled.
+
+    A cancelled request's started archive worker may still read those files.
+    Never raises a cancellation; the custody wrapper re-raises it after finish.
+    """
+    try:
+        await settle_upload()
+    finally:
+        cleanup(*args)
+
+
 async def _complete(state: UploadState, fn: Callable[..., Any], *args, **kwargs) -> Any:
     # Completion is never abandoned: a cancelled request still clears its fence.
     step = _Step(db_executor, fn, args, kwargs, abandonable=False)

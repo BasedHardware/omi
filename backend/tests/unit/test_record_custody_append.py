@@ -760,8 +760,7 @@ async def test_route_temp_cleanup_waits_for_the_started_archive_worker(monkeypat
             await request.begin_upload('synthetic', 'record', 'cleanup')
             await request.archive(archive, 'synthetic', ['local-1'], {})
         finally:
-            await request.settle_upload()
-            cleaned.append(list(archive.committed))
+            await request.settle_then(lambda: cleaned.append(list(archive.committed)))
 
     task = asyncio.create_task(upload())
     await until(archive.entered.is_set)
