@@ -10,6 +10,7 @@ import pytest
 from fastapi import HTTPException
 
 from config import conversations_v3 as switch
+from config import rollout_cohorts as policy
 from database import conversations as db
 from routers import conversations as routes, episodes
 from utils.conversations.v3 import service, audio, triggers
@@ -467,8 +468,6 @@ def test_runtime_resolver_reports_unknown_holdout_membership(monkeypatch):
 
 
 def test_unbound_resolver_reports_unknown_holdout_membership(monkeypatch):
-    from config import rollout_cohorts as policy
-
     monkeypatch.setattr(policy, '_membership_resolver', None)
     with pytest.raises(policy.RolloutCohortUnavailable):
         policy.in_rollout_cohort('synthetic', policy.V3_HOLDOUT_COHORT)
@@ -479,8 +478,6 @@ def test_unbound_resolver_reports_unknown_holdout_membership(monkeypatch):
 
 
 def test_unbound_resolver_admits_holdout_with_fallback(monkeypatch):
-    from config import rollout_cohorts as policy
-
     fallbacks = []
     monkeypatch.delenv('CONVERSATIONS_V3_HOLDOUT', raising=False)
     monkeypatch.setattr(policy, '_membership_resolver', None)
