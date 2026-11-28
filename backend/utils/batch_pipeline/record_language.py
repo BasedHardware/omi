@@ -1,4 +1,4 @@
-"""CPU-only audio proof for auto-language native records, before encrypted staging.
+"""CPU-only audio proof for native records with auto or untrusted language pins.
 
 The learned profile admits capture custody, never a Parakeet route. Every 30 s
 of audio must pass both independent classifiers. Refusal freezes
@@ -8,7 +8,12 @@ of audio must pass both independent classifiers. Refusal freezes
 import json
 
 from config.audio_archive import derived_audio_bucket
-from config.server_batch import AUTO_LANGUAGES
+from config.batch_pipeline_language import (
+    admission_language_exclusion_enabled,
+    multilingual_profile_routing_enabled,
+    pin_untrusted,
+)
+from config.server_batch import AUTO_LANGUAGES, UNSUPPORTED
 from config.stt_provider_policy import normalized_stt_language
 from utils.batch_pipeline.audio import audio_unit
 from utils.batch_pipeline.retention import batch_artifact_authorize
@@ -18,6 +23,19 @@ from utils.batch_pipeline.source_audio import MAGIC, materialize, read_reference
 from utils.other.storage import private_cloud_sync_bucket
 from utils.stt import batch_language, language_gate
 from utils.executors import db_executor, storage_executor, sync_executor, record_language_executor, run_blocking
+
+
+async def authorize_record_language(store, artifacts, item, language):
+    """Use the profile from the admission's existing privacy authorization."""
+    if (
+        normalized_stt_language(language) in UNSUPPORTED
+        or not admission_language_exclusion_enabled()
+        or not multilingual_profile_routing_enabled()
+    ):
+        return await run_blocking(db_executor, artifacts.authorize, item), False
+    snapshots = {}
+    protection = await run_blocking(db_executor, batch_artifact_authorize, store, item, snapshots=snapshots)
+    return protection, pin_untrusted(snapshots['user'])
 
 
 def classify_probe(probe, guard):

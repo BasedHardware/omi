@@ -70,7 +70,7 @@ from utils.batch_pipeline.source_audio import (
 )
 from utils.batch_pipeline.record_barrier import validate_record_tail
 from utils.batch_pipeline.record_wal_source import attest
-from utils.batch_pipeline.record_language import prove_manifest
+from utils.batch_pipeline.record_language import authorize_record_language, prove_manifest
 from utils.batch_pipeline.language_receipt import admission as language_admission_receipt
 from utils.batch_pipeline.record_partial import drain_partial, record_failure as record_partial_failure
 from config.record_seal_rules import overlap_trim_enabled
@@ -658,7 +658,7 @@ async def admit_recording(store, pending, *, now=None, provider_outbox_factory=N
         conversation_id=conversation_id,
         privacy_generation=pending['privacy_generation'],
     )
-    protection = await run_blocking(db_executor, artifacts.authorize, seed)
+    protection, untrusted_pin = await authorize_record_language(store, artifacts, seed, row.get('language'))
     # These read hints belong to the encrypted worker manifest. Keep the
     # walker output for operator plans and partial continuations stable.
     iterator = retained_record_units(
@@ -680,7 +680,7 @@ async def admit_recording(store, pending, *, now=None, provider_outbox_factory=N
     validate_record_tail(units, current.get('finished_at'))
     from utils.batch_pipeline.language_receipt import auto_language_cohort
 
-    receipt_enabled = auto_language_cohort(
+    receipt_enabled = untrusted_pin or auto_language_cohort(
         server_batch_only=row.get('server_batch_only') is True,
         client_platform=row.get('client_platform'),
         native_record=True,
@@ -731,9 +731,8 @@ async def admit_recording(store, pending, *, now=None, provider_outbox_factory=N
             'client_device_id': binding.client_device_id,
             'client_platform': binding.client_platform,
             'conversation_id': conversation_id,
-            # Declared profiles preserve their proof. Auto capture must replace
-            # these fields with independent whole-unit audio proof below.
-            'stt_language': binding.language or '',
+            # Auto capture and untrusted pins get whole-unit proof below.
+            'stt_language': 'multi' if untrusted_pin else binding.language or '',
             'stt_language_evidence': 'declared',
             'stt_language_confidence': 1.0,
         }
@@ -744,7 +743,7 @@ async def admit_recording(store, pending, *, now=None, provider_outbox_factory=N
             'references': refs,
             'context': context,
         }
-        if row.get('server_batch_only') is True:
+        if untrusted_pin or row.get('server_batch_only') is True:
             manifest = await prove_manifest(store, artifacts, item, manifest)
         if item.language_receipt_enabled:
             language_receipts[item.segment_id] = language_admission_receipt(manifest['context'])

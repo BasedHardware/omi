@@ -213,25 +213,28 @@ async def test_accept_upload_marks_evidence_only_on_a_fresh_admission(monkeypatc
     """Luna r1 P1: the batch flag belongs to the admission itself, never to the
     non-None responses that re-ack prior batch custody."""
 
-    store = MemoryStore()
-    store.namespace = 'batch_pipeline_dev'
-    monkeypatch.setattr(intake, 'FirestoreStore', lambda *a: store)
+    world = _language_world(monkeypatch, owner='batch_sync_v1')
+    world.client.rows[CONVERSATION]['language'] = 'en'
+    world.client.rows[USER]['live_stt_language_sessions'] = [{'zh': 30}, {'en': 4, 'zh': 21}]
+    store = world.store
+    monkeypatch.setenv('BATCH_MULTILINGUAL_PROFILE_ROUTING_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED', 'true')
     monkeypatch.setattr(intake, 'current_stage', lambda: 'dev')
     monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: ON)
     monkeypatch.setattr(intake, 'serving_for', lambda *a, **k: False)
-    monkeypatch.setattr(intake, 'admission_language_exclusion_enabled', lambda: False)
-    monkeypatch.setattr(intake, 'language_guard_enabled', lambda: False)
+    monkeypatch.setattr(intake, 'language_guard_enabled', lambda: True)
     monkeypatch.setattr(
         intake, 'provider_config', lambda: SimpleNamespace(pool_kind='dedicated_batch', max_unit_seconds=600)
     )
-    monkeypatch.setattr(intake, 'with_context', lambda wav, ctx: wav)
+    freeze = Mock(side_effect=lambda wav, ctx: wav)
+    monkeypatch.setattr(intake, 'with_context', freeze)
     artifacts = Mock()
     artifacts.stage_audio = Mock(return_value='gs://synthetic/audio.bin')
     monkeypatch.setattr(intake, 'artifacts_for', Mock(return_value=artifacts))
 
     def authorize(_store, _work, snapshots):
-        snapshots['user'] = {}
-        snapshots['conversations'] = {}
+        snapshots['user'] = world.client.rows[USER]
+        snapshots['conversations'] = {CID: world.client.rows[CONVERSATION]}
         return ProtectionContext('standard', 0)
 
     monkeypatch.setattr(intake, 'batch_artifact_authorize', authorize)
@@ -250,13 +253,12 @@ async def test_accept_upload_marks_evidence_only_on_a_fresh_admission(monkeypatc
     )
     from utils.stt import batch_language
 
-    monkeypatch.setattr(
-        batch_language,
-        'resolve_language',
-        lambda *a, **k: SimpleNamespace(
-            language='en', parakeet_safe=True, evidence=None, confidence=1.0, probe_seconds=0.0
-        ),
+    classify = Mock(
+        return_value=SimpleNamespace(
+            language='und', parakeet_safe=False, evidence='unavailable', confidence=0.0, probe_seconds=0.0
+        )
     )
+    monkeypatch.setattr(batch_language, 'resolve_language', classify)
 
     def decode(_max_seconds):
         yield SimpleNamespace(capture_at=0.0, duration_seconds=1.0, wav=b'x', coverage_runs=())
@@ -270,16 +272,29 @@ async def test_accept_upload_marks_evidence_only_on_a_fresh_admission(monkeypatc
         recording_age_seconds=60,
         source='omi',
         should_lock=False,
-        conversation_id=None,
+        conversation_id=CID,
         client_device_id=None,
         client_platform='ios',
         policy=BatchUnitPolicy(batch_enabled=True, batch_percent=5),
         decode=decode,
     )
+    route = await live_upload.registered_record_response(
+        uid=UID,
+        conversation_id=CID,
+        content_id='content',
+        paths=[],
+        source='omi',
+        client_device_id=None,
+        policy=world.policy,
+    )
+    assert route is RecordUploadRoute.BATCH and not world.claims
     evidence = IntakeRouteEvidence()
     response = await intake.accept_upload(**arguments, evidence=evidence)
     assert response.status_code == 202
     assert evidence.batch_accepted
+    assert classify.call_args.args[0] == 'multi'
+    assert freeze.call_args.args[1]['stt_language'] == 'und'
+    assert freeze.call_args.args[1]['stt_language_evidence'] == 'unavailable'
 
     # A prior batch receipt re-ACKs custody with the same 202 shape: no fresh admission.
     store.rows['content', f'{UID}/content'] = {'dispatch_protocol': 'batch_v1', 'job_id': 'bp_prior'}

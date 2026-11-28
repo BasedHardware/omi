@@ -422,6 +422,8 @@ def test_record_assignment_reads_restore_obligation_before_clearing_discard(rest
 @pytest.mark.asyncio
 async def test_failed_restore_metadata_does_not_admit_or_process_full_archive(restore_store, monkeypatch):
     monkeypatch.setenv('BATCH_PIPELINE_RECORD_PROTOCOL_READY', 'true')
+    monkeypatch.setenv('BATCH_MULTILINGUAL_PROFILE_ROUTING_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED', 'true')
     monkeypatch.setattr(live, 'UPLOAD_GRACE_SECONDS', 0)
     # This synthetic fleet is empty. Fairness queries are outside the strict
     # document-transaction fake; retain real enqueue with its empty frontier.

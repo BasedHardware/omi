@@ -994,12 +994,15 @@ def test_reference_scope_and_generation_are_fail_closed(change):
 
 @pytest.mark.parametrize('server_only', [False, True])
 @pytest.mark.parametrize('barrier_change', [None, 'before_read', 'pending', 'failed', 'resealed', 'protocol_closed'])
-@pytest.mark.parametrize('language', ['en', 'multi', 'ca'])
+@pytest.mark.parametrize(
+    'language,profile_proof',
+    [('en', None), ('multi', None), ('ca', None), ('en', 'en'), ('en', 'und')],
+)
 async def test_native_admission_stages_references_and_drains_after_rollback(
-    monkeypatch, server_only, barrier_change, language
+    monkeypatch, server_only, barrier_change, language, profile_proof
 ):
     from types import SimpleNamespace
-    from utils.batch_pipeline import live
+    from utils.batch_pipeline import live, record_language
     from database.batch_pipeline_staging import artifact_id
 
     unit_reads = []
@@ -1016,6 +1019,11 @@ async def test_native_admission_stages_references_and_drains_after_rollback(
     store.namespace = 'batch_pipeline_test_live'
     current = recording(record_audio_closed=True, finished_at=datetime.fromtimestamp(101, timezone.utc))
     current['language'] = language
+    monkeypatch.setenv('BATCH_MULTILINGUAL_PROFILE_ROUTING_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED', 'true')
+    user = {'live_stt_language_sessions': [{'zh': 30}, {'en': 4, 'zh': 21}]} if profile_proof else {}
+    proof_language = profile_proof or 'en'
+    evidence = 'unavailable' if proof_language == 'und' else 'audio_lid'
     proofs = []
     from unittest.mock import Mock
 
@@ -1030,13 +1038,15 @@ async def test_native_admission_stages_references_and_drains_after_rollback(
             from utils.batch_pipeline.record_language import prove_manifest
 
             return await prove_manifest(store, artifacts, item, manifest)
+        if profile_proof:
+            assert manifest['context']['stt_language'] == 'multi'
         return {
             **manifest,
             'context': {
                 **manifest['context'],
-                'stt_language': 'en',
-                'stt_language_evidence': 'audio_lid',
-                'stt_language_confidence': 0.99,
+                'stt_language': proof_language,
+                'stt_language_evidence': evidence,
+                'stt_language_confidence': 0.0 if proof_language == 'und' else 0.99,
             },
         }
 
@@ -1078,6 +1088,12 @@ async def test_native_admission_stages_references_and_drains_after_rollback(
 
     monkeypatch.setattr(live, 'create_storage_client', Client)
     listings = []
+
+    def authorize_with_snapshots(store, item, *, snapshots):
+        snapshots['user'] = user
+        return SimpleNamespace(level='standard')
+
+    monkeypatch.setattr(record_language, 'batch_artifact_authorize', authorize_with_snapshots)
     monkeypatch.setattr(
         live,
         'list_audio_chunks',
@@ -1170,20 +1186,21 @@ async def test_native_admission_stages_references_and_drains_after_rollback(
         assert provider.run(segment).outcome == 'done'
         assert vendor.calls == 1
     assert manifests[0]['references'][0]['generation'] == 1
-    assert bool(proofs) is server_only
-    assert manifests[0]['context']['stt_language'] == ('en' if server_only and language != 'ca' else language)
+    assert bool(proofs) == (server_only or bool(profile_proof))
+    assert manifests[0]['context']['stt_language'] == (proof_language if proofs and language != 'ca' else language)
     assert store.rows['jobs', segment]['projection_binding']['native_record']
+    assert store.rows['jobs', segment]['projection_binding']['language'] == language
     intake = store.rows['intakes', 'bp_' + content]
     assert (intake.get('server_batch_only') is True) is server_only
     assert store.rows['jobs', segment]['timing_store'] == 'batch'
-    receipt_enabled = server_only and language == 'multi'
+    receipt_enabled = bool(profile_proof) or (server_only and language == 'multi')
     assert ('language_receipts' in intake) is receipt_enabled
     assert (store.rows['jobs', intake['segment_ids'][0]].get('language_receipt_enabled') is True) is receipt_enabled
     if receipt_enabled:
         assert intake['language_receipts'][intake['segment_ids'][0]] == {
             'version': 1,
-            'language': 'en',
-            'evidence': 'audio_lid',
+            'language': proof_language,
+            'evidence': evidence,
         }
     # A slow raw-archive listing must raise and retry, never admit a short capture.
     assert listings == [{'max_count': 4096, 'require_archive': True}]
