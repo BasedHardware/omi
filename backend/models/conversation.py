@@ -301,7 +301,7 @@ class SharedConversationResponse(BaseModel):
     created_at: datetime
     started_at: Optional[datetime]
     finished_at: Optional[datetime]
-    language: Optional[str] = None
+    language: str = 'en'
     source: Optional[ConversationSource] = ConversationSource.omi
     status: Optional[ConversationStatus] = ConversationStatus.completed
     visibility: ConversationVisibility = ConversationVisibility.private
@@ -552,7 +552,7 @@ class Conversation(BaseModel):
     summary_on_open: Optional[bool] = None
 
     source: Optional[ConversationSource] = ConversationSource.omi
-    language: Optional[str] = None  # applies only to Friend # TODO: once released migrate db to default 'en'
+    language: str = 'en'
 
     # True when this conversation was transcribed on a third-party (custom STT)
     # provider, so no Omi transcription credits were consumed. Provenance for
@@ -945,7 +945,7 @@ class CreateConversation(BaseModel):
     photos: List[ConversationPhoto] = []
 
     source: ConversationSource = ConversationSource.omi
-    language: Optional[str] = None
+    language: str = 'en'
 
     processing_conversation_id: Optional[str] = None
     calendar_meeting_context: Optional[CalendarMeetingContext] = None
@@ -1064,7 +1064,7 @@ class ExternalIntegrationCreateConversation(BaseModel):
     geolocation: Optional[Geolocation] = None
 
     source: ConversationSource = ConversationSource.workflow
-    language: Optional[str] = None
+    language: str = 'en'
 
     # Server-resolved meeting identity for this capture, carried as a field the
     # same way `CreateConversation` carries it. The pre-summarization resolver
