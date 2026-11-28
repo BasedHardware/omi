@@ -5,16 +5,10 @@ import Vision
 
 @MainActor
 enum CloudConnectorFormAutomation {
-  private struct FieldValue {
-    let label: String
-    let value: String
-    let optional: Bool
-    let aliases: [String]
-  }
-
   private struct AccessibleNode {
     let element: AXUIElement
     let role: String
+    let subrole: String
     let title: String
     let value: String
     let placeholder: String
@@ -69,82 +63,42 @@ enum CloudConnectorFormAutomation {
     _ args: [String: Any],
     expectedOwnerID: String? = nil
   ) async -> String {
+    await fill(
+      args,
+      expectedOwnerID: expectedOwnerID,
+      endpoints: .current,
+      uiSteps: { request, ownerID in
+        await fillVisibleForm(request, expectedOwnerID: ownerID)
+      })
+  }
+
+  /// Validates and pins the arguments, then hands them to `uiSteps`. A refused
+  /// request returns before `uiSteps` runs, so nothing is focused, typed or
+  /// clicked. Tests inject `uiSteps` to observe that.
+  static func fill(
+    _ args: [String: Any],
+    expectedOwnerID: String?,
+    endpoints: OmiConnectorEndpoints,
+    uiSteps: (PreparedFill, String?) async -> String
+  ) async -> String {
     guard ChatToolExecutor.isExpectedOwnerCurrent(expectedOwnerID) else {
       return ChatToolExecutor.authorizedOwnerChangedResult()
     }
-    let provider = ((args["provider"] as? String) ?? "").lowercased()
-    guard provider == "claude" || provider == "chatgpt" else {
-      return "Error: provider must be 'claude' or 'chatgpt'."
+    switch prepareFill(args, endpoints: endpoints) {
+    case .refused(let message):
+      return message
+    case .ready(let request):
+      return await uiSteps(request, expectedOwnerID)
     }
+  }
 
-    guard let serverURL = nonEmptyString(args["server_url"]) else {
-      return "Error: server_url is required."
-    }
-
-    let connectorName = nonEmptyString(args["name"]) ?? "Omi Memory"
-    let clientID = nonEmptyString(args["oauth_client_id"]) ?? defaultOAuthClientID(for: provider)
-    let clientSecret = nonEmptyString(args["oauth_client_secret"])
-    let submit = (args["submit"] as? Bool) ?? false
-
-    var values = [
-      FieldValue(
-        label: "Name",
-        value: connectorName,
-        optional: false,
-        aliases: ["name", "connector name", "app name"]),
-      FieldValue(
-        label: "Remote MCP server URL",
-        value: serverURL,
-        optional: false,
-        aliases: ["remote mcp server url", "mcp server url", "server url", "url"]),
-      FieldValue(
-        label: "OAuth Client ID",
-        value: clientID,
-        optional: provider == "chatgpt",
-        aliases: ["oauth client id", "client id"]),
-    ]
-
-    if let clientSecret {
-      values.append(
-        FieldValue(
-          label: "OAuth Client Secret",
-          value: clientSecret,
-          optional: provider == "chatgpt",
-          aliases: ["oauth client secret", "client secret"]))
-    }
-
-    if provider == "chatgpt" {
-      values.append(contentsOf: [
-        FieldValue(
-          label: "Authentication",
-          value: nonEmptyString(args["authentication"]) ?? "OAuth",
-          optional: true,
-          aliases: ["authentication", "auth type"]),
-        FieldValue(
-          label: "Token auth method",
-          value:
-            nonEmptyString(args["token_auth_method"])
-            ?? (clientSecret == nil ? "none" : "client_secret_post"),
-          optional: true,
-          aliases: ["token auth method", "token authentication method"]),
-      ])
-      if let authURL = nonEmptyString(args["auth_url"]) {
-        values.append(
-          FieldValue(
-            label: "Auth URL",
-            value: authURL,
-            optional: true,
-            aliases: ["auth url", "authorization url", "authorize url"]))
-      }
-      if let tokenURL = nonEmptyString(args["token_url"]) {
-        values.append(
-          FieldValue(
-            label: "Token URL",
-            value: tokenURL,
-            optional: true,
-            aliases: ["token url"]))
-      }
-    }
+  private static func fillVisibleForm(
+    _ request: PreparedFill,
+    expectedOwnerID: String?
+  ) async -> String {
+    let provider = request.provider
+    let values = request.values
+    let submit = request.submit
 
     guard accessibilityLooksUsable() else {
       return
@@ -164,22 +118,16 @@ enum CloudConnectorFormAutomation {
         "Error: Could not find a visible \(provider) custom connector form. Open the add connector modal in the signed-in browser, then call this tool again."
     }
 
-    guard let form = findBestForm(provider: provider, values: values) else {
-      if let result = await advanceClaudeConnectorStateMachine(
-        provider: provider,
-        values: values,
-        submit: submit,
-        expectedOwnerID: expectedOwnerID)
-      {
-        return result
-      }
-      return
-        "Error: Could not find a visible \(provider) custom connector form. Open the add connector modal in the signed-in browser, then call this tool again."
+    // ChatGPT: only a supported browser window showing chatgpt.com's connector
+    // settings, and only inside the connector form's own dialog.
+    guard let form = findChatGPTConnectorForm(values: values) else {
+      return chatGPTFormNotVerifiedResult
     }
 
-    if needsAdvancedSettings(values: values, nodes: form.nodes),
+    var formNodes = form.nodes
+    if needsAdvancedSettings(values: values, nodes: formNodes),
       let disclosure = findActionNode(
-        in: form.nodes,
+        in: formNodes,
         matching: ["advanced settings", "advanced"])
     {
       guard ChatToolExecutor.isExpectedOwnerCurrent(expectedOwnerID) else {
@@ -190,11 +138,14 @@ enum CloudConnectorFormAutomation {
       guard ChatToolExecutor.isExpectedOwnerCurrent(expectedOwnerID) else {
         return ChatToolExecutor.authorizedOwnerChangedResult()
       }
+      guard let refreshed = verifiedChatGPTConnectorDialog(in: form.window, values: values) else {
+        return chatGPTFormNotVerifiedResult
+      }
+      formNodes = refreshed.nodes
     }
 
-    let refreshedNodes = collectNodes(from: form.root, maxDepth: 12, maxNodes: 700)
     let fields =
-      refreshedNodes
+      formNodes
       .filter { isInputField($0) }
       .sorted(by: visualOrder)
     var usedElementIDs = Set<ObjectIdentifier>()
@@ -209,7 +160,7 @@ enum CloudConnectorFormAutomation {
         ?? fallbackField(for: value, in: fields, usedElementIDs: usedElementIDs, provider: provider)
       {
         usedElementIDs.insert(ObjectIdentifier(match.element))
-        if setField(match.element, to: value.value) {
+        if setField(match.element, to: value.value, in: form.app) {
           filled.append(value.label)
         } else if value.optional {
           missing.append("\(value.label) (optional, set failed)")
@@ -221,28 +172,27 @@ enum CloudConnectorFormAutomation {
       }
     }
 
-    if !missing.isEmpty,
-      let result = await advanceClaudeConnectorStateMachine(
-        provider: provider,
-        values: values,
-        submit: submit,
-        expectedOwnerID: expectedOwnerID)
-    {
-      return result
-    }
-
     var pressedButton: String?
     if submit && missing.isEmpty {
       guard ChatToolExecutor.isExpectedOwnerCurrent(expectedOwnerID) else {
         return ChatToolExecutor.authorizedOwnerChangedResult()
       }
-      let submitNodes = collectNodes(from: form.root, maxDepth: 12, maxNodes: 700)
-      if let button = findActionNode(
-        in: submitNodes,
-        matching: ["add", "connect", "create", "save"])
-      {
-        _ = AXUIElementPerformAction(button.element, kAXPressAction as CFString)
-        pressedButton = bestLabel(for: button)
+      // Re-verify the page and the form, then press only the form's own
+      // Add/Create button, matched exactly and only when it is the one match.
+      if let current = verifiedChatGPTConnectorDialog(in: form.window, values: values) {
+        // The walk can reach one element twice (children and visible children),
+        // so collapse equal elements before requiring a single match.
+        var buttons: [AccessibleNode] = []
+        for node in current.nodes where node.role.lowercased().contains("button") {
+          if !buttons.contains(where: { CFEqual($0.element, node.element) }) {
+            buttons.append(node)
+          }
+        }
+        if let index = chatGPTSubmitButtonIndex(labels: buttons.map { bestLabel(for: $0) }) {
+          let button = buttons[index]
+          _ = AXUIElementPerformAction(button.element, kAXPressAction as CFString)
+          pressedButton = bestLabel(for: button).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
       }
     }
 
@@ -260,7 +210,8 @@ enum CloudConnectorFormAutomation {
     } else {
       lines.append(
         submit
-          ? "Submit skipped: no enabled Add/Connect button found." : "Submit skipped by request.")
+          ? "Submit skipped: no enabled Add/Create button found in the verified form."
+          : "Submit skipped by request.")
     }
     return lines.joined(separator: "\n")
   }
@@ -976,64 +927,58 @@ enum CloudConnectorFormAutomation {
     return lines.joined(separator: "\n")
   }
 
-  private static func nonEmptyString(_ value: Any?) -> String? {
-    guard let string = value as? String else { return nil }
-    let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
-    return trimmed.isEmpty ? nil : trimmed
-  }
-
-  private static func defaultOAuthClientID(for provider: String) -> String {
-    switch provider {
-    case "chatgpt": return MemoryExportDestination.chatgpt.cloudOAuthClientID ?? ""
-    case "claude": return MemoryExportDestination.claude.cloudOAuthClientID ?? ""
-    default: return ""
-    }
-  }
-
   private static func accessibilityLooksUsable() -> Bool {
     AXIsProcessTrusted()
   }
 
-  private static func findBestForm(
-    provider: String,
+  /// Finds ChatGPT's connector form: a supported browser window whose text shows
+  /// chatgpt.com's connector settings, and the dialog inside it that holds the
+  /// form. Other apps are never scanned.
+  private static func findChatGPTConnectorForm(
     values: [FieldValue]
-  ) -> (app: NSRunningApplication, root: AXUIElement, nodes: [AccessibleNode])? {
+  ) -> (app: NSRunningApplication, window: AXUIElement, nodes: [AccessibleNode])? {
     let ownBundleID = Bundle.main.bundleIdentifier
-    var candidates: [NSRunningApplication] = []
-    if let frontmost = NSWorkspace.shared.frontmostApplication {
-      candidates.append(frontmost)
+    let browserApps = NSWorkspace.shared.runningApplications.filter { app in
+      app.bundleIdentifier != ownBundleID && isSupportedBrowserApp(app)
     }
-    candidates.append(
-      contentsOf: NSWorkspace.shared.runningApplications.filter { app in
-        guard app.bundleIdentifier != ownBundleID else { return false }
-        let name = (app.localizedName ?? app.bundleIdentifier ?? "").lowercased()
-        return name.contains("chrome")
-          || name.contains("atlas")
-          || name.contains("brave")
-          || name.contains("edge")
-          || name.contains("arc")
-          || name.contains("opera")
-          || name.contains("vivaldi")
-          || name.contains("chromium")
-      })
-    candidates.append(
-      contentsOf: NSWorkspace.shared.runningApplications.filter { app in
-        app.activationPolicy == .regular && app.bundleIdentifier != ownBundleID
-      })
-
-    var seen = Set<pid_t>()
-    for app in candidates where !seen.contains(app.processIdentifier) {
-      seen.insert(app.processIdentifier)
+    let frontmostBrowser = NSWorkspace.shared.frontmostApplication.flatMap { app in
+      app.bundleIdentifier != ownBundleID && isSupportedBrowserApp(app) ? app : nil
+    }
+    let candidates = ([frontmostBrowser].compactMap { $0 } + browserApps).uniquedByPID()
+    for app in candidates {
       let appElement = AXUIElementCreateApplication(app.processIdentifier)
-      let roots = focusedAndWindowRoots(for: appElement)
-      for root in roots {
-        let nodes = collectNodes(from: root, maxDepth: 12, maxNodes: 700)
-        if formScore(provider: provider, values: values, nodes: nodes) >= 3 {
-          return (app, root, nodes)
+      for window in focusedAndWindowRoots(for: appElement) {
+        if let dialog = verifiedChatGPTConnectorDialog(in: window, values: values) {
+          return (app, window, dialog.nodes)
         }
       }
     }
     return nil
+  }
+
+  /// The innermost dialog in `window` that holds ChatGPT's connector form, or nil
+  /// when the window does not show chatgpt.com's connector settings.
+  private static func verifiedChatGPTConnectorDialog(
+    in window: AXUIElement,
+    values: [FieldValue]
+  ) -> (element: AXUIElement, nodes: [AccessibleNode])? {
+    let windowNodes = collectNodes(from: window, maxDepth: 12, maxNodes: 700)
+    let windowText = windowNodes.map(\.searchableText).joined(separator: " ")
+    guard showsChatGPTConnectorSettingsURL(windowText) else { return nil }
+
+    let dialogSubroles: Set<String> = ["AXApplicationDialog", "AXApplicationAlertDialog"]
+    let forms =
+      windowNodes
+      .filter { dialogSubroles.contains($0.subrole) }
+      .compactMap { dialog -> (element: AXUIElement, nodes: [AccessibleNode])? in
+        let nodes = collectNodes(from: dialog.element, maxDepth: 12, maxNodes: 700)
+        let text = nodes.map(\.searchableText).joined(separator: " ")
+        guard looksLikeChatGPTConnectorForm(text),
+          formScore(provider: "chatgpt", values: values, nodes: nodes) >= 3
+        else { return nil }
+        return (dialog.element, nodes)
+      }
+    return forms.min(by: { $0.nodes.count < $1.nodes.count })
   }
 
   private static func focusedAndWindowRoots(for appElement: AXUIElement) -> [AXUIElement] {
@@ -1104,6 +1049,7 @@ enum CloudConnectorFormAutomation {
     AccessibleNode(
       element: element,
       role: stringAttribute(element, "AXRole"),
+      subrole: stringAttribute(element, "AXSubrole"),
       title: stringAttribute(element, "AXTitle"),
       value: stringAttribute(element, "AXValue"),
       placeholder: stringAttribute(element, "AXPlaceholderValue"),
@@ -1257,12 +1203,23 @@ enum CloudConnectorFormAutomation {
       || name.contains("chromium")
   }
 
-  private static func setField(_ element: AXUIElement, to value: String) -> Bool {
+  private static func setField(
+    _ element: AXUIElement,
+    to value: String,
+    in app: NSRunningApplication
+  ) -> Bool {
     if AXUIElementSetAttributeValue(element, "AXValue" as CFString, value as CFTypeRef) == .success {
       return true
     }
     _ = AXUIElementSetAttributeValue(element, "AXFocused" as CFString, kCFBooleanTrue)
     Thread.sleep(forTimeInterval: 0.08)
+    // Key events go to the frontmost app's focused element, so paste only when
+    // that is the verified browser and this very field.
+    let appElement = AXUIElementCreateApplication(app.processIdentifier)
+    guard NSWorkspace.shared.frontmostApplication?.processIdentifier == app.processIdentifier,
+      let focused = elementAttribute(appElement, "AXFocusedUIElement"),
+      CFEqual(focused, element)
+    else { return false }
     NSPasteboard.general.clearContents()
     NSPasteboard.general.setString(value, forType: .string)
     sendKey(0, flags: .maskCommand)
