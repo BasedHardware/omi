@@ -4946,6 +4946,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get omiAppName => 'Omi';
 
   @override
+  String get loadMoreConversations => 'Загрузить ещё';
+
+  @override
   String get showMore => 'показать больше ↓';
 
   @override

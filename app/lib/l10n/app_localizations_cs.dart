@@ -4926,6 +4926,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get omiAppName => 'Omi';
 
   @override
+  String get loadMoreConversations => 'Načíst další';
+
+  @override
   String get showMore => 'zobrazit více ↓';
 
   @override

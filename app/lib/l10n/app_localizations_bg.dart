@@ -4951,6 +4951,9 @@ class AppLocalizationsBg extends AppLocalizations {
   String get omiAppName => 'Omi';
 
   @override
+  String get loadMoreConversations => 'Зареди още';
+
+  @override
   String get showMore => 'покажи повече ↓';
 
   @override

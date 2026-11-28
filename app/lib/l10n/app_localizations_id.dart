@@ -4940,6 +4940,9 @@ class AppLocalizationsId extends AppLocalizations {
   String get omiAppName => 'Omi';
 
   @override
+  String get loadMoreConversations => 'Muat lebih banyak';
+
+  @override
   String get showMore => 'tampilkan lebih ↓';
 
   @override

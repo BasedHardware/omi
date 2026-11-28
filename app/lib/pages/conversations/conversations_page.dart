@@ -275,6 +275,35 @@ List<_ConversationListRow> _buildConversationListRows({
   return rows;
 }
 
+Widget _animatedDayRow(BuildContext context, {required bool collapsed, required Widget child}) {
+  final duration = OmiMotion.of(context).standard;
+  if (duration == Duration.zero) return collapsed ? const SizedBox.shrink() : child;
+  final extent = collapsed ? 0.0 : 1.0;
+  return TweenAnimationBuilder<double>(
+    key: ValueKey((#animatedDayRow, child.key)),
+    tween: Tween(begin: extent, end: extent),
+    duration: duration,
+    curve: OmiMotion.standardCurve,
+    child: child,
+    builder: (context, extent, child) {
+      if (extent == 0) return const SizedBox.shrink();
+      return ClipRect(
+        child: Align(
+          alignment: Alignment.topCenter,
+          heightFactor: extent,
+          child: IgnorePointer(
+            ignoring: collapsed || extent < 1,
+            child: ExcludeSemantics(
+              excluding: collapsed || extent < 1,
+              child: Opacity(opacity: extent, child: child),
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
+
 /// [rows] with conversation [id] moved to the top of its day, right under the day's header: the
 /// conversation in progress leads its day even when a later call or import started after it.
 List<_ConversationListRow> _pinFirstInDay(List<_ConversationListRow> rows, String id) {
@@ -372,9 +401,10 @@ class _ConversationsPageState extends State<ConversationsPage>
     if (fromScroll) _autoLoadMorePages = 0;
     final source = context.read<ConversationProvider>();
     _feed?.continuePreparation();
+    if (_manualPaging) return;
     if (!_usesCards(source)) {
       if (_scrollController.position.extentAfter < _scrollController.position.viewportDimension * 2) {
-        _requestMoreIfNeeded(source);
+        unawaited(_requestMoreIfNeeded(source));
       }
       return;
     }
@@ -384,6 +414,10 @@ class _ConversationsPageState extends State<ConversationsPage>
 
   final GlobalKey<HomeDailyRecapsState> _recapsKey = GlobalKey<HomeDailyRecapsState>();
   String? _loadMoreFilterKey;
+  final Set<DateTime> _collapsedConversationDays = {};
+  // Set by the last build: while a day is collapsed paging is manual (Show more), so scrolling must not prefetch.
+  bool _manualPaging = false;
+
   String? _lastLoadMoreRequestKey;
   bool _isBootstrapping = true;
   bool _initialOverlayPending = false;
@@ -776,8 +810,8 @@ class _ConversationsPageState extends State<ConversationsPage>
     return ready.future;
   }
 
-  bool _requestMoreIfNeeded(ConversationProvider provider) {
-    if (provider.isLoadingConversations) return false;
+  Future<void> _requestMoreIfNeeded(ConversationProvider provider) async {
+    if (provider.isLoadingConversations) return;
 
     final filterKey = conversationLoadMoreFilterKey(
       query: provider.previousQuery,
@@ -798,45 +832,34 @@ class _ConversationsPageState extends State<ConversationsPage>
     final String pageOrCount;
     final isSearch = provider.previousQuery.isNotEmpty || provider.selectedSpeakerId != null;
     if (isSearch) {
-      if (provider.totalSearchPages <= provider.currentSearchPage) return false;
+      if (provider.totalSearchPages <= provider.currentSearchPage) return;
       pageOrCount = 'page:${provider.currentSearchPage}';
     } else {
-      if (!provider.hasMoreConversations) return false;
+      if (!provider.hasMoreConversations) return;
       pageOrCount = 'offset:${provider.conversationServerOffset}';
     }
 
     final requestKey = '$filterKey|$pageOrCount';
-    if (_lastLoadMoreRequestKey == requestKey) return false;
+    if (_lastLoadMoreRequestKey == requestKey) return;
     _lastLoadMoreRequestKey = requestKey;
 
-    if (isSearch) {
-      unawaited(provider.searchMoreConversations());
-    } else {
-      unawaited(
-        provider.getMoreConversationsFromServer().then((succeeded) {
-          if (mounted &&
-              shouldReleaseConversationLoadMoreLatch(
-                currentRequestKey: _lastLoadMoreRequestKey,
-                requestKey: requestKey,
-                succeeded: succeeded,
-              )) {
-            // A failed page fetch leaves the server cursor unchanged; release
-            // the latch so the next scroll can retry the same offset.
-            _lastLoadMoreRequestKey = null;
-          }
-          // A page can come back short (hidden rows) or add nothing new. With the reader still
-          // near the end, ask for the next one now instead of waiting for another scroll. Bounded:
-          // each page through a hidden run costs hundreds of reads, so one scroll buys a few pages.
-          if (mounted && succeeded && _autoLoadMorePages < _maxAutoLoadMorePages) {
-            _autoLoadMorePages++;
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) _prefetchCards(fromScroll: false);
-            });
-          }
-        }),
-      );
+    final succeeded = await (isSearch ? provider.searchMoreConversations() : provider.getMoreConversationsFromServer());
+    if (!mounted) return;
+    if (shouldReleaseConversationLoadMoreLatch(
+      currentRequestKey: _lastLoadMoreRequestKey,
+      requestKey: requestKey,
+      succeeded: succeeded,
+    )) {
+      // A failed page fetch leaves the cursor/page unchanged, so allow a retry.
+      _lastLoadMoreRequestKey = null;
     }
-    return true;
+    // Only automatic server paging can continue across sparse pages.
+    if (!isSearch && succeeded && !_manualPaging && _autoLoadMorePages < _maxAutoLoadMorePages) {
+      _autoLoadMorePages++;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _prefetchCards(fromScroll: false);
+      });
+    }
   }
 
   void scrollToTop() {
@@ -1245,12 +1268,40 @@ class _ConversationsPageState extends State<ConversationsPage>
         final mergedDates = <DateTime>{...conversationsByDate.keys, ...recordingsByDate.keys, ...heldByDate.keys}
             .toList()
           ..sort((a, b) => b.compareTo(a));
+        final isSearchPage = convoProvider.previousQuery.isNotEmpty || convoProvider.selectedSpeakerId != null;
+        final canLoadMore = isSearchPage
+            ? convoProvider.totalSearchPages > convoProvider.currentSearchPage
+            : convoProvider.hasMoreConversations;
         // Episodes beta, default view: background conversations live in the day's recap, not on Home.
         final hidingBackground = !cardsOn && episodesOn && showRecordings && !convoProvider.isSelectionModeActive;
+        final conversationsForRows = hidingBackground ? _withoutBackground(conversationsByDate) : conversationsByDate;
+        final preservedConversationIds = {
+          ...projectedProcessingIds,
+          ...snapshot.processingConversations.map((conversation) => conversation.id),
+          // v3 keeps its live row and the rows still transcribing or writing in view.
+          if (liveServerRow != null) liveServerRow.id,
+          for (final list in conversationsForRows.values)
+            for (final conversation in list)
+              if (ConversationsV3Provider.anyMidPipeline([conversation])) conversation.id,
+        };
+        // v3 Home draws an earlier day's header as a summary link with no collapse toggle, so such a
+        // day is never collapsed: a day collapsed in another layout would otherwise stay hidden here.
+        bool summaryHeaderDay(DateTime day) =>
+            v3Home && day != unknownCardDay && day.isBefore(localHomeDay(clock.now()));
+        final collapsibleDays = {
+          for (final day in mergedDates)
+            if (!summaryHeaderDay(day) &&
+                (conversationsForRows[day] ?? const <ServerConversation>[])
+                    .any((conversation) => !preservedConversationIds.contains(conversation.id)))
+              DateUtils.dateOnly(day),
+        };
+        final collapsedDays = _collapsedConversationDays.intersection(collapsibleDays);
+        final hasCollapsedDays = collapsedDays.isNotEmpty;
+        _manualPaging = hasCollapsedDays;
         final builtRows = _processingFirst(
             _buildConversationListRows(
               dates: mergedDates,
-              conversationsByDate: hidingBackground ? _withoutBackground(conversationsByDate) : conversationsByDate,
+              conversationsByDate: conversationsForRows,
               recordingsByDate: recordingsByDate,
               heldByDate: heldByDate,
             ),
@@ -1513,8 +1564,29 @@ class _ConversationsPageState extends State<ConversationsPage>
                   delegate: SliverChildBuilderDelegate(childCount: conversationRows.length + 1, (context, index) {
                     if (index == conversationRows.length) {
                       Logger.debug('loading more conversations');
-                      if (cardsOn) return feed.loading ? _buildLoadMoreShimmer() : const SizedBox(height: 20);
-                      if (convoProvider.isLoadingConversations) {
+                      if (cardsOn) {
+                        // A failed page keeps an in-place retry at the footer; the partial notice sits off-screen above.
+                        if (hasCollapsedDays && feed.problem != null && feed.items.isNotEmpty) {
+                          return OmiLoadMoreFailed(
+                            key: const Key('conversations_load_more_failed_cards'),
+                            onRetry: feed.retry,
+                          );
+                        }
+                        // Collapsed days can leave the list too short to scroll, so scroll prefetch never fires.
+                        if (hasCollapsedDays && feed.hasMore && feed.problem == null) {
+                          return Center(
+                            child: OmiButton.tertiary(
+                              key: const Key('conversations_show_more_cards'),
+                              label: context.l10n.loadMoreConversations,
+                              isLoading: feed.loading,
+                              onPressed: feed.loadMore,
+                            ),
+                          );
+                        }
+                        if (feed.loading) return _buildLoadMoreShimmer();
+                        return const SizedBox(height: 20);
+                      }
+                      if (convoProvider.isLoadingConversations && (!hasCollapsedDays || !canLoadMore)) {
                         return _buildLoadMoreShimmer();
                       }
                       // A failed older page ends the list with one quiet line, not silence (X6);
@@ -1529,12 +1601,22 @@ class _ConversationsPageState extends State<ConversationsPage>
                           },
                         );
                       }
-                      // widget.loadMoreMemories(); // CALL this only when visible
+                      if (hasCollapsedDays) {
+                        if (!canLoadMore) return const SizedBox(height: 20);
+                        return Center(
+                          child: OmiButton.tertiary(
+                            key: const Key('conversations_show_more'),
+                            label: context.l10n.loadMoreConversations,
+                            isLoading: convoProvider.isLoadingConversations,
+                            onPressed: () => _requestMoreIfNeeded(context.read<ConversationProvider>()),
+                          ),
+                        );
+                      }
                       return VisibilityDetector(
                         key: const Key('conversations-key'),
                         onVisibilityChanged: (visibilityInfo) {
-                          if (visibilityInfo.visibleFraction > 0) {
-                            _requestMoreIfNeeded(context.read<ConversationProvider>());
+                          if (!_manualPaging && visibilityInfo.visibleFraction > 0) {
+                            unawaited(_requestMoreIfNeeded(context.read<ConversationProvider>()));
                           }
                         },
                         child: const SizedBox(height: 20, width: double.maxFinite),
@@ -1553,7 +1635,7 @@ class _ConversationsPageState extends State<ConversationsPage>
                           more: row.conversationIndex == heldRecordings.length - 1 ? heldMore : 0,
                         );
                       case _ConversationListRowKind.dateHeader:
-                        if (v3Home && row.date != unknownCardDay && row.date.isBefore(localHomeDay(clock.now()))) {
+                        if (summaryHeaderDay(row.date)) {
                           return DaySummaryHeader(
                             key: ValueKey('date_${row.date.toIso8601String()}'),
                             date: row.date,
@@ -1561,11 +1643,20 @@ class _ConversationsPageState extends State<ConversationsPage>
                             open: widget.openDaySummary,
                           );
                         }
+                        final day = DateUtils.dateOnly(row.date);
+                        final canCollapse = collapsibleDays.contains(day);
+                        final collapsed = collapsedDays.contains(day);
                         return DateListItem(
                           key: ValueKey('date_${row.date.toIso8601String()}'),
                           date: row.date,
                           label: cardsOn && row.date == unknownCardDay ? context.l10n.unknown : null,
                           isFirst: row.isFirst,
+                          collapsed: collapsed,
+                          onToggle: canCollapse
+                              ? () => setState(() {
+                                    if (!_collapsedConversationDays.add(day)) _collapsedConversationDays.remove(day);
+                                  })
+                              : null,
                         );
                       case _ConversationListRowKind.liveEpisode:
                         return Column(
@@ -1609,18 +1700,26 @@ class _ConversationsPageState extends State<ConversationsPage>
                             count: projectedRow?.count ?? 1,
                           );
                         }
+                        Widget animate(Widget child) {
+                          final day = DateUtils.dateOnly(row.date);
+                          if (!collapsibleDays.contains(day) ||
+                              preservedConversationIds.contains(row.conversation!.id)) {
+                            return child;
+                          }
+                          return _animatedDayRow(context, collapsed: collapsedDays.contains(day), child: child);
+                        }
                         // Consecutive locked rows share one frosted card and one upgrade action;
                         // the run's first row draws it and the rest of the run draws nothing.
                         final lockedRun = cardsOn ? null : _lockedRunAt(conversationRows, index);
                         if (lockedRun != null) {
                           if (lockedRun.isEmpty) return const SizedBox.shrink();
-                          return LockedConversationRun(
+                          return animate(LockedConversationRun(
                             key: ValueKey('locked_run_${row.conversation!.id}'),
                             conversations: lockedRun,
                             date: row.date,
-                          );
+                          ));
                         }
-                        return ConversationListItem(
+                        return animate(ConversationListItem(
                           key: ValueKey(cardById[row.conversation!.id]?.id ?? row.conversation!.id),
                           conversation: row.conversation!,
                           conversationIdx: row.conversationIndex,
@@ -1634,11 +1733,15 @@ class _ConversationsPageState extends State<ConversationsPage>
                           homeEpisode: projectedEpisodes[row.conversation!.id]?.isTemporaryMember == true
                               ? null
                               : projectedEpisodes[row.conversation!.id]?.episode,
-                        );
+                        ));
                       case _ConversationListRowKind.recording:
                         return RecordingListItem(key: ValueKey('rec_${row.recording!.id}'), recording: row.recording!);
                       case _ConversationListRowKind.groupSpacer:
-                        return const SizedBox(height: 10);
+                        return _animatedDayRow(
+                          context,
+                          collapsed: collapsedDays.contains(DateUtils.dateOnly(row.date)),
+                          child: SizedBox(key: ValueKey('spacer_${row.date}'), height: 10),
+                        );
                     }
                   }),
                 ),

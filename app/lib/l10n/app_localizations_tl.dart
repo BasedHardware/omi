@@ -4976,6 +4976,9 @@ class AppLocalizationsTl extends AppLocalizations {
   String get omiAppName => 'Omi';
 
   @override
+  String get loadMoreConversations => 'Mag-load pa';
+
+  @override
   String get showMore => 'magpakita ng higit pa ↓';
 
   @override

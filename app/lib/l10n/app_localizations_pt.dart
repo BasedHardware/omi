@@ -4930,6 +4930,9 @@ class AppLocalizationsPt extends AppLocalizations {
   String get omiAppName => 'Omi';
 
   @override
+  String get loadMoreConversations => 'Carregar mais';
+
+  @override
   String get showMore => 'mostrar mais ↓';
 
   @override

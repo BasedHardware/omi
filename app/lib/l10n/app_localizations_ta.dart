@@ -4975,6 +4975,9 @@ class AppLocalizationsTa extends AppLocalizations {
   String get omiAppName => 'Omi';
 
   @override
+  String get loadMoreConversations => 'மேலும் ஏற்று';
+
+  @override
   String get showMore => 'மேலும் காட்டவும் ↓';
 
   @override

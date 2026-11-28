@@ -4941,6 +4941,9 @@ class AppLocalizationsBn extends AppLocalizations {
   String get omiAppName => 'Omi';
 
   @override
+  String get loadMoreConversations => 'আরও লোড করুন';
+
+  @override
   String get showMore => 'আরও দেখান ↓';
 
   @override

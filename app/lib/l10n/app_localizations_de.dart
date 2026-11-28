@@ -4973,6 +4973,9 @@ class AppLocalizationsDe extends AppLocalizations {
   String get omiAppName => 'Omi';
 
   @override
+  String get loadMoreConversations => 'Mehr laden';
+
+  @override
   String get showMore => 'mehr anzeigen ↓';
 
   @override

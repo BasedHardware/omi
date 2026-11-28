@@ -9369,6 +9369,12 @@ abstract class AppLocalizations {
   /// **'Omi'**
   String get omiAppName;
 
+  /// Button to load the next page of older conversations.
+  ///
+  /// In en, this message translates to:
+  /// **'Load More'**
+  String get loadMoreConversations;
+
   /// Text shown to expand collapsed content, with down arrow
   ///
   /// In en, this message translates to:

@@ -4937,6 +4937,9 @@ class AppLocalizationsSv extends AppLocalizations {
   String get omiAppName => 'Omi';
 
   @override
+  String get loadMoreConversations => 'Läs in fler';
+
+  @override
   String get showMore => 'visa mer ↓';
 
   @override

@@ -4854,6 +4854,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get omiAppName => 'Omi';
 
   @override
+  String get loadMoreConversations => 'さらに読み込む';
+
+  @override
   String get showMore => 'もっと見る ↓';
 
   @override

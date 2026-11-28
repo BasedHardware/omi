@@ -4944,6 +4944,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get omiAppName => 'Omi';
 
   @override
+  String get loadMoreConversations => 'Tải thêm';
+
+  @override
   String get showMore => 'xem thêm ↓';
 
   @override

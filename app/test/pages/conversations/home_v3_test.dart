@@ -743,6 +743,59 @@ void main() {
     });
   });
 
+  testWidgets('v3: collapsing Today keeps the live and mid-pipeline rows in view', (tester) async {
+    await withClock(Clock.fixed(_now), () async {
+      final home = await _pumpHome(tester, v3: true);
+      final today = DateTime(_now.year, _now.month, _now.day);
+      await tester.tap(find.byKey(ValueKey('collapse_day_${today.toIso8601String()}')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
+
+      expect(_rowIds(tester), ['live-1', 'c-transcribing', 'c-writing', 'c-yesterday', 'c-yesterday-2']);
+      await _dispose(tester, home);
+    });
+  });
+
+  testWidgets('v3: a day with only the live row has no collapse toggle', (tester) async {
+    await withClock(Clock.fixed(_now), () async {
+      final home = await _pumpHome(tester, v3: true);
+      home.conversations
+        ..conversations = []
+        ..groupConversationsByDate();
+      home.conversations.notifyListeners();
+      await tester.pump();
+
+      expect(_rowIds(tester), ['live-1']);
+      final today = DateTime(_now.year, _now.month, _now.day);
+      expect(find.byKey(ValueKey('collapse_day_${today.toIso8601String()}')), findsNothing);
+      await _dispose(tester, home);
+    });
+  });
+
+  testWidgets('v3: a day collapsed while selecting is expanded again on Home', (tester) async {
+    await withClock(Clock.fixed(_now), () async {
+      final home = await _pumpHome(tester, v3: true);
+      home.conversations
+        ..isSelectionModeActive = true
+        ..notifyListeners();
+      await tester.pump();
+      final yesterday = DateTime(_now.year, _now.month, _now.day - 1);
+      await tester.tap(find.byKey(ValueKey('collapse_day_${yesterday.toIso8601String()}')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(_rowIds(tester), isNot(contains('c-yesterday')));
+
+      home.conversations
+        ..isSelectionModeActive = false
+        ..notifyListeners();
+      await tester.pump();
+
+      expect(_rowIds(tester), containsAll(['c-yesterday', 'c-yesterday-2']));
+      expect(find.byType(DaySummaryHeader), findsOneWidget);
+      await _dispose(tester, home);
+    });
+  });
+
   testWidgets('v3: with nothing listed, the streaming placeholder still opens Today', (tester) async {
     await withClock(Clock.fixed(_now), () async {
       final home = await _pumpHome(tester, v3: true);

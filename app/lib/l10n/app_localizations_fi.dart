@@ -4935,6 +4935,9 @@ class AppLocalizationsFi extends AppLocalizations {
   String get omiAppName => 'Omi';
 
   @override
+  String get loadMoreConversations => 'Lataa lisää';
+
+  @override
   String get showMore => 'näytä lisää ↓';
 
   @override

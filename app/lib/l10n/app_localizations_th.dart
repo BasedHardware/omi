@@ -4907,6 +4907,9 @@ class AppLocalizationsTh extends AppLocalizations {
   String get omiAppName => 'Omi';
 
   @override
+  String get loadMoreConversations => 'โหลดเพิ่มเติม';
+
+  @override
   String get showMore => 'แสดงเพิ่มเติม ↓';
 
   @override

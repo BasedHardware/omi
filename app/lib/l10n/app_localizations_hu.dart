@@ -4961,6 +4961,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get omiAppName => 'Omi';
 
   @override
+  String get loadMoreConversations => 'Továbbiak betöltése';
+
+  @override
   String get showMore => 'mutass többet ↓';
 
   @override

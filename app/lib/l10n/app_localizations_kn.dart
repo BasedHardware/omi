@@ -4955,6 +4955,9 @@ class AppLocalizationsKn extends AppLocalizations {
   String get omiAppName => 'Omi';
 
   @override
+  String get loadMoreConversations => 'ಇನ್ನಷ್ಟು ಲೋಡ್ ಮಾಡಿ';
+
+  @override
   String get showMore => 'ಹೆಚ್ಚಾಗಿ ತೋರಿಸಿ ↓';
 
   @override

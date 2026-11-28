@@ -4934,6 +4934,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get omiAppName => 'Omi';
 
   @override
+  String get loadMoreConversations => 'بارگیری بیشتر';
+
+  @override
   String get showMore => 'نمایش بیشتر ↓';
 
   @override
