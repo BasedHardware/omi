@@ -3,7 +3,6 @@
   "project": "based-hardware",
   "lifecycle": {
     "rule": [
-      {"action": {"type": "Delete"}, "condition": {"age": 3, "matchesPrefix": ["merged/"]}},
       {"action": {"type": "Delete"}, "condition": {"age": 30, "matchesPrefix": ["playback/"]}},
       {
         "action": {"type": "SetStorageClass", "storageClass": "COLDLINE"},
@@ -14,13 +13,13 @@
           "matchesSuffix": [".batch.enc", ".batch.bin"]
         }
       },
+      {"action": {"type": "Delete"}, "condition": {"age": 3, "matchesPrefix": ["merged/"]}},
       {
         "action": {"type": "Delete"},
         "condition": {
           "isLive": false,
-          "numNewerVersions": 1,
-          "matchesPrefix": ["chunks/"],
-          "matchesSuffix": [".opus.enc"]
+          "daysSinceNoncurrentTime": 7,
+          "matchesPrefix": ["playback/", "merged/"]
         }
       }
     ]

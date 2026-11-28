@@ -141,7 +141,11 @@ jobs:
         run: |
           set -euo pipefail
           suffix=''
-          if [[ "$LIFECYCLE_VARIANT" == "rollback" ]]; then suffix='.rollback'; fi
+          variant_args=()
+          if [[ "$LIFECYCLE_VARIANT" == "rollback" ]]; then
+            suffix='.rollback'
+            variant_args+=(--rollback)
+          fi
           file="backend/deploy/storage-lifecycle/${RESOLVED_ENVIRONMENT}${suffix}.json"
           test -f "$file"
           bucket="$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['bucket'])" "$file")"
@@ -159,7 +163,7 @@ jobs:
             echo "Lifecycle file project $project does not match the environment project ${{ vars.GCP_PROJECT_ID }}."
             exit 1
           fi
-          python3 backend/scripts/validate_storage_lifecycle.py --desired "$file" --source-only
+          python3 backend/scripts/validate_storage_lifecycle.py --desired "$file" --source-only "${variant_args[@]}"
           {
             echo "file=$file"
             echo "bucket=$bucket"
@@ -199,11 +203,11 @@ jobs:
           set -euo pipefail
           extra=()
           if [[ "$LIFECYCLE_VARIANT" == "rollback" ]]; then
-            # Scoped removal: only rules the apply variant declared (the Coldline
-            # rule) may be dropped; a later live rule still blocks the rollback.
+            # Scoped removal: a later live rule outside the apply variant
+            # still blocks the rollback.
             apply_file="backend/deploy/storage-lifecycle/${RESOLVED_ENVIRONMENT}.json"
             test -f "$apply_file"
-            extra+=(--allow-rule-removal-of "$apply_file")
+            extra+=(--rollback --allow-rule-removal-of "$apply_file")
           fi
           python3 backend/scripts/validate_storage_lifecycle.py \
             --desired "${{ steps.select.outputs.file }}" \
@@ -222,10 +226,12 @@ jobs:
       - name: Assert the applied lifecycle equals the checked-in document
         run: |
           set -euo pipefail
+          variant_args=()
+          if [[ "$LIFECYCLE_VARIANT" == "rollback" ]]; then variant_args+=(--rollback); fi
           gcloud storage buckets describe "gs://${{ steps.select.outputs.bucket }}" \
             --project="${{ steps.select.outputs.project }}" --raw --format=json > after.json
           python3 backend/scripts/validate_storage_lifecycle.py \
-            --desired "${{ steps.select.outputs.file }}" --live after.json --expect-applied
+            --desired "${{ steps.select.outputs.file }}" --live after.json --expect-applied "${variant_args[@]}"
 
       - name: Upload lifecycle evidence
         if: always()
