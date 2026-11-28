@@ -24,6 +24,7 @@ class ProcessingTrigger(str, Enum):
     SYNC_UPDATE = 'sync_update'  # offline sync created or appended to it
     FIRST_OPEN = 'first_open'  # deferred enrichment when the user opens it
     BACKLOG_CHOICE = 'backlog_choice'  # authenticated explicit funded-backlog consent
+    FIRST_WEEK_FORCED_CLOSE = 'first_week_forced_close'  # bounded first-week spend override; summary only
     USER_REPROCESS = 'user_reprocess'  # the user asked to reprocess it
     MERGE = 'merge'  # the user merged conversations into it
     SMART_MERGE = 'smart_merge'  # a finished conversation was folded into this survivor
@@ -66,6 +67,7 @@ PROCESSING_MODES: Mapping[ProcessingTrigger, ProcessingMode] = MappingProxyType(
         ProcessingTrigger.SYNC_UPDATE: ProcessingMode(True, True, _ASSESS),
         ProcessingTrigger.FIRST_OPEN: ProcessingMode(True, False, _KEEP),
         ProcessingTrigger.BACKLOG_CHOICE: ProcessingMode(True, True, _KEEP),
+        ProcessingTrigger.FIRST_WEEK_FORCED_CLOSE: ProcessingMode(True, True, _KEEP),
         ProcessingTrigger.USER_REPROCESS: ProcessingMode(True, True, _KEEP),
         ProcessingTrigger.MERGE: ProcessingMode(True, False, _KEEP),
         # Regenerates an existing, already-kept survivor over its longer transcript:

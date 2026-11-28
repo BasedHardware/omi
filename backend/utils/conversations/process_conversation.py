@@ -2823,7 +2823,10 @@ def _process_conversation_steps(
     historical_tier = historical_minimum.historical_tier.is_historical(conversation)
     v3_backfilled = v3_policy.flag(conversation, 'v3_derived') and v3_policy.flag(conversation, 'backfilled')
     historical = silent_backfill or historical_tier or v3_backfilled
-    backlog_authorized = trigger is ProcessingTrigger.BACKLOG_CHOICE
+    backlog_authorized = trigger in {
+        ProcessingTrigger.BACKLOG_CHOICE,
+        ProcessingTrigger.FIRST_WEEK_FORCED_CLOSE,
+    }
     mode = PROCESSING_MODES[trigger]
     force_process, is_reprocess = mode.run_now, mode.reprocess
     settle_manual_deferral = trigger is ProcessingTrigger.USER_REPROCESS and getattr(conversation, 'deferred', False)
@@ -2943,6 +2946,8 @@ def _process_conversation_steps(
             return conversation
         if waiting:
             conversation.processing_deferred = False
+    if trigger is ProcessingTrigger.FIRST_WEEK_FORCED_CLOSE and getattr(conversation, 'processing_deferred', False):
+        conversation.processing_deferred = False
     # The synthetic release-probe identity (dev pusher release lane) is
     # exempt from the desktop deferral gates below so the probe certifies
     # the full terminal desktop path end to end. New desktop gates must
@@ -3259,7 +3264,11 @@ def _process_conversation_steps(
     explicit_selection_failures: list[ExplicitAppSelectionFailedError] = []
     user_reprocess = trigger is ProcessingTrigger.USER_REPROCESS
     effect_kwargs = {}
-    if trigger in {ProcessingTrigger.SYNC_UPDATE, ProcessingTrigger.BACKLOG_CHOICE}:
+    if trigger in {
+        ProcessingTrigger.SYNC_UPDATE,
+        ProcessingTrigger.BACKLOG_CHOICE,
+        ProcessingTrigger.FIRST_WEEK_FORCED_CLOSE,
+    }:
         effect_kwargs['effect_source'] = ConversationEffectSource(
             conversation.id, conversation.sync_content_revision, conversation.finalization_owner_epoch
         )

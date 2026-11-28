@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -172,6 +173,37 @@ def _open_row(**extra) -> dict:
     row = _parked_row(dormant=False, age_gate_parked=False, deferred_reason=None)
     row.update(extra)
     return row
+
+
+def test_reserve_query_projects_only_the_window_end_metadata():
+    class Query:
+        def __init__(self):
+            self.selected = None
+
+        def where(self, *, filter):
+            return self
+
+        def order_by(self, *_args):
+            return self
+
+        def select(self, fields):
+            self.selected = fields
+            return self
+
+        def limit(self, _limit):
+            return self
+
+        def stream(self, **_kwargs):
+            return iter(['snapshot'])
+
+    query = Query()
+    client = SimpleNamespace(collection_group=lambda _name: query)
+    result = first_week_queries.approaching_first_week_conversations(
+        now=PAID, until=WINDOW_END, firestore_client=client
+    )
+
+    assert result == ['snapshot']
+    assert query.selected == [first_week_queries.WINDOW_END_PATH]
 
 
 def _store(conversation: dict | None, row: dict | None):

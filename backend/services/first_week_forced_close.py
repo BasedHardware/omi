@@ -34,6 +34,8 @@ from config.summary_guarantee import (
     first_week_forced_admission_limit,
     first_week_forced_close_enabled,
     first_week_open,
+    FIRST_WEEK_FORCED_POLICY_FIELD,
+    FIRST_WEEK_FORCED_POLICY_ID,
 )
 from database._client import get_firestore_client
 from models.finalization_owner import python_owns_finalization
@@ -46,8 +48,8 @@ from utils.enrichment import age_gate, outbox
 logger = logging.getLogger(__name__)
 
 FORCED_AT_FIELD = 'first_week_forced_at'
-FORCED_POLICY_FIELD = 'first_week_forced_policy'
-FORCED_POLICY_ID = 'first_week_forced_close.v1'
+FORCED_POLICY_FIELD = FIRST_WEEK_FORCED_POLICY_FIELD
+FORCED_POLICY_ID = FIRST_WEEK_FORCED_POLICY_ID
 OUTCOME_FIELD = 'first_week_outcome'
 RESERVE_PAGE_LIMIT = 25
 

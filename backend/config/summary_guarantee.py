@@ -106,6 +106,8 @@ def first_week_enabled(*, environ: Mapping[str, str] | None = None) -> bool:
 # refused or parked for a capacity reason gets exactly one admitted attempt
 # before its stored window closes. Ships off; activation is a separate decision.
 FIRST_WEEK_FORCED_CLOSE_ENV = 'FIRST_WEEK_FORCED_CLOSE_ENABLED'
+FIRST_WEEK_FORCED_POLICY_FIELD = 'first_week_forced_policy'
+FIRST_WEEK_FORCED_POLICY_ID = 'first_week_forced_close.v1'
 FIRST_WEEK_CLOSE_RESERVE_ENV = 'FIRST_WEEK_CLOSE_RESERVE_HOURS'
 FIRST_WEEK_FORCED_LIMIT_ENV = 'FIRST_WEEK_REPAIR_ADMISSION_LIMIT'
 FIRST_WEEK_DEFAULT_RESERVE_HOURS = 24

@@ -192,7 +192,7 @@ class EnrichmentConsumer:
     # The 1500s dispatch deadline is the longest any wake may run; past it the callback is treated as hung.
     max_hold_seconds: ClassVar[float] = 1500.0
 
-    def __init__(self, outbox: Any = None, process: Callable[[str, str, str], Any] | None = None):
+    def __init__(self, outbox: Any = None, process: Callable[..., Any] | None = None):
         if outbox is None:
             from database.outbox_firestore import ENRICHMENT_OUTBOX
 
@@ -200,7 +200,7 @@ class EnrichmentConsumer:
         self.outbox = outbox
         self._process = process
 
-    def _callback(self) -> Callable[[str, str, str], Any]:
+    def _callback(self) -> Callable[..., Any]:
         if self._process is not None:
             return self._process
         from utils.enrichment.callback import enrich_conversation
@@ -238,6 +238,20 @@ class EnrichmentConsumer:
         now = time.time()
         row: dict[str, Any] = {**claim.payload, 'uid': claim.owner_id, 'document_id': claim.row_id}
         uid, conversation_id, language = claim.owner_id, row['conversation_id'], row['language']
+
+        from config.summary_guarantee import FIRST_WEEK_FORCED_POLICY_FIELD, FIRST_WEEK_FORCED_POLICY_ID
+
+        first_week_forced = row.get(FIRST_WEEK_FORCED_POLICY_FIELD) == FIRST_WEEK_FORCED_POLICY_ID
+        if first_week_forced:
+            from config.summary_guarantee import first_week_forced_close_enabled
+
+            if not first_week_forced_close_enabled():
+                return Result(
+                    Outcome.DEFERRED,
+                    ConsumerReason.NOT_DUE,
+                    available_at=now + LIVE_DEFER_SECONDS,
+                    defer_cause='first_week_forced_close_disabled',
+                )
 
         if row.get('effects_only'):
             from utils.conversations.lazy_enrichment import enrich_settled
@@ -285,7 +299,13 @@ class EnrichmentConsumer:
             with _beating(heartbeat, self.heartbeat_seconds, context) as lost:
                 abort_token = early_abort.ACTIVE.set(True)
                 try:
-                    output = self._callback()(uid, conversation_id, language)
+                    if first_week_forced:
+                        from utils import funded_processing
+
+                        with funded_processing.backlog_consent(uid, funded_processing.period_id()):
+                            output = self._callback()(uid, conversation_id, language, first_week_forced=True)
+                    else:
+                        output = self._callback()(uid, conversation_id, language)
                 finally:
                     early_abort.ACTIVE.reset(abort_token)
                 if summary_policy:

@@ -58,6 +58,7 @@ def approaching_first_week_conversations(
         .where(filter=FieldFilter(WINDOW_END_PATH, '<=', until))
         .order_by(WINDOW_END_PATH)
         .order_by('__name__')
+        .select([WINDOW_END_PATH])
         .limit(max(1, min(PAGE_LIMIT, limit)))
     )
     cursor = _keyset_cursor(after)

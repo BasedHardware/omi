@@ -25,6 +25,7 @@ BLOCKED_REASON = 'historical_on_open'
 SUMMARY_TRIGGERS = frozenset(
     {
         ProcessingTrigger.HISTORICAL_OPEN,
+        ProcessingTrigger.FIRST_WEEK_FORCED_CLOSE,
         ProcessingTrigger.USER_REPROCESS,
         ProcessingTrigger.MERGE,
         ProcessingTrigger.BACKLOG_CHOICE,
