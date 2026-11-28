@@ -238,8 +238,11 @@ def test_turning_the_credit_switch_back_on_changes_the_generation(monkeypatch):
     assert generation(user, now) == on != off
 
 
-def test_an_owner_without_credit_keeps_the_generation_it_had_before_the_credit_existed():
+def test_an_owner_without_credit_keeps_the_generation_it_had_before_the_credit_existed(monkeypatch):
     # The pre-credit formula, byte for byte: a deploy must not re-offer every parked owner.
+    # Promotions off and the credit switch on, pinned so the expected list never depends on the env.
+    monkeypatch.delenv('OMI_REFERRAL_CAMPAIGN_ENABLED', raising=False)
+    monkeypatch.delenv('SUPPORT_TRANSCRIPTION_CREDIT_ENABLED', raising=False)
     import hashlib
     import json
 
