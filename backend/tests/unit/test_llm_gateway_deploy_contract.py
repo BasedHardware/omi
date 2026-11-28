@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 import re
@@ -789,6 +790,13 @@ _FAKE_KUBECTL = _CALL_LOG + '''case " $* " in
     fi
     echo 'deployment.apps/dev-omi-llm-gateway serverside-applied'
     ;;
+  *' get deployment '*)
+    if [[ "${FAKE_GET_DEPLOYMENT:-}" == fail ]]; then
+      echo 'error: the server could not find the requested resource' >&2
+      exit 1
+    fi
+    printf '%s' "${FAKE_LIVE_DEPLOYMENT:-}"
+    ;;
   *' get secret '*)
     printf '%s' '{"data":{"ANTHROPIC_API_KEY":"cHJvb2Y=","METRICS_SECRET":"cHJvb2Y=","OMI_LLM_GATEWAY_SERVICE_TOKEN":"cHJvb2Y="}}'
     ;;
@@ -808,6 +816,8 @@ def _run_gateway_deploy(
     dry_run: bool = False,
     repository: str = '',
     digest: str = '',
+    helm_operations: tuple[str, ...] | None = None,
+    get_deployment_fails: bool = False,
 ) -> tuple[subprocess.CompletedProcess[str], list[str], str]:
     """Run the real deploy script over a copy of its inputs, with fake helm, kubectl and secret reapply."""
     layout = root / 'repo'
@@ -856,6 +866,10 @@ def _run_gateway_deploy(
         env['DRY_RUN'] = 'true'
     if digest:
         env.update(IMAGE_REPOSITORY=repository, IMAGE_DIGEST=digest)
+    if helm_operations is not None:
+        env['FAKE_LIVE_DEPLOYMENT'] = json.dumps(_live_deployment(helm_operations))
+    if get_deployment_fails:
+        env['FAKE_GET_DEPLOYMENT'] = 'fail'
 
     result = subprocess.run(
         bash_command(bash_path(scripts / 'deploy-llm-gateway.sh', cwd=layout)),
@@ -866,7 +880,18 @@ def _run_gateway_deploy(
         check=False,
     )
     calls = (root / 'calls.txt').read_text(encoding='utf-8').splitlines()
-    return result, calls, (root / 'manifest.yaml').read_text(encoding='utf-8')
+    manifest = root / 'manifest.yaml'
+    return result, calls, manifest.read_text(encoding='utf-8') if manifest.exists() else ''
+
+
+def _live_deployment(helm_operations: tuple[str, ...]) -> dict:
+    """A live Deployment whose managed fields name Helm with these operations, beside unrelated owners."""
+    managed = [{'manager': 'helm', 'operation': operation, 'fieldsV1': {}} for operation in helm_operations]
+    managed += [
+        {'manager': 'kube-controller-manager', 'operation': 'Update', 'subresource': 'status', 'fieldsV1': {}},
+        {'manager': 'kubectl-rollout', 'operation': 'Update', 'fieldsV1': {}},
+    ]
+    return {'kind': 'Deployment', 'metadata': {'name': 'dev-omi-llm-gateway', 'managedFields': managed}}
 
 
 def _stages(calls: list[str]) -> list[str]:
@@ -902,8 +927,10 @@ def test_gateway_deploy_stops_at_a_conflicting_apply_preflight_before_any_write(
     assert 'backend/docs/runbooks/llm-gateway-image-ownership.md' in result.stderr
     assert _stages(calls) == ['apply-preflight'], calls
     assert [call for call in calls if call.startswith('kubectl')] == [
-        call for call in calls if call.startswith('kubectl') and '--dry-run=server' in call
-    ], 'the only kubectl call is the dry-run'
+        call
+        for call in calls
+        if call.startswith('kubectl') and ('--dry-run=server' in call or ' get deployment ' in call)
+    ], 'the only kubectl calls are the apply-method read and the dry-run'
     assert [call for call in calls if call.startswith('helm')] == [
         call for call in calls if call.startswith('helm template')
     ], 'the only helm calls render'
@@ -972,3 +999,73 @@ def test_gateway_deploy_dry_runs_the_deployment_that_the_rollout_applies(tmp_pat
             'kubectl -n llm-gateway-contract apply --server-side --dry-run=server --field-manager=helm -f '
         )
     assert manifest.count(f'image: {image}') == 2 and manifest.count('name: dev-omi-llm-gateway') == 2
+
+
+@pytest.mark.parametrize(
+    ('helm_operations', 'server_side'),
+    [
+        (None, 'true'),
+        (('Apply',), 'true'),
+        (('Update',), 'false'),
+        (('Apply', 'Update'), 'true'),
+        ((), 'true'),
+    ],
+    ids=['fresh-install', 'server-side-release', 'client-side-release', 'mixed-owners', 'no-helm-owner'],
+)
+def test_gateway_preflight_and_rollout_use_the_apply_method_helm_owns_the_deployment_with(
+    tmp_path, helm_operations, server_side
+):
+    """A client-side release (helm/Update) is checked and rolled out client-side; anything else stays server-side.
+
+    A server-side dry-run against a client-side release reports Helm's own Update entry as a conflict
+    (dev, 2026-11-27: image, OMI_LLM_GATEWAY_BUILD_IDENTITY and cpu "conflict with helm"), which is not
+    an ownership problem; Helm's auto mode would have upgraded that release client-side.
+    """
+    result, calls, manifest = _run_gateway_deploy(
+        tmp_path,
+        tag='abc1234',
+        preflight_conflict=False,
+        helm_operations=helm_operations,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert _stages(calls) == ['apply-preflight', 'secret-reapply', 'apply-preflight', 'helm-upgrade', 'rollout-wait']
+    reads = [call for call in calls if ' get deployment ' in call]
+    assert len(reads) == 2 and all('--show-managed-fields' in call for call in reads), reads
+    dry_runs = [call for call in calls if '--dry-run=server' in call]
+    assert len(dry_runs) == 2
+    for call in dry_runs:
+        assert ('--server-side' in shlex.split(call)) == (server_side == 'true'), call
+        assert '--field-manager=helm' in call
+    upgrades = [call for call in calls if 'upgrade --install' in call]
+    assert len(upgrades) == 1 and upgrades[0].endswith(f'--server-side={server_side}'), upgrades
+    assert '--force-conflicts' not in '\n'.join(calls)
+    assert manifest.count('image: gcr.io/based-hardware-dev/llm-gateway:abc1234') == 2
+
+
+def test_gateway_client_side_release_still_stops_at_a_failing_preflight(tmp_path):
+    result, calls, _ = _run_gateway_deploy(
+        tmp_path,
+        tag='abc1234',
+        preflight_conflict=True,
+        helm_operations=('Update',),
+    )
+    assert result.returncode == 1, result.stderr
+    assert 'apply preflight failed' in result.stderr
+    assert _stages(calls) == ['apply-preflight']
+    assert not any('upgrade --install' in call for call in calls)
+
+
+def test_gateway_deploy_fails_closed_when_the_live_deployment_cannot_be_read(tmp_path):
+    result, calls, _ = _run_gateway_deploy(
+        tmp_path,
+        tag='abc1234',
+        preflight_conflict=False,
+        get_deployment_fails=True,
+    )
+    assert result.returncode == 2, result.stderr
+    assert 'choose the Helm apply method' in result.stderr
+    assert _stages(calls) == []
+    assert [call for call in calls if call.startswith('kubectl')] == [
+        call for call in calls if ' get deployment ' in call
+    ], 'nothing but the read ran'
