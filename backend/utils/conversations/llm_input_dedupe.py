@@ -229,12 +229,9 @@ def _stored(uid: str, conversation: Any, *, db_client: Any = None) -> dict[str, 
     return row
 
 
-def _notes_packet_identity(uid: str) -> dict[str, Any]:
-    from config.refactor_modes import serving_for
-    from utils.llm.notes_packet import PACKET_VERSION
-
-    serving = serving_for('NOTES_PACKET_V2_MODE', uid)
-    return {'mode': 'serve' if serving else 'legacy', 'version': PACKET_VERSION if serving else 1}
+# The retired notes-packet-v2 serve arm keyed reuse on this pair. Every account
+# now takes the legacy packet; the literal keeps existing fingerprints valid.
+_NOTES_PACKET_IDENTITY: dict[str, Any] = {'mode': 'legacy', 'version': 1}
 
 
 def _scaled_notes_identity(prefix: Any) -> dict[str, Any] | None:
@@ -264,7 +261,7 @@ def notes_steps(uid: str, conversation: Any, prefix: Any, generate, hashes: dict
         'prefix': prefix,
         **({}),
         'arguments': kwargs,
-        'notes_packet': _notes_packet_identity(uid),
+        'notes_packet': dict(_NOTES_PACKET_IDENTITY),
         'action_items_v2': serving_for('ACTION_ITEMS_V2_MODE', uid),
         'tier_escalation': os.getenv('NOTES_TIER_ESCALATION_ENABLED', ''),
         'shaped_notes_mode': os.getenv('OMI_SHAPED_AGENT_MODE', 'off'),

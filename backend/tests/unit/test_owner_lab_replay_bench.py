@@ -75,12 +75,12 @@ def test_vendor_harness_carries_no_product_packages():
 def test_worker_env_preserves_parent_values_and_strips_credentials(monkeypatch, tmp_path):
     monkeypatch.setenv('OWNER_LAB_UID', 'uid-from-parent')
     monkeypatch.setenv('GOOGLE_APPLICATION_CREDENTIALS', '/secrets.json')
-    monkeypatch.setenv('NOTES_PACKET_V2_MODE_SERVE_UID_SHA256S', 'digest')
+    monkeypatch.setenv('SPEAKER_EVIDENCE_MODE_SERVE_UID_SHA256S', 'digest')
     arm = replay_bench.Arm(name='on', adapter='m:a', tree=str(tmp_path), ref='r', env={'FLAG_X': 'true'})
     env = replay_bench.worker_env(arm)
     assert env['OWNER_LAB_UID'] == 'uid-from-parent'
     assert 'GOOGLE_APPLICATION_CREDENTIALS' not in env
-    assert 'NOTES_PACKET_V2_MODE_SERVE_UID_SHA256S' not in env
+    assert 'SPEAKER_EVIDENCE_MODE_SERVE_UID_SHA256S' not in env
     assert env['FLAG_X'] == 'true'
 
 

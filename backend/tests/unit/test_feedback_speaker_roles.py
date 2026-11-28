@@ -114,12 +114,9 @@ def test_mixed_cluster_names_are_order_independent(rows, monkeypatch):
     monkeypatch.setattr(renderer, 'get_user_name', lambda *_a, **_kw: 'David')
     people = [Person(id='sam', name='Sam'), Person(id='lee', name='Lee')]
     conv = conversation(rows)
-    for mode in ['off', 'serve']:
-        monkeypatch.setenv('NOTES_PACKET_V2_MODE', mode)
-        monkeypatch.setattr('utils.llm.notes_packet.get_evidence', lambda *_a: None)
-        text, labels = renderer.conversation_transcript_and_speaker_map('synthetic', conv, people)
-        assert all(name is None for name in labels.values())
-        assert all(row.text in text for row in rows)
+    text, labels = renderer.conversation_transcript_and_speaker_map('synthetic', conv, people)
+    assert all(name is None for name in labels.values())
+    assert all(row.text in text for row in rows)
 
 
 @pytest.mark.parametrize(
@@ -321,7 +318,6 @@ def test_task_and_legacy_note_rollback_retains_previous_labels(monkeypatch):
     conv = conversation([row])
     monkeypatch.setattr(renderer, 'get_user_name', lambda *_a, **_kw: 'David')
     monkeypatch.setenv('SPEAKER_ROLE_PROJECTION_ENABLED', 'false')
-    monkeypatch.setenv('NOTES_PACKET_V2_MODE', 'off')
     _, labels = renderer.conversation_transcript_and_speaker_map('synthetic', conv)
     assert list(labels.values()) == ['David']
     assert renderer.conversation_action_item_speaker_labels('synthetic', conv)[0]['speaker_role'] == 'primary_user'
@@ -332,7 +328,6 @@ def test_task_and_legacy_note_rollback_retains_previous_labels(monkeypatch):
 @pytest.mark.parametrize('enabled', [True, False])
 def test_roster_and_calendar_cannot_fill_evidence_unbound_voice(monkeypatch, use_roster, enabled):
     monkeypatch.setenv('SPEAKER_ROLE_PROJECTION_ENABLED', 'true' if enabled else 'false')
-    monkeypatch.setenv('NOTES_PACKET_V2_MODE', 'off')
     monkeypatch.setattr(renderer, 'get_user_name', lambda *_a, **_kw: 'David')
     conv = conversation([segment(text='An unattributed remark.')])
     text, labels = renderer.conversation_transcript_and_speaker_map('synthetic', conv)

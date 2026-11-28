@@ -63,10 +63,9 @@ def test_deterministic_builders_never_persist_the_brain(builder):
 
 
 def test_short_clip_quiet_minimum_never_persists_the_brain(monkeypatch):
-    from utils.llm import notes_packet as packet
     from utils.llm import notes_short_clip
 
-    monkeypatch.setenv(packet.FLAG, 'serve')
+    monkeypatch.delenv('NOTES_SHORT_CLIP_FLOOR', raising=False)
     conversation = SimpleNamespace(
         transcript_segments=[SimpleNamespace(text='one word')], started_at=None, photos=[], language='en'
     )

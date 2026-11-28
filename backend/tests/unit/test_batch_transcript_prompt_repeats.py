@@ -69,7 +69,6 @@ def test_both_summary_renderers_share_canonical_segment_ids(monkeypatch):
     from utils.conversations import transcript_for_llm as render
 
     monkeypatch.setattr(render, 'get_user_name', lambda *args, **kwargs: 'Test User')
-    monkeypatch.setattr(render, 'serving_for', lambda *args: False)
     segments = [TranscriptSegment(**segment('a')), TranscriptSegment(**segment('b', scope='final:batch:other'))]
     conversation = SimpleNamespace(transcript_segments=segments)
     normal = render.conversation_transcript_for_llm('synthetic', conversation)

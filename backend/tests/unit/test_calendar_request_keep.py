@@ -29,9 +29,6 @@ REQUESTS = (
 def isolated_flags(monkeypatch):
     monkeypatch.delenv('EXPLICIT_CALENDAR_REQUEST_KEEP', raising=False)
     monkeypatch.setenv('NOTES_SHORT_CLIP_FLOOR', 'on')
-    monkeypatch.setenv('NOTES_PACKET_V2_MODE', 'off')
-    monkeypatch.delenv('NOTES_PACKET_V2_MODE_SERVE_PERCENT', raising=False)
-    monkeypatch.delenv('NOTES_PACKET_V2_MODE_SERVE_UID_SHA256S', raising=False)
 
 
 def capture(text):

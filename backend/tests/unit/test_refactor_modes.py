@@ -31,10 +31,8 @@ def test_unset_mode_is_off_unless_frozen_legacy_family(monkeypatch):
 # here and in refactor_modes when its family is bound, served or retired; never add one.
 LEGACY_SHADOW_CEILING = frozenset(
     {
-        'CALLS_RECAP_MODE',
         'CAPTURE_COVERAGE_MODE',
         'LIFECYCLE_V2_MODE',
-        'NOTES_PACKET_V2_MODE',
         'SPEAKER_EVIDENCE_MODE',
     }
 )

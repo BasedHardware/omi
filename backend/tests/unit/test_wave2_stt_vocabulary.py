@@ -86,8 +86,8 @@ def test_real_soniox_config_shadow_serve_and_off_preserve_language(monkeypatch, 
 
 
 def test_invalid_flags_keep_the_family_default(monkeypatch):
-    # CALLS_RECAP is a frozen legacy shadow; the retired families default to off (2026-11-28).
-    for name, default in (('CALLS_RECAP_MODE', 'shadow'), ('ACTION_ITEMS_V2_MODE', 'off'), ('STT_VOCAB_MODE', 'off')):
+    # The retired families default to off (2026-11-28); CALLS_RECAP was deleted the same day.
+    for name, default in (('ACTION_ITEMS_V2_MODE', 'off'), ('STT_VOCAB_MODE', 'off')):
         monkeypatch.setenv(name, 'srve')
         assert refactor_modes.mode(name) == default
         assert not refactor_modes.serving_for(name, 'synthetic-owner')

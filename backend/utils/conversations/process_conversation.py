@@ -954,15 +954,7 @@ def trigger_conversation_apps(
     """
     if is_server_minimum(conversation) and not (app_id or first_party_only):
         return True
-    if serving_for('NOTES_PACKET_V2_MODE', uid):
-        language_code = resolve_output_language(
-            uid,
-            normalize_language(conversation.language) or language_code,
-            getattr(conversation, 'transcript_segments', None),
-        )
-    else:
-        # The legacy branch never resolved: a 'multi' capture tag reached app prompts verbatim.
-        language_code = normalize_language(conversation.language) or normalize_language(language_code) or 'en'
+    language_code = normalize_language(conversation.language) or normalize_language(language_code) or 'en'
     if first_party_only and app_id:
         raise ValueError('first_party_only excludes an explicit app selection')
     if usage_attribution is None:

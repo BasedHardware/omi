@@ -250,7 +250,6 @@ def test_episode_prompt_renderers_reuse_owner_authority_and_keep_unknown_speech(
     from zoneinfo import ZoneInfo
 
     monkeypatch.setenv('SPEAKER_ROLE_PROJECTION_ENABLED', 'true')
-    monkeypatch.setenv('NOTES_PACKET_V2_MODE', 'off')
     segments = [
         {
             'text': 'I will approve the pilot budget.',

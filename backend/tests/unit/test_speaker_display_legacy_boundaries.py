@@ -21,7 +21,6 @@ from utils.conversations.render import populate_speaker_names
 from utils.conversations.shared_chat import build_bounded_transcript
 from utils.conversations.transcript_for_llm import conversation_action_item_speaker_labels, render_cluster_transcript
 from utils.episodes import incremental
-from utils.episodes.moment_render import render_segments
 from utils.speaker_display import SpeakerLabeler, voice_key
 
 # The raw ids from the incident: a long live conversation whose "So far" bullets
@@ -88,7 +87,6 @@ def test_transcript_segment_segments_as_string_uses_dense_labels():
 
 
 def test_live_moment_render_keeps_unplaced_voices_unnamed(monkeypatch):
-    monkeypatch.delenv('NOTES_PACKET_V2_MODE', raising=False)
     rendered = incremental.render_moment(_mapping_segments(), uid=None)
     _assert_no_raw_ids(rendered.text)
     assert 'You:' not in rendered.text and 'owner words' in rendered.text
@@ -98,7 +96,6 @@ def test_live_moment_render_keeps_unplaced_voices_unnamed(monkeypatch):
 
 
 def test_live_moment_render_uses_dense_labels_after_qualification(monkeypatch):
-    monkeypatch.delenv('NOTES_PACKET_V2_MODE', raising=False)
     rows = [dict(row, start=index * 5, end=(index + 1) * 5) for index, row in enumerate(_mapping_segments())]
     rendered = incremental.render_moment(rows, uid=None)
     _assert_no_raw_ids(rendered.text)
@@ -110,9 +107,7 @@ def test_live_moment_render_uses_dense_labels_after_qualification(monkeypatch):
     assert 'Speaker C: named friend talks' in rendered.text
 
 
-def test_cluster_moment_render_never_labels_a_speaker():
-    text, _labels = render_segments(_mapping_segments(), owner_name='David')
-    _assert_no_raw_ids(text)
+def test_cluster_transcript_render_never_labels_a_speaker():
     rendered, _map = render_cluster_transcript(_mapping_segments(), names={'p1': 'Minh'}, owner_name='David')
     _assert_no_raw_ids(rendered)
 

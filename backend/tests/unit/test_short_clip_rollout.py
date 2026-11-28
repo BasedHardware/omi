@@ -29,9 +29,6 @@ START = datetime(2026, 10, 31, 6, 0, tzinfo=timezone.utc)
 def flags(monkeypatch):
     monkeypatch.delenv('EXPLICIT_CALENDAR_REQUEST_KEEP', raising=False)
     monkeypatch.delenv('NOTES_SHORT_CLIP_FLOOR', raising=False)
-    monkeypatch.setenv('NOTES_PACKET_V2_MODE', 'off')
-    monkeypatch.delenv('NOTES_PACKET_V2_MODE_SERVE_PERCENT', raising=False)
-    monkeypatch.delenv('NOTES_PACKET_V2_MODE_SERVE_UID_SHA256S', raising=False)
 
 
 @pytest.fixture(autouse=True)
@@ -52,7 +49,7 @@ def capture(text='A tiny recording', **kwargs):
 
 
 @pytest.mark.parametrize('switch', [None, 'on', 'true', '1', 'yes', 'typo'])
-def test_floor_serves_independently_of_notes_v2_and_counts_only_served_decisions(monkeypatch, switch):
+def test_floor_serves_by_default_and_counts_only_served_decisions(monkeypatch, switch):
     if switch is not None:
         monkeypatch.setenv('NOTES_SHORT_CLIP_FLOOR', switch)
     metric = RESULTS.labels(check='short_clip', outcome='minimum')._value
@@ -63,25 +60,15 @@ def test_floor_serves_independently_of_notes_v2_and_counts_only_served_decisions
     assert metric.get() == before + 1
 
 
-@pytest.mark.parametrize('mode,minimum', [('off', False), ('shadow', False), ('serve', True)])
 @pytest.mark.parametrize('switch', ['off', 'false', '0', 'no'])
-def test_rollback_restores_legacy_admission_and_notes_v2_still_implies_floor(monkeypatch, mode, minimum, switch):
+def test_rollback_restores_legacy_admission(monkeypatch, switch):
     monkeypatch.setenv('NOTES_SHORT_CLIP_FLOOR', switch)
-    monkeypatch.setenv('NOTES_PACKET_V2_MODE', mode)
     metric = RESULTS.labels(check='short_clip', outcome='minimum')._value
     before = metric.get()
-    assert (notes_short_clip.quiet_minimum('synthetic-account', capture()) is not None) is minimum
-    assert metric.get() == before + int(minimum)
+    assert notes_short_clip.quiet_minimum('synthetic-account', capture()) is None
+    assert metric.get() == before
 
 
-def test_existing_notes_v2_shadow_serve_cohort_retains_floor(monkeypatch):
-    monkeypatch.setenv('NOTES_SHORT_CLIP_FLOOR', 'off')
-    monkeypatch.setenv('NOTES_PACKET_V2_MODE', 'shadow')
-    monkeypatch.setenv('NOTES_PACKET_V2_MODE_SERVE_PERCENT', '100')
-    assert notes_short_clip.quiet_minimum('synthetic-account', capture()).title
-
-
-@pytest.mark.parametrize('mode', ['off', 'serve'])
 @pytest.mark.parametrize(
     'text',
     [
@@ -94,8 +81,7 @@ def test_existing_notes_v2_shadow_serve_cohort_retains_floor(monkeypatch):
         'note to self: buy bread',
     ],
 )
-def test_explicit_reminders_bypass_both_floor_measures(monkeypatch, mode, text):
-    monkeypatch.setenv('NOTES_PACKET_V2_MODE', mode)
+def test_explicit_reminders_bypass_both_floor_measures(text):
     assert notes_short_clip.quiet_minimum('synthetic-account', capture(text)) is None
 
 

@@ -18,8 +18,6 @@ from utils.byok import has_byok_keys
 from utils.conversations.notes_agent_tools import NotesToolbox, build_packet, owner_profile, prefetched_results
 from utils.llm.meeting_notes_rich_prompts import NotesFrameImage
 from utils.llm.notes_agent import langchain_complete, record_decision, record_run, run_notes_agent
-from config.refactor_modes import serving_for
-from utils.llm.notes_packet import select_notes_packet
 from utils.llm.notes_identity import notes_identity, screen_speaker_bindings
 from utils.llm.notes_agent_policy import bounded_budget, plan_notes_agent
 from utils.llm.notes_lengths import length_guide
@@ -154,9 +152,6 @@ def agentic_notes_steps(
             capture_evidence=capture_evidence,
             people_cache=people_cache,
         )
-        packet = select_notes_packet(
-            packet, prefix=prefix, uid=uid, capture_evidence=capture_evidence, words=words, inputs=kwargs
-        )
         identity = notes_identity(prefix, kwargs, packet)
         kwargs['notes_identity'] = identity
         packet['screen_speaker_bindings'] = screen_speaker_bindings(identity)
@@ -196,8 +191,7 @@ def agentic_notes_steps(
                     prefetched_lookups=prefetched_results(packet),
                     open_tasks=open_tasks,
                     owner_names=owner_names,
-                    naming_leads=() if serving_for('NOTES_PACKET_V2_MODE', uid) else naming_leads(packet),
-                    contract_v2=serving_for('NOTES_PACKET_V2_MODE', uid),
+                    naming_leads=naming_leads(packet),
                     transcript_segment_ids=prefix.transcript_segment_ids,
                     identity=identity,
                 )

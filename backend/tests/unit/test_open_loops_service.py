@@ -1,9 +1,8 @@
 """Open-loop card service: pending listing and answer transitions.
 
 ``list_pending_cards``/``answer_card`` are the functions the Review routes
-call; these tests pin their contracts: the producer's recap-day rule per
-cohort (legacy noon split vs ``CALLS_RECAP_MODE`` serving, with the
-one-day fallback), per-timezone snooze/history days, ask-only vs strong task
+call; these tests pin their contracts: the producer's noon-split recap-day
+rule with the one-day fallback, per-timezone snooze/history days, ask-only vs strong task
 links (Done completes a task only through the app's own completion path —
 ``mark_action_item_completed`` + reminder reconciliation #5085), the
 drop → negative-example record, and the answer transaction's serialization of
@@ -16,12 +15,10 @@ from unittest.mock import Mock
 
 import pytest
 
-from config.refactor_modes import uid_digest
 import utils.open_loops.service as service
 from database.open_loops import get_cards, get_loops, set_cards, upsert_loop
 from tests.support.open_loops_store_fake import FakeFirestore
 from utils.open_loops import store
-from utils.other import daily_recap
 
 NOW = datetime(2026, 10, 26, 15, 0, tzinfo=timezone.utc)
 DATE_STR = '2026-10-26'
@@ -144,31 +141,23 @@ def test_list_pending_cards_for_a_day_the_pass_did_not_run(cards_env):
     assert service.list_pending_cards(UID, date_str='2026-10-20', firestore_client=cards_env.fake) == []
 
 
-def test_cards_display_day_always_matches_the_producers_scheduled_date(monkeypatch):
-    """Drift guard: the reader resolves the day with the producer's own rule
-    (``daily_recap.scheduled_date``), every cohort and mode, so the listing can
-    never aim at a day the pass did not date cards to."""
-    cohorts = {'off': None, 'shadow': None, 'shadow-cohort': None, 'serve': None}
-    for mode in cohorts:
-        monkeypatch.setenv('CALLS_RECAP_MODE', mode)
-        monkeypatch.setenv('CALLS_RECAP_MODE_SERVE_PERCENT', '0')
-        if mode == 'shadow-cohort':
-            monkeypatch.setenv('CALLS_RECAP_MODE_SERVE_UID_SHA256S', uid_digest(UID))
-        for uid in (UID, 'someone-else'):
-            for tz in ('Africa/Lagos', 'Pacific/Kiritimati', None):
-                for utc_hour in (0, 2, 9, 12, 14, 23):
-                    moment = datetime(2026, 10, 26, utc_hour, 30, tzinfo=timezone.utc)
-                    # scheduled_date hands the caller a date or the legacy string;
-                    # the reader always speaks the document id form.
-                    assert service.cards_display_day(uid, tz, moment) == str(
-                        daily_recap.scheduled_date(uid, tz, moment, service.recap_completed_day(tz, moment))
-                    ), (mode, uid, tz, utc_hour)
+def test_cards_display_day_is_the_recap_jobs_noon_split_day():
+    """Drift guard: the reader resolves the day with the recap job's own rule,
+    so the listing can never aim at a day the pass did not date cards to."""
+    for uid in (UID, 'someone-else'):
+        for tz in ('Africa/Lagos', 'Pacific/Kiritimati', None):
+            for utc_hour in (0, 2, 9, 12, 14, 23):
+                moment = datetime(2026, 10, 26, utc_hour, 30, tzinfo=timezone.utc)
+                assert service.cards_display_day(uid, tz, moment) == service.recap_completed_day(tz, moment), (
+                    uid,
+                    tz,
+                    utc_hour,
+                )
 
 
 def test_legacy_recap_users_keep_the_noon_split_morning_and_afternoon(cards_env, monkeypatch):
-    """Without CALLS_RECAP_MODE serving, the pass dates cards with the
-    noon-split rule — before noon yesterday, after noon today."""
-    monkeypatch.setenv('CALLS_RECAP_MODE', 'off')
+    """The pass dates cards with the noon-split rule — before noon yesterday,
+    after noon today."""
     tz = 'Africa/Lagos'  # UTC+1, no DST: 09:00/15:00 local = 08:00/14:00 UTC
     set_cards(UID, '2026-10-25', [_card(card_id='ol-25', question='yesterday card')], firestore_client=cards_env.fake)
     set_cards(UID, '2026-10-26', [_card(card_id='ol-26', question='today card')], firestore_client=cards_env.fake)
@@ -180,51 +169,33 @@ def test_legacy_recap_users_keep_the_noon_split_morning_and_afternoon(cards_env,
     assert (day, [c['question'] for c in pending]) == ('2026-10-26', ['today card'])
 
 
-def test_serving_recap_users_list_the_completed_day_morning_and_afternoon(cards_env, monkeypatch):
-    """CALLS_RECAP_MODE serving dates cards with ``completed_day`` — always
-    yesterday, no noon split (the pass runs ~01:00 local). At 15:00 local the
-    noon split would read a document that does not exist until tomorrow's
-    pass; the producer's rule keeps listing the day that was written."""
-    monkeypatch.setenv('CALLS_RECAP_MODE', 'serve')
-    tz = 'Africa/Lagos'  # UTC+1, no DST
-    set_cards(UID, '2026-10-25', [_card(card_id='ol-25', question='yesterday card')], firestore_client=cards_env.fake)
-    for local_hour, utc_hour in ((9, 8), (15, 14)):
-        moment = datetime(2026, 10, 26, utc_hour, 0, tzinfo=timezone.utc)
-        assert service.cards_display_day(UID, tz, moment) == '2026-10-25'
-        day, pending = service.list_owner_pending_cards(UID, tz=tz, now=moment, firestore_client=cards_env.fake)
-        assert (day, [c['question'] for c in pending]) == ('2026-10-25', ['yesterday card'])
-
-
 def test_owner_listing_falls_back_to_the_previous_local_day(cards_env, monkeypatch):
     """A missed pass (the resolved day has no document) must not blank the
     surface: the previous day's still-pending cards are listed, under their own
     day — the answer endpoint's date path."""
-    monkeypatch.setenv('CALLS_RECAP_MODE', 'serve')
     tz = 'Africa/Lagos'
     set_cards(UID, '2026-10-24', [_card(card_id='ol-24', question='older card')], firestore_client=cards_env.fake)
-    afternoon = datetime(2026, 10, 26, 14, 0, tzinfo=timezone.utc)  # 15:00 local
-    day, pending = service.list_owner_pending_cards(UID, tz=tz, now=afternoon, firestore_client=cards_env.fake)
+    morning = datetime(2026, 10, 26, 8, 0, tzinfo=timezone.utc)  # 09:00 local: the noon split reads 10-25
+    day, pending = service.list_owner_pending_cards(UID, tz=tz, now=morning, firestore_client=cards_env.fake)
     assert (day, [c['question'] for c in pending]) == ('2026-10-24', ['older card'])
 
 
 def test_owner_listing_falls_back_only_over_pending_cards(cards_env, monkeypatch):
-    monkeypatch.setenv('CALLS_RECAP_MODE', 'serve')
     tz = 'Africa/Lagos'
     set_cards(UID, '2026-10-25', [_card(state='done')], firestore_client=cards_env.fake)
     set_cards(UID, '2026-10-24', [_card(state='remind')], firestore_client=cards_env.fake)
-    afternoon = datetime(2026, 10, 26, 14, 0, tzinfo=timezone.utc)
-    assert service.list_owner_pending_cards(UID, tz=tz, now=afternoon, firestore_client=cards_env.fake) == (
+    morning = datetime(2026, 10, 26, 8, 0, tzinfo=timezone.utc)  # 09:00 local: the noon split reads 10-25
+    assert service.list_owner_pending_cards(UID, tz=tz, now=morning, firestore_client=cards_env.fake) == (
         '2026-10-25',
         [],
     )
 
 
 def test_owner_listing_does_not_reach_beyond_the_fallback_window(cards_env, monkeypatch):
-    monkeypatch.setenv('CALLS_RECAP_MODE', 'serve')
     tz = 'Africa/Lagos'
     set_cards(UID, '2026-10-23', [_card(card_id='ol-23', question='stale card')], firestore_client=cards_env.fake)
-    afternoon = datetime(2026, 10, 26, 14, 0, tzinfo=timezone.utc)
-    assert service.list_owner_pending_cards(UID, tz=tz, now=afternoon, firestore_client=cards_env.fake) == (
+    morning = datetime(2026, 10, 26, 8, 0, tzinfo=timezone.utc)  # 09:00 local: the noon split reads 10-25
+    assert service.list_owner_pending_cards(UID, tz=tz, now=morning, firestore_client=cards_env.fake) == (
         '2026-10-25',
         [],
     )
@@ -429,17 +400,16 @@ def test_owner_listing_never_falls_back_over_a_day_the_pass_ran(cards_env, monke
     """Today's document exists but is fully answered (or the pass wrote zero
     cards): the listing stays empty instead of resurfacing yesterday's
     unanswered cards, whose loops may have expired or resolved since."""
-    monkeypatch.setenv('CALLS_RECAP_MODE', 'serve')
     tz = 'Africa/Lagos'
     set_cards(UID, '2026-10-25', [_card(state='done')], firestore_client=cards_env.fake)
     set_cards(UID, '2026-10-24', [_card(card_id='ol-24', question='older card')], firestore_client=cards_env.fake)
-    afternoon = datetime(2026, 10, 26, 14, 0, tzinfo=timezone.utc)
-    assert service.list_owner_pending_cards(UID, tz=tz, now=afternoon, firestore_client=cards_env.fake) == (
+    morning = datetime(2026, 10, 26, 8, 0, tzinfo=timezone.utc)  # 09:00 local: the noon split reads 10-25
+    assert service.list_owner_pending_cards(UID, tz=tz, now=morning, firestore_client=cards_env.fake) == (
         '2026-10-25',
         [],
     )
     set_cards(UID, '2026-10-25', [], firestore_client=cards_env.fake)
-    assert service.list_owner_pending_cards(UID, tz=tz, now=afternoon, firestore_client=cards_env.fake) == (
+    assert service.list_owner_pending_cards(UID, tz=tz, now=morning, firestore_client=cards_env.fake) == (
         '2026-10-25',
         [],
     )

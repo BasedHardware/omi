@@ -33,11 +33,7 @@ from config.episodes import (
     episode_moment_output_validator_enabled,
     episode_output_language_pinned,
 )
-from config.refactor_modes import serving_for, shadow_or_serve
 from database.auth import get_user_name
-from utils.episodes.moment_render import render_segments
-from utils.llm.notes_packet import get_evidence
-from utils.llm.notes_refactor_metrics import shadow
 from utils.llm.output_language import resolve_output_language
 from utils.episodes.state import IncrementalUpdate, parse_update
 from utils.summary_quality import NOTE_QUALITY_RULES
@@ -198,21 +194,12 @@ def render_moment(
         segments, owner_name=owner, voice_order=voice_order, display_scope=conversation_id, defer_short_voices=True
     )
     legacy = _legacy_moment(segments, display)
-    if shadow_or_serve('NOTES_PACKET_V2_MODE'):
-        serving = serving_for('NOTES_PACKET_V2_MODE', uid)
-        # Shadow compares renderers without the evidence read; only the serving cohort pays for it.
-        evidence = get_evidence(uid, conversation_id) if serving else None
-        text, words = render_segments(segments, evidence=evidence, owner_name=owner)
-        shadow('moment_render', 'agree' if text == legacy[0] else 'disagree', rendered_chars=len(text), words=words)
-        if serving:
-            return MomentText(_bounded_moment(text), words, display.voice_order, len(text) > MOMENT_TEXT_MAX_CHARS)
     return MomentText(
         _bounded_moment(legacy[0]), legacy[1], display.voice_order, len(legacy[0]) > MOMENT_TEXT_MAX_CHARS
     )
 
 
 def _legacy_moment(segments: Sequence[Mapping[str, Any]], display: Any) -> tuple[str, int]:
-    # refactor: superseded by moment_render.render_segments when NOTES_PACKET_V2_MODE=serve
     lines: list[list[str]] = []
     previous_voice = None
     words = 0
@@ -350,7 +337,7 @@ def run_incremental_update(
 ) -> ModelResult:
     """One cheap call. Raises ``ModelCallFailed`` (llm_error | parse_error); never partial state."""
     language = None
-    if episode_output_language_pinned() or serving_for('NOTES_PACKET_V2_MODE', uid):
+    if episode_output_language_pinned():
         language = output_language or resolve_output_language(uid, conversation_language)
     messages = build_messages(
         state_json, moment, now=now, tz_name=tz_name, output_language=language, repair_instruction=repair_instruction

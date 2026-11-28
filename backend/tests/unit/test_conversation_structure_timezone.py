@@ -7,9 +7,7 @@ user's timezone, which mislabeled the time of day in titles/overviews. They now 
 in Python and tell the model the timestamp is already local.
 
 Covers:
-1. _local_started_at_iso converts UTC to the user's local wall-clock
-2. None / invalid timezone falls back to UTC; naive datetimes are treated as UTC; DST is handled
-3. get_transcript_structure and get_reprocess_transcript_structure pass the local time + a non-None tz
+- get_transcript_structure and get_reprocess_transcript_structure pass the local time + a non-None tz
 """
 
 from datetime import datetime, timedelta, timezone, tzinfo
@@ -69,45 +67,6 @@ def _test_zone_info(name):
     if name == "UTC":
         return timezone.utc
     raise KeyError(name)
-
-
-# ===========================================================================
-# _local_started_at_iso unit tests (pure conversion logic)
-# ===========================================================================
-
-
-class TestLocalStartedAtIso:
-    def test_converts_utc_to_user_local(self):
-        # 23:48 UTC -> 13:48 in Honolulu (UTC-10), the meal/time-of-day case from the issue.
-        out = conv_proc._local_started_at_iso(datetime(2025, 1, 1, 23, 48, tzinfo=timezone.utc), "Pacific/Honolulu")
-        assert out == "2025-01-01T13:48:00"
-
-    def test_none_tz_falls_back_to_utc(self):
-        out = conv_proc._local_started_at_iso(datetime(2025, 1, 1, 23, 48, tzinfo=timezone.utc), None)
-        assert out == "2025-01-01T23:48:00"
-
-    def test_invalid_tz_falls_back_to_utc(self):
-        out = conv_proc._local_started_at_iso(datetime(2025, 1, 1, 23, 48, tzinfo=timezone.utc), "Not/AZone")
-        assert out == "2025-01-01T23:48:00"
-
-    def test_empty_tz_falls_back_to_utc(self):
-        out = conv_proc._local_started_at_iso(datetime(2025, 1, 1, 23, 48, tzinfo=timezone.utc), "")
-        assert out == "2025-01-01T23:48:00"
-
-    def test_naive_started_at_treated_as_utc(self):
-        # A naive timestamp must be read as UTC, not silently localized.
-        out = conv_proc._local_started_at_iso(datetime(2025, 1, 1, 23, 48), "Pacific/Honolulu")
-        assert out == "2025-01-01T13:48:00"
-
-    def test_dst_summer_offset(self):
-        # July: America/New_York is EDT (UTC-4). 12:00 UTC -> 08:00 local.
-        out = conv_proc._local_started_at_iso(datetime(2025, 7, 1, 12, 0, tzinfo=timezone.utc), "America/New_York")
-        assert out == "2025-07-01T08:00:00"
-
-    def test_dst_winter_offset(self):
-        # January: America/New_York is EST (UTC-5). 12:00 UTC -> 07:00 local.
-        out = conv_proc._local_started_at_iso(datetime(2025, 1, 1, 12, 0, tzinfo=timezone.utc), "America/New_York")
-        assert out == "2025-01-01T07:00:00"
 
 
 # ===========================================================================

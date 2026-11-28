@@ -20,7 +20,6 @@ from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any, Iterable, List, Optional, Protocol, Sequence
 
-from config.refactor_modes import serving_for
 from utils.conversations.transcript_repeats import canonical_prompt_segments
 from database.auth import get_user_name
 from models.other import Person
@@ -365,20 +364,6 @@ def conversation_transcript_and_speaker_map(
     segments = canonical_prompt_segments(segments)
     profile_name = get_user_name(uid, use_default=False)
     people_map = {person.id: person.name for person in people} if people else {}
-    if serving_for('NOTES_PACKET_V2_MODE', uid):
-        from utils.llm.notes_packet import get_evidence
-        from utils.llm.notes_language_inputs import in_profile_segments
-
-        return render_cluster_transcript(
-            in_profile_segments(segments),
-            names=people_map,
-            owner_name=profile_name,
-            evidence=get_evidence(uid, getattr(conversation, 'id', None)),
-            mark_wake_words=mark_wake_words,
-            resolution_available=getattr(getattr(conversation, 'speaker_resolution', None), 'status', None)
-            != 'unavailable',
-        )
-    # refactor: superseded by render_cluster_transcript when NOTES_PACKET_V2_MODE=serve
     segments, _ = (
         owner_safe_transcript_segments(segments) if speaker_role_projection(segments) is not None else (segments, '')
     )

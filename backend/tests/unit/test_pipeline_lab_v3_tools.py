@@ -38,7 +38,7 @@ def runtime_env(tmp_path):
     (backend / 'utils').mkdir()
     (backend / 'utils' / 'thing.py').write_text(
         "from config.refactor_modes import serving_for\n"
-        "def f(uid):\n    return serving_for('NOTES_PACKET_V2_MODE', uid) or serving_for(\"LIFECYCLE_V2_MODE\", uid)\n"
+        "def f(uid):\n    return serving_for('SPEAKER_EVIDENCE_MODE', uid) or serving_for(\"LIFECYCLE_V2_MODE\", uid)\n"
     )
     (backend / 'tests').mkdir()
     (backend / 'tests' / 't.py').write_text("serving_for('TEST_ONLY_MODE', 'u')\n")
@@ -60,10 +60,10 @@ def test_default_service_is_backend_sync_and_v3_switches_are_reported(runtime_en
 def test_every_static_serve_decision_is_pinned(runtime_env):
     (runtime_env.parents[1] / 'config' / 'modes.py').write_text("BOUNDARIES_MODE_ENV = 'EPISODE_BOUNDARIES_MODE'\n")
     names = static_mode_names(runtime_env.parents[1])
-    assert names == {'NOTES_PACKET_V2_MODE', 'LIFECYCLE_V2_MODE', 'EPISODE_BOUNDARIES_MODE'}
+    assert names == {'SPEAKER_EVIDENCE_MODE', 'LIFECYCLE_V2_MODE', 'EPISODE_BOUNDARIES_MODE'}
     overlay, report = overlay_from_runtime_env(runtime_env)
-    assert {'NOTES_PACKET_V2_MODE', 'LIFECYCLE_V2_MODE'} <= set(overlay['serving'])
-    assert overlay['serving']['NOTES_PACKET_V2_MODE'] is False  # unset mode: shadow, no cohort -> nobody
+    assert {'SPEAKER_EVIDENCE_MODE', 'LIFECYCLE_V2_MODE'} <= set(overlay['serving'])
+    assert overlay['serving']['SPEAKER_EVIDENCE_MODE'] is False  # unset mode: shadow, no cohort -> nobody
     assert report['pinned_static'] >= 2
 
 

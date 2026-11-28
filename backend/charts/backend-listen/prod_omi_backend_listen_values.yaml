@@ -419,10 +419,6 @@ env:
     value: "off"
   - name: CAPTURE_GROUP_CONTAINMENT_MODE
     value: "off"
-  - name: NOTES_PACKET_V2_MODE
-    value: "off"
-  - name: CALLS_RECAP_MODE
-    value: "off"
   # Keep these aligned with the production GitHub environment variables used
   # by the Cloud Run backend; api.omi.me is served by backend-listen.
   - name: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE

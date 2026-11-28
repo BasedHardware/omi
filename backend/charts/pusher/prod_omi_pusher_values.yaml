@@ -353,10 +353,6 @@ env:
     value: "true"
   - name: CAPTURE_GROUP_CONTAINMENT_MODE
     value: "off"
-  - name: NOTES_PACKET_V2_MODE
-    value: "off"
-  - name: CALLS_RECAP_MODE
-    value: "off"
   - name: CLIENT_SUMMARIES_AT_CAP_ENABLED
     value: "true"
   - name: BUCKET_SPEECH_PROFILES

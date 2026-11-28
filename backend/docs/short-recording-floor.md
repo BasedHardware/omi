@@ -1,9 +1,8 @@
 # Short-recording notes floor
 
 `NOTES_SHORT_CLIP_FLOOR` is an `ops_kill` switch, on unless explicitly set to
-`off`, `false`, `0`, or `no`. It serves independently of `NOTES_PACKET_V2_MODE`.
-The existing notes-v2 serve cohort still implies the floor when this switch is off;
-notes-v2 shadow comparisons continue when the independent floor is disabled.
+`off`, `false`, `0`, or `no`. It is the only switch for the floor: the retired
+notes-v2 serve cohort (`NOTES_PACKET_V2_MODE`, removed 2026-11-28) no longer implies it.
 
 A nonempty audio transcript below 4 seconds of transcript speech gets the
 existing deterministic minimum. Known English captures also qualify below 12
@@ -58,7 +57,7 @@ clips had at most seven words. These are evaluations, not unique recordings or a
 measured share of paid summaries; retries can inflate evaluations. This change
 does not claim a measured dollar saving or perform production reads/writes.
 
-Watch served floor decisions (including notes-v2 serves):
+Watch served floor decisions:
 
 ```promql
 sum(increase(omi_notes_refactor_results_total{check="short_clip",outcome="minimum"}[1h]))
@@ -68,8 +67,7 @@ The counter increments only when a minimum is returned, not for shadow-only
 eligibility. Monitor notes/task regressions alongside this volume, particularly
 short commands without explicit reminder phrasing.
 
-Rollback: set `NOTES_SHORT_CLIP_FLOOR=off` to restore previous admission outside
-the existing notes-v2 serve cohort. Existing minimum rows retain their marker and
+Rollback: set `NOTES_SHORT_CLIP_FLOOR=off` to restore previous admission. Existing minimum rows retain their marker and
 remain exempt from intelligence until actually enriched; rollback does not backfill.
 
 ## Verification
@@ -79,7 +77,6 @@ Run each test file in its own pytest process:
 ```bash
 backend/.venv/bin/python -m pytest backend/tests/unit/test_short_clip_rollout.py
 backend/.venv/bin/python -m pytest backend/tests/unit/test_short_clip_floor.py
-backend/.venv/bin/python -m pytest backend/tests/unit/test_notes_packet_v2.py
 backend/.venv/bin/python -m pytest backend/tests/unit/test_structured_emoji_never_defaults_to_brain.py
 ```
 

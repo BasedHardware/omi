@@ -68,9 +68,6 @@ def test_timeout_classification_survives_processing_and_rollback_wrappers():
 @pytest.fixture
 def durable_loop(monkeypatch):
     monkeypatch.setenv('NOTES_SHORT_CLIP_FLOOR', 'false')
-    monkeypatch.setenv('NOTES_PACKET_V2_MODE', 'off')
-    monkeypatch.delenv('NOTES_PACKET_V2_MODE_SERVE_PERCENT', raising=False)
-    monkeypatch.delenv('NOTES_PACKET_V2_MODE_SERVE_UID_SHA256S', raising=False)
     monkeypatch.setenv('CONVERSATION_OCCASION_RELEVANCE_ENABLED', 'false')
     monkeypatch.setenv('CONVERSATION_LLM_INPUT_DEDUPE_ENABLED', 'false')
     conversation = Conversation(
@@ -125,7 +122,6 @@ def durable_loop(monkeypatch):
     monkeypatch.setattr(finalizer, '_episode_at_finalization_start', AsyncMock())
     monkeypatch.setattr(finalizer, 'await_meeting_evidence', AsyncMock(return_value='not_applicable'))
     monkeypatch.setattr(finalizer, 'get_cached_user_geolocation', lambda *_: None)
-    monkeypatch.setattr(finalizer, 'apply_call_metadata', lambda _uid, conv: conv)
     monkeypatch.setattr(finalizer, 'warm_rollout_cohorts', AsyncMock())
     monkeypatch.setattr(finalizer, '_maybe_start_shadow', Mock())
     monkeypatch.setattr(finalizer.member_notes, 'waits', lambda *a: False)

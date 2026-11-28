@@ -14,9 +14,8 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping, Sequence
 
 from models.structured import Structured
-from config.refactor_modes import serving_for, shadow_or_serve
 from utils.llm.meeting_notes_presentation import enforce_static_conversation_note_presentation
-from utils.llm.notes_refactor_metrics import shadow, result
+from utils.llm.notes_refactor_metrics import result
 from utils.observability.fallback import record_fallback
 from utils.llm.notes_lengths import length_ceiling, length_floor
 from utils.llm.shaped_agent import Problem
@@ -277,50 +276,6 @@ def repair_contract(
     return repaired, sorted(set(repairs))
 
 
-def enforce_output_contract(
-    structured: Any,
-    *,
-    transcript_words: int,
-    transcript_segment_ids: Iterable[str],
-    owner_names: Sequence[str] = (),
-    open_tasks: Sequence[Any] = (),
-    title_people: Sequence[str] = (),
-    identity: NotesIdentity | None = None,
-) -> NotesCheck:
-    """Validate and repair the parsed artifact including visible Markdown citations."""
-
-    payload = structured.model_dump(mode='json')
-    check = check_notes(payload, transcript_words=transcript_words, contract_v2=True, identity=identity)
-    payload, check.repairs = repair_contract(
-        payload,
-        transcript_words=transcript_words,
-        open_tasks=open_tasks,
-        owner_names=owner_names,
-        transcript_segment_ids=transcript_segment_ids,
-        identity=identity,
-    )
-    repaired = Structured.model_validate(payload)
-    for field_name in (
-        'title',
-        'overview',
-        'sections',
-        'participants',
-        'action_items',
-        'events',
-        'insights',
-        'note_claims',
-    ):
-        if getattr(structured, field_name) != getattr(repaired, field_name):
-            setattr(structured, field_name, getattr(repaired, field_name))
-    enforce_static_conversation_note_presentation(structured, transcript_segment_ids, title_people=title_people)
-    # Title people repair can lengthen the title: the shared bounds apply last.
-    bounded, _ = repair_contract({'title': structured.title}, transcript_words=transcript_words)
-    structured.title = bounded['title']
-    if identity is not None:
-        _finish_identity(structured, None, {'notes_identity': identity})
-    return check
-
-
 OUTPUT_RULES = '''OUTPUT CONTRACT
 - Return a specific title of at most 70 characters and 10 words. Never put the account owner's name in it.
 - Lead with a non-owner counterpart's name only when confident speaker evidence identifies them; otherwise lead
@@ -339,41 +294,8 @@ OUTPUT_RULES = '''OUTPUT CONTRACT
 def finish_notes_contract(
     structured: Any, *, prefix: Any, uid: str | None, words: int, rich_mode: bool, inputs: Mapping[str, Any]
 ) -> Any:
-    """Shadow validates a copy; serving mutates only the cohort's artifact. Zero model calls."""
+    """Static presentation plus the speaker-identity repair. Zero model calls."""
 
-    serve = serving_for('NOTES_PACKET_V2_MODE', uid)
-    if shadow_or_serve('NOTES_PACKET_V2_MODE'):
-        try:
-            target = structured.model_copy(deep=True)
-            check = enforce_output_contract(
-                target,
-                transcript_words=words,
-                transcript_segment_ids=prefix.transcript_segment_ids,
-                owner_names=tuple(name for name in (prefix.account_owner_name, *prefix.owner_names) if name),
-                open_tasks=inputs.get('existing_action_items') or (),
-            )
-            shadow(
-                'output_contract',
-                'disagree' if check.findings or check.repairs else 'agree',
-                repairs=len(check.repairs),
-            )
-            if serve:
-                result(
-                    'output_contract',
-                    'repaired' if check.repairs else 'accepted_with_problems' if check.findings else 'passed',
-                )
-                return _finish_identity(target, prefix, inputs)
-        except Exception:
-            shadow('output_contract', 'error')
-            if serve:
-                record_fallback(
-                    component='conversation_notes',
-                    from_mode='notes_output_contract',
-                    to_mode='legacy_presentation',
-                    reason='local_heal',
-                    outcome='degraded',
-                )
-    # refactor: superseded by notes_output_contract when NOTES_PACKET_V2_MODE=serve
     enforce_static_conversation_note_presentation(
         structured,
         prefix.transcript_segment_ids,

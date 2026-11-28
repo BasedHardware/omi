@@ -4562,9 +4562,7 @@ FIELD_SITES = {
         ('purge_owner_lake_content', 'status', "'purged'", ('candidates_deleted', 'objects_deleted', 'status')),
     ],
     'utils/other/daily_recap.py': [
-        ('_state', 'status', 'status', ('created_at', 'date', 'generated_at', 'status')),
         ('finish_legacy_stub', 'status', "'generated'", ('generated_at', 'status')),
-        ('generate', 'status', "'generated'", ('generated_at', 'status')),
     ],
     'utils/other/endpoints.py': [
         ('enforce_account_deletion_http_access', 'status', 'status', ('code', 'retryable', 'status'))

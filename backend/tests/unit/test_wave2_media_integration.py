@@ -23,7 +23,6 @@ def test_classification_persists_minimum_and_restore_clears_marker(monkeypatch, 
     from utils.conversations import relevance_media as media
 
     monkeypatch.setenv('MEDIA_NOISE_MODE', 'serve')
-    monkeypatch.setenv('NOTES_PACKET_V2_MODE', 'off')
     monkeypatch.setattr(pc.funded_processing, 'enabled', lambda *_: False)
     actual_structured = pc._get_structured
     spies = _spy_managed_effects(monkeypatch, pc)

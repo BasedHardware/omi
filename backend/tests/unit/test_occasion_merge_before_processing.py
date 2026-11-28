@@ -320,7 +320,6 @@ async def test_real_finalizer_closes_absorbed_donor_without_any_fanout(world, mo
     from tests.unit.test_conversation_smart_merge import _Jobs, JOB
 
     monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'false')
-    monkeypatch.setenv('CALLS_RECAP_MODE', 'off')
     monkeypatch.setenv('EPISODES_ENABLED', 'off')
     world.raw('n').update(finalization_job_id=JOB, finalization_revision=1)
     jobs = _Jobs(world, monkeypatch)

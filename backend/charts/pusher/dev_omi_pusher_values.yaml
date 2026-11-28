@@ -284,10 +284,6 @@ env:
     value: "true"
   - name: CAPTURE_GROUP_CONTAINMENT_MODE
     value: "off"
-  - name: NOTES_PACKET_V2_MODE
-    value: "off"
-  - name: CALLS_RECAP_MODE
-    value: "off"
   - name: TRANSCRIPTION_SHADOW_ENABLED
     value: "true"
   - name: TRANSCRIPTION_SHADOW_KILL_SWITCH

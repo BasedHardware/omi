@@ -23,12 +23,10 @@ from models.notification_message import NotificationMessage
 from utils.conversations.factory import deserialize_conversations
 from utils.conversations.summary_selection import select_primary_summary
 from utils.daily_summary_validation import require_daily_summary
+from utils.other.daily_recap import delivery_allowed, finish_legacy_stub
 from utils.executors import db_executor, open_loops_executor, postprocess_executor, run_blocking
 from utils.conversations.relevance_content import exclude_from_derived
 from utils.llm.external_integrations import generate_comprehensive_daily_summary
-from config.refactor_modes import serving_for
-from utils.llm.daily_recap_fingerprint import input_fingerprint, FINGERPRINT_FIELD
-from utils.llm.notes_refactor_metrics import shadow as record_notes_shadow
 from utils.memory.learned_today import memories_learned_payload, memory_review_card_block
 from utils.notifications import send_bulk_notification, send_notification_result
 from utils.other import daily_summary_metrics
@@ -88,7 +86,7 @@ def _display_date_for_now(tz_name: Optional[str], at: Optional[datetime] = None)
 # queries on holes it cannot fill.
 _DECLINE_LOCKED = 'locked'
 _DECLINE_NO_CONVERSATIONS = 'no_conversations'
-# daily_recap.generate's budget decline; a budget-declined recap spends no
+# The budget decline; a budget-declined recap spends no
 # sibling-step tokens either.
 _DECLINE_USAGE_BUDGET = 'usage_budget_exhausted'
 # The window held conversations, but none this job may summarize (all ``is_locked``, none
@@ -141,8 +139,8 @@ def generate_and_store_daily_summary(uid, date_str, start_date_utc, end_date_utc
        shows
     6. LLM generate → persist
 
-    Serving recap revisions/states live in daily_recap. User-initiated partial-day
-    generation is explicit through generate_daily_summary_on_demand.
+    User-initiated partial-day generation is explicit through
+    generate_daily_summary_on_demand.
 
     Returns the stored record (or the pre-existing one), or ``None`` when a guard declined.
     """
@@ -160,30 +158,11 @@ def generate_daily_summary_on_demand(
     second is a retry.
     """
     require_generated_compute(uid, 'daily_summary')
-    record, _created, declined = _generate_and_store_daily_summary(
-        uid, date_str, start_date_utc, end_date_utc, user_initiated=True
-    )
+    record, _created, declined = _generate_and_store_daily_summary(uid, date_str, start_date_utc, end_date_utc)
     return record, declined
 
 
 def _generate_and_store_daily_summary(
-    uid, date_str, start_date_utc, end_date_utc, *, prepare_delivery=None, user_initiated=False
-):
-    from utils.other.daily_recap import generate
-
-    return generate(
-        uid,
-        date_str,
-        start_date_utc,
-        end_date_utc,
-        legacy=_legacy_generate_and_store_daily_summary,
-        prepare_delivery=prepare_delivery,
-        user_initiated=user_initiated,
-    )
-
-
-# refactor: superseded by utils.other.daily_recap when CALLS_RECAP_MODE=serve
-def _legacy_generate_and_store_daily_summary(
     uid, date_str, start_date_utc, end_date_utc, *, prepare_delivery: Optional[Callable[[], None]] = None
 ) -> Tuple[Optional[dict], bool, Optional[str]]:
     """Like ``generate_and_store_daily_summary``, plus whether this call persisted a new record
@@ -198,11 +177,13 @@ def _legacy_generate_and_store_daily_summary(
     the full 2h TTL instead barred the day: the on-demand button poisoned the very day it was
     pressed on — press it at 21:30 on a quiet day and the 22:00 cron tick lost the lock and
     the day never got a recap at all.
+
+    **An account pending deletion gets no recap**, before any budget, lock or read.
     """
+    if account_deletion_blocks_user_work(uid):
+        return None, False, 'account_pending_deletion'
     if not generated_compute_allowed(uid, 'daily_summary'):
         return None, False, 'usage_budget_exhausted'
-
-    from utils.other.daily_recap import delivery_allowed, finish_legacy_stub
 
     if not try_acquire_daily_summary_lock(uid, date_str):
         return None, False, _DECLINE_LOCKED
@@ -214,7 +195,7 @@ def _legacy_generate_and_store_daily_summary(
         # any LLM tokens. The regenerate flow stays in-place via update_daily_summary.
         existing_summary = daily_summaries_db.get_daily_summary_by_date(uid, date_str)
         existing_complete = bool(existing_summary and delivery_allowed(uid, existing_summary))
-        if existing_summary and existing_complete and not serving_for('NOTES_PACKET_V2_MODE', uid):
+        if existing_summary and existing_complete:
             logger.info(
                 f"Daily summary already exists for uid={uid} date={date_str} "
                 f"id={existing_summary.get('id')}; skipping duplicate generation"
@@ -224,14 +205,6 @@ def _legacy_generate_and_store_daily_summary(
         conversations_data = conversations_db.get_conversations(
             uid, start_date=start_date_utc, end_date=end_date_utc, date_field='started_at'
         )
-        fingerprint = None
-        if serving_for('NOTES_PACKET_V2_MODE', uid):
-            fingerprint = input_fingerprint(conversations_data or [])
-            if existing_summary and existing_complete and existing_summary.get(FINGERPRINT_FIELD) == fingerprint:
-                release_daily_summary_lock(uid, date_str)
-                record_notes_shadow('daily_recap_inputs', 'agree')
-                return existing_summary, False, None
-            record_notes_shadow('daily_recap_inputs', 'disagree')
         if not conversations_data or len(conversations_data) == 0:
             release_daily_summary_lock(uid, date_str)
             return None, False, _DECLINE_NO_CONVERSATIONS
@@ -285,8 +258,6 @@ def _legacy_generate_and_store_daily_summary(
         # by-date idempotency guard and prevent the user's next attempt from generating.
         require_daily_summary(summary_data, uid=uid, operation='legacy_generation_candidate')
         summary_data = finish_legacy_stub(existing_summary, summary_data)
-        if fingerprint is not None:
-            summary_data[FINGERPRINT_FIELD] = fingerprint
         if existing_summary:
             summary_id = existing_summary['id']
             # Preserve the existing deep link and completed-delivery marker on refresh.
@@ -818,14 +789,7 @@ def _reduce_daily_summary_chunks(
     return users, chunk_errors[0] if chunk_errors else None, every_chunk_read
 
 
-async def _get_users_for_daily_summary(timezones, target_hour):
-    from utils.other.daily_recap import select_recipients
-
-    return await select_recipients(timezones, target_hour, _legacy_get_users_for_daily_summary)
-
-
-# refactor: superseded by utils.other.daily_recap when CALLS_RECAP_MODE=serve
-async def _legacy_get_users_for_daily_summary(
+async def _get_users_for_daily_summary(
     timezones: List[str], target_hour: int
 ) -> Tuple[List[Tuple[str, Any, Any]], Optional[BaseException], bool]:
     """Read one hour group's users.
@@ -1112,9 +1076,7 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> Optional[Tuple[str
     ``(uid, date_str, start_utc, end_utc, tz_name)`` only when the pass should
     run — never for a day another worker owns or a budget already declined.
     """
-    if not serving_for('CALLS_RECAP_MODE', user_data[0]) and not generated_compute_allowed(
-        user_data[0], 'daily_summary'
-    ):
+    if not generated_compute_allowed(user_data[0], 'daily_summary'):
         return
     uid = user_data[0]
     if account_deletion_blocks_user_work(str(uid)):
@@ -1130,9 +1092,6 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> Optional[Tuple[str
     # trial only gates desktop features, not the recap the mobile app renders.
 
     display_date = _display_date_for_now(user_tz_name, user_data[3] if len(user_data) > 3 else None)
-    from utils.other.daily_recap import scheduled_date, delivery_allowed
-
-    display_date = scheduled_date(uid, user_tz_name, user_data[3] if len(user_data) > 3 else None, display_date)
     start_date_utc, end_date_utc = local_day_bounds_utc(display_date, user_tz_name)
     date_str = display_date.strftime('%Y-%m-%d')
 

@@ -15,7 +15,6 @@ def test_daily_generation_filters_media_before_paid_work(monkeypatch, mode, expe
     monkeypatch.setenv('MEDIA_NOISE_MODE', mode)
     monkeypatch.setenv('MEDIA_NOISE_MODE_SERVE_PERCENT', '0')
     monkeypatch.delenv('MEDIA_NOISE_MODE_SERVE_UID_SHA256S', raising=False)
-    monkeypatch.setenv('NOTES_PACKET_V2_MODE', 'off')
     generated, created, _, released, _ = _install_generation_fakes(monkeypatch)
     media = _FakeConvo()
     media.content_kind = 'media'

@@ -67,7 +67,6 @@ finalization:
   - backend/utils/conversations/action_item_refresh.py
   - backend/utils/conversations/backfill_stats.py
   - backend/utils/conversations/calendar_linking.py
-  - backend/utils/conversations/call_metadata.py
   - backend/utils/conversations/capture_group_meeting_context.py
   - backend/utils/conversations/capture_group_notes_refresh.py
   - backend/utils/conversations/demand_processing.py

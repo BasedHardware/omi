@@ -118,7 +118,7 @@ def test_every_transcript_boundary_rejects_high_raw_ids(monkeypatch):
     from utils.conversations.shared_chat import build_bounded_transcript
     from utils.conversations.smart_merge_state import transcript_lines
     from utils.conversations.transcript_chunks import build_transcript_chunks
-    from utils.episodes import incremental, moment_render
+    from utils.episodes import incremental
     from utils.mcp_server.helpers import conversation_participants, bounded_transcript_segments
     from utils import review
 
@@ -130,8 +130,6 @@ def test_every_transcript_boundary_rejects_high_raw_ids(monkeypatch):
         get_transcript=lambda *_a, **kw: TranscriptSegment.segments_as_string(segments, **kw),
     )
     monkeypatch.setattr(llm, 'get_user_name', lambda *_a, **_kw: 'David')
-    monkeypatch.setattr(llm, 'serving_for', lambda *_a: False)
-    monkeypatch.setattr(incremental, 'shadow_or_serve', lambda *_a: False)
     monkeypatch.setattr(render, 'get_user_name', lambda *_a, **_kw: 'David')
     monkeypatch.setattr(
         review.conversations,
@@ -172,7 +170,6 @@ def test_every_transcript_boundary_rejects_high_raw_ids(monkeypatch):
         'evidence_notes': evidence_compact,
         'evidence_map': json.dumps(evidence_map),
         'live_notes_and_titles': incremental.render_moment(rows, owner_name='David').text,
-        'moment_packet': moment_render.render_segments(rows)[0],
         'review': review_item.model_dump_json(),
         'task_review': task_review.model_dump_json(),
         'api_speaker_names': json.dumps([s['speaker_name'] for s in payload['transcript_segments']]),
@@ -191,7 +188,6 @@ def test_every_transcript_boundary_rejects_high_raw_ids(monkeypatch):
 def test_live_moments_keep_the_episode_order_and_bound_the_ledger(monkeypatch):
     from utils.episodes import incremental
 
-    monkeypatch.setattr(incremental, 'shadow_or_serve', lambda *_a: False)
     first = incremental.render_moment(
         [dict(row(378), end=5), dict(row(379), end=5)], conversation_id='c', voice_order=[]
     )

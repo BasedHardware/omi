@@ -10,7 +10,6 @@ from utils.llm.notes_short_clip import quiet_minimum
 
 def test_user_title_survives_deserialization_and_exempts_a_short_row(monkeypatch):
     monkeypatch.setenv('NOTES_SHORT_CLIP_FLOOR', 'on')
-    monkeypatch.setenv('NOTES_PACKET_V2_MODE', 'off')
     now = datetime(2026, 10, 31, tzinfo=timezone.utc)
     raw = dict(
         id='curated-row',

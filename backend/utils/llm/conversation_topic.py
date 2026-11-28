@@ -5,12 +5,10 @@ just-saved conversation would not sit untitled while full processing ran. The pr
 the model and the output contract now live here, behind ``get_llm('conv_structure')``.
 """
 
-from typing import Any, Optional, cast, Sequence, Mapping
+from typing import Any, Optional, cast
 from config.llm_spend import topic_deterministic_short_enabled
 from config.episodes import episode_output_language_pinned
-from config.refactor_modes import serving_for
 from utils.llm.output_language import language_preference, normalize_language
-from utils.llm.notes_language_inputs import in_profile_segments
 from utils.llm.notes_short_clip import NOTES_MIN_WORDS
 from utils.conversations.deterministic_minimum import first_sentence, truncate_on_word_boundary
 from utils.conversations.relevance_rules import transcript_word_count
@@ -60,15 +58,12 @@ def generate_conversation_topic(
     transcript: str,
     *,
     conversation_language: str | None = None,
-    segments: Sequence[Mapping[str, Any]] | None = None,
 ) -> Optional[ConversationTopic]:
     """Return-only emoji + short title through get_llm('conv_structure') (OpenRouter Luna).
 
     Returns an empty topic for an empty transcript and ``None`` when the model call or
     parse fails, so callers can leave the conversation untitled rather than show noise.
     """
-    if serving_for('NOTES_PACKET_V2_MODE', uid) and segments is not None:
-        transcript = ' '.join(str(segment.get('text') or '') for segment in in_profile_segments(segments))
     language_pin_enabled = episode_output_language_pinned()
     capture_language = normalize_language(conversation_language) if language_pin_enabled else ''
     preference = language_preference(uid) if language_pin_enabled else ''
@@ -77,7 +72,7 @@ def generate_conversation_topic(
     if not text:
         return ConversationTopic(emoji="", title="")
     if (
-        (serving_for('NOTES_PACKET_V2_MODE', uid) or topic_deterministic_short_enabled())
+        topic_deterministic_short_enabled()
         and transcript_word_count(text) < NOTES_MIN_WORDS
         and (
             not language_pin_enabled or capture_language == output_language or (not capture_language and not preference)

@@ -148,7 +148,6 @@ async def test_idle_reopen_listen_reconnect_short_turns_and_owner_evidence(monke
 
 
 def test_unnamed_display_never_joins_distinct_voice_turns(monkeypatch):
-    monkeypatch.setattr(incremental, 'shadow_or_serve', lambda *_: False)
     rows = [dict(speaker_id=i, speaker_id_scope='s', text=f'turn{i}', start=i, end=i + 1) for i in (1, 2)]
     assert incremental.render_moment(rows).text == 'Unknown speaker: turn1\nUnknown speaker: turn2'
 
@@ -158,7 +157,6 @@ def test_unnamed_display_never_joins_distinct_voice_turns(monkeypatch):
     [(6, 7, 'c', 'Speaker A'), (-1, -1, 'c', 'Speaker A'), (6, 7, 'other', 'Unknown speaker')],
 )
 def test_moment_ledger_retains_qualification_across_short_deltas(monkeypatch, start, end, conversation_id, expected):
-    monkeypatch.setattr(incremental, 'shadow_or_serve', lambda *_: False)
     voice = dict(speaker_id=1, speaker_id_scope='listen:0')
     first = incremental.render_moment(
         [dict(voice, id='anchor', text='first turn', start=0, end=6)], conversation_id='c', voice_order=[]
