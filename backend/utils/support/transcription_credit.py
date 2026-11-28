@@ -65,7 +65,7 @@ def _allowance(uid: str, raw: Any, now: float) -> dict[str, Any]:
             now=now,
             current_used=used,
             current_allowance=allowance,
-            month_used=lambda month: subscription_utils._past_month_transcription_seconds(uid, month),
+            month_used=lambda month: support_credit.past_month_used(uid, month),
         )
         usable = support_credit.usable_seconds(grants, remaining, now)
     return {
@@ -77,29 +77,30 @@ def _allowance(uid: str, raw: Any, now: float) -> dict[str, Any]:
 
 
 def _held(client: Any, uid: str, namespace: str) -> dict[str, Any]:
-    """Parked (``allowance_held``) units for this owner and their audio seconds. Read only."""
+    """Parked (``allowance_held``) units for this owner and their audio seconds. Read only.
+
+    Pages the hold controller's own ``allowance_page`` query, then point-reads
+    each unit's duration. The store refuses a namespace that does not match
+    ``OMI_ENV_STAGE``, so run it with ``OMI_ENV_STAGE=prod`` against production.
+    """
+    from database.batch_pipeline_store import FirestoreStore
     from utils.batch_pipeline.scheduler import owner_key
 
-    query = (
-        client.collection(f'{namespace}_jobs')
-        .where('state', '==', 'allowance_held')
-        .where('owner_key', '==', owner_key(uid))
-        .order_by('capture_at')
-        .order_by('segment_id')
-    )
+    store = FirestoreStore(namespace, firestore_client=client)
+    jobs = client.collection(f'{namespace}_jobs')
+    key = owner_key(uid)
     units, seconds, after = 0, 0.0, None
     while units < _HELD_SCAN_LIMIT:
-        page_query = query.start_after(after) if after else query
-        rows = list(page_query.limit(_HELD_PAGE).stream())
-        for row in rows:
-            data = row.to_dict() or {}
+        page = store.allowance_page(key, after, _HELD_PAGE)
+        data: dict[str, Any] = {}
+        for segment in page:
+            data = jobs.document(segment).get(['duration_seconds', 'capture_at', 'segment_id']).to_dict() or {}
             units += 1
             value = data.get('duration_seconds')
             seconds += value if isinstance(value, (int, float)) and not isinstance(value, bool) else 0
-        if len(rows) < _HELD_PAGE:
+        if len(page) < _HELD_PAGE:
             break
-        last = rows[-1].to_dict() or {}
-        after = {'capture_at': last.get('capture_at'), 'segment_id': last.get('segment_id')}
+        after = [data.get('capture_at'), data.get('segment_id')]
     return {'held_units': units, 'held_seconds': int(seconds), 'held_scan_truncated': units >= _HELD_SCAN_LIMIT}
 
 

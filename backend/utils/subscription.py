@@ -50,8 +50,7 @@ from config import ladder_v1 as ladder_policy
 from config import prepaid_code_redeem
 from config.refactor_modes import default_on as refactor_default_on
 from utils import ladder_v1
-from utils import support_credit
-from config import support_credit as support_credit_config
+from utils.support_credit import UNREAD as SUPPORT_CREDIT_UNREAD, after_plan as support_credit_after_plan
 
 logger = logging.getLogger(__name__)
 
@@ -1564,7 +1563,7 @@ def resolve_transcription_allowance(
     usage_cache: Any = None,
     provision_subscription: bool = True,
     ready_usage_only: bool = False,
-    support_credit: Any = _UNRESOLVED,
+    support_credit: Any = SUPPORT_CREDIT_UNREAD,
 ) -> TranscriptionAllowance:
     """Resolve the managed-transcription allowance for one uid, once. Never raises.
 
@@ -1586,11 +1585,6 @@ def resolve_transcription_allowance(
     basic one by that lookup and gets basic's minutes. Any dependency that
     cannot be read, and any usage record that cannot be trusted, resolves to
     the free local path rather than a billed socket.
-
-    A finite plan whose minutes are spent then consults the support credit
-    (``support_credit`` lets a caller pass the raw map it already read). Only
-    exhausted users pay that read; a spent or absent credit keeps today's
-    ``plan_allowance_exhausted`` answer so cap parking is unchanged.
     """
     known_limit_seconds: Optional[int] = 0
     try:
@@ -1647,69 +1641,14 @@ def resolve_transcription_allowance(
             return TranscriptionAllowance(
                 TRANSCRIPTION_MODE_MANAGED, remaining, 'plan_within_allowance', limit_seconds=allowance
             )
-        credited = _support_credit_allowance(uid, support_credit, used=used, allowance=allowance)
-        if credited is not None:
-            return credited
-        return TranscriptionAllowance(
+        # Spent finite plan: a support credit may fund it (utils/support_credit.py); none keeps today's answer.
+        exhausted = TranscriptionAllowance(
             TRANSCRIPTION_MODE_ON_DEVICE, 0, 'plan_allowance_exhausted', limit_seconds=allowance
         )
+        return support_credit_after_plan(uid, support_credit, used=used, allowance=allowance) or exhausted
     except Exception as exc:  # fail closed: a billed socket is never the default
         logger.warning('transcription allowance unavailable for uid=%s: %s', uid, type(exc).__name__)
         return _closed('allowance_unavailable', limit_seconds=known_limit_seconds)
-
-
-SUPPORT_CREDIT_REASON = 'support_credit'
-
-
-def _past_month_transcription_seconds(uid: str, month: tuple[int, int]) -> int:
-    year, number = month
-    used = _usage_seconds(user_usage_db.get_monthly_usage_stats(uid, datetime(year, number, 15, tzinfo=timezone.utc)))
-    if used is None:
-        raise support_credit.CreditUnreadable('past month usage is untrusted')
-    return used
-
-
-def _support_credit_allowance(
-    uid: str, raw: Any, *, used: int, allowance: int, now: Optional[float] = None
-) -> Optional[TranscriptionAllowance]:
-    """The managed answer a live support credit funds, or ``None`` for no usable credit.
-
-    Called only once the plan's finite allowance is spent. ``limit_seconds``
-    stays the plan's: batch capacity and usage displays are plan-only. A read
-    failure is no credit (today's answer). A credit that exists but cannot be
-    evaluated is transient (``allowance_unavailable``): the user was already
-    on the local path, and the hold controller retries instead of
-    acknowledging a generation.
-    """
-    if not support_credit_config.enabled():
-        return None
-    if raw is _UNRESOLVED:
-        try:
-            raw = users_db.get_support_transcription_credit(uid)
-        except Exception as exc:
-            # Every exhausted user pays this read; a blip must keep today's
-            # parking answer, not turn the whole cohort transient.
-            logger.warning('support credit read failed for uid=%s: %s', uid, type(exc).__name__)
-            return None
-    try:
-        grants = support_credit.parse_grants(raw)
-        if not grants:
-            return None
-        at = time.time() if now is None else now
-        remaining = support_credit.remaining_by_grant(
-            grants,
-            now=at,
-            current_used=used,
-            current_allowance=allowance,
-            month_used=lambda month: _past_month_transcription_seconds(uid, month),
-        )
-        usable = support_credit.usable_seconds(grants, remaining, at)
-    except Exception as exc:
-        logger.warning('support credit unavailable for uid=%s: %s', uid, type(exc).__name__)
-        return _closed('allowance_unavailable', limit_seconds=allowance)
-    if usable <= 0:
-        return None
-    return TranscriptionAllowance(TRANSCRIPTION_MODE_MANAGED, usable, SUPPORT_CREDIT_REASON, limit_seconds=allowance)
 
 
 def has_transcription_credits(uid: str, source: Optional[str] = None) -> bool:

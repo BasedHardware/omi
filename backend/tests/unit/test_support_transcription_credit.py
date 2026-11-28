@@ -167,8 +167,8 @@ def situate(monkeypatch, sub, *, used: int, credit=None, plan=PlanType.basic, re
             raise read_error
         return credit
 
-    monkeypatch.setattr(sub.users_db, 'get_support_transcription_credit', read, raising=False)
-    monkeypatch.setattr(sub.time, 'time', lambda: at('2026-11-28T00:00'))
+    monkeypatch.setattr(support_credit, 'read_credit', read)
+    monkeypatch.setattr(support_credit.time, 'time', lambda: at('2026-11-28T00:00'))
     return reads
 
 

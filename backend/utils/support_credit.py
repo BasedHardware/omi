@@ -21,11 +21,13 @@ grant by one meter lag, the same property the plan cap has today.
 
 from __future__ import annotations
 
+import logging
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable, Mapping
 
-from config.support_credit import MAX_EXPIRES_DAYS
+from config.support_credit import FIELD, MAX_EXPIRES_DAYS, enabled
 
 
 class CreditUnreadable(ValueError):
@@ -153,3 +155,74 @@ def serialize(grant: Grant) -> dict[str, int]:
         'baseline_seconds': grant.baseline_seconds,
         'allowance_seconds': grant.allowance_seconds,
     }
+
+
+# --- admission ------------------------------------------------------------------------------
+
+REASON = 'support_credit'
+# The caller did not read the credit; ``None`` is a real answer (no credit stored).
+UNREAD: Any = object()
+logger = logging.getLogger(__name__)
+
+
+def read_credit(uid: str, *, firestore_client: Any = None) -> Any:
+    """The raw credit map (``None`` when absent): one users-root point read."""
+    from database._client import db
+
+    snapshot = (firestore_client or db).collection('users').document(uid).get([FIELD])
+    return (snapshot.to_dict() or {}).get(FIELD) if snapshot.exists else None
+
+
+def past_month_used(uid: str, month: tuple[int, int]) -> int:
+    """``transcription_seconds`` for an earlier UTC month, from the existing monthly totals."""
+    import database.user_usage as user_usage_db
+
+    year, number = month
+    usage = user_usage_db.get_monthly_usage_stats(uid, datetime(year, number, 15, tzinfo=timezone.utc))
+    value = usage.get('transcription_seconds', 0) if isinstance(usage, dict) else None
+    value = 0 if value is None else value
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise CreditUnreadable('past month usage is untrusted')
+    return value
+
+
+def after_plan(uid: str, raw: Any = UNREAD, *, used: int, allowance: int, now: float | None = None):
+    """The managed answer a live credit funds once a finite plan is spent, or ``None`` (no usable credit).
+
+    ``raw`` is the stored map when the caller already read it (the hold
+    controller does). ``limit_seconds`` stays the plan's: batch capacity and
+    usage displays are plan-only. A read failure is no credit, so a blip keeps
+    today's parking answer for the whole exhausted cohort. A credit that exists
+    but cannot be evaluated is transient (``allowance_unavailable``): the user
+    was already on the local path, and the hold controller retries instead of
+    acknowledging a generation.
+    """
+    from utils.transcription_allowance import TranscriptionAllowance
+
+    if not enabled():
+        return None
+    if raw is UNREAD:
+        try:
+            raw = read_credit(uid)
+        except Exception as exc:
+            logger.warning('support credit read failed for uid=%s: %s', uid, type(exc).__name__)
+            return None
+    try:
+        grants = parse_grants(raw)
+        if not grants:
+            return None
+        at = time.time() if now is None else now
+        left = remaining_by_grant(
+            grants,
+            now=at,
+            current_used=used,
+            current_allowance=allowance,
+            month_used=lambda month: past_month_used(uid, month),
+        )
+        usable = usable_seconds(grants, left, at)
+    except Exception as exc:
+        logger.warning('support credit unavailable for uid=%s: %s', uid, type(exc).__name__)
+        return TranscriptionAllowance('on_device', 0, 'allowance_unavailable', limit_seconds=allowance)
+    if usable <= 0:
+        return None
+    return TranscriptionAllowance('managed', usable, REASON, limit_seconds=allowance)
