@@ -304,11 +304,26 @@ def get_user_private_cloud_sync_enabled(uid: str) -> bool:
     return user_data.get('private_cloud_sync_enabled', True)
 
 
-def set_user_private_cloud_sync_enabled(uid: str, value: bool, *, operation_id: str | None = None):
+def set_user_private_cloud_sync_enabled(
+    uid: str,
+    value: bool,
+    *,
+    operation_id: str | None = None,
+    request_deadline: float | None = None,
+    trace_id: str = '-',
+):
     """Enable or disable private cloud sync for a user."""
-    client = get_data_plane_firestore_client() if account_authority_writer_enabled() else db
+    # Let update_privacy pin and time the HTTP write on the scrub worker's data plane.
+    client = None
+    if request_deadline is None:
+        client = get_data_plane_firestore_client() if account_authority_writer_enabled() else db
     auto_enroll_db.update_privacy(
-        uid, {'private_cloud_sync_enabled': value}, firestore_client=client, operation_id=operation_id
+        uid,
+        {'private_cloud_sync_enabled': value},
+        firestore_client=client,
+        operation_id=operation_id,
+        request_deadline=request_deadline,
+        trace_id=trace_id,
     )
 
 

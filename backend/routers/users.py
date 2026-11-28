@@ -17,6 +17,7 @@ import os
 import asyncio
 
 import pytz
+from google.api_core.exceptions import DeadlineExceeded, ServiceUnavailable
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -30,10 +31,14 @@ from database import (
     daily_summaries as daily_summaries_db,
     llm_usage as llm_usage_db,
     people as people_db,
+    recurring_voice_privacy,
+    rpc_deadline,
     users as users_db,
 )
 from database.account_deletion_marker import account_deletion_blocks_user_work
+from omi_logging import trace_context
 from database._client import get_customer_firestore_client
+from database.firestore_read_origin import read_origin
 from database.go_queue_erase import ERASE_LEASE_SECONDS
 from database.legal_holds import DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable
 from services.users.go_queue_erase import go_queue_erase_required
@@ -152,6 +157,7 @@ from utils.cloud_tasks import (
     account_deletion_queue_path,
     get_account_deletion_tasks_max_attempts,
     verify_account_deletion_cloud_tasks_oidc,
+    verify_cloud_tasks_oidc,
     verify_conversation_batch_purge_cloud_tasks_oidc,
 )
 from database import (
@@ -688,9 +694,34 @@ def update_onboarding_state(data: OnboardingStateUpdate, uid: str = Depends(auth
 
 
 @router.post('/v1/users/private-cloud-sync', tags=['v1'], response_model=UserStatusResponse)
-def set_private_cloud_sync(value: bool, uid: str = Depends(auth.get_current_user_uid)):
-    set_user_private_cloud_sync_enabled(uid, value)
+def set_private_cloud_sync(request: Request, value: bool, uid: str = Depends(auth.get_current_user_uid)):
+    started = getattr(request.state, 'omi_request_started_monotonic', rpc_deadline.now())
+    outer_deadline = getattr(request.state, 'omi_request_deadline_monotonic', float('inf'))
+    # Leave room for rollback and response serialization below the HTTP cutoff.
+    deadline = min(started + 20, outer_deadline - 2)
+    trace = trace_context(dict(request.scope.get('headers', ())))
+    try:
+        set_user_private_cloud_sync_enabled(uid, value, request_deadline=deadline, trace_id=trace[0] if trace else '-')
+    except Exception as error:
+        retryable = (rpc_deadline.RpcDeadlineExceeded, DeadlineExceeded, ServiceUnavailable)
+        # The SDK's rollback can mask a begin or commit deadline with its own error.
+        if not isinstance(error, retryable) and not isinstance(error.__context__, retryable):
+            raise
+        raise HTTPException(
+            status_code=503,
+            detail={'code': 'privacy_write_unavailable', 'retryable': True},
+            headers={'Retry-After': '1'},
+        ) from None
     return {'status': 'ok'}
+
+
+@router.post('/v1/users/recurring-voice-privacy/sweep', include_in_schema=False)
+@read_origin('job:recurring_voice_privacy_scrub')
+def resume_recurring_voice_privacy(_retry_count: int = Depends(verify_cloud_tasks_oidc)):
+    try:
+        return recurring_voice_privacy.resume_pending_scrubs()
+    except (rpc_deadline.RpcDeadlineExceeded, DeadlineExceeded, ServiceUnavailable):
+        raise HTTPException(status_code=503, detail='Privacy sweep temporarily unavailable') from None
 
 
 @router.get('/v1/users/private-cloud-sync', tags=['v1'], response_model=PrivateCloudSyncResponse)

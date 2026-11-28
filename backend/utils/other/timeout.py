@@ -98,6 +98,7 @@ class TimeoutMiddleware(BaseHTTPMiddleware):
         # (utils.other.list_budget) can derive an internal deadline that leaves
         # serialization headroom under this middleware's hard cutoff.
         request.state.omi_request_started_monotonic = time.monotonic()
+        request.state.omi_request_deadline_monotonic = request.state.omi_request_started_monotonic + timeout
         arrival_token = started_at.set(time.time())
         try:
             return await asyncio.wait_for(call_next(request), timeout=timeout)

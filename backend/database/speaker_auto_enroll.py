@@ -11,7 +11,14 @@ from database.batch_account_authority import account_authority_writer_enabled, m
 from database.batch_account_authority_schema import ACCOUNT_FIELD_GROUPS, SPEAKER_PRIVACY_VERSION, USER_COLLECTION
 from database.people_generation import bump_people_generation
 from database._client import get_firestore_client
-from database import _client, speaker_profile_authority, recurring_voices, transcript_pointer
+from database import (
+    _client,
+    recurring_voice_privacy,
+    recurring_voices,
+    rpc_deadline,
+    speaker_profile_authority,
+    transcript_pointer,
+)
 from database.legal_holds import external_write_fence
 from utils.speakers import auto_enroll as policy
 from utils.stt.voiceprints import usable_person_voiceprint
@@ -196,13 +203,28 @@ def publish(
     return stored
 
 
-def update_privacy(uid: str, updates: dict, *, firestore_client: Any = None, operation_id: str | None = None) -> None:
-    """Privacy opt-out clears the indexed pools in the same transaction as consent."""
+def update_privacy(
+    uid: str,
+    updates: dict,
+    *,
+    firestore_client: Any = None,
+    operation_id: str | None = None,
+    request_deadline: float | None = None,
+    trace_id: str = '-',
+) -> None:
+    """Commit consent and revoke indexed profiles before scrubbing stored links."""
+    started = rpc_deadline.now()
+    recurring_voice_privacy.log_phase('start', started, trace_id)
+    budget = recurring_voice_privacy.scrub_budget_seconds() if request_deadline is not None else 0
     enabled = account_authority_writer_enabled()
     if firestore_client is not None:
         client = firestore_client
     else:
-        client = _client.get_data_plane_firestore_client() if enabled else get_firestore_client()
+        client = (
+            _client.get_data_plane_firestore_client()
+            if request_deadline is not None or enabled
+            else get_firestore_client()
+        )
     stable_id = operation_id or uuid4().hex
     user = client.collection('users').document(uid)
 
@@ -212,25 +234,27 @@ def update_privacy(uid: str, updates: dict, *, firestore_client: Any = None, ope
             snapshot = user.get(transaction=transaction)
             owner = snapshot.to_dict() or {}
             following = {**owner, **updates}
+            withdrawn = not policy.retained(following)
             people = []
-            if not policy.retained(following):
+            if withdrawn:
                 for pid in owner.get(OWNER_INDEX) or []:
                     ref = user.collection('people').document(pid)
                     if ref.get(transaction=transaction).exists:
                         people.append(ref)
-            recurring = (
-                recurring_voices.prepare_retraction(transaction, user, owner, clear=True)
-                if not policy.retained(following)
-                else None
-            )
+            recurring = recurring_voices.prepare_retraction(transaction, user, owner, clear=True) if withdrawn else None
             version = owner.get(PRIVACY_VERSION, 0)
             if type(version) is not int:
                 raise ValueError('Invalid speaker enrollment privacy version')
             patch = {
                 **updates,
                 PRIVACY_VERSION: version + 1,
-                **({OWNER_INDEX: [], policy.AUTHORITY_FIELD: {}} if not policy.retained(following) else {}),
+                **({OWNER_INDEX: [], policy.AUTHORITY_FIELD: {}} if withdrawn else {}),
             }
+            needs_scrub = withdrawn and bool(owner.get(recurring_voices.INDEX))
+            pending = owner.get(recurring_voice_privacy.SCRUB_FIELD)
+            if needs_scrub and request_deadline is not None:
+                pending = recurring_voice_privacy.new_scrub(version + 1, trace_id)
+                patch[recurring_voice_privacy.SCRUB_FIELD] = pending
             certify = enabled and (not owner or bool(ACCOUNT_FIELD_GROUPS[USER_COLLECTION].keys() & updates.keys()))
             if certify:
                 result = mutate_account_authority(
@@ -243,7 +267,7 @@ def update_privacy(uid: str, updates: dict, *, firestore_client: Any = None, ope
                     merge=None if owner else False,
                 )
                 if not result.applied:
-                    return not policy.retained(owner) and recurring_voices.INDEX in owner
+                    return False, owner.get(recurring_voice_privacy.SCRUB_FIELD)
             if recurring is not None and owner:
                 recurring_voices.write_profiles(transaction, user, owner, recurring)
             for ref in people:
@@ -256,12 +280,37 @@ def update_privacy(uid: str, updates: dict, *, firestore_client: Any = None, ope
                     transaction.update(user, patch)
                 else:
                     transaction.set(user, patch)
-            return not policy.retained(following) and recurring_voices.INDEX in owner
+            return needs_scrub, pending
 
-    if _client.run_transactional(client, commit):
-        from database.recurring_voice_privacy import scrub_transcripts
+    if request_deadline is None:
+        needs_scrub, pending = _client.run_transactional(client, commit)
+    else:
+        with rpc_deadline.rpc_deadline(request_deadline):
+            rpc_deadline.bind_firestore_client(client)
+            needs_scrub, pending = _client.run_transactional(client, commit)
+    recurring_voice_privacy.log_phase('committed', started, trace_id)
+    scrub_started = rpc_deadline.now()
+    if request_deadline is not None and pending and budget:
+        recurring_voice_privacy.log_phase(
+            'scrub_exhausted', scrub_started, trace_id, reason='deferred' if needs_scrub else 'pending'
+        )
+        return
 
-        scrub_transcripts(uid, firestore_client=client)
+    progress = recurring_voice_privacy.ScrubProgress()
+    if request_deadline is not None and pending:
+        progress.cursor = pending['cursor']
+        recurring_voice_privacy.scrub_transcripts(uid, firestore_client=client, progress=progress, expected_job=pending)
+        recurring_voice_privacy.checkpoint(client, user, pending, progress)
+    elif needs_scrub:
+        recurring_voice_privacy.scrub_transcripts(uid, firestore_client=client, progress=progress)
+    recurring_voice_privacy.log_phase(
+        'scrub_done',
+        scrub_started,
+        trace_id,
+        pages=progress.pages,
+        documents=progress.documents,
+        reason='complete' if progress.done else 'skipped',
+    )
 
 
 def retract_conversation(uid: str, conversation_id: str, *, firestore_client: Any = None) -> None:

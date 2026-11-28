@@ -184,6 +184,20 @@ routes:
       owner: backend
   - route_type: http
     method: POST
+    path: /v1/users/recurring-voice-privacy/sweep
+    policy:
+      review_status: reviewed
+      auth: {mechanisms: [service_oidc], placement: dependency, scopes: []}
+      byok: not_applicable
+      rate_limit: {policy_name: none, key_subject: none, enforcement: none, placement: none}
+      timeout_class: default_method
+      surface: internal_task
+      visibility: internal
+      data_domain: conversations
+      deprecation: {state: active}
+      owner: backend
+  - route_type: http
+    method: POST
     path: /v2/dream-agent/sweep
     policy:
       review_status: reviewed
