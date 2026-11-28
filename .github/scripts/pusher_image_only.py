@@ -83,6 +83,7 @@ CONTROL_PATHS = (
     ".github/scripts/pusher_canary_inverse.py",
     ".github/scripts/pusher_image_rehearsal.py",
     "backend/scripts/pusher_release_receipt.py",
+    "backend/scripts/pusher_canary_from_live.py",
     "backend/scripts/pusher_prod_canary.py",
     "backend/scripts/pusher_semantic_probe.py",
     "backend/scripts/verify_pusher_promotion_evidence.py",

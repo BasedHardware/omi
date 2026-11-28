@@ -610,39 +610,6 @@ jobs:
 
       - name: Create isolated proposed production Pusher ConfigMap
         if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod'
-        env:
-          LADDER_V1_PLUS_MONTH_PRICE_ID: ${{ vars.LADDER_V1_PLUS_MONTH_PRICE_ID }}
-          LADDER_V1_PLUS_YEAR_PRICE_ID: ${{ vars.LADDER_V1_PLUS_YEAR_PRICE_ID }}
-          LADDER_V1_PRO_MONTH_PRICE_ID: ${{ vars.LADDER_V1_PRO_MONTH_PRICE_ID }}
-          LADDER_V1_PRO_YEAR_PRICE_ID: ${{ vars.LADDER_V1_PRO_YEAR_PRICE_ID }}
-          LADDER_V1_ARCHITECT_MONTH_PRICE_ID: ${{ vars.LADDER_V1_ARCHITECT_MONTH_PRICE_ID }}
-          LADDER_V1_ARCHITECT_YEAR_PRICE_ID: ${{ vars.LADDER_V1_ARCHITECT_YEAR_PRICE_ID }}
-          ACCOUNT_DELETION_HANDLER_URL: ${{ steps.pusher-runtime-targets.outputs.account_deletion_handler_url }}
-          CONVERSATION_SUMMARIZED_APP_IDS: ${{ vars.CONVERSATION_SUMMARIZED_APP_IDS }}
-          ENVIRONMENT: ${{ vars.ENV }}
-          GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
-          MCP_AUTHORIZATION_SERVER_URL: ${{ vars.MCP_AUTHORIZATION_SERVER_URL }}
-          MCP_OAUTH_CHATGPT_CLIENT_ID: ${{ vars.MCP_OAUTH_CHATGPT_CLIENT_ID }}
-          MCP_OAUTH_CHATGPT_REDIRECT_URIS: ${{ vars.MCP_OAUTH_CHATGPT_REDIRECT_URIS }}
-          MCP_OAUTH_CLAUDE_CLIENT_ID: ${{ vars.MCP_OAUTH_CLAUDE_CLIENT_ID }}
-          MCP_OAUTH_CLAUDE_CLIENT_NAME: ${{ vars.MCP_OAUTH_CLAUDE_CLIENT_NAME }}
-          MCP_OAUTH_CLAUDE_REDIRECT_URIS: ${{ vars.MCP_OAUTH_CLAUDE_REDIRECT_URIS }}
-          MCP_OAUTH_PUBLIC_CLIENT_ID: ${{ vars.MCP_OAUTH_PUBLIC_CLIENT_ID }}
-          MCP_OAUTH_PUBLIC_REDIRECT_URIS: ${{ vars.MCP_OAUTH_PUBLIC_REDIRECT_URIS }}
-          MCP_RESOURCE_URL: ${{ vars.MCP_RESOURCE_URL }}
-          RAPID_API_HOST: ${{ vars.RAPID_API_HOST }}
-          REDIS_DB_HOST: ${{ vars.REDIS_DB_HOST }}
-          STT_PRERECORDED_MODEL: parakeet,modulate-velma-2
-          PRERECORDED_SONIOX_FAILOVER_ENABLED: "true"
-          STT_SERVICE_MODELS: dg-nova-3,modulate-velma-2,parakeet
-          SYNC_TASKS_HANDLER_URL: ${{ steps.pusher-runtime-targets.outputs.sync_tasks_handler_url }}
-          SYNC_TASKS_INVOKER_SA: ${{ steps.pusher-runtime-targets.outputs.sync_tasks_invoker_sa }}
-          TYPESENSE_HOST: ${{ vars.TYPESENSE_HOST }}
-          TWILIO_ACCOUNT_SID: ${{ vars.TWILIO_ACCOUNT_SID }}
-          TWILIO_API_KEY_SID: ${{ vars.TWILIO_API_KEY_SID }}
-          TWILIO_TWIML_APP_SID: ${{ vars.TWILIO_TWIML_APP_SID }}
-          X_OAUTH_CLIENT_ID: ${{ vars.X_OAUTH_CLIENT_ID }}
-          X_OAUTH_REDIRECT_URI: ${{ vars.X_OAUTH_REDIRECT_URI }}
         run: |
           set -euo pipefail
           PUSHER_CANARY_CONFIG="prod-omi-backend-config-canary-${GITHUB_RUN_ID}"
@@ -653,7 +620,16 @@ jobs:
             echo "PUSHER_CANARY=$PUSHER_CANARY"
             echo "LISTENER_CANARY=$LISTENER_CANARY"
           } >> "$GITHUB_ENV"
-          CONFIG_MAP_NAME_OVERRIDE="$PUSHER_CANARY_CONFIG" backend/scripts/deploy-backend-config.sh
+          # SCA-4763 (Release, 2026-11-28): the canary must prove the candidate
+          # against the environment production will keep. An image-only promote
+          # preserves the live ConfigMap and PodTemplate, so the isolated map is
+          # an exact copy of the live one. A render from the dispatching main
+          # carries keys the promote never applies; that is what refused run
+          # 46139487564 with effective_environment_differs.
+          python3 backend/scripts/pusher_canary_from_live.py config-map \
+            --namespace prod-omi-backend \
+            --live-config-map prod-omi-backend-config \
+            --canary-config-map "$PUSHER_CANARY_CONFIG"
 
       # The inverse receipt names GITHUB_WORKFLOW_SHA as its producer, so the helper
       # and its first-party import run from that immutable revision, not from the
@@ -702,24 +678,21 @@ jobs:
           set -euo pipefail
           python3 -m pip install -q pyyaml websockets==12.0
           test -n "$PUSHER_CANARY" -a -n "$LISTENER_CANARY" -a -n "$PUSHER_CANARY_CONFIG"
-          helm -n prod-omi-backend upgrade --install "$PUSHER_CANARY" ./backend/charts/pusher \
-            -f ./backend/charts/pusher/prod_omi_pusher_values.yaml \
-            --set-string "fullnameOverride=$PUSHER_CANARY" \
-            --set serviceAccount.create=false \
-            --set-string serviceAccount.name=prod-omi-pusher \
-            --set autoscaling.enabled=false \
-            --set replicaCount=1 \
-            --set ingress.enabled=false \
-            --set-json podDisruptionBudget=null \
-            --set-string "service.backendConfig=$PUSHER_CANARY-backend-config" \
-            --set-json 'service.annotations={}' \
-            --set-string "runtimeConfigMapName=$PUSHER_CANARY_CONFIG" \
-            --set-string "image.repository=$PUSHER_IMAGE_REPOSITORY" \
-            --set-string "image.digest=$PUSHER_IMAGE_DIGEST" \
-            --set-string image.tag= \
-            --set-string image.pullPolicy=IfNotPresent
-          # The isolated canary is exactly one replica with HPA disabled; this
-          # covers the committed per-pod startup budget without inheriting the
+          # SCA-4763 (Release, 2026-11-28): copy the live Pusher PodTemplate,
+          # changing only the candidate image, the canary identity labels and the
+          # ConfigMap references (redirected to the copied live map). Nothing is
+          # rendered from the dispatching main, so the canary's startup inputs are
+          # the ones an image-only promote preserves. The Service selects only the
+          # canary pod and carries no ingress, NEG or backend-config annotation.
+          python3 backend/scripts/pusher_canary_from_live.py workload \
+            --namespace prod-omi-backend \
+            --live-deployment prod-omi-pusher \
+            --live-service prod-omi-pusher \
+            --canary-name "$PUSHER_CANARY" \
+            --canary-config-map "$PUSHER_CANARY_CONFIG" \
+            --image "$PUSHER_IMAGE_REPOSITORY@$PUSHER_IMAGE_DIGEST"
+          # The isolated canary is exactly one replica with no HPA; this covers
+          # the committed per-pod startup budget without inheriting the
           # fourteen-wave timeout required by the shared 40-pod release.
           kubectl -n prod-omi-backend rollout status "deployment/$PUSHER_CANARY" --timeout=900s
           python3 backend/scripts/pusher_release_receipt.py record-live \
@@ -732,6 +705,9 @@ jobs:
             --release-name "$PUSHER_CANARY" \
             --isolated-canary \
             --config-map-name "$PUSHER_CANARY_CONFIG" \
+            --derived-from-live \
+            --live-release-name prod-omi-pusher \
+            --live-config-map-name prod-omi-backend-config \
             --output pusher-prod-canary-deployment-receipt.json
           python3 backend/scripts/pusher_prod_canary.py create-listener \
             --namespace prod-omi-backend \
@@ -894,8 +870,12 @@ jobs:
           fi
           kubectl -n prod-omi-backend delete service "$LISTENER_CANARY" --ignore-not-found=true --wait=true || cleanup_failed=1
           kubectl -n prod-omi-backend delete deployment "$LISTENER_CANARY" --ignore-not-found=true --wait=true || cleanup_failed=1
+          # The derived canary is a plain Deployment and Service, not a Helm release.
+          kubectl -n prod-omi-backend delete service "$PUSHER_CANARY" --ignore-not-found=true --wait=true || cleanup_failed=1
+          kubectl -n prod-omi-backend delete deployment "$PUSHER_CANARY" --ignore-not-found=true --wait=true || cleanup_failed=1
           # A run that refuses before the canary install has no release to remove (run 46027266977).
           # Only Helm's own "release: not found" means absent; any other status failure fails cleanup.
+          # The lookup stays for a canary created by a pre-derivation revision.
           helm_status_out="$(helm -n prod-omi-backend status "$PUSHER_CANARY" 2>&1)"
           helm_status_rc=$?
           if [ "$helm_status_rc" -eq 0 ]; then
