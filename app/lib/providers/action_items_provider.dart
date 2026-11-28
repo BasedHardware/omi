@@ -22,6 +22,7 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:omi/ui/feedback/omi_feedback.dart';
+import 'package:omi/providers/task_layout_writes.dart';
 import 'package:omi/providers/task_suggestions_controller.dart';
 
 typedef ActionItemsFetcher = Future<ActionItemsResponse?> Function({
@@ -57,6 +58,7 @@ class ActionItemsProvider extends ChangeNotifier {
     BulkDeleteActionItemsRequest? bulkDeleteActionItemsRequest,
     CreateActionItemRequest? createActionItemRequest,
     UpdateDueDateRequest? updateDueDateRequest,
+    BatchUpdateActionItemsRequest? batchUpdateActionItemsRequest,
     api.ActionItemsApi? actionItemsApi,
     TaskSuggestionsApi? taskSuggestionsApi,
     AutomaticAppleRemindersExport? automaticAppleRemindersExport,
@@ -69,6 +71,7 @@ class ActionItemsProvider extends ChangeNotifier {
         _bulkDeleteActionItemsRequest = bulkDeleteActionItemsRequest ?? api.bulkDeleteActionItems,
         _createActionItemRequest = createActionItemRequest ?? api.createActionItem,
         _updateDueDateRequest = updateDueDateRequest ?? api.updateActionItem,
+        _layoutWrites = TaskLayoutWrites(batchUpdateActionItemsRequest ?? api.batchUpdateActionItems),
         _actionItemsApi = actionItemsApi,
         _automaticAppleRemindersExport = automaticAppleRemindersExport ?? AutomaticAppleRemindersExport(),
         _exportActionItem = exportActionItem ?? ActionItemExportService.export {
@@ -88,6 +91,7 @@ class ActionItemsProvider extends ChangeNotifier {
   final DeleteActionItemRequest _deleteActionItemRequest;
   final UpdateActionItemRequest _updateActionItemRequest;
   final BulkDeleteActionItemsRequest _bulkDeleteActionItemsRequest;
+  final TaskLayoutWrites _layoutWrites;
   final CreateActionItemRequest _createActionItemRequest;
   final UpdateDueDateRequest _updateDueDateRequest;
   final api.ActionItemsApi? _actionItemsApi;
@@ -127,12 +131,6 @@ class ActionItemsProvider extends ChangeNotifier {
   Timer? _refreshDebounceTimer;
   DateTime? _lastRefreshTime;
   static const Duration _refreshCooldown = Duration(seconds: 30);
-
-  // Debounced persistence for sort order and indent level
-  final Map<String, int> _pendingSortUpdates = {};
-  final Map<String, int> _pendingIndentUpdates = {};
-  Timer? _sortDebounce;
-  Timer? _indentDebounce;
 
   // Multi-selection state
   bool _isSelectionMode = false;
@@ -312,6 +310,7 @@ class ActionItemsProvider extends ChangeNotifier {
     final writeRevision = _taskWriteRevision;
     final readOrdinal = ++_listReadOrdinal;
     _activeListReads.add(readOrdinal);
+    final layoutMark = _layoutWrites.readMark;
     final startOfTomorrow = DateTime(now.year, now.month, now.day + 1);
     final sevenDaysAgo = now.subtract(const Duration(days: 7));
     try {
@@ -323,11 +322,13 @@ class ActionItemsProvider extends ChangeNotifier {
         dueEndDate: startOfTomorrow.subtract(const Duration(microseconds: 1)),
       );
       if (response != null && generation == _sessionGeneration && writeRevision == _taskWriteRevision) {
-        _homeDayItems = _pendingDeletionIds.isEmpty
-            ? List.of(response.actionItems)
-            : response.actionItems.where((item) => !_pendingDeletionIds.contains(item.id)).toList();
+        _homeDayItems = response.actionItems
+            .where((item) => !_pendingDeletionIds.contains(item.id))
+            .map(_layoutWrites.overlayFor(layoutMark))
+            .toList();
         SiriIntegration.current.queueUpsertTasks(_homeDayItems);
         _homeDayLoaded = true;
+        _layoutWrites.retryPending();
       }
     } catch (e) {
       Logger.debug('Error fetching home today tasks: $e');
@@ -419,6 +420,7 @@ class ActionItemsProvider extends ChangeNotifier {
     final readOrdinal = ++_listReadOrdinal;
     _latestTaskListRead = readOrdinal;
     _activeListReads.add(readOrdinal);
+    final layoutMark = _layoutWrites.readMark;
     final query = (includeCompleted: _includeCompleted, startDate: _startDate, endDate: _endDate);
     bool ownsQuery() =>
         !_disposed &&
@@ -453,6 +455,7 @@ class ActionItemsProvider extends ChangeNotifier {
           response,
           decodedPageIsComplete: decodedPageIsComplete,
           readOrdinal: readOrdinal,
+          layoutMark: layoutMark,
         );
         loaded = true;
       }
@@ -496,6 +499,7 @@ class ActionItemsProvider extends ChangeNotifier {
     ActionItemsResponse response, {
     required bool decodedPageIsComplete,
     required int readOrdinal,
+    required int layoutMark,
   }) async {
     _loadMoreFailed = false; // a fresh first page restarts pagination (T1)
     // Snapshot server IDs before filtering so tombstone retirement is
@@ -505,7 +509,9 @@ class ActionItemsProvider extends ChangeNotifier {
     // in-place: the response list may be unmodifiable, and aliasing it
     // would cause removeWhere to throw in deleteActionItem/deleteSelectedItems
     // and retire tombstones prematurely.
-    _actionItems = TaskCategorizationList(response.actionItems.where((item) => !_pendingDeletionIds.contains(item.id)));
+    _actionItems = TaskCategorizationList(response.actionItems
+        .where((item) => !_pendingDeletionIds.contains(item.id))
+        .map(_layoutWrites.overlayFor(layoutMark)));
     _loadedTaskPageIds
       ..clear()
       ..addAll(serverIds);
@@ -545,6 +551,7 @@ class ActionItemsProvider extends ChangeNotifier {
       _showCompletedView = true;
       _completedViewWasAutoRevealed = true;
     }
+    _layoutWrites.retryPending();
   }
 
   void _revealNewIncompleteTasks() {
@@ -567,6 +574,7 @@ class ActionItemsProvider extends ChangeNotifier {
     final writeRevision = _taskWriteRevision;
     final readOrdinal = ++_listReadOrdinal;
     _activeListReads.add(readOrdinal);
+    final layoutMark = _layoutWrites.readMark;
 
     setFetching(true);
 
@@ -600,9 +608,11 @@ class ActionItemsProvider extends ChangeNotifier {
         final seenIds = _actionItems.map((item) => item.id).toSet();
         final filtered = response.actionItems
             .where((item) => !_pendingDeletionIds.contains(item.id) && seenIds.add(item.id))
+            .map(_layoutWrites.overlayFor(layoutMark))
             .toList();
         _actionItems.addAll(filtered);
         _revealNewIncompleteTasks();
+        _layoutWrites.retryPending();
         _hasMore = response.hasMore;
         if (!_hasMore &&
             !hasActiveFilter &&
@@ -1020,7 +1030,7 @@ class ActionItemsProvider extends ChangeNotifier {
 
       if (newItem != null) {
         _actionItems.removeWhere((item) => item.id == optimisticItem.id);
-        _receiveCanonicalTask(newItem);
+        _receiveCanonicalTask(newItem, _layoutWrites.readMark);
         unawaited(() async {
           final exported = await _automaticAppleRemindersExport.export(newItem,
               canContinue: () => !_disposed && generation == _sessionGeneration);
@@ -1050,17 +1060,20 @@ class ActionItemsProvider extends ChangeNotifier {
     final generation = _sessionGeneration;
     final typedApi = _actionItemsApi;
     if (typedApi == null || _disposed) return false;
+    final layoutMark = _layoutWrites.readMark;
     final result = await typedApi.getById(id);
     if (_disposed || generation != _sessionGeneration) return false;
     if (result case ApiSuccess(:final data)) {
       if (data.id != id) return false;
-      _receiveCanonicalTask(data);
+      _receiveCanonicalTask(data, layoutMark);
+      _layoutWrites.retryPending();
       return true;
     }
     return false;
   }
 
-  void _receiveCanonicalTask(ActionItemWithMetadata item) {
+  void _receiveCanonicalTask(ActionItemWithMetadata item, int layoutMark) {
+    item = _layoutWrites.overlayFor(layoutMark)(item);
     _taskWriteRevision++;
     if (_pendingDeletionIds.contains(item.id)) return;
     // An explicit Add Task gesture should reveal its new incomplete task,
@@ -1116,46 +1129,22 @@ class ActionItemsProvider extends ChangeNotifier {
 
   void updateItemSortOrder(String id, int sortOrder) {
     _updateItemInPlace(id, sortOrder: sortOrder);
-    _pendingSortUpdates[id] = sortOrder;
+    _layoutWrites.setSortOrder(id, sortOrder);
     notifyListeners();
-    _sortDebounce?.cancel();
-    _sortDebounce = Timer(const Duration(milliseconds: 500), _flushSortUpdates);
   }
 
   void updateItemIndentLevel(String id, int indentLevel) {
     _updateItemInPlace(id, indentLevel: indentLevel);
-    _pendingIndentUpdates[id] = indentLevel;
+    _layoutWrites.setIndentLevel(id, indentLevel);
     notifyListeners();
-    _indentDebounce?.cancel();
-    _indentDebounce = Timer(const Duration(milliseconds: 500), _flushIndentUpdates);
   }
 
   void batchUpdateSortOrders(Map<String, int> updates) {
     for (final entry in updates.entries) {
       _updateItemInPlace(entry.key, sortOrder: entry.value);
-      _pendingSortUpdates[entry.key] = entry.value;
+      _layoutWrites.setSortOrder(entry.key, entry.value);
     }
     notifyListeners();
-    _sortDebounce?.cancel();
-    _sortDebounce = Timer(const Duration(milliseconds: 500), _flushSortUpdates);
-  }
-
-  Future<void> _flushSortUpdates() async {
-    if (_pendingSortUpdates.isEmpty) return;
-    final updates = Map<String, int>.from(_pendingSortUpdates);
-    _pendingSortUpdates.clear();
-
-    final items = updates.entries.map((e) => {'id': e.key, 'sort_order': e.value}).toList();
-    await api.batchUpdateActionItems(items);
-  }
-
-  Future<void> _flushIndentUpdates() async {
-    if (_pendingIndentUpdates.isEmpty) return;
-    final updates = Map<String, int>.from(_pendingIndentUpdates);
-    _pendingIndentUpdates.clear();
-
-    final items = updates.entries.map((e) => {'id': e.key, 'indent_level': e.value}).toList();
-    await api.batchUpdateActionItems(items);
   }
 
   ActionItemWithMetadata? _findAndUpdateItemState(String itemId, bool newState) {
@@ -1343,8 +1332,7 @@ class ActionItemsProvider extends ChangeNotifier {
     _pendingDeletionIds.clear();
     _deletionAcknowledgedAtRead.clear();
     _activeListReads.clear();
-    _pendingSortUpdates.clear();
-    _pendingIndentUpdates.clear();
+    _layoutWrites.clear();
     suggestions?.reset();
     notifyListeners();
   }
@@ -1552,10 +1540,7 @@ class ActionItemsProvider extends ChangeNotifier {
     suggestions?.removeListener(notifyListeners);
     suggestions?.dispose();
     _refreshDebounceTimer?.cancel();
-    _sortDebounce?.cancel();
-    _indentDebounce?.cancel();
-    _flushSortUpdates();
-    _flushIndentUpdates();
+    _layoutWrites.flush();
     super.dispose();
   }
 }
