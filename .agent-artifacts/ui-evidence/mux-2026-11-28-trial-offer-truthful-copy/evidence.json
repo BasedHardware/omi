@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-trial-offer-light-before-after.png",
+      "platform": "mobile-ios",
+      "description": "30-day trial sheet in light mode: main says You've been upgraded to 30 days free; this branch says Try Omi Pro free for 30 days and that a card is needed with nothing to pay today",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-trial-offer-dark-before-after.png",
+      "platform": "mobile-ios",
+      "description": "Same sheet in dark mode, main vs this branch",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "003-mobile-ios-trial-offer-largest-text-before-after.png",
+      "platform": "mobile-ios",
+      "description": "Largest accessibility text, top and scrolled bottom: the title no longer breaks a word; the Claim label clips the same as on main",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "004-mobile-ios-trial-offer-de-ja-pt.png",
+      "platform": "mobile-ios",
+      "description": "This branch in German, Japanese and Portuguese",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}
