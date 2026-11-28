@@ -19388,5 +19388,21 @@
                 "example": "Dec 1"
             }
         }
+    },
+    "transcriptHoldLineHint": "Press and hold a line to name who's speaking.",
+    "@transcriptHoldLineHint": {
+        "description": "Shown above a conversation transcript: how to open the menu on a transcript line. Must read naturally on both iOS and Android."
+    },
+    "experimentalDesign": "Experimental Design",
+    "@experimentalDesign": {
+        "description": "Developer Settings toggle title: turn on the experimental look of Home and conversations"
+    },
+    "experimentalDesignDescription": "Try the new look for Home and conversations before it is released.",
+    "@experimentalDesignDescription": {
+        "description": "Subtitle for the Experimental Design toggle in Developer Settings"
+    },
+    "endConversationShort": "End",
+    "@endConversationShort": {
+        "description": "Short label of the button that ends the conversation in progress, in a bar beside Pause and Ask Omi; keep it to one short word"
     }
 }

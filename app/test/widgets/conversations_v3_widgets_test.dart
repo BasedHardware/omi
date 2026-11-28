@@ -25,6 +25,7 @@ import 'package:omi/pages/conversation_detail/widgets/live_summary_section.dart'
 import 'package:omi/pages/conversations/widgets/conversation_state_tile.dart';
 import 'package:omi/pages/conversations/widgets/day_summary_link.dart';
 import 'package:omi/providers/conversations_v3_provider.dart';
+import 'package:omi/services/experiments/experimental_design.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -91,6 +92,21 @@ void main() {
       ));
       await tester.pump();
     }
+
+    testWidgets('the tile is 36pt, and 44pt with a larger emoji in the experimental design', (tester) async {
+      addTearDown(() => ExperimentalDesign.debugOverride = null);
+      final done = _conversation(state: ConversationTileState.done);
+      ExperimentalDesign.debugOverride = false;
+      await pumpTile(tester, done);
+      expect(tester.getSize(find.byType(ConversationStateTile)), const Size(36, 36));
+      final before = tester.widget<Text>(find.byKey(const Key('conversation_tile_emoji'))).style!.fontSize;
+      ExperimentalDesign.debugOverride = true;
+      await tester.pumpWidget(const SizedBox.shrink());
+      await pumpTile(tester, done);
+      expect(tester.getSize(find.byType(ConversationStateTile)), const Size(44, 44));
+      expect(tester.widget<Text>(find.byKey(const Key('conversation_tile_emoji'))).style!.fontSize, 24);
+      expect(before, lessThan(24));
+    });
 
     testWidgets('a conversation in progress breathes', (tester) async {
       await pumpTile(tester, _conversation(state: ConversationTileState.live));

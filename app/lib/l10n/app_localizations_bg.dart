@@ -15910,4 +15910,17 @@ class AppLocalizationsBg extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Ще се обработят на $date';
   }
+
+  @override
+  String get transcriptHoldLineHint => 'Натиснете и задръжте ред, за да посочите кой говори.';
+
+  @override
+  String get experimentalDesign => 'Експериментален дизайн';
+
+  @override
+  String get experimentalDesignDescription =>
+      'Изпробвайте новия вид на началния екран и разговорите преди пускането му.';
+
+  @override
+  String get endConversationShort => 'Край';
 }

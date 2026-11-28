@@ -4772,5 +4772,9 @@
     "batteryRestartToRefresh": "Reinicia Omi para actualizar",
     "onTheWayAllowanceHeldTitle": "Se procesarán el {date} cuando se renueven tus minutos",
     "onTheWayAllowanceHeldUpgrade": "O procésalas de inmediato con una mejora de plan",
-    "onTheWayDayProcessesOn": "Se procesan el {date}"
+    "onTheWayDayProcessesOn": "Se procesan el {date}",
+    "transcriptHoldLineHint": "Mantén pulsada una línea para poner nombre a quien habla.",
+    "experimentalDesign": "Diseño experimental",
+    "experimentalDesignDescription": "Prueba el nuevo aspecto de Inicio y de las conversaciones antes de su lanzamiento.",
+    "endConversationShort": "Finalizar"
 }

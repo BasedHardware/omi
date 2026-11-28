@@ -4772,5 +4772,9 @@
     "batteryRestartToRefresh": "Start Omi opnieuw op om te vernieuwen",
     "onTheWayAllowanceHeldTitle": "Worden verwerkt op {date} wanneer je minuten vernieuwen",
     "onTheWayAllowanceHeldUpgrade": "Of verwerk ze direct met een upgrade van je plan",
-    "onTheWayDayProcessesOn": "Worden verwerkt op {date}"
+    "onTheWayDayProcessesOn": "Worden verwerkt op {date}",
+    "transcriptHoldLineHint": "Houd een regel ingedrukt om de spreker een naam te geven.",
+    "experimentalDesign": "Experimenteel ontwerp",
+    "experimentalDesignDescription": "Probeer het nieuwe uiterlijk van Home en gesprekken voordat het wordt uitgebracht.",
+    "endConversationShort": "Beëindig"
 }

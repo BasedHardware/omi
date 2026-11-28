@@ -4772,5 +4772,9 @@
     "batteryRestartToRefresh": "Start Omi på nytt for å oppdatere verdien",
     "onTheWayAllowanceHeldTitle": "Behandles på {date} når minuttene dine fornyes",
     "onTheWayAllowanceHeldUpgrade": "Eller behandle dem umiddelbart med en planoppgradering",
-    "onTheWayDayProcessesOn": "Behandles {date}"
+    "onTheWayDayProcessesOn": "Behandles {date}",
+    "transcriptHoldLineHint": "Trykk og hold på en linje for å gi navn til den som snakker.",
+    "experimentalDesign": "Eksperimentelt design",
+    "experimentalDesignDescription": "Prøv det nye utseendet for Hjem og samtaler før det lanseres.",
+    "endConversationShort": "Avslutt"
 }

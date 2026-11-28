@@ -4772,5 +4772,9 @@
     "batteryRestartToRefresh": "Рестартирайте Omi, за да опресните стойността",
     "onTheWayAllowanceHeldTitle": "Ще се обработят на {date}, когато се подновят минутите ви",
     "onTheWayAllowanceHeldUpgrade": "Или ги обработете веднага с надграждане на плана",
-    "onTheWayDayProcessesOn": "Ще се обработят на {date}"
+    "onTheWayDayProcessesOn": "Ще се обработят на {date}",
+    "transcriptHoldLineHint": "Натиснете и задръжте ред, за да посочите кой говори.",
+    "experimentalDesign": "Експериментален дизайн",
+    "experimentalDesignDescription": "Изпробвайте новия вид на началния екран и разговорите преди пускането му.",
+    "endConversationShort": "Край"
 }

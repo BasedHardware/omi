@@ -15911,4 +15911,16 @@ class AppLocalizationsRu extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Будут обработаны $date';
   }
+
+  @override
+  String get transcriptHoldLineHint => 'Нажмите и удерживайте строку, чтобы указать, кто говорит.';
+
+  @override
+  String get experimentalDesign => 'Экспериментальный дизайн';
+
+  @override
+  String get experimentalDesignDescription => 'Попробуйте новый вид главного экрана и разговоров до выпуска.';
+
+  @override
+  String get endConversationShort => 'Завершить';
 }

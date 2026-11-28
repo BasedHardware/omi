@@ -15896,4 +15896,16 @@ class AppLocalizationsMs extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Diproses pada $date';
   }
+
+  @override
+  String get transcriptHoldLineHint => 'Tekan dan tahan satu baris untuk menamakan siapa yang bercakap.';
+
+  @override
+  String get experimentalDesign => 'Reka bentuk percubaan';
+
+  @override
+  String get experimentalDesignDescription => 'Cuba rupa baharu Laman Utama dan perbualan sebelum ia dikeluarkan.';
+
+  @override
+  String get endConversationShort => 'Tamat';
 }

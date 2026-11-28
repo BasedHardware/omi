@@ -15850,4 +15850,16 @@ class AppLocalizationsEt extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Töödeldakse $date';
   }
+
+  @override
+  String get transcriptHoldLineHint => 'Vajuta ja hoia rida, et anda kõnelejale nimi.';
+
+  @override
+  String get experimentalDesign => 'Eksperimentaalne kujundus';
+
+  @override
+  String get experimentalDesignDescription => 'Proovi avakuva ja vestluste uut välimust enne selle avaldamist.';
+
+  @override
+  String get endConversationShort => 'Lõpeta';
 }

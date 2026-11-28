@@ -15923,4 +15923,17 @@ class AppLocalizationsMk extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Обработка на $date';
   }
+
+  @override
+  String get transcriptHoldLineHint => 'Притиснете и задржете ред за да именувате кој зборува.';
+
+  @override
+  String get experimentalDesign => 'Експериментален дизајн';
+
+  @override
+  String get experimentalDesignDescription =>
+      'Испробајте го новиот изглед на почетниот екран и разговорите пред објавување.';
+
+  @override
+  String get endConversationShort => 'Заврши';
 }

@@ -4772,5 +4772,9 @@
     "batteryRestartToRefresh": "أعد تشغيل Omi لتحديث القراءة",
     "onTheWayAllowanceHeldTitle": "ستتم المعالجة في {date} عندما تتجدد دقائقك",
     "onTheWayAllowanceHeldUpgrade": "أو عالجها فورًا بترقية خطتك",
-    "onTheWayDayProcessesOn": "تتم المعالجة في {date}"
+    "onTheWayDayProcessesOn": "تتم المعالجة في {date}",
+    "transcriptHoldLineHint": "اضغط مطولاً على أي سطر لتسمية المتحدث.",
+    "experimentalDesign": "التصميم التجريبي",
+    "experimentalDesignDescription": "جرّب المظهر الجديد للصفحة الرئيسية والمحادثات قبل إصداره.",
+    "endConversationShort": "إنهاء"
 }

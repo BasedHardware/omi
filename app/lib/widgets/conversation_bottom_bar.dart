@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:omi/services/experiments/experimental_design.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
@@ -26,6 +27,9 @@ import 'package:omi/utils/audio/conversation_playback_controller.dart';
 import 'package:omi/utils/audio/partial_audio_coverage.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/pages/conversations/widgets/live_conversation_pause_button.dart';
+import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/widgets/footer_glass.dart';
 import 'package:omi/widgets/home_bottom_bar.dart' show kAskOmiGlyph;
 
 enum ConversationBottomBarMode {
@@ -941,10 +945,21 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     final live = v3 && widget.conversation?.v3?.tileState == ConversationTileState.live;
     final showPlayer = widget.selectedTab == ConversationTab.transcript && hasAudio && !_noPlayerWhileLive(v3);
     if (live) {
+      final exp = ExperimentalDesign.of(context);
+      final currentLiveId = context.select<ConversationsV3Provider?, String?>((v3) => v3?.live?.id);
+      final liveDevice = context.select<ConversationsV3Provider?, String?>((v3) => v3?.live?.v3?.captureDeviceId);
+      // Experimental design: when this phone captures the conversation, the bar is Pause, Ask Omi
+      // and End. Pause and Ask Omi are frosted white buttons; End is a flat red pill.
+      final mine = exp &&
+          context.select<CaptureProvider?, bool>((capture) =>
+              capture != null &&
+              LiveConversationEndButton.phoneCaptures(widget.conversation!, capture,
+                  currentLiveId: currentLiveId, liveCaptureDeviceId: liveDevice));
       // End is on both tabs: beside Ask Omi, or beside the player's round Ask button.
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
         child: Row(children: [
+          if (exp) LiveConversationPauseButton(conversation: widget.conversation!),
           if (showPlayer) ...[
             Expanded(child: KeyedSubtree(key: const ValueKey('detail_audio_player'), child: _buildPlayer())),
             const SizedBox(width: 10),
@@ -952,7 +967,9 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
           ] else
             Expanded(child: _buildAskBar(context)),
           LiveConversationEndButton(
-              conversation: widget.conversation!, onEndSuppressionChanged: widget.onLiveEndSuppressionChanged),
+              conversation: widget.conversation!,
+              flatRed: mine,
+              onEndSuppressionChanged: widget.onLiveEndSuppressionChanged),
         ]),
       );
     }
@@ -993,15 +1010,22 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       child: Material(
         key: const ValueKey('detail_ask_omi'),
         color: Colors.transparent,
-        child: Ink(
-          height: 56,
-          decoration: _barDecoration,
-          child: InkWell(
-            borderRadius: OmiRadius.pillAll,
-            onTap: _askOmi,
-            child: Center(child: Text(label, style: OmiType.headline)),
-          ),
-        ),
+        child: ExperimentalDesign.of(context)
+            ? InkWell(
+                borderRadius: OmiRadius.pillAll,
+                onTap: _askOmi,
+                child: FooterGlassSurface(
+                    height: 56, raised: true, onTap: _askOmi, child: Text(label, style: OmiType.headline)),
+              )
+            : Ink(
+                height: 56,
+                decoration: _barDecoration,
+                child: InkWell(
+                  borderRadius: OmiRadius.pillAll,
+                  onTap: _askOmi,
+                  child: Center(child: Text(label, style: OmiType.headline)),
+                ),
+              ),
       ),
     );
   }
@@ -1018,15 +1042,24 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
         excludeSemantics: true,
         child: Material(
           key: const ValueKey('detail_ask_omi_round'),
-          color: OmiColors.accent,
+          color: ExperimentalDesign.of(context) ? Colors.transparent : OmiColors.accent,
           shape: const CircleBorder(),
-          clipBehavior: Clip.antiAlias,
+          clipBehavior: ExperimentalDesign.of(context) ? Clip.none : Clip.antiAlias,
           child: InkWell(
+            customBorder: const CircleBorder(),
             onTap: _askOmi,
-            child: SizedBox.square(
-              dimension: 56,
-              child: Center(child: FaIcon(kAskOmiGlyph, size: 20, color: OmiColors.onAccent)),
-            ),
+            child: ExperimentalDesign.of(context)
+                ? FooterGlassSurface(
+                    height: 56,
+                    circle: true,
+                    raised: true,
+                    onTap: _askOmi,
+                    child: FaIcon(kAskOmiGlyph, size: 20, color: OmiColors.textPrimary),
+                  )
+                : SizedBox.square(
+                    dimension: 56,
+                    child: Center(child: FaIcon(kAskOmiGlyph, size: 20, color: OmiColors.onAccent)),
+                  ),
           ),
         ),
       ),
@@ -1038,18 +1071,17 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
   /// scroll, Try Again after an inline failure.
   Widget _buildPlayer() {
     final controller = widget.playbackController;
-    final player = Container(
-      height: 56,
-      padding: const EdgeInsetsDirectional.only(start: 4, end: OmiSpacing.md),
-      decoration: _barDecoration,
-      child: Row(
-        children: [
-          _buildPlayPauseButton(),
-          const SizedBox(width: 8),
-          Expanded(child: _buildWaveform()),
-        ],
-      ),
+    const playerPadding = EdgeInsetsDirectional.only(start: 4, end: OmiSpacing.md);
+    final controls = Row(
+      children: [
+        _buildPlayPauseButton(),
+        const SizedBox(width: 8),
+        Expanded(child: _buildWaveform()),
+      ],
     );
+    final Widget player = ExperimentalDesign.of(context)
+        ? FooterGlassSurface(height: 56, raised: true, swell: false, padding: playerPadding, child: controls)
+        : Container(height: 56, padding: playerPadding, decoration: _barDecoration, child: controls);
     if (controller == null && _failure == null) return player;
     return Column(
       mainAxisSize: MainAxisSize.min,

@@ -4772,5 +4772,9 @@
     "batteryRestartToRefresh": "รีสตาร์ท Omi เพื่อรีเฟรช",
     "onTheWayAllowanceHeldTitle": "จะประมวลผลในวันที่ {date} เมื่อจำนวนนาทีของคุณต่ออายุ",
     "onTheWayAllowanceHeldUpgrade": "หรืออัปเกรดแพ็กเกจเพื่อประมวลผลทันที",
-    "onTheWayDayProcessesOn": "ประมวลผลในวันที่ {date}"
+    "onTheWayDayProcessesOn": "ประมวลผลในวันที่ {date}",
+    "transcriptHoldLineHint": "แตะบรรทัดค้างไว้เพื่อตั้งชื่อผู้พูด",
+    "experimentalDesign": "ดีไซน์ทดลอง",
+    "experimentalDesignDescription": "ลองใช้หน้าตาใหม่ของหน้าหลักและบทสนทนาก่อนเปิดตัว",
+    "endConversationShort": "จบ"
 }

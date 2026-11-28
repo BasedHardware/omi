@@ -15863,4 +15863,16 @@ class AppLocalizationsFi extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Käsitellään $date';
   }
+
+  @override
+  String get transcriptHoldLineHint => 'Paina riviä pitkään nimetäksesi puhujan.';
+
+  @override
+  String get experimentalDesign => 'Kokeellinen ulkoasu';
+
+  @override
+  String get experimentalDesignDescription => 'Kokeile Kodin ja keskustelujen uutta ulkoasua ennen julkaisua.';
+
+  @override
+  String get endConversationShort => 'Lopeta';
 }

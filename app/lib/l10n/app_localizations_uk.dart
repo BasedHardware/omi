@@ -15891,4 +15891,16 @@ class AppLocalizationsUk extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Буде оброблено $date';
   }
+
+  @override
+  String get transcriptHoldLineHint => 'Натисніть і утримуйте рядок, щоб указати, хто говорить.';
+
+  @override
+  String get experimentalDesign => 'Експериментальний дизайн';
+
+  @override
+  String get experimentalDesignDescription => 'Спробуйте новий вигляд головного екрана й розмов до випуску.';
+
+  @override
+  String get endConversationShort => 'Завершити';
 }

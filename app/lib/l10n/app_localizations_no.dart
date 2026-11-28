@@ -15863,4 +15863,16 @@ class AppLocalizationsNo extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Behandles $date';
   }
+
+  @override
+  String get transcriptHoldLineHint => 'Trykk og hold på en linje for å gi navn til den som snakker.';
+
+  @override
+  String get experimentalDesign => 'Eksperimentelt design';
+
+  @override
+  String get experimentalDesignDescription => 'Prøv det nye utseendet for Hjem og samtaler før det lanseres.';
+
+  @override
+  String get endConversationShort => 'Avslutt';
 }

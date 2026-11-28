@@ -15893,4 +15893,16 @@ class AppLocalizationsBe extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Будуць апрацаваны $date';
   }
+
+  @override
+  String get transcriptHoldLineHint => 'Націсніце і ўтрымлівайце радок, каб назваць таго, хто гаворыць.';
+
+  @override
+  String get experimentalDesign => 'Эксперыментальны дызайн';
+
+  @override
+  String get experimentalDesignDescription => 'Паспрабуйце новы выгляд галоўнай старонкі і размоў да выхаду.';
+
+  @override
+  String get endConversationShort => 'Завяршыць';
 }

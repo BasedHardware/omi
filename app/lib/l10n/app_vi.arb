@@ -4772,5 +4772,9 @@
     "batteryRestartToRefresh": "Khởi động lại Omi để làm mới",
     "onTheWayAllowanceHeldTitle": "Sẽ xử lý vào {date} khi số phút của bạn được gia hạn",
     "onTheWayAllowanceHeldUpgrade": "Hoặc xử lý ngay bằng cách nâng cấp gói",
-    "onTheWayDayProcessesOn": "Xử lý vào {date}"
+    "onTheWayDayProcessesOn": "Xử lý vào {date}",
+    "transcriptHoldLineHint": "Nhấn và giữ một dòng để đặt tên cho người đang nói.",
+    "experimentalDesign": "Thiết kế thử nghiệm",
+    "experimentalDesignDescription": "Dùng thử giao diện mới của Trang chủ và các cuộc trò chuyện trước khi phát hành.",
+    "endConversationShort": "Kết thúc"
 }

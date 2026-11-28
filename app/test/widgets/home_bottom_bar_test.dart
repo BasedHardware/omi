@@ -3,6 +3,8 @@ import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/pages/conversation_detail/page.dart' show detailFloatingBarBottom;
+import 'package:omi/services/experiments/experimental_design.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/home/widgets/home_tab_switcher.dart';
 import 'package:omi/services/dev_controls/addressability_catalog.dart';
@@ -80,6 +82,30 @@ void main() {
     expect(find.bySemanticsLabel('Conversations'), findsNothing, reason: 'Conversations is part of Home now');
     expect(find.bySemanticsLabel('Apps'), findsNothing, reason: 'Apps lives under Settings › Integrations');
     semantics.dispose();
+  });
+
+  testWidgets('experimental design: the footer row rests where a conversation bar does', (tester) async {
+    ExperimentalDesign.debugOverride = true;
+    addTearDown(() => ExperimentalDesign.debugOverride = null);
+    Future<double> offsetFor(double inset) async {
+      late double offset;
+      await tester.pumpWidget(
+        MediaQuery(
+          data: MediaQueryData(viewPadding: EdgeInsets.only(bottom: inset)),
+          child: Builder(
+            builder: (context) {
+              offset = homeChatBarOffset(context);
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      );
+      return offset;
+    }
+
+    for (final inset in [0.0, 34.0, 48.0]) {
+      expect(await offsetFor(inset), detailFloatingBarBottom(inset), reason: 'inset $inset');
+    }
   });
 
   testWidgets('keeps the chat bar and page clearances tied to the system inset', (tester) async {

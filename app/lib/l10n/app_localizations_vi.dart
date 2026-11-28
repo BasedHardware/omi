@@ -15859,4 +15859,17 @@ class AppLocalizationsVi extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Xử lý vào $date';
   }
+
+  @override
+  String get transcriptHoldLineHint => 'Nhấn và giữ một dòng để đặt tên cho người đang nói.';
+
+  @override
+  String get experimentalDesign => 'Thiết kế thử nghiệm';
+
+  @override
+  String get experimentalDesignDescription =>
+      'Dùng thử giao diện mới của Trang chủ và các cuộc trò chuyện trước khi phát hành.';
+
+  @override
+  String get endConversationShort => 'Kết thúc';
 }

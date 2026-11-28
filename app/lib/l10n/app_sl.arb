@@ -12329,5 +12329,9 @@
     "batteryRestartToRefresh": "Ponovno zaženite Omi, da osvežite podatke",
     "onTheWayAllowanceHeldTitle": "Obdelani bodo {date}, ko se obnovijo vaše minute",
     "onTheWayAllowanceHeldUpgrade": "Ali pa jih obdelajte takoj z nadgradnjo paketa",
-    "onTheWayDayProcessesOn": "Obdelani bodo {date}"
+    "onTheWayDayProcessesOn": "Obdelani bodo {date}",
+    "transcriptHoldLineHint": "Pritisnite in pridržite vrstico, da poimenujete, kdo govori.",
+    "experimentalDesign": "Poskusni dizajn",
+    "experimentalDesignDescription": "Preizkusite novi videz začetnega zaslona in pogovorov pred izidom.",
+    "endConversationShort": "Končaj"
 }

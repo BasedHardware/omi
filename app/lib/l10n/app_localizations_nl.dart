@@ -15899,4 +15899,17 @@ class AppLocalizationsNl extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Worden verwerkt op $date';
   }
+
+  @override
+  String get transcriptHoldLineHint => 'Houd een regel ingedrukt om de spreker een naam te geven.';
+
+  @override
+  String get experimentalDesign => 'Experimenteel ontwerp';
+
+  @override
+  String get experimentalDesignDescription =>
+      'Probeer het nieuwe uiterlijk van Home en gesprekken voordat het wordt uitgebracht.';
+
+  @override
+  String get endConversationShort => 'Beëindig';
 }

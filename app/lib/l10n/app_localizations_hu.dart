@@ -15916,4 +15916,17 @@ class AppLocalizationsHu extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Feldolgozás: $date';
   }
+
+  @override
+  String get transcriptHoldLineHint => 'Tartsd lenyomva a sort, hogy elnevezd a beszélőt.';
+
+  @override
+  String get experimentalDesign => 'Kísérleti dizájn';
+
+  @override
+  String get experimentalDesignDescription =>
+      'Próbáld ki a Kezdőlap és a beszélgetések új megjelenését a kiadás előtt.';
+
+  @override
+  String get endConversationShort => 'Befejezés';
 }

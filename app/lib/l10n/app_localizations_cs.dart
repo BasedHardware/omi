@@ -15857,4 +15857,16 @@ class AppLocalizationsCs extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Zpracuje se $date';
   }
+
+  @override
+  String get transcriptHoldLineHint => 'Podržením řádku pojmenujete, kdo mluví.';
+
+  @override
+  String get experimentalDesign => 'Experimentální design';
+
+  @override
+  String get experimentalDesignDescription => 'Vyzkoušejte nový vzhled domovské obrazovky a konverzací před vydáním.';
+
+  @override
+  String get endConversationShort => 'Ukončit';
 }

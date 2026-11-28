@@ -4772,5 +4772,9 @@
     "batteryRestartToRefresh": "重启 Omi 以刷新",
     "onTheWayAllowanceHeldTitle": "将在您的分钟数于 {date} 刷新时处理",
     "onTheWayAllowanceHeldUpgrade": "或升级套餐以立即处理",
-    "onTheWayDayProcessesOn": "将于 {date} 处理"
+    "onTheWayDayProcessesOn": "将于 {date} 处理",
+    "transcriptHoldLineHint": "长按某一行，可为说话人命名。",
+    "experimentalDesign": "实验性设计",
+    "experimentalDesignDescription": "在正式发布前试用主页和对话的新外观。",
+    "endConversationShort": "结束"
 }

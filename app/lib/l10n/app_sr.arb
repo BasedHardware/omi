@@ -12329,5 +12329,9 @@
     "batteryRestartToRefresh": "Поново покрените Omi да освежите податке",
     "onTheWayAllowanceHeldTitle": "Обрадиће се {date} када се обнове ваши минути",
     "onTheWayAllowanceHeldUpgrade": "Или их одмах обрадите уз надоградњу плана",
-    "onTheWayDayProcessesOn": "Обрадиће се {date}"
+    "onTheWayDayProcessesOn": "Обрадиће се {date}",
+    "transcriptHoldLineHint": "Притисните и држите ред да именујете ко говори.",
+    "experimentalDesign": "Експериментални дизајн",
+    "experimentalDesignDescription": "Испробајте нови изглед почетног екрана и разговора пре објављивања.",
+    "endConversationShort": "Заврши"
 }

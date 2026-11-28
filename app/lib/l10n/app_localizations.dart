@@ -27824,6 +27824,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Processes {date}'**
   String onTheWayDayProcessesOn(String date);
+
+  /// Shown above a conversation transcript: how to open the menu on a transcript line. Must read naturally on both iOS and Android.
+  ///
+  /// In en, this message translates to:
+  /// **'Press and hold a line to name who\'s speaking.'**
+  String get transcriptHoldLineHint;
+
+  /// Developer Settings toggle title: turn on the experimental look of Home and conversations
+  ///
+  /// In en, this message translates to:
+  /// **'Experimental Design'**
+  String get experimentalDesign;
+
+  /// Subtitle for the Experimental Design toggle in Developer Settings
+  ///
+  /// In en, this message translates to:
+  /// **'Try the new look for Home and conversations before it is released.'**
+  String get experimentalDesignDescription;
+
+  /// Short label of the button that ends the conversation in progress, in a bar beside Pause and Ask Omi; keep it to one short word
+  ///
+  /// In en, this message translates to:
+  /// **'End'**
+  String get endConversationShort;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

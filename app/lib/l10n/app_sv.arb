@@ -4772,5 +4772,9 @@
     "batteryRestartToRefresh": "Starta om Omi för att uppdatera",
     "onTheWayAllowanceHeldTitle": "Bearbetas {date} när dina minuter förnyas",
     "onTheWayAllowanceHeldUpgrade": "Eller bearbeta dem direkt med en planuppgradering",
-    "onTheWayDayProcessesOn": "Bearbetas {date}"
+    "onTheWayDayProcessesOn": "Bearbetas {date}",
+    "transcriptHoldLineHint": "Tryck och håll på en rad för att namnge den som talar.",
+    "experimentalDesign": "Experimentell design",
+    "experimentalDesignDescription": "Testa det nya utseendet för Hem och konversationer innan det släpps.",
+    "endConversationShort": "Avsluta"
 }

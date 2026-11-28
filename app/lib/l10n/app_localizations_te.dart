@@ -15922,4 +15922,16 @@ class AppLocalizationsTe extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return '$dateన ప్రాసెస్ అవుతుంది';
   }
+
+  @override
+  String get transcriptHoldLineHint => 'ఎవరు మాట్లాడుతున్నారో పేరు పెట్టడానికి ఒక పంక్తిని నొక్కి పట్టుకోండి.';
+
+  @override
+  String get experimentalDesign => 'ప్రయోగాత్మక డిజైన్';
+
+  @override
+  String get experimentalDesignDescription => 'విడుదలకు ముందే హోమ్ మరియు సంభాషణల కొత్త రూపాన్ని ప్రయత్నించండి.';
+
+  @override
+  String get endConversationShort => 'ముగించు';
 }

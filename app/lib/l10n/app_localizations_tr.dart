@@ -15868,4 +15868,16 @@ class AppLocalizationsTr extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return '$date tarihinde işlenecek';
   }
+
+  @override
+  String get transcriptHoldLineHint => 'Kimin konuştuğunu adlandırmak için bir satıra basılı tutun.';
+
+  @override
+  String get experimentalDesign => 'Deneysel tasarım';
+
+  @override
+  String get experimentalDesignDescription => 'Ana sayfa ve konuşmaların yeni görünümünü yayınlanmadan önce deneyin.';
+
+  @override
+  String get endConversationShort => 'Bitir';
 }

@@ -12,6 +12,8 @@ import 'package:pull_down_button/pull_down_button.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:uuid/uuid.dart';
 
+import 'package:omi/services/experiments/experimental_design.dart';
+import 'package:omi/widgets/top_bar_glass.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/messages.dart' show ChatPageContext;
 import 'package:omi/backend/preferences.dart';
@@ -71,6 +73,7 @@ import 'widgets/conversation_activity_strip.dart';
 import 'widgets/conversation_action_items_section.dart' show conversationActionItemSearchMatchCount;
 import 'widgets/conversation_detail_header.dart';
 import 'widgets/conversation_detail_tabs.dart';
+import 'widgets/conversation_scrolling_header.dart';
 import 'widgets/detail_search_bar.dart';
 import 'widgets/summary_tab.dart';
 import 'widgets/ask_agent_sheet.dart';
@@ -307,6 +310,12 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
     setState(() => selectedTab = ConversationTab.summary);
     _controller?.animateTo(_summaryTabIndex);
   }
+
+  /// Experimental design: the header scrolls away with the open tab's content.
+  final _headerScroll = ConversationScrollingHeaderController(2);
+
+  Widget _detailTab(bool scrolls, int index, Widget tab) =>
+      scrolls ? ConversationScrollingHeader.tab(_headerScroll, index, tab) : tab;
 
   void _createTabController({required int initialIndex}) {
     _controller = TabController(length: 2, vsync: this, initialIndex: initialIndex);
@@ -686,6 +695,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
     unawaited(_summaryAnswers?.cancel());
     _separation.dispose();
     _controller?.dispose();
+    _headerScroll.dispose();
     focusTitleField.dispose();
     focusOverviewField.dispose();
     _searchController.dispose();
@@ -1488,63 +1498,74 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
     final l10n = context.l10n;
     final starred = provider.conversation.starred;
     final live = _isLiveV3(provider.conversation);
-    return Padding(
-      padding: const EdgeInsets.only(right: OmiSpacing.xxs),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          OmiIconButton.filled(
-            key: const Key('conversation_star'),
-            icon: _isTogglingStarred
+    // Experimental design: the top bar's glyphs in Home's grey instead of the primary ink.
+    final glass = ExperimentalDesign.of(context);
+    final ink = glass ? OmiColors.textSecondary : null;
+    // On the shared capsule the buttons paint no circle of their own.
+    final fill = glass ? Colors.transparent : null;
+    final buttons = <Widget>[
+      OmiIconButton.filled(
+        key: const Key('conversation_star'),
+        fillColor: fill,
+        icon: _isTogglingStarred
+            ? const OmiSpinner(size: OmiSpinnerSize.small)
+            : FaIcon(starred ? FontAwesomeIcons.solidStar : FontAwesomeIcons.star, size: 16),
+        label: starred ? l10n.unstarConversation : l10n.starConversation,
+        color: starred ? Colors.amber : ink,
+        onPressed: _isTogglingStarred
+            ? null
+            : () {
+                trackConversationAction(
+                  starred ? ConversationActionAction.unstar : ConversationActionAction.star,
+                  ConversationActionSurface.topBar,
+                );
+                _toggleStarred(provider);
+              },
+      ),
+      // Also the share sheet's anchor (iPad needs one).
+      if (!live)
+        KeyedSubtree(
+          key: _shareButtonKey,
+          child: OmiIconButton.filled(
+            key: const Key('conversation_share'),
+            fillColor: fill,
+            icon: _isSharing
                 ? const OmiSpinner(size: OmiSpinnerSize.small)
-                : FaIcon(starred ? FontAwesomeIcons.solidStar : FontAwesomeIcons.star, size: 16),
-            label: starred ? l10n.unstarConversation : l10n.starConversation,
-            color: starred ? Colors.amber : null,
-            onPressed: _isTogglingStarred
+                : const FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16),
+            label: l10n.share,
+            color: ink,
+            onPressed: _isSharing
                 ? null
                 : () {
-                    trackConversationAction(
-                      starred ? ConversationActionAction.unstar : ConversationActionAction.star,
-                      ConversationActionSurface.topBar,
-                    );
-                    _toggleStarred(provider);
+                    trackConversationAction(ConversationActionAction.share, ConversationActionSurface.topBar);
+                    _shareConversation(provider);
                   },
           ),
-          // Also the share sheet's anchor (iPad needs one).
-          if (!live)
-            KeyedSubtree(
-              key: _shareButtonKey,
-              child: OmiIconButton.filled(
-                key: const Key('conversation_share'),
-                icon: _isSharing
-                    ? const OmiSpinner(size: OmiSpinnerSize.small)
-                    : const FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16),
-                label: l10n.share,
-                onPressed: _isSharing
-                    ? null
-                    : () {
-                        trackConversationAction(ConversationActionAction.share, ConversationActionSurface.topBar);
-                        _shareConversation(provider);
-                      },
-              ),
-            ),
-          PullDownButton(
-            itemBuilder: (context) => _menuItems(context, provider),
-            buttonBuilder: (context, showMenu) => OmiIconButton.filled(
-              key: const Key('conversation_more'),
-              icon: const FaIcon(FontAwesomeIcons.ellipsisVertical, size: 16),
-              label: l10n.moreOptions,
-              onPressed: () {
-                HapticFeedback.mediumImpact();
-                PlatformManager.instance.analytics.conversationThreeDotsMenuOpened(
-                  conversationId: provider.conversation.id,
-                );
-                showMenu();
-              },
-            ),
-          ),
-        ],
+        ),
+      PullDownButton(
+        itemBuilder: (context) => _menuItems(context, provider),
+        buttonBuilder: (context, showMenu) => OmiIconButton.filled(
+          key: const Key('conversation_more'),
+          fillColor: fill,
+          icon: const FaIcon(FontAwesomeIcons.ellipsisVertical, size: 16),
+          label: l10n.moreOptions,
+          color: ink,
+          onPressed: () {
+            HapticFeedback.mediumImpact();
+            PlatformManager.instance.analytics.conversationThreeDotsMenuOpened(
+              conversationId: provider.conversation.id,
+            );
+            showMenu();
+          },
+        ),
       ),
+    ];
+    // Experimental design: one capsule in the footer's style holds the three.
+    return Padding(
+      padding: EdgeInsets.only(right: glass ? OmiSpacing.sm : OmiSpacing.xxs),
+      child: glass
+          ? Center(child: TopBarGlass(children: buttons))
+          : Row(mainAxisSize: MainAxisSize.min, children: buttons),
     );
   }
 
@@ -1671,9 +1692,23 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
       child: Scaffold(
         key: scaffoldKey,
         extendBody: true,
+        // Experimental design: the top bar has no background of its own; the page scrolls behind
+        // its buttons.
+        extendBodyBehindAppBar: ExperimentalDesign.of(context),
         appBar: AppBar(
           automaticallyImplyLeading: false,
-          leading: const Center(child: OmiBackButton.circled()),
+          forceMaterialTransparency: ExperimentalDesign.of(context),
+          leading: Center(
+            child: ExperimentalDesign.of(context)
+                ? TopBarGlass(
+                    children: [
+                      OmiBackButton.circled(color: OmiColors.textSecondary, fillColor: Colors.transparent),
+                    ],
+                  )
+                : const OmiBackButton.circled(),
+          ),
+          // The surfaces' shadows fall below the bar.
+          clipBehavior: ExperimentalDesign.of(context) ? Clip.none : null,
           // No title: the tab bar below already names the active view, so a
           // header label only crowds the row with the back button and actions.
           // _getTabTitle still backs the `active_tab` search analytics property.
@@ -1692,22 +1727,26 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
                 // gesture here: a sideways swipe moves between the tabs, never to another
                 // conversation (D2), and the iOS edge swipe always goes back.
                 onTap: _closeSearchIfEmpty,
-                child: Column(
-                  children: [
+                child: Builder(builder: (context) {
+                  final scrolls = ExperimentalDesign.of(context);
+                  final header = <Widget>[
                     // Title and facts, shared by both tabs (#17297), then the tab row (v3).
                     ConversationDetailHeader(onOpenRecordings: _openRecordings),
                     if (conversation.processingDeferred)
                       const Padding(padding: EdgeInsets.all(OmiSpacing.xs), child: ProcessingDeferredMarker()),
                     ConversationDetailTabs(controller: _controller!, onTap: _onDetailTabTap),
                     ConversationActivityStrip(summaryTabVisible: selectedTab == ConversationTab.summary),
-                    Expanded(
-                      // Each tab owns the page's side margin, so a section can scroll edge to edge
-                      // (the Summary tab's screenshot strip) instead of clipping at the margin.
-                      child: NotificationListener<ScrollNotification>(
-                        onNotification: _onDetailTabScroll,
-                        child: TabBarView(
-                          controller: _controller,
-                          children: [
+                  ];
+                  // Each tab owns the page's side margin, so a section can scroll edge to edge
+                  // (the Summary tab's screenshot strip) instead of clipping at the margin.
+                  final Widget tabs = NotificationListener<ScrollNotification>(
+                    onNotification: _onDetailTabScroll,
+                    child: TabBarView(
+                      controller: _controller,
+                      children: [
+                        _detailTab(
+                            scrolls,
+                            _summaryTabIndex,
                             SummaryTab(
                               liveSummaryOpen: _summaryOpen,
                               liveSummaryTick: _liveSummaryTick,
@@ -1737,7 +1776,10 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
                               summarySearchResultOffset: _summaryContentSearchResults,
                               onTapWhenSearchEmpty: _closeSearchIfEmpty,
                               onShowActionItemInTranscript: _showActionItemInTranscript,
-                            ),
+                            )),
+                        _detailTab(
+                            scrolls,
+                            _transcriptTabIndex,
                             Padding(
                               padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
                               child: TranscriptWidgets(
@@ -1762,19 +1804,32 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
                                     _livePreviewTail(row, capture, whenEmpty: whenEmpty) ??
                                     _streamedLinesTail(row, capture, whenEmpty: whenEmpty),
                               ),
-                            ),
-                          ],
-                        ),
-                      ),
+                            )),
+                      ],
                     ),
-                  ],
-                ),
+                  );
+                  if (scrolls) {
+                    return ConversationScrollingHeader(
+                      controller: _headerScroll,
+                      tabAnimation: _controller!.animation!,
+                      // The header starts under the top bar, which the page now runs behind.
+                      header: Padding(
+                        padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top),
+                        child: Column(mainAxisSize: MainAxisSize.min, children: header),
+                      ),
+                      body: tabs,
+                    );
+                  }
+                  return Column(children: [...header, Expanded(child: tabs)]);
+                }),
               ),
 
               // Floating bottom bar — hidden while keyboard is up (e.g. inline summary edit). The page
               // colour fades in behind it so text never runs under the bar.
               if (MediaQuery.of(context).viewInsets.bottom == 0 && hasBar)
-                _DetailBarBackdrop(barBottom: detailFloatingBarBottom(MediaQuery.viewPaddingOf(context).bottom)),
+                _DetailBarBackdrop(
+                    barBottom: detailFloatingBarBottom(MediaQuery.viewPaddingOf(context).bottom),
+                    soft: ExperimentalDesign.of(context)),
               if (MediaQuery.of(context).viewInsets.bottom == 0)
                 Positioned(
                   // Stable key so the body Stack's collection-`if` diff matches
@@ -1839,7 +1894,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
                   // the body Stack's diff was reusing this Positioned's
                   // element into the bar's slot and remounting the TextField.
                   key: const ValueKey('detail_search_overlay'),
-                  top: 0,
+                  top: ExperimentalDesign.of(context) ? MediaQuery.viewPaddingOf(context).top + kToolbarHeight : 0,
                   left: 0,
                   right: 0,
                   child: DetailSearchBar(
@@ -1865,7 +1920,11 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
 /// Solid page colour from the screen edge up through the floating bar, fading out above it. Paint
 /// only; a [Stack] child placed before the bar.
 class _DetailBarBackdrop extends StatelessWidget {
-  const _DetailBarBackdrop({required this.barBottom});
+  const _DetailBarBackdrop({required this.barBottom, this.soft = false});
+
+  /// Under a glass bar: the text fades out towards the bar over a longer run and is never fully
+  /// covered, so the bar has something behind it and no sharp line of text at its edge.
+  final bool soft;
 
   /// Distance from the screen edge to the bar's bottom.
   final double barBottom;
@@ -1875,7 +1934,8 @@ class _DetailBarBackdrop extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final height = barBottom + _barHeight + _fade;
+    final fade = soft ? 72.0 : _fade;
+    final height = barBottom + _barHeight + fade;
     final page = OmiColors.surface0;
     return Positioned(
       key: const ValueKey('detail_bar_backdrop'),
@@ -1889,8 +1949,10 @@ class _DetailBarBackdrop extends StatelessWidget {
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              stops: [0, _fade / height, 1],
-              colors: [page.withValues(alpha: 0), page, page],
+              stops: [0, fade / height, 1],
+              colors: soft
+                  ? [page.withValues(alpha: 0), page.withValues(alpha: 0.7), page.withValues(alpha: 0.9)]
+                  : [page.withValues(alpha: 0), page, page],
             ),
           ),
         ),

@@ -15849,4 +15849,16 @@ class AppLocalizationsDa extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Behandles $date';
   }
+
+  @override
+  String get transcriptHoldLineHint => 'Tryk og hold på en linje for at navngive den, der taler.';
+
+  @override
+  String get experimentalDesign => 'Eksperimentelt design';
+
+  @override
+  String get experimentalDesignDescription => 'Prøv det nye udseende for Hjem og samtaler, før det udgives.';
+
+  @override
+  String get endConversationShort => 'Afslut';
 }

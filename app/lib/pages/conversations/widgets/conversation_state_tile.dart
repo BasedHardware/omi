@@ -3,6 +3,7 @@ import 'package:flutter/semantics.dart';
 
 import 'package:provider/provider.dart';
 
+import 'package:omi/services/experiments/experimental_design.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/conversation_v3.dart';
 import 'package:omi/providers/conversations_v3_provider.dart';
@@ -22,7 +23,16 @@ class ConversationStateTile extends StatefulWidget {
 
   final ServerConversation conversation;
 
-  static const double extent = 36;
+  /// The tile's side: 36pt, or 44pt in the experimental design.
+  static double extentOf(BuildContext context) => ExperimentalDesign.of(context) ? 44 : 36;
+
+  /// The tile's fill and corners. In the experimental design a hairline in the border colour
+  /// outlines it, so the tile keeps its edge on the bare page and under a pressed row.
+  static BoxDecoration decorationOf(BuildContext context) => BoxDecoration(
+        color: OmiColors.surface2,
+        borderRadius: OmiRadius.mdAll,
+        border: ExperimentalDesign.of(context) ? Border.all(color: OmiColors.border, width: 0.5) : null,
+      );
 
   /// Reliability experiment `early_title_icon`: whether a row still in the pipeline already shows its
   /// emoji, because the server has fixed its title and emoji ([titledBeforeSummary]); the row's status
@@ -71,19 +81,12 @@ class _ConversationStateTileState extends State<ConversationStateTile> {
               key: const Key('conversation_tile_failed'), size: 20, color: OmiColors.warning),
           l10n.conversationSummaryFailed,
         ),
-      _ => (
-          Text(
-            conversation.structured.getEmoji(),
-            key: const Key('conversation_tile_emoji'),
-            style: OmiType.title3.copyWith(fontWeight: FontWeight.w500),
-          ),
-          null,
-        ),
+      _ => (_emoji(context, conversation.structured.getEmoji()), null),
     };
     final tile = Container(
-      width: ConversationStateTile.extent,
-      height: ConversationStateTile.extent,
-      decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+      width: ConversationStateTile.extentOf(context),
+      height: ConversationStateTile.extentOf(context),
+      decoration: ConversationStateTile.decorationOf(context),
       alignment: Alignment.center,
       child: OmiCrossFade(
         alignment: Alignment.center,
@@ -93,6 +96,29 @@ class _ConversationStateTileState extends State<ConversationStateTile> {
     );
     return label == null ? tile : Semantics(label: label, child: tile);
   }
+}
+
+Widget _emoji(BuildContext context, String emoji) {
+  const key = Key('conversation_tile_emoji');
+  if (!ExperimentalDesign.of(context)) {
+    return Text(emoji, key: key, style: OmiType.title3.copyWith(fontWeight: FontWeight.w500));
+  }
+  // The system emoji font draws its glyph at the left of an advance wider than the glyph:
+  // measured on an iPhone at this size, the picture sits 1pt left of the tile's centre.
+  // The offset puts the picture, not its text box, in the centre.
+  return Transform.translate(
+    offset: const Offset(1, 0),
+    child: Text(
+      emoji,
+      key: key,
+      textAlign: TextAlign.center,
+      style: OmiType.title3.copyWith(
+          fontSize: 24, // omi-ux-allow: font-size-literal -- an emoji glyph sized to its tile, not text
+          fontWeight: FontWeight.w400,
+          height: 1,
+          leadingDistribution: TextLeadingDistribution.even),
+    ),
+  );
 }
 
 /// The pen that marks a summary being written, on the Home tile and on the conversation page. It

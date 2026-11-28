@@ -15904,4 +15904,16 @@ class AppLocalizationsPl extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Zostaną przetworzone $date';
   }
+
+  @override
+  String get transcriptHoldLineHint => 'Przytrzymaj wiersz, aby nazwać osobę, która mówi.';
+
+  @override
+  String get experimentalDesign => 'Eksperymentalny wygląd';
+
+  @override
+  String get experimentalDesignDescription => 'Wypróbuj nowy wygląd ekranu głównego i rozmów przed wydaniem.';
+
+  @override
+  String get endConversationShort => 'Zakończ';
 }

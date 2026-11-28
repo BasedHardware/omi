@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'package:pull_down_button/pull_down_button.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/conversations.dart' show assignBulkConversationTranscriptSegments;
@@ -13,6 +15,8 @@ import 'package:omi/backend/schema/conversation_v3.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
+import 'package:omi/pages/conversation_detail/widgets/transcript_line_menu.dart';
+import 'package:omi/pages/conversation_detail/widgets/conversation_scrolling_header.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_meta.dart';
 import 'package:omi/pages/conversation_detail/page.dart' show detailFloatingBarBottom, detailFloatingBarHeight;
@@ -27,6 +31,7 @@ import 'package:omi/pages/conversation_detail/widgets/speaker_tag_outcome.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:omi/providers/people_provider.dart';
+import 'package:omi/services/experiments/experimental_design.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/audio/conversation_playback_controller.dart';
 import 'package:omi/utils/constants.dart';
@@ -90,7 +95,8 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
     super.dispose();
   }
 
-  void _beginSelection(ConversationDetailProvider provider) async {
+  /// [first] is the line the reader held to get here: it starts out chosen.
+  void _beginSelection(ConversationDetailProvider provider, {String? first}) async {
     final id = provider.conversation.id;
     await provider.loadRecordingTranscript();
     if (!mounted || provider.conversationOrNull?.id != id) return;
@@ -101,7 +107,114 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
     }
     if (!_readyForTranscriptEdit(provider)) return;
     provider.beginSpeakerLabelingSession();
-    setState(() => _selection = {});
+    setState(() => _selection = {if (first != null) first});
+  }
+
+  /// Experimental design: holding a line offers to choose lines or to name the line's speaker.
+  Future<void> _openLineMenu(
+    ConversationDetailProvider provider,
+    TranscriptSegment segment,
+    Offset at,
+    Rect lineRect, {
+    required bool canName,
+    required String speakerName,
+  }) async {
+    final l10n = context.l10n;
+    final actions = <(Key, String, IconData, VoidCallback)>[
+      (
+        const Key('transcript_line_menu_select'),
+        l10n.selectOption,
+        Icons.checklist,
+        () => _beginSelection(provider, first: segment.id),
+      ),
+      if (canName)
+        (
+          const Key('transcript_line_menu_name'),
+          l10n.nameSpeakerTitle,
+          Icons.person_outline,
+          () => _nameSpeaker(provider, segment.id, segment.speakerId),
+        ),
+      // Holding a line no longer selects its words, so the menu copies them.
+      (
+        const Key('transcript_line_menu_copy'),
+        l10n.copy,
+        Icons.copy_outlined,
+        () async {
+          if (mounted) await OmiClipboard.copy(context, segment.text.decodeString);
+        },
+      ),
+    ];
+    // Each platform's own menu: Material's on Android; on iPhone the page blurs and the line lifts
+    // with its actions under it; the blurred pull-down elsewhere.
+    if (Theme.of(context).platform == TargetPlatform.iOS) {
+      await showTranscriptLineMenu(
+        context,
+        lineRect: lineRect,
+        preview: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (speakerName.isNotEmpty) ...[
+              Text(
+                speakerName,
+                style: OmiType.footnote.copyWith(color: OmiColors.textTertiary, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 3),
+            ],
+            Text(segment.text.decodeString, style: OmiType.body.copyWith(height: 1.5)),
+          ],
+        ),
+        actions: [
+          for (final (key, title, _, action) in actions)
+            // Outline glyphs with a thinner stroke than Material's, which has one weight only.
+            (key: key, title: title, icon: _thinIcon(key), onTap: action),
+        ],
+      );
+      return;
+    }
+    if (Theme.of(context).platform == TargetPlatform.android) {
+      final screen = MediaQuery.sizeOf(context);
+      final chosen = await showMenu<VoidCallback>(
+        context: context,
+        position: RelativeRect.fromLTRB(at.dx, at.dy, screen.width - at.dx, screen.height - at.dy),
+        items: [
+          for (final (key, title, icon, action) in actions)
+            PopupMenuItem<VoidCallback>(
+              key: key,
+              value: action,
+              child: Row(children: [Icon(icon, size: 20), const SizedBox(width: OmiSpacing.sm), Text(title)]),
+            ),
+        ],
+      );
+      chosen?.call();
+      return;
+    }
+    await showPullDownMenu(
+      context: context,
+      position: Rect.fromCenter(center: at, width: 1, height: 1),
+      items: [
+        for (final (key, title, icon, action) in actions)
+          PullDownMenuItem(key: key, title: title, icon: icon, onTap: action),
+      ],
+    );
+  }
+
+  /// The name the transcript shows for [segment]'s speaker.
+  String _speakerNameFor(
+      ConversationDetailProvider provider, List<TranscriptSegment> segments, TranscriptSegment segment) {
+    final people = context.read<PeopleProvider?>()?.people ?? SharedPreferencesUtil().cachedPeople;
+    return SpeakerNames.forSegments(
+      segments,
+      people: people,
+      l10n: context.l10n,
+      unresolved: provider.conversation.speakerResolution?.status == 'unavailable',
+    ).forSegment(segment, person: personById(people, segment.personId));
+  }
+
+  static FaIconData _thinIcon(Key key) {
+    if (key == const Key('transcript_line_menu_select')) return FontAwesomeIcons.circleCheck;
+    if (key == const Key('transcript_line_menu_name')) return FontAwesomeIcons.user;
+    return FontAwesomeIcons.copy;
   }
 
   void _toggleSelection(TranscriptSegment segment) {
@@ -453,43 +566,59 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
                   );
             }
             final tail = widget.livePreviewTail?.call(conversation, empty);
-            if (tail == null && empty != null) return empty;
+            // No list of its own: the page's header stays where it is.
+            if (tail == null && empty != null) return ConversationScrollingHeaderPinned(child: empty);
 
             final selection = _selection;
-            return Column(
-              children: [
-                SpeakerSummaryAction(provider: provider),
-                if (provider.speakerLabelingSessionActive || selection != null)
-                  SpeakerLabelingSessionBar(
-                    linesRelabeled: provider.speakerLabelingSessionLineCount,
-                    selectedCount: selection?.length,
-                    onDone: () => _finishLabeling(provider),
-                    onSelect: () => _beginSelection(provider),
-                    onCancelSelection: () => setState(() => _selection = null),
-                    onAssign: () => _assignSelection(provider),
-                    onUndo: provider.canUndoSpeakerLabel ? () => _undoLabel(provider) : null,
-                  ),
-                ListenableBuilder(
-                  listenable: _outcome,
-                  builder: (context, _) {
-                    final outcome = _outcome.outcome;
-                    if (outcome == null) return const SizedBox.shrink();
-                    return SpeakerTagOutcomeCard(
-                      outcome: outcome,
-                      onClose: _outcome.dismiss,
-                      onReview: () => _reviewEarlierMatches(outcome),
-                    );
-                  },
-                ),
-                Expanded(
-                  child: widget.playbackController == null
-                      ? _buildTranscript(null, tail)
-                      : _PlaybackFollowScope(
-                          controller: widget.playbackController!,
-                          builder: (context) => _buildTranscript(widget.playbackController, tail),
+            // A bar pinned above the lines holds the page's header in place too; otherwise the
+            // header scrolls away with the lines (experimental design).
+            return ListenableBuilder(
+              listenable: _outcome,
+              builder: (context, _) {
+                final barPinned = provider.speakerLabelingSessionActive ||
+                    selection != null ||
+                    _outcome.outcome != null ||
+                    provider.offerSpeakerSummaryRefresh;
+                return ConversationScrollingHeaderPinned(
+                  pinned: barPinned,
+                  child: Column(
+                    children: [
+                      SpeakerSummaryAction(provider: provider),
+                      if (provider.speakerLabelingSessionActive || selection != null)
+                        SpeakerLabelingSessionBar(
+                          linesRelabeled: provider.speakerLabelingSessionLineCount,
+                          selectedCount: selection?.length,
+                          onDone: () => _finishLabeling(provider),
+                          onSelect: () => _beginSelection(provider),
+                          onCancelSelection: () => setState(() => _selection = null),
+                          onAssign: () => _assignSelection(provider),
+                          onUndo: provider.canUndoSpeakerLabel ? () => _undoLabel(provider) : null,
                         ),
-                ),
-              ],
+                      ListenableBuilder(
+                        listenable: _outcome,
+                        builder: (context, _) {
+                          final outcome = _outcome.outcome;
+                          if (outcome == null) return const SizedBox.shrink();
+                          return SpeakerTagOutcomeCard(
+                            outcome: outcome,
+                            onClose: _outcome.dismiss,
+                            onReview: () => _reviewEarlierMatches(outcome),
+                          );
+                        },
+                      ),
+                      Expanded(
+                        child: widget.playbackController == null
+                            ? _buildTranscript(null, tail, headerInset: !barPinned)
+                            : _PlaybackFollowScope(
+                                controller: widget.playbackController!,
+                                builder: (context) =>
+                                    _buildTranscript(widget.playbackController, tail, headerInset: !barPinned),
+                              ),
+                      ),
+                    ],
+                  ),
+                );
+              },
             );
           },
         ),
@@ -497,7 +626,7 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
     );
   }
 
-  Widget _buildTranscript(ConversationPlaybackController? controller, Widget? tail) {
+  Widget _buildTranscript(ConversationPlaybackController? controller, Widget? tail, {bool headerInset = false}) {
     return Consumer<ConversationDetailProvider>(
       builder: (context, provider, child) {
         final conversation = provider.conversation;
@@ -522,7 +651,12 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
         final reviewQuestion = context.watch<ReviewProvider?>()?.speakerQuestionIn(conversation.id);
         playback?.updateSegments(segments);
         // Each leading row carries its own id so the two lists TranscriptWidget needs can't drift apart.
+        final experimental = ExperimentalDesign.of(context);
+        final onDevice = segments.any((s) => s.sttProvider?.startsWith('on_device:') == true);
+        // Room for the page's header when it scrolls with these lines (experimental design).
+        final inset = headerInset ? ConversationScrollingHeader.insetOf(context) : 0.0;
         final leading = <(String, Widget)>[
+          if (inset > 0) ('page-header-inset', SizedBox(height: inset)),
           if (provider.isReprocessingOpenConversation || provider.loadingRecordingTranscript)
             (
               'speaker-summary-updating',
@@ -535,6 +669,7 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
               _TranscriptHeading(
                 conversation: conversation,
                 segments: segments,
+                holdHint: experimental,
                 onSelect: provider.speakerLabelingSessionActive || _selection != null
                     ? null
                     : () => _beginSelection(provider),
@@ -575,9 +710,7 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
             final local = conversation.transcriptSegments.indexWhere((line) => line.id == segments[segmentIndex].id);
             if (local >= 0) _editSegmentText(provider, local);
           },
-          editSegment: segments.any((s) => s.sttProvider?.startsWith('on_device:') == true)
-              ? null
-              : (segmentId, speakerId) => _nameSpeaker(provider, segmentId, speakerId),
+          editSegment: onDevice ? null : (segmentId, speakerId) => _nameSpeaker(provider, segmentId, speakerId),
           onConfirmSpeakerLabel: (segment) => _confirmSpeakerLabel(provider, segment),
           onRejectSpeakerLabel: (segment) => _rejectSpeakerLabel(provider, segment),
           startedAt: conversation.startedAt ?? conversation.createdAt,
@@ -597,6 +730,16 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
           onTopVisibleSegmentChanged: playback?.readerMovedTo,
           selectedSegmentIds: _selection,
           onToggleSegmentSelection: _toggleSelection,
+          onSegmentLongPress: !experimental || _selection != null
+              ? null
+              : (segment, at, lineRect) => _openLineMenu(
+                    provider,
+                    segment,
+                    at,
+                    lineRect,
+                    canName: !onDevice && (segment.isUser || segment.speakerId != omiSpeakerId),
+                    speakerName: _speakerNameFor(provider, segments, segment),
+                  ),
         );
       },
     );
@@ -606,7 +749,11 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
 /// "Transcript · 2 speakers" over the lines (Omi v8 transcript heading): how many voices took part,
 /// counting the owner once. The length is in the header's date chip, so it is not repeated here.
 class _TranscriptHeading extends StatelessWidget {
-  const _TranscriptHeading({required this.conversation, this.segments, this.onSelect});
+  const _TranscriptHeading({required this.conversation, this.segments, this.onSelect, this.holdHint = false});
+
+  /// Experimental design: no heading chip and no Select button (the tab already says Transcript, and
+  /// holding a line offers Select); a line of text says how to name speakers instead.
+  final bool holdHint;
 
   final ServerConversation conversation;
   final List<TranscriptSegment>? segments;
@@ -635,12 +782,45 @@ class _TranscriptHeading extends StatelessWidget {
     });
   }
 
+  static void _explainUnresolved(BuildContext context) => showOmiSheet<void>(
+        context: context,
+        title: context.l10n.unresolvedSpeakersTitle,
+        builder: (sheetContext) => SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: OmiSpacing.md),
+            child: Text(
+              sheetContext.l10n.unresolvedSpeakersMessage,
+              style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+            ),
+          ),
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final people = context.watch<PeopleProvider?>()?.people ?? SharedPreferencesUtil().cachedPeople;
     final count = _speakerCount(conversation, people, l10n.you, segments ?? conversation.transcriptSegments);
     final label = [l10n.transcript, if (count != null) l10n.transcriptSpeakerCount(count)].join(' · ');
+    if (holdHint) {
+      final note = OmiType.footnote.copyWith(color: OmiColors.textSecondary);
+      final unresolved = _hasUnnamedVoice(conversation, people);
+      final hint = Text(
+        unresolved ? '${l10n.unresolvedSpeakersNotice} ${l10n.transcriptHoldLineHint}' : l10n.transcriptHoldLineHint,
+        key: const Key('transcript_hold_line_hint'),
+        style: note,
+      );
+      return Padding(
+        padding: const EdgeInsets.only(top: 14, bottom: 14),
+        child: unresolved
+            ? InkWell(
+                key: const Key('transcript_unresolved_speakers_notice'),
+                onTap: () => _explainUnresolved(context),
+                child: hint,
+              )
+            : hint,
+      );
+    }
     return Padding(
       padding: const EdgeInsets.only(top: 18, bottom: 18),
       child: Column(
@@ -672,19 +852,7 @@ class _TranscriptHeading extends StatelessWidget {
           if (_hasUnnamedVoice(conversation, people))
             InkWell(
               key: const Key('transcript_unresolved_speakers_notice'),
-              onTap: () => showOmiSheet<void>(
-                context: context,
-                title: context.l10n.unresolvedSpeakersTitle,
-                builder: (sheetContext) => SingleChildScrollView(
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: OmiSpacing.md),
-                    child: Text(
-                      sheetContext.l10n.unresolvedSpeakersMessage,
-                      style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
-                    ),
-                  ),
-                ),
-              ),
+              onTap: () => _explainUnresolved(context),
               child: ConstrainedBox(
                 constraints: const BoxConstraints(minHeight: kOmiMinTapTarget),
                 child: Align(

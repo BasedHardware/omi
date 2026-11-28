@@ -15600,4 +15600,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return '将于 $date 处理';
   }
+
+  @override
+  String get transcriptHoldLineHint => '长按某一行，可为说话人命名。';
+
+  @override
+  String get experimentalDesign => '实验性设计';
+
+  @override
+  String get experimentalDesignDescription => '在正式发布前试用主页和对话的新外观。';
+
+  @override
+  String get endConversationShort => '结束';
 }

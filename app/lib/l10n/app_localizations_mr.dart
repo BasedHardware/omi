@@ -15866,4 +15866,16 @@ class AppLocalizationsMr extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return '$date रोजी प्रक्रिया';
   }
+
+  @override
+  String get transcriptHoldLineHint => 'कोण बोलत आहे त्याला नाव देण्यासाठी ओळ दाबून धरा.';
+
+  @override
+  String get experimentalDesign => 'प्रायोगिक डिझाइन';
+
+  @override
+  String get experimentalDesignDescription => 'प्रकाशनापूर्वी होम आणि संभाषणांचे नवीन रूप वापरून पहा.';
+
+  @override
+  String get endConversationShort => 'समाप्त';
 }

@@ -15851,4 +15851,16 @@ class AppLocalizationsFa extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'در $date پردازش می‌شود';
   }
+
+  @override
+  String get transcriptHoldLineHint => 'برای نام‌گذاری گوینده، روی یک خط فشار دهید و نگه دارید.';
+
+  @override
+  String get experimentalDesign => 'طراحی آزمایشی';
+
+  @override
+  String get experimentalDesignDescription => 'ظاهر جدید صفحه اصلی و گفتگوها را پیش از انتشار امتحان کنید.';
+
+  @override
+  String get endConversationShort => 'پایان';
 }

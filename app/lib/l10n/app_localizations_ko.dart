@@ -15630,4 +15630,16 @@ class AppLocalizationsKo extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return '$date에 처리';
   }
+
+  @override
+  String get transcriptHoldLineHint => '줄을 길게 누르면 말하는 사람의 이름을 지정할 수 있습니다.';
+
+  @override
+  String get experimentalDesign => '실험적 디자인';
+
+  @override
+  String get experimentalDesignDescription => '홈과 대화의 새로운 디자인을 출시 전에 사용해 보세요.';
+
+  @override
+  String get endConversationShort => '종료';
 }

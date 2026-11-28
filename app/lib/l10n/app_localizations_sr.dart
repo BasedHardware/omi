@@ -15865,4 +15865,16 @@ class AppLocalizationsSr extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Обрадиће се $date';
   }
+
+  @override
+  String get transcriptHoldLineHint => 'Притисните и држите ред да именујете ко говори.';
+
+  @override
+  String get experimentalDesign => 'Експериментални дизајн';
+
+  @override
+  String get experimentalDesignDescription => 'Испробајте нови изглед почетног екрана и разговора пре објављивања.';
+
+  @override
+  String get endConversationShort => 'Заврши';
 }

@@ -15990,4 +15990,17 @@ class AppLocalizationsFr extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Traitement le $date';
   }
+
+  @override
+  String get transcriptHoldLineHint => 'Maintenez une ligne appuyée pour nommer la personne qui parle.';
+
+  @override
+  String get experimentalDesign => 'Design expérimental';
+
+  @override
+  String get experimentalDesignDescription =>
+      'Essayez le nouveau look de l\'accueil et des conversations avant sa sortie.';
+
+  @override
+  String get endConversationShort => 'Terminer';
 }

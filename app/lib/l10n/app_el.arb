@@ -4772,5 +4772,9 @@
     "batteryRestartToRefresh": "Κάντε επανεκκίνηση του Omi για να ανανεωθεί η ένδειξη",
     "onTheWayAllowanceHeldTitle": "Θα επεξεργαστούν στις {date} όταν ανανεωθούν τα λεπτά σας",
     "onTheWayAllowanceHeldUpgrade": "Ή επεξεργαστείτε τα αμέσως με μια αναβάθμιση προγράμματος",
-    "onTheWayDayProcessesOn": "Επεξεργασία στις {date}"
+    "onTheWayDayProcessesOn": "Επεξεργασία στις {date}",
+    "transcriptHoldLineHint": "Πατήστε παρατεταμένα μια γραμμή για να ονομάσετε ποιος μιλάει.",
+    "experimentalDesign": "Πειραματικός σχεδιασμός",
+    "experimentalDesignDescription": "Δοκιμάστε τη νέα εμφάνιση της Αρχικής και των συνομιλιών πριν κυκλοφορήσει.",
+    "endConversationShort": "Τέλος"
 }

@@ -1,9 +1,13 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
+import 'package:omi/services/experiments/experimental_design.dart';
 import 'package:omi/ui/omi_tokens.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/widgets/footer_glass.dart';
 
 /// The two-bubbles glyph (FontAwesome `comments`, regular weight) that marks Ask Omi everywhere it
 /// appears, so every entry point reads as one family.
@@ -36,7 +40,12 @@ double homeBottomInset(BuildContext context) => MediaQuery.viewPaddingOf(context
 double homeBottomClearance(BuildContext context) => homeBottomInset(context) + kHomeScrollEndPadding;
 
 /// Offset from the bottom of the screen to the bottom edge of Home's chat bar.
-double homeChatBarOffset(BuildContext context) => homeBottomInset(context) + kHomeChatBarBottomGap;
+///
+/// In the experimental design the row rests where a conversation's floating bar does
+/// (`detailFloatingBarBottom`), so the footer buttons do not jump between the two pages.
+double homeChatBarOffset(BuildContext context) => ExperimentalDesign.of(context)
+    ? math.max(32, homeBottomInset(context))
+    : homeBottomInset(context) + kHomeChatBarBottomGap;
 
 /// Distance from the bottom of the screen that Home content clears to stay out from under the
 /// floating chat bar, with a little air above it.
@@ -55,6 +64,10 @@ class HomeChatBarBackdrop extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Glass needs the list behind it; a solid block would leave it nothing to refract. Still a
+    // Positioned: an unpositioned child would size Home's footer Stack to itself (nothing), and the
+    // row of controls is laid out against that Stack.
+    if (ExperimentalDesign.of(context)) return const Positioned.fill(child: SizedBox.shrink());
     final solid = homeChatBarOffset(context) + kHomeChatBarHeight;
     final height = solid + kHomeBottomFadeHeight;
     return Positioned(
@@ -87,6 +100,15 @@ class HomeAskAnythingButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final label = context.l10n.askAnything;
+    final text = Text(
+      label,
+      // Experimental design: the conversation page's Ask Omi label style.
+      style: ExperimentalDesign.of(context)
+          ? OmiType.headline
+          : OmiType.subhead.copyWith(color: OmiColors.textPrimary, fontWeight: FontWeight.w500),
+      textAlign: TextAlign.center,
+      overflow: TextOverflow.ellipsis,
+    );
     return Semantics(
       container: true,
       button: true,
@@ -95,24 +117,18 @@ class HomeAskAnythingButton extends StatelessWidget {
         key: const ValueKey('home_ask_omi_bar'),
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
-        child: Container(
-          height: kHomeChatBarHeight,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: OmiColors.surface1,
-            borderRadius: OmiRadius.pillAll,
-            border: Border.all(color: OmiColors.border, width: 1),
-          ),
-          child: Text(
-            label,
-            style: OmiType.subhead.copyWith(
-              color: OmiColors.textPrimary,
-              fontWeight: FontWeight.w500,
-            ),
-            textAlign: TextAlign.center,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
+        child: ExperimentalDesign.of(context)
+            ? FooterGlassSurface(height: kHomeChatBarHeight, onTap: onTap, child: text)
+            : Container(
+                height: kHomeChatBarHeight,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: OmiColors.surface1,
+                  borderRadius: OmiRadius.pillAll,
+                  border: Border.all(color: OmiColors.border, width: 1),
+                ),
+                child: text,
+              ),
       ),
     );
   }

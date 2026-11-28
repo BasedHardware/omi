@@ -4772,5 +4772,9 @@
     "batteryRestartToRefresh": "Перезавантажте Omi, щоб оновити",
     "onTheWayAllowanceHeldTitle": "Буде оброблено {date}, коли відновляться ваші хвилини",
     "onTheWayAllowanceHeldUpgrade": "Або обробіть їх одразу, покращивши план",
-    "onTheWayDayProcessesOn": "Буде оброблено {date}"
+    "onTheWayDayProcessesOn": "Буде оброблено {date}",
+    "transcriptHoldLineHint": "Натисніть і утримуйте рядок, щоб указати, хто говорить.",
+    "experimentalDesign": "Експериментальний дизайн",
+    "experimentalDesignDescription": "Спробуйте новий вигляд головного екрана й розмов до випуску.",
+    "endConversationShort": "Завершити"
 }

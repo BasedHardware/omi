@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/services/experiments/experimental_design.dart';
 import 'package:omi/pages/conversations/widgets/live_capture_card.dart';
 import 'package:omi/pages/episodes/live_episode_page.dart';
 import 'package:omi/pages/episodes/finish_capture.dart';
@@ -14,6 +15,7 @@ import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:omi/widgets/footer_glass.dart';
 import 'package:omi/widgets/home_bottom_bar.dart';
 
 /// Home's bottom row while this phone records a live conversation: one bar in place of the
@@ -207,22 +209,32 @@ class _HomeRecordingBarState extends State<HomeRecordingBar> {
             onPressed: _busy ? null : () => _wrapUp(capture),
           );
 
+    final row = Row(
+      children: [
+        Expanded(child: body),
+        const SizedBox(width: OmiSpacing.xs),
+        action,
+      ],
+    );
+    const padding = EdgeInsetsDirectional.only(start: OmiSpacing.lg, end: OmiSpacing.sm);
+    if (ExperimentalDesign.of(context)) {
+      return FooterGlassSurface(
+          key: const ValueKey('home_recording_bar'),
+          height: kHomeChatBarHeight,
+          swell: false,
+          padding: padding,
+          child: row);
+    }
     return Container(
       key: const ValueKey('home_recording_bar'),
       height: kHomeChatBarHeight,
-      padding: const EdgeInsetsDirectional.only(start: OmiSpacing.lg, end: OmiSpacing.sm),
+      padding: padding,
       decoration: BoxDecoration(
         color: OmiColors.surface1,
         borderRadius: OmiRadius.pillAll,
         border: Border.all(color: OmiColors.border, width: 1),
       ),
-      child: Row(
-        children: [
-          Expanded(child: body),
-          const SizedBox(width: OmiSpacing.xs),
-          action,
-        ],
-      ),
+      child: row,
     );
   }
 }

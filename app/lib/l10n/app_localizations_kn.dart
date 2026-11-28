@@ -15910,4 +15910,16 @@ class AppLocalizationsKn extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return '$date ರಂದು ಪ್ರಕ್ರಿಯೆ';
   }
+
+  @override
+  String get transcriptHoldLineHint => 'ಯಾರು ಮಾತನಾಡುತ್ತಿದ್ದಾರೆ ಎಂದು ಹೆಸರಿಸಲು ಸಾಲನ್ನು ಒತ್ತಿ ಹಿಡಿಯಿರಿ.';
+
+  @override
+  String get experimentalDesign => 'ಪ್ರಾಯೋಗಿಕ ವಿನ್ಯಾಸ';
+
+  @override
+  String get experimentalDesignDescription => 'ಬಿಡುಗಡೆಗೆ ಮೊದಲು ಹೋಮ್ ಮತ್ತು ಸಂಭಾಷಣೆಗಳ ಹೊಸ ನೋಟವನ್ನು ಪ್ರಯತ್ನಿಸಿ.';
+
+  @override
+  String get endConversationShort => 'ಮುಗಿಸಿ';
 }

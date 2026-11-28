@@ -12329,5 +12329,9 @@
     "batteryRestartToRefresh": "I-restart ang Omi upang i-refresh",
     "onTheWayAllowanceHeldTitle": "Ipo-proseso sa {date} kapag mag-renew na ang iyong mga minuto",
     "onTheWayAllowanceHeldUpgrade": "O mag-plan upgrade para maiproseso agad ang mga ito",
-    "onTheWayDayProcessesOn": "Maiiproseso sa {date}"
+    "onTheWayDayProcessesOn": "Maiiproseso sa {date}",
+    "transcriptHoldLineHint": "Pindutin nang matagal ang isang linya para pangalanan kung sino ang nagsasalita.",
+    "experimentalDesign": "Eksperimental na disenyo",
+    "experimentalDesignDescription": "Subukan ang bagong itsura ng Home at mga pag-uusap bago ito ilabas.",
+    "endConversationShort": "Tapusin"
 }

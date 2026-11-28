@@ -15744,4 +15744,16 @@ class AppLocalizationsHe extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'ייעבדו ב-$date';
   }
+
+  @override
+  String get transcriptHoldLineHint => 'לחצו לחיצה ארוכה על שורה כדי לתת שם למי שמדבר.';
+
+  @override
+  String get experimentalDesign => 'עיצוב ניסיוני';
+
+  @override
+  String get experimentalDesignDescription => 'נסו את המראה החדש של מסך הבית והשיחות לפני שהוא משוחרר.';
+
+  @override
+  String get endConversationShort => 'סיום';
 }

@@ -15866,4 +15866,16 @@ class AppLocalizationsSv extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Bearbetas $date';
   }
+
+  @override
+  String get transcriptHoldLineHint => 'Tryck och håll på en rad för att namnge den som talar.';
+
+  @override
+  String get experimentalDesign => 'Experimentell design';
+
+  @override
+  String get experimentalDesignDescription => 'Testa det nya utseendet för Hem och konversationer innan det släpps.';
+
+  @override
+  String get endConversationShort => 'Avsluta';
 }

@@ -15873,4 +15873,16 @@ class AppLocalizationsId extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Diproses pada $date';
   }
+
+  @override
+  String get transcriptHoldLineHint => 'Tekan dan tahan sebuah baris untuk menamai siapa yang berbicara.';
+
+  @override
+  String get experimentalDesign => 'Desain eksperimental';
+
+  @override
+  String get experimentalDesignDescription => 'Coba tampilan baru Beranda dan percakapan sebelum dirilis.';
+
+  @override
+  String get endConversationShort => 'Akhiri';
 }

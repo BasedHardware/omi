@@ -15924,4 +15924,17 @@ class AppLocalizationsRo extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Se procesează $date';
   }
+
+  @override
+  String get transcriptHoldLineHint => 'Ține apăsat pe un rând pentru a numi cine vorbește.';
+
+  @override
+  String get experimentalDesign => 'Design experimental';
+
+  @override
+  String get experimentalDesignDescription =>
+      'Încearcă noul aspect al ecranului principal și al conversațiilor înainte de lansare.';
+
+  @override
+  String get endConversationShort => 'Încheie';
 }

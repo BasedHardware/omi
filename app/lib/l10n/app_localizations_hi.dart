@@ -15840,4 +15840,16 @@ class AppLocalizationsHi extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return '$date को प्रोसेस होगा';
   }
+
+  @override
+  String get transcriptHoldLineHint => 'कौन बोल रहा है, उसका नाम देने के लिए किसी पंक्ति को दबाकर रखें।';
+
+  @override
+  String get experimentalDesign => 'प्रायोगिक डिज़ाइन';
+
+  @override
+  String get experimentalDesignDescription => 'रिलीज़ से पहले होम और बातचीत का नया रूप आज़माएँ।';
+
+  @override
+  String get endConversationShort => 'समाप्त';
 }

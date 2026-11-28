@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:omi/services/experiments/experimental_design.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -148,7 +149,7 @@ class LiveCaptureCard extends StatelessWidget {
       // 48pt row, with the circle inset 6pt — the same inset as the approved pill.
       padding: const EdgeInsets.fromLTRB(12, 2, 2, 2),
       decoration: BoxDecoration(
-        color: OmiColors.surface1,
+        color: ExperimentalDesign.of(context) ? Colors.transparent : OmiColors.surface1,
         // A pill, not a card corner. OmiRadius has no capsule token.
         borderRadius: BorderRadius.circular(999), // omi-ux-allow: radius-literal -- capsule, not a card corner
       ),

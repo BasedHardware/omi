@@ -12329,5 +12329,9 @@
     "batteryRestartToRefresh": "برای بازخوانی، Omi را دوباره راه‌اندازی کنید",
     "onTheWayAllowanceHeldTitle": "وقتی دقیقه‌های شما تمدید می‌شوند، در {date} پردازش می‌شود",
     "onTheWayAllowanceHeldUpgrade": "یا با ارتقای طرح، فوراً آن‌ها را پردازش کنید",
-    "onTheWayDayProcessesOn": "در {date} پردازش می‌شود"
+    "onTheWayDayProcessesOn": "در {date} پردازش می‌شود",
+    "transcriptHoldLineHint": "برای نام‌گذاری گوینده، روی یک خط فشار دهید و نگه دارید.",
+    "experimentalDesign": "طراحی آزمایشی",
+    "experimentalDesignDescription": "ظاهر جدید صفحه اصلی و گفتگوها را پیش از انتشار امتحان کنید.",
+    "endConversationShort": "پایان"
 }

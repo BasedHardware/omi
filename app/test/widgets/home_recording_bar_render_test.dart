@@ -268,6 +268,8 @@ void main() {
       expect(find.text('Recording with your phone'), findsOneWidget);
       await capture(tester, '${_n(base + 1)}-mobile-ios-recording-bar-undo-$mode.png');
 
+      expect(tester.getSize(find.byType(HomeRecordingBar)).width, 393 - 32);
+
       // Four minutes in: Wrap Up.
       phone.startPhone(const Duration(minutes: 4, seconds: 12), lines: [
         _line('Then I need the deposit by Friday, and a walkthrough with your AV person.'),

@@ -15624,4 +15624,16 @@ class AppLocalizationsJa extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return '$dateに処理予定';
   }
+
+  @override
+  String get transcriptHoldLineHint => '行を長押しすると、話している人に名前を付けられます。';
+
+  @override
+  String get experimentalDesign => '試験的デザイン';
+
+  @override
+  String get experimentalDesignDescription => 'ホームと会話の新しいデザインをリリース前に試せます。';
+
+  @override
+  String get endConversationShort => '終了';
 }

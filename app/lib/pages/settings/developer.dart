@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/services/experiments/experimental_design.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps_setting.dart';
 import 'package:omi/pages/settings/developer_firmware_flash_page.dart';
 import 'package:omi/pages/settings/developer_mcp_section.dart';
@@ -313,6 +314,15 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
           subtitle: l10n.dailyRecapsOnHomeDescription,
           value: HomeDailyRecapsSetting.enabled,
           onChanged: (v) => setState(() => HomeDailyRecapsSetting.enabled = v),
+        ),
+        OmiSettingsRow.toggle(
+          key: const Key('developer_experimental_design_toggle'),
+          leading: const FaIcon(FontAwesomeIcons.wandMagicSparkles),
+          title: l10n.experimentalDesign,
+          subtitle: l10n.experimentalDesignDescription,
+          // On for an account the flag admits, whatever is saved here.
+          value: ExperimentalDesign.manual || ExperimentalDesign.byFlag,
+          onChanged: ExperimentalDesign.byFlag ? null : (v) => setState(() => ExperimentalDesign.manual = v),
         ),
       ],
     );

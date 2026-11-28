@@ -4772,5 +4772,9 @@
     "batteryRestartToRefresh": "Repornește Omi pentru a actualiza valoarea",
     "onTheWayAllowanceHeldTitle": "Vor fi procesate pe {date} când se reînnoiesc minutele tale",
     "onTheWayAllowanceHeldUpgrade": "Sau procesează-le imediat cu un upgrade de plan",
-    "onTheWayDayProcessesOn": "Se procesează {date}"
+    "onTheWayDayProcessesOn": "Se procesează {date}",
+    "transcriptHoldLineHint": "Ține apăsat pe un rând pentru a numi cine vorbește.",
+    "experimentalDesign": "Design experimental",
+    "experimentalDesignDescription": "Încearcă noul aspect al ecranului principal și al conversațiilor înainte de lansare.",
+    "endConversationShort": "Încheie"
 }

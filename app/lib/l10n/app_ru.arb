@@ -4807,5 +4807,9 @@
     "batteryRestartToRefresh": "Перезапустите Omi, чтобы обновить данные",
     "onTheWayAllowanceHeldTitle": "Будут обработаны {date}, когда обновятся ваши минуты",
     "onTheWayAllowanceHeldUpgrade": "Или обработайте их сразу, улучшив тариф",
-    "onTheWayDayProcessesOn": "Будут обработаны {date}"
+    "onTheWayDayProcessesOn": "Будут обработаны {date}",
+    "transcriptHoldLineHint": "Нажмите и удерживайте строку, чтобы указать, кто говорит.",
+    "experimentalDesign": "Экспериментальный дизайн",
+    "experimentalDesignDescription": "Попробуйте новый вид главного экрана и разговоров до выпуска.",
+    "endConversationShort": "Завершить"
 }

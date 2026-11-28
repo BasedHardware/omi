@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'package:omi/services/experiments/experimental_design.dart';
+import 'package:omi/widgets/row_press.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -549,25 +551,27 @@ class _ConversationListItemState extends State<ConversationListItem> {
                           PlatformManager.instance.analytics.conversationSwipedToDelete(conversation);
                           unawaited(deleteConversationsWithUndo(context, [conversation]));
                         },
-                        child: AnimatedContainer(
-                          key: const ValueKey('conversation_card'),
-                          duration: const Duration(milliseconds: 200),
-                          width: double.maxFinite,
-                          decoration: BoxDecoration(
-                            color: isSelected
-                                ? OmiColors.surface3
-                                : (isSelectionMode && !isEligible)
-                                    ? OmiColors.surface2
-                                    : OmiColors.surface1,
-                            borderRadius: OmiRadius.xlAll,
-                            border: isSelected
-                                ? Border.all(color: OmiColors.accent, width: 2)
-                                : (isSelectionMode && !isEligible)
-                                    ? Border.all(color: OmiColors.border, width: 1)
-                                    : null,
-                          ),
-                          child: ClipRRect(borderRadius: OmiRadius.xlAll, child: _buildCardContent(context, onTap)),
-                        ),
+                        child: RowPress(
+                            enabled: !isSelectionMode && !isMerging,
+                            child: AnimatedContainer(
+                              key: const ValueKey('conversation_card'),
+                              duration: const Duration(milliseconds: 200),
+                              width: double.maxFinite,
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? OmiColors.surface3
+                                    : (isSelectionMode && !isEligible)
+                                        ? OmiColors.surface2
+                                        : (ExperimentalDesign.of(context) ? Colors.transparent : OmiColors.surface1),
+                                borderRadius: OmiRadius.xlAll,
+                                border: isSelected
+                                    ? Border.all(color: OmiColors.accent, width: 2)
+                                    : (isSelectionMode && !isEligible)
+                                        ? Border.all(color: OmiColors.border, width: 1)
+                                        : null,
+                              ),
+                              child: ClipRRect(borderRadius: OmiRadius.xlAll, child: _buildCardContent(context, onTap)),
+                            )),
                       ),
                     ),
                   ),
@@ -592,11 +596,14 @@ class _ConversationListItemState extends State<ConversationListItem> {
     return EdgeInsets.only(top: 8, left: side, right: side);
   }
 
-  static TextStyle get _metaStyle => TextStyle(color: OmiColors.textTertiary, fontSize: 14);
+  TextStyle get _metaStyle =>
+      TextStyle(color: OmiColors.textTertiary, fontSize: ExperimentalDesign.of(context) ? 15 : 14);
 
   Widget _buildCardContent(BuildContext context, Future<void> Function() onTap) {
     final content = Padding(
-      padding: const EdgeInsetsDirectional.symmetric(horizontal: 14, vertical: 14),
+      padding: ExperimentalDesign.of(context)
+          ? const EdgeInsetsDirectional.symmetric(horizontal: 4, vertical: 6)
+          : const EdgeInsetsDirectional.symmetric(horizontal: 14, vertical: 14),
       child: _buildMobileLayout(context),
     );
     // A run frosts its rows together under one action.
@@ -678,6 +685,23 @@ class _ConversationListItemState extends State<ConversationListItem> {
     );
   }
 
+  /// [lines] as they are, or in the experimental design as one block at least as tall as the icon
+  /// tile with the lines centred in it, so the text sits level with the tile's middle.
+  List<Widget> _centredOnTile(BuildContext context, List<Widget> lines) {
+    if (!ExperimentalDesign.of(context)) return lines;
+    return [
+      ConstrainedBox(
+        constraints: BoxConstraints(minHeight: ConversationStateTile.extentOf(context)),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: lines,
+        ),
+      ),
+    ];
+  }
+
   Widget _buildMobileLayout(BuildContext context) {
     final discarded = widget.conversation.discarded && !widget.conversation.isFoldedNoise;
     final discardedSnippet = widget.homeCard?.preview ??
@@ -697,27 +721,30 @@ class _ConversationListItemState extends State<ConversationListItem> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        widget.homeCard != null &&
-                                widget.homeCard!.startedAt == null &&
-                                widget.conversation.structured.title.trim().isEmpty
-                            ? context.l10n.recording
-                            : conversationRowTitle(context, widget.conversation),
-                        style: Theme.of(context).textTheme.titleMedium,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      if (discardedSnippet.isNotEmpty) ...[
-                        const SizedBox(height: 4),
+                      // Title and meta: in the experimental design, one block centred on the tile.
+                      ..._centredOnTile(context, [
                         Text(
-                          discardedSnippet,
-                          style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, height: 1.35),
-                          maxLines: 2,
+                          widget.homeCard != null &&
+                                  widget.homeCard!.startedAt == null &&
+                                  widget.conversation.structured.title.trim().isEmpty
+                              ? context.l10n.recording
+                              : conversationRowTitle(context, widget.conversation),
+                          style: experimentalRowTitleStyle(context),
+                          maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                      ],
-                      const SizedBox(height: 3),
-                      _buildMetaOrStatus(context),
+                        if (discardedSnippet.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            discardedSnippet,
+                            style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, height: 1.35),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                        SizedBox(height: ExperimentalDesign.of(context) ? 1 : 3),
+                        _buildMetaOrStatus(context),
+                      ]),
                       if (widget.conversation.processingDeferred &&
                           widget.conversation.homeStep != 'failed' &&
                           !widget.conversation.isTranscriptionAllowanceHeld)
@@ -795,7 +822,8 @@ class _ConversationListItemState extends State<ConversationListItem> {
     final v3 = context.select<ConversationsV3Provider?, bool>((p) => p?.v3 ?? false);
     final state = v3 ? widget.conversation.v3?.tileState : null;
     final l10n = context.l10n;
-    final style = OmiType.footnote.copyWith(color: OmiColors.textSecondary);
+    final style =
+        (ExperimentalDesign.of(context) ? OmiType.subhead : OmiType.footnote).copyWith(color: OmiColors.textSecondary);
     if (widget.conversation.isTranscriptionAllowanceHeld) {
       return Text(l10n.waitingForTranscriptionAllowance, style: style, maxLines: 1);
     }

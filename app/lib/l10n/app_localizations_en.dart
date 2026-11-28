@@ -15841,4 +15841,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Processes $date';
   }
+
+  @override
+  String get transcriptHoldLineHint => 'Press and hold a line to name who\'s speaking.';
+
+  @override
+  String get experimentalDesign => 'Experimental Design';
+
+  @override
+  String get experimentalDesignDescription => 'Try the new look for Home and conversations before it is released.';
+
+  @override
+  String get endConversationShort => 'End';
 }

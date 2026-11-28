@@ -12329,5 +12329,9 @@
     "batteryRestartToRefresh": "రిఫ్రెష్ చేయడానికి Omi ను రీస్టార్ట్ చేయండి",
     "onTheWayAllowanceHeldTitle": "మీ నిమిషాలు రిన్యూ అయ్యే {date}న ప్రాసెస్ అవుతుంది",
     "onTheWayAllowanceHeldUpgrade": "లేదా ప్లాన్ అప్‌గ్రేడ్‌తో వెంటనే ప్రాసెస్ చేయించండి",
-    "onTheWayDayProcessesOn": "{date}న ప్రాసెస్ అవుతుంది"
+    "onTheWayDayProcessesOn": "{date}న ప్రాసెస్ అవుతుంది",
+    "transcriptHoldLineHint": "ఎవరు మాట్లాడుతున్నారో పేరు పెట్టడానికి ఒక పంక్తిని నొక్కి పట్టుకోండి.",
+    "experimentalDesign": "ప్రయోగాత్మక డిజైన్",
+    "experimentalDesignDescription": "విడుదలకు ముందే హోమ్ మరియు సంభాషణల కొత్త రూపాన్ని ప్రయత్నించండి.",
+    "endConversationShort": "ముగించు"
 }

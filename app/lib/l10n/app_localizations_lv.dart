@@ -15893,4 +15893,16 @@ class AppLocalizationsLv extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Apstrādās $date';
   }
+
+  @override
+  String get transcriptHoldLineHint => 'Nospiediet un turiet rindu, lai nosauktu runātāju.';
+
+  @override
+  String get experimentalDesign => 'Eksperimentālais dizains';
+
+  @override
+  String get experimentalDesignDescription => 'Izmēģiniet sākuma ekrāna un sarunu jauno izskatu pirms tā izlaišanas.';
+
+  @override
+  String get endConversationShort => 'Beigt';
 }

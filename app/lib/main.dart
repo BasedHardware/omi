@@ -129,6 +129,7 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/notification_channel_strings.dart';
+import 'package:omi/services/experiments/experimental_design.dart';
 
 /// Firebase parameters for the current flavor, resolved identically in every engine.
 FirebaseOptions _firebaseOptionsForFlavor() => Env.profile == AppEnvironmentProfile.localDev
@@ -320,6 +321,8 @@ Future _init() async {
   }
 
   await PhysicalQualification.startupStage('shared_preferences', SharedPreferencesUtil.init);
+  // The saved Developer Settings choice now; the account's flag once analytics knows who this is.
+  ExperimentalDesign.start();
   // Persisted override must be live before auth resolution and product traffic.
   BackendUrlOverride.restore(SharedPreferencesUtil().customBackendUrl);
   // ConnectivityService snapshots its health-check URLs when ServiceManager
@@ -821,10 +824,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 child: KeyedSubtree(key: ValueKey(brightness), child: child!),
               );
               final guidedContent = BluetoothGuidanceListener(child: content);
-              return SessionReplayScope(
-                child: PlatformService.isIOS && Env.posthogApiKey != null
-                    ? RageClickContextTracker(child: guidedContent)
-                    : guidedContent,
+              return ExperimentalDesignScope(
+                child: SessionReplayScope(
+                  child: PlatformService.isIOS && Env.posthogApiKey != null
+                      ? RageClickContextTracker(child: guidedContent)
+                      : guidedContent,
+                ),
               );
             },
             home: TalkerWrapper(

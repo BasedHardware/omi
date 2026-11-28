@@ -15770,4 +15770,16 @@ class AppLocalizationsAr extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'تتم المعالجة في $date';
   }
+
+  @override
+  String get transcriptHoldLineHint => 'اضغط مطولاً على أي سطر لتسمية المتحدث.';
+
+  @override
+  String get experimentalDesign => 'التصميم التجريبي';
+
+  @override
+  String get experimentalDesignDescription => 'جرّب المظهر الجديد للصفحة الرئيسية والمحادثات قبل إصداره.';
+
+  @override
+  String get endConversationShort => 'إنهاء';
 }

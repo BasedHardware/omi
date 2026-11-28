@@ -8,7 +8,9 @@ import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart'
 import 'package:omi/pages/conversation_detail/widgets/conversation_detail_chip.dart';
 import 'package:omi/pages/conversation_detail/widgets/conversation_detail_header.dart';
 import 'package:omi/pages/conversations/conversation_action_analytics.dart';
+import 'package:omi/services/experiments/experimental_design.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/widgets/footer_glass.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 /// Summary and Transcript under the title and its chips (Omi v8 `.ctabs`): 15/600 labels 22 pt
@@ -16,6 +18,10 @@ import 'package:omi/utils/l10n_extensions.dart';
 /// the other in the tertiary ink. Swiping the pages below moves the underline with them. A shared
 /// conversation says so at the trailing end, which opens [ConversationVisibilitySheet]; a private one
 /// (the default) shows nothing there, and Visibility stays in the ⋯ menu.
+///
+/// In the experimental design there is no hairline and no underline: each tab is a capsule like
+/// the chips above, and the open one is filled with the primary ink, its label in the page colour.
+/// The fill slides between the two as the pages are swiped.
 class ConversationDetailTabs extends StatelessWidget {
   const ConversationDetailTabs({super.key, required this.controller, required this.onTap, this.showVisibility = true});
 
@@ -31,14 +37,17 @@ class ConversationDetailTabs extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final style = OmiType.subhead.copyWith(fontWeight: FontWeight.w600, height: 1.4);
+    final pills = ExperimentalDesign.of(context);
+    final style = OmiType.subhead.copyWith(fontWeight: FontWeight.w600, height: pills ? 1.2 : 1.4);
     // A scrollable TabBar shrinks to its labels (and the page's column would centre it), so the
     // hairline is drawn full width here and the underline paints over its last point.
+    final hairline = pills ? Colors.transparent : ConversationDetailInk.hairline;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          border: Border(bottom: BorderSide(color: ConversationDetailInk.hairline)),
+          // Transparent rather than absent, so the tabs keep their height in either design.
+          border: Border(bottom: BorderSide(color: hairline)),
         ),
         child: Row(
           children: [
@@ -54,12 +63,24 @@ class ConversationDetailTabs extends StatelessWidget {
                     isScrollable: true,
                     tabAlignment: TabAlignment.start,
                     padding: EdgeInsets.zero,
-                    labelPadding: const EdgeInsetsDirectional.only(end: 22),
-                    indicatorSize: TabBarIndicatorSize.label,
-                    indicator: UnderlineTabIndicator(borderSide: BorderSide(color: OmiColors.textPrimary, width: 2)),
+                    labelPadding: EdgeInsetsDirectional.only(end: pills ? _pillGap : 22),
+                    indicatorSize: pills ? TabBarIndicatorSize.tab : TabBarIndicatorSize.label,
+                    // The filled capsule covers the open tab's own capsule and slides to the other.
+                    indicatorPadding: pills
+                        ? const EdgeInsetsDirectional.only(
+                            top: (_tabHeight - _pillHeight) / 2,
+                            // The bar is the tabs plus the indicator's own 2 pt below them.
+                            bottom: (_tabHeight - _pillHeight) / 2 + 2,
+                            end: _pillGap,
+                          )
+                        : EdgeInsets.zero,
+                    indicatorWeight: 2,
+                    indicator: pills
+                        ? ShapeDecoration(color: OmiColors.textPrimary, shape: const StadiumBorder())
+                        : UnderlineTabIndicator(borderSide: BorderSide(color: OmiColors.textPrimary, width: 2)),
                     dividerHeight: 0,
-                    labelColor: OmiColors.textPrimary,
-                    unselectedLabelColor: ConversationDetailInk.label,
+                    labelColor: pills ? OmiColors.surface0 : OmiColors.textPrimary,
+                    unselectedLabelColor: pills ? ConversationDetailInk.words : ConversationDetailInk.label,
                     labelStyle: style,
                     unselectedLabelStyle: style,
                     overlayColor: const WidgetStatePropertyAll(Colors.transparent),
@@ -69,8 +90,8 @@ class ConversationDetailTabs extends StatelessWidget {
                       onTap(index);
                     },
                     tabs: [
-                      Tab(key: const Key('conversation_tab_summary'), height: 44, text: l10n.summary),
-                      Tab(key: const Key('conversation_tab_transcript'), height: 44, text: l10n.transcript),
+                      _tab(const Key('conversation_tab_summary'), l10n.summary, pills, Icons.auto_awesome_outlined),
+                      _tab(const Key('conversation_tab_transcript'), l10n.transcript, pills, Icons.notes),
                     ],
                   ),
                 ),
@@ -78,6 +99,42 @@ class ConversationDetailTabs extends StatelessWidget {
             ),
             if (showVisibility) const _VisibilityLabel(),
           ],
+        ),
+      ),
+    );
+  }
+
+  static const double _tabHeight = 44;
+  static const double _pillHeight = 34;
+  static const double _pillGap = 8;
+
+  /// A plain label, or in the experimental design a capsule with a hairline edge, the size of the
+  /// chips above it, with a glyph before the label. The label's ink comes from the TabBar, so it crosses over as the tabs change.
+  static Tab _tab(Key key, String label, bool pill, IconData icon) {
+    if (!pill) return Tab(key: key, height: _tabHeight, text: label);
+    return Tab(
+      key: key,
+      height: _tabHeight,
+      // A pressed capsule grows by the design's rule for its height.
+      child: PressSwell(
+        height: _pillHeight,
+        child: Container(
+          height: _pillHeight,
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            borderRadius: OmiRadius.pillAll,
+            border: Border.all(color: ConversationDetailInk.hairline),
+          ),
+          // The glyph takes the label's ink from the TabBar, as the text does.
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 15),
+              const SizedBox(width: 6),
+              Text(label, maxLines: 1, softWrap: false),
+            ],
+          ),
         ),
       ),
     );

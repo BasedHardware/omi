@@ -15905,4 +15905,17 @@ class AppLocalizationsEs extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Se procesan el $date';
   }
+
+  @override
+  String get transcriptHoldLineHint => 'Mantén pulsada una línea para poner nombre a quien habla.';
+
+  @override
+  String get experimentalDesign => 'Diseño experimental';
+
+  @override
+  String get experimentalDesignDescription =>
+      'Prueba el nuevo aspecto de Inicio y de las conversaciones antes de su lanzamiento.';
+
+  @override
+  String get endConversationShort => 'Finalizar';
 }

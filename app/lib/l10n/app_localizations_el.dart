@@ -15963,4 +15963,17 @@ class AppLocalizationsEl extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Επεξεργασία στις $date';
   }
+
+  @override
+  String get transcriptHoldLineHint => 'Πατήστε παρατεταμένα μια γραμμή για να ονομάσετε ποιος μιλάει.';
+
+  @override
+  String get experimentalDesign => 'Πειραματικός σχεδιασμός';
+
+  @override
+  String get experimentalDesignDescription =>
+      'Δοκιμάστε τη νέα εμφάνιση της Αρχικής και των συνομιλιών πριν κυκλοφορήσει.';
+
+  @override
+  String get endConversationShort => 'Τέλος';
 }

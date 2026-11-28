@@ -4772,5 +4772,9 @@
     "batteryRestartToRefresh": "Paleiskite Omi iš naujo, kad atnaujintumėte",
     "onTheWayAllowanceHeldTitle": "Bus apdorojama {date}, kai atsinaujins jūsų minutės",
     "onTheWayAllowanceHeldUpgrade": "Arba apdorokite juos nedelsiant atnaujinę planą",
-    "onTheWayDayProcessesOn": "Apdorojama {date}"
+    "onTheWayDayProcessesOn": "Apdorojama {date}",
+    "transcriptHoldLineHint": "Paspauskite ir palaikykite eilutę, kad pavadintumėte kalbantįjį.",
+    "experimentalDesign": "Eksperimentinis dizainas",
+    "experimentalDesignDescription": "Išbandykite naują pagrindinio ekrano ir pokalbių išvaizdą prieš ją išleidžiant.",
+    "endConversationShort": "Baigti"
 }

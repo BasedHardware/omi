@@ -15985,4 +15985,17 @@ class AppLocalizationsTl extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Maiiproseso sa $date';
   }
+
+  @override
+  String get transcriptHoldLineHint =>
+      'Pindutin nang matagal ang isang linya para pangalanan kung sino ang nagsasalita.';
+
+  @override
+  String get experimentalDesign => 'Eksperimental na disenyo';
+
+  @override
+  String get experimentalDesignDescription => 'Subukan ang bagong itsura ng Home at mga pag-uusap bago ito ilabas.';
+
+  @override
+  String get endConversationShort => 'Tapusin';
 }

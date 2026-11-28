@@ -15886,4 +15886,16 @@ class AppLocalizationsSl extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Obdelani bodo $date';
   }
+
+  @override
+  String get transcriptHoldLineHint => 'Pritisnite in pridržite vrstico, da poimenujete, kdo govori.';
+
+  @override
+  String get experimentalDesign => 'Poskusni dizajn';
+
+  @override
+  String get experimentalDesignDescription => 'Preizkusite novi videz začetnega zaslona in pogovorov pred izidom.';
+
+  @override
+  String get endConversationShort => 'Končaj';
 }

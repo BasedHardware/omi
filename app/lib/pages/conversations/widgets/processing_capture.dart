@@ -5,6 +5,7 @@
 // episode row is showing the streaming capture the card defers to it, and the
 // one-second elapsed timer is a cheap no-op while no offline session is active
 // so it can keep ticking behind disabled TickerModes.
+import 'package:omi/services/experiments/experimental_design.dart';
 import 'package:omi/ui/components/local_stt_recovery_notice.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'dart:async';
@@ -29,6 +30,7 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/pages/conversations/widgets/live_capture_card.dart';
+import 'package:omi/pages/conversations/widgets/live_conversation_pause_button.dart';
 import 'package:omi/pages/phone_calls/active_call_page.dart';
 import 'package:omi/ui/ui.dart';
 
@@ -194,38 +196,27 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
 
   /// The live card's glyph and 44pt Pause target carry their own air, so its edges are tighter
   /// than the Transcribe Later card's; the status line keeps the width it needs on a 320pt phone.
-  static const _liveCardPadding = EdgeInsets.fromLTRB(14, 10, 8, 12);
+  EdgeInsets get _liveCardPadding =>
+      ExperimentalDesign.of(context) ? const EdgeInsets.fromLTRB(4, 6, 0, 6) : const EdgeInsets.fromLTRB(14, 10, 8, 12);
 
   Widget _cardShell(Widget child, {EdgeInsets? padding, bool decorated = true}) => Container(
-        margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+        margin: EdgeInsets.fromLTRB(16, 8, 16, ExperimentalDesign.of(context) ? 0 : 4),
         width: double.maxFinite,
-        padding: decorated ? (padding ?? const EdgeInsets.fromLTRB(18, 14, 12, 16)) : EdgeInsets.zero,
-        decoration:
-            decorated ? BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(24)) : null,
+        padding: decorated
+            ? (padding ??
+                (ExperimentalDesign.of(context)
+                    ? const EdgeInsets.fromLTRB(4, 8, 4, 8)
+                    : const EdgeInsets.fromLTRB(18, 14, 12, 16)))
+            : EdgeInsets.zero,
+        decoration: decorated
+            ? BoxDecoration(
+                color: ExperimentalDesign.of(context) ? Colors.transparent : OmiColors.surface1,
+                borderRadius: BorderRadius.circular(24))
+            : null,
         child: child,
       );
 
-  Future<void> _togglePause(CaptureProvider provider) async {
-    final phone = provider.liveCaptureSource == 'phone';
-    try {
-      OmiHaptics.medium();
-      if (provider.isPaused) {
-        await provider.resumeCapture();
-        if (phone && !provider.isPaused) PlatformManager.instance.analytics.phoneMicRecordingStarted();
-      } else {
-        await provider.pauseCapture();
-        if (phone) PlatformManager.instance.analytics.phoneMicRecordingStopped();
-      }
-    } catch (_) {
-      // Same as the live page's control: say so rather than leave an unhandled future.
-      if (mounted) OmiFeedback.error(context, context.l10n.somethingWentWrong);
-      return;
-    }
-    PlatformManager.instance.analytics.recordingMuteToggled(
-      isMuted: provider.isPaused,
-      recordingType: phone ? 'phone_mic' : 'device',
-    );
-  }
+  Future<void> _togglePause(CaptureProvider provider) => toggleCapturePause(context, provider);
 
   Widget _buildUnifiedRecordingUI(CaptureProvider provider) {
     // The controller names the source that owns the capture: a connected pendant the phone took

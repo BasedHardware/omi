@@ -4772,5 +4772,9 @@
     "batteryRestartToRefresh": "Taaskäivitage Omi värskendamiseks",
     "onTheWayAllowanceHeldTitle": "Töödeldakse {date}, kui teie minutid uuenevad",
     "onTheWayAllowanceHeldUpgrade": "Või töödelge need kohe plaani täiendusega",
-    "onTheWayDayProcessesOn": "Töödeldakse {date}"
+    "onTheWayDayProcessesOn": "Töödeldakse {date}",
+    "transcriptHoldLineHint": "Vajuta ja hoia rida, et anda kõnelejale nimi.",
+    "experimentalDesign": "Eksperimentaalne kujundus",
+    "experimentalDesignDescription": "Proovi avakuva ja vestluste uut välimust enne selle avaldamist.",
+    "endConversationShort": "Lõpeta"
 }

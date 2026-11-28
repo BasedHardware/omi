@@ -4807,5 +4807,9 @@
     "batteryRestartToRefresh": "Yenilemek için Omi'yi yeniden başlatın",
     "onTheWayAllowanceHeldTitle": "Dakikalarınız yenilendiğinde {date} tarihinde işlenecek",
     "onTheWayAllowanceHeldUpgrade": "Ya da plan yükseltmesiyle bunları hemen işleme alın",
-    "onTheWayDayProcessesOn": "{date} tarihinde işlenecek"
+    "onTheWayDayProcessesOn": "{date} tarihinde işlenecek",
+    "transcriptHoldLineHint": "Kimin konuştuğunu adlandırmak için bir satıra basılı tutun.",
+    "experimentalDesign": "Deneysel tasarım",
+    "experimentalDesignDescription": "Ana sayfa ve konuşmaların yeni görünümünü yayınlanmadan önce deneyin.",
+    "endConversationShort": "Bitir"
 }

@@ -4772,5 +4772,9 @@
     "batteryRestartToRefresh": "Reinicieu Omi per actualitzar el valor",
     "onTheWayAllowanceHeldTitle": "Es processaran el {date} quan es renovin els vostres minuts",
     "onTheWayAllowanceHeldUpgrade": "O processa'ls de seguida amb una actualització del pla",
-    "onTheWayDayProcessesOn": "Es processaran el {date}"
+    "onTheWayDayProcessesOn": "Es processaran el {date}",
+    "transcriptHoldLineHint": "Mantén premuda una línia per posar nom a qui parla.",
+    "experimentalDesign": "Disseny experimental",
+    "experimentalDesignDescription": "Prova el nou aspecte d'Inici i de les converses abans que es publiqui.",
+    "endConversationShort": "Finalitza"
 }

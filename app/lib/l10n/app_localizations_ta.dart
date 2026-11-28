@@ -15966,4 +15966,17 @@ class AppLocalizationsTa extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return '$date அன்று செயலாக்கம்';
   }
+
+  @override
+  String get transcriptHoldLineHint => 'யார் பேசுகிறார் என்று பெயரிட ஒரு வரியை அழுத்திப் பிடிக்கவும்.';
+
+  @override
+  String get experimentalDesign => 'சோதனை வடிவமைப்பு';
+
+  @override
+  String get experimentalDesignDescription =>
+      'வெளியீட்டுக்கு முன் முகப்பு மற்றும் உரையாடல்களின் புதிய தோற்றத்தை முயற்சிக்கவும்.';
+
+  @override
+  String get endConversationShort => 'முடி';
 }

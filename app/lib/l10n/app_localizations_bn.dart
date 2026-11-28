@@ -15853,4 +15853,16 @@ class AppLocalizationsBn extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return '$date তারিখে প্রসেস হবে';
   }
+
+  @override
+  String get transcriptHoldLineHint => 'কে কথা বলছেন তার নাম দিতে যেকোনো লাইনে চেপে ধরে রাখুন।';
+
+  @override
+  String get experimentalDesign => 'পরীক্ষামূলক ডিজাইন';
+
+  @override
+  String get experimentalDesignDescription => 'প্রকাশের আগেই হোম ও কথোপকথনের নতুন চেহারা ব্যবহার করে দেখুন।';
+
+  @override
+  String get endConversationShort => 'শেষ';
 }

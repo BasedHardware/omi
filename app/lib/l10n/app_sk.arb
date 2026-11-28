@@ -4772,5 +4772,9 @@
     "batteryRestartToRefresh": "Pre obnovenie údajov reštartujte Omi",
     "onTheWayAllowanceHeldTitle": "Spracuje sa {date}, keď sa obnovia vaše minúty",
     "onTheWayAllowanceHeldUpgrade": "Alebo ich spracujte hneď s upgradom plánu",
-    "onTheWayDayProcessesOn": "Spracuje sa {date}"
+    "onTheWayDayProcessesOn": "Spracuje sa {date}",
+    "transcriptHoldLineHint": "Podržaním riadka pomenujete, kto hovorí.",
+    "experimentalDesign": "Experimentálny dizajn",
+    "experimentalDesignDescription": "Vyskúšajte nový vzhľad domovskej obrazovky a konverzácií pred vydaním.",
+    "endConversationShort": "Ukončiť"
 }

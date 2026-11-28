@@ -15870,4 +15870,16 @@ class AppLocalizationsUr extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return '$date کو پروسیس ہوں گے';
   }
+
+  @override
+  String get transcriptHoldLineHint => 'بولنے والے کا نام رکھنے کے لیے کسی سطر کو دبا کر رکھیں۔';
+
+  @override
+  String get experimentalDesign => 'تجرباتی ڈیزائن';
+
+  @override
+  String get experimentalDesignDescription => 'ریلیز سے پہلے ہوم اور گفتگو کی نئی شکل آزمائیں۔';
+
+  @override
+  String get endConversationShort => 'ختم';
 }

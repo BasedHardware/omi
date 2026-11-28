@@ -12329,5 +12329,9 @@
     "batteryRestartToRefresh": "ریفریش کرنے کے لیے Omi کو دوبارہ شروع کریں",
     "onTheWayAllowanceHeldTitle": "آپ کے منٹ تجدید ہونے پر {date} کو پروسیس ہوں گے",
     "onTheWayAllowanceHeldUpgrade": "یا پلان اپ گریڈ کے ساتھ انہیں فوراً پروسیس کریں",
-    "onTheWayDayProcessesOn": "{date} کو پروسیس ہوں گے"
+    "onTheWayDayProcessesOn": "{date} کو پروسیس ہوں گے",
+    "transcriptHoldLineHint": "بولنے والے کا نام رکھنے کے لیے کسی سطر کو دبا کر رکھیں۔",
+    "experimentalDesign": "تجرباتی ڈیزائن",
+    "experimentalDesignDescription": "ریلیز سے پہلے ہوم اور گفتگو کی نئی شکل آزمائیں۔",
+    "endConversationShort": "ختم"
 }

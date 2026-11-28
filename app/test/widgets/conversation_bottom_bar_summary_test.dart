@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart' show FaIcon;
 import 'package:provider/provider.dart';
 
+import 'package:omi/services/experiments/experimental_design.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
@@ -10,6 +11,7 @@ import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart';
+import 'package:omi/widgets/footer_glass.dart';
 
 ServerConversation _conversation({required List<AppResponse> appResults, bool withAudio = false}) {
   return ServerConversation(
@@ -121,6 +123,33 @@ void main() {
     await _pumpBar(tester, provider, onAskOmi: () => asked++);
     expect(player, findsNothing, reason: 'Summary shows the Ask Omi bar alone');
     expect(find.byKey(const ValueKey('detail_ask_omi')), findsOneWidget);
+  });
+
+  testWidgets('experimental design: same bar, keys, sizes and taps on frosted surfaces', (tester) async {
+    ExperimentalDesign.debugOverride = true;
+    addTearDown(() => ExperimentalDesign.debugOverride = null);
+    final provider = _provider(_conversation(appResults: [], withAudio: true));
+    addTearDown(provider.dispose);
+    var asked = 0;
+
+    await _pumpBar(tester, provider, selectedTab: ConversationTab.transcript, onAskOmi: () => asked++);
+    final player = find.byKey(const ValueKey('detail_audio_player'));
+    final ask = find.byKey(const ValueKey('detail_ask_omi_round'));
+    expect(find.byType(FooterGlassSurface), findsNWidgets(2), reason: 'the player and the round Ask button');
+    expect(find.bySemanticsLabel('Play'), findsOneWidget);
+    expect(tester.getSize(player).height, 56);
+    expect(tester.getSize(ask), const Size(56, 56));
+    await tester.tap(ask);
+    expect(asked, 1);
+
+    await _pumpBar(tester, provider, onAskOmi: () => asked++);
+    final bar = find.byKey(const ValueKey('detail_ask_omi'));
+    expect(find.byType(FooterGlassSurface), findsOneWidget);
+    expect(find.text('Ask Omi'), findsOneWidget);
+    expect(tester.getSize(bar).height, 56);
+    await tester.tap(bar);
+    expect(asked, 2);
+    expect(tester.takeException(), isNull);
   });
 
   test('the waveform rises where people spoke and drops through silence', () {

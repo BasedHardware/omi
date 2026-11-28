@@ -15883,4 +15883,17 @@ class AppLocalizationsLt extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Apdorojama $date';
   }
+
+  @override
+  String get transcriptHoldLineHint => 'Paspauskite ir palaikykite eilutę, kad pavadintumėte kalbantįjį.';
+
+  @override
+  String get experimentalDesign => 'Eksperimentinis dizainas';
+
+  @override
+  String get experimentalDesignDescription =>
+      'Išbandykite naują pagrindinio ekrano ir pokalbių išvaizdą prieš ją išleidžiant.';
+
+  @override
+  String get endConversationShort => 'Baigti';
 }

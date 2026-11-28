@@ -15853,4 +15853,16 @@ class AppLocalizationsSk extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Spracuje sa $date';
   }
+
+  @override
+  String get transcriptHoldLineHint => 'Podržaním riadka pomenujete, kto hovorí.';
+
+  @override
+  String get experimentalDesign => 'Experimentálny dizajn';
+
+  @override
+  String get experimentalDesignDescription => 'Vyskúšajte nový vzhľad domovskej obrazovky a konverzácií pred vydaním.';
+
+  @override
+  String get endConversationShort => 'Ukončiť';
 }
