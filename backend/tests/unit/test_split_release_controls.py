@@ -129,6 +129,13 @@ def test_bound_rollback_paths_request_the_published_release_floor():
         '--release-floor-check "$DEPLOY_WORKFLOW_ROOT/.github/scripts/verify_backend_release_floor.py"'
         in restore['run']
     )
+    shift = next(step for step in action['runs']['steps'] if step.get('id') == 'shift-cloud-run-traffic')
+    assert (
+        '--release-floor-check "$DEPLOY_WORKFLOW_ROOT/.github/scripts/verify_backend_release_floor.py"' in shift['run']
+    )
+    # The verifier needs the restored revision's ancestry, so main is fetched
+    # (unshallowing a shallow checkout) before the executor runs.
+    assert shift['run'].index('refs/remotes/origin/main') < shift['run'].index('promote \\')
     workflow = yaml.safe_load((repo / '.github/workflows/gcp_backend.yml').read_text())
     recovery = workflow['jobs']['recover-bound-split']['steps']
     restore_index = next(i for i, step in enumerate(recovery) if 'recover-run' in step.get('run', ''))
@@ -271,6 +278,8 @@ def test_completed_receipt_can_be_restored_from_another_run(tmp_path, monkeypatc
         return state.observed
 
     monkeypatch.setattr(canary, 'promote', promote)
+    floor = tmp_path / 'floor.py'
+    floor.write_text('import sys\nsys.exit(0)\n')
     target = ['--project', 'example', '--region', 'us-central1', '--promotion-receipt', str(receipt_path)]
     identity = ['--run-id', str(run_id)]
     assert (
@@ -293,6 +302,8 @@ def test_completed_receipt_can_be_restored_from_another_run(tmp_path, monkeypatc
                 control,
                 '--candidate',
                 'backend-candidate',
+                '--release-floor-check',
+                str(floor),
             ]
         )
         == 0
@@ -311,8 +322,6 @@ def test_completed_receipt_can_be_restored_from_another_run(tmp_path, monkeypatc
         display_title=f'Holdback prod/{service} sha={source} by selection:{"0" * 32} plan={binding}',
     )
     run_path.write_text(json.dumps(run))
-    floor = tmp_path / 'floor.py'
-    floor.write_text('import sys\nsys.exit(0)\n')
     recover = ['recover-run', *target, *identity, '--run-metadata', str(run_path), '--release-floor-check', str(floor)]
     assert canary.main(recover) == 0
     transport.replace.assert_called_once_with(transport.read.return_value, {'backend-donor': 90, 'backend-shadow': 10})
