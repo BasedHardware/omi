@@ -506,7 +506,7 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
                       color: OmiColors.onAccent,
                       fillColor: OmiColors.accent,
                       diameter: 32,
-                      onPressed: provider.isLoading ? null : () => provider.regenerateIcon(),
+                      onPressed: provider.isLoading ? null : () => _regenerateIcon(provider),
                     ),
                   ),
                 ],
@@ -716,6 +716,14 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
     PlatformManager.instance.analytics.aiAppGeneratorPromptSubmitted(promptLength: _promptController.text.length);
     await provider.generateApp(_promptController.text);
     PlatformManager.instance.analytics.aiAppGeneratorAppGenerated(success: provider.hasGeneratedApp);
+  }
+
+  Future<void> _regenerateIcon(AiAppGeneratorProvider provider) async {
+    final regenerated = await provider.regenerateIcon();
+    // The error text lives on the prompt view; the reader is on the generated view here.
+    if (!regenerated && mounted && provider.errorMessage != null) {
+      OmiFeedback.error(context, provider.errorMessage!);
+    }
   }
 
   Future<void> _submitApp(AiAppGeneratorProvider provider) async {
