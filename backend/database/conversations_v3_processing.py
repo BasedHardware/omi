@@ -22,6 +22,7 @@ from models.finalization_owner import python_owns_finalization
 from utils.conversations.v3 import Conflict, policy
 from utils.conversations import summary_delivery, terminal_settled
 from utils.conversations.summary_delivery import present
+from utils.conversations.v3 import finish_timeline
 from utils.conversations.fragment_visibility import is_relevance_discarded
 from utils.encryption import encrypt, decrypt
 
@@ -328,12 +329,15 @@ def settle_processing(
     held = leases.lease_ref(client, uid, 'summary-' + cid)
     # The committed attempt's Finish-to-visible sample; each attempt of the transaction body resets it.
     finish_latency: list = []
+    # The committed attempt's row when it first shows as a visible manual-end card (Finish timeline).
+    shown_ended: list = []
 
     repairs = []
 
     @firestore.transactional
     def settle(tx):
         finish_latency.clear()
+        shown_ended.clear()
         repairs.clear()
         snapshot = ref.get(transaction=tx)
         row = snapshot.to_dict() or {}
@@ -390,6 +394,8 @@ def settle_processing(
             )
             kind = row.get('kind') if row.get('kind') in metrics.MANUAL_END_KINDS else 'other'
             manual_visibility = ('visible' if visible else 'hidden', kind)
+            if visible:
+                shown_ended.append(row)
             # The response target of a live-window Finish first shows as a finished Home card here, once per row
             # (v3_manual_end_home_counted). A stamp older than FINISH_STAMP_MAX_AGE is dropped, not observed.
             sample = finish_stamp_sample(row.get(FINISH_STAMP_FIELD), datetime.now(timezone.utc)) if visible else None
@@ -450,6 +456,8 @@ def settle_processing(
         metrics.safe_metric(lambda: metrics.FINISH_NO_POINTER.labels('settled').inc())
     for path, seconds in finish_latency:
         metrics.safe_metric(lambda: metrics.FINISH_TO_VISIBLE.labels(path).observe(seconds))
+    for row in shown_ended:
+        finish_timeline.observe('summary_visible', row)
     if settled and word_floor_outcomes is not None:
         metrics.safe_metric(lambda: metrics.observe_word_floor(*word_floor_outcomes))
     return armed

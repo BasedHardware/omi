@@ -70,6 +70,7 @@ from utils.conversations.v3 import (
 from utils.conversations.v3 import manual_cuts, refinement, preview_wakes, rederive_plan, summary_wake
 from utils.conversations.v3 import live_tail
 from utils.conversations.v3 import capture_device
+from utils.conversations.v3 import finish_timeline
 from utils.conversations.v3.word_floor import MIN_TASK_WORDS, has_unspaced_script, text_word_count
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.meeting_treatment import deduplicated_transcribed_speech_seconds
@@ -731,6 +732,8 @@ async def _after_projection(
             metrics.safe_metric(
                 lambda: metrics.VISIBLE_LATENCY.observe(max(0, (now - row['started_at']).total_seconds()))
             )
+        if not derive:  # Finish timeline: this pass, begun at ``now``, may be the first to end the card.
+            finish_timeline.observe_card_finished(row, prior, pass_started=now)
     if not derive and not on_open and live_title_enabled():
         for row in rows:
             if policy.live_title_candidate(row) and not row.get(policy.LIVE_TITLE_STATE):
@@ -1690,6 +1693,7 @@ def _process(uid, row, token):
         lifecycle.complete(uid, row['id'])
     else:
         notes = True
+        finish_timeline.observe_notes_started(row)
         persisted = []
 
         def summary_persisted(current):
