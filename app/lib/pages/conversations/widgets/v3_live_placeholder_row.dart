@@ -81,7 +81,7 @@ class V3LivePlaceholderRow extends StatelessWidget {
                 Container(
                   width: ConversationStateTile.extentOf(context),
                   height: ConversationStateTile.extentOf(context),
-                  decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+                  decoration: ConversationStateTile.decorationOf(context),
                   alignment: Alignment.center,
                   child: const OmiBreathingDot(),
                 ),

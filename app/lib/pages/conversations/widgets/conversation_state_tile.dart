@@ -26,6 +26,14 @@ class ConversationStateTile extends StatefulWidget {
   /// The tile's side: 36pt, or 44pt in the experimental design.
   static double extentOf(BuildContext context) => ExperimentalDesign.of(context) ? 44 : 36;
 
+  /// The tile's fill and corners. In the experimental design a hairline in the border colour
+  /// outlines it, so the tile keeps its edge on the bare page and under a pressed row.
+  static BoxDecoration decorationOf(BuildContext context) => BoxDecoration(
+        color: OmiColors.surface2,
+        borderRadius: OmiRadius.mdAll,
+        border: ExperimentalDesign.of(context) ? Border.all(color: OmiColors.border, width: 0.5) : null,
+      );
+
   /// Reliability experiment `early_title_icon`: whether a row still in the pipeline already shows its
   /// emoji, because the server has fixed its title and emoji ([titledBeforeSummary]); the row's status
   /// line goes on saying what is still being done. Off, always false.
@@ -78,7 +86,7 @@ class _ConversationStateTileState extends State<ConversationStateTile> {
     final tile = Container(
       width: ConversationStateTile.extentOf(context),
       height: ConversationStateTile.extentOf(context),
-      decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+      decoration: ConversationStateTile.decorationOf(context),
       alignment: Alignment.center,
       child: OmiCrossFade(
         alignment: Alignment.center,

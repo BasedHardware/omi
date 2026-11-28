@@ -105,7 +105,7 @@ class ProcessingConversationRow extends StatelessWidget {
                         width: ConversationStateTile.extentOf(context),
                         height: ConversationStateTile.extentOf(context),
                         alignment: Alignment.center,
-                        decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+                        decoration: ConversationStateTile.decorationOf(context),
                         child: const OmiActivityRing(active: true, diameter: 18, child: SizedBox.shrink()),
                       ),
                       const SizedBox(width: 12),

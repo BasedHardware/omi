@@ -86,7 +86,7 @@ class RecordingListItem extends StatelessWidget {
                         Container(
                           width: ExperimentalDesign.of(context) ? ConversationStateTile.extentOf(context) : 40,
                           height: ExperimentalDesign.of(context) ? ConversationStateTile.extentOf(context) : 40,
-                          decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+                          decoration: ConversationStateTile.decorationOf(context),
                           child: Icon(Icons.graphic_eq,
                               color: OmiColors.textTertiary, size: ExperimentalDesign.of(context) ? 22 : 20),
                         ),
