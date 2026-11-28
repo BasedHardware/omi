@@ -213,7 +213,7 @@ def overlay_from_runtime_env(
     unresolved: list[str] = []
     names = sorted({key[: -len(suffix)] for key in cohort_env for suffix in COHORT_SUFFIXES if key.endswith(suffix)})
     if names:
-        from config.refactor_modes import _COHORT_ENVS, serving_for
+        from config.refactor_modes import _COHORT_ENVS, mode as parsed_mode, serving_for
 
         reverse = {pair[0]: mode for mode, pair in _COHORT_ENVS.items()}
         reverse.update({pair[1]: mode for mode, pair in _COHORT_ENVS.items()})
@@ -229,7 +229,10 @@ def overlay_from_runtime_env(
             except ValueError:
                 percent = 0.0
             digests = [d for d in (cohort_env.get(digests_env) or '').split(',') if d.strip()]
-            if percent >= 100:
+            if parsed_mode(mode, environ=production) == 'off':
+                # An unset mode is off unless the family is a frozen legacy shadow (refactor_modes).
+                serving[mode] = False
+            elif percent >= 100:
                 serving[mode] = True
             else:
                 serving[mode] = False

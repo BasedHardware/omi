@@ -24,6 +24,15 @@ DECISIONS = {"pending", "graduate", "ship", "kill", "kill_after_readout", "keep"
 TERMINALS = {"on", "off", "keep", "undecided"}
 REVIEW_GRACE_DAYS = 7
 RAMP_REQUIRED_FROM = date(2026, 10, 21)
+# Shadow rows (ruling: R-20261128-01, proposed; David 2026-11-28, anx card:prod-shadows-settled-retire-the-dead):
+# a shadow names its readout metric and a readout date at most 21 days after creation, and stops by itself
+# SHADOW_EXPIRY_GRACE_DAYS after that date through the generated backend/config/shadow_expiry.py table.
+SHADOW_REQUIRED_FROM = date(2026, 11, 28)
+SHADOW_READOUT_MAX_DAYS = 21
+SHADOW_EXPIRY_GRACE_DAYS = 7
+SHADOW_KEY = re.compile(r"(?:_MODE$|SHADOW)")
+SHADOW_METRIC = re.compile(r"^[A-Za-z_][A-Za-z0-9_:.]*$")
+SHADOW_EXPIRY_PATH = "backend/config/shadow_expiry.py"
 # DEC-BTR-001 keeps these two fail-closed allocation controls as permanent
 # ops_kill flags: production declares 100 explicitly and zero withdraws the leg.
 OPS_KILL_DEFAULT_OFF_ALLOWLIST = frozenset({
@@ -107,6 +116,66 @@ def due_dates(entry: dict[str, Any]) -> list[tuple[str, date]]:
     if _ramp_applies_to(entry) and "ramp" in entry:
         deadlines.append(("ramp", ramp_due(entry)))
     return deadlines
+
+
+def _validate_shadow(entry: dict[str, Any], label: str, errors: list[str]) -> None:
+    shadow = entry.get("shadow")
+    if shadow is None:
+        try:
+            created = date.fromisoformat(entry["created"])
+        except (KeyError, TypeError, ValueError):
+            return
+        if (
+            created >= SHADOW_REQUIRED_FROM
+            and SHADOW_KEY.search(entry.get("key", ""))
+            and entry.get("lifecycle") in {"rollout", "experiment"}
+            and entry.get("decision") != "kill"
+        ):
+            errors.append(
+                f"{label}: shadow is required for new _MODE/SHADOW rollout rows created on or after "
+                f"{SHADOW_REQUIRED_FROM.isoformat()}: {{readout_by, metric}}"
+            )
+        return
+    if not isinstance(shadow, dict) or set(shadow) != {"readout_by", "metric"}:
+        errors.append(f"{label}: shadow must be an object with exactly readout_by and metric")
+        return
+    if entry.get("lifecycle") not in {"rollout", "experiment"}:
+        errors.append(f"{label}: shadow requires rollout or experiment lifecycle")
+    if not isinstance(shadow["metric"], str) or not SHADOW_METRIC.match(shadow["metric"]):
+        errors.append(f"{label}: shadow.metric must name the readout metric or log event")
+    try:
+        readout_by = date.fromisoformat(shadow["readout_by"])
+        created = date.fromisoformat(entry["created"])
+    except (KeyError, TypeError, ValueError):
+        errors.append(f"{label}: shadow.readout_by must be an ISO date")
+        return
+    if not 0 <= (readout_by - created).days <= SHADOW_READOUT_MAX_DAYS:
+        errors.append(f"{label}: shadow.readout_by must be 0 to {SHADOW_READOUT_MAX_DAYS} days after created")
+
+
+def shadow_expiry(registry: dict[str, list[dict[str, Any]]]) -> dict[str, str]:
+    """Every key and alias of a shadow row, mapped to the first date its shadow no longer runs."""
+    table: dict[str, str] = {}
+    for entry in registry.get("flags", []):
+        shadow = entry.get("shadow")
+        if not isinstance(shadow, dict) or "readout_by" not in shadow:
+            continue
+        expires = date.fromisoformat(shadow["readout_by"]) + timedelta(days=SHADOW_EXPIRY_GRACE_DAYS + 1)
+        for name in (entry["key"], *entry.get("aliases", [])):
+            table[name] = expires.isoformat()
+    return dict(sorted(table.items()))
+
+
+def render_shadow_expiry(registry: dict[str, list[dict[str, Any]]]) -> str:
+    rows = "".join(f"    {key!r}: {value!r},\n" for key, value in shadow_expiry(registry).items())
+    body = "{\n" + rows + "}" if rows else "{}"
+    return (
+        '"""Generated from config/feature-flags.yaml by scripts/render_shadow_expiry.py; do not edit.\n\n'
+        "A shadow row stops by itself: from the date here, config.refactor_modes.mode() reads a\n"
+        f"``shadow`` binding as ``off`` (readout_by + {SHADOW_EXPIRY_GRACE_DAYS} days; ruling: R-20261128-01, proposed).\n"
+        '"""\n\n'
+        f"SHADOW_EXPIRES: dict[str, str] = {body}\n"
+    )
 
 
 def _validate_extension(entry: dict[str, Any], key: str, errors: list[str], as_of: date) -> None:
@@ -247,6 +316,7 @@ def validate_registry(
                         except (TypeError, ValueError):
                             errors.append(f"{label}: {field} must be an ISO date")
                 _validate_ramp(entry, label, errors)
+                _validate_shadow(entry, label, errors)
                 _validate_extension(entry, key, errors, current_date)
                 if lifecycle == "ops_kill" and entry.get("fail") == "closed":
                     default_off_ops.add(key)

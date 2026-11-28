@@ -344,9 +344,10 @@ def test_naive_windows_are_treated_as_utc():
     assert cc.measure_capture_containment(pendant, laptop).would_join
 
 
-def test_mode_defaults_shadow_and_fails_closed(monkeypatch):
+def test_mode_defaults_off_and_fails_closed(monkeypatch):
+    # Retired 2026-11-28 (David, card:prod-shadows-settled-retire-the-dead): unset is off.
     monkeypatch.delenv(cc.MODE_ENV, raising=False)
-    assert cc.capture_group_containment_mode() == 'shadow'
+    assert cc.capture_group_containment_mode() == 'off'
     for value, expected in (('ON', 'on'), ('off', 'off'), ('', 'off'), ('typo', 'off'), (' shadow ', 'shadow')):
         monkeypatch.setenv(cc.MODE_ENV, value)
         assert cc.capture_group_containment_mode() == expected

@@ -214,9 +214,10 @@ def test_off_mode_never_measures_or_logs(seam, monkeypatch, caplog):
     assert ('capture_group_joined', 'none') in seam['events']
 
 
-def test_mode_defaults_to_shadow_and_unknown_values_disable(monkeypatch):
+def test_mode_defaults_to_off_and_unknown_values_disable(monkeypatch):
+    # Retired 2026-11-28 (David, card:prod-shadows-settled-retire-the-dead): unset is off.
     monkeypatch.delenv(containment_module.MODE_ENV, raising=False)
-    assert containment_module.capture_group_containment_mode() == 'shadow'
+    assert containment_module.capture_group_containment_mode() == 'off'
     monkeypatch.setenv(containment_module.MODE_ENV, 'shaow')
     assert containment_module.capture_group_containment_mode() == 'off'
     monkeypatch.setenv(containment_module.MODE_ENV, '')
@@ -547,16 +548,16 @@ CLOUD_RUN_HOSTS = ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-
 SAFE_YAML_LOADER = getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
 
 
-def test_composed_manifest_declares_shadow_on_all_six_hosts_per_environment():
+def test_composed_manifest_declares_off_on_all_six_hosts_per_environment():
     manifest = yaml.load((REPO / 'backend/deploy/runtime_env.yaml').read_text(), Loader=SAFE_YAML_LOADER)
     for env_name in ('dev', 'prod'):
         env = manifest['environments'][env_name]
         for host in GKE_HOSTS:
             entry = env['gke'][host]['env'][MODE_KEY]
-            assert entry == {'value': 'shadow', 'category': 'rollout'}, (env_name, host)
+            assert entry == {'value': 'off', 'category': 'rollout'}, (env_name, host)
         for host in CLOUD_RUN_HOSTS:
             entry = env['cloud_run']['services'][host]['env'][MODE_KEY]
-            assert entry == {'value': 'shadow', 'category': 'rollout'}, (env_name, host)
+            assert entry == {'value': 'off', 'category': 'rollout'}, (env_name, host)
 
 
 def test_gke_chart_values_match_the_composed_manifest():
@@ -568,7 +569,7 @@ def test_gke_chart_values_match_the_composed_manifest():
     ):
         values = yaml.load((REPO / 'backend/charts' / chart).read_text(), Loader=SAFE_YAML_LOADER)
         entries = {item['name']: item.get('value') for item in values['env']}
-        assert entries[MODE_KEY] == 'shadow', chart
+        assert entries[MODE_KEY] == 'off', chart
 
 
 def test_registry_and_classification_declare_the_mode():
@@ -576,7 +577,7 @@ def test_registry_and_classification_declare_the_mode():
     rows = [row for row in registry['flags'] if row.get('key') == MODE_KEY]
     assert len(rows) == 1
     assert rows[0]['lifecycle'] == 'rollout' and rows[0]['fail'] == 'closed'
-    assert rows[0]['surfaces'] == ['backend'] and rows[0]['decision'] == 'pending'
+    assert rows[0]['surfaces'] == ['backend'] and rows[0]['decision'] == 'kill' and rows[0]['terminal'] == 'off'
     classification = json.loads((REPO / 'config/deployment-setting-classification.json').read_text())
     assert MODE_KEY in classification['kinds']['config']
 
@@ -717,7 +718,7 @@ def test_realistic_layout_joins_only_in_on_mode(seam, monkeypatch, caplog, mode,
         monkeypatch.delenv(containment_module.MODE_ENV, raising=False)
     else:
         monkeypatch.setenv(containment_module.MODE_ENV, mode)
-    if mode in ('off', 'typo'):
+    if mode in ('off', 'typo', 'unset'):
         detector = MagicMock(side_effect=AssertionError('detector must not run'))
         monkeypatch.setattr(policy, 'measure_capture_containment', detector)
     pendant, laptop = _layout_realistic_rows()
@@ -746,7 +747,7 @@ def test_realistic_layout_joins_only_in_on_mode(seam, monkeypatch, caplog, mode,
             assert {k: v for k, v in strip.items() if k != 'external_data'} == original
             assert seam['store'].rows[path(cid)]['transcript_segments'] == before[path(cid)]['transcript_segments']
             assert seam['store'].rows[path(cid)]['structured'] == before[path(cid)]['structured']
-    elif mode in ('shadow', 'unset'):
+    elif mode == 'shadow':
         assert all('capture_group' not in r for r in seam['store'].rows.values())
         assert ('capture_group_joined', 'none') in seam['events']
         assert len(lines) == 1
