@@ -77,6 +77,29 @@ void main() {
   Future<void> selectOnDevice() =>
       SharedPreferencesUtil().saveCustomSttConfig(const CustomSttConfig(provider: SttProvider.onDeviceWhisper));
 
+  OnDeviceRunner runnerFor(LocalWalSyncImpl sync, OnDeviceTranscriptionController controller,
+          {required List<String> posts, int status = 200, Map<String, String> headers = const {}}) =>
+      OnDeviceRunner(
+          sync: sync,
+          controller: controller,
+          publish: (_) {},
+          cloudBaseUrl: 'http://127.0.0.1:1/',
+          transcribeChunk: (_, __) async => const OnDeviceBatchResult(
+              engine: 'synthetic', text: 'A synthetic test.', words: [OnDeviceWord('A synthetic test.', 0, 1)]),
+          send: (request) async {
+            if (request.method == 'POST') {
+              final body = jsonDecode(request.body) as Map<String, dynamic>;
+              posts.add(body['client_session_id'] as String);
+              if (status != 200) return http.Response('{}', status, headers: headers);
+              return http.Response(jsonEncode({'id': 'cloud-${body['client_session_id']}'}), 200);
+            }
+            final id = Uri.parse(request.url.toString()).pathSegments.last;
+            return http.Response(
+                jsonEncode(ServerConversation(id: id, createdAt: DateTime.utc(2026), structured: Structured('t', 'o'))
+                    .toJson()),
+                200);
+          });
+
   test('on-device STT is the only custom provider that counts as on-device selection', () async {
     expect(SharedPreferencesUtil().onDeviceSttSelected, isFalse);
     await SharedPreferencesUtil().saveCustomSttConfig(const CustomSttConfig(provider: SttProvider.deepgram));
@@ -144,24 +167,76 @@ void main() {
     controller.dispose();
   });
 
-  test('without on-device selection or the overflow setting nothing runs', () async {
+  test('phone overflow audio needs the overflow setting; drained audio keeps its drain-time consent', () async {
     recording('a.bin');
+    recording('p.bin');
+    // Drained while on-device STT was selected; the user has since switched back to cloud.
     final wal = drained('a.bin', 1700000000);
-    final sync = LocalWalSyncImpl(_Listener(), persistWals: (_) async {})..testWals = [wal];
+    final overflow = Wal(
+        timerStart: 1700100000,
+        codec: BleAudioCodec.pcm16,
+        seconds: 1,
+        status: WalStatus.miss,
+        storage: WalStorage.disk,
+        filePath: 'p.bin',
+        device: 'phone',
+        onDeviceOnly: true,
+        capturedOnDeviceOnly: true);
+    final sync = LocalWalSyncImpl(_Listener(), persistWals: (_) async {})..testWals = [wal, overflow];
+    final controller = OnDeviceTranscriptionController(model: FakeOnDeviceModel(), power: FakePhonePowerSource())
+      ..debugActivate(settings: const OnDeviceSettings(enabled: false), storefront: false);
+    expect(controller.isActive, isFalse, reason: 'no surfaces without a current consent');
+    final posts = <String>[];
+    final runner = runnerFor(sync, controller, posts: posts);
+    await runner.run(transcribeNow: true);
+    expect(posts, ['ondevice-${wal.id}']);
+    expect(wal.status, WalStatus.synced);
+    expect(overflow.status, WalStatus.miss);
+    expect(overflow.onDeviceConversation, isNull);
+    runner.dispose();
+    controller.dispose();
+  });
+
+  test('a silent group waits and never blocks the older backlog', () async {
+    await selectOnDevice();
+    recording('silent.bin');
+    recording('speech.bin');
+    final silent = drained('silent.bin', 1700009000);
+    final speech = drained('speech.bin', 1700000000);
+    final sync = LocalWalSyncImpl(_Listener(), persistWals: (_) async {})..testWals = [silent, speech];
     final controller = OnDeviceTranscriptionController(model: FakeOnDeviceModel(), power: FakePhonePowerSource())
       ..debugActivate(settings: const OnDeviceSettings(enabled: false));
-    var calls = 0;
+    var call = 0;
+    final posts = <String>[];
     final runner = OnDeviceRunner(
         sync: sync,
         controller: controller,
         publish: (_) {},
-        transcribeChunk: (_, __) async {
-          calls++;
-          return const OnDeviceBatchResult(engine: 'synthetic', text: '', words: []);
+        cloudBaseUrl: 'http://127.0.0.1:1/',
+        // Newest first: the silent recording is transcribed first and yields nothing.
+        transcribeChunk: (_, __) async => call++ == 0
+            ? const OnDeviceBatchResult(engine: 'synthetic', text: '', words: [])
+            : const OnDeviceBatchResult(
+                engine: 'synthetic', text: 'A synthetic test.', words: [OnDeviceWord('A synthetic test.', 0, 1)]),
+        send: (request) async {
+          if (request.method == 'POST') {
+            final body = jsonDecode(request.body) as Map<String, dynamic>;
+            posts.add(body['client_session_id'] as String);
+            return http.Response(jsonEncode({'id': 'cloud-${body['client_session_id']}'}), 200);
+          }
+          final id = Uri.parse(request.url.toString()).pathSegments.last;
+          return http.Response(
+              jsonEncode(
+                  ServerConversation(id: id, createdAt: DateTime.utc(2026), structured: Structured('t', 'o')).toJson()),
+              200);
         });
     await runner.run(transcribeNow: true);
-    expect(calls, 0);
-    expect(wal.status, WalStatus.miss);
+    expect(posts, ['ondevice-${speech.id}']);
+    expect(silent.status, WalStatus.miss);
+    expect(silent.onDeviceOnly, isTrue);
+    expect(runner.lastError, 'OnDeviceNoSpeech');
+    await runner.run(transcribeNow: true);
+    expect(call, 2, reason: 'the silent group waits instead of decoding every tick');
     runner.dispose();
     controller.dispose();
   });
@@ -240,32 +315,11 @@ void main() {
       ['a', 'b', 'c'],
       ['phone'],
     ]);
+    // Unknown device clocks (timerStart 0) never join a group.
+    expect(groupOnDeviceWork([chunk('z1', 0), chunk('z2', 0)]).map((g) => g.length).toList(), [1, 1]);
     final long = [for (var i = 0; i < 61; i++) chunk('l$i', 10000 + i * 60)];
     expect(groupOnDeviceWork(long).map((g) => g.length).toList()..sort(), [1, 60]);
   });
-
-  OnDeviceRunner runnerFor(LocalWalSyncImpl sync, OnDeviceTranscriptionController controller,
-          {required List<String> posts, int status = 200, Map<String, String> headers = const {}}) =>
-      OnDeviceRunner(
-          sync: sync,
-          controller: controller,
-          publish: (_) {},
-          cloudBaseUrl: 'http://127.0.0.1:1/',
-          transcribeChunk: (_, __) async => const OnDeviceBatchResult(
-              engine: 'synthetic', text: 'A synthetic test.', words: [OnDeviceWord('A synthetic test.', 0, 1)]),
-          send: (request) async {
-            if (request.method == 'POST') {
-              final body = jsonDecode(request.body) as Map<String, dynamic>;
-              posts.add(body['client_session_id'] as String);
-              if (status != 200) return http.Response('{}', status, headers: headers);
-              return http.Response(jsonEncode({'id': 'cloud-${body['client_session_id']}'}), 200);
-            }
-            final id = Uri.parse(request.url.toString()).pathSegments.last;
-            return http.Response(
-                jsonEncode(ServerConversation(id: id, createdAt: DateTime.utc(2026), structured: Structured('t', 'o'))
-                    .toJson()),
-                200);
-          });
 
   test('a drained backlog uploads one conversation per contiguous span, saved and released together', () async {
     await selectOnDevice();

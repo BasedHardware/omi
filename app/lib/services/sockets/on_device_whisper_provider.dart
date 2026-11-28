@@ -7,7 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:whisper_flutter_new/whisper_flutter_new.dart';
 
 import 'package:omi/models/stt_result.dart';
-import 'package:omi/services/experiments/on_device_runner_gate.dart';
+import 'package:omi/services/experiments/on_device_overflow_gate.dart';
 import 'package:omi/utils/audio/wav_bytes.dart';
 import 'package:omi/utils/audio/whisper_pcm.dart';
 import 'package:omi/services/sockets/local_stt_failure.dart';
@@ -161,7 +161,7 @@ class OnDeviceWhisperProvider implements ISttProvider {
     String? language,
   }) async {
     try {
-      final enhanced = onDeviceOverflowEnabled ?? await OnDeviceRunnerGate.enabled();
+      final enhanced = onDeviceOverflowEnabled ?? await OnDeviceOverflowGate.read();
       final sw = Stopwatch()..start();
       await _ensureInitialized();
 

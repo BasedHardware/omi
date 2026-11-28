@@ -58,6 +58,11 @@ Stream<List<Uint8List>> readOnDeviceChunks(File file, int framesPerSecond) async
 
 class PreparedContinuationDisabled implements Exception {}
 
+/// The audio decoded but held no recognizable speech; it stays on the phone, untouched.
+class OnDeviceNoSpeech implements Exception {
+  const OnDeviceNoSpeech();
+}
+
 /// Drained pendant audio arrives as 60 s chunks. Contiguous chunks from one device (gaps up to
 /// [maxGapSeconds], spans up to [maxSpanSeconds]) are one conversation and one from-segments
 /// upload. Everything else stays one WAL per conversation. Groups run newest first.
@@ -73,8 +78,11 @@ List<List<Wal>> groupOnDeviceWork(List<Wal> pending) {
   for (final wal in pending.where(drained).toList()..sort((a, b) => a.timerStart.compareTo(b.timerStart))) {
     final group = current;
     final previous = group?.last;
+    // An unknown device clock (timerStart 0) or overlapping starts never join a group.
     final joins = group != null &&
         previous != null &&
+        previous.timerStart > 0 &&
+        wal.timerStart >= previous.timerStart + previous.seconds - 2 &&
         previous.device == wal.device &&
         previous.codec == wal.codec &&
         previous.sampleRate == wal.sampleRate &&
@@ -120,12 +128,19 @@ class OnDeviceRunner with WidgetsBindingObserver {
   int pendingSeconds = 0;
   // A from-segments 429 pauses every run until the server's Retry-After (bounded).
   DateTime? _backoffUntil;
+  // Per-group retry backoff (in memory) for groups that failed for any other reason.
+  final _groupFailures = <String, int>{};
+  final _groupRetryAt = <String, DateTime>{};
+
+  static bool _drainedDevice(Wal wal) =>
+      wal.capturedOnDeviceOnly == true &&
+      (wal.originalStorage == WalStorage.sdcard || wal.originalStorage == WalStorage.flashPage);
   DateTime Function() now = DateTime.now;
   static const channel = MethodChannel('com.omi/on_device');
 
   Future<void> start() async {
     await controller.ensureLoaded();
-    if (!controller.isActive) return;
+    if (!controller.runnerEnabled) return;
     WidgetsBinding.instance.addObserver(this);
     controller.runPending = (now) => run(transcribeNow: now);
     controller.deleteLocalConversation = deleteLocal;
@@ -163,11 +178,14 @@ class OnDeviceRunner with WidgetsBindingObserver {
   }
 
   Future<void> run({bool transcribeNow = false}) async {
-    if (!controller.isActive) return;
+    if (!controller.runnerEnabled) return;
     final backoff = _backoffUntil;
     if (backoff != null && now().isBefore(backoff)) return;
     // Rechecked every run (cached for ten minutes), here and in the Android background worker.
-    if (!await OnDeviceRunnerGate.enabled()) return;
+    if (!await OnDeviceRunnerGate.enabled()) {
+      await controller.deactivateForKill();
+      return;
+    }
     if (_busy) {
       await _runDone?.future;
       return;
@@ -205,10 +223,17 @@ class OnDeviceRunner with WidgetsBindingObserver {
       pending.sort((a, b) => b.timerStart.compareTo(a.timerStart));
       pendingSeconds = pending.fold(0, (sum, w) => sum + w.seconds);
       controller.setPendingSeconds(pendingSeconds);
-      // Choosing on-device transcription is consent for drained pendant audio; the overflow
-      // setting governs only live hours. Neither changes shouldKeepAudioLocal.
-      final onDeviceStt = SharedPreferencesUtil().onDeviceSttSelected;
-      if (!controller.settings.enabled && !onDeviceStt) return;
+      // Drained pendant audio carries its consent from drain time (on-device STT was selected), so
+      // it keeps transcribing after a mode switch. Phone overflow audio needs the overflow setting.
+      final work = <Wal>[];
+      for (final wal in pending) {
+        if (!controller.settings.enabled && !_drainedDevice(wal)) continue;
+        final path = await Wal.getFilePath(wal.filePath);
+        // A missing file is skipped, never a reason to stall its neighbours.
+        if (path != null && await File(path).exists()) work.add(wal);
+      }
+      if (work.isEmpty) return;
+      final drainedWork = work.any(_drainedDevice);
       if (pending.any((w) => w.onDevicePreparedUpload != null) && !await ClientRefactorFlags.chunkUploads()) {
         for (final wal in pending.where((w) => w.onDevicePreparedUpload != null)) {
           await sync.rejectDisabledPreparedUpload(wal, generation);
@@ -217,25 +242,41 @@ class OnDeviceRunner with WidgetsBindingObserver {
       }
       final hasModel = controller.model.status.isInstalled;
       final resumePrepared = !hasModel && await ClientRefactorFlags.chunkUploads();
-      if (!hasModel && !(resumePrepared && pending.any((w) => w.onDevicePreparedUpload != null))) return;
+      if (!hasModel && !(resumePrepared && work.any((w) => w.onDevicePreparedUpload != null))) return;
       final decision = await controller.evaluate(
           pendingAudio: Duration(seconds: pendingSeconds),
           transcribeNow: transcribeNow,
-          foreground: onDeviceStt && WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed);
+          foreground: drainedWork && WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed);
       if (!decision.shouldRun) return;
       controller.markRunFailure(false);
       controller.markRun(running: true);
-      for (final group in groupOnDeviceWork(pending)) {
+      String? groupError;
+      for (final group in groupOnDeviceWork(work)) {
         if (!hasModel && (!resumePrepared || group.first.onDevicePreparedUpload == null)) continue;
         if (_cancelled || generation != sync.sessionGeneration) return;
+        final key = group.first.id;
+        final retryAt = _groupRetryAt[key];
+        if (retryAt != null && now().isBefore(retryAt)) continue;
         sync.claimForOnDevice(group);
         try {
           await _process(group, generation);
+          _groupFailures.remove(key);
+          _groupRetryAt.remove(key);
+        } on Exception catch (error) {
+          // A group whose own audio cannot be transcribed (no speech, unreadable or missing bytes)
+          // never blocks the rest: it waits 30 min, doubling to a day, with its audio untouched.
+          // Anything else (network, server, cancellation) ends the run as before.
+          if (error is! OnDeviceNoSpeech && error is! FormatException && error is! FileSystemException) rethrow;
+          final failures = (_groupFailures[key] ?? 0) + 1;
+          _groupFailures[key] = failures;
+          _groupRetryAt[key] = now().add(Duration(minutes: (30 << (failures - 1).clamp(0, 6)).clamp(30, 1440)));
+          groupError = error.runtimeType.toString();
         } finally {
           sync.unclaimForOnDevice(group);
         }
       }
-      lastError = null;
+      lastError = groupError;
+      if (groupError != null) controller.markRunFailure(true);
     } catch (error) {
       // Keep original bytes and retry from them. No transcript content in error logs.
       if (error is OnDeviceUploadRateLimited) {
@@ -351,7 +392,7 @@ class OnDeviceRunner with WidgetsBindingObserver {
         whisper?.dispose();
       }
     }
-    if (segments.isEmpty) throw StateError('No speech recognized; audio retained');
+    if (segments.isEmpty) throw const OnDeviceNoSpeech();
     // refactor: superseded by on_device_segment_upload when clients_from_segments_chunks=serve
     if (!chunked && segments.length > 500) throw StateError('Transcript exceeds ingestion limit; audio retained');
     if (_cancelled || generation != sync.sessionGeneration) return;

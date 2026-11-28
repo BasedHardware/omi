@@ -5,8 +5,8 @@ import 'package:omi/utils/analytics/analytics_manager.dart';
 
 /// Operational kill switch for the on-device runner: the queue that transcribes phone-only audio
 /// (drained pendant audio for on-device STT users, and overflow audio for users who opted in),
-/// its model setup, schedule, queue banner, provenance and settings, and the Apple SpeechAnalyzer
-/// engine path. On for everyone unless PostHog `mobile-on-device-runner-disabled` is true
+/// its model setup, schedule, queue banner and provenance. Live on-device STT is not on this gate.
+/// On for everyone unless PostHog `mobile-on-device-runner-disabled` is true
 /// (ops_kill, owner free-tier-on-device; ruling David 2026-11-27, SCA-5264).
 ///
 /// Only an authoritative flag answer changes the state. A missing answer (no settled identity,

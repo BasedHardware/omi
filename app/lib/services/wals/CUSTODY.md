@@ -532,6 +532,15 @@ later mode switch never rewrites custody.
   released there.
 - The runner claims the WALs it is transcribing (`claimForOnDevice`), and re-checks custody before
   posting, so a manual Sync and the runner never both process the same audio.
+- Drained chunks keep their drain-time consent: after a switch back to cloud STT the runner still
+  transcribes them on the phone (a confirmed manual Sync sends them to the cloud instead). Phone
+  overflow audio still needs the overflow setting.
+- A group whose own audio cannot be transcribed (no speech, unreadable or missing bytes) waits
+  30 min, doubling to a day, and never blocks other groups; its audio stays untouched. A chunk with
+  an unknown device clock (`timerStart` 0) is always its own conversation.
 - The runner kill switch (`mobile-on-device-runner-disabled`) is checked on every run, in the app
-  and in the Android background worker. Killed, nothing is transcribed and custody is unchanged.
+  and in the Android background worker. Killed, nothing is transcribed, the controller and native
+  overflow configuration turn off, and custody is unchanged.
+- Scope: the drain runs on ring-buffer firmware (3.0.20+). Multi-file firmware keeps today's
+  behaviour under any custom STT.
 - Other custom providers keep today's behaviour: no automatic drain or upload.
