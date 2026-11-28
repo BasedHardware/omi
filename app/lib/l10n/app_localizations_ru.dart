@@ -15897,6 +15897,24 @@ class AppLocalizationsRu extends AppLocalizations {
       'Некоторые записи всё ещё находятся на устройстве. Дождитесь завершения их синхронизации с телефоном, а затем начните обновление.';
 
   @override
+  String get deleteFromServerTitle => 'Удалить везде?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'Эта запись загружена, но ещё не расшифрована. При удалении копия на серверах Omi тоже будет безвозвратно стёрта, поэтому запись никогда не будет расшифрована. Это действие нельзя отменить.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'Уже расшифровано. Чтобы убрать запись, удалите её разговор.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'Обработка этой записи продолжится. Когда разговор появится, вы сможете удалить его.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'При удалении здесь копия удаляется с телефона. Разговоры по уже расшифрованным записям сохраняются.';
+
+  @override
   String get batteryRestartToRefresh => 'Перезапустите Omi, чтобы обновить данные';
 
   @override

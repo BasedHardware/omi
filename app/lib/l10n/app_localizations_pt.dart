@@ -15873,6 +15873,24 @@ class AppLocalizationsPt extends AppLocalizations {
       'Algumas gravações ainda estão no seu dispositivo. Deixe-as concluir a sincronização com seu telefone e, em seguida, inicie a atualização.';
 
   @override
+  String get deleteFromServerTitle => 'Excluir em todos os lugares?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'Esta gravação foi enviada, mas ainda não foi transcrita. Excluí-la também apaga permanentemente a cópia nos servidores do Omi, então ela nunca será transcrita. Isso não pode ser desfeito.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'Já foi transcrita. Exclua a conversa dela para removê-la.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'Esta gravação continuará a ser processada. Pode eliminar a conversa quando aparecer.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'Ao eliminar aqui, remove a cópia do telefone. As conversas das gravações já transcritas são mantidas.';
+
+  @override
   String get batteryRestartToRefresh => 'Reinicie o Omi para atualizar';
 
   @override

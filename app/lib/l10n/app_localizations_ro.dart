@@ -15910,6 +15910,24 @@ class AppLocalizationsRo extends AppLocalizations {
       'Unele înregistrări sunt încă pe dispozitivul tău. Lasă-le să termine de sincronizat cu telefonul tău, apoi pornește actualizarea.';
 
   @override
+  String get deleteFromServerTitle => 'Ștergi peste tot?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'Această înregistrare a fost încărcată, dar nu a fost încă transcrisă. Ștergerea ei elimină definitiv și copia de pe serverele Omi, așa că nu va fi transcrisă niciodată. Acțiunea nu poate fi anulată.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'Deja transcrisă. Șterge conversația ei pentru a o elimina.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'Această înregistrare va fi procesată în continuare. Poți șterge conversația când apare.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'Ștergerea de aici elimină copia de pe telefon. Conversațiile înregistrărilor deja transcrise rămân.';
+
+  @override
   String get batteryRestartToRefresh => 'Repornește Omi pentru a actualiza valoarea';
 
   @override

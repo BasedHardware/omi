@@ -581,9 +581,11 @@ async def test_accept_upload_records_unit_frames_only_with_the_experiment(monkey
         'total_files',
         'total_audio_seconds',
         'lane',
+        'raw_capture_paths',
         'repair_lineage',
         'repair_languages',
     }
+    assert admitted['raw_capture_paths'] == []
     if on:
         assert set(admitted) == baseline_keys | {frame_outcomes.RUNS_FIELD}
         first = admitted['segment_ids'][0]

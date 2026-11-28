@@ -15756,6 +15756,23 @@ class AppLocalizationsAr extends AppLocalizations {
       'لا تزال بعض التسجيلات على جهازك. دعها تكمل المزامنة إلى هاتفك، ثم ابدأ التحديث.';
 
   @override
+  String get deleteFromServerTitle => 'حذف من كل مكان؟';
+
+  @override
+  String get deleteFromServerMessage =>
+      'تم رفع هذا التسجيل ولكن لم يتم تحويله إلى نص بعد. حذفه يمسح أيضًا نسخته على خوادم Omi نهائيًا، فلن يتم تحويله إلى نص أبدًا. لا يمكن التراجع عن ذلك.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'تم تحويله إلى نص بالفعل. احذف محادثته لإزالته.';
+
+  @override
+  String get deletedRecordingWillBeProcessed => 'ستستمر معالجة هذا التسجيل. يمكنك حذف المحادثة عند ظهورها.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'يؤدي الحذف هنا إلى إزالة النسخة من الهاتف. وتبقى محادثات التسجيلات التي تم تفريغها بالفعل.';
+
+  @override
   String get batteryRestartToRefresh => 'أعد تشغيل Omi لتحديث القراءة';
 
   @override

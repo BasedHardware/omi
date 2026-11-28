@@ -95,3 +95,17 @@ class SyncCaptureEndResponse(BaseModel):
 
 class SyncUploadHoldReleaseResponse(BaseModel):
     accepted: bool
+
+
+class SyncJobCancelResponse(BaseModel):
+    """Owner deletion of an uploaded recording's server job (``DELETE /v2/sync-local-files/{job_id}``).
+
+    ``cancelled``: nothing will transcribe; ``erasure`` says whether every server copy is gone yet
+    (``pending`` is resumed by calling again). ``already_processed``: a transcript exists; delete those
+    conversations instead. ``not_found``: nothing on the server for this owner and handle.
+    """
+
+    job_id: str
+    outcome: Literal['cancelled', 'already_processed', 'not_found']
+    erasure: Literal['complete', 'pending'] | None = None
+    conversation_ids: list[str] = Field(default_factory=list)

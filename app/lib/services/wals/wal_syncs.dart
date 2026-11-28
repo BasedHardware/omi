@@ -265,12 +265,15 @@ class WalSyncs implements IWalSync {
   }
 
   @override
+
+  /// Returns the phone sync's server-cancel answer for an uploaded recording, else null.
   Future deleteWal(Wal wal) async {
-    await _phoneSync.deleteWal(wal);
+    final serverCancel = await _phoneSync.deleteWal(wal);
     await _sdcardSync.deleteWal(wal);
     await _flashPageSync.deleteWal(wal);
     await _storageSync.deleteWal(wal);
     await _ringSync.deleteWal(wal);
+    return serverCancel;
   }
 
   @override

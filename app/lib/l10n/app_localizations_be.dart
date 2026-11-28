@@ -15879,6 +15879,24 @@ class AppLocalizationsBe extends AppLocalizations {
       'Некаторыя запісы ўсё яшчэ на вашай прыладзе. Дайце ім завяршыць сінхранізацыю на тэлефон, а потым пачніце абнаўленне.';
 
   @override
+  String get deleteFromServerTitle => 'Выдаліць усюды?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'Гэты запіс загружаны, але яшчэ не расшыфраваны. Выдаленне таксама назаўсёды сатрэ копію на серверах Omi, таму ён ніколі не будзе расшыфраваны. Гэта нельга адмяніць.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'Ужо расшыфравана. Выдаліце размову, каб прыбраць запіс.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'Апрацоўка гэтага запісу працягнецца. Вы зможаце выдаліць размову, калі яна з’явіцца.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'Выдаленне тут прыбірае копію з тэлефона. Размовы для ўжо транскрыбаваных запісаў застаюцца.';
+
+  @override
   String get batteryRestartToRefresh => 'Перазагрузіце Omi, каб абнавіць паказанне';
 
   @override

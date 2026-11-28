@@ -15839,6 +15839,24 @@ class AppLocalizationsBn extends AppLocalizations {
       'কিছু রেকর্ডিং এখনও আপনার ডিভাইসে রয়েছে। সেগুলিকে আপনার ফোনে সিঙ্ক শেষ হতে দিন, তারপর আপডেট শুরু করুন।';
 
   @override
+  String get deleteFromServerTitle => 'সব জায়গা থেকে মুছবেন?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'এই রেকর্ডিংটি আপলোড হয়েছে কিন্তু এখনও ট্রান্সক্রাইব হয়নি। এটি মুছলে Omi-র সার্ভারের কপিটিও স্থায়ীভাবে মুছে যাবে, তাই এটি আর কখনও ট্রান্সক্রাইব হবে না। এটি পূর্বাবস্থায় ফেরানো যাবে না।';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'ইতিমধ্যে ট্রান্সক্রাইব হয়েছে। সরাতে এর কথোপকথনটি মুছুন।';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'এই রেকর্ডিং প্রক্রিয়াকরণ চলবে। কথোপকথনটি দেখা গেলে আপনি সেটি মুছে ফেলতে পারবেন।';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'এখানে মুছলে ফোনের কপি সরবে। ইতিমধ্যে প্রতিলিখিত রেকর্ডিংয়ের কথোপকথন থেকে যাবে।';
+
+  @override
   String get batteryRestartToRefresh => 'রিফ্রেশ করতে Omi পুনরায় চালু করুন';
 
   @override

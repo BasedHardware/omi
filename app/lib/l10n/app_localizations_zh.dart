@@ -15586,6 +15586,21 @@ class AppLocalizationsZh extends AppLocalizations {
   String get firmwareSyncRecordingsFirstMessage => '部分录音仍存储在您的设备上。请等待它们同步到手机完成后，再开始更新。';
 
   @override
+  String get deleteFromServerTitle => '要在所有位置删除吗？';
+
+  @override
+  String get deleteFromServerMessage => '此录音已上传，但尚未转写。删除后，Omi 服务器上的副本也会被永久清除，因此它永远不会被转写。此操作无法撤销。';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => '已转写。请删除其对话以将其移除。';
+
+  @override
+  String get deletedRecordingWillBeProcessed => '系统仍会处理这段录音。对话出现后，你可以将其删除。';
+
+  @override
+  String get deleteRecordingKeepsConversation => '在此删除会移除手机上的副本。已转录录音对应的对话将保留。';
+
+  @override
   String get batteryRestartToRefresh => '重启 Omi 以刷新';
 
   @override

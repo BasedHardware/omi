@@ -15845,6 +15845,24 @@ class AppLocalizationsVi extends AppLocalizations {
       'Một số bản ghi âm vẫn còn trên thiết bị của bạn. Hãy đợi chúng đồng bộ xong lên điện thoại, sau đó bắt đầu cập nhật.';
 
   @override
+  String get deleteFromServerTitle => 'Xóa ở mọi nơi?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'Bản ghi này đã được tải lên nhưng chưa được chép lời. Xóa bản ghi cũng sẽ xóa vĩnh viễn bản sao trên máy chủ của Omi, nên nó sẽ không bao giờ được chép lời. Không thể hoàn tác thao tác này.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'Đã được chép lời. Hãy xóa cuộc trò chuyện của nó để gỡ bỏ.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'Bản ghi này vẫn sẽ được xử lý. Bạn có thể xóa cuộc trò chuyện khi nó xuất hiện.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'Xóa tại đây sẽ xóa bản sao trên điện thoại. Cuộc trò chuyện của những bản ghi đã được chép lời vẫn được giữ lại.';
+
+  @override
   String get batteryRestartToRefresh => 'Khởi động lại Omi để làm mới';
 
   @override

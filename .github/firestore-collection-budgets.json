@@ -465,6 +465,30 @@
       "reviewed": "2026-11-16"
     },
     {
+      "site": "backend/utils/batch_pipeline/owner_cancel_erase.py",
+      "expression": "f'{self.namespace}_{table}'",
+      "collection_pattern": "batch_pipeline_*_*",
+      "owner": "support-packet owner cancel (DELETE /v2/sync-local-files/{job_id}) / batch-custody",
+      "unit": "one owner-cancelled batch upload (intake plus its fenced units), including one erasure retry",
+      "reads_per_unit_budget": 200,
+      "reads_per_day_budget": 400000,
+      "basis": "planning-bound",
+      "source": "Existing jobs/results/artifacts tables only, point reads by segment id; no scan. Per unit: job and result reads, one artifact read per referenced object, then the reused purge delete_job transaction (job, result, owner, control, queue, predecessor query, re-fence read), about 15 reads. Fence (Store.run in owner_cancel.py) adds intake, ledger, each unit, its queue and one ready-predecessor query per unit. Uploads hold a few units; 200 reads covers about eight units with one retry. Volume: owner-initiated deletes of uploaded-but-unprocessed rows only, planned at up to 2000/day; the endpoint shares the per-owner sync poll limiter. Remeasure if deletes exceed that or uploads grow beyond eight units.",
+      "reviewed": "2026-11-18"
+    },
+    {
+      "site": "backend/utils/sync/owner_cancel_legacy.py",
+      "expression": "collection_name('sync_content_ledger')",
+      "collection_pattern": "sync_content_ledger*",
+      "owner": "support-packet owner cancel (DELETE /v2/sync-local-files/{job_id}, legacy handle) / sync-custody",
+      "unit": "one owner-cancelled legacy upload (its held ledger row and the cap holds it names), including one erasure retry",
+      "reads_per_unit_budget": 60,
+      "reads_per_day_budget": 60000,
+      "basis": "planning-bound",
+      "source": "Owner-scoped only: one bounded equality query on the owner's own ledger (job_id ==, limit 2, keys only), then one transaction reading the ledger row, each named hold and the held-audio summary, and per hold one re-read before erasure. Legacy uploads name a few holds; 60 reads covers about ten holds with one retry. Volume: owner-initiated deletes of legacy-held uploads only, a shrinking set since legacy sync went dark on 2026-11-04, planned at up to 1000/day; the endpoint shares the per-owner sync poll limiter. Remeasure if deletes exceed that.",
+      "reviewed": "2026-11-18"
+    },
+    {
       "site": "backend/utils/support/transcription_credit.py",
       "expression": "f'{namespace}_jobs'",
       "collection_pattern": "batch_pipeline_*_jobs",

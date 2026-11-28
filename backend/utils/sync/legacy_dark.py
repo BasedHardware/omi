@@ -77,6 +77,7 @@ class LegacyDarkReason(StrEnum):
     UNKNOWN = 'unknown'
     LEGACY_COMPLETED = 'legacy_completed'
     LEGACY_HELD = 'legacy_held'
+    OWNER_CANCELLED = 'owner_cancelled'
     LEGACY_ACTIVE = 'legacy_active'
     LEGACY_ACTIVE_IN_DARK = 'legacy_active_in_dark'
     LEGACY_STRANDED = 'legacy_stranded'
@@ -97,6 +98,7 @@ class LegacyOwnership(StrEnum):
     BATCH = 'batch'
     COMPLETED = 'completed'
     HELD = 'held'
+    OWNER_CANCELLED = 'owner_cancelled'
     ACTIVE = 'active'
     CAPPED = 'capped'
     STRANDED = 'stranded'
@@ -274,6 +276,8 @@ def classify_ledger_row(
     now = now or datetime.now(timezone.utc)
     protocol = row.get('dispatch_protocol')
     status = row.get('status')
+    if status == 'owner_cancelled':
+        return LegacyOwnership.OWNER_CANCELLED
     if protocol == 'batch_v1':
         return LegacyOwnership.BATCH
     if protocol == 'stt_cap_hold_v1' and status == 'held':
@@ -362,6 +366,9 @@ def fence_decision(
     keeps its repeat-failure pause: 409 for the remaining pause.
     """
     ownership = classify_ledger_row(row, now=now, owner_job_present=owner_job_present)
+    if ownership is LegacyOwnership.OWNER_CANCELLED:
+        job_id = (row or {}).get('job_id')
+        return FenceDecision(FenceAction.ACK, LegacyDarkReason.OWNER_CANCELLED, ownership, job_id)
     if ownership in (LegacyOwnership.NONE, LegacyOwnership.BATCH):
         return FenceDecision(FenceAction.ADMIT_BATCH, None, ownership)
     if mode is LegacySyncMode.ON:
@@ -403,6 +410,10 @@ def fence_response(decision: FenceDecision, *, total_files: int, lane: str) -> O
     """
     if decision.action is FenceAction.ACK:
         record_dark_ack(decision.reason or LegacyDarkReason.UNKNOWN)
+        if decision.ownership is LegacyOwnership.OWNER_CANCELLED:
+            from utils.sync.admission_responses import owner_cancelled_response
+
+            return owner_cancelled_response(decision.job_id, total_files=total_files, lane=lane)
         if decision.ownership in (LegacyOwnership.COMPLETED, LegacyOwnership.HELD):
             result = decision.result if isinstance(decision.result, Mapping) else {}
             segments = result.get('total_segments')

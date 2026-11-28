@@ -15852,6 +15852,24 @@ class AppLocalizationsMr extends AppLocalizations {
       'काही रेकॉर्डिंग अजून तुमच्या डिव्हाइसवर आहेत. त्या तुमच्या फोनवर पूर्णपणे सिंक होऊ द्या, नंतर अपडेट सुरू करा.';
 
   @override
+  String get deleteFromServerTitle => 'सगळीकडून हटवायचे?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'हे रेकॉर्डिंग अपलोड झाले आहे पण अद्याप ट्रान्सक्राइब झालेले नाही. ते हटवल्यास Omi च्या सर्व्हरवरील प्रतही कायमची मिटवली जाते, त्यामुळे ते कधीही ट्रान्सक्राइब होणार नाही. हे पूर्ववत करता येणार नाही.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'आधीच ट्रान्सक्राइब झाले आहे. ते काढण्यासाठी त्याचे संभाषण हटवा.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'या रेकॉर्डिंगवर प्रक्रिया सुरू राहील. संभाषण दिसल्यानंतर तुम्ही ते हटवू शकता.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'इथून हटवल्यावर फोनवरील प्रत हटते. ज्या रेकॉर्डिंगचे लिप्यंतरण झाले आहे, त्यांची संभाषणे कायम राहतात.';
+
+  @override
   String get batteryRestartToRefresh => 'रिफ्रेश करण्यासाठी Omi पुनः सुरू करा';
 
   @override

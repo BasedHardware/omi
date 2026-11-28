@@ -15839,6 +15839,25 @@ class AppLocalizationsSk extends AppLocalizations {
       'Niektoré nahrávky sa stále nachádzajú na zariadení. Počkajte, kým sa dokončí ich synchronizácia s telefónom, a potom spustite aktualizáciu.';
 
   @override
+  String get deleteFromServerTitle => 'Odstrániť všade?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'Tento záznam je nahraný, ale ešte nebol prepísaný. Odstránením sa natrvalo vymaže aj kópia na serveroch Omi, takže nikdy nebude prepísaný. Túto akciu nie je možné vrátiť späť.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed =>
+      'Už bol prepísaný. Ak ho chcete odstrániť, odstráňte jeho konverzáciu.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'Spracovanie tejto nahrávky bude pokračovať. Konverzáciu môžeš odstrániť, keď sa zobrazí.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'Odstránením sa vymaže kópia z telefónu. Konverzácie z už prepísaných nahrávok zostanú zachované.';
+
+  @override
   String get batteryRestartToRefresh => 'Pre obnovenie údajov reštartujte Omi';
 
   @override

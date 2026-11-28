@@ -15902,6 +15902,24 @@ class AppLocalizationsHu extends AppLocalizations {
       'Néhány felvétel még az eszközödön van. Várd meg, amíg a telefonodra szinkronizálásuk befejeződik, majd indítsd el a frissítést.';
 
   @override
+  String get deleteFromServerTitle => 'Törlés mindenhonnan?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'Ez a felvétel fel van töltve, de még nincs átírva. A törlés az Omi szerverein lévő példányt is véglegesen eltávolítja, így soha nem lesz átírva. Ez nem vonható vissza.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'Már át lett írva. Az eltávolításhoz töröld a beszélgetését.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'A felvétel feldolgozása folytatódik. A beszélgetést törölheted, miután megjelent.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'Az itteni törlés eltávolítja a másolatot a telefonról. A már átírt felvételekhez tartozó beszélgetések megmaradnak.';
+
+  @override
   String get batteryRestartToRefresh => 'Indítsa újra az Omit a frissítéshez';
 
   @override

@@ -17,6 +17,7 @@ import 'package:flutter/foundation.dart';
 
 import 'package:omi/app_globals.dart';
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/http/api/sync_job_cancel.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/connectivity_service.dart';
@@ -869,10 +870,13 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     return await _walService.getSyncs().getWalStats();
   }
 
-  Future<void> deleteWal(Wal wal) async {
+  /// Deletes [wal]. For an uploaded recording the result is the server's answer to cancelling its
+  /// job; [SyncJobCancelOutcome.alreadyProcessed] means its conversation must be deleted instead.
+  Future<SyncJobCancelResult?> deleteWal(Wal wal) async {
     final generation = _sessionGeneration;
     try {
-      await _walService.getSyncs().deleteWal(wal);
+      final result = await _walService.getSyncs().deleteWal(wal);
+      return result is SyncJobCancelResult ? result : null;
     } finally {
       await _refreshWals(generation);
     }

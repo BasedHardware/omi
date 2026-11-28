@@ -53,6 +53,7 @@ def test_accepted_repair_reaches_exact_owner_check_after_new_upload_lookback(
     monkeypatch.setattr(sync, 'prepare_sync_uploads', lambda files, *args, **kwargs: files)
     monkeypatch.setattr(sync, 'get_sync_ledger_fence_mode', lambda: sync.SyncLedgerFenceMode.ACTIVE)
     monkeypatch.setattr(sync.legacy_dark, 'current_mode', lambda *args: sync.legacy_dark.LegacySyncMode.DARK)
+    monkeypatch.setattr(sync.legacy_dark, 'read_ledger_row', lambda _uid, _content_id: None)
     monkeypatch.setattr(
         sync,
         'classify_sync_lane',

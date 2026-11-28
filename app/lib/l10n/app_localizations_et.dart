@@ -15836,6 +15836,24 @@ class AppLocalizationsEt extends AppLocalizations {
       'Mõned salvestised on veel teie seadmes. Oodake, kuni need on telefonisse sünkroonitud, ja seejärel alustage uuendust.';
 
   @override
+  String get deleteFromServerTitle => 'Kas kustutada kõikjalt?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'See salvestis on üles laaditud, kuid veel transkribeerimata. Kustutamine eemaldab jäädavalt ka koopia Omi serveritest, nii et seda ei transkribeerita kunagi. Seda ei saa tagasi võtta.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'Juba transkribeeritud. Eemaldamiseks kustuta selle vestlus.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'Selle salvestise töötlemine jätkub. Saad vestluse kustutada, kui see ilmub.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'Siin kustutades eemaldad koopia telefonist. Juba transkribeeritud salvestiste vestlused jäävad alles.';
+
+  @override
   String get batteryRestartToRefresh => 'Taaskäivitage Omi värskendamiseks';
 
   @override

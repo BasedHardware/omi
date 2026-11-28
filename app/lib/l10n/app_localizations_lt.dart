@@ -15869,6 +15869,24 @@ class AppLocalizationsLt extends AppLocalizations {
       'Kai kurie įrašai dar yra jūsų įrenginyje. Leiskite jiems užbaigti sinchronizavimą į telefoną, tada pradėkite atnaujinimą.';
 
   @override
+  String get deleteFromServerTitle => 'Ištrinti visur?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'Šis įrašas įkeltas, bet dar nepaverstas tekstu. Jį ištrynus visam laikui ištrinama ir kopija Omi serveriuose, todėl jis niekada nebus paverstas tekstu. To negalima atšaukti.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'Jau paverstas tekstu. Norėdami pašalinti, ištrinkite jo pokalbį.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'Šis įrašas ir toliau bus apdorojamas. Galėsi ištrinti pokalbį, kai jis pasirodys.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'Ištrynus čia, kopija pašalinama iš telefono. Jau transkribuotų įrašų pokalbiai išlieka.';
+
+  @override
   String get batteryRestartToRefresh => 'Paleiskite Omi iš naujo, kad atnaujintumėte';
 
   @override

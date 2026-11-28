@@ -15852,6 +15852,24 @@ class AppLocalizationsSv extends AppLocalizations {
       'Vissa inspelningar finns fortfarande på din enhet. Låt dem slutföra synkroniseringen till telefonen och starta sedan uppdateringen.';
 
   @override
+  String get deleteFromServerTitle => 'Radera överallt?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'Den här inspelningen är uppladdad men har inte transkriberats än. Om du raderar den tas även kopian på Omis servrar bort permanent, så den transkriberas aldrig. Detta kan inte ångras.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'Redan transkriberad. Radera dess konversation för att ta bort den.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'Inspelningen kommer fortfarande att bearbetas. Du kan radera konversationen när den visas.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'Om du raderar här tas kopian bort från telefonen. Konversationer från inspelningar som redan har transkriberats finns kvar.';
+
+  @override
   String get batteryRestartToRefresh => 'Starta om Omi för att uppdatera';
 
   @override

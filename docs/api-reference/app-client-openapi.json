@@ -36422,6 +36422,52 @@
         "title": "SyncContentInProgressResponse",
         "type": "object"
       },
+      "SyncJobCancelResponse": {
+        "description": "Owner deletion of an uploaded recording's server job (``DELETE /v2/sync-local-files/{job_id}``).\n\n``cancelled``: nothing will transcribe; ``erasure`` says whether every server copy is gone yet\n(``pending`` is resumed by calling again). ``already_processed``: a transcript exists; delete those\nconversations instead. ``not_found``: nothing on the server for this owner and handle.",
+        "properties": {
+          "conversation_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Conversation Ids",
+            "type": "array"
+          },
+          "erasure": {
+            "anyOf": [
+              {
+                "enum": [
+                  "complete",
+                  "pending"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Erasure"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "cancelled",
+              "already_processed",
+              "not_found"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "outcome"
+        ],
+        "title": "SyncJobCancelResponse",
+        "type": "object"
+      },
       "SyncJobStartResponse": {
         "properties": {
           "job_id": {
@@ -90477,6 +90523,91 @@
       }
     },
     "/v2/sync-local-files/{job_id}": {
+      "delete": {
+        "description": "Owner deletes an uploaded recording that has not been transcribed; its server copy is erased.\n\nBatch (``bp_``) uploads and legacy uploads held in cap holds are both covered. Idempotent. Wrong-owner, unknown and legacy handles share the ``not_found``\nanswer. Work that a worker is computing, merging or projecting answers 409\n``sync_job_processing`` (retry later); a committed transcript is never\ndeleted here and answers ``already_processed`` with its conversations.\nRuns under the account destructive-operation gate, so a legal hold refuses it.",
+        "operationId": "cancel_sync_upload_v2_sync_local_files__job_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncJobCancelResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Cancel Sync Upload"
+      },
       "get": {
         "description": "Poll for the status of an async sync job.",
         "operationId": "get_sync_job_status_v2_sync_local_files__job_id__get",

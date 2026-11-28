@@ -15849,6 +15849,24 @@ class AppLocalizationsFi extends AppLocalizations {
       'Osaa nauhoituksista on vielä laitteella. Anna niiden synkronoitua puhelimeen loppuun ja käynnistä sitten päivitys.';
 
   @override
+  String get deleteFromServerTitle => 'Poistetaanko kaikkialta?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'Tämä tallenne on ladattu, mutta sitä ei ole vielä litteroitu. Poistaminen poistaa pysyvästi myös kopion Omin palvelimilta, joten sitä ei koskaan litteroida. Tätä ei voi kumota.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'Jo litteroitu. Poista sen keskustelu poistaaksesi sen.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'Tallenteen käsittely jatkuu. Voit poistaa keskustelun, kun se tulee näkyviin.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'Poistaminen tässä poistaa kopion puhelimesta. Jo litteroitujen tallenteiden keskustelut säilyvät.';
+
+  @override
   String get batteryRestartToRefresh => 'Käynnistä Omi uudelleen päivittämiseksi';
 
   @override

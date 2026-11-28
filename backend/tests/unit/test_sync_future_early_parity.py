@@ -193,13 +193,13 @@ def test_early_upload_job_and_context_documents_equal_main(
                 'ledgers': {key: row for (table, key), row in store.rows.items() if table == 'content'},
             }
         )
-    # Preserve exact parity for every old field; assert the two approved server
-    # measurement fields explicitly instead of discarding them from actual data.
+    # Preserve exact parity for old fields and assert the new measurement and
+    # owner-cancel receipt fields explicitly.
     expected = deepcopy(records[0])
     for context in expected['contexts']:
         context.update(upload_arrived_at=NOW, upload_entitlement='unknown')
     for receipt in expected['intakes'].values():
-        receipt.update(upload_arrived_at=NOW, upload_entitlement='unknown')
+        receipt.update(upload_arrived_at=NOW, upload_entitlement='unknown', raw_capture_paths=[])
     for ledger in expected['ledgers'].values():
         ledger.update(upload_arrived_at=NOW, upload_entitlement='unknown')
     if expected_hold is not None:
@@ -285,6 +285,12 @@ def test_early_placement_and_coverage_implementations_are_main_bytes():
                 )
             else:
                 actual, baseline = without_unrelated_functions(actual), without_unrelated_functions(baseline)
+                # Owner cancellation needs the original archive paths on legacy hold receipts.
+                # Placement and all surrounding behavior still compare byte for byte.
+                for holds in ('cap_hold_receipts', 'cap_holds'):
+                    original = f"ledger_extra = {{'hold_ids': list({holds})}}"
+                    assert baseline.count(original) == 1
+                    baseline = baseline.replace(original, original[:-1] + ", 'raw_capture_paths': raw_capture_paths}")
         assert actual == baseline, path
 
 

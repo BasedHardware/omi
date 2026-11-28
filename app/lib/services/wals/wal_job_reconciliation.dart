@@ -37,9 +37,13 @@ extension _WalJobCompletion on LocalWalSyncImpl {
       });
     }
 
+    // A deleted recording's job is asked to cancel first; while that is unanswered its
+    // remaining rows wait (never acknowledged or re-uploaded under a job being cancelled).
+    final cancelling = (await _drainServerCancels(generation)).pending;
+    if (!_isCurrent(generation)) return resp;
     final byJob = <String, List<Wal>>{};
     for (final w in _indexInventory.uploaded) {
-      if (_activeWals.containsIdentity(w) && w.jobId != null && w.jobId!.isNotEmpty) {
+      if (_activeWals.containsIdentity(w) && w.jobId != null && w.jobId!.isNotEmpty && !cancelling.contains(w.jobId)) {
         byJob.putIfAbsent(w.jobId!, () => []).add(w);
       }
     }

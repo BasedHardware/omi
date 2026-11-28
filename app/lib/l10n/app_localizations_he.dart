@@ -15730,6 +15730,22 @@ class AppLocalizationsHe extends AppLocalizations {
       'חלק מההקלטות עדיין נמצאות במכשיר שלך. תן להן להשלים את הסינכרון לטלפון, ואז התחל את העדכון.';
 
   @override
+  String get deleteFromServerTitle => 'למחוק מכל מקום?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'ההקלטה הזו הועלתה אך עדיין לא תומללה. מחיקתה מוחקת לצמיתות גם את העותק בשרתים של Omi, כך שלעולם לא תתומלל. לא ניתן לבטל פעולה זו.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'כבר תומללה. מחקו את השיחה שלה כדי להסיר אותה.';
+
+  @override
+  String get deletedRecordingWillBeProcessed => 'עיבוד ההקלטה יימשך. אפשר למחוק את השיחה כשתופיע.';
+
+  @override
+  String get deleteRecordingKeepsConversation => 'המחיקה כאן מסירה את העותק מהטלפון. שיחות מהקלטות שכבר תומללו נשארות.';
+
+  @override
   String get batteryRestartToRefresh => 'הפעל מחדש את Omi כדי לרענן';
 
   @override

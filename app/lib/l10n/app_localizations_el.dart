@@ -15949,6 +15949,25 @@ class AppLocalizationsEl extends AppLocalizations {
       'Μερικές ηχογραφήσεις βρίσκονται ακόμη στη συσκευή σας. Περιμένετε να ολοκληρωθεί ο συγχρονισμός τους στο τηλέφωνό σας και, στη συνέχεια, ξεκινήστε την ενημέρωση.';
 
   @override
+  String get deleteFromServerTitle => 'Διαγραφή παντού;';
+
+  @override
+  String get deleteFromServerMessage =>
+      'Αυτή η εγγραφή έχει μεταφορτωθεί αλλά δεν έχει μεταγραφεί ακόμη. Η διαγραφή της σβήνει οριστικά και το αντίγραφο στους διακομιστές της Omi, ώστε να μη μεταγραφεί ποτέ. Αυτή η ενέργεια δεν αναιρείται.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed =>
+      'Έχει ήδη μεταγραφεί. Διαγράψτε τη συνομιλία της για να την αφαιρέσετε.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'Η επεξεργασία αυτής της εγγραφής θα συνεχιστεί. Μπορείς να διαγράψεις τη συνομιλία μόλις εμφανιστεί.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'Η διαγραφή εδώ αφαιρεί το αντίγραφο από το τηλέφωνο. Οι συνομιλίες από ήδη απομαγνητοφωνημένες εγγραφές διατηρούνται.';
+
+  @override
   String get batteryRestartToRefresh => 'Κάντε επανεκκίνηση του Omi για να ανανεωθεί η ένδειξη';
 
   @override

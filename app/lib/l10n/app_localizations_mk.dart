@@ -15909,6 +15909,25 @@ class AppLocalizationsMk extends AppLocalizations {
       'Некои записи се уште се на вашиот уред. Оставете ги да ја завршат синхронизацијата со телефонот, а потоа започнете со ажурирањето.';
 
   @override
+  String get deleteFromServerTitle => 'Да се избрише насекаде?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'Оваа снимка е прикачена, но сè уште не е транскрибирана. Со бришењето трајно се брише и копијата на серверите на Omi, па никогаш нема да биде транскрибирана. Ова не може да се врати.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed =>
+      'Веќе е транскрибирана. Избришете го нејзиниот разговор за да ја отстраните.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'Обработката на оваа снимка ќе продолжи. Можеш да го избришеш разговорот кога ќе се појави.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'Бришењето овде ја отстранува копијата од телефонот. Разговорите за веќе транскрибираните снимки остануваат.';
+
+  @override
   String get batteryRestartToRefresh => 'Рестартирајте го Omi за освежување';
 
   @override

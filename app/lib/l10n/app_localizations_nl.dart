@@ -15885,6 +15885,25 @@ class AppLocalizationsNl extends AppLocalizations {
       'Sommige opnames staan nog op je apparaat. Laat ze eerst volledig synchroniseren naar je telefoon en start daarna de update.';
 
   @override
+  String get deleteFromServerTitle => 'Overal verwijderen?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'Deze opname is geüpload maar nog niet getranscribeerd. Als je hem verwijdert, wordt ook de kopie op de servers van Omi definitief gewist, zodat hij nooit wordt getranscribeerd. Dit kan niet ongedaan worden gemaakt.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed =>
+      'Al getranscribeerd. Verwijder het bijbehorende gesprek om het te verwijderen.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'Deze opname wordt nog verwerkt. Je kunt het gesprek verwijderen zodra het verschijnt.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'Als je hier verwijdert, verdwijnt de kopie van je telefoon. Gesprekken van opnamen die al zijn getranscribeerd, blijven bewaard.';
+
+  @override
   String get batteryRestartToRefresh => 'Start Omi opnieuw op om te vernieuwen';
 
   @override

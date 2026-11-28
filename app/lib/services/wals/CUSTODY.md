@@ -148,6 +148,23 @@ against the local length-prefixed frames before applying synced retention. S1 so
 WALs omit claims rather than deriving them from wall clock. Batch must apply L1 coverage before
 the legacy coverage trim is deleted (plan C, C11).
 
+## Owner delete of an uploaded recording
+
+When the owner deletes an `uploaded` row that has a job handle, the phone also cancels the server job
+(`DELETE /v2/sync-local-files/{job_id}`, `wal_server_cancel.dart`). Batch (`bp_`) and legacy handles
+both go there; the server erases a legacy upload's cap holds.
+
+- **Order.** The job id is written to a durable tombstone before the local file goes. If the
+  tombstone cannot be saved, the recording is kept.
+- **Retries.** A 409 (the job is being processed), an offline phone or a server error keeps the
+  tombstone. Later reconcile passes retry it, backing off from 5 min to 6 h, until the server settles the request.
+- **Siblings.** While a cancel is unanswered, the job is not polled. Rows that shared the upload
+  but were not deleted keep waiting. Once the server confirms the fence, they return to `miss`
+  and re-upload on their own.
+- **Already processed.** That answer clears the tombstone, and the normal poll acknowledges the
+  siblings.
+- **No re-upload.** A cancelled recording has no file or row left, so it is never re-uploaded.
+
 ## Guards
 
 | Invariant | Behavioral guard under `app/test/` |

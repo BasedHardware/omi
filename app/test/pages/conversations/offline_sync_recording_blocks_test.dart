@@ -13,6 +13,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/http/api/sync_job_cancel.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -22,6 +23,7 @@ import 'package:omi/pages/conversations/auto_sync_page.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/user_provider.dart';
+import 'package:omi/services/wals/server_cancel_pause.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_derived_sync_views.dart';
 
@@ -91,6 +93,7 @@ class _Sync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvi
   int retried = 0;
   int discovered = 0;
   String? skipDeleteId;
+  SyncJobCancelResult? serverCancel;
   final manuallyRetried = <Wal>[];
 
   @override
@@ -115,12 +118,13 @@ class _Sync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvi
   @override
   List<Wal> walsForDisplayFilter(WalDisplayFilter filter) => wals;
   @override
-  Future<void> deleteWal(Wal wal) async {
+  Future<SyncJobCancelResult?> deleteWal(Wal wal) async {
     deleted.add(wal);
     if (removeOnDelete && wal.id != skipDeleteId) {
       wals.remove(wal);
     }
     notifyListeners();
+    return serverCancel;
   }
 
   @override
@@ -412,6 +416,60 @@ void main() {
     expect(sync.wals, isEmpty);
   });
 
+  List<Wal> uploadedHeld() {
+    final start = DateTime.now().subtract(const Duration(hours: 3)).millisecondsSinceEpoch ~/ 1000;
+    return [
+      Wal(
+        timerStart: start,
+        codec: BleAudioCodec.opus,
+        seconds: 600,
+        status: WalStatus.uploaded,
+        storage: WalStorage.disk,
+        device: 'pendant',
+        filePath: 'held.bin',
+      )..jobId = 'bp_synthetic',
+    ];
+  }
+
+  for (final render in [false, true]) {
+    testWidgets('swiping an uploaded, untranscribed recording says the server copy is erased too (render $render)',
+        (tester) async {
+      ServerCancelPause.instance.reset();
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      OmiColors.active = OmiColors.forBrightness(Brightness.dark);
+      final sync = await _pump(tester, uploadedHeld(), render: render);
+      sync.serverCancel = const SyncJobCancelResult(SyncJobCancelOutcome.cancelled);
+      await tester.drag(find.byType(Dismissible).first, const Offset(-600, 0));
+      await tester.pumpAndSettle();
+      expect(find.text('Delete Everywhere?'), findsOneWidget);
+      expect(
+          find.text("This recording is uploaded but not transcribed yet. Deleting it also permanently erases the copy "
+              "on Omi's servers, so it will never be transcribed. This can't be undone."),
+          findsOneWidget);
+      if (render) await _frame(tester, '003-mobile-ios-delete-everywhere-confirm');
+      await tester.tap(find.text('Delete').last);
+      await tester.pumpAndSettle();
+      expect(sync.deleted, hasLength(1));
+      expect(find.text('Already transcribed. Delete its conversation to remove it.'), findsNothing);
+      debugDefaultTargetPlatformOverride = null;
+    });
+  }
+
+  testWidgets('deleting a recording the server already transcribed points to its conversation', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    OmiColors.active = OmiColors.forBrightness(Brightness.dark);
+    final sync = await _pump(tester, uploadedHeld());
+    sync.serverCancel = const SyncJobCancelResult(SyncJobCancelOutcome.alreadyProcessed, conversationIds: ['c1']);
+    await tester.drag(find.byType(Dismissible).first, const Offset(-600, 0));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete').last);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('Already transcribed. Delete its conversation to remove it.'), findsOneWidget);
+    await tester.pumpAndSettle(const Duration(seconds: 5));
+    debugDefaultTargetPlatformOverride = null;
+  });
+
   testWidgets('swiping a recording whose device delete fails snaps back instead of asserting', (tester) async {
     final start = DateTime.now().subtract(const Duration(minutes: 10)).millisecondsSinceEpoch ~/ 1000;
     final ringWal = Wal(
@@ -460,7 +518,10 @@ void main() {
     expect(find.byKey(ValueKey('${sync.wals.first.id}#${sync.wals.first.storage.name}')), findsOneWidget);
     expect(find.text('Failed to delete some items'), findsOneWidget);
   });
-  group('delete confirmation tells the truth about uploaded audio', () {
+  group('delete confirmation tells the truth about uploaded audio while server cancel is paused', () {
+    // The server's owner-cancel switch was last seen off: the server keeps processing for now.
+    setUp(() => ServerCancelPause.instance.reset(pausedUntil: 4102444800));
+    tearDown(() => ServerCancelPause.instance.reset());
     final en = lookupAppLocalizations(const Locale('en'));
     const uploadedCopy =
         "This recording is already uploaded and Omi is processing it. Deleting it here removes the phone's copy. If processing fails, Omi can't retry from this phone.";
@@ -472,7 +533,7 @@ void main() {
           status: status,
           storage: WalStorage.disk,
           device: 'pendant',
-        );
+        )..jobId = status == WalStatus.uploaded ? 'bp_synthetic' : null;
 
     Future<void> swipe(WidgetTester tester) async {
       await tester.drag(find.byType(Dismissible).first, const Offset(-600, 0));
@@ -492,7 +553,7 @@ void main() {
       expect(find.text(en.deleteWhileProcessingTitle), findsOneWidget);
       expect(find.text(uploadedCopy), findsOneWidget);
       expect(find.text(en.thisCannotBeUndone), findsNothing);
-      await _frame(tester, '001-mobile-ios-delete-uploaded-phone-copy');
+      await _frame(tester, '004-mobile-ios-delete-uploaded-cancel-paused');
       await tester.tap(find.text('Delete').last);
       await tester.pumpAndSettle();
       expect(sync.deleted, hasLength(1), reason: 'copy only: the delete itself is unchanged');

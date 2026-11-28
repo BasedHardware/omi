@@ -15610,6 +15610,22 @@ class AppLocalizationsJa extends AppLocalizations {
   String get firmwareSyncRecordingsFirstMessage => '一部の録音はまだデバイスに残っています。スマートフォンへの同期が完了してから、更新を開始してください。';
 
   @override
+  String get deleteFromServerTitle => 'すべての場所から削除しますか？';
+
+  @override
+  String get deleteFromServerMessage =>
+      'この録音はアップロード済みですが、まだ文字起こしされていません。削除すると Omi のサーバー上のコピーも完全に消去され、文字起こしされることはありません。この操作は元に戻せません。';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'すでに文字起こし済みです。削除するには、その会話を削除してください。';
+
+  @override
+  String get deletedRecordingWillBeProcessed => 'この録音の処理は続行されます。会話が表示されたら削除できます。';
+
+  @override
+  String get deleteRecordingKeepsConversation => 'ここで削除すると、スマートフォン上のコピーが消去されます。文字起こし済みの録音の会話は残ります。';
+
+  @override
   String get batteryRestartToRefresh => 'Omiを再起動して更新';
 
   @override

@@ -53,6 +53,8 @@ class BatchPrivacyReason(str, Enum):
     RECORDING_PRIVACY_CHANGED = 'recording_privacy_changed'
     CONVERSATION_REDIRECT_MISSING = 'conversation_redirect_missing'
     RESULT_LEASE_LOST = 'result_lease_lost'
+    # The owner deleted the uploaded recording before it was transcribed (utils/batch_pipeline/owner_cancel.py).
+    OWNER_CANCELLED = 'owner_cancelled'
     UNKNOWN = 'unknown'
 
 

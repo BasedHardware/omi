@@ -532,6 +532,13 @@ _driver(
 
 
 _driver(
+    'utils.sync.owner_cancel_legacy.find_legacy_content',
+    base={'uid': UID, 'job_id': 'legacy-job'},
+    patchers=(_completed_status_enabled,),
+)
+
+
+_driver(
     'utils.episodes.home_read.list_episode_window',
     base={'uid': UID, 'start': T0},
     domains={'end': (T0, T1)},

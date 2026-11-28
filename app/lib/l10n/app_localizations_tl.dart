@@ -15971,6 +15971,24 @@ class AppLocalizationsTl extends AppLocalizations {
       'May mga recording pa na nasa iyong device. Hayaang matapos munang i-sync ang mga ito sa iyong phone, pagkatapos ay simulan ang pag-update.';
 
   @override
+  String get deleteFromServerTitle => 'Burahin sa lahat ng lugar?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'Na-upload na ang recording na ito pero hindi pa naita-transcribe. Kapag binura mo ito, permanente ring mabubura ang kopya sa mga server ng Omi, kaya hindi na ito kailanman maita-transcribe. Hindi na ito maaaring bawiin.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'Naita-transcribe na. Burahin ang usapan nito para alisin ito.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'Patuloy na ipoproseso ang recording na ito. Maaari mong burahin ang pag-uusap kapag lumabas na ito.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'Aalisin ng pagbura rito ang kopya sa telepono. Mananatili ang mga pag-uusap para sa mga recording na na-transcribe na.';
+
+  @override
   String get batteryRestartToRefresh => 'I-restart ang Omi upang i-refresh';
 
   @override

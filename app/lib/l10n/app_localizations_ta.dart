@@ -15952,6 +15952,25 @@ class AppLocalizationsTa extends AppLocalizations {
       'சில பதிவுகள் இன்னும் உங்கள் சாதனத்தில் உள்ளன. அவை உங்கள் தொலைபேசிக்கு ஒத்திசைவை முடிக்க அனுமதித்து, பிறகு புதுப்பிப்பைத் தொடங்கவும்.';
 
   @override
+  String get deleteFromServerTitle => 'எல்லா இடங்களிலிருந்தும் நீக்கவா?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'இந்தப் பதிவு பதிவேற்றப்பட்டது, ஆனால் இன்னும் எழுத்துப்படியாக்கப்படவில்லை. இதை நீக்கினால் Omi சேவையகங்களில் உள்ள நகலும் நிரந்தரமாக அழிக்கப்படும், எனவே இது ஒருபோதும் எழுத்துப்படியாக்கப்படாது. இதைச் செயல்தவிர்க்க முடியாது.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed =>
+      'ஏற்கனவே எழுத்துப்படியாக்கப்பட்டது. அதை அகற்ற அதன் உரையாடலை நீக்கவும்.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'இந்தப் பதிவு தொடர்ந்து செயலாக்கப்படும். உரையாடல் தோன்றியதும் அதை நீக்கலாம்.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'இங்கு நீக்கினால் மொபைலில் உள்ள நகல் அகற்றப்படும். ஏற்கெனவே எழுத்தாக்கப்பட்ட பதிவுகளின் உரையாடல்கள் தொடர்ந்து இருக்கும்.';
+
+  @override
   String get batteryRestartToRefresh => 'புதுப்பிக்க Omi ஐ மறுதொடக்கம் செய்யவும்';
 
   @override

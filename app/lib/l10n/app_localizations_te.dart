@@ -15908,6 +15908,25 @@ class AppLocalizationsTe extends AppLocalizations {
       'కొన్ని రికార్డింగ్‌లు ఇంకా మీ డివైస్‌లో ఉన్నాయి. అవి మీ ఫోన్‌కు పూర్తిగా సమకాలీకరించనివ్వండి, తర్వాత నవీకరణను ప్రారంభించండి.';
 
   @override
+  String get deleteFromServerTitle => 'అన్ని చోట్ల నుండి తొలగించాలా?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'ఈ రికార్డింగ్ అప్‌లోడ్ అయింది కానీ ఇంకా ట్రాన్స్‌క్రైబ్ కాలేదు. దీన్ని తొలగిస్తే Omi సర్వర్లలోని కాపీ కూడా శాశ్వతంగా తొలగించబడుతుంది, కాబట్టి ఇది ఎప్పటికీ ట్రాన్స్‌క్రైబ్ కాదు. దీన్ని రద్దు చేయలేరు.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed =>
+      'ఇప్పటికే ట్రాన్స్‌క్రైబ్ అయింది. దీన్ని తీసివేయడానికి దాని సంభాషణను తొలగించండి.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'ఈ రికార్డింగ్ ప్రాసెసింగ్ కొనసాగుతుంది. సంభాషణ కనిపించిన తర్వాత దాన్ని తొలగించవచ్చు.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'ఇక్కడ తొలగిస్తే ఫోన్‌లోని కాపీ తొలగిపోతుంది. ఇప్పటికే లిప్యంతరీకరించిన రికార్డింగ్‌ల సంభాషణలు అలాగే ఉంటాయి.';
+
+  @override
   String get batteryRestartToRefresh => 'రిఫ్రెష్ చేయడానికి Omi ను రీస్టార్ట్ చేయండి';
 
   @override

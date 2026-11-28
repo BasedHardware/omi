@@ -15896,6 +15896,24 @@ class AppLocalizationsKn extends AppLocalizations {
       'ಕೆಲವು ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಇನ್ನೂ ನಿಮ್ಮ ಸಾಧನದಲ್ಲಿವೆ. ಅವುಗಳು ನಿಮ್ಮ ಫೋನ್‌ಗೆ ಸಿಂಕ್ ಆಗಲು ಬಿಡಿ, ನಂತರ ನವೀಕರಣ ಪ್ರಾರಂಭಿಸಿ.';
 
   @override
+  String get deleteFromServerTitle => 'ಎಲ್ಲೆಡೆಯಿಂದ ಅಳಿಸುವುದೇ?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'ಈ ರೆಕಾರ್ಡಿಂಗ್ ಅಪ್‌ಲೋಡ್ ಆಗಿದೆ ಆದರೆ ಇನ್ನೂ ಲಿಪ್ಯಂತರ ಆಗಿಲ್ಲ. ಇದನ್ನು ಅಳಿಸಿದರೆ Omi ಸರ್ವರ್‌ಗಳಲ್ಲಿರುವ ಪ್ರತಿಯೂ ಶಾಶ್ವತವಾಗಿ ಅಳಿಸಲ್ಪಡುತ್ತದೆ, ಆದ್ದರಿಂದ ಇದು ಎಂದಿಗೂ ಲಿಪ್ಯಂತರ ಆಗುವುದಿಲ್ಲ. ಇದನ್ನು ರದ್ದುಗೊಳಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'ಈಗಾಗಲೇ ಲಿಪ್ಯಂತರ ಆಗಿದೆ. ಅದನ್ನು ತೆಗೆದುಹಾಕಲು ಅದರ ಸಂಭಾಷಣೆಯನ್ನು ಅಳಿಸಿ.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'ಈ ರೆಕಾರ್ಡಿಂಗ್‌ನ ಸಂಸ್ಕರಣೆ ಮುಂದುವರಿಯುತ್ತದೆ. ಸಂಭಾಷಣೆ ಕಾಣಿಸಿಕೊಂಡ ನಂತರ ಅದನ್ನು ಅಳಿಸಬಹುದು.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'ಇಲ್ಲಿ ಅಳಿಸಿದರೆ ಫೋನ್‌ನಲ್ಲಿರುವ ಪ್ರತಿ ಅಳಿಯುತ್ತದೆ. ಈಗಾಗಲೇ ಲಿಪ್ಯಂತರಿಸಿದ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳ ಸಂಭಾಷಣೆಗಳು ಉಳಿಯುತ್ತವೆ.';
+
+  @override
   String get batteryRestartToRefresh => 'ರಿಫ್ರೆಶ್ ಮಾಡಲು Omi ಅನ್ನು ಮರುಪ್ರಾರಂಭ ಮಾಡಿ';
 
   @override

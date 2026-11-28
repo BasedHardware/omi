@@ -16959,7 +16959,7 @@ abstract class AppLocalizations {
   /// **'Still Processing'**
   String get deleteWhileProcessingTitle;
 
-  /// Delete confirmation for a recording already uploaded whose server job has not finished. Deleting removes the phone copy; the server keeps processing, but if that job fails the app has no local file to re-upload from.
+  /// Delete confirmation for an uploaded recording whose server job has not finished, shown only while the server's owner-cancel switch is off (otherwise deleteFromServerMessage applies). Deleting removes the phone copy; the server keeps processing for now, and if that job fails the app has no local file to re-upload from.
   ///
   /// In en, this message translates to:
   /// **'This recording is already uploaded and Omi is processing it. Deleting it here removes the phone\'s copy. If processing fails, Omi can\'t retry from this phone.'**
@@ -27800,6 +27800,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Some recordings are still on your device. Let them finish syncing to your phone, then start the update.'**
   String get firmwareSyncRecordingsFirstMessage;
+
+  /// Confirmation title when deleting an uploaded recording that the server has not transcribed yet; the server copy is erased too
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Everywhere?'**
+  String get deleteFromServerTitle;
+
+  /// Confirmation body: deleting an uploaded, untranscribed recording also permanently erases it from Omi's servers
+  ///
+  /// In en, this message translates to:
+  /// **'This recording is uploaded but not transcribed yet. Deleting it also permanently erases the copy on Omi\'s servers, so it will never be transcribed. This can\'t be undone.'**
+  String get deleteFromServerMessage;
+
+  /// Shown after deleting a recording the server had already transcribed; the conversation must be deleted separately
+  ///
+  /// In en, this message translates to:
+  /// **'Already transcribed. Delete its conversation to remove it.'**
+  String get deletedRecordingAlreadyTranscribed;
+
+  /// Notice after deletion when the server cannot cancel an uploaded recording.
+  ///
+  /// In en, this message translates to:
+  /// **'This recording will still be processed. You can delete the conversation once it appears.'**
+  String get deletedRecordingWillBeProcessed;
+
+  /// Delete confirmation when the selection contains a transcribed recording.
+  ///
+  /// In en, this message translates to:
+  /// **'Deleting here removes the phone copy. Conversations for recordings that have already been transcribed will stay.'**
+  String get deleteRecordingKeepsConversation;
 
   /// Short caption under the Battery value (shown as a dash) in Omi device settings when the pendant's near-empty battery reading looks stuck after charging. Tells the user that restarting the Omi pendant refreshes the reading. Omi is the product name; keep it untranslated.
   ///

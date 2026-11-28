@@ -15,6 +15,7 @@ from utils.sync import future_capture_request, minimal_redrive, redrive_policy, 
 from utils.sync.future_capture_request import Outcome as FutureCaptureOutcome
 from utils.other.playback_identity import PlaybackSourceChanged
 from utils.capture.coverage_endpoint import router as coverage_router
+from utils.sync.owner_cancel_endpoint import router as owner_cancel_router
 from utils.observability.sync_phases import sync_attempt, set_sync_metrics_lane
 from utils.observability.sync_upload import compare_recovery_label, observe_hold_age
 import asyncio
@@ -121,12 +122,17 @@ from models.sync_audio import AudioPrecacheResponse, AudioUrlsResponse
 from routers.listen.contracts import persisted_started_seconds
 from config.stt_cap_dispatch import offline_admission_enabled as cap_dispatch_enabled
 from utils.sync.cap_hold import hold_capture_if_exhausted
-from utils.sync.admission_responses import sync_content_in_progress_response, sync_finalization_retrying
+from utils.sync.admission_responses import (
+    owner_cancelled_response,
+    sync_content_in_progress_response,
+    sync_finalization_retrying,
+)
 from utils.sync.assignment_errors import SyncAssignmentSuperseded
 from utils.analytics import record_sync_v1_usage as record_usage
 from utils.other import endpoints as auth
 from utils.account_cutover.access import should_skip_background_account_mutation
 from utils.other.storage import (
+    delete_rejected_upload_archives,
     archive_mobile_batch_raw_files,
     link_archive_captures,
     get_playback_artifact_signed_url,
@@ -348,6 +354,7 @@ async def _offer_shadow_upload(**kwargs) -> None:
 
 router = APIRouter(route_class=MultipartMaxPartSizeRoute, dependencies=[Depends(sync_stage.require_http_stage)])
 router.include_router(coverage_router)
+router.include_router(owner_cancel_router)
 
 
 async def _renew_custody_lease(uid, conversation_id):
@@ -1258,7 +1265,15 @@ async def sync_local_files_v2(
                 content={'code': 'sync_repair_bundle_changed', 'detail': 'Retain the original complete local upload'},
             )
 
+        ledger = await run_blocking(db_executor, legacy_dark.read_ledger_row, uid, content_id)
+        if ledger and ledger.get('status') == 'owner_cancelled':
+            return owner_cancelled_response(ledger.get('job_id'), total_files=len(files), lane=lane_decision.lane.value)
+
         archive_paths = None
+
+        async def erase_rejected_archives():
+            if archive_paths:
+                await run_blocking(sync_executor, delete_rejected_upload_archives, uid, job_id, archive_paths)
 
         async def archive_originals():
             nonlocal archive_paths
@@ -1422,6 +1437,12 @@ async def sync_local_files_v2(
                 evidence=intake_evidence,
             )
             if batch_response is not None:
+                if (
+                    isinstance(batch_response, JSONResponse)
+                    and batch_response.status_code == 202
+                    and json.loads(batch_response.body).get('reason_code') == 'owner_cancelled'
+                ):
+                    await erase_rejected_archives()
                 # Count only a fresh admission this request (a re-ACK of prior
                 # custody, a fence/unavailable response, or a rehomed final-pass
                 # owner is a follow-on, not a batch landing).
@@ -1481,6 +1502,8 @@ async def sync_local_files_v2(
                 )
             await run_blocking(sync_executor, _cleanup_files, paths)
             await run_blocking(sync_executor, shutil.rmtree, job_dir, True)
+            if decision.ownership is legacy_dark.LegacyOwnership.OWNER_CANCELLED:
+                await erase_rejected_archives()
             return (
                 legacy_dark.fence_response(decision, total_files=len(files), lane=lane_decision.lane.value)
                 or legacy_dark.admission_refused_response()
@@ -1536,6 +1559,10 @@ async def sync_local_files_v2(
             job_id,
             lane_decision.lane.value,
         )
+        if claim.get('outcome') == 'owner_cancelled':
+            await erase_rejected_archives()
+            await run_blocking(db_executor, mark_job_failed, job_id, 'Owner cancelled', reason_code='owner_cancelled')
+            return owner_cancelled_response(claim.get('job_id'), total_files=len(files), lane=lane_decision.lane.value)
         if claim.get('outcome') in {'completed', 'held'}:
             cached_result = claim.get('result') or {}
             await run_blocking(db_executor, mark_job_completed, job_id, cached_result)

@@ -14,7 +14,6 @@ import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/user_provider.dart';
-import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/logger.dart';
@@ -30,6 +29,7 @@ import 'wal_item_detail/wal_item_detail_page.dart';
 import 'widgets/too_old_recording_help.dart';
 import 'package:omi/pages/conversations/widgets/status_action_pill.dart';
 import 'package:omi/pages/conversations/wal_delete_confirmation.dart';
+import 'package:omi/pages/conversations/wal_server_delete_copy.dart';
 
 Widget _buildFaIcon(FaIconData icon, {double size = 18, Color color = const Color(0xFF8E8E93)}) {
   return Padding(
@@ -44,6 +44,13 @@ class WalListItem extends StatelessWidget {
   final Wal wal;
 
   const WalListItem({super.key, required this.wal, required this.date, required this.walIdx});
+
+  Future<void> _deleteWithNotice(BuildContext context, SyncProvider syncProvider) async {
+    final feedbackContext = Scaffold.maybeOf(context)?.context ?? context;
+    final l10n = context.l10n;
+    final result = await syncProvider.deleteWal(wal);
+    if (feedbackContext.mounted) showWalServerDeleteNotice(feedbackContext, result, l10n);
+  }
 
   double _calcProgress(Wal wal) {
     if (!wal.isSyncing || wal.syncStartedAt == null) return 0.0;
@@ -128,7 +135,7 @@ class WalListItem extends StatelessWidget {
             confirmLabel: context.l10n.delete,
             destructive: true,
           );
-          if (confirmed) await syncProvider.deleteWal(wal);
+          if (confirmed && context.mounted) await _deleteWithNotice(context, syncProvider);
         },
       );
     }
@@ -174,8 +181,8 @@ class WalListItem extends StatelessWidget {
               color: Colors.red,
               child: const Icon(Icons.delete, color: Colors.white),
             ),
-            onDismissed: (direction) {
-              ServiceManager.instance().wal.getSyncs().deleteWal(wal);
+            onDismissed: (direction) async {
+              await _deleteWithNotice(context, syncProvider);
             },
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
@@ -232,7 +239,7 @@ class WalListItem extends StatelessWidget {
                           confirmLabel: context.l10n.delete,
                           destructive: true,
                         );
-                        if (confirmed) await syncProvider.deleteWal(wal);
+                        if (confirmed && context.mounted) await _deleteWithNotice(context, syncProvider);
                       }),
                     ],
                     if (showBar) ...[

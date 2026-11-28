@@ -19026,7 +19026,7 @@
     },
     "onTheWayServerWork": "Server-reported work",
     "@deleteWhileProcessingMessage": {
-        "description": "Delete confirmation for a recording already uploaded whose server job has not finished. Deleting removes the phone copy; the server keeps processing, but if that job fails the app has no local file to re-upload from."
+        "description": "Delete confirmation for an uploaded recording whose server job has not finished, shown only while the server's owner-cancel switch is off (otherwise deleteFromServerMessage applies). Deleting removes the phone copy; the server keeps processing for now, and if that job fails the app has no local file to re-upload from."
     },
     "finishNothingToProcess": "Nothing to process yet.",
     "@finishNothingToProcess": {
@@ -19360,6 +19360,26 @@
     "firmwareSyncRecordingsFirstMessage": "Some recordings are still on your device. Let them finish syncing to your phone, then start the update.",
     "@firmwareSyncRecordingsFirstMessage": {
         "description": "Dialog body explaining that recordings must finish syncing from the pendant to the phone before the firmware update can start."
+    },
+    "deleteFromServerTitle": "Delete Everywhere?",
+    "@deleteFromServerTitle": {
+        "description": "Confirmation title when deleting an uploaded recording that the server has not transcribed yet; the server copy is erased too"
+    },
+    "deleteFromServerMessage": "This recording is uploaded but not transcribed yet. Deleting it also permanently erases the copy on Omi's servers, so it will never be transcribed. This can't be undone.",
+    "@deleteFromServerMessage": {
+        "description": "Confirmation body: deleting an uploaded, untranscribed recording also permanently erases it from Omi's servers"
+    },
+    "deletedRecordingAlreadyTranscribed": "Already transcribed. Delete its conversation to remove it.",
+    "@deletedRecordingAlreadyTranscribed": {
+        "description": "Shown after deleting a recording the server had already transcribed; the conversation must be deleted separately"
+    },
+    "deletedRecordingWillBeProcessed": "This recording will still be processed. You can delete the conversation once it appears.",
+    "@deletedRecordingWillBeProcessed": {
+        "description": "Notice after deletion when the server cannot cancel an uploaded recording."
+    },
+    "deleteRecordingKeepsConversation": "Deleting here removes the phone copy. Conversations for recordings that have already been transcribed will stay.",
+    "@deleteRecordingKeepsConversation": {
+        "description": "Delete confirmation when the selection contains a transcribed recording."
     },
     "batteryRestartToRefresh": "Restart Omi to refresh",
     "@batteryRestartToRefresh": {

@@ -15835,6 +15835,24 @@ class AppLocalizationsDa extends AppLocalizations {
       'Nogle optagelser er stadig på din enhed. Lad dem blive færdige med at synkronisere til din telefon, og start derefter opdateringen.';
 
   @override
+  String get deleteFromServerTitle => 'Slet overalt?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'Denne optagelse er uploadet, men endnu ikke transskriberet. Når du sletter den, slettes kopien på Omis servere også permanent, så den aldrig bliver transskriberet. Dette kan ikke fortrydes.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'Allerede transskriberet. Slet samtalen for at fjerne den.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'Optagelsen bliver stadig behandlet. Du kan slette samtalen, når den vises.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'Hvis du sletter her, fjernes kopien fra telefonen. Samtaler for optagelser, der allerede er transskriberet, bevares.';
+
+  @override
   String get batteryRestartToRefresh => 'Genstart Omi for at opdatere værdien';
 
   @override

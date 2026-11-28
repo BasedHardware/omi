@@ -15961,6 +15961,25 @@ class AppLocalizationsDe extends AppLocalizations {
       'Einige Aufnahmen sind noch auf Ihrem Gerät. Warten Sie, bis sie vollständig mit Ihrem Telefon synchronisiert wurden, und starten Sie dann die Aktualisierung.';
 
   @override
+  String get deleteFromServerTitle => 'Überall löschen?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'Diese Aufnahme wurde hochgeladen, aber noch nicht transkribiert. Beim Löschen wird auch die Kopie auf den Omi-Servern endgültig entfernt, sodass sie nie transkribiert wird. Dies kann nicht rückgängig gemacht werden.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed =>
+      'Bereits transkribiert. Lösche die zugehörige Konversation, um sie zu entfernen.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'Diese Aufnahme wird weiterhin verarbeitet. Du kannst die Unterhaltung löschen, sobald sie angezeigt wird.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'Dadurch wird die Kopie auf dem Telefon gelöscht. Unterhaltungen zu bereits transkribierten Aufnahmen bleiben erhalten.';
+
+  @override
   String get batteryRestartToRefresh => 'Starten Sie Omi neu, um den Wert zu aktualisieren';
 
   @override

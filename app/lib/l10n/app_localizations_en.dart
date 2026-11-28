@@ -15827,6 +15827,24 @@ class AppLocalizationsEn extends AppLocalizations {
       'Some recordings are still on your device. Let them finish syncing to your phone, then start the update.';
 
   @override
+  String get deleteFromServerTitle => 'Delete Everywhere?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'This recording is uploaded but not transcribed yet. Deleting it also permanently erases the copy on Omi\'s servers, so it will never be transcribed. This can\'t be undone.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'Already transcribed. Delete its conversation to remove it.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'This recording will still be processed. You can delete the conversation once it appears.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'Deleting here removes the phone copy. Conversations for recordings that have already been transcribed will stay.';
+
+  @override
   String get batteryRestartToRefresh => 'Restart Omi to refresh';
 
   @override

@@ -15854,6 +15854,24 @@ class AppLocalizationsTr extends AppLocalizations {
       'Bazı kayıtlar hâlâ cihazınızda. Telefonunuza senkronize edilmelerini bekleyin, ardından güncellemeyi başlatın.';
 
   @override
+  String get deleteFromServerTitle => 'Her yerden silinsin mi?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'Bu kayıt yüklendi ancak henüz metne dönüştürülmedi. Silmek, Omi sunucularındaki kopyayı da kalıcı olarak siler; böylece asla metne dönüştürülmez. Bu işlem geri alınamaz.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'Zaten metne dönüştürüldü. Kaldırmak için konuşmasını silin.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'Bu kayıt işlenmeye devam edecek. Konuşma göründüğünde onu silebilirsin.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'Buradan silmek telefondaki kopyayı kaldırır. Metne dönüştürülmüş kayıtların konuşmaları kalır.';
+
+  @override
   String get batteryRestartToRefresh => 'Yenilemek için Omi\'yi yeniden başlatın';
 
   @override

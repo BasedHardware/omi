@@ -73,6 +73,7 @@ from utils.sync.source_reuse_decode import decode_for_intake
 from config.refactor_modes import serving_for
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
 from utils.batch_pipeline.intake_outcome import IntakeRouteEvidence
+from utils.batch_pipeline.owner_cancel import cancelled_status
 from database.outbox import OutboxKind, outbox_for
 from utils.batch_pipeline import gpu_overflow
 from utils.batch_pipeline.provider_stt_admission import provider_enqueue
@@ -301,6 +302,9 @@ def durable_status(store, uid: str, job_id: str, *, poll: bool = False) -> dict 
             return None
         if intake['owner_id'] != uid:
             raise HTTPException(status_code=403, detail='Not authorized to view this sync job')
+        if intake.get('owner_cancelled_at') is not None:
+            # The owner deleted this recording: never redrive or ACK it as processed.
+            return cancelled_status(intake, job_id)
         if intake.get('coalesce_group'):
             return {'_coalescing_intake': intake}
         ledger = tx.get('content', f"{uid}/{intake['content_id']}")
@@ -618,6 +622,44 @@ async def _probe_upload_allowance(
         return None
 
 
+async def _completed_legacy_upload_response(store, uid, content_id, job_id, *, conversation_id, total_files, lane):
+    try:
+        cached = await run_blocking(
+            db_executor,
+            cache_completed,
+            store,
+            uid,
+            content_id,
+            job_id,
+            {
+                'owner_key': owner_key(uid),
+                'conversation_id': conversation_id,
+                'total_files': total_files,
+                'lane': lane,
+            },
+            time.time(),
+        )
+    except BatchPrivacyBlocked as error:
+        # cache_completed checks privacy only after proving a valid
+        # completed receipt. The user deleted its conversation: answer
+        # the synchronous all-success shape (no IDs, no intake write) so
+        # the phone ACKs instead of looping on a 409.
+        if not is_conversation_deleted(error):
+            raise
+        # Re-prove in one transaction that every denial is a deletion;
+        # any other denial raises here and keeps the 409.
+        total = await run_blocking(db_executor, store.run, lambda tx: _only_deleted_total(tx, uid, content_id))
+        if total is None:
+            raise error
+        logger.info('event=batch_intake outcome=conversation_deleted_terminal')
+        return JSONResponse(status_code=200, content=deleted_conversation_result(total))
+    if cached:
+        status = await run_blocking(db_executor, durable_status, store, uid, job_id)
+        if status:
+            return start_response(status)
+    return None
+
+
 async def accept_upload(
     *,
     uid: str,
@@ -684,47 +726,28 @@ async def accept_upload(
         if refused is not None:
             future_capture_request.mark(FutureCaptureOutcome.PREFLIGHT_REFUSED)
             return refused
+        if previous.get('status') == 'owner_cancelled':
+            from utils.sync.admission_responses import owner_cancelled_response
+
+            future_capture_request.mark(FutureCaptureOutcome.PRIOR_CUSTODY)
+            return owner_cancelled_response(previous.get('job_id'), total_files=len(paths), lane=lane)
         if previous.get('dispatch_protocol') == 'batch_v1':
             status = await run_blocking(db_executor, durable_status, store, uid, previous['job_id'])
             future_capture_request.mark(FutureCaptureOutcome.PRIOR_CUSTODY)
             return start_response(status) if status else sync_content_in_progress_response(previous['job_id'])
         if previous.get('status') == 'completed':
-            try:
-                cached = await run_blocking(
-                    db_executor,
-                    cache_completed,
-                    store,
-                    uid,
-                    content_id,
-                    public_job_id,
-                    {
-                        'owner_key': owner_key(uid),
-                        'conversation_id': conversation_id,
-                        'total_files': len(paths),
-                        'lane': lane,
-                    },
-                    time.time(),
-                )
-            except BatchPrivacyBlocked as error:
-                # cache_completed checks privacy only after proving a valid
-                # completed receipt. The user deleted its conversation: answer
-                # the synchronous all-success shape (no IDs, no intake write) so
-                # the phone ACKs instead of looping on a 409.
-                if not is_conversation_deleted(error):
-                    raise
-                # Re-prove in one transaction that every denial is a deletion;
-                # any other denial raises here and keeps the 409.
-                total = await run_blocking(db_executor, store.run, lambda tx: _only_deleted_total(tx, uid, content_id))
-                if total is None:
-                    raise error
+            completed = await _completed_legacy_upload_response(
+                store,
+                uid,
+                content_id,
+                public_job_id,
+                conversation_id=conversation_id,
+                total_files=len(paths),
+                lane=lane,
+            )
+            if completed is not None:
                 future_capture_request.mark(FutureCaptureOutcome.PRIOR_CUSTODY)
-                logger.info('event=batch_intake outcome=conversation_deleted_terminal')
-                return JSONResponse(status_code=200, content=deleted_conversation_result(total))
-            if cached:
-                status = await run_blocking(db_executor, durable_status, store, uid, public_job_id)
-                if status:
-                    future_capture_request.mark(FutureCaptureOutcome.PRIOR_CUSTODY)
-                    return start_response(status)
+                return completed
         phase = 'ownership_fence'
         mode = await run_blocking(db_executor, legacy_dark.current_mode, uid)
         adopt = None
@@ -1237,6 +1260,7 @@ async def accept_upload(
                 'total_files': len(paths),
                 'total_audio_seconds': sum(item.duration_seconds for item in items),
                 'lane': lane,
+                'raw_capture_paths': list((intake_context or {}).get('raw_capture_paths') or ()),
                 'repair_lineage': lineage_record(intake_context),
                 'repair_languages': repair_languages,
                 **context_fields(intake_context),

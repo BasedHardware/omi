@@ -15856,6 +15856,25 @@ class AppLocalizationsUr extends AppLocalizations {
       'کچھ ریکارڈنگز ابھی آپ کے ڈیوائس پر ہیں۔ انہیں فون پر سنک ہونے دیں، پھر اپڈیٹ شروع کریں۔';
 
   @override
+  String get deleteFromServerTitle => 'ہر جگہ سے حذف کریں؟';
+
+  @override
+  String get deleteFromServerMessage =>
+      'یہ ریکارڈنگ اپ لوڈ ہو چکی ہے لیکن ابھی تک ٹرانسکرائب نہیں ہوئی۔ اسے حذف کرنے سے Omi کے سرورز پر موجود کاپی بھی ہمیشہ کے لیے مٹ جائے گی، اس لیے یہ کبھی ٹرانسکرائب نہیں ہوگی۔ اسے واپس نہیں کیا جا سکتا۔';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed =>
+      'پہلے ہی ٹرانسکرائب ہو چکی ہے۔ اسے ہٹانے کے لیے اس کی گفتگو حذف کریں۔';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'اس ریکارڈنگ پر کارروائی جاری رہے گی۔ گفتگو ظاہر ہونے پر آپ اسے حذف کر سکتے ہیں۔';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'یہاں حذف کرنے سے فون پر موجود کاپی ہٹ جاتی ہے۔ جن ریکارڈنگز کو پہلے ہی متن میں تبدیل کیا جا چکا ہے ان کی گفتگو برقرار رہے گی۔';
+
+  @override
   String get batteryRestartToRefresh => 'ریفریش کرنے کے لیے Omi کو دوبارہ شروع کریں';
 
   @override

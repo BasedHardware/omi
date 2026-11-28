@@ -15976,6 +15976,24 @@ class AppLocalizationsFr extends AppLocalizations {
       'Certains enregistrements sont encore sur votre appareil. Laissez-les terminer leur synchronisation vers votre téléphone, puis lancez la mise à jour.';
 
   @override
+  String get deleteFromServerTitle => 'Supprimer partout ?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'Cet enregistrement a été envoyé mais pas encore transcrit. Le supprimer efface aussi définitivement la copie sur les serveurs d\'Omi, il ne sera donc jamais transcrit. Cette action est irréversible.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'Déjà transcrit. Supprimez sa conversation pour le retirer.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'Le traitement de cet enregistrement va se poursuivre. Tu pourras supprimer la conversation dès qu’elle apparaîtra.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'La suppression retire la copie du téléphone. Les conversations des enregistrements déjà transcrits sont conservées.';
+
+  @override
   String get batteryRestartToRefresh => 'Redémarrez Omi pour actualiser';
 
   @override

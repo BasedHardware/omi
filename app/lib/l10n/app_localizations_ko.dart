@@ -15616,6 +15616,22 @@ class AppLocalizationsKo extends AppLocalizations {
   String get firmwareSyncRecordingsFirstMessage => '일부 녹음이 아직 기기에 남아 있습니다. 휴대폰으로의 동기화가 완료되면 업데이트를 시작해 주세요.';
 
   @override
+  String get deleteFromServerTitle => '모든 곳에서 삭제할까요?';
+
+  @override
+  String get deleteFromServerMessage =>
+      '이 녹음은 업로드되었지만 아직 텍스트로 변환되지 않았습니다. 삭제하면 Omi 서버에 있는 사본도 영구적으로 지워지므로 텍스트로 변환되지 않습니다. 이 작업은 되돌릴 수 없습니다.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => '이미 텍스트로 변환되었습니다. 제거하려면 해당 대화를 삭제하세요.';
+
+  @override
+  String get deletedRecordingWillBeProcessed => '이 녹음은 계속 처리됩니다. 대화가 표시되면 삭제할 수 있습니다.';
+
+  @override
+  String get deleteRecordingKeepsConversation => '여기서 삭제하면 휴대전화의 사본이 제거됩니다. 이미 텍스트로 변환된 녹음의 대화는 유지됩니다.';
+
+  @override
   String get batteryRestartToRefresh => '새로고침하려면 Omi를 다시 시작하세요';
 
   @override

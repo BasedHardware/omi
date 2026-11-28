@@ -15769,6 +15769,23 @@ class AppLocalizationsTh extends AppLocalizations {
       'ไฟล์บันทึกเสียงบางส่วนยังอยู่ในอุปกรณ์ของคุณ รอให้ซิงค์ไปยังโทรศัพท์เสร็จก่อน แล้วจึงเริ่มการอัปเดต';
 
   @override
+  String get deleteFromServerTitle => 'ลบทุกที่ใช่ไหม';
+
+  @override
+  String get deleteFromServerMessage =>
+      'การบันทึกนี้อัปโหลดแล้วแต่ยังไม่ได้ถอดเสียง การลบจะลบสำเนาบนเซิร์ฟเวอร์ของ Omi อย่างถาวรด้วย จึงจะไม่ถูกถอดเสียงอีกเลย การดำเนินการนี้ไม่สามารถย้อนกลับได้';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'ถอดเสียงแล้ว ลบบทสนทนาของรายการนี้เพื่อนำออก';
+
+  @override
+  String get deletedRecordingWillBeProcessed => 'ระบบจะประมวลผลการบันทึกนี้ต่อไป คุณสามารถลบการสนทนาได้เมื่อปรากฏขึ้น';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'การลบจากที่นี่จะนำสำเนาออกจากโทรศัพท์ การสนทนาจากการบันทึกที่ถอดเสียงแล้วจะยังคงอยู่';
+
+  @override
   String get batteryRestartToRefresh => 'รีสตาร์ท Omi เพื่อรีเฟรช';
 
   @override

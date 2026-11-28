@@ -15879,6 +15879,24 @@ class AppLocalizationsLv extends AppLocalizations {
       'Daži ieraksti vēl atrodas jūsu ierīcē. Ļaujiet tiem pabeigt sinhronizēšanu ar tālruni, pēc tam sāciet atjaunināšanu.';
 
   @override
+  String get deleteFromServerTitle => 'Dzēst visur?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'Šis ieraksts ir augšupielādēts, bet vēl nav transkribēts. Dzēšot to, neatgriezeniski tiek izdzēsta arī kopija Omi serveros, tāpēc tas nekad netiks transkribēts. Šo darbību nevar atsaukt.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'Jau transkribēts. Lai to noņemtu, izdzēsiet tā sarunu.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'Šī ieraksta apstrāde turpināsies. Kad saruna parādīsies, to varēsi dzēst.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'Dzēšot šeit, tiek noņemta kopija no tālruņa. Jau transkribēto ierakstu sarunas saglabājas.';
+
+  @override
   String get batteryRestartToRefresh => 'Restartējiet Omi, lai atsvaidzinātu';
 
   @override

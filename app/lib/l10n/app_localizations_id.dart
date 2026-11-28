@@ -15859,6 +15859,24 @@ class AppLocalizationsId extends AppLocalizations {
       'Beberapa rekaman masih berada di perangkat Anda. Biarkan rekaman tersebut selesai disinkronkan ke ponsel Anda, lalu mulai pembaruan.';
 
   @override
+  String get deleteFromServerTitle => 'Hapus di semua tempat?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'Rekaman ini sudah diunggah tetapi belum ditranskripsi. Menghapusnya juga menghapus salinannya di server Omi secara permanen, sehingga tidak akan pernah ditranskripsi. Tindakan ini tidak dapat dibatalkan.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'Sudah ditranskripsi. Hapus percakapannya untuk menghapusnya.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'Rekaman ini akan tetap diproses. Kamu bisa menghapus percakapan setelah muncul.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'Menghapus di sini menghapus salinan di ponsel. Percakapan dari rekaman yang sudah ditranskripsikan tetap tersimpan.';
+
+  @override
   String get batteryRestartToRefresh => 'Mulai ulang Omi untuk menyegarkan';
 
   @override

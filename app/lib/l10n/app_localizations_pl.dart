@@ -15890,6 +15890,24 @@ class AppLocalizationsPl extends AppLocalizations {
       'Niektóre nagrania wciąż znajdują się na urządzeniu. Poczekaj, aż zostaną zsynchronizowane z telefonem, a następnie rozpocznij aktualizację.';
 
   @override
+  String get deleteFromServerTitle => 'Usunąć wszędzie?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'To nagranie zostało przesłane, ale nie zostało jeszcze przetranskrybowane. Usunięcie go trwale usuwa również kopię na serwerach Omi, więc nigdy nie zostanie przetranskrybowane. Tej operacji nie można cofnąć.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'Już przetranskrybowane. Usuń jego rozmowę, aby je usunąć.';
+
+  @override
+  String get deletedRecordingWillBeProcessed =>
+      'Przetwarzanie tego nagrania będzie kontynuowane. Możesz usunąć rozmowę, gdy się pojawi.';
+
+  @override
+  String get deleteRecordingKeepsConversation =>
+      'Usunięcie w tym miejscu usuwa kopię z telefonu. Rozmowy z nagrań, które już przepisano, pozostaną dostępne.';
+
+  @override
   String get batteryRestartToRefresh => 'Uruchom ponownie Omi, aby odświeżyć odczyt';
 
   @override
