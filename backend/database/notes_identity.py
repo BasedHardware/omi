@@ -122,13 +122,9 @@ def stage_notes_identity(transaction, user_ref, write_data, existing, *, decode_
         for s in segments
         if (s.get('person_id') or s.get('speaker_match_source')) and s.get('speaker_match_source') != 'notes_inferred'
     )
-    owner_speakers = {
-        s.get('speaker_id') for s in [*segments, *apply_manual_assignments(segments, receipt)] if s.get('is_user')
-    }
     rejected_speakers = manual_rejected_speakers(receipt)
     rejected_participants = []
     pending = {}
-    bindings = {}
     now = datetime.now(timezone.utc)
     for participant in participants:
         name = normalized_person_alias(participant['name'])
@@ -205,34 +201,15 @@ def stage_notes_identity(transaction, user_ref, write_data, existing, *, decode_
         person.update(aliases=aliases, notes_identity_identifiers=contributions, updated_at=now)
         people[pid] = person
         pending[pid] = (created or pending.get(pid, (False,))[0], person)
-        for speaker_id in participant.get('speaker_bindings') or []:
-            if isinstance(speaker_id, int) and not isinstance(speaker_id, bool) and speaker_id >= 0:
-                bindings.setdefault(speaker_id, set()).add(pid)
     write_data['structured']['participants'] = [
         p for p in write_data['structured']['participants'] if p not in rejected_participants
     ]
-    # A number reused across merged scopes does not identify one speaker.
+    # Retire historical notes labels on rewrite while protecting manual decisions.
     for segment in segments:
         if segment.get('speaker_match_source') == 'notes_inferred' and segment.get('id') not in protected:
             segment.update(
                 person_id=None, speaker_identity_status='unknown', speaker_label_source=None, speaker_match_source=None
             )
-        choices = bindings.get(segment.get('speaker_id'), set())
-        scopes = {s.get('speaker_id_scope') for s in segments if s.get('speaker_id') == segment.get('speaker_id')}
-        if (
-            not owner_speakers
-            or segment.get('speaker_id') in owner_speakers
-            or len(choices) != 1
-            or len(scopes) > 1
-            or segment.get('id') in protected
-        ):
-            continue
-        segment.update(
-            person_id=next(iter(choices)),
-            speaker_identity_status='not_user',
-            speaker_label_source='auto',
-            speaker_match_source='notes_inferred',
-        )
     segments = apply_manual_assignments(segments, receipt)
     encoded = encode({'transcript_segments': segments}, uid, level)
     write_data.update(encoded)
