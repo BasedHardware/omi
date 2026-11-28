@@ -574,8 +574,12 @@ class RegistryFixture(unittest.TestCase):
         self.assertIn("shadow is required", self._shadow_errors(entry))
         older = flag("OLD_PATH_MODE", created="2026-11-27", review_by="2026-12-10", ramp=ramp_plan(done_by="2026-12-10"))
         self.assertNotIn("shadow is required", self._shadow_errors(older))
-        killed = flag("DEAD_PATH_SHADOW", created="2026-11-28", review_by="2026-12-10", decision="kill")
+        killed = flag("DEAD_PATH_MODE", created="2026-11-28", review_by="2026-12-10", decision="kill")
         self.assertNotIn("shadow is required", self._shadow_errors(killed))
+        direct = flag("NEW_THING_SHADOW_ENABLED", created="2026-11-28", review_by="2026-12-10", ramp=ramp_plan(done_by="2026-12-10"))
+        self.assertNotIn("shadow is required", self._shadow_errors(direct))
+        direct["shadow"] = {"readout_by": "2026-12-01", "metric": "omi_thing_total"}
+        self.assertIn("only for config.refactor_modes", self._shadow_errors(direct))
 
     def test_shadow_block_bounds_readout_and_names_metric(self) -> None:
         base = dict(created="2026-11-28", review_by="2026-12-20", ramp=ramp_plan(done_by="2026-12-20"))
@@ -602,7 +606,7 @@ class RegistryFixture(unittest.TestCase):
         )
         registry = {"flags": [entry], "ignore": [], "retired": []}
         self.assertEqual(
-            {"NEW_PATH_LEGACY_MODE": "2026-12-18", "NEW_PATH_MODE": "2026-12-18"}, shadow_expiry(registry)
+            {"NEW_PATH_LEGACY_MODE": "2026-12-17", "NEW_PATH_MODE": "2026-12-17"}, shadow_expiry(registry)
         )
         self.write_flags([entry])
         self.write("backend/service.py", "import os\nos.getenv('NEW_PATH_MODE')\nos.getenv('NEW_PATH_LEGACY_MODE')\n")

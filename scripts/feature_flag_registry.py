@@ -30,7 +30,9 @@ RAMP_REQUIRED_FROM = date(2026, 10, 21)
 SHADOW_REQUIRED_FROM = date(2026, 11, 28)
 SHADOW_READOUT_MAX_DAYS = 21
 SHADOW_EXPIRY_GRACE_DAYS = 7
-SHADOW_KEY = re.compile(r"(?:_MODE$|SHADOW)")
+# Only refactor_modes families (*_MODE) expire through the table; other shadow readers are
+# covered by the kill-still-serving watchdog (omi-workspace infra/rollout/bin/killed_flags_serving.py).
+SHADOW_KEY = re.compile(r"_MODE$")
 SHADOW_METRIC = re.compile(r"^[A-Za-z_][A-Za-z0-9_:.]*$")
 SHADOW_EXPIRY_PATH = "backend/config/shadow_expiry.py"
 # DEC-BTR-001 keeps these two fail-closed allocation controls as permanent
@@ -132,7 +134,7 @@ def _validate_shadow(entry: dict[str, Any], label: str, errors: list[str]) -> No
             and entry.get("decision") != "kill"
         ):
             errors.append(
-                f"{label}: shadow is required for new _MODE/SHADOW rollout rows created on or after "
+                f"{label}: shadow is required for new _MODE rollout rows created on or after "
                 f"{SHADOW_REQUIRED_FROM.isoformat()}: {{readout_by, metric}}"
             )
         return
@@ -141,6 +143,8 @@ def _validate_shadow(entry: dict[str, Any], label: str, errors: list[str]) -> No
         return
     if entry.get("lifecycle") not in {"rollout", "experiment"}:
         errors.append(f"{label}: shadow requires rollout or experiment lifecycle")
+    if not SHADOW_KEY.search(entry.get("key", "")):
+        errors.append(f"{label}: shadow is only for config.refactor_modes *_MODE families, which read the expiry table")
     if not isinstance(shadow["metric"], str) or not SHADOW_METRIC.match(shadow["metric"]):
         errors.append(f"{label}: shadow.metric must name the readout metric or log event")
     try:
@@ -160,7 +164,7 @@ def shadow_expiry(registry: dict[str, list[dict[str, Any]]]) -> dict[str, str]:
         shadow = entry.get("shadow")
         if not isinstance(shadow, dict) or "readout_by" not in shadow:
             continue
-        expires = date.fromisoformat(shadow["readout_by"]) + timedelta(days=SHADOW_EXPIRY_GRACE_DAYS + 1)
+        expires = date.fromisoformat(shadow["readout_by"]) + timedelta(days=SHADOW_EXPIRY_GRACE_DAYS)
         for name in (entry["key"], *entry.get("aliases", [])):
             table[name] = expires.isoformat()
     return dict(sorted(table.items()))

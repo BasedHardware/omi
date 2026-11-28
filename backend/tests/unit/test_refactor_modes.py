@@ -148,6 +148,12 @@ def test_expired_shadow_reads_as_off_and_serve_is_untouched(monkeypatch, caplog)
     assert rm.mode('EXPIRY_FIXTURE_MODE', environ={'EXPIRY_FIXTURE_MODE': 'serve'}) == 'serve'
     assert rm.mode('OTHER_MODE', environ={'OTHER_MODE': 'shadow'}) == 'shadow'
 
+    # Expiry stops the shadow run only: a configured serve cohort keeps serving.
+    uid = 'expiry-fixture-uid'
+    cohort = {'EXPIRY_FIXTURE_MODE': 'shadow', 'EXPIRY_FIXTURE_MODE_SERVE_UID_SHA256S': rm.uid_digest(uid)}
+    assert rm.serving_for('EXPIRY_FIXTURE_MODE', uid, environ=cohort) is True
+    assert rm.serving_for('EXPIRY_FIXTURE_MODE', 'someone-else', environ=cohort) is False
+
 
 def test_shadow_expiry_table_shape():
     from config.shadow_expiry import SHADOW_EXPIRES

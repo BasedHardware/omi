@@ -455,7 +455,7 @@ env:
     value: "15000"
   - name: TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED
     value: "true"
-  # Complete stage E: 5% cohort plus the owner UID, bounded by the daily cap.
+  # Complete stage F: stage E with the shadow retired (2026-11-28, kill switch on).
   - name: TRANSCRIPTION_SHADOW_ENABLED
     value: "false"
   - name: TRANSCRIPTION_SHADOW_KILL_SWITCH

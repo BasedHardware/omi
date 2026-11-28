@@ -241,7 +241,8 @@ def serving_for(
 ) -> bool:
     """Whether the new path serves this uid. ``off`` and ``shadow`` serve only the cohort."""
     env = os.environ if environ is None else environ
-    current = mode(name, default, environ=env)
+    # Not mode(): shadow expiry stops the shadow run, never a configured serve cohort.
+    current = _parse_mode(name, default, env)
     if current == 'off':
         return False
     if name == RECORD_TOKEN_LEASE_MODE_ENV:
