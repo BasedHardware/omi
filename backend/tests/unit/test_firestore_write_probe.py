@@ -559,8 +559,8 @@ def test_caller_cap_folds_new_labels_to_other(client, monkeypatch):
     assert probe.FIRESTORE_WRITE_CALLER_LABEL_OVERFLOW._value.get() == write_overflow + 1
 
 
-@pytest.mark.parametrize('method', ['commit', 'batch_write'])
-def test_batch_privacy_fence_preserves_writer_attribution(client, transport, monkeypatch, method):
+@pytest.mark.parametrize('method,denies_recording', [('commit', False), ('batch_write', False), ('commit', True)])
+def test_batch_privacy_fence_preserves_writer_attribution(client, transport, monkeypatch, method, denies_recording):
     from database import batch_privacy_write_fence as fence
 
     monkeypatch.setattr(FirestoreClient, 'commit', fence._wrap_commit(FirestoreClient.commit))
@@ -569,7 +569,9 @@ def test_batch_privacy_fence_preserves_writer_attribution(client, transport, mon
     source_before = _by_caller('users/conversations', 'set', caller)
     token_before = _by_caller('batch_pipeline_privacy', 'set', caller)
     if method == 'commit':
-        client.document('users/u1/conversations/c1').set({'record_lane_owner': 'batch_live_v1'})
+        client.document('users/u1/conversations/c1').set(
+            {'record_lane_owner': 'batch_live_v1', 'private_cloud_sync_enabled': not denies_recording}
+        )
     else:
         client._firestore_api.batch_write(
             request={
@@ -580,9 +582,11 @@ def test_batch_privacy_fence_preserves_writer_attribution(client, transport, mon
     assert _by_caller('users/conversations', 'set', caller) == source_before + 1
     assert _by_caller('batch_pipeline_privacy', 'set', caller) == token_before + 1
     assert len(transport.requests) == 1
-    assert (
-        len(transport.requests[0].writes) == 4
-    )  # source with folded version, Home dirty receipt/control, privacy token
+    writes = transport.requests[0].writes
+    # Source with folded version, Home dirty receipt/control, privacy token.
+    assert len(writes) == 4 + int(denies_recording)
+    if denies_recording:
+        assert writes[-1].update.name.startswith(f'{ROOT}/batch_privacy_late_sweeps/')
 
 
 @pytest.mark.parametrize(

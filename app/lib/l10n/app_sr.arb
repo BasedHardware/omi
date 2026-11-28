@@ -12325,5 +12325,9 @@
     "playStripePlanPaused": "Ваш {plan} план је паузиран.",
     "firmwareNewestSupportedForDevice": "Ваш уређај већ користи најновију подржану верзију фирмвера",
     "firmwareSyncRecordingsFirstTitle": "Прво синхронизујте снимке",
-    "firmwareSyncRecordingsFirstMessage": "Неки снимци се још увек налазе на вашем уређају. Сачекајте да заврше синхронизовање са телефоном, а затим покрените ажурирање."
+    "firmwareSyncRecordingsFirstMessage": "Неки снимци се још увек налазе на вашем уређају. Сачекајте да заврше синхронизовање са телефоном, а затим покрените ажурирање.",
+    "batteryRestartToRefresh": "Поново покрените Omi да освежите податке",
+    "onTheWayAllowanceHeldTitle": "Обрадиће се {date} када се обнове ваши минути",
+    "onTheWayAllowanceHeldUpgrade": "Или их одмах обрадите уз надоградњу плана",
+    "onTheWayDayProcessesOn": "Обрадиће се {date}"
 }

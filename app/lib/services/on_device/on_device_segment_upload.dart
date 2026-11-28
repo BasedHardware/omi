@@ -3,6 +3,12 @@ import 'dart:math';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 
+/// The from-segments budget is spent; the runner waits for [retryAfter] before trying again.
+class OnDeviceUploadRateLimited implements Exception {
+  const OnDeviceUploadRateLimited(this.retryAfter);
+  final Duration? retryAfter;
+}
+
 /// Chunk boundaries never merge speakers or reset timestamps. Retrying the same
 /// recording resends the same indices under its original client_session_id.
 Future<String> uploadOnDeviceSegments(
@@ -42,6 +48,9 @@ Future<String> uploadOnDeviceSegments(
       case ApiSuccess<String>():
         resultId = response.data;
       case ApiFailure<String>():
+        if (response.problem.kind == ApiProblemKind.rateLimited) {
+          throw OnDeviceUploadRateLimited(response.problem.retryAfter);
+        }
         throw StateError('Transcript ingestion ${response.problem.kind.name}');
     }
   }

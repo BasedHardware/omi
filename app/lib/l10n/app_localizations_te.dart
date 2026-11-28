@@ -15906,4 +15906,20 @@ class AppLocalizationsTe extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'కొన్ని రికార్డింగ్‌లు ఇంకా మీ డివైస్‌లో ఉన్నాయి. అవి మీ ఫోన్‌కు పూర్తిగా సమకాలీకరించనివ్వండి, తర్వాత నవీకరణను ప్రారంభించండి.';
+
+  @override
+  String get batteryRestartToRefresh => 'రిఫ్రెష్ చేయడానికి Omi ను రీస్టార్ట్ చేయండి';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'మీ నిమిషాలు రిన్యూ అయ్యే $dateన ప్రాసెస్ అవుతుంది';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'లేదా ప్లాన్ అప్‌గ్రేడ్‌తో వెంటనే ప్రాసెస్ చేయించండి';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return '$dateన ప్రాసెస్ అవుతుంది';
+  }
 }

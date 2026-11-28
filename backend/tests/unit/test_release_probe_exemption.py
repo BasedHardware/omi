@@ -55,11 +55,11 @@ def test_desktop_gates_exempt_only_the_probe_uid() -> None:
     assert "probe_uid = is_release_probe_uid(uid)" in process_source
     assert "'omi-release-probe'" not in process_source
     # The trial gate is gone. Inventory the remaining desktop conditions in
-    # the real processing entry point so an added gate cannot escape this check.
+    # the shared stage generator so an added gate cannot escape this check.
     process_function = next(
         node
         for node in ast.parse(process_source).body
-        if isinstance(node, ast.FunctionDef) and node.name == 'process_conversation'
+        if isinstance(node, ast.FunctionDef) and node.name == '_process_conversation_steps'
     )
     desktop_gates = [
         node

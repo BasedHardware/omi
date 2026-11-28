@@ -493,3 +493,173 @@ def test_config_matrix_takes_the_bounded_path_or_exactly_the_legacy_path(monkeyp
         assert followups.backoff == {} and followups.wrap_at is None
         if pagination == 'false':
             assert second[0] == 'r000'  # every page is the head, as before
+
+
+INTERVAL_KNOB = 'BATCH_PIPELINE_PROJECTION_FOLLOWUP_DISCOVERY_INTERVAL_SECONDS'
+
+
+@pytest.mark.parametrize(
+    ('raw', 'expected'),
+    [(None, 0.0), ('0', 0.0), ('120', 120.0), ('900', 900.0), ('901', 0.0), ('-1', 0.0), ('x', 0.0), ('nan', 0.0)],
+)
+def test_discovery_interval_knob_parsing(monkeypatch, raw, expected):
+    from config.batch_pipeline import projection_followup_discovery_interval_seconds
+
+    if raw is None:
+        monkeypatch.delenv(INTERVAL_KNOB, raising=False)
+    else:
+        monkeypatch.setenv(INTERVAL_KNOB, raw)
+    assert projection_followup_discovery_interval_seconds() == expected
+
+
+def _paced_runner(monkeypatch, clock_box):
+    followups, _ = runner(backlog(5), monkeypatch)
+    reads = []
+
+    def candidates():
+        reads.append(clock_box[0])
+        return []
+
+    followups.candidates = candidates
+    monkeypatch.setattr(projection_followup, '_monotonic', lambda: clock_box[0])
+    return followups, reads
+
+
+@pytest.mark.asyncio
+async def test_discovery_interval_paces_only_the_periodic_sweep(monkeypatch):
+    monkeypatch.setenv(INTERVAL_KNOB, '120')
+    clock_box = [1000.0]
+    followups, reads = _paced_runner(monkeypatch, clock_box)
+    await followups.schedule()
+    assert reads == [1000.0]
+    clock_box[0] = 1100.0
+    await followups.schedule()  # inside the interval: no discovery read
+    assert reads == [1000.0]
+    clock_box[0] = 1120.0
+    await followups.schedule()
+    assert reads == [1000.0, 1120.0]
+
+
+@pytest.mark.asyncio
+async def test_discovery_interval_never_delays_targeted_wakes(monkeypatch):
+    monkeypatch.setenv(INTERVAL_KNOB, '120')
+    clock_box = [1000.0]
+    followups, reads = _paced_runner(monkeypatch, clock_box)
+    started = []
+
+    async def run(segment):
+        started.append(segment)
+
+    followups.run = AsyncMock(side_effect=run)
+    await followups.schedule()
+    clock_box[0] = 1001.0
+    await followups.schedule(['wake'], discover=False)
+    await followups.schedule(['wake2'])
+    await asyncio.gather(*list(followups.tasks.values()))
+    assert started == ['wake', 'wake2']
+    assert reads == [1000.0]
+
+
+@pytest.mark.asyncio
+async def test_discovery_interval_zero_keeps_every_pass(monkeypatch):
+    monkeypatch.setenv(INTERVAL_KNOB, '0')
+    clock_box = [1000.0]
+    followups, reads = _paced_runner(monkeypatch, clock_box)
+    for step in range(3):
+        clock_box[0] = 1000.0 + step
+        await followups.schedule()
+    assert reads == [1000.0, 1001.0, 1002.0]
+
+
+@pytest.mark.asyncio
+async def test_targeted_wake_to_start_latency_is_observed_at_attempt_entry(monkeypatch):
+    clock_box = [500.0]
+    followups, _ = _paced_runner(monkeypatch, clock_box)
+    observed = []
+    monkeypatch.setattr(projection_followup.TARGETED_START_SECONDS, 'observe', observed.append)
+    shared = asyncio.Semaphore(1)
+    followups.projector.outbox_followup_slots = shared
+    entered = []
+
+    async def attempt(segment, *, track_backoff):
+        entered.append(segment)
+
+    followups.run_attempt = attempt
+    await shared.acquire()  # the shared effect budget is busy
+    await followups.schedule(['waits'], discover=False)
+    for _ in range(3):
+        await asyncio.sleep(0)
+    assert observed == [] and entered == []  # launched, but still waiting for the shared slot
+    clock_box[0] = 507.0
+    shared.release()
+    await asyncio.gather(*list(followups.tasks.values()))
+    assert entered == ['waits']
+    assert observed == [7.0]
+    assert followups.wake_marks == {}
+
+
+@pytest.mark.asyncio
+async def test_targeted_wake_cancelled_before_entry_is_not_counted(monkeypatch):
+    clock_box = [500.0]
+    followups, _ = _paced_runner(monkeypatch, clock_box)
+    observed = []
+    monkeypatch.setattr(projection_followup.TARGETED_START_SECONDS, 'observe', observed.append)
+    shared = asyncio.Semaphore(0)
+    followups.projector.outbox_followup_slots = shared
+    followups.run_attempt = AsyncMock()
+    await followups.schedule(['gone'], discover=False)
+    task = followups.tasks['gone']
+    await asyncio.sleep(0)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    await asyncio.sleep(0)
+    assert observed == []
+    assert followups.wake_marks == {}
+
+
+@pytest.mark.asyncio
+async def test_duplicate_queue_entry_keeps_the_first_wake_until_attempt_entry(monkeypatch):
+    clock_box = [500.0]
+    followups, _ = _paced_runner(monkeypatch, clock_box)
+    observed = []
+    monkeypatch.setattr(projection_followup.TARGETED_START_SECONDS, 'observe', observed.append)
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_FOLLOWUP_SLOTS', '1')
+    shared = asyncio.Semaphore(1)
+    followups.projector.outbox_followup_slots = shared
+    entered = []
+    release_busy = asyncio.Event()
+
+    async def attempt(segment, *, track_backoff):
+        entered.append(segment)
+        if segment == 'busy':
+            await release_busy.wait()
+
+    followups.run_attempt = attempt
+    await followups.schedule(['busy'], discover=False)  # occupies the only local slot
+    await asyncio.sleep(0)
+    await followups.schedule(['dup'], discover=False)  # wake at t=500, queued in targeted_pending
+    await followups.schedule(['dup'])  # the same segment again, via priority with discovery on
+    assert entered == ['busy']  # 'busy' holds the local slot and the only shared permit
+    hog = asyncio.ensure_future(shared.acquire())  # another shared-budget user queues first
+    await asyncio.sleep(0)
+    clock_box[0] = 504.0
+    release_busy.set()
+    await asyncio.wait_for(followups.tasks['busy'], 5)
+    await asyncio.wait_for(hog, 5)  # the freed permit goes to the hog, so 'dup' must wait for it
+    assert 'dup' in followups.tasks and 'dup' in followups.pending  # launched from targeted, still queued
+    # A freed local slot lets the ordinary queue reach its duplicate copy of 'dup'
+    # while the running copy still waits for the shared slot.
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_FOLLOWUP_SLOTS', '2')
+    followups.launch()
+    for _ in range(3):
+        await asyncio.sleep(0)
+    assert 'dup' in followups.tasks and 'dup' not in entered
+    assert 'dup' in followups.wake_marks
+    clock_box[0] = 509.0
+    shared.release()
+    await asyncio.wait_for(asyncio.gather(*list(followups.tasks.values())), 5)
+    assert entered.count('dup') == 1
+    # 'busy' started at once (0 s); 'dup' has one sample, from its first wake through the shared-slot wait.
+    assert observed == [0.0, 9.0]
+    assert followups.wake_marks == {}

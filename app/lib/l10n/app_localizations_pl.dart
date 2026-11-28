@@ -15888,4 +15888,20 @@ class AppLocalizationsPl extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Niektóre nagrania wciąż znajdują się na urządzeniu. Poczekaj, aż zostaną zsynchronizowane z telefonem, a następnie rozpocznij aktualizację.';
+
+  @override
+  String get batteryRestartToRefresh => 'Uruchom ponownie Omi, aby odświeżyć odczyt';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Zostaną przetworzone $date, gdy odnowią się Twoje minuty';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Albo przetwórz je od razu, ulepszając plan';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Zostaną przetworzone $date';
+  }
 }

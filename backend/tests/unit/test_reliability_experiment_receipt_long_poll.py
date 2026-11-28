@@ -91,13 +91,14 @@ async def test_wait_subscribes_before_snapshot_and_replays_multiple_completed_jo
         snapshots.append(job)
         return {'job_id': job, 'status': jobs[job]}
 
-    async def run(_executor, fn, *args):
-        return fn(*args)
+    async def run(_executor, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
 
     monkeypatch.setattr(redis_db, 'get_async_redis_client', get_redis)
     monkeypatch.setattr(sync, 'admit_sync_job_poll', lambda _: True)
     monkeypatch.setattr(sync, '_read_sync_job_status', read)
     monkeypatch.setattr(sync, 'run_blocking', run)
+    monkeypatch.setattr(sync, 'account_deletion_blocks_user_work', lambda uid, fresh=False: False)
     body = SyncReceiptsWaitRequest(job_ids=['a', 'b', 'c'])
     waiter = asyncio.create_task(sync.wait_for_sync_receipts(body, Request(), 'owner'))
     await asyncio.wait_for(listening.wait(), 2)

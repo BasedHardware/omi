@@ -64,7 +64,7 @@ BILLING_EVENTS = frozenset(
     }
 )
 
-MCP_EVENTS = frozenset({'MCP Active', 'MCP Tool Call', 'MCP Tool Use Succeeded'})
+MCP_EVENTS = frozenset({'MCP Active', 'MCP Tool Call', 'MCP Tool Use Succeeded', 'MCP Daily Activity'})
 
 
 def _capture_project_key(event: str) -> Optional[str]:

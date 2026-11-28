@@ -171,3 +171,36 @@ async def test_a_failed_pointer_move_still_finishes_the_successor_and_counts_it(
     assert 'pointer_failed' in outcomes and 'rotated' in outcomes
     assert harness.pointer == successor  # the Redis in-progress id and the tail ran
     assert len(harness.events) > events  # send_conversation_session reached the phone
+
+
+@pytest.mark.anyio
+async def test_rotation_successor_stays_v3_for_a_held_out_owner(monkeypatch):
+    """SCA-2918: a held-out owner's capture in flight rotates into a v3 successor, not a legacy row."""
+    from utils.conversations.v3 import triggers
+
+    monkeypatch.setattr(triggers, 'conversations_v3_enabled', lambda uid: True)
+    monkeypatch.setattr(triggers, 'v3_intake_held_out', lambda uid: True)
+    monkeypatch.setattr(triggers, '_mark_resolved', lambda uid, row: row.update(recording=True))
+    harness = _harness(monkeypatch)
+    inner = harness.call
+    continuations = []
+
+    async def calls(fn, *args, **kwargs):
+        if fn.__name__ == 'create_in_progress_conversation':
+            # The lifecycle create's own intake decision, ahead of the harness store write.
+            continuations.append(kwargs.get('v3_continuation', False))
+            triggers.mark_new(args[0], args[1], continuation=kwargs.get('v3_continuation', False))
+        return await inner(fn, *args, **kwargs)
+
+    harness.call = calls
+    controller, sealed = _connect(harness)
+    await controller.prepare()
+    first = controller.host.state.current_conversation_id
+    # Mid-capture: this recording was admitted to v3 before the owner was held out.
+    harness.rows[first]['recording'] = True
+    harness.now += timedelta(minutes=3)
+    await controller._rotate_v3_recording(first)
+    successor = controller.host.state.current_conversation_id
+    assert successor != first and sealed == [first]
+    assert continuations == [False, True]
+    assert harness.rows[successor]['recording'] is True

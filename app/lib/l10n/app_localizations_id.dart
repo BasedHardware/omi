@@ -15857,4 +15857,20 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Beberapa rekaman masih berada di perangkat Anda. Biarkan rekaman tersebut selesai disinkronkan ke ponsel Anda, lalu mulai pembaruan.';
+
+  @override
+  String get batteryRestartToRefresh => 'Mulai ulang Omi untuk menyegarkan';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Akan diproses pada $date saat menit Anda diperbarui';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Atau proses langsung dengan upgrade paket';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Diproses pada $date';
+  }
 }

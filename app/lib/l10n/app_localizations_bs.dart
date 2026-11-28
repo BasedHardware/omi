@@ -15870,4 +15870,20 @@ class AppLocalizationsBs extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Neki snimci su još uvijek na vašem uređaju. Sačekajte da se sinhronizuju s telefonom, a zatim pokrenite ažuriranje.';
+
+  @override
+  String get batteryRestartToRefresh => 'Ponovo pokrenite Omi radi osvježavanja';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Obradit će se $date kada se obnove vaši minuti';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Ili ih obradite odmah nadogradnjom plana';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Obradit će se $date';
+  }
 }

@@ -82,8 +82,8 @@ def test_vendor_capability_is_code_owned_policy_admission():
     for service in c.VENDOR_SERVICES:
         assert c.route_capable(service, 'en') == provider_is_enabled(service, STTServingSurface.PRERECORDED)
     assert not c.route_capable('deepgram', 'en')
-    # Pinned on purpose: Soniox failover comes from slice D's reviewed prerecorded admission, not a table
-    # edit; tables still mark it failover_only (RouteConfig), so selection never picks it as cheapest.
+    # Pinned on purpose: Soniox capability comes from slice D's reviewed prerecorded admission, not a table
+    # edit. Whether it starts units or only takes failover is the table's failover_only choice.
     assert c.route_capable('soniox', 'en')
     assert c.route_capable('gpu', None)  # unknown is multi, which Parakeet serves
     assert not c.route_capable('gpu', 'ja')
@@ -142,7 +142,6 @@ MALFORMED = {
     'bool price': _mutate(('routes', 'modulate', 'price_usd_per_audio_hour'), True),
     'gpu spend cap': _mutate(('routes', 'gpu', 'daily_audio_hours_cap'), 10.0),
     'gpu failover only': _mutate(('routes', 'gpu', 'failover_only'), True),
-    'soniox chosen as primary': _mutate(('routes', 'soniox', 'failover_only'), False),
     'speaker turns kept': _mutate(('routes', 'modulate', 'speaker_turns'), 'keep'),
     'cheapest without price': _mutate(('routes', 'gpu', 'price_usd_per_audio_hour'), None),
     'no rows': _mutate(('rows',), []),
@@ -185,12 +184,18 @@ def test_malformed_with_no_last_valid_serves_builtin(junk):
     assert c.RouteTableLadder().resolve(junk) == (c.BUILTIN_TABLE, VendorRouteTableOutcome.BUILTIN)
 
 
+def test_a_table_may_start_units_on_soniox():
+    table = copy.deepcopy(_table())
+    table['routes']['soniox']['failover_only'] = False
+    assert not c.RouteTable.from_dict(table).routes['soniox'].failover_only
+
+
 def test_ladder_configured_then_last_valid_then_unset_is_builtin():
     ladder = c.RouteTableLadder()
     table, outcome = ladder.resolve(_table())
     assert outcome is VendorRouteTableOutcome.CONFIGURED and table.table_version == '2026-11-01a'
     broken = copy.deepcopy(_table())
-    broken['routes']['soniox']['failover_only'] = False
+    broken['routes']['gpu']['failover_only'] = True
     assert ladder.resolve(broken) == (table, VendorRouteTableOutcome.LAST_VALID)
     # Unset (or the kill switch) is deliberate: builtin, and last-valid survives for the next malformed read.
     assert ladder.resolve(None) == (c.BUILTIN_TABLE, VendorRouteTableOutcome.BUILTIN)

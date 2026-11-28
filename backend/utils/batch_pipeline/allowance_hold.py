@@ -11,6 +11,7 @@ import logging
 import uuid
 
 from config.referral_campaign import GRANT_FIELD, campaign_enabled
+from config.support_credit import FIELD as SUPPORT_CREDIT_FIELD, enabled as support_credit_enabled
 from database._client import get_data_plane_firestore_client
 from database.batch_pipeline_allowance_hold import STATE, OWNERS, enabled, restore_retry
 from utils.batch_pipeline.scheduler import Scheduler
@@ -44,6 +45,14 @@ def generation(snapshot: dict, now: float) -> str:
     # so allowance holds reset with the month, as before the cap existed.
     reset_period = clock.strftime('%Y-%m')
     value = [subscription, valid, promotions, grant_authority, effective, reset_period]
+    # A support grant or revoke changes the generation, so held work is
+    # re-offered to admission at the owner's next check, not the next month.
+    # Like promotions, the kill switch gates it: re-enabling re-offers once.
+    # Appended only when present, so an owner with no credit keeps the exact
+    # generation it had before the credit existed (no deploy-time re-offer wave).
+    support_credit = (snapshot.get(SUPPORT_CREDIT_FIELD) or None) if support_credit_enabled() else None
+    if support_credit is not None:
+        value.append(support_credit)
     return hashlib.sha256(json.dumps(value, sort_keys=True, default=str).encode()).hexdigest()
 
 
@@ -204,14 +213,15 @@ def entitlement(uid: str, now: float, previous: str | None) -> tuple[str, bool]:
         get_data_plane_firestore_client()
         .collection('users')
         .document(uid)
-        .get(field_paths=['subscription', GRANT_FIELD])
+        .get(field_paths=['subscription', GRANT_FIELD, SUPPORT_CREDIT_FIELD])
     )
     if not snapshot.exists:
         raise RuntimeError('allowance owner unavailable')
-    current = generation(snapshot.to_dict(), now)
+    data = snapshot.to_dict()
+    current = generation(data, now)
     if current == previous:
         return current, False
-    allowance = funded_allowance(uid, lane='batch')
+    allowance = funded_allowance(uid, lane='batch', support_credit=data.get(SUPPORT_CREDIT_FIELD))
     if allowance.reason in TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS:
         raise RuntimeError('allowance unavailable')
     return current, allowance.managed

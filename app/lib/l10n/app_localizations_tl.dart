@@ -15969,4 +15969,20 @@ class AppLocalizationsTl extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'May mga recording pa na nasa iyong device. Hayaang matapos munang i-sync ang mga ito sa iyong phone, pagkatapos ay simulan ang pag-update.';
+
+  @override
+  String get batteryRestartToRefresh => 'I-restart ang Omi upang i-refresh';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Ipo-proseso sa $date kapag mag-renew na ang iyong mga minuto';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'O mag-plan upgrade para maiproseso agad ang mga ito';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Maiiproseso sa $date';
+  }
 }

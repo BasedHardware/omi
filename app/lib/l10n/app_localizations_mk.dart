@@ -15907,4 +15907,20 @@ class AppLocalizationsMk extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Некои записи се уште се на вашиот уред. Оставете ги да ја завршат синхронизацијата со телефонот, а потоа започнете со ажурирањето.';
+
+  @override
+  String get batteryRestartToRefresh => 'Рестартирајте го Omi за освежување';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Ќе се обработат на $date, кога ќе се обноват вашите минути';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Или обработете ги веднаш со надградба на планот';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Обработка на $date';
+  }
 }

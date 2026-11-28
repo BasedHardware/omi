@@ -21,6 +21,9 @@ def marker(monkeypatch):
     redis.set.side_effect = AssertionError('success must not claim Redis')
     redis.eval.side_effect = AssertionError('success must not settle Redis')
     monkeypatch.setattr(analytics.redis_db, 'r', redis)
+    # The daily rollup is a separate, fail-open Redis writer (test_mcp_daily_rollup.py);
+    # keep it off here so the raw path's no-Redis contract is pinned on its own.
+    monkeypatch.setenv(analytics.mcp_daily_rollup.ENABLED_ENV, 'false')
     monkeypatch.setattr(analytics, 'emit_product_event', capture)
     return redis, capture
 

@@ -15894,4 +15894,20 @@ class AppLocalizationsKn extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'ಕೆಲವು ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಇನ್ನೂ ನಿಮ್ಮ ಸಾಧನದಲ್ಲಿವೆ. ಅವುಗಳು ನಿಮ್ಮ ಫೋನ್‌ಗೆ ಸಿಂಕ್ ಆಗಲು ಬಿಡಿ, ನಂತರ ನವೀಕರಣ ಪ್ರಾರಂಭಿಸಿ.';
+
+  @override
+  String get batteryRestartToRefresh => 'ರಿಫ್ರೆಶ್ ಮಾಡಲು Omi ಅನ್ನು ಮರುಪ್ರಾರಂಭ ಮಾಡಿ';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'ನಿಮ್ಮ ನಿಮಿಷಗಳು ನವೀಕರಣವಾಗುವ $date ರಂದು ಪ್ರಕ್ರಿಯೆಗೊಳ್ಳುತ್ತದೆ';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'ಅಥವಾ ಪ್ಲಾನ್ ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡುವ ಮೂಲಕ ತಕ್ಷಣ ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಿ';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return '$date ರಂದು ಪ್ರಕ್ರಿಯೆ';
+  }
 }

@@ -20,7 +20,7 @@ from utils.observability.delivery import record_delivery
 from prometheus_client import Counter, Gauge, Histogram
 from models.finalization_owner import python_owns_finalization
 from config.refactor_modes import default_on
-from config.summary_guarantee import deadline_seconds
+from config.summary_guarantee import deadline_seconds, first_week_open
 from config.policy import FirstSummaryPolicy
 from utils.conversations.minimum_derived import intentional_short_clip_minimum, waive_short_clip_summary_debt
 from utils.summary_quality import valid_title
@@ -153,13 +153,19 @@ def rearm_on_revision_change(existing: Row, write: Row, *, now: float | None = N
     )
 
 
-def prepare(data: Row, uid: str, *, now: float | None = None) -> None:
-    """Called on plaintext inside the existing write codec: zero reads."""
+def prepare(data: Row, uid: str, *, now: float | None = None, first_week: Mapping[str, Any] | None = None) -> None:
+    """Called on plaintext inside the existing write codec: zero reads.
+
+    ``first_week`` is the already-resolved paid-start window from the caller; the
+    codec never reads Firestore. It is stamped once and never moved, so a later
+    renewal or config change cannot reopen or extend an existing window.
+    """
     if 'structured' not in data:
         return
     current = time.time() if now is None else now
     structured = data['structured']
     data['summary_output_present'] = present(structured)
+    _stamp_first_week(data, first_week)
     if field(structured, 'title_provenance') == 'server_minimum' and not present(structured):
         data['summary_title_provenance'] = 'server_minimum'
         if data.get('processing_tier') == 'historical':
@@ -186,6 +192,45 @@ def prepare(data: Row, uid: str, *, now: float | None = None) -> None:
         data.setdefault('summary_first_pending_at', current)
         data.setdefault('summary_due_at', data['summary_first_pending_at'] + deadline_seconds())
         data.setdefault('summary_lane', lane(data))
+
+
+FIRST_WEEK_OUTCOME_FIELD = 'first_week_outcome'
+FIRST_WEEK_FIELD = 'first_week_summary'
+FIRST_WEEK_ATTEMPTS_FIELD = 'first_week_attempts'
+FIRST_WEEK_LAST_CLASS_FIELD = 'first_week_last_class'
+FIRST_WEEK_RECEIPT_FIELDS = (
+    FIRST_WEEK_FIELD,
+    FIRST_WEEK_OUTCOME_FIELD,
+    'first_week_outcome_at',
+    FIRST_WEEK_ATTEMPTS_FIELD,
+    FIRST_WEEK_LAST_CLASS_FIELD,
+)
+
+
+def summary_deadline_seconds(row: Row) -> float:
+    """Keep the existing dispatch and repair deadline, independent of first-week eligibility."""
+    policy = row.get('first_summary_policy')
+    if policy is not None:
+        return FirstSummaryPolicy.from_dict(policy).first_summary_deadline_seconds
+    return deadline_seconds()
+
+
+def _stamp_first_week(data: Row, first_week: Mapping[str, Any] | None) -> None:
+    """Record the paid-start window once; a later write never clears the outcome.
+
+    The outcome field is the close-out counting key, so a subsequent processing
+    write must not reset it to null after the window was counted.
+    """
+    if not first_week:
+        return
+    existing = data.get(FIRST_WEEK_FIELD)
+    if isinstance(existing, Mapping):
+        if not isinstance(existing, dict):
+            data[FIRST_WEEK_FIELD] = dict(first_week)
+        return
+    data[FIRST_WEEK_FIELD] = dict(first_week)
+    if FIRST_WEEK_OUTCOME_FIELD not in data:
+        data[FIRST_WEEK_OUTCOME_FIELD] = None
 
 
 def projection_debt_enabled(*, environ: Mapping[str, str] | None = None) -> bool:
@@ -302,7 +347,11 @@ def stamp_projection_debt(write: Row, *, now: float | None = None, allow_existin
     if _refusal(candidate) is not None:
         return False
     write['summary_title_provenance'] = 'server_minimum'
-    if _past_age_gate(write.get('created_at'), now=current):
+    # A stamped first-week window is the age gate's explicit exemption: the
+    # projection is late, but the obligation is not historical while the payer's
+    # window is open (SCA-4790, correction 3).
+    first_week = first_week_open(write, now=current)
+    if not first_week and _past_age_gate(write.get('created_at'), now=current):
         return False
     accepted = write.get('summary_first_pending_at')
     if (
@@ -313,10 +362,10 @@ def stamp_projection_debt(write: Row, *, now: float | None = None, allow_existin
         or accepted > current
     ):
         accepted = current
-    if _past_age_gate(accepted, now=current):
+    if not first_week and _past_age_gate(accepted, now=current):
         return False
     write['summary_first_pending_at'] = accepted
-    write['summary_due_at'] = accepted + deadline_seconds()
+    write['summary_due_at'] = accepted + summary_deadline_seconds(write)
     write.setdefault('summary_lane', lane(write))
     return True
 
@@ -484,6 +533,12 @@ def merge_result(existing: Row, write: Row, uid: str, *, now: float | None = Non
     """Inside the existing revision-fenced transaction, before its write."""
     if 'summary_output_present' not in write:
         return None
+    # Codec callers may not have loaded these scheduling receipts. Preserve
+    # their transactionally-read values so a late processing write cannot
+    # reopen a closed first-week outcome or reset its attempt evidence.
+    for field_name in FIRST_WEEK_RECEIPT_FIELDS:
+        if field_name in existing:
+            write[field_name] = existing[field_name]
     current = time.time() if now is None else now
     for name in ('summary_first_pending_at', 'summary_title_provenance', 'summary_completed_at', 'summary_due_at'):
         if name in existing:

@@ -926,6 +926,27 @@ def projection_followup_slots(default: int = PROJECTION_FOLLOWUP_SLOTS_DEFAULT) 
     return value if 1 <= value <= PROJECTION_FOLLOWUP_SLOTS_MAX else default
 
 
+PROJECTION_FOLLOWUP_DISCOVERY_INTERVAL_MAX = 900.0
+
+
+def projection_followup_discovery_interval_seconds() -> float:
+    """Minimum seconds between one serving process's periodic follow-up discovery reads.
+
+    ``0`` (the default) keeps today's behavior: discover on every serving pass whose
+    queue has drained. A positive value paces only the periodic sweep, so fleet sweep
+    volume stops scaling with serving-pass speed. Targeted owner-chain wakes and
+    queued rows are never delayed. Malformed or out-of-range values keep ``0``.
+    """
+    raw = os.getenv('BATCH_PIPELINE_PROJECTION_FOLLOWUP_DISCOVERY_INTERVAL_SECONDS', '').strip()
+    try:
+        value = float(raw) if raw else 0.0
+    except ValueError:
+        return 0.0
+    if not math.isfinite(value) or not 0 <= value <= PROJECTION_FOLLOWUP_DISCOVERY_INTERVAL_MAX:
+        return 0.0
+    return value
+
+
 PROJECTION_FOLLOWUP_BACKOFF_DEFAULT = 900.0
 PROJECTION_FOLLOWUP_BACKOFF_MAX = 3600.0
 

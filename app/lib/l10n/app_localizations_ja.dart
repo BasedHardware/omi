@@ -15608,4 +15608,20 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get firmwareSyncRecordingsFirstMessage => '一部の録音はまだデバイスに残っています。スマートフォンへの同期が完了してから、更新を開始してください。';
+
+  @override
+  String get batteryRestartToRefresh => 'Omiを再起動して更新';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return '分数が更新される$dateに処理されます';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'またはプランのアップグレードですぐに処理できます';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return '$dateに処理予定';
+  }
 }

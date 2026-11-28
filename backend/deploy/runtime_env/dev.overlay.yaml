@@ -427,7 +427,6 @@ overlay:
           # Dev qualification for the David-approved graduation (DEC-BTR-004): open/play/download,
           # changed-source and duplicate-task checks before prod.
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-          SYNC_POLL_BACKOFF_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_API_URL:
             value: ''
           BUCKET_BATCH_PIPELINE:

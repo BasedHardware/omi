@@ -22,6 +22,7 @@ class ReasonFamily(StrEnum):
     WORK_OUTCOME = 'work_outcome'
     QUARANTINE = 'quarantine'
     FALLBACK = 'fallback'
+    GATEWAY_FLEX_FALLBACK = 'gateway_flex_fallback'
     RETRY = 'retry'
     CONSUMER = 'consumer'
     PROVIDER_STT = 'provider_stt'
@@ -59,6 +60,7 @@ class ReasonFamily(StrEnum):
     SUMMARY_REPAIR_DISCOVERY = 'summary_repair_discovery'
     RECORD_SEAL_REPAIR = 'record_seal_repair'
     HISTORICAL_SUMMARY_OPEN = 'historical_summary_open'
+    PREVIEW_CUSTODY = 'preview_custody'
     MONTHLY_USAGE_SHADOW = 'monthly_usage_shadow'
 
 

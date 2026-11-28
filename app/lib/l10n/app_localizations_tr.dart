@@ -15852,4 +15852,20 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Bazı kayıtlar hâlâ cihazınızda. Telefonunuza senkronize edilmelerini bekleyin, ardından güncellemeyi başlatın.';
+
+  @override
+  String get batteryRestartToRefresh => 'Yenilemek için Omi\'yi yeniden başlatın';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Dakikalarınız yenilendiğinde $date tarihinde işlenecek';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Ya da plan yükseltmesiyle bunları hemen işleme alın';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return '$date tarihinde işlenecek';
+  }
 }

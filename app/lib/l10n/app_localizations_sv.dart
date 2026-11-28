@@ -15850,4 +15850,20 @@ class AppLocalizationsSv extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Vissa inspelningar finns fortfarande på din enhet. Låt dem slutföra synkroniseringen till telefonen och starta sedan uppdateringen.';
+
+  @override
+  String get batteryRestartToRefresh => 'Starta om Omi för att uppdatera';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Bearbetas $date när dina minuter förnyas';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Eller bearbeta dem direkt med en planuppgradering';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Bearbetas $date';
+  }
 }

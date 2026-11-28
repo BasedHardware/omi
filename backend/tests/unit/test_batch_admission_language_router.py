@@ -42,11 +42,13 @@ def defaults(monkeypatch):
     )
 
 
-def setup(monkeypatch, language, *, owner=None, single=False, user_language='en'):
+def setup(monkeypatch, language, *, owner=None, single=False, user_language='en', profile=None):
     row = {'status': 'completed', 'language': language, '_test_revision': 1}
     if owner:
         row['record_lane_owner'] = owner
     user = {'language': user_language, 'transcription_preferences': {'single_language_mode': single}}
+    if profile is not None:
+        user['live_stt_language_sessions'] = profile
     client = StrictFirestore({USER: user, CONVERSATION: row})
     store = MemoryStore()
     store.client, store.namespace = client, 'batch_pipeline_dev'
@@ -135,6 +137,32 @@ async def test_supported_context_or_single_preference_can_still_claim_batch(monk
     world = setup(monkeypatch, language, single=single)
     assert await route(world, mode) is RecordUploadRoute.BATCH
     assert world.claims == ['batch_sync_v1']
+
+
+# A multi-language owner whose live speech is mostly Mandarin (live STT labels it 'ja').
+MANDARIN_PROFILE = [{'en': 4, 'ja': 21}, {'ja': 33}, {'en': 17, 'ja': 30}]
+
+
+@pytest.mark.parametrize(
+    'mode, switch, expected',
+    [
+        # Legacy on: the record lane has no sampler, so a profiled 'en' pin goes to legacy multilingual STT.
+        (LegacySyncMode.ON, None, 'legacy_final_pass_v1'),
+        (LegacySyncMode.ON, 'false', 'batch_sync_v1'),  # kill switch: the pin is trusted again
+        # Draining/dark never read the preference: the new owner is batch, as for any exclusion.
+        (LegacySyncMode.DRAINING, None, 'batch_sync_v1'),
+        (LegacySyncMode.DARK, None, 'batch_sync_v1'),
+    ],
+)
+async def test_multilingual_profile_new_owner(monkeypatch, mode, switch, expected):
+    if switch is not None:
+        monkeypatch.setenv('BATCH_MULTILINGUAL_PROFILE_ROUTING_ENABLED', switch)
+    else:
+        monkeypatch.delenv('BATCH_MULTILINGUAL_PROFILE_ROUTING_ENABLED', raising=False)
+    world = setup(monkeypatch, 'en', profile=MANDARIN_PROFILE)
+    routed = await route(world, mode)
+    assert world.claims == [expected]
+    assert routed is (RecordUploadRoute.LEGACY if expected == 'legacy_final_pass_v1' else RecordUploadRoute.BATCH)
 
 
 @pytest.mark.parametrize('mode', list(LegacySyncMode))

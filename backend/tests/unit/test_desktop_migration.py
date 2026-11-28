@@ -153,6 +153,7 @@ client_stub.db = mock_db
 client_stub.delete_collection_recursive = MagicMock()
 client_stub.document_id_from_seed = MagicMock(return_value="seed-id")
 client_stub.get_firestore_client = MagicMock(return_value=mock_db)
+client_stub.run_transactional = MagicMock()
 # database.screen_activity imports the data-plane seam's lazy proxy at its own
 # import site (see database/_client.py's get_data_plane_firestore_client()).
 client_stub.data_plane_db = mock_db

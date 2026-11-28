@@ -12325,5 +12325,9 @@
     "playStripePlanPaused": "Vaš paket {plan} je začasno ustavljen.",
     "firmwareNewestSupportedForDevice": "Vaša naprava že uporablja najnovejšo podprto različico firmwareja",
     "firmwareSyncRecordingsFirstTitle": "Najprej sinhronizirajte posnetke",
-    "firmwareSyncRecordingsFirstMessage": "Nekateri posnetki so še na vaši napravi. Počakajte, da se dokonča sinhroniziranje s telefonom, nato pa začnite posodobitev."
+    "firmwareSyncRecordingsFirstMessage": "Nekateri posnetki so še na vaši napravi. Počakajte, da se dokonča sinhroniziranje s telefonom, nato pa začnite posodobitev.",
+    "batteryRestartToRefresh": "Ponovno zaženite Omi, da osvežite podatke",
+    "onTheWayAllowanceHeldTitle": "Obdelani bodo {date}, ko se obnovijo vaše minute",
+    "onTheWayAllowanceHeldUpgrade": "Ali pa jih obdelajte takoj z nadgradnjo paketa",
+    "onTheWayDayProcessesOn": "Obdelani bodo {date}"
 }

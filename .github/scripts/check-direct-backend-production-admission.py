@@ -271,6 +271,28 @@ BOOTSTRAP_RUN = 'python3 .github/listen-evidence-control/.github/scripts/listen_
 PRODUCER_RUN = 'set -euo pipefail\numask 077\nexport LD_LIBRARY_PATH="$RUNNER_TEMP/listen-runtime/python/lib"\nunset LD_PRELOAD PYTHONHOME PYTHONPATH\n"$RUNNER_TEMP/listen-runtime/python/bin/python3.12" -I -B .github/listen-evidence-control/.github/scripts/listen_overlay_evidence.py job \\\n  --root "$GITHUB_WORKSPACE" --output "$RUNNER_TEMP/listen-overlay-receipt.json"\n'
 
 
+def pusher_image_only_checkout_is_bound(text: str) -> bool:
+    steps = [step for step in workflow_steps(text) if step["job"] == "pusher-image-only"]
+    controls = [
+        step
+        for step in steps
+        if step.get("uses") in CHECKOUT_ACTIONS and not step.get("with", {}).get("path")
+    ]
+    return (
+        len(controls) == 1
+        and controls[0]["index"] == 1
+        and "if" not in controls[0]
+        and controls[0]["with"] == {
+            "ref": "${{ github.workflow_sha }}",
+            "fetch-depth": "0",
+            "persist-credentials": "false",
+        }
+        and steps[0].get("name") == "Validate protected image-only dispatch"
+        and '"$GITHUB_SHA" != "$GITHUB_WORKFLOW_SHA"' in steps[0].get("run", "")
+        and '"$GITHUB_REF" != refs/heads/main' in steps[0].get("run", "")
+    )
+
+
 def evidence_commands_bound(text: str) -> bool:
     steps = workflow_steps(text)
     controls = [step for step in steps if step.get('with', {}).get('path') == '.github/listen-evidence-control']
@@ -301,7 +323,6 @@ def evidence_commands_bound(text: str) -> bool:
             {}
             if name.startswith('Reconstruct')
             else {
-                'EVIDENCE_REQUEST': '${{ inputs.evidence_request }}',
                 'LISTEN_PRIVATE_VALUES_YAML': ("${{ fromJSON(inputs.evidence_request).overlay_state != 'references' "
                                                "&& secrets.LISTEN_PRIVATE_VALUES_YAML || '' }}"),
             }
@@ -335,14 +356,16 @@ def validate(root: Path) -> list[str]:
             firestore_controls = isolated_checkout_count(checkout_text, CONTROL_CHECKOUT)
             evidence_controls = isolated_checkout_count(checkout_text, LISTEN_EVIDENCE_CONTROL)
             commands_bound = evidence_commands_bound(text) if relative == LISTEN_WORKFLOW else True
+            image_only_controls = relative == PUSHER_WORKFLOW and pusher_image_only_checkout_is_bound(text)
         except (ValueError, KeyError, TypeError, yaml.YAMLError):
             errors.append(f"{relative} must have unambiguous real workflow steps")
             checkout_count, unknown_checkout = -100, True
             firestore_controls = evidence_controls = 0
             commands_bound = False
+            image_only_controls = False
         if unknown_checkout:
             errors.append(f"{relative} has an unapproved checkout action or version")
-        source_checkouts = checkout_count - firestore_controls
+        source_checkouts = checkout_count - firestore_controls - int(image_only_controls)
         if relative == LISTEN_WORKFLOW:
             # A separate immutable control checkout is not an application source.
             # Recognize only the exact path/ref/nonpersistent-credentials contract.
@@ -377,6 +400,8 @@ def validate(root: Path) -> list[str]:
             errors.extend(validate_gateway_release_admission(text))
             errors.extend(validate_gateway_break_glass_hatch(text))
         if relative == PUSHER_WORKFLOW:
+            if not image_only_controls:
+                errors.append(f"{relative} image-only job must verify main dispatch and check out immutable controls")
             for fragment in (
                 '"$GITHUB_REF" != refs/heads/main || "$GITHUB_SHA" != "$WORKFLOW_CONTROL_SHA"',
                 'BRANCH_INPUT: ${{ github.event.inputs.branch }}',

@@ -112,28 +112,33 @@ def test_conversations_v3_stage_is_shared_across_creator_finalizer_readers():
     manifest = COMPOSER['compose_manifest']()
     for env in manifest['environments'].values():
         for service in env['cloud_run']['services'].values():
-            assert service['env']['CONVERSATIONS_V3_STAGE']['value'] == 'beta'
+            assert service['env']['CONVERSATIONS_V3_STAGE']['value'] == 'all'
         for job in env['cloud_run'].get('jobs', {}).values():
             if isinstance(job, dict):
-                assert job['env']['CONVERSATIONS_V3_STAGE']['value'] == 'beta'
+                assert job['env']['CONVERSATIONS_V3_STAGE']['value'] == 'all'
         for name in ('backend-listen', 'pusher'):
             assert env['gke'][name]['env']['CONVERSATIONS_V3_STAGE']['config_map']['key'] == 'CONVERSATIONS_V3_STAGE'
-        assert env['gke']['config_map']['entries']['CONVERSATIONS_V3_STAGE']['value'] == 'beta'
+        assert env['gke']['config_map']['entries']['CONVERSATIONS_V3_STAGE']['value'] == 'all'
 
 
 def test_one_stage_source_moves_all_runtime_roles(tmp_path):
     base = ROOT / 'backend/deploy/runtime_env/_base.yaml'
     expanded = tmp_path / 'base.yaml'
-    expanded.write_text(base.read_text().replace('conversations_v3_stage: beta', 'conversations_v3_stage: all'))
+    expanded.write_text(base.read_text().replace('conversations_v3_stage: all', 'conversations_v3_stage: beta'))
     manifest = COMPOSER['compose_manifest'](base_path=expanded)
     for env in manifest['environments'].values():
-        assert all(s['env']['CONVERSATIONS_V3_STAGE']['value'] == 'all' for s in env['cloud_run']['services'].values())
+        assert all(s['env']['CONVERSATIONS_V3_STAGE']['value'] == 'beta' for s in env['cloud_run']['services'].values())
         assert all(
-            j['env']['CONVERSATIONS_V3_STAGE']['value'] == 'all'
+            j['env']['CONVERSATIONS_V3_STAGE']['value'] == 'beta'
             for j in env['cloud_run'].get('jobs', {}).values()
             if isinstance(j, dict)
         )
-        assert env['gke']['config_map']['entries']['CONVERSATIONS_V3_STAGE']['value'] == 'all'
+        assert env['gke']['config_map']['entries']['CONVERSATIONS_V3_STAGE']['value'] == 'beta'
+        desktop_env = env['desktop_backend']['env']
+        backend_env = env['cloud_run']['services']['backend']['env']
+        for key in ('CONVERSATIONS_V3_STAGE', 'CONVERSATIONS_V3_FIRST_APP_BUILD'):
+            assert desktop_env[key] == backend_env[key]
+        assert desktop_env.get('CONVERSATIONS_V3') == backend_env.get('CONVERSATIONS_V3')
 
 
 @pytest.mark.parametrize('name', ['CONVERSATIONS_V3_STAGE', 'CONVERSATIONS_V3_FIRST_APP_BUILD'])
@@ -156,5 +161,19 @@ def test_prod_v3_kill_switch_reaches_every_writer():
         if isinstance(job, dict):
             values.add(job['env']['CONVERSATIONS_V3']['value'])
     values.add(prod['gke']['config_map']['entries']['CONVERSATIONS_V3']['value'])
+    values.add(prod['desktop_backend']['env']['CONVERSATIONS_V3']['value'])
     assert len(values) == 1 and values <= {'on', 'off'}
     assert 'CONVERSATIONS_V3' not in manifest['environments']['dev']['gke']['config_map']['entries']
+
+
+@pytest.mark.parametrize('key', ['CONVERSATIONS_V3', 'CONVERSATIONS_V3_STAGE', 'CONVERSATIONS_V3_FIRST_APP_BUILD'])
+def test_v3_rejects_rendered_names_at_source_scope(key):
+    with pytest.raises(ValueError, match=f'use {key.lower()} at environment scope'):
+        COMPOSER['_apply_conversations_v3_stage']({key: 'value'})
+
+
+def test_v3_desktop_env_is_created_when_missing():
+    env = {'conversations_v3_stage': 'beta', 'conversations_v3': 'off'}
+    COMPOSER['_apply_conversations_v3_stage'](env)
+    assert env['desktop_backend']['env']['CONVERSATIONS_V3_STAGE']['value'] == 'beta'
+    assert env['desktop_backend']['env']['CONVERSATIONS_V3']['value'] == 'off'

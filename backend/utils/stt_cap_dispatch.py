@@ -45,7 +45,14 @@ _UNRESOLVED = object()
 
 
 def _funded_allowance(
-    uid, source=None, *, usage_cache=None, subscription=_UNRESOLVED, lane=None, ready_usage_only=False
+    uid,
+    source=None,
+    *,
+    usage_cache=None,
+    subscription=_UNRESOLVED,
+    lane=None,
+    ready_usage_only=False,
+    support_credit=_UNRESOLVED,
 ):
     # Streaming imports this module even with enforcement off. Load billing
     # policy only at the admission boundary, not during provider-module import.
@@ -86,11 +93,21 @@ def _funded_allowance(
         kwargs.update(provision_subscription=False, ready_usage_only=True)
     if subscription is not _UNRESOLVED:
         kwargs['subscription'] = subscription
+    if support_credit is not _UNRESOLVED:
+        kwargs['support_credit'] = support_credit
     return resolve_transcription_allowance(uid, source=source, byok_active=False, omi_funded=True, **kwargs)
 
 
 def funded_allowance(
-    uid, source=None, *, usage_cache=None, subscription=_UNRESOLVED, lane=None, backfill=False, ready_usage_only=False
+    uid,
+    source=None,
+    *,
+    usage_cache=None,
+    subscription=_UNRESOLVED,
+    lane=None,
+    backfill=False,
+    ready_usage_only=False,
+    support_credit=_UNRESOLVED,
 ):
     """The funded-STT allowance, then the default-off unlimited_v2 backfill day cap.
 
@@ -100,7 +117,9 @@ def funded_allowance(
     every managed backfill answer, independent of the legacy dispatch scope, so
     the same refusal reaches sync and batch admission.
     """
-    kwargs = {'ready_usage_only': True} if ready_usage_only else {}
+    kwargs: dict[str, Any] = {'ready_usage_only': True} if ready_usage_only else {}
+    if support_credit is not _UNRESOLVED:
+        kwargs['support_credit'] = support_credit
     allowance = _funded_allowance(
         uid, source=source, usage_cache=usage_cache, subscription=subscription, lane=lane, **kwargs
     )

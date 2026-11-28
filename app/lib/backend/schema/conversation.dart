@@ -895,6 +895,9 @@ class SyncLocalFilesResponse {
   /// Last permanent upload error message for SyncStatus.error surfacing.
   String? localUploadPermanentError;
 
+  /// Every eligible local WAL was waiting for its mobile batch hold to release.
+  bool localUploadHeldOnly;
+
   SyncLocalFilesResponse({
     this.frameOutcomes,
     required this.newConversationIds,
@@ -905,6 +908,7 @@ class SyncLocalFilesResponse {
     this.localUploadFailures = 0,
     this.localUploadPermanentFailures = 0,
     this.localUploadPermanentError,
+    this.localUploadHeldOnly = false,
   });
 
   bool get hasPartialFailure => failedSegments > 0;

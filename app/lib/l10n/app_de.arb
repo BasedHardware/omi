@@ -4768,5 +4768,9 @@
     "playStripePlanPaused": "Dein {plan}-Tarif ist pausiert.",
     "firmwareNewestSupportedForDevice": "Ihr Gerät verwendet bereits die neueste unterstützte Firmware-Version",
     "firmwareSyncRecordingsFirstTitle": "Synchronisieren Sie zuerst Ihre Aufnahmen",
-    "firmwareSyncRecordingsFirstMessage": "Einige Aufnahmen sind noch auf Ihrem Gerät. Warten Sie, bis sie vollständig mit Ihrem Telefon synchronisiert wurden, und starten Sie dann die Aktualisierung."
+    "firmwareSyncRecordingsFirstMessage": "Einige Aufnahmen sind noch auf Ihrem Gerät. Warten Sie, bis sie vollständig mit Ihrem Telefon synchronisiert wurden, und starten Sie dann die Aktualisierung.",
+    "batteryRestartToRefresh": "Starten Sie Omi neu, um den Wert zu aktualisieren",
+    "onTheWayAllowanceHeldTitle": "Wird am {date} verarbeitet, wenn sich Ihre Minuten erneuern",
+    "onTheWayAllowanceHeldUpgrade": "Oder verarbeiten Sie sie sofort mit einem Plan-Upgrade",
+    "onTheWayDayProcessesOn": "Wird am {date} verarbeitet"
 }

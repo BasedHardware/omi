@@ -14,6 +14,7 @@ from typing import Any
 
 ENGINE_FIELD = 'finalization_engine'
 EPOCH_FIELD = 'finalization_owner_epoch'
+CUSTODY_FIELD = 'go_finalization_custody'
 REFUSAL = 'finalization_owned_elsewhere'
 
 

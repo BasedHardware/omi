@@ -32,7 +32,7 @@ from google.cloud.firestore_v1 import FieldFilter, transactional
 from pydantic import ValidationError
 
 import database.memories as memories_db
-from database import memory_source_index
+from database import memory_source_index, rpc_deadline
 import database.vector_db as vector_db
 from utils.mcp_memory_reads import collect_filtered_mcp_memories
 from utils.memory.index_window import (
@@ -82,6 +82,7 @@ from models.product_memory import (
     RESTRICTED_SENSITIVITY_LABELS,
     SourceState,
 )
+from utils.executors import cleanup_executor, submit_with_context
 from utils.log_sanitizer import sanitize, sanitize_validation_error
 from utils.other.account_gate_http import account_gate_busy_http_exception
 from utils.other.list_budget import (
@@ -97,6 +98,10 @@ from utils.memory.canonical_memory_adapter import (
     CanonicalBatchMutationLimitError,
     CanonicalMemoryNotFoundError,
     CanonicalScanCursor,
+    CanonicalVisibilityRetryError,
+    CanonicalVisibilityTimeout,
+    visibility_mutation_budget,
+    visibility_write_deadline,
     canonical_memory_lineage_ids,
     delete_default_canonical_memories,
     delete_all_canonical_memories,
@@ -323,6 +328,14 @@ def _legacy_memorydb(value: MemoryDB | Dict[str, Any]) -> MemoryDB:
     payload = memory_api_payload(value, MemoryApiExposure.LEGACY)
     memory = MemoryDB.model_validate(payload)
     return memory.model_copy(update={"memory_tier": None})
+
+
+def visibility_retry_http_exception(error: CanonicalVisibilityRetryError) -> HTTPException:
+    return HTTPException(
+        status_code=503 if isinstance(error, CanonicalVisibilityTimeout) else 409,
+        detail="Memory visibility update temporarily unavailable",
+        headers={"Retry-After": "1"},
+    )
 
 
 def fetch_memory_dict(uid: str, memory_id: str, *, db_client: Any) -> MemoryPayload:
@@ -4172,12 +4185,26 @@ class MemoryService:
         self._invalidate_prompt_cache(uid)
         return memory_item_to_memorydb(updated)
 
+    def _cleanup_visibility_history(self, uid: str, memory_id: str) -> None:
+        remaining = rpc_deadline.remaining()
+        if remaining is not None and remaining <= 0:
+            logger.warning("visibility_historical_cleanup_deadline_expired")
+            return
+        HistoricalMemoryAdapter.cleanup(uid, memory_id, db_client=self.db_client)
+
     def update_visibility(self, uid: str, memory_id: str, visibility: str) -> None:
         self.ensure_canonical_mutation_ready(uid)
-        materialized = self._ensure_canonical_target(uid, memory_id)
-        self._canonical.update_visibility(uid, memory_id, visibility)
-        if materialized:
-            HistoricalMemoryAdapter.cleanup(uid, memory_id, db_client=self.db_client)
+        with visibility_mutation_budget(self.db_client) as deadline:
+            with rpc_deadline.rpc_deadline(visibility_write_deadline(deadline)):
+                materialized = self._ensure_canonical_target(uid, memory_id)
+            self._canonical.update_visibility(uid, memory_id, visibility)
+            if materialized:
+                # The durable override already suppresses the old row. Best-effort physical
+                # cleanup inherits the deadline but cannot delay or fail the committed request.
+                try:
+                    submit_with_context(cleanup_executor, self._cleanup_visibility_history, uid, memory_id)
+                except RuntimeError as exc:
+                    logger.warning("visibility_historical_cleanup_not_queued error_type=%s", type(exc).__name__)
         self._invalidate_prompt_cache(uid)
 
     def review(self, uid: str, memory_id: str, value: bool) -> None:

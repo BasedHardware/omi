@@ -15843,4 +15843,20 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Một số bản ghi âm vẫn còn trên thiết bị của bạn. Hãy đợi chúng đồng bộ xong lên điện thoại, sau đó bắt đầu cập nhật.';
+
+  @override
+  String get batteryRestartToRefresh => 'Khởi động lại Omi để làm mới';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Sẽ xử lý vào $date khi số phút của bạn được gia hạn';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Hoặc xử lý ngay bằng cách nâng cấp gói';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Xử lý vào $date';
+  }
 }

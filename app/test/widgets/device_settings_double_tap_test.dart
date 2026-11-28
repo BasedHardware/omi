@@ -44,6 +44,12 @@ class _StubDeviceProvider extends ChangeNotifier implements DeviceProvider {
 
   @override
   int get batteryLevel => -1;
+
+  @override
+  int get displayBatteryLevel => batteryLevel;
+
+  @override
+  bool get batteryReadingStuck => false;
   @override
   int get settingsBatteryLevel => batteryLevel;
 

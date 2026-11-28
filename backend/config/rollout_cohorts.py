@@ -12,9 +12,15 @@ class RolloutCohortUnavailable(RuntimeError):
     """Membership is unknown, rather than an authoritative negative grant."""
 
 
+# Owners returned to legacy v3 intake at any stage (SCA-2918). Unknown membership raises
+# RolloutCohortUnavailable at runtime; config.conversations_v3 then admits and records the fallback.
+V3_HOLDOUT_COHORT = 'conversations-v3-holdout'
+
 # Literal env reads keep the migration fallbacks visible to the flag registry.
 COHORT_ENVS = {
     'conversations-v3': lambda: os.getenv('CONVERSATIONS_V3_UID_ALLOWLIST', ''),
+    # Conversations v3 holdout (V3_HOLDOUT_COHORT): runtime membership only, no env fallback.
+    'conversations-v3-holdout': lambda: '',
     'v3-recording-rotation': lambda: '',
     # Manual-finish first transcript (SCA-3024): runtime membership only, no env fallback.
     'v3-fast-finish': lambda: '',
@@ -97,6 +103,9 @@ def in_rollout_cohort(uid: str, name: str, *, legacy_members=None, legacy_all=Fa
         if name == 'go-finalization':
             # Go admission reports an unknown membership as a fallback, never as a plain miss.
             raise RolloutCohortUnavailable('go finalization cohort resolver is unbound')
+        if name == V3_HOLDOUT_COHORT:
+            # Unknown holdout membership admits as a counted fallback (v3_intake_held_out), never a plain miss.
+            raise RolloutCohortUnavailable('conversations v3 holdout cohort resolver is unbound')
         return False
     return _membership_resolver(uid, name, legacy_members=legacy_members, legacy_all=legacy_all)
 

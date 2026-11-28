@@ -190,7 +190,7 @@ def test_no_marker_means_no_frontier_read():
 
 def test_store_run_reseeds_each_hinted_activation_after_commit(monkeypatch):
     calls = []
-    view = SimpleNamespace(hinted_activations={('scheduler_09', 2), ('scheduler_01', 0)})
+    view = SimpleNamespace(hinted_activations={('scheduler_09', 2), ('scheduler_01', 0)}, tokenless_hits=[])
     store = store_module.FirestoreStore.__new__(store_module.FirestoreStore)
     store.namespace = 'batch_pipeline_dev'
     store._client = object()

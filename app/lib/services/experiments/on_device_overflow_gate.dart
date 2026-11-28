@@ -2,9 +2,10 @@ import 'package:flutter/foundation.dart';
 
 import 'package:omi/utils/analytics/analytics_manager.dart';
 
-/// Client presentation gate for on-device transcription once live hours run out (the at-cap
-/// choice sheet, model setup, schedule, queue banner, provenance and settings). Off leaves every
-/// existing surface exactly as it is.
+/// Storefront gate for on-device transcription once live hours run out: the at-cap choice sheet,
+/// its overflow capture and settings opt-in, the held-audio phone choices and the Plus meter
+/// shortcut. Off leaves those surfaces exactly as they are. The runner, model setup, schedule,
+/// queue banner and provenance follow [OnDeviceRunnerGate] instead (SCA-5264).
 ///
 /// Evaluated from the PostHog flag `mobile-on-device-overflow`, registered in
 /// `config/feature-flags.yaml`. Fail-closed: no analytics identity or a failed read means off.

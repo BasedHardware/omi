@@ -93,6 +93,38 @@ def test_variant_and_payload_only_when_on():
     assert omi_flags.evaluate(off, 'u') == omi_flags.Resolved(False)
 
 
+@pytest.mark.parametrize('platform', ['ios', 'android', None, 'macos'])
+def test_empty_platforms_preserve_legacy_evaluation(platform):
+    legacy = rule(rollout_percentage=5, variant='b', payload='{}', allow_uids=['allow'], deny_uids=['deny'])
+    explicit_empty = rule(
+        rollout_percentage=5, variant='b', payload='{}', allow_uids=['allow'], deny_uids=['deny'], platforms=[]
+    )
+    for uid in ('allow', 'deny', *(f'preview-{n}' for n in range(100))):
+        assert omi_flags.evaluate(explicit_empty, uid, platform) == omi_flags.evaluate(legacy, uid)
+
+
+@pytest.mark.parametrize('platform,enabled', [('ios', True), ('android', False), (None, False), ('macos', False)])
+def test_evaluate_ios_target_and_uid_overrides(platform, enabled):
+    targeted = rule(platforms=['ios'], allow_uids=['allowed', 'denied'], deny_uids=['denied'])
+    canary = rule(platforms=['ios'], rollout_percentage=0, allow_uids=['allowed'])
+    assert omi_flags.evaluate(targeted, 'bucketed', platform).enabled is enabled
+    assert omi_flags.evaluate(targeted, 'denied', platform) == omi_flags.Resolved(False)
+    assert omi_flags.evaluate(canary, 'allowed', platform).enabled is enabled
+    assert omi_flags.evaluate(canary, 'bucketed', platform) == omi_flags.Resolved(False)
+
+
+@pytest.mark.parametrize('platforms', [['windows'], ['IOS'], ['ios', None], 'ios', None])
+def test_invalid_platforms_rejected_before_parsing_or_writing(platforms):
+    with pytest.raises(ValueError, match='platforms'):
+        rule(platforms=platforms)
+    with pytest.raises(ValueError, match='platforms'):
+        cli.merge_rule({'platforms': platforms}, ENTRY, {})
+    client = Mock()
+    with pytest.raises(ValueError, match='platforms'):
+        omi_flags_store.write_rule(client, 'k', {'platforms': platforms}, actor='t', reason='r')
+    assert not client.mock_calls
+
+
 def test_from_doc_clamps_and_ignores_garbage():
     parsed = omi_flags.FlagRule.from_doc('k', {'active': 'true', 'rollout_percentage': 250, 'variant': 3})
     assert parsed.active is False and parsed.rollout_percentage == 100 and parsed.variant is None
@@ -142,6 +174,25 @@ def test_store_failure_keeps_last_known_good(store, monkeypatch):
     assert recorded.call_args.kwargs['to_mode'] == 'last_known_good'
 
 
+def test_invalid_platforms_disable_only_that_rule_and_allow_refresh(store, monkeypatch):
+    recorded = Mock()
+    monkeypatch.setattr(omi_flags, 'record_fallback', recorded)
+    store.docs = {
+        'targeted': {'active': True, 'rollout_percentage': 100, 'surfaces': ['mobile'], 'platforms': ['ios']},
+        'legacy': {'active': False, 'surfaces': ['mobile']},
+    }
+    assert omi_flags.resolve_surface('u', 'mobile', 'ios')[1]['targeted'] == omi_flags.Resolved(True)
+    store.docs['targeted']['platforms'] = ['invalid']
+    store.docs['legacy'].update(active=True, rollout_percentage=100)
+    store.version = 2
+    store.now[0] += 60
+    assert omi_flags.resolve_surface('u', 'mobile', 'ios') == (
+        2,
+        {'legacy': omi_flags.Resolved(True), 'targeted': omi_flags.Resolved(False)},
+    )
+    assert recorded.call_args.kwargs['failure_subtype'] == 'invalid_rule_platforms'
+
+
 def test_client_construction_failure_degrades_like_a_read_failure(store, monkeypatch):
     recorded = Mock()
     monkeypatch.setattr(omi_flags, 'record_fallback', recorded)
@@ -178,6 +229,69 @@ def test_client_flags_endpoint_filters_by_surface(store):
         ],
     }
     assert TestClient(app).get('/v1/flags', params={'surface': 'backend'}).status_code == 422
+
+
+@pytest.mark.parametrize(
+    'platform_headers,enabled',
+    [
+        pytest.param((), False, id='missing'),
+        pytest.param(('',), False, id='empty'),
+        pytest.param(('macos',), False, id='macos'),
+        pytest.param(('fuchsia',), False, id='fuchsia'),
+        pytest.param(('iOS',), False, id='mixed-case'),
+        pytest.param(('IOS',), False, id='uppercase'),
+        pytest.param((' ios',), False, id='leading-space'),
+        pytest.param(('ios ',), False, id='trailing-space'),
+        pytest.param(('ios,android',), False, id='comma-separated'),
+        pytest.param(('ios', 'android'), False, id='repeated-different'),
+        pytest.param(('ios', 'ios'), False, id='repeated-identical'),
+        pytest.param(('ios',), True, id='ios'),
+        pytest.param(('android',), False, id='android'),
+    ],
+)
+def test_client_flags_endpoint_requires_one_exact_platform(store, platform_headers, enabled):
+    store.docs = {'ios-only': {'active': True, 'rollout_percentage': 100, 'surfaces': ['mobile'], 'platforms': ['ios']}}
+    app = FastAPI()
+    app.include_router(flags_router.router)
+    app.dependency_overrides[get_current_user_uid] = lambda: 'u'
+    headers = [('X-App-Platform', value) for value in platform_headers]
+    response = TestClient(app).get('/v1/flags', params={'surface': 'mobile'}, headers=headers)
+    assert response.status_code == 200
+    assert response.json() == {
+        'version': 1,
+        'flags': [{'key': 'ios-only', 'enabled': enabled, 'variant': None, 'payload_json': None}],
+    }
+
+
+def test_legacy_client_flags_use_percentage_without_platform_header(store):
+    legacy_rule = {'active': True, 'rollout_percentage': 50, 'surfaces': ['mobile']}
+    store.docs = {'legacy-a': legacy_rule, 'legacy-b': legacy_rule}
+    app = FastAPI()
+    app.include_router(flags_router.router)
+    app.dependency_overrides[get_current_user_uid] = lambda: 'u'
+    response = TestClient(app).get('/v1/flags', params={'surface': 'mobile'})
+    assert response.status_code == 200
+    # uid "u" buckets below 50% for legacy-a and above 50% for legacy-b.
+    assert {flag['key']: flag['enabled'] for flag in response.json()['flags']} == {'legacy-a': True, 'legacy-b': False}
+
+
+def test_legacy_client_flag_response_is_byte_identical_across_platforms(store):
+    store.docs = {
+        'off': {'active': True, 'rollout_percentage': 100, 'surfaces': ['mobile'], 'deny_uids': ['u'], 'payload': '{}'},
+        'on': {'active': True, 'surfaces': ['mobile'], 'allow_uids': ['u'], 'variant': 'b', 'payload': '{}'},
+    }
+    app = FastAPI()
+    app.include_router(flags_router.router)
+    app.dependency_overrides[get_current_user_uid] = lambda: 'u'
+    client = TestClient(app)
+    expected = (
+        b'{"version":1,"flags":[{"key":"off","enabled":false,"variant":null,"payload_json":null},'
+        b'{"key":"on","enabled":true,"variant":"b","payload_json":"{}"}]}'
+    )
+    for headers in ({}, {'X-App-Platform': 'ios'}, {'X-App-Platform': 'android'}, {'X-App-Platform': 'unknown'}):
+        response = client.get('/v1/flags', params={'surface': 'mobile'}, headers=headers)
+        assert response.status_code == 200
+        assert response.content == expected
 
 
 def _dual_count(outcome):
@@ -254,6 +368,7 @@ def test_proactivity_omi_source_and_absent_fails_closed(store, monkeypatch):
 
 
 ENTRY = {'key': 'k', 'surfaces': ['macos'], 'lifecycle': 'rollout'}
+MOBILE_ENTRY = {**ENTRY, 'surfaces': ['mobile']}
 
 
 def test_posthog_import_converts_only_simple_rows():
@@ -295,6 +410,86 @@ def test_merge_rule_validates_and_copies_registry_surfaces():
         cli.merge_rule(None, ENTRY, {'rollout_percentage': 101})
     with pytest.raises(ValueError):
         cli.merge_rule(None, ENTRY, {'payload': 'not json'})
+
+
+def test_merge_rule_preserves_platforms_unless_replaced_or_cleared():
+    current = {'platforms': ['ios']}
+    assert cli.merge_rule(current, MOBILE_ENTRY, {'rollout_percentage': 10})['platforms'] == ['ios']
+    assert cli.merge_rule(current, MOBILE_ENTRY, {'platforms': ['ios', 'android']})['platforms'] == ['ios', 'android']
+    assert cli.merge_rule(current, MOBILE_ENTRY, {'platforms': []})['platforms'] == []
+    assert current == {'platforms': ['ios']}
+
+
+@pytest.mark.parametrize('surfaces', [['macos'], ['backend', 'mobile']])
+def test_merge_rule_refuses_platform_targeting_for_non_mobile_only_keys(surfaces):
+    with pytest.raises(cli.FlagCliError, match='requires a mobile-only flag'):
+        cli.merge_rule(None, {**ENTRY, 'surfaces': surfaces}, {'platforms': ['ios']})
+
+
+def test_set_refuses_platform_targeted_mirror_before_external_checks(monkeypatch, capsys):
+    monkeypatch.setattr(cli, 'load_registry', lambda: {'k': MOBILE_ENTRY})
+    monkeypatch.setattr(cli, '_client', lambda args: object())
+    monkeypatch.setattr(cli.store, 'read_all', lambda client: (1, {'k': {'platforms': ['ios']}}))
+    require, posthog, write = Mock(), Mock(), Mock()
+    monkeypatch.setattr(cli.live_preflight, 'require', require)
+    monkeypatch.setattr(cli, 'posthog_rows', posthog)
+    monkeypatch.setattr(cli.store, 'write_rule', write)
+    assert cli.main(['set', 'k', '--rollout', '5', '--reason', 'ramp', '--yes', '--mirror-posthog']) == 2
+    assert 'platform targeting cannot be mirrored' in capsys.readouterr().err
+    require.assert_not_called()
+    posthog.assert_not_called()
+    write.assert_not_called()
+
+
+def test_preview_reads_once_and_never_writes_or_prints_stored_uids(monkeypatch, capsys):
+    current = {'active': False, 'allow_uids': ['stored-allow'], 'deny_uids': ['stored-deny']}
+    key = 'mobile-batch-upload-hold'
+    client = object()
+    read = Mock(return_value=(3, {key: current}))
+    write, publish, require = Mock(), Mock(), Mock()
+    monkeypatch.setattr(cli, '_client', lambda args: client)
+    monkeypatch.setattr(cli.store, 'read_all', read)
+    monkeypatch.setattr(cli.store, 'write_rule', write)
+    monkeypatch.setattr(cli.store, 'publish_redis_version', publish)
+    monkeypatch.setattr(cli.live_preflight, 'require', require)
+    assert cli.main(['preview', key, '--active', '--rollout', '5', '--platforms', 'ios']) == 0
+    read.assert_called_once_with(client)
+    write.assert_not_called()
+    publish.assert_not_called()
+    require.assert_not_called()
+    assert current == {'active': False, 'allow_uids': ['stored-allow'], 'deny_uids': ['stored-deny']}
+    output = capsys.readouterr().out
+    assert 'stored-allow' not in output and 'stored-deny' not in output
+    preview = json.loads(output)
+    assert preview['rule']['key'] == key
+    assert preview['rule']['platforms'] == ['ios']
+    assert preview['rule']['active'] is True
+    assert preview['rule']['rollout_percentage'] == 5
+    assert preview['rule']['allow_count'] == preview['rule']['deny_count'] == 1
+    assert preview['synthetic_uid_count'] == 10_000
+    expected_ios = sum(posthog_hash(key, f'preview-{n}') < 0.05 for n in range(10_000))
+    assert preview['exposure'] == {
+        'ios': {'enabled': expected_ios, 'percentage': expected_ios / 100},
+        'android': {'enabled': 0, 'percentage': 0},
+        'missing_header': {'enabled': 0, 'percentage': 0},
+    }
+
+
+@pytest.mark.parametrize('options', [['--platforms', 'ios', 'android'], ['--all-platforms']])
+def test_set_platform_expansion_requires_live_preflight(monkeypatch, options):
+    current = {'active': True, 'rollout_percentage': 100, 'platforms': ['ios']}
+    monkeypatch.setattr(cli, 'load_registry', lambda: {'k': MOBILE_ENTRY})
+    monkeypatch.setattr(cli, '_client', lambda args: object())
+    monkeypatch.setattr(cli.store, 'read_all', lambda client: (1, {'k': current}))
+    require = Mock(side_effect=SystemExit(4))
+    write = Mock()
+    monkeypatch.setattr(cli.live_preflight, 'require', require)
+    monkeypatch.setattr(cli, '_write', write)
+    with pytest.raises(SystemExit) as error:
+        cli.main(['set', 'k', *options, '--reason', 'expand', '--yes'])
+    assert error.value.code == 4
+    require.assert_called_once_with('k', 100, None)
+    write.assert_not_called()
 
 
 @pytest.fixture(scope='module')

@@ -13,6 +13,11 @@ from tests.unit.test_batch_pipeline_projection_donor_dedupe import batch_project
 from utils.conversations import summary_delivery as delivery
 
 
+@pytest.fixture(autouse=True)
+def disable_first_week_for_projection_contracts(monkeypatch):
+    monkeypatch.setenv('FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED', 'false')
+
+
 def setup_record(lane, **changes):
     binding = replace(lane.binding, record_origin=True, native_record=True)
     lane.client.rows[(f'{lane.namespace}_jobs', 'segment')]['projection_binding'] = asdict(binding)
@@ -25,7 +30,7 @@ def setup_record(lane, **changes):
         structured={'title': '', 'overview': ''},
         finalization_job_id='finalizer',
         finalization_revision=1,
-        finalization_status='queued',  # Capture handoff leaves this stale on the conversation.
+        finalization_status='queued',  # Seed a historical handoff before atomic settlement.
     )
     row.update(changes)
     for index, segment in enumerate(row['transcript_segments']):
@@ -71,7 +76,7 @@ def test_projection_commit_arms_first_summary_with_retained_finalization_id(batc
     assert 'client_processing' not in update.update.fields
     assert delivery.refusal({k: v for k, v in stored.items() if v is not firestore.DELETE_FIELD}) is None
     assert stored['finalization_job_id'] == 'finalizer'
-    assert stored['finalization_status'] == 'queued'
+    assert stored['finalization_status'] == 'completed'
     assert 'title_provenance' not in stored['structured']
     # Debt creation has no dispatch side effect; the existing projection follow-up owns it.
     lane.projector.finish_part.assert_called_once()
@@ -99,6 +104,7 @@ def test_projection_does_not_take_an_active_or_unrelated_generation(batch_projec
     lane.client.rows[('conversation_finalization_jobs', 'finalizer')].update(job_changes)
     lane.projector.project('segment')
     stored = lane.client.rows[('users', 'u', 'conversations', 'live')]
+    assert stored['finalization_status'] == 'queued'
     assert stored.get('summary_due_at') is None
     assert 'summary_projection_finalization' not in stored
 
@@ -111,6 +117,7 @@ def test_successful_byok_finalizer_keeps_credential_custody_with_account_byok_of
     with caplog.at_level(logging.INFO, logger='database.batch_summary_debt'):
         lane.projector.project('segment')
     stored = lane.client.rows[('users', 'u', 'conversations', 'live')]
+    assert stored['finalization_status'] == 'queued'
     assert stored.get('summary_due_at') is None
     assert 'summary_projection_finalization' not in stored
     assert 'phase=precommit outcome=refused reason=byok_required' in caplog.text
@@ -122,6 +129,7 @@ def test_projection_kill_switch_preserves_the_generation_fence(batch_projection,
     monkeypatch.setenv('SUMMARY_PROJECTION_DEBT_ENABLED', 'false')
     lane.projector.project('segment')
     stored = lane.client.rows[('users', 'u', 'conversations', 'live')]
+    assert stored['finalization_status'] == 'completed'
     assert stored.get('summary_due_at') is None
     assert 'summary_projection_finalization' not in stored
 

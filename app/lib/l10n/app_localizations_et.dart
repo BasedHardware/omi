@@ -15834,4 +15834,20 @@ class AppLocalizationsEt extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Mõned salvestised on veel teie seadmes. Oodake, kuni need on telefonisse sünkroonitud, ja seejärel alustage uuendust.';
+
+  @override
+  String get batteryRestartToRefresh => 'Taaskäivitage Omi värskendamiseks';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Töödeldakse $date, kui teie minutid uuenevad';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Või töödelge need kohe plaani täiendusega';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Töödeldakse $date';
+  }
 }

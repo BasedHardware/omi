@@ -141,6 +141,7 @@ spec:
           ports:
             - {name: http, containerPort: 8080}
           env:
+            - {name: FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED, value: {{ .Values.firstWeekSummaryGuaranteeEnabled | quote }}}
             {{- if not (has "ROLLOUT_POD_TEMPLATE_HASH" $preserveLiveEnv) }}
             # Immutable rollout exporter identity, including supervised GPU children.
             - name: ROLLOUT_POD_TEMPLATE_HASH
@@ -218,6 +219,11 @@ spec:
             - {name: BATCH_PIPELINE_SHADOW_PERCENT, value: {{ .Values.worker.shadowPercent | quote }}}
             - {name: BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR, value: {{ .Values.worker.shadowPaidRecoveryPerHour | quote }}}
             - {name: BATCH_PIPELINE_SHADOW_RECOVERY_API_URL, value: {{ .Values.worker.shadowRecoveryApiUrl | quote }}}
+            {{- if .Values.worker.flagStoreProject }}
+            # Per-owner rules of the Omi flag store (commit_wake). Absent, every rule reads off.
+            - {name: OMI_FLAGS_FIRESTORE_PROJECT, value: {{ .Values.worker.flagStoreProject | quote }}}
+            - {name: OMI_FLAGS_FIRESTORE_DATABASE, value: {{ .Values.worker.flagStoreDatabase | quote }}}
+            {{- end }}
             # Sampled strict-VAD shadow; 100 restores full, 0 turns the shadow off.
             # No `default` here: Helm's default treats 0 as empty, which would
             # silently turn the documented 0-disable into 10.
@@ -271,6 +277,17 @@ spec:
                   name: {{ .Values.secretName }}
                   key: SONIOX_API_KEY
                   optional: true
+            {{- if .Values.privacyDecisionRedisSecret }}
+            {{- $secret := .Values.privacyDecisionRedisSecret }}
+            {{- range $key := list "REDIS_DB_HOST" "REDIS_DB_PORT" "REDIS_DB_PASSWORD" }}
+            - name: {{ replace "REDIS_DB_" "BPP_WRITE_REDIS_" $key }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secret | quote }}
+                  key: {{ $key }}
+                  optional: true
+            {{- end }}
+            {{- end }}
             {{- if $preserveLiveEnv }}
             {{- $liveEnv := include "batch-pipeline-worker.liveEnv" (dict "deployment" $current "container" "worker" "names" $preserveLiveEnv) | fromYamlArray }}
             {{- with $liveEnv }}

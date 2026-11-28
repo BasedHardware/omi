@@ -12325,5 +12325,9 @@
     "playStripePlanPaused": "آپ کا {plan} پلان روک دیا گیا ہے۔",
     "firmwareNewestSupportedForDevice": "آپ کا ڈیوائس پہلے ہی سپورٹ شدہ تازہ ترین فرم ویئر ورژن پر ہے",
     "firmwareSyncRecordingsFirstTitle": "پہلے اپنی ریکارڈنگز سنک کریں",
-    "firmwareSyncRecordingsFirstMessage": "کچھ ریکارڈنگز ابھی آپ کے ڈیوائس پر ہیں۔ انہیں فون پر سنک ہونے دیں، پھر اپڈیٹ شروع کریں۔"
+    "firmwareSyncRecordingsFirstMessage": "کچھ ریکارڈنگز ابھی آپ کے ڈیوائس پر ہیں۔ انہیں فون پر سنک ہونے دیں، پھر اپڈیٹ شروع کریں۔",
+    "batteryRestartToRefresh": "ریفریش کرنے کے لیے Omi کو دوبارہ شروع کریں",
+    "onTheWayAllowanceHeldTitle": "آپ کے منٹ تجدید ہونے پر {date} کو پروسیس ہوں گے",
+    "onTheWayAllowanceHeldUpgrade": "یا پلان اپ گریڈ کے ساتھ انہیں فوراً پروسیس کریں",
+    "onTheWayDayProcessesOn": "{date} کو پروسیس ہوں گے"
 }

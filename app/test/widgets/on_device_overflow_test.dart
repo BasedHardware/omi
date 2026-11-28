@@ -624,10 +624,12 @@ void main() {
         return null;
       });
       final model = AppleOnDeviceModel(detectionTimeout: const Duration(milliseconds: 40));
+      // The at-cap banner is a storefront surface: runner and storefront flags both on.
       final controller = OnDeviceTranscriptionController(
         model: model,
         power: const UnknownPhonePowerSource(),
         readGate: () async => true,
+        readStorefrontGate: () async => true,
         manageNativeCustody: false,
       );
       final loaded = controller.ensureLoaded();

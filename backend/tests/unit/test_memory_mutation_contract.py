@@ -1,16 +1,20 @@
 """Regression tests for the v3 memory mutation HTTP contract."""
 
+from types import SimpleNamespace
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from models.memories import MemoryDB
-from routers import memories
+from routers import developer, memories
+from utils.memory.canonical_memory_adapter import CanonicalVisibilityRetryError, CanonicalVisibilityTimeout
 from tests.unit.test_memory_service_parity import _sample_memory_dict
 
 
 @pytest.fixture
 def client(monkeypatch):
+    monkeypatch.setattr(memories.db_client_module, 'db', object())
     app = FastAPI()
     app.add_api_route('/v3/memories/{memory_id}', memories.edit_memory, methods=['PATCH'])
     app.add_api_route('/v3/memories/{memory_id}/revert', memories.revert_memory, methods=['POST'])
@@ -185,6 +189,52 @@ def test_visibility_accepts_canonical_json_body(client, monkeypatch):
     assert response.status_code == 200
     assert response.json() == {'status': 'ok'}
     assert client.memory_calls == [('visibility', 'test-user', 'memory-1', 'public')]
+
+
+@pytest.mark.parametrize(
+    ("error_type", "status"),
+    [(CanonicalVisibilityRetryError, 409), (CanonicalVisibilityTimeout, 503)],
+)
+def test_visibility_retry_hint_without_side_effects(client, monkeypatch, error_type, status):
+    def exhausted(*_args):
+        raise error_type("busy")
+
+    def unexpected(*_args, **_kwargs):
+        pytest.fail("visibility side effect ran without a committed mutation")
+
+    monkeypatch.setattr(memories.MemoryService, 'update_visibility', exhausted)
+    monkeypatch.setattr(memories, 'submit_with_context', unexpected)
+    monkeypatch.setattr(memories, 'record_product_event', unexpected)
+
+    response = client.patch('/v3/memories/memory-1/visibility', json={'value': 'public'})
+
+    assert response.status_code == status
+    assert response.headers['Retry-After'] == '1'
+
+
+@pytest.mark.parametrize(
+    ("error_type", "status"),
+    [(CanonicalVisibilityRetryError, 409), (CanonicalVisibilityTimeout, 503)],
+)
+def test_developer_visibility_uses_the_same_retry_hint(monkeypatch, error_type, status):
+    def exhausted(*_args):
+        raise error_type("busy")
+
+    monkeypatch.setattr(developer.MemoryService, "update_visibility", exhausted)
+    monkeypatch.setattr(
+        developer, "authorize_memory_external_default_memory_write", lambda *_, **__: SimpleNamespace(allowed=True)
+    )
+    app = FastAPI()
+    app.add_api_route("/v1/dev/user/memories/{memory_id}", developer.update_memory, methods=["PATCH"])
+    app.dependency_overrides[developer.get_developer_memory_default_memory_write_context] = lambda: SimpleNamespace(
+        uid="test-user"
+    )
+
+    with TestClient(app) as client:
+        response = client.patch("/v1/dev/user/memories/memory-1", json={"visibility": "public"})
+
+    assert response.status_code == status
+    assert response.headers["Retry-After"] == "1"
 
 
 def test_visibility_retains_legacy_query_parameter(client, monkeypatch):

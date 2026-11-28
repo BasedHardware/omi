@@ -211,7 +211,7 @@ env:
   # Media/noise classifier: live shadow/0 (folded 2026-11-18, unchanged). The digest serve list is
   # private: see privateSecretEnv above.
   - name: MEDIA_NOISE_MODE
-    value: "shadow"
+    value: "off"
   - name: MEDIA_NOISE_MODE_SERVE_PERCENT
     value: "0"
   - name: UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED
@@ -298,10 +298,6 @@ env:
     value: "180"
   - name: CONVERSATIONS_V3_ROTATION_MAX_SECONDS
     value: "300"
-  - name: SYNC_POLL_BACKOFF_ENABLED
-    value: "true"
-  - name: SYNC_POLL_BACKOFF_PERCENT
-    value: "5"
   - name: BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED
     value: "false"
   - name: BATCH_PIPELINE_LIVE_ADMISSION_ENABLED
@@ -362,7 +358,7 @@ env:
   - name: OMI_FLAGS_FIRESTORE_DATABASE
     value: "omi-flags"
   - name: OMI_FLAGS_SOURCE
-    value: "dual"
+    value: "posthog"
   - name: FIRESTORE_READ_LEDGER
     value: "1"
   - name: FIRESTORE_READ_LEVERS
@@ -422,7 +418,7 @@ env:
   - name: SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED
     value: "off"
   - name: CAPTURE_GROUP_CONTAINMENT_MODE
-    value: "shadow"
+    value: "off"
   # Keep these aligned with the production GitHub environment variables used
   # by the Cloud Run backend; api.omi.me is served by backend-listen.
   - name: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE
@@ -491,9 +487,9 @@ env:
     value: "gateway"
   # Cached-evidence shadow only; authoritative grouping stays incumbent.
   - name: SPEAKER_GROUPING_SHADOW
-    value: "cohort"
+    value: "off"
   - name: SPEAKER_GROUPING_SHADOW_PERCENT
-    value: "10"
+    value: "0"
   - name: SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST
     value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
   - name: OMI_SHAPED_AGENT_MODE

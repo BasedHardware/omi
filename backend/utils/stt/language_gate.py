@@ -20,6 +20,7 @@ from prometheus_client import Counter
 
 from config.live_stt_gpu_fleet import gpu_fleet_off
 from config.prerecorded_language import language_class, language_gate_percent, self_lid_confidence_floor
+from utils.stt.prerecorded_deadline import probe_timeout
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +99,7 @@ def self_detect(probe: bytes, *, surface: str) -> SelfVerdict | None:
         if not base:
             outcome = 'no_url'
             return None
-        with httpx.Client(timeout=GATE_TIMEOUT) as client:
+        with httpx.Client(timeout=probe_timeout(GATE_TIMEOUT)) as client:
             response = client.post(base + '/v2/language', files={'file': ('language.wav', probe, 'audio/wav')})
         if response.status_code != 200:
             outcome = 'unavailable' if response.status_code == 503 else f'http_{response.status_code // 100}xx'
@@ -125,7 +126,7 @@ def self_detect(probe: bytes, *, surface: str) -> SelfVerdict | None:
             return None
         outcome = 'accepted'
         return SelfVerdict(language.lower(), top_p, p_supported, float(seconds))
-    except httpx.TimeoutException:
+    except (httpx.TimeoutException, TimeoutError):
         outcome = 'timeout'
         return None
     except Exception:

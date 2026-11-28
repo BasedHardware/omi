@@ -113,6 +113,8 @@ class DeviceService {
 
   DeviceServiceStatus _status = DeviceServiceStatus.init;
   List<BtDevice> _devices = [];
+  // Ids the last scan saw. _devices also holds stored devices added for reconnect, which pickers must not list.
+  final Set<String> _scannedIds = {};
   Future<void>? _activeDiscovery;
   Future<void>? _queuedDiscovery;
 
@@ -203,6 +205,9 @@ class DeviceService {
       }
 
       _devices = discoveredDevices;
+      _scannedIds
+        ..clear()
+        ..addAll(discoveredDevices.map((d) => d.id));
       onDevices(devices);
 
       if (desirableDeviceId != null && desirableDeviceId.isNotEmpty) {
@@ -302,8 +307,8 @@ class DeviceService {
     _subscriptions.remove(context.hashCode);
     _subscriptions.putIfAbsent(context.hashCode, () => subscription);
 
-    // Retains
-    subscription.onDevices(_devices);
+    // Retains: only what the last scan saw, not stored devices added for reconnect.
+    subscription.onDevices(_devices.where((d) => _scannedIds.contains(d.id)).toList());
     subscription.onStatusChanged(_status);
   }
 
@@ -335,6 +340,7 @@ class DeviceService {
 
     _subscriptions.clear();
     _devices.clear();
+    _scannedIds.clear();
   }
 
   Future<void> stopDiscoverers() async {
@@ -525,5 +531,6 @@ class DeviceService {
     }
 
     _devices.removeWhere((d) => d.id == deviceId);
+    _scannedIds.remove(deviceId);
   }
 }

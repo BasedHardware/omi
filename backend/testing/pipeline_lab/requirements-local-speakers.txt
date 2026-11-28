@@ -1,0 +1,12 @@
+# Optional extra for the speaker lab's `record-local` (speakers/local_worker.py): production's diarizer models
+# (pyannote community-1, WeSpeaker v2) and the silver-truth reference (NVIDIA Streaming Sortformer v2, via NeMo)
+# on this machine's CPU, plus local Parakeet words. Never part of the default install, a lock or CI.
+# Install into its own venv outside the repository, never backend/.venv:
+#   uv venv -p python3.11 <dir>/venv && uv pip install -p <dir>/venv/bin/python -r backend/testing/pipeline_lab/requirements-local-speakers.txt
+#   export OMI_PIPELINE_LAB_LOCAL_SPEAKERS_PYTHON=<dir>/venv/bin/python OMI_PIPELINE_LAB_LOCAL_STT_PYTHON=<dir>/venv/bin/python HF_HOME=<dir>/hf
+# pyannote/speaker-diarization-community-1 is gated: accept its terms once and run the first download with a
+# Hugging Face token in the environment; afterwards HF_HUB_OFFLINE=1.
+# Measured 2026-11-26 on macOS arm64 (M4), Python 3.11: installs from wheels; models about 3.5 GB.
+-r requirements-local-stt.txt
+pyannote-audio==4.0.3
+fastapi==0.121.0

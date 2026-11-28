@@ -120,7 +120,10 @@ class ConversationDetailHeader extends StatelessWidget {
           focusNode: provider.titleFocusNode,
           controller: provider.titleController,
           style: titleStyle,
-          displayText: (stored) => TranscriptionPendingConversations.replacesTitle(conversation, title: stored)
+          // An empty display shows the hint: "Listening" while the conversation awaits its name
+          // (always, with the reliability experiment title_at_end, until it ends).
+          displayText: (stored) => TranscriptionPendingConversations.replacesTitle(conversation, title: stored) ||
+                  awaitsLiveTitle(conversation, title: stored)
               ? ''
               : presentableConversationTitle(conversation, title: stored),
           // A hint shows only while the field is empty, so a live conversation's empty field reads

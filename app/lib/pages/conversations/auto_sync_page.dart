@@ -101,6 +101,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   Widget build(BuildContext context) {
     return Consumer3<SyncProvider, UserProvider, DeviceProvider>(
       builder: (context, syncProvider, userProvider, deviceProvider, _) {
+        final ringFirmware = WalSyncs.isRingBufferFirmware(deviceProvider.currentFirmwareVersion);
         final syncState = syncProvider.syncState;
         final hasAnyRecording = syncProvider.allWals.isNotEmpty;
         // Compute the lists once per build and pass them down — the
@@ -129,11 +130,10 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                 sliver: SliverList(
                   delegate: SliverChildListDelegate.fixed([
                     const SizedBox(height: 8),
-                    _buildOverallStatusCard(syncProvider, syncState),
+                    _buildOverallStatusCard(syncProvider, syncState, ringFirmware: ringFirmware),
                     const OnDeviceChargerWaitLine(),
                     if (syncState.hasError) ...[const SizedBox(height: 16), _buildErrorCard(syncState, syncProvider)],
-                    if (WalSyncs.isRingBufferFirmware(deviceProvider.currentFirmwareVersion) &&
-                        deviceProvider.ringStatus != null) ...[
+                    if (ringFirmware && deviceProvider.ringStatus != null) ...[
                       const SizedBox(height: 16),
                       DeviceStorageCard(status: deviceProvider.ringStatus!),
                     ],
@@ -162,7 +162,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
 
   /// Every amount on this card is audio length. File, upload-part and server-job
   /// counts used to leak through ("Processing 0/5914"); they are in Sync details now.
-  Widget _buildOverallStatusCard(SyncProvider p, SyncState s) {
+  Widget _buildOverallStatusCard(SyncProvider p, SyncState s, {required bool ringFirmware}) {
     final l = context.l10n;
     String dur(int seconds) => OmiDuration.compact(seconds, l);
     final step = _runTracker.update(s, p.allWals, pendingWork: p.derivedWals.pendingWork);
@@ -179,7 +179,12 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     final isActive = s.isSyncing || s.isFetchingConversations;
     // An edge throttle clears by itself and needs nothing from the user, so it is not shown (David, 11-02).
     final paused = p.isRateLimited && p.rateLimitReason != RateLimitReason.edgeThrottle;
-    final bool showSpinner = (isActive || uploaded > 0) && !paused;
+    final ringDownloading = ringFirmware && p.isRingDownloading;
+    final unlistedRingSeconds =
+        !ringFirmware || readyWals.any((wal) => wal.storage == WalStorage.sdcard && wal.fileNum == -1)
+            ? 0
+            : p.readyRingSeconds;
+    final bool showSpinner = ringDownloading || ((isActive || uploaded > 0) && !paused);
 
     String title;
     String? subtitle;
@@ -189,7 +194,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     double? barFraction;
 
     Future<void> startSync() async {
-      if (await confirmSyncForCustomStt(context) && context.mounted) p.syncWals();
+      if (await confirmSyncForCustomStt(context) && context.mounted) p.syncWalsAfterConfirmation();
     }
 
     if (isActive && step != null && step.step != SyncStep.transcribe) {
@@ -212,9 +217,16 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       // Live-capture uploads run before the device drain: the bar stays on the device step, unfilled.
       if (barStep != step.step) barFraction = 0;
       action = statusActionPill(l.cancel, Colors.redAccent, () => _confirmCancel(context, p));
+    } else if (ringDownloading && (paused || !isActive || s.phase == SyncPhase.idle)) {
+      title = l.syncCardDownloadingTitle;
+      barStep = SyncStep.download;
+      action = statusActionPill(l.cancel, Colors.redAccent, () => _confirmCancel(context, p));
     } else if (paused) {
       title = syncCooldownTitle(p.rateLimitReason, l);
       titleColor = Colors.orangeAccent;
+    } else if (isActive && step == null) {
+      title = l.syncCardSyncingTitle;
+      action = statusActionPill(l.cancel, Colors.redAccent, () => _confirmCancel(context, p));
     } else if (isActive || uploaded > 0) {
       // Uploads finished; the server is turning them into conversations.
       final job = p.offlineServerProcessingSeconds;
@@ -239,8 +251,8 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
           }),
         );
       }
-    } else if (readyWals.isNotEmpty) {
-      final seconds = walSeconds(readyWals);
+    } else if (readyWals.isNotEmpty || unlistedRingSeconds > 0) {
+      final seconds = walSeconds(readyWals) + unlistedRingSeconds;
       title = seconds > 0
           ? l.syncCardReadyAmount(dur(seconds))
           : l.syncCardReadyCount(groupRecordingBlocks(readyWals).length);

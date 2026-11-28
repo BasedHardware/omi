@@ -224,7 +224,12 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
                     continue
 
                 if expired(
-                    {'first_pending_at': row.get('summary_first_pending_at')}, row.get('created_at'), now=current
+                    {
+                        'first_pending_at': row.get('summary_first_pending_at'),
+                        'first_week_summary': row.get('first_week_summary'),
+                    },
+                    row.get('created_at'),
+                    now=current,
                 ):
                     counts['expired_seen'] += 1
                     observed[DiscoveryOutcome.EXPIRED] += 1

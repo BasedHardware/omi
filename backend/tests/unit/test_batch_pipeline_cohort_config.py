@@ -50,7 +50,8 @@ def test_shadow_controls_match_the_batch_ladder_and_stay_prod_only(manifest, rec
     # through the live rungs. Prod pins 25 in the manifest because the 11:13Z Cloud Run deploy
     # reset the hand-applied values — manifest-pinned keys survive deploys, ops env does not.
     # The paid recovery cap stays at the shared 200 base (lead ruling 12:15Z).
-    expected = {'dev': ('0', '200'), 'prod': ('25', '200')}
+    # 2026-11-28 (David, card:prod-shadows-settled-retire-the-dead): retired to 0 at batch 100.
+    expected = {'dev': ('0', '200'), 'prod': ('0', '200')}
     for stage, config in manifest.items():
         for service in SERVICES:
             env = config['cloud_run']['services'][service]['env']

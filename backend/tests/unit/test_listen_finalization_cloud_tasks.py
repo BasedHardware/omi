@@ -1184,7 +1184,16 @@ async def test_worker_completes_claimed_job(monkeypatch):
 
 
 @pytest.mark.anyio
-async def test_worker_forwards_rest_force_processing_mode_from_the_durable_job(monkeypatch):
+@pytest.mark.parametrize(
+    ('force_process', 'trigger', 'background_flex_eligible'),
+    [
+        (True, ProcessingTrigger.CLIENT_FINALIZE, False),
+        (False, ProcessingTrigger.CAPTURE_END, True),
+    ],
+)
+async def test_worker_forwards_processing_mode_from_the_durable_job(
+    monkeypatch, force_process, trigger, background_flex_eligible
+):
     monkeypatch.setattr(finalization_router, 'run_blocking', _inline_run_blocking)
     monkeypatch.setattr(finalization_router, 'try_acquire_job_run_lock', lambda key: 'lock-token')
     monkeypatch.setattr(finalization_router, 'release_job_run_lock', lambda key, token: None)
@@ -1197,7 +1206,7 @@ async def test_worker_forwards_rest_force_processing_mode_from_the_durable_job(m
         lambda job_id: {
             'uid': 'uid-1',
             'conversation_id': 'conversation-1',
-            'force_process': True,
+            'force_process': force_process,
             'created_at': 'accepted-at',
         },
     )
@@ -1217,7 +1226,8 @@ async def test_worker_forwards_rest_force_processing_mode_from_the_durable_job(m
         finalization_job_id='job-1',
         dispatch_generation=1,
         lease_epoch=1,
-        trigger=ProcessingTrigger.CLIENT_FINALIZE,
+        trigger=trigger,
+        background_flex_eligible=background_flex_eligible,
         final_attempt=False,
     )
 

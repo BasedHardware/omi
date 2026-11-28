@@ -199,6 +199,7 @@ def _claim(client: Any, job: str, generation: int) -> tuple[str, dict[str, Any] 
             if (
                 value.get('uid') == row['uid']
                 and value.get('conversation_id')
+                and not value.get('post_window')
                 and not value.get('progress')
                 and not value.get('scan_epoch')
                 and not jobs.lease_held(value, now=now)

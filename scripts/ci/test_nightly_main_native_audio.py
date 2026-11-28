@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import sys
 import tempfile
 import textwrap
 import unittest
@@ -45,9 +46,12 @@ sudo() {
                 cache = root / ".cache/native-audio-apt"
                 cache.mkdir(parents=True)
                 (cache / "closure.deb").touch()
+            # The fakes run with HOME pointed at the temp directory, so they must not
+            # resolve `python3` through PATH: a HOME-relative interpreter shim (as on
+            # agent macOS hosts) would then miss and the fake would never record a call.
+            shebang = f"#!{sys.executable}\n"
             fake_sudo = binaries / "sudo"
-            fake_sudo.write_text(textwrap.dedent('''\
-                #!/usr/bin/env python3
+            fake_sudo.write_text(shebang + textwrap.dedent('''\
                 import json, os, pathlib, sys
                 args = sys.argv[1:]
                 root = pathlib.Path(os.environ["HOME"])
@@ -81,7 +85,7 @@ sudo() {
             fake_sudo.chmod(0o755)
             fake_mktemp = binaries / "mktemp"
             fake_mktemp.write_text(
-                '#!/usr/bin/env python3\nimport tempfile\nprint(tempfile.mkstemp(suffix=".sources")[1])\n'
+                shebang + 'import tempfile\nprint(tempfile.mkstemp(suffix=".sources")[1])\n'
             )
             fake_mktemp.chmod(0o755)
             env = dict(os.environ, HOME=directory, TMPDIR=directory,

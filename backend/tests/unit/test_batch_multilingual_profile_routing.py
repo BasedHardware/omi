@@ -1,0 +1,125 @@
+"""A multi-language user whose own live speech shows a language Parakeet cannot transcribe is classified on audio.
+
+The conversation's supported pin (usually the app language, 'en') is not capability proof for that user:
+the sampled LID path decides instead of admitting the upload straight to Parakeet.
+"""
+
+import pytest
+
+from config.batch_pipeline_language import (
+    MULTILINGUAL_PROFILE,
+    PROFILE_FIELD,
+    batch_admission_language,
+    multilingual_profile_routing_enabled,
+    profile_speaks_unsupported,
+)
+
+# Shape of a real multilingual owner's rolling projection: Mandarin is classified 'ja' by live STT, plus 'vi'.
+MULTILINGUAL = [
+    {'en': 8, 'vi': 1},
+    {'ja': 33},
+    {'en': 4, 'ja': 21},
+    {'en': 172, 'vi': 1},
+    {'en': 17, 'ja': 30},
+    {'vi': 28},
+]
+# English speaker with classifier noise: stray single segments never reach the per-session floor.
+ENGLISH_WITH_NOISE = [{'en': 172, 'vi': 1}, {'en': 99, 'de': 2}, {'en': 45, 'vi': 1}, {'ja': 1}, {'ja': 1}]
+# European languages are Parakeet's own; a German/English speaker keeps Parakeet.
+EUROPEAN = [{'en': 40, 'de': 60}, {'de': 80}, {'fr': 50, 'en': 10}]
+
+
+@pytest.fixture(autouse=True)
+def defaults(monkeypatch):
+    monkeypatch.delenv('BATCH_MULTILINGUAL_PROFILE_ROUTING_ENABLED', raising=False)
+    monkeypatch.delenv('BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED', raising=False)
+
+
+def multi_user(sessions):
+    return {'language': 'en', 'transcription_preferences': {'single_language_mode': False}, PROFILE_FIELD: sessions}
+
+
+@pytest.mark.parametrize(
+    'sessions, expected',
+    [
+        (MULTILINGUAL, True),
+        (ENGLISH_WITH_NOISE, False),
+        (EUROPEAN, False),
+        ([], False),
+        (None, False),
+        ('not-a-list', False),
+        ([{'ja': 33}], False),  # one session is not a pattern
+        ([{'ja': 9}, {'ja': 9}], False),  # under the per-session segment floor
+        ([{'en': 100, 'zh': 15}, {'en': 100, 'zh': 15}], False),  # under the per-session share
+        ([{'en': 40, 'zh': 15}, {'en': 40, 'zh': 15}], True),
+        ([{'zh': 'many'}, {'zh': True}, {7: 30}, 'row'], False),  # malformed rows count as nothing
+        ([{'und': 30}, {'und': 30}], False),  # an unknown language is not evidence
+        ([{'und': 80, 'zh': 15}, {'und': 80, 'zh': 15}], True),  # nor does it dilute the share
+        ([{'und': 10, 'en': 80, 'zh': 15}, {'en': 80, 'zh': 15}], False),
+        # canonical 'sr' stands for Serbian, Croatian and Bosnian: ambiguous, so it is checked on audio
+        ([{'sr': 30}, {'sr': 30}], True),
+        ([{'sr': 30}, {'bs': 30}], True),
+        ([{'hi': 30}, {'ko': 30}], True),
+    ],
+)
+def test_profile_speaks_unsupported(sessions, expected):
+    assert profile_speaks_unsupported({PROFILE_FIELD: sessions}) is expected
+
+
+def test_multilingual_profile_does_not_trust_the_en_pin():
+    assert batch_admission_language(multi_user(MULTILINGUAL), {'language': 'en'}) == (None, MULTILINGUAL_PROFILE)
+
+
+@pytest.mark.parametrize('sessions', [ENGLISH_WITH_NOISE, EUROPEAN, None])
+def test_other_multi_language_users_keep_the_pinned_route(sessions):
+    assert batch_admission_language(multi_user(sessions), {'language': 'en'}) == ('en', None)
+
+
+def test_single_language_mode_is_an_explicit_choice_and_wins():
+    user = {**multi_user(MULTILINGUAL), 'transcription_preferences': {'single_language_mode': True}}
+    assert batch_admission_language(user, {'language': 'en'}) == ('en', None)
+
+
+def test_known_unsupported_conversation_is_unchanged():
+    assert batch_admission_language(multi_user(MULTILINGUAL), {'language': 'zh'}) == (
+        None,
+        'known_unsupported_language',
+    )
+
+
+def test_the_admission_exclusion_kill_switch_also_trusts_the_pin(monkeypatch):
+    from config.batch_pipeline_language import pin_untrusted
+
+    user = multi_user(MULTILINGUAL)
+    assert pin_untrusted(user)
+    monkeypatch.setenv('BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED', 'false')
+    assert not pin_untrusted(user)
+
+
+@pytest.mark.parametrize(
+    'value, enabled', [(None, True), ('true', True), ('', True), ('false', False), ('FALSE', False)]
+)
+def test_kill_switch(monkeypatch, value, enabled):
+    if value is not None:
+        monkeypatch.setenv('BATCH_MULTILINGUAL_PROFILE_ROUTING_ENABLED', value)
+    assert multilingual_profile_routing_enabled() is enabled
+    expected = (None, MULTILINGUAL_PROFILE) if enabled else ('en', None)
+    assert batch_admission_language(multi_user(MULTILINGUAL), {'language': 'en'}) == expected
+
+
+@pytest.mark.parametrize(
+    'switch, inherit, expected',
+    [(None, True, None), ('false', True, 'en'), (None, False, None), ('false', False, None)],
+)
+def test_profile_inherited_language_is_the_one_rule_for_serving_and_shadow_intake(
+    monkeypatch, switch, inherit, expected
+):
+    from config.batch_pipeline_language import profile_inherited_language
+    from utils.batch_pipeline import intake, shadow_intake
+
+    if switch is not None:
+        monkeypatch.setenv('BATCH_MULTILINGUAL_PROFILE_ROUTING_ENABLED', switch)
+    assert profile_inherited_language({'language': 'en'}, multi_user(MULTILINGUAL), inherit) == expected
+    # Both stages call this helper rather than their own copy.
+    assert intake.profile_inherited_language is profile_inherited_language
+    assert shadow_intake.profile_inherited_language is profile_inherited_language

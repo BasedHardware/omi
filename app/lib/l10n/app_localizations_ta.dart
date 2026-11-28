@@ -15950,4 +15950,20 @@ class AppLocalizationsTa extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'சில பதிவுகள் இன்னும் உங்கள் சாதனத்தில் உள்ளன. அவை உங்கள் தொலைபேசிக்கு ஒத்திசைவை முடிக்க அனுமதித்து, பிறகு புதுப்பிப்பைத் தொடங்கவும்.';
+
+  @override
+  String get batteryRestartToRefresh => 'புதுப்பிக்க Omi ஐ மறுதொடக்கம் செய்யவும்';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'உங்கள் நிமிடங்கள் புதுப்பிக்கப்படும்போது $date அன்று செயலாக்கப்படும்';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'அல்லது திட்ட மேம்பாடு மூலம் அவற்றை உடனடியாகச் செயலாக்குங்கள்';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return '$date அன்று செயலாக்கம்';
+  }
 }
