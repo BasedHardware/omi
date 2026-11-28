@@ -3,9 +3,8 @@
 Staging is composed from the prod overlay plus ``backend/deploy/runtime_env/staging.overlay.yaml``
 (``compose_runtime_env.compose_staging``). This check composes both and fails on any Cloud Run
 service, env var, secret binding or flag that differs outside ``STAGING_DIFF_ALLOWLIST``
-or the exact retained staging privacy values and Integration tick. Every other read-lever field
-remains equal. Messages name variables, never values.
-Registered in ``scripts/cross_service_contract.INVARIANTS``.
+or the exact retained staging privacy values. Every other read-lever field remains equal. Messages
+name variables, never values. Registered by lane 1 in ``scripts/cross_service_contract.INVARIANTS``.
 """
 
 from __future__ import annotations
@@ -178,13 +177,6 @@ def staging_diff(root: Path) -> list[tuple[str, str, str]]:
                     problems.append((service, name, 'staging privacy retention or other lever parity differs'))
                 continue
             if name in p_env and name in s_env and p_env[name] == s_env[name]:
-                continue
-            # SCA-4928: staging Integration retains its 10-second tick.
-            if (
-                service == 'backend-integration'
-                and name == 'BATCH_PIPELINE_SERVING_TICK_SECONDS'
-                and (p_env.get(name), s_env.get(name)) == ('20', '10')
-            ):
                 continue
             if _allowed(name, STAGING_DIFF_ALLOWLIST):
                 continue

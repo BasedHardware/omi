@@ -22,7 +22,6 @@ from utils.observability.reasons import VendorHealthReason, VendorRouteReason as
 BACKEND = Path(__file__).resolve().parents[2]
 TABLE_PATH = BACKEND / 'deploy' / 'batch-pipeline' / 'vendor_route_table.prod.json'
 OVERLAY_PATH = BACKEND / 'deploy' / 'runtime_env' / 'prod.overlay.yaml'
-INTEGRATION_TABLE_PATH = TABLE_PATH.with_name('vendor_route_table.en-overflow-1116.json')
 SYNC_SERVICES = ('backend-sync', 'backend-sync-backfill', 'backend-integration')
 SUPPORTED = 'en'  # deployed Parakeet serves it, and it is the one overflow language
 OTHER_SUPPORTED = 'de'  # Parakeet serves it; English-only overflow keeps it on GPU
@@ -167,10 +166,9 @@ def test_served_through_the_env_value(monkeypatch, table):
 
 
 @pytest.mark.parametrize('service', SYNC_SERVICES)
-def test_the_runtime_overlay_pins_the_expected_table_on_each_sync_service(service):
+def test_the_runtime_overlay_serves_this_file_on_every_sync_service(service):
     # Durable: the backend train re-applies the overlay, so a deploy never drops the table.
     overlay = yaml.safe_load(OVERLAY_PATH.read_text())
     env = overlay['overlay']['cloud_run']['services'][service]['env']
     served = json.loads(env['BATCH_VENDOR_ROUTE_TABLE']['value'])
-    expected = INTEGRATION_TABLE_PATH if service == 'backend-integration' else TABLE_PATH
-    assert served == json.loads(expected.read_text())
+    assert served == json.loads(TABLE_PATH.read_text())

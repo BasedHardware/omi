@@ -245,7 +245,7 @@ overlay:
           HOSTED_SPEAKER_EMBEDDING_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
       backend-integration:
         env:
-          # SCA-4928: staging retains its 10-second Integration tick.
+          # Margin-40 O1 inverse: full deploys must retain the admitted 200/10/class16 cadence.
           BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS: {value: '200', category: rollout}
           BATCH_PIPELINE_SERVING_TICK_SECONDS: {value: '10', category: rollout}
           BATCH_PIPELINE_PROJECTION_FOLLOWUP_SLOTS: {value: '4', category: rollout}
