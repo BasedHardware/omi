@@ -573,10 +573,11 @@ def test_pusher_workflow_threads_the_override_into_every_pusher_render_and_skips
     canary_run = steps['Create isolated production Pusher and listener canary'][1]['run']
     assert '"${lease_override_values[@]}"' in canary_run.split('kubectl -n prod-omi-backend rollout status')[0]
     assert values not in canary_run.split('pusher_prod_canary.py create-listener')[1]
-    # The shared ConfigMap writer is the only one skipped; the isolated canary map
-    # is still rendered from the same shared vector.
+    # The shared ConfigMap writer is the only one skipped.
     shared_index, shared = steps['Apply non-secret pusher runtime config']
     assert shared['if'].endswith("&& env.PUSHER_RECORD_TOKEN_LEASE_OVERRIDE != 'active'")
+    # Override runs copy the live shared map into the canary map (P2); other runs
+    # still render it from the proposed shared vector.
     canary_config = steps['Create isolated proposed production Pusher ConfigMap'][1]
     assert 'OVERRIDE' not in str(canary_config['if']) and values not in canary_config['run']
     parity_index, parity = steps['Verify the kept shared ConfigMap is the canary-qualified ConfigMap']
@@ -586,3 +587,279 @@ def test_pusher_workflow_threads_the_override_into_every_pusher_render_and_skips
     assert 'verify-config' in parity['run'] and 'pusher-prod-canary-deployment-receipt.json' in parity['run']
     # Listen never reads the Pusher override.
     assert 'record_token_lease_override' not in (ROOT / '.github/workflows/gcp_backend_listen_helm.yml').read_text()
+
+
+# SCA-4463 round 2. Operating rule: the Pusher override is none before any reader
+# enters serve. One guard script holds both directions; every writer calls it.
+def _guard():
+    from scripts import record_token_lease_serve_guard as guard
+
+    return guard
+
+
+def _shared_config_map(mode, percent, name='prod-omi-backend-config'):
+    return {
+        'kind': 'ConfigMap',
+        'metadata': {'name': name},
+        'data': {'RECORD_TOKEN_LEASE_MODE': mode, 'RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT': percent},
+    }
+
+
+def _seal_worker(mode, percent):
+    env = [
+        {'name': 'RECORD_TOKEN_LEASE_MODE', 'value': mode},
+        {'name': 'RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', 'value': percent},
+    ]
+    return {
+        'kind': 'Deployment',
+        'metadata': {'name': 'record-seal-worker'},
+        'spec': {'template': {'spec': {'containers': [{'name': 'seal', 'env': env}]}}},
+    }
+
+
+@pytest.mark.parametrize('shared', [('serve', '1'), ('serve', '0'), ('shadow', '1'), ('off', '100'), (None, None)])
+@pytest.mark.parametrize('override_mode', ['off', 'shadow'])
+def test_override_is_refused_against_a_serving_shared_configmap(shared, override_mode):
+    guard = _guard()
+    config_map = _shared_config_map(*shared) if shared[0] else {'metadata': {'name': 'prod-omi-backend-config'}}
+    with pytest.raises(guard.GuardError, match='off or shadow at serve percent 0'):
+        guard.check_override(override_mode, config_map, [], config_map_name='prod-omi-backend-config')
+
+
+@pytest.mark.parametrize('shared', [('off', '0'), ('shadow', '0')])
+def test_override_is_admitted_only_while_every_live_reader_is_non_serving(shared):
+    guard = _guard()
+    config_map = _shared_config_map(*shared)
+    quiet = guard.reader_vectors('deployment/record-seal-worker', _seal_worker('shadow', '0'))
+    assert 'admitted' in guard.check_override('shadow', config_map, quiet, config_map_name='prod-omi-backend-config')
+    serving = guard.reader_vectors('deployment/record-seal-worker', _seal_worker('serve', '1'))
+    with pytest.raises(guard.GuardError, match='record-seal-worker/seal serves'):
+        guard.check_override('off', config_map, serving, config_map_name='prod-omi-backend-config')
+    with pytest.raises(guard.GuardError, match='missing'):
+        guard.check_override('off', None, [], config_map_name='prod-omi-backend-config')
+    # none reads nothing and guards nothing.
+    assert 'nothing to guard' in guard.check_override('none', None, [], config_map_name='prod-omi-backend-config')
+
+
+def _pusher_deployment(*extra):
+    result = _render_pusher(*extra)
+    assert result.returncode == 0, result.stderr
+    return next(item for item in _documents(result.stdout) if item.get('kind') == 'Deployment')
+
+
+def test_shared_serve_write_is_refused_while_the_rendered_pusher_override_is_live(tmp_path):
+    guard = _guard()
+    serving = [('shared prod-omi-backend-config', 'serve', '1')]
+    live_override = _pusher_deployment('-f', str(_override_file(tmp_path)))
+    sources = guard.pusher_override_sources(live_override, [])
+    assert sources == ['deployment/prod-omi-pusher']
+    with pytest.raises(guard.GuardError, match='override_mode=none'):
+        guard.check_shared_serve(serving, sources)
+    # An unfinished rollout: the template is cleared but an override pod still runs.
+    pod = {'kind': 'Pod', 'metadata': {'name': 'prod-omi-pusher-old'}, 'spec': _pusher_container_spec(live_override)}
+    cleared = _pusher_deployment()
+    assert guard.pusher_override_sources(cleared, [pod]) == ['pod/prod-omi-pusher-old']
+    # After a Pusher dispatch with override none has finished, serve is allowed.
+    assert guard.pusher_override_sources(cleared, []) == []
+    assert 'may enter serve' in guard.check_shared_serve(serving, [])
+    # A vector that does not serve needs no live read at all.
+    assert 'nothing to guard' in guard.check_shared_serve([('shared', 'shadow', '0'), ('x', 'off', '0')], None)
+    with pytest.raises(guard.GuardError, match='needs the live Pusher'):
+        guard.check_shared_serve(serving, None)
+
+
+def _pusher_container_spec(deployment):
+    return deployment['spec']['template']['spec']
+
+
+def test_guard_reads_live_state_through_kubectl_and_refuses_the_serve_write(monkeypatch, tmp_path, capsys):
+    import json as json_module
+    from types import SimpleNamespace
+
+    guard = _guard()
+    live_override = _pusher_deployment('-f', str(_override_file(tmp_path)))
+    calls = []
+
+    def run(command, **kwargs):
+        calls.append(command)
+        if command[:2] == ['kubectl', '--request-timeout=30s'] and 'deployment' in command:
+            payload = live_override
+        elif 'pods' in command:
+            payload = {'items': []}
+        else:
+            raise AssertionError(command)
+        return SimpleNamespace(returncode=0, stdout=json_module.dumps(payload), stderr='')
+
+    monkeypatch.setattr(guard.subprocess, 'run', run)
+    args = ['shared-serve', '--environment', 'prod', '--vector', 'shared', 'serve', '1']
+    assert guard.main(args) == 1
+    assert 'override_mode=none' in capsys.readouterr().err
+    selector = calls[1][calls[1].index('-l') + 1]
+    assert selector and all('=' in part for part in selector.split(','))
+    calls.clear()
+    assert guard.main(['shared-serve', '--environment', 'prod', '--vector', 'shared', 'shadow', '0']) == 0
+    assert calls == []  # A non-serving write never contacts the cluster.
+
+
+def test_guard_reads_the_rendered_seal_readers(tmp_path):
+    guard = _guard()
+    chart = ROOT / 'backend/charts/batch-pipeline-worker'
+    common = [
+        'prod-omi-batch-pipeline-worker',
+        str(chart),
+        '--namespace',
+        'prod-omi-backend',
+        '-f',
+        str(chart / 'prod_omi_batch-pipeline-worker_values.yaml'),
+        '--set-string',
+        f'image.digest={RENDER_DIGEST}',
+    ]
+    plain = _helm(*common)
+    assert plain.returncode == 0, plain.stderr
+    vectors = guard.rendered_reader_vectors(_documents(plain.stdout))
+    assert {label for label, _, _ in vectors} == {
+        'proposed record-seal-worker/seal',
+        'proposed record-seal-repair/repair',
+    }
+    assert not any(guard.enters_serve(mode, percent) for _, mode, percent in vectors)
+    serving = [('proposed record-seal-worker/seal', 'serve', '1')]
+    with pytest.raises(guard.GuardError, match='record-seal-worker/seal would enter'):
+        guard.check_shared_serve(serving, ['deployment/prod-omi-pusher'])
+
+
+def test_live_configmap_clone_keeps_an_off_rollback_available_under_staged_drift():
+    """P2: a staged shared variable must not block the scoped rollback."""
+    from scripts import pusher_release_receipt as receipt
+
+    override = _override_module()
+    live = {
+        'metadata': {'name': 'prod-omi-backend-config', 'namespace': 'prod-omi-backend', 'uid': 'u'},
+        'data': {'REDIS_DB_HOST': 'live-redis', 'RECORD_TOKEN_LEASE_MODE': 'off'},
+    }
+    target = 'prod-omi-backend-config-canary-123'
+    canary = override.canary_config_manifest(live, environment='prod', target=target)
+    assert canary['metadata'] == {'name': target, 'namespace': 'prod-omi-backend'}
+    assert canary['data'] == live['data'] and 'binaryData' not in canary
+    # Staged for a later standard deploy; the override run never renders it.
+    staged = {**live, 'data': {**live['data'], 'REDIS_DB_HOST': 'staged-redis'}}
+    qualified = receipt.config_fingerprint(canary, expected_name=target)
+    assert receipt.verify_config_matches_receipt(
+        live, {'config_sha256': qualified}, expected_name='prod-omi-backend-config'
+    )
+    assert qualified != receipt.config_fingerprint(
+        {**staged, 'metadata': {'name': target}}, expected_name=target
+    )  # what the proposed render would have qualified
+    # A concurrent write to the live shared map during the run still refuses.
+    with pytest.raises(receipt.ReceiptError, match='differs'):
+        receipt.verify_config_matches_receipt(
+            staged, {'config_sha256': qualified}, expected_name='prod-omi-backend-config'
+        )
+    for bad_live, bad_target in (
+        ({**live, 'metadata': {'name': 'prod-omi-backend-config-canary-1'}}, target),
+        (live, 'prod-omi-backend-config'),
+        (live, 'dev-omi-backend-config-canary-1'),
+    ):
+        with pytest.raises(override.OverrideError):
+            override.canary_config_manifest(bad_live, environment='prod', target=bad_target)
+
+
+def test_clone_live_config_applies_only_the_copied_manifest(monkeypatch):
+    import json as json_module
+
+    override = _override_module()
+    live = {'metadata': {'name': 'prod-omi-backend-config'}, 'data': {'A': '1'}, 'binaryData': {'B': 'Ag=='}}
+    calls = []
+
+    def kubectl(arguments, *, stdin=None):
+        calls.append((arguments, stdin))
+        return json_module.dumps(live) if 'get' in arguments else ''
+
+    monkeypatch.setattr(override, '_kubectl', kubectl)
+    message = override.clone_live_config('prod', 'prod-omi-backend-config-canary-9')
+    assert calls[0][0] == ['-n', 'prod-omi-backend', 'get', 'configmap', 'prod-omi-backend-config', '-o', 'json']
+    assert calls[1][0] == ['-n', 'prod-omi-backend', 'apply', '-f', '-']
+    applied = json_module.loads(calls[1][1])
+    assert applied['data'] == {'A': '1'} and applied['binaryData'] == {'B': 'Ag=='}
+    assert '(1 keys)' in message and 'Ag==' not in message  # key count only, never a value
+
+
+GUARD = 'record_token_lease_serve_guard.py'
+
+
+def _steps_by_name(steps):
+    return {step.get('name'): (index, step) for index, step in enumerate(steps)}
+
+
+def test_pusher_workflow_runs_both_guards_from_workflow_controls_before_any_write():
+    steps = _pusher_deploy_steps()
+    gke, _ = steps['Get GKE credentials']
+    first_index, first = steps['Refuse a Pusher lease override while any reader serves']
+    shared_index, shared = steps['Refuse a shared lease serve write while a Pusher override is live']
+    recheck_index, recheck = steps['Recheck the Pusher lease override against live readers before Helm']
+    helm_index, _ = steps['Deploy Pusher to GKE cluster using Helm']
+    canary_config_index, canary_config = steps['Create isolated proposed production Pusher ConfigMap']
+    writer_index, _ = steps['Apply non-secret pusher runtime config']
+    assert gke < first_index < shared_index < canary_config_index < writer_index
+    assert recheck_index == helm_index - 1
+    assert first['if'] == "env.SERVICE == 'pusher' && env.PUSHER_RECORD_TOKEN_LEASE_OVERRIDE == 'active'"
+    assert recheck['if'].endswith("env.PUSHER_RECORD_TOKEN_LEASE_OVERRIDE == 'active'")
+    assert shared['if'].endswith("env.PUSHER_RECORD_TOKEN_LEASE_OVERRIDE != 'active'")
+    for step in (first, recheck):
+        assert f'.github/firestore-workflow/backend/scripts/{GUARD} override' in step['run']
+        assert '--sync-project' in step['run'] and '"$LEASE_OVERRIDE_MODE"' in step['run']
+    assert f'.github/firestore-workflow/backend/scripts/{GUARD} shared-serve' in shared['run']
+    assert '"$RECORD_TOKEN_LEASE_MODE" "$RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT"' in shared['run']
+    controls = steps['Checkout immutable Firestore gate controls'][1]
+    assert (
+        controls['with']['ref'] == '${{ github.workflow_sha }}'
+        and 'backend/scripts' in controls['with']['sparse-checkout']
+    )
+    assert 'if' not in controls
+    # P2: an override run copies the live shared map into the canary map.
+    run = canary_config['run']
+    clone, render = run.index('clone-live-config'), run.index('deploy-backend-config.sh')
+    assert run.index('PUSHER_RECORD_TOKEN_LEASE_OVERRIDE:-}" == active') < clone < run.index('else') < render
+    # A pinned pre-override rollback source binds nothing when nothing is asked.
+    bind = steps['Bind Pusher-scoped record token lease override'][1]['run']
+    assert bind.index('! -f backend/scripts/pusher_record_token_lease_override.py') < bind.index('bind \\')
+
+
+def test_every_other_serve_writer_calls_the_guard_before_writing():
+    listen = _steps_by_name(_workflow('gcp_backend_listen_helm.yml')['jobs']['helm-upgrade']['steps'])
+    guard_index, guard = listen['Refuse a shared lease serve write while a Pusher override is live']
+    assert guard_index + 1 == listen['Apply non-secret backend runtime config'][0]
+    assert guard_index < listen['Upgrade backend-listen Helm chart'][0]
+    assert guard['if'] == listen['Apply non-secret backend runtime config'][1]['if']
+    assert f'git show "$GITHUB_WORKFLOW_SHA:backend/scripts/{GUARD}" > "$guard"' in guard['run']
+    assert 'python3 "$guard" shared-serve' in guard['run']
+    assert listen['Checkout'][1]['with']['fetch-depth'] == 0
+    assert listen['Get GKE credentials'][0] < guard_index
+
+    action = yaml.safe_load((ROOT / '.github/actions/deploy-backend-stack/action.yml').read_text())
+    stack = _steps_by_name(action['runs']['steps'])
+    creds_index, creds = stack['Get GKE credentials for the record token lease serve guard']
+    guard_index, guard = stack['Refuse a shared lease serve write while a Pusher override is live']
+    assert stack['Bind shared record token lease rollout inputs'][0] < creds_index == guard_index - 1
+    assert "env.RECORD_TOKEN_LEASE_MODE == 'serve'" in creds['if'] and 'if' not in guard
+    assert f'"$DEPLOY_CONTROL_SCRIPTS/{GUARD}" shared-serve' in guard['run']
+    writers = [
+        name
+        for name, (_, step) in stack.items()
+        if 'deploy-backend-config.sh' in step.get('run', '') or 'gcloud run deploy' in step.get('run', '')
+    ]
+    assert writers and all(guard_index < stack[name][0] for name in writers)
+
+    # The seal readers: inside the worker Helm step, ahead of its only upgrade.
+    diarizer = _steps_by_name(_workflow('gcp_diarizer.yml')['jobs']['deploy']['steps'])
+    helm_index, helm = diarizer['Deploy Diarizer to GKE cluster using Helm']
+    assert diarizer['Get GKE credentials'][0] < helm_index
+    worker = helm['run'].split('if [[ "$SERVICE" == "batch-pipeline-worker" ]]; then', 1)[1].split('elif', 1)[0]
+    render = worker.index('helm template "$TARGET_RELEASE"')
+    check = worker.index(f'.github/firestore-workflow/backend/scripts/{GUARD} shared-serve')
+    assert render < check < worker.index('helm -n "$DEPLOY_NAMESPACE" upgrade --install')
+    assert '--rendered "$rendered" || exit 1' in worker and '> "$rendered" || exit 1' in worker
+    controls = diarizer['Checkout immutable Firestore gate controls'][1]
+    assert (
+        controls['with']['ref'] == '${{ github.workflow_sha }}'
+        and 'backend/scripts' in controls['with']['sparse-checkout']
+    )

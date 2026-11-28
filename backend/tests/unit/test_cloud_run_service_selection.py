@@ -222,6 +222,9 @@ def test_step_census_refuses_an_unclassified_new_step():
     # `Resolve production backend memory` reads local ops config and writes only
     # step outputs. It runs for the production backend/sync deploy paths.
     # SCA-3681 removes the manual development datastore smoke from the census.
+    # SCA-4463 adds the record token lease serve guard and its conditional GKE
+    # credentials: read-only (live Pusher Deployment and pods, only when the bound
+    # vector serves), before every Cloud Run and shared ConfigMap writer.
     # The split-plan parser reads local input only. Candidate staging writes
     # Backend only, and its subsequent donor-continuity verification is read-only.
     for name in (
@@ -241,7 +244,7 @@ def test_step_census_refuses_an_unclassified_new_step():
     )
     assert (
         hashlib.sha256(json.dumps([s['name'] for s in STEPS]).encode()).hexdigest()
-        == "7df1aedf4b09b55f07b21fe4e16e2766692e2848a7be6ec19aa29fb602d3ed18"
+        == "f62a48a6aeb19ce7c61c1e60613edc5024548c0336b7a04631f453998cc836ba"
     )
 
 

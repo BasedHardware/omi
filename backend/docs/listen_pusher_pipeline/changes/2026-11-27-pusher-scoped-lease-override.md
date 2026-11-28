@@ -29,6 +29,43 @@ which also changes what backend-listen reads. So neither path could do it.
   (preview, canary, promote, rollback) keeps the live config, so its first validation step refuses any
   override input other than `none`/empty, before checkout or any write.
 
+## Operating rule: override `none` before any reader serves
+
+The override is safe only while no reader serves. A serving reader treats a token whose producer stopped
+renewing as dead after the epoch plus the lease (`record_producer_proof.py`), and a partial finish can then clear
+a token Pusher still holds (`record_partial.py`). Pusher in override `shadow` also skips the serve-side recovery
+that serving readers expect. So the override must be `none` before any reader enters serve, and
+`backend/scripts/record_token_lease_serve_guard.py` enforces both directions:
+
+- `override`, before the override is applied: any mode other than `none` needs the live shared ConfigMap at
+  `off` or `shadow` with serve percent `0`, the live `record-seal-worker` Deployment and `record-seal-repair`
+  CronJob not serving, and in prod the live Cloud Run `backend-sync` not serving. `gcp_backend_pusher.yml` runs it
+  after GKE credentials, before the canary, and again in the step right before the Pusher Helm upgrade.
+- `shared-serve`, before a writer sets `serve` or a non-zero serve percent on a reader: it reads the live
+  `<env>-omi-pusher` Deployment and its pods and refuses while any `pusher` container carries a literal
+  `RECORD_TOKEN_LEASE_*` entry. The pods are read too, because an unfinished rollout can still run override pods
+  under a cleared template. The error tells the operator to dispatch the Pusher with override `none` first. A
+  vector that does not serve reads nothing. Callers: the Pusher standard deploy (without the override), the
+  Listen deploy before its shared ConfigMap write, `deploy-backend-stack` before any Cloud Run or ConfigMap write
+  (with GKE credentials fetched only when the bound vector serves), and the `batch-pipeline-worker` Helm step in
+  `gcp_diarizer.yml`, which renders the seal readers and checks the rendered vector before `helm upgrade`.
+
+Every caller runs the guard from its immutable workflow-control revision (a sparse checkout, `git show` of
+`GITHUB_WORKFLOW_SHA`, or the backend stack's deploy-control copy), so a pinned older runtime source cannot skip it.
+
+## Scoped rollback under staged drift
+
+An override run does not write the shared ConfigMap. Its isolated canary ConfigMap is therefore an exact copy of
+the live shared `data`/`binaryData` (`pusher_record_token_lease_override.py clone-live-config`), not a render of the
+proposed shared config. A shared variable staged for a later standard deploy, for example `REDIS_DB_HOST`, can then
+no longer make `verify-config` refuse, and an `off` rollback stays available. Only a write to the live shared
+ConfigMap during the run still refuses. Other dispatch config inputs have no effect on an override run.
+This is smaller than a separate override-only patch mode, and it keeps the existing canary, receipts and
+`verify-config`.
+
+A pinned runtime source that predates the override binds nothing when no override is requested, so a rollback to
+such a source still deploys.
+
 ## Runtime check
 
 `utils/pusher_record_barrier.py` and `database/record_audio.py`: Pusher in shadow stamps
@@ -45,7 +82,8 @@ shadow, or serve with the uid outside the cohort), a failure is logged, counted 
 `omi_record_token_lease_renewal_failures_total{outcome="renewal_failed_shadow"}`, and returns what `off` returns,
 so storage and the ACK proceed as in `off`. The next attempt waits the normal half-lease interval, so an outage does
 not stall every frame batch on a metadata timeout. Serve-cohort failures keep the fence (requeue, no ACK) and count
-as `outcome="renewal_failed_serve"`. This is the shared runtime path, so it also applies when Pusher reaches
+as `outcome="renewal_failed_serve"`. The clock is advanced only while the socket still owns the lease. If a concurrent
+failed drain retired it during the renewal, the active-lease gauge is not decremented a second time. This is the shared runtime path, so it also applies when Pusher reaches
 shadow through the shared ConfigMap.
 
 ## Operating notes
@@ -57,3 +95,5 @@ shadow through the shared ConfigMap.
 - An image-only or rollback dispatch that sets any override input fails before any write. Change the lease vector
   only through a standard Pusher deploy.
 - Rollback: dispatch with mode `off` (literal off on Pusher), or a standard deploy with mode `none`, or revert.
+- Before the shared ramp enters serve: dispatch a standard Pusher deploy with mode `none` while the shared vector is
+  still `off` or `shadow`, let it finish, then change the shared vector. Every serve writer refuses until then.

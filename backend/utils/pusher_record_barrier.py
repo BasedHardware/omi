@@ -396,7 +396,7 @@ class PusherRecordBarrier:
                     # off path returns and wait the normal half-lease interval
                     # before the next attempt, so an outage does not stall
                     # every frame batch on a metadata timeout.
-                    self.lease_renewed_at[conversation_id] = now
+                    self._stamp_lease(conversation_id, now)
                     lease_metrics.RENEWAL_FAILURES_SHADOW.inc()
                     logger.warning('record token lease renewal failed outside serve; storage continues', exc_info=True)
                     return conversation_id not in self.lease_renewal_failed
@@ -412,11 +412,23 @@ class PusherRecordBarrier:
                 return not lease.token_lease_serving(self.uid) and conversation_id not in self.lease_renewal_failed
             if observed.get('late'):
                 self.late_appends.add(conversation_id)
-            if conversation_id not in self.lease_renewed_at:
-                lease_metrics.ACTIVE.inc()
-            self.lease_renewed_at[conversation_id] = now
+            self._stamp_lease(conversation_id, now)
             self.lease_renewal_failed.discard(conversation_id)
             return True
+
+    def _stamp_lease(self, conversation_id, now):
+        """Advance the renewal clock only while this socket still owns the lease.
+
+        The clock key is the ACTIVE gauge ownership marker: _forget_lease
+        decrements exactly when it pops one. A concurrent failed drain may retire
+        ownership while a renewal awaits metadata, so a late stamp must not
+        recreate the key (a later _forget_lease would decrement twice).
+        """
+        if conversation_id not in self.registered_sessions or conversation_id in self.failed_recordings:
+            return
+        if conversation_id not in self.lease_renewed_at:
+            lease_metrics.ACTIVE.inc()
+        self.lease_renewed_at[conversation_id] = now
 
     def append_committed(self, conversation_id, *, observed=True):
         """A successful durable window/object owns the late-append event."""

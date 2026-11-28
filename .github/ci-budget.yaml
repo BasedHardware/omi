@@ -1579,7 +1579,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Manual prod/dev deploy, about one dispatch a day. SCA-4763 adds a one-replica canary inverse server dry-run (read-only admission probe) after canary readiness, one more minute. The canary_only input stops before shared-config apply and Helm, so that branch costs less than the budget. SCA-4463 adds a Pusher-only lease override bind step (pip install and one chart render) and, when the override is set, a ConfigMap digest read in place of the shared-config apply: under a minute, rounded up to one. No PR or scheduled runs.",
+      "rationale": "Manual prod/dev deploy, about one dispatch a day. SCA-4763 adds a one-replica canary inverse server dry-run (read-only admission probe) after canary readiness, one more minute. The canary_only input stops before shared-config apply and Helm, so that branch costs less than the budget. SCA-4463 adds a Pusher-only lease override bind step (pip install and one chart render) and, when the override is set, a live ConfigMap copy for the canary, a ConfigMap digest read in place of the shared-config apply and two read-only lease serve guard checks (kubectl and one Cloud Run describe); without the override, one serve guard that reads the cluster only when the shared vector serves: under a minute, rounded up to one. No PR or scheduled runs.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {

@@ -435,8 +435,20 @@ jobs:
           TARGET_VALUES: ${{ steps.target.outputs.values_file }}
           TARGET_VALUES_OVERLAY: ${{ steps.target.outputs.values_overlay }}
           TARGET_RELEASE: ${{ steps.target.outputs.release_name }}
+          DEPLOY_ENV: ${{ vars.ENV }}
         run: |
           if [[ "$SERVICE" == "batch-pipeline-worker" ]]; then
+            # SCA-4463 operating rule: a Pusher-only lease override is none before
+            # any reader enters serve. Render the seal readers this release applies
+            # and refuse a serving vector while the live Pusher still carries an
+            # override (immutable workflow-control guard; a non-serving render reads nothing).
+            rendered="$RUNNER_TEMP/batch-pipeline-worker-lease-render.yaml"
+            python3 -m pip install -q pyyaml || exit 1
+            helm template "$TARGET_RELEASE" "./$TARGET_CHART" --namespace "$DEPLOY_NAMESPACE" \
+              -f "./$TARGET_VALUES" --set-string "image.digest=${{ steps.build.outputs.image_digest || steps.promote.outputs.image_digest }}" \
+              > "$rendered" || exit 1
+            python3 .github/firestore-workflow/backend/scripts/record_token_lease_serve_guard.py shared-serve \
+              --environment "$DEPLOY_ENV" --rendered "$rendered" || exit 1
             helm -n "$DEPLOY_NAMESPACE" upgrade --install "$TARGET_RELEASE" "./$TARGET_CHART" \
               -f "./$TARGET_VALUES" --set-string "image.digest=${{ steps.build.outputs.image_digest || steps.promote.outputs.image_digest }}"
           elif [[ "$SERVICE" == "diarizer-batch" ]]; then

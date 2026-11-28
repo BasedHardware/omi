@@ -20,11 +20,20 @@ shared binding in ``.github/actions/deploy-backend-stack/action.yml``: mode in
 off, so serve is reached only through the coordinated shared ramp. Every number
 must be a plain decimal integer: lease seconds 1800-7200, epoch >= 0 and > 0
 unless mode is off.
+
+``clone-live-config`` (SCA-4463 P2): an override run does not write the shared
+ConfigMap, so its isolated canary qualifies a byte copy of the live shared
+``data``/``binaryData`` rather than a render of the proposed shared config. A
+shared variable staged for a later standard deploy (say ``REDIS_DB_HOST``) then
+cannot make ``verify-config`` refuse, and an ``off`` rollback stays available
+whatever is staged. Only a concurrent write to the live shared ConfigMap during
+the run still refuses, which is the drift that check exists to catch.
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import subprocess
@@ -183,15 +192,75 @@ def bind(environment: str, service: str, output: Path, environ: dict[str, str], 
     return message
 
 
+CANARY_CONFIG = re.compile(r"(dev|prod)-omi-backend-config-canary-[1-9][0-9]*")
+
+
+def canary_config_manifest(live: dict[str, Any], *, environment: str, target: str) -> dict[str, Any]:
+    """The isolated canary ConfigMap as an exact data copy of the live shared one."""
+    source = f"{environment}-omi-backend-config"
+    metadata = live.get("metadata") if isinstance(live.get("metadata"), dict) else {}
+    if metadata.get("name") != source or metadata.get("namespace", f"{environment}-omi-backend") != (
+        f"{environment}-omi-backend"
+    ):
+        raise OverrideError(f"live ConfigMap identity does not match {environment}-omi-backend/{source}")
+    if not CANARY_CONFIG.fullmatch(target) or not target.startswith(f"{environment}-") or len(target) > 63:
+        raise OverrideError("canary ConfigMap name must be <env>-omi-backend-config-canary-<run id>")
+    manifest: dict[str, Any] = {
+        "apiVersion": "v1",
+        "kind": "ConfigMap",
+        "metadata": {"name": target, "namespace": f"{environment}-omi-backend"},
+        "data": dict(live.get("data") or {}),
+    }
+    if live.get("binaryData"):
+        manifest["binaryData"] = dict(live["binaryData"])
+    return manifest
+
+
+def _kubectl(arguments: list[str], *, stdin: str | None = None) -> str:
+    result = subprocess.run(
+        ["kubectl", "--request-timeout=30s", *arguments],
+        input=stdin,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=120,
+    )
+    if result.returncode:
+        raise OverrideError((result.stderr or result.stdout).strip() or "kubectl failed")
+    return result.stdout
+
+
+def clone_live_config(environment: str, target: str) -> str:
+    namespace = f"{environment}-omi-backend"
+    live = json.loads(
+        _kubectl(["-n", namespace, "get", "configmap", f"{environment}-omi-backend-config", "-o", "json"])
+    )
+    manifest = canary_config_manifest(live, environment=environment, target=target)
+    _kubectl(["-n", namespace, "apply", "-f", "-"], stdin=json.dumps(manifest))
+    # Key count only; no ConfigMap value leaves this process.
+    return (
+        f"Applied {namespace}/{target} as a copy of the live {environment}-omi-backend-config "
+        f"({len(manifest['data'])} keys); the proposed shared config is not rendered on a lease-override run."
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("bind",))
+    parser.add_argument("command", choices=("bind", "clone-live-config"))
     parser.add_argument("--environment", choices=("dev", "prod"), required=True)
-    parser.add_argument("--service", required=True)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--service")
+    parser.add_argument("--output", type=Path)
+    parser.add_argument("--target", help="clone-live-config: the isolated canary ConfigMap name")
     args = parser.parse_args(argv)
     github_env = os.environ.get("GITHUB_ENV")
     try:
+        if args.command == "clone-live-config":
+            if not args.target:
+                raise OverrideError("clone-live-config needs --target")
+            print(clone_live_config(args.environment, args.target))
+            return 0
+        if not args.service or args.output is None:
+            raise OverrideError("bind needs --service and --output")
         message = bind(
             args.environment, args.service, args.output, dict(os.environ), Path(github_env) if github_env else None
         )

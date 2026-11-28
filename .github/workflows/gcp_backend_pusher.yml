@@ -298,6 +298,16 @@ jobs:
           PUSHER_LEASE_OVERRIDE_DEPLOYED_AT: ${{ github.event.inputs.pusher_record_token_lease_override_deployed_at }}
         run: |
           set -euo pipefail
+          # A pinned runtime source that predates the override (a rollback target)
+          # binds nothing when nothing is asked; any requested override still
+          # needs this script and its chart block, and refuses without them.
+          if [[ "${PUSHER_LEASE_OVERRIDE_MODE:-none}" == none &&
+                -z "$PUSHER_LEASE_OVERRIDE_SERVE_PERCENT$PUSHER_LEASE_OVERRIDE_SECONDS$PUSHER_LEASE_OVERRIDE_DEPLOYED_AT" &&
+                ! -f backend/scripts/pusher_record_token_lease_override.py ]]; then
+            echo "PUSHER_RECORD_TOKEN_LEASE_OVERRIDE=absent" >> "$GITHUB_ENV"
+            echo "No Pusher record token lease override (runtime source predates the override)."
+            exit 0
+          fi
           python3 -m pip install -q pyyaml
           python3 backend/scripts/pusher_record_token_lease_override.py bind \
             --environment "${{ vars.ENV }}" \
@@ -613,6 +623,30 @@ jobs:
           location: ${{ env.REGION }}
           project_id: ${{ vars.GCP_PROJECT_ID }}
 
+      # SCA-4463 operating rule: the Pusher lease override is none before any
+      # reader enters serve. Both guards run from the immutable workflow-control
+      # checkout, so a pinned runtime source cannot skip them.
+      - name: Refuse a Pusher lease override while any reader serves
+        if: env.SERVICE == 'pusher' && env.PUSHER_RECORD_TOKEN_LEASE_OVERRIDE == 'active'
+        env:
+          LEASE_OVERRIDE_MODE: ${{ github.event.inputs.pusher_record_token_lease_override_mode }}
+        run: |
+          set -euo pipefail
+          sync_reader=()
+          if [[ "${{ vars.ENV }}" == prod ]]; then
+            sync_reader=(--sync-project "${{ vars.GCP_PROJECT_ID }}" --sync-region "${{ env.REGION }}")
+          fi
+          python3 .github/firestore-workflow/backend/scripts/record_token_lease_serve_guard.py override \
+            --environment "${{ vars.ENV }}" --override-mode "$LEASE_OVERRIDE_MODE" "${sync_reader[@]}"
+
+      - name: Refuse a shared lease serve write while a Pusher override is live
+        if: env.SERVICE == 'pusher' && env.CANARY_ONLY != 'true' && env.PUSHER_RECORD_TOKEN_LEASE_OVERRIDE != 'active'
+        run: |
+          set -euo pipefail
+          python3 .github/firestore-workflow/backend/scripts/record_token_lease_serve_guard.py shared-serve \
+            --environment "${{ vars.ENV }}" \
+            --vector "shared ${{ vars.ENV }}-omi-backend-config" "$RECORD_TOKEN_LEASE_MODE" "$RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT"
+
       - name: Resolve production pusher runtime targets
         if: env.SERVICE == 'pusher' && vars.ENV == 'prod'
         id: pusher-runtime-targets
@@ -691,7 +725,15 @@ jobs:
             echo "PUSHER_CANARY=$PUSHER_CANARY"
             echo "LISTENER_CANARY=$LISTENER_CANARY"
           } >> "$GITHUB_ENV"
-          CONFIG_MAP_NAME_OVERRIDE="$PUSHER_CANARY_CONFIG" backend/scripts/deploy-backend-config.sh
+          if [[ "${PUSHER_RECORD_TOKEN_LEASE_OVERRIDE:-}" == active ]]; then
+            # SCA-4463: an override run keeps the live shared ConfigMap, so the
+            # canary qualifies an exact copy of it; staged shared variables cannot
+            # block a scoped (off) rollback.
+            python3 backend/scripts/pusher_record_token_lease_override.py clone-live-config \
+              --environment prod --target "$PUSHER_CANARY_CONFIG"
+          else
+            CONFIG_MAP_NAME_OVERRIDE="$PUSHER_CANARY_CONFIG" backend/scripts/deploy-backend-config.sh
+          fi
 
       # The inverse receipt names GITHUB_WORKFLOW_SHA as its producer, so the helper
       # and its first-party import run from that immutable revision, not from the
@@ -1023,6 +1065,21 @@ jobs:
             --namespace ${{ vars.ENV }}-omi-backend \
             --image "$PUSHER_IMAGE_REFERENCE" \
             "${lease_override[@]}"
+
+      # SCA-4463: the readers may have changed since the first check; recheck
+      # right before the Pusher template takes the override.
+      - name: Recheck the Pusher lease override against live readers before Helm
+        if: env.SERVICE == 'pusher' && env.CANARY_ONLY != 'true' && env.PUSHER_RECORD_TOKEN_LEASE_OVERRIDE == 'active'
+        env:
+          LEASE_OVERRIDE_MODE: ${{ github.event.inputs.pusher_record_token_lease_override_mode }}
+        run: |
+          set -euo pipefail
+          sync_reader=()
+          if [[ "${{ vars.ENV }}" == prod ]]; then
+            sync_reader=(--sync-project "${{ vars.GCP_PROJECT_ID }}" --sync-region "${{ env.REGION }}")
+          fi
+          python3 .github/firestore-workflow/backend/scripts/record_token_lease_serve_guard.py override \
+            --environment "${{ vars.ENV }}" --override-mode "$LEASE_OVERRIDE_MODE" "${sync_reader[@]}"
 
       - name: Deploy Pusher to GKE cluster using Helm
         if: env.CANARY_ONLY != 'true'
