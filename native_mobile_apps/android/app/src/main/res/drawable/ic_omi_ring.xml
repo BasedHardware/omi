@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Omi mark: eight dots on a ring, as the app and the iOS widgets draw it (`OmiRingMark`). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="#FFFFFFFF" android:pathData="M10.104,3.744a1.896,1.896 0 1,0 3.792,0a1.896,1.896 0 1,0 -3.792,0" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M15.942,6.162a1.896,1.896 0 1,0 3.792,0a1.896,1.896 0 1,0 -3.792,0" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M18.360,12.000a1.896,1.896 0 1,0 3.792,0a1.896,1.896 0 1,0 -3.792,0" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M15.942,17.838a1.896,1.896 0 1,0 3.792,0a1.896,1.896 0 1,0 -3.792,0" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M10.104,20.256a1.896,1.896 0 1,0 3.792,0a1.896,1.896 0 1,0 -3.792,0" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M4.266,17.838a1.896,1.896 0 1,0 3.792,0a1.896,1.896 0 1,0 -3.792,0" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M1.848,12.000a1.896,1.896 0 1,0 3.792,0a1.896,1.896 0 1,0 -3.792,0" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M4.266,6.162a1.896,1.896 0 1,0 3.792,0a1.896,1.896 0 1,0 -3.792,0" />
+</vector>

@@ -1,0 +1,214 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Push (FCM) banners; asked for in onboarding's Permissions step, as on iOS. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Onboarding (and-onboarding): the voice steps and dictation, location (Permissions step), finding the Omi (Pair step). -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <queries>
+        <!-- SpeechRecognizer (onboarding's live words, dictation) and TextToSpeech (spoken replies). -->
+        <intent><action android:name="android.speech.RecognitionService" /></intent>
+        <intent><action android:name="android.intent.action.TTS_SERVICE" /></intent>
+        <!-- "Omi asks" (and-askomi): a messaging app for propose_message. -->
+        <intent><action android:name="android.intent.action.SENDTO" /><data android:scheme="smsto" /></intent>
+        <intent><action android:name="android.intent.action.SENDTO" /><data android:scheme="mailto" /></intent>
+        <!-- Health Connect (and-transcribe) -->
+        <package android:name="com.google.android.apps.healthdata" />
+    </queries>
+    <!-- "Omi asks" (and-askomi): search_contacts reads the phone's contacts after the user allows it. -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <!-- Health Connect, read only (and-transcribe): what HealthKitReader reads on iOS. -->
+    <uses-permission android:name="android.permission.health.READ_STEPS" />
+    <uses-permission android:name="android.permission.health.READ_ACTIVE_CALORIES_BURNED" />
+    <uses-permission android:name="android.permission.health.READ_DISTANCE" />
+    <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
+    <uses-permission android:name="android.permission.health.READ_RESTING_HEART_RATE" />
+    <uses-permission android:name="android.permission.health.READ_SLEEP" />
+    <uses-permission android:name="android.permission.health.READ_EXERCISE" />
+
+    <!-- The Omi wearable (and-device): the Flutter app's BLE entries, same names. -->
+    <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
+    <uses-feature android:name="android.software.companion_device_setup" android:required="false" />
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <!-- Android 10 and 11 scan only with location (ACCESS_FINE_LOCATION, declared above for onboarding without a max SDK). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <!-- A read off the Omi or an upload finishes when the app is put away (`TransferForegroundService`). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.REQUEST_COMPANION_RUN_IN_BACKGROUND" />
+    <uses-permission android:name="android.permission.REQUEST_COMPANION_START_FOREGROUND_SERVICES_FROM_BACKGROUND" />
+    <uses-permission android:name="android.permission.REQUEST_OBSERVE_COMPANION_DEVICE_PRESENCE" />
+
+    <application
+        android:name=".OmiApplication"
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Omi">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:theme="@style/Theme.Omi.Splash"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- omi:// links (DeepLink), incl. the web sign-in callback omi://auth/callback (WebAuthSession). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="omi" />
+            </intent-filter>
+            <!-- The web sign-in callback of the local_dev and beta profiles (Flutter `authCallbackScheme`). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="omi-dev" android:host="auth" />
+                <data android:scheme="omi-beta" android:host="auth" />
+            </intent-filter>
+            <!-- App Links on Omi's share domains (`DeepLink.fromUniversalLink`, Flutter's manifest paths). -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:host="h.omi.me" />
+                <data android:host="try.omi.me" />
+                <data android:pathPattern="/apps/.*" />
+                <data android:pathPattern="/tasks/.*" />
+                <data android:pathPattern="/conversations/.*" />
+                <data android:pathPattern="/conversation/.*" />
+                <data android:pathPattern="/recaps/.*" />
+                <data android:pathPattern="/daily-summary/.*" />
+                <data android:pathPrefix="/memories" />
+                <data android:path="/unlimited" />
+                <data android:path="/wrapped" />
+            </intent-filter>
+        </activity>
+        <!-- Chat camera photos and shared pictures use the features module's FileProvider (`.omi.files`, the cache dir). -->
+
+        <!-- Push (system): FCM tokens and messages; task reminders an hour before they are due. -->
+        <service
+            android:name=".system.OmiMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+        <receiver
+            android:name=".system.TaskReminders$TaskReminderReceiver"
+            android:exported="false" />
+        <!-- Stop, Start and End on the Omi's and the watch's recording notification. -->
+        <receiver
+            android:name=".CaptureActionReceiver"
+            android:exported="false" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="channel" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@mipmap/ic_stat_launcher" />
+
+        <!-- Home screen widgets (iOS Extensions/OmiWidgets). -->
+        <receiver
+            android:name=".system.widgets.OmiBatteryWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_battery_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_battery" />
+        </receiver>
+        <receiver
+            android:name=".system.widgets.OmiUpNextWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_up_next_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_up_next" />
+        </receiver>
+        <receiver
+            android:name=".system.widgets.OmiLatestWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_latest_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_latest" />
+        </receiver>
+
+        <!-- The Omi wearable (and-device): component names kept from the Flutter app. -->
+        <!-- Receives OS-level device presence events (companion device association). -->
+        <service
+            android:name="com.friend.ios.ble.BleCompanionService"
+            android:exported="true"
+            android:permission="android.permission.BIND_COMPANION_DEVICE_SERVICE">
+            <intent-filter>
+                <action android:name="android.companion.CompanionDeviceService" />
+            </intent-filter>
+        </service>
+        <!-- Keeps the Omi's link while the app is in the background. -->
+        <service
+            android:name="com.friend.ios.ble.OmiBleForegroundService"
+            android:foregroundServiceType="connectedDevice"
+            android:stopWithTask="false"
+            android:exported="false" />
+        <!-- Keeps a read off the Omi or an upload going while the app is in the background (TransferLease). -->
+        <service
+            android:name=".system.TransferForegroundService"
+            android:foregroundServiceType="dataSync"
+            android:exported="false" />
+        <!-- The Wear OS watch app (and-wear): its messages, recordings and queued messages (`WatchSession`). -->
+        <service
+            android:name=".WatchListenerService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
+                <data android:scheme="wear" android:host="*" android:pathPrefix="/omi/watch/" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.DATA_CHANGED" />
+                <data android:scheme="wear" android:host="*" android:pathPrefix="/omi/watch/" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.CHANNEL_EVENT" />
+                <data android:scheme="wear" android:host="*" android:pathPrefix="/omi/watch/" />
+            </intent-filter>
+        </service>
+        <!-- Health Connect (and-transcribe): why Omi reads health data (Android 13 and older), and
+             the system's "permission usage" link (Android 14+); both open the app. -->
+        <activity-alias
+            android:name=".HealthPermissionsRationale"
+            android:exported="true"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".HealthPermissionsUsage"
+            android:exported="true"
+            android:permission="android.permission.START_VIEW_PERMISSION_USAGE"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />
+                <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
+            </intent-filter>
+        </activity-alias>
+    </application>
+</manifest>

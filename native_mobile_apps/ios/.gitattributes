@@ -1,0 +1,11 @@
+# Left out of the clean export (Tools/export-clean.sh): internal notes and local dev helpers.
+docs/VISION.md export-ignore
+docs/CHAT-FIRST.md export-ignore
+Tools/dev/seed_*.py export-ignore
+docs/PLAN.md export-ignore
+docs/AGENT_BRIEF.md export-ignore
+# Patches keep the trailing space of their blank context lines.
+*.patch -whitespace
+# Generated (make strings, make api): GitHub collapses them in diffs and leaves them out of the stats.
+Packages/OmiDesign/Sources/OmiDesign/Resources/Localizable.xcstrings linguist-generated=true
+Packages/OmiNetwork/Sources/OmiNetwork/Generated/OmiApi.generated.swift linguist-generated=true

@@ -1,0 +1,32 @@
+{
+  "platform_files": {
+    "App/System/SiriTipSheet.swift": "the Siri tip; Android has no Siri",
+    "Packages/OmiFeatures/Sources/ConversationsFeature/EdgeSwipeBack.swift": "lets the edge swipe win over the pager; Android's system back gesture never competes"
+  },
+  "view_aliases": {
+    "AppLinkScreen": "AppDetailScreen",
+    "DeveloperKeysSection": "DeveloperKeysScreen",
+    "LaterUndoToast": "TaskLaterUndoToast",
+    "TaskCardView": "TaskCardModern",
+    "SpinningRing": "RunningButton",
+    "BrandLogo": "EntityAvatar",
+    "NameMonogram": "EntityAvatar",
+    "CategoryEmojiTile": "EntityAvatar",
+    "AddToCalendarView": "CalendarEventSheet",
+    "ExportMenu": "exportMenuSection",
+    "ExportDataRow": "exportDataRow",
+    "PlanSummarySection": "planSummarySection",
+    "MetersSection": "metersSection",
+    "PhoneIntroSections": "phoneIntroSections"
+  },
+  "key_aliases": {
+    "nativeRecordWithIPhone": "recordWithPhoneMic",
+    "nativeRecordWithPhoneDetail": "recordWithPhoneMic",
+    "memoryThisIphone": "memoryThisPhone",
+    "nativeAudioFromPhone": "phone"
+  },
+  "ios_only": {
+    "Packages/OmiFeatures/Sources/SettingsFeature/CapabilitiesScreen.swift": ["RemindersRow", "nativeSettingsRemindersDenied", "nativeSettingsTurnOff"],
+    "Packages/OmiFeatures/Sources/TasksFeature/TaskMenus.swift": ["nativeSyncWithReminders", "nativeRemindersAccessDenied"]
+  }
+}

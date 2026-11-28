@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>aps-environment</key>
+	<string>development</string>
+	<key>com.apple.developer.applesignin</key>
+	<array>
+		<string>Default</string>
+	</array>
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:h.omi.me</string>
+		<string>applinks:try.omi.me</string>
+	</array>
+	<!-- Apple Health (begin): read only, no clinical records -->
+	<key>com.apple.developer.healthkit</key>
+	<true/>
+	<key>com.apple.developer.healthkit.access</key>
+	<array/>
+	<!-- Apple Health (end) -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.$(OMI_BUNDLE_ID)</string>
+	</array>
+</dict>
+</plist>
