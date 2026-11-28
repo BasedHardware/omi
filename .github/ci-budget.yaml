@@ -1570,7 +1570,7 @@
       "runs_on": "${{ (inputs.mode == 'evidence' || inputs.mode == 'image-only') && 'ubuntu-22.04' || 'ubuntu-latest' }}"
     },
     "gcp_backend_pusher.yml/deploy": {
-      "budget_p50_minutes": 8,
+      "budget_p50_minutes": 9,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 1,
@@ -1579,7 +1579,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Manual prod/dev deploy, about one dispatch a day. SCA-4763 adds a one-replica canary inverse server dry-run (read-only admission probe) after canary readiness, one more minute. The canary_only input stops before shared-config apply and Helm, so that branch costs less than the budget; no PR or scheduled runs.",
+      "rationale": "Manual prod/dev deploy, about one dispatch a day. SCA-4763 adds a one-replica canary inverse server dry-run (read-only admission probe) after canary readiness, one more minute. The canary_only input stops before shared-config apply and Helm, so that branch costs less than the budget. SCA-4463 adds a Pusher-only lease override bind step (pip install and one chart render) and, when the override is set, a ConfigMap digest read in place of the shared-config apply: under a minute, rounded up to one. No PR or scheduled runs.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1588,7 +1588,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_backend_pusher.yml/pusher-image-only": {
-      "budget_p50_minutes": 22,
+      "budget_p50_minutes": 23,
       "display_name": "pusher-image-only",
       "expected_runs_class": "non-pr",
       "expected_runs_per_day": 1,
@@ -1597,7 +1597,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "Omi Release",
-      "rationale": "Manual protected production Pusher only. SCA-4763 replaces the isolated rehearsal with live server dry-runs and GitHub API verification of the non-secret evidence input; preview and canary verification stay read-only. The forecast covers one guarded rollout wait per run (forward, the single reverse after a failed post-move gate, or rollback); the 220-minute job ceiling is that one 160-minute wait plus checks, receipts and paging. No PR or scheduled runs.",
+      "rationale": "Manual protected production Pusher only. SCA-4763 replaces the isolated rehearsal with live server dry-runs and GitHub API verification of the non-secret evidence input; preview and canary verification stay read-only. The forecast covers one guarded rollout wait per run (forward, the single reverse after a failed post-move gate, or rollback); the 220-minute job ceiling is that one 160-minute wait plus checks, receipts and paging. SCA-4463's lease override inputs widen the shared workflow_dispatch trigger but add no step to this job; the one-minute raise only records that reviewed trigger change. No PR or scheduled runs.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -5488,7 +5488,7 @@
     "gcp_backend_pusher.yml": {
       "name": "Deploy Backend Pusher to GKE",
       "owner": "CI maintainers",
-      "rationale": "SCA-4763 adds the non-secret pusher_image_only_evidence dispatch input and the pusher_canary_only stop under the existing manual trigger and prod-train lock. No PR or scheduled runs.",
+      "rationale": "SCA-4763 adds the non-secret pusher_image_only_evidence dispatch input and the pusher_canary_only stop under the existing manual trigger and prod-train lock. SCA-4463 adds four optional Pusher-only record token lease override inputs (default none) under the same manual trigger; they add one chart render and one ConfigMap digest read, no runner, job or PR event. No PR or scheduled runs.",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
@@ -5555,6 +5555,33 @@
             "pusher_image_only_evidence": {
               "default": "",
               "description": "Protected production Pusher image-only evidence: non-secret JSON of run and record ids (schema 2)",
+              "required": "false"
+            },
+            "pusher_record_token_lease_override_deployed_at": {
+              "default": "",
+              "description": "Pusher lease override only: integer release epoch (> 0 unless mode is off)",
+              "required": "false"
+            },
+            "pusher_record_token_lease_override_mode": {
+              "default": "none",
+              "description": "Pusher only: record token lease override mode (none keeps the shared ConfigMap vector)",
+              "options": [
+                "none",
+                "off",
+                "shadow",
+                "serve"
+              ],
+              "required": "false",
+              "type": "choice"
+            },
+            "pusher_record_token_lease_override_seconds": {
+              "default": "",
+              "description": "Pusher lease override only: lease seconds 1800-7200",
+              "required": "false"
+            },
+            "pusher_record_token_lease_override_serve_percent": {
+              "default": "",
+              "description": "Pusher lease override only: serve percent 0-100",
               "required": "false"
             },
             "pusher_role_image_digest": {
