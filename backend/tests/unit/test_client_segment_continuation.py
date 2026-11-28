@@ -101,7 +101,8 @@ def test_nonserving_server_explicitly_rejects_chunks(monkeypatch, value):
     with pytest.raises(HTTPException) as error:
         intake.assemble_continuation(uuid4().hex, chunk(), 'c')
     assert error.value.status_code == 409
-    assert mode(intake.CONTINUATION_FLAG_KEY) == ('shadow' if value == 'typo' else value)
+    # An unrecognised value keeps the family default, off since 2026-11-28.
+    assert mode(intake.CONTINUATION_FLAG_KEY) == ('off' if value == 'typo' else value)
 
 
 @pytest.mark.parametrize(

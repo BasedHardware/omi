@@ -17,6 +17,7 @@ from feature_flag_registry import (
     REVIEW_GRACE_DAYS,
     RAMP_REQUIRED_FROM,
     ROOT,
+    SHADOW_EXPIRY_PATH,
     _ramp_applies_to,
     duplicate_declaration_sources,
     due_dates,
@@ -25,6 +26,8 @@ from feature_flag_registry import (
     extract_deploy_declarations,
     load_registry,
     ramp_due,
+    render_shadow_expiry,
+    shadow_expiry,
     validate_registry,
 )
 
@@ -180,6 +183,11 @@ def check(root: Path, *, check_render: bool = True, as_of: date | None = None) -
     else:
         errors.extend(diff_errors)
         warnings.extend(diff_warnings)
+    expiry_path = root / SHADOW_EXPIRY_PATH
+    if expiry_path.is_file() or shadow_expiry(registry):
+        current = expiry_path.read_text(encoding="utf-8") if expiry_path.is_file() else ""
+        if current != render_shadow_expiry(registry):
+            errors.append(f"{SHADOW_EXPIRY_PATH}: shadow expiry table drift; regenerate with python3 scripts/render_shadow_expiry.py")
     flags = {entry["key"]: entry for entry in registry["flags"]}
     for key, expected in parser_defaults(root).items():
         if key in flags and flags[key]["fail"] != expected:
