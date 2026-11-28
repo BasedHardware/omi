@@ -219,8 +219,24 @@ def restore_completed(service, wire, transport, receipt, floor=None):
     transport.replace(current, plan['inverse'])
 
 
-def release_floor(targets, *, script, project, region, run=subprocess.run):
-    """Refuse any rollback target the published backend release floor rejects."""
+# The published floor lives on origin/main. A long guard window can outlive the
+# fetch that preceded promotion, so every check re-reads that ref first and
+# fails closed when the refresh cannot be proven.
+FLOOR_REFRESH = ('git', 'fetch', '--no-tags', 'origin', '+refs/heads/main:refs/remotes/origin/main')
+
+
+def release_floor(targets, *, script, project, region, refresh=None, run=subprocess.run):
+    """Refuse any rollback target the published backend release floor rejects.
+
+    When refresh is supplied its command must succeed before any target is
+    checked; a failed refresh refuses the check instead of trusting a cached
+    floor.
+    """
+    if refresh is not None:
+        fetched = run(list(refresh), capture_output=True, text=True)
+        if fetched.returncode:
+            reason = ' '.join((fetched.stderr or '').split())[:400]
+            raise ValueError(f'release_floor_refresh_failed:{reason}')
     for revision in targets:
         completed = run(
             [sys.executable, str(script), '--revision', revision, '--project', project, '--region', region],
@@ -473,6 +489,7 @@ def main(argv=None):
         if mode in ('restore-completed', 'promote'):
             command.add_argument('--release-floor-check', type=Path, required=True)
         if mode == 'promote':
+            command.add_argument('--refresh-floor', action='store_true', required=True)
             command.add_argument('--candidate', required=True)
             command.add_argument('--source', required=True)
             command.add_argument('--control', required=True)
@@ -489,8 +506,9 @@ def main(argv=None):
     args = parser.parse_args(argv)
     floor = None
     if getattr(args, 'release_floor_check', None) is not None:
+        refresh = FLOOR_REFRESH if getattr(args, 'refresh_floor', False) else None
         floor = lambda targets: release_floor(  # noqa: E731 - single-use CLI closure
-            targets, script=args.release_floor_check, project=args.project, region=args.region
+            targets, script=args.release_floor_check, project=args.project, region=args.region, refresh=refresh
         )
     try:
         if args.mode == 'recover-run':

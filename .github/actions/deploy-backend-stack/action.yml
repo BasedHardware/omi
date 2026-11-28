@@ -1849,6 +1849,7 @@ runs:
             --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT" \
             --promotion-receipt "$RUNNER_TEMP/backend-holdback-promotion.json" \
             --release-floor-check "$DEPLOY_WORKFLOW_ROOT/.github/scripts/verify_backend_release_floor.py" \
+            --refresh-floor \
             --guard-command python3 -I "$DEPLOY_CONTROL_SCRIPTS/cloud_run_split_canary.py" workflow-guard)" || {
               rc=$?
               if ((rc == 75)); then

@@ -304,6 +304,7 @@ def test_completed_receipt_can_be_restored_from_another_run(tmp_path, monkeypatc
                 'backend-candidate',
                 '--release-floor-check',
                 str(floor),
+                '--refresh-floor',
             ]
         )
         == 0
@@ -575,3 +576,121 @@ def test_promote_requires_the_release_floor_on_the_cli(tmp_path):
 
 def holdback_wire():
     return 'holdback-v1;backend-donor;backend-donor=90,backend-shadow=10;5;7200'
+
+
+def published_floor(tmp_path, *, eligible, refresh_ok, calls):
+    """Build a floor callback that refreshes origin/main like the real CLI."""
+    script = tmp_path / 'verify_backend_release_floor.py'
+    script.write_text('')
+    rounds = {'refresh': 0}
+
+    def run(command, **kwargs):
+        if command and command[0] == 'git':
+            rounds['refresh'] += 1
+            calls.append('refresh')
+            ok = refresh_ok(rounds['refresh'])
+            return SimpleNamespace(
+                returncode=0 if ok else 1,
+                stderr='' if ok else 'fatal: could not read from remote repository\n',
+            )
+        calls.append(command[3])
+        ok = eligible(rounds['refresh'])
+        return SimpleNamespace(
+            returncode=0 if ok else 1,
+            stderr='' if ok else 'ERROR: Backend release floor rejected the target. below floor\n',
+        )
+
+    return lambda targets: canary.release_floor(
+        targets,
+        script=script,
+        project='example',
+        region='us-central1',
+        refresh=canary.FLOOR_REFRESH,
+        run=run,
+    )
+
+
+def test_promote_enforces_a_floor_published_during_the_guard(tmp_path):
+    transport, inverse = split_transport()
+    calls = []
+    floor = published_floor(
+        tmp_path,
+        eligible=lambda round_: round_ == 1,
+        refresh_ok=lambda round_: True,
+        calls=calls,
+    )
+    now, sleep = advancing_clock()
+    with pytest.raises(ValueError, match='release_floor_refused'):
+        canary.promote(
+            'backend',
+            holdback_wire(),
+            'backend-candidate',
+            transport,
+            trip_guard,
+            sleep=sleep,
+            now=now,
+            floor=floor,
+        )
+    # The restore-time round refreshed origin/main again, then refused.
+    assert calls[:3] == ['refresh', 'backend-donor', 'backend-shadow']
+    assert calls[3] == 'refresh'
+    assert inverse not in transport.writes
+    assert transport.state.requested != inverse
+
+
+def test_failed_floor_refresh_prevents_the_inverse_write(tmp_path):
+    transport, inverse = split_transport()
+    calls = []
+    floor = published_floor(
+        tmp_path,
+        eligible=lambda round_: True,
+        refresh_ok=lambda round_: round_ == 1,
+        calls=calls,
+    )
+    now, sleep = advancing_clock()
+    with pytest.raises(ValueError, match='release_floor_refresh_failed'):
+        canary.promote(
+            'backend',
+            holdback_wire(),
+            'backend-candidate',
+            transport,
+            trip_guard,
+            sleep=sleep,
+            now=now,
+            floor=floor,
+        )
+    assert calls == ['refresh', 'backend-donor', 'backend-shadow', 'refresh']
+    assert inverse not in transport.writes
+    assert transport.state.requested != inverse
+
+
+def test_promote_requires_the_floor_refresh_on_the_cli(tmp_path):
+    base = [
+        'promote',
+        '--service',
+        'backend',
+        '--plan',
+        holdback_wire(),
+        '--binding',
+        hashlib.sha256(holdback_wire().encode()).hexdigest(),
+        '--candidate',
+        'backend-candidate',
+        '--project',
+        'example',
+        '--region',
+        'us-central1',
+        '--promotion-receipt',
+        str(tmp_path / 'receipt.json'),
+        '--source',
+        'a' * 40,
+        '--control',
+        'b' * 40,
+        '--run-id',
+        '1',
+        '--run-attempt',
+        '1',
+        '--release-floor-check',
+        str(tmp_path / 'floor.py'),
+    ]
+    with pytest.raises(SystemExit):
+        canary.main(base)
