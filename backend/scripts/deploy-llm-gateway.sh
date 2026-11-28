@@ -56,6 +56,42 @@ python backend/scripts/validate-llm-gateway-env.py \
   "backend/charts/backend-listen/${ENVIRONMENT}_omi_backend_listen_values.yaml" \
   "$VALUES_FILE"
 
+HELM_ARGS=(
+  "$RELEASE_NAME"
+  "$CHART_DIR"
+  -f "$VALUES_FILE"
+  --set-string "image.tag=${IMAGE_TAG}"
+  --set-string "serviceAccount.annotations.iam\\.gke\\.io/gcp-service-account=${LLM_GATEWAY_GSA}"
+)
+if [[ -n "$IMAGE_DIGEST" ]]; then
+  HELM_ARGS+=(--set "image.repository=${IMAGE_REPOSITORY}" --set-string "image.digest=${IMAGE_DIGEST}")
+fi
+
+helm template "${HELM_ARGS[@]}" >/dev/null
+
+# Helm applies through server-side apply as field manager "helm". The same apply
+# as a server-side dry-run reports a field another manager owns before any
+# release is mutated, so an out-of-band image patch cannot strand the rollout
+# halfway through a deploy.
+gateway_apply_preflight() {
+  local rendered
+  rendered="$(mktemp)"
+  if ! helm template -n "$NAMESPACE" "${HELM_ARGS[@]}" --show-only templates/deployment.yaml >"$rendered"; then
+    rm -f "$rendered"
+    echo "ERROR: llm-gateway Deployment could not be rendered for ${RELEASE_NAME}" >&2
+    exit 2
+  fi
+  if ! kubectl -n "$NAMESPACE" apply --server-side --dry-run=server --field-manager=helm -f "$rendered"; then
+    rm -f "$rendered"
+    echo "ERROR: llm-gateway apply preflight failed for deploy/${RELEASE_NAME} in ${NAMESPACE}; nothing was changed." >&2
+    echo "Resolve the field ownership reported above (backend/docs/runbooks/llm-gateway-image-ownership.md) and rerun; do not force the conflict." >&2
+    exit 1
+  fi
+  rm -f "$rendered"
+}
+
+gateway_apply_preflight
+
 if [[ "$SKIP_BACKEND_SECRETS" != "true" ]]; then
   env -u CHART_DIR -u VALUES_FILE -u RELEASE_NAME \
     ENVIRONMENT="$ENVIRONMENT" \
@@ -102,19 +138,6 @@ print(f"Gateway credential keys present and non-empty in {secret_name}")
 PY
 fi
 
-HELM_ARGS=(
-  "$RELEASE_NAME"
-  "$CHART_DIR"
-  -f "$VALUES_FILE"
-  --set-string "image.tag=${IMAGE_TAG}"
-  --set-string "serviceAccount.annotations.iam\\.gke\\.io/gcp-service-account=${LLM_GATEWAY_GSA}"
-)
-if [[ -n "$IMAGE_DIGEST" ]]; then
-  HELM_ARGS+=(--set "image.repository=${IMAGE_REPOSITORY}" --set-string "image.digest=${IMAGE_DIGEST}")
-fi
-
-helm template "${HELM_ARGS[@]}" >/dev/null
-
 adopt_for_helm() {
   local kind="$1"
   local name="$2"
@@ -144,7 +167,7 @@ adopt_for_helm() {
 }
 
 if [[ "$DRY_RUN" == "true" ]]; then
-  echo "llm-gateway render preflight OK for ${RELEASE_NAME} in ${NAMESPACE}"
+  echo "llm-gateway render and apply preflight OK for ${RELEASE_NAME} in ${NAMESPACE}"
   exit 0
 fi
 
@@ -152,6 +175,10 @@ fi
 # only the chart's known resources so future deploys converge through Helm.
 adopt_for_helm ingress "$RELEASE_NAME"
 adopt_for_helm backendconfig "${ENVIRONMENT}-llm-gateway-backend-config"
+
+# The shared secrets reapply and the credential check can take a minute; re-check
+# so an owner that appeared in that window still fails before Helm touches the release.
+gateway_apply_preflight
 
 helm -n "$NAMESPACE" upgrade --install "${HELM_ARGS[@]}"
 kubectl -n "$NAMESPACE" rollout status "deploy/${RELEASE_NAME}" --timeout=300s

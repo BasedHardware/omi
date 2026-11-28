@@ -15835,10 +15835,13 @@ class AppLocalizationsBn extends AppLocalizations {
   String get firmwareSyncRecordingsFirstTitle => 'প্রথমে আপনার রেকর্ডিং সিঙ্ক করুন';
 
   @override
+  String get pendantAudioUnconfirmedSyncBlocked =>
+      'আপনার Pendant-এ সংরক্ষিত অডিও নিশ্চিত করা যায়নি। Pendant সংযুক্ত রাখুন এবং আবার সিঙ্ক করার চেষ্টা করুন।';
+
+  @override
   String get firmwareSyncRecordingsFirstMessage =>
       'কিছু রেকর্ডিং এখনও আপনার ডিভাইসে রয়েছে। সেগুলিকে আপনার ফোনে সিঙ্ক শেষ হতে দিন, তারপর আপডেট শুরু করুন।';
 
   @override
-  String get pendantAudioUnconfirmedSyncBlocked =>
-      'আপনার Pendant-এ সংরক্ষিত অডিও নিশ্চিত করা যায়নি। Pendant সংযুক্ত রাখুন এবং আবার সিঙ্ক করার চেষ্টা করুন।';
+  String get batteryRestartToRefresh => 'রিফ্রেশ করতে Omi পুনরায় চালু করুন';
 }

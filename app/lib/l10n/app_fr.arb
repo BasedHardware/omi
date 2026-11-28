@@ -4803,6 +4803,7 @@
     "playStripePlanPaused": "Votre forfait {plan} est en pause.",
     "firmwareNewestSupportedForDevice": "Votre appareil utilise déjà la dernière version de firmware prise en charge",
     "firmwareSyncRecordingsFirstTitle": "Synchronisez d'abord vos enregistrements",
+    "pendantAudioUnconfirmedSyncBlocked": "Impossible de confirmer l’audio stocké sur votre Pendant. Gardez votre Pendant connecté et réessayez la synchronisation.",
     "firmwareSyncRecordingsFirstMessage": "Certains enregistrements sont encore sur votre appareil. Laissez-les terminer leur synchronisation vers votre téléphone, puis lancez la mise à jour.",
-    "pendantAudioUnconfirmedSyncBlocked": "Impossible de confirmer l’audio stocké sur votre Pendant. Gardez votre Pendant connecté et réessayez la synchronisation."
+    "batteryRestartToRefresh": "Redémarrez Omi pour actualiser"
 }

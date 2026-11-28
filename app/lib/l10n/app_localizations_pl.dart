@@ -15886,10 +15886,13 @@ class AppLocalizationsPl extends AppLocalizations {
   String get firmwareSyncRecordingsFirstTitle => 'Najpierw zsynchronizuj nagrania';
 
   @override
+  String get pendantAudioUnconfirmedSyncBlocked =>
+      'Nie udało się potwierdzić dźwięku zapisanego na Twoim Pendant. Pozostaw Pendant połączony i spróbuj ponownie zsynchronizować.';
+
+  @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Niektóre nagrania wciąż znajdują się na urządzeniu. Poczekaj, aż zostaną zsynchronizowane z telefonem, a następnie rozpocznij aktualizację.';
 
   @override
-  String get pendantAudioUnconfirmedSyncBlocked =>
-      'Nie udało się potwierdzić dźwięku zapisanego na Twoim Pendant. Pozostaw Pendant połączony i spróbuj ponownie zsynchronizować.';
+  String get batteryRestartToRefresh => 'Uruchom ponownie Omi, aby odświeżyć odczyt';
 }

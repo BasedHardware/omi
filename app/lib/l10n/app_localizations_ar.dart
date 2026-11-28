@@ -15752,10 +15752,13 @@ class AppLocalizationsAr extends AppLocalizations {
   String get firmwareSyncRecordingsFirstTitle => 'مزامنة تسجيلاتك أولاً';
 
   @override
+  String get pendantAudioUnconfirmedSyncBlocked =>
+      'تعذّر تأكيد الصوت المخزّن على جهاز Pendant. أبقِ جهاز Pendant متصلاً وحاول مزامنته مرة أخرى.';
+
+  @override
   String get firmwareSyncRecordingsFirstMessage =>
       'لا تزال بعض التسجيلات على جهازك. دعها تكمل المزامنة إلى هاتفك، ثم ابدأ التحديث.';
 
   @override
-  String get pendantAudioUnconfirmedSyncBlocked =>
-      'تعذّر تأكيد الصوت المخزّن على جهاز Pendant. أبقِ جهاز Pendant متصلاً وحاول مزامنته مرة أخرى.';
+  String get batteryRestartToRefresh => 'أعد تشغيل Omi لتحديث القراءة';
 }

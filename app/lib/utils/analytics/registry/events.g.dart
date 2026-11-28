@@ -3825,3 +3825,21 @@ final class AppForegroundEnded extends RegisteredEvent {
   @override
   Map<String, Object> get properties => {"foreground_seconds": foregroundSeconds, "capturing_seconds": capturingSeconds};
 }
+
+enum BatteryReadingHiddenReason {
+  chargingLow("charging_low"),
+  firstPairing("first_pairing"),
+  longCharge("long_charge"),
+  flat("flat");
+  const BatteryReadingHiddenReason(this.wireName);
+  final String wireName;
+}
+
+final class BatteryReadingHidden extends RegisteredEvent {
+  const BatteryReadingHidden({required this.reason});
+  final BatteryReadingHiddenReason reason;
+  @override
+  String get wireName => "Battery Reading Hidden";
+  @override
+  Map<String, Object> get properties => {"reason": reason.wireName};
+}

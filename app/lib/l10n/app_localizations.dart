@@ -27795,17 +27795,23 @@ abstract class AppLocalizations {
   /// **'Sync your recordings first'**
   String get firmwareSyncRecordingsFirstTitle;
 
+  /// Shown when offline sync stalls and the app cannot confirm that all stored Pendant audio has transferred.
+  ///
+  /// In en, this message translates to:
+  /// **'Your Pendant\'s stored audio could not be confirmed. Keep your Pendant connected and try syncing again.'**
+  String get pendantAudioUnconfirmedSyncBlocked;
+
   /// Dialog body explaining that recordings must finish syncing from the pendant to the phone before the firmware update can start.
   ///
   /// In en, this message translates to:
   /// **'Some recordings are still on your device. Let them finish syncing to your phone, then start the update.'**
   String get firmwareSyncRecordingsFirstMessage;
 
-  /// Shown when offline sync stalls and the app cannot confirm that all stored Pendant audio has transferred.
+  /// Short caption under the Battery value (shown as a dash) in Omi device settings when the pendant's near-empty battery reading looks stuck after charging. Tells the user that restarting the Omi pendant refreshes the reading. Omi is the product name; keep it untranslated.
   ///
   /// In en, this message translates to:
-  /// **'Your Pendant\'s stored audio could not be confirmed. Keep your Pendant connected and try syncing again.'**
-  String get pendantAudioUnconfirmedSyncBlocked;
+  /// **'Restart Omi to refresh'**
+  String get batteryRestartToRefresh;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

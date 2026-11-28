@@ -12325,6 +12325,7 @@
     "playStripePlanPaused": "طرح {plan} شما متوقف شده است.",
     "firmwareNewestSupportedForDevice": "دستگاه شما در حال حاضر روی جدیدترین نسخه فریم‌ور پشتیبانی‌شده قرار دارد",
     "firmwareSyncRecordingsFirstTitle": "ابتدا ضبط‌های خود را همگام‌سازی کنید",
+    "pendantAudioUnconfirmedSyncBlocked": "تأیید صدای ذخیره‌شده در Pendant شما ممکن نشد. Pendant را متصل نگه دارید و دوباره همگام‌سازی را امتحان کنید.",
     "firmwareSyncRecordingsFirstMessage": "برخی ضبط‌ها هنوز روی دستگاه شما هستند. اجازه دهید همگام‌سازی آن‌ها به گوشی شما کامل شود، سپس بروزرسانی را شروع کنید.",
-    "pendantAudioUnconfirmedSyncBlocked": "تأیید صدای ذخیره‌شده در Pendant شما ممکن نشد. Pendant را متصل نگه دارید و دوباره همگام‌سازی را امتحان کنید."
+    "batteryRestartToRefresh": "برای بازخوانی، Omi را دوباره راه‌اندازی کنید"
 }

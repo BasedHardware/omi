@@ -15967,10 +15967,13 @@ class AppLocalizationsTl extends AppLocalizations {
   String get firmwareSyncRecordingsFirstTitle => 'I-sync muna ang iyong mga recording';
 
   @override
+  String get pendantAudioUnconfirmedSyncBlocked =>
+      'Hindi makumpirma ang nakaimbak na audio sa iyong Pendant. Panatilihing nakakonekta ang Pendant at subukang mag-sync muli.';
+
+  @override
   String get firmwareSyncRecordingsFirstMessage =>
       'May mga recording pa na nasa iyong device. Hayaang matapos munang i-sync ang mga ito sa iyong phone, pagkatapos ay simulan ang pag-update.';
 
   @override
-  String get pendantAudioUnconfirmedSyncBlocked =>
-      'Hindi makumpirma ang nakaimbak na audio sa iyong Pendant. Panatilihing nakakonekta ang Pendant at subukang mag-sync muli.';
+  String get batteryRestartToRefresh => 'I-restart ang Omi upang i-refresh';
 }

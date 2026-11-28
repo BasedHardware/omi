@@ -15920,10 +15920,13 @@ class AppLocalizationsCa extends AppLocalizations {
   String get firmwareSyncRecordingsFirstTitle => 'Primer sincronitzeu els enregistraments';
 
   @override
+  String get pendantAudioUnconfirmedSyncBlocked =>
+      'No s’ha pogut confirmar l’àudio emmagatzemat al teu Pendant. Mantén el Pendant connectat i torna-ho a provar.';
+
+  @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Alguns enregistraments encara són al vostre dispositiu. Deixeu que acabin de sincronitzar-se al telèfon i, després, inicieu l\'actualització.';
 
   @override
-  String get pendantAudioUnconfirmedSyncBlocked =>
-      'No s’ha pogut confirmar l’àudio emmagatzemat al teu Pendant. Mantén el Pendant connectat i torna-ho a provar.';
+  String get batteryRestartToRefresh => 'Reinicieu Omi per actualitzar el valor';
 }

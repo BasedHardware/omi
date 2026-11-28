@@ -1,7 +1,7 @@
 """Content-free note receipts and a shared deadline for episode repairs."""
 
 import logging
-from functools import wraps
+from contextlib import contextmanager
 from time import monotonic
 from contextvars import ContextVar
 from typing import Any
@@ -125,23 +125,22 @@ def current_run() -> NotesRun | None:
     return _current.get()
 
 
-def observe_notes(fn):
-    @wraps(fn)
-    def wrapped(*args, **kwargs):
-        run = NotesRun('baseline')
-        token = _current.set(run)
-        try:
-            result = fn(*args, **kwargs)
-            from utils.conversations.episode_vacuity import is_vacuous_note
+@contextmanager
+def notes_observation():
+    run = NotesRun('baseline')
+    token = _current.set(run)
+    try:
+        yield run
+    except Exception:
+        run.error = True
+        raise
+    finally:
+        run.emit()
+        _current.reset(token)
 
-            run.vacuity = is_vacuous_note(result)
-            run.claim_count = len(result.note_claims or [])
-            return result
-        except Exception:
-            run.error = True
-            raise
-        finally:
-            run.emit()
-            _current.reset(token)
 
-    return wrapped
+def observe_notes_output(run, result):
+    from utils.conversations.episode_vacuity import is_vacuous_note
+
+    run.vacuity = is_vacuous_note(result)
+    run.claim_count = len(result.note_claims or [])

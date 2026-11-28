@@ -15892,10 +15892,13 @@ class AppLocalizationsKn extends AppLocalizations {
   String get firmwareSyncRecordingsFirstTitle => 'ಮೊದಲು ನಿಮ್ಮ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಸಿಂಕ್ ಮಾಡಿ';
 
   @override
+  String get pendantAudioUnconfirmedSyncBlocked =>
+      'ನಿಮ್ಮ Pendant‌ನಲ್ಲಿ ಸಂಗ್ರಹಿಸಿದ ಆಡಿಯೊವನ್ನು ದೃಢೀಕರಿಸಲಾಗಲಿಲ್ಲ. Pendant ಅನ್ನು ಸಂಪರ್ಕದಲ್ಲಿರಿಸಿ ಮತ್ತು ಮತ್ತೆ ಸಿಂಕ್ ಮಾಡಲು ಪ್ರಯತ್ನಿಸಿ.';
+
+  @override
   String get firmwareSyncRecordingsFirstMessage =>
       'ಕೆಲವು ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಇನ್ನೂ ನಿಮ್ಮ ಸಾಧನದಲ್ಲಿವೆ. ಅವುಗಳು ನಿಮ್ಮ ಫೋನ್‌ಗೆ ಸಿಂಕ್ ಆಗಲು ಬಿಡಿ, ನಂತರ ನವೀಕರಣ ಪ್ರಾರಂಭಿಸಿ.';
 
   @override
-  String get pendantAudioUnconfirmedSyncBlocked =>
-      'ನಿಮ್ಮ Pendant‌ನಲ್ಲಿ ಸಂಗ್ರಹಿಸಿದ ಆಡಿಯೊವನ್ನು ದೃಢೀಕರಿಸಲಾಗಲಿಲ್ಲ. Pendant ಅನ್ನು ಸಂಪರ್ಕದಲ್ಲಿರಿಸಿ ಮತ್ತು ಮತ್ತೆ ಸಿಂಕ್ ಮಾಡಲು ಪ್ರಯತ್ನಿಸಿ.';
+  String get batteryRestartToRefresh => 'ರಿಫ್ರೆಶ್ ಮಾಡಲು Omi ಅನ್ನು ಮರುಪ್ರಾರಂಭ ಮಾಡಿ';
 }

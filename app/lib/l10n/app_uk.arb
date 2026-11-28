@@ -4768,6 +4768,7 @@
     "playStripePlanPaused": "Ваш план {plan} призупинено.",
     "firmwareNewestSupportedForDevice": "Ваш пристрій уже працює на найновішій підтримуваній версії прошивки",
     "firmwareSyncRecordingsFirstTitle": "Спочатку синхронізуйте свої записи",
+    "pendantAudioUnconfirmedSyncBlocked": "Не вдалося підтвердити аудіо, збережене на Pendant. Залиште Pendant під’єднаним і спробуйте синхронізувати ще раз.",
     "firmwareSyncRecordingsFirstMessage": "Деякі записи ще зберігаються на вашому пристрої. Дочекайтеся завершення синхронізації з телефоном, а потім почніть оновлення.",
-    "pendantAudioUnconfirmedSyncBlocked": "Не вдалося підтвердити аудіо, збережене на Pendant. Залиште Pendant під’єднаним і спробуйте синхронізувати ще раз."
+    "batteryRestartToRefresh": "Перезавантажте Omi, щоб оновити"
 }

@@ -15850,10 +15850,13 @@ class AppLocalizationsTr extends AppLocalizations {
   String get firmwareSyncRecordingsFirstTitle => 'Önce kayıtlarınızı senkronize edin';
 
   @override
+  String get pendantAudioUnconfirmedSyncBlocked =>
+      'Pendant\'ınızda saklanan ses doğrulanamadı. Pendant\'ınızı bağlı tutun ve yeniden eşitlemeyi deneyin.';
+
+  @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Bazı kayıtlar hâlâ cihazınızda. Telefonunuza senkronize edilmelerini bekleyin, ardından güncellemeyi başlatın.';
 
   @override
-  String get pendantAudioUnconfirmedSyncBlocked =>
-      'Pendant\'ınızda saklanan ses doğrulanamadı. Pendant\'ınızı bağlı tutun ve yeniden eşitlemeyi deneyin.';
+  String get batteryRestartToRefresh => 'Yenilemek için Omi\'yi yeniden başlatın';
 }

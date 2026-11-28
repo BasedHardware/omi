@@ -4768,6 +4768,7 @@
     "playStripePlanPaused": "แพ็กเกจ {plan} ของคุณหยุดชั่วคราวอยู่",
     "firmwareNewestSupportedForDevice": "อุปกรณ์ของคุณใช้เฟิร์มแวร์เวอร์ชันล่าสุดที่รองรับอยู่แล้ว",
     "firmwareSyncRecordingsFirstTitle": "ซิงค์ไฟล์บันทึกเสียงของคุณก่อน",
+    "pendantAudioUnconfirmedSyncBlocked": "ไม่สามารถยืนยันเสียงที่บันทึกไว้ใน Pendant ได้ โปรดเชื่อมต่อ Pendant ไว้ แล้วลองซิงค์อีกครั้ง",
     "firmwareSyncRecordingsFirstMessage": "ไฟล์บันทึกเสียงบางส่วนยังอยู่ในอุปกรณ์ของคุณ รอให้ซิงค์ไปยังโทรศัพท์เสร็จก่อน แล้วจึงเริ่มการอัปเดต",
-    "pendantAudioUnconfirmedSyncBlocked": "ไม่สามารถยืนยันเสียงที่บันทึกไว้ใน Pendant ได้ โปรดเชื่อมต่อ Pendant ไว้ แล้วลองซิงค์อีกครั้ง"
+    "batteryRestartToRefresh": "รีสตาร์ท Omi เพื่อรีเฟรช"
 }

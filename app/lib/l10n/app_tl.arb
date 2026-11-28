@@ -12325,6 +12325,7 @@
     "playStripePlanPaused": "Naka-pause ang iyong {plan} plan.",
     "firmwareNewestSupportedForDevice": "Ang iyong device ay nasa pinakabagong firmware version na kayang suportahan nito",
     "firmwareSyncRecordingsFirstTitle": "I-sync muna ang iyong mga recording",
+    "pendantAudioUnconfirmedSyncBlocked": "Hindi makumpirma ang nakaimbak na audio sa iyong Pendant. Panatilihing nakakonekta ang Pendant at subukang mag-sync muli.",
     "firmwareSyncRecordingsFirstMessage": "May mga recording pa na nasa iyong device. Hayaang matapos munang i-sync ang mga ito sa iyong phone, pagkatapos ay simulan ang pag-update.",
-    "pendantAudioUnconfirmedSyncBlocked": "Hindi makumpirma ang nakaimbak na audio sa iyong Pendant. Panatilihing nakakonekta ang Pendant at subukang mag-sync muli."
+    "batteryRestartToRefresh": "I-restart ang Omi upang i-refresh"
 }

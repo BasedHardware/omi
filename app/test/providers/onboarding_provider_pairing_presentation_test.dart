@@ -410,15 +410,18 @@ void main() {
     });
   });
 
-  test('saved visible devices clear reachability, but stale-bond recovery is retained', () async {
-    await SharedPreferencesUtil()
-        .btDeviceSet(BtDevice(id: 'saved-omi', name: 'Saved Omi', type: DeviceType.omi, rssi: -50));
+  test('advertising saved devices clear reachability, but stale-bond recovery is retained', () async {
+    final saved = BtDevice(id: 'saved-omi', name: 'Saved Omi', type: DeviceType.omi, rssi: -50);
+    await SharedPreferencesUtil().btDeviceSet(saved);
     provider.pairingFailureReason = Reason.notFoundOrDropped;
     provider.onDevices([]);
+    expect(provider.visibleDeviceList, isEmpty);
+    expect(provider.pairingFailureReason, Reason.notFoundOrDropped);
+    provider.onDevices([saved]);
     expect(provider.visibleDeviceList, isNotEmpty);
     expect(provider.pairingFailureReason, isNull);
     provider.pairingFailureReason = Reason.staleBond;
-    provider.onDevices([]);
+    provider.onDevices([saved]);
     expect(provider.pairingFailureReason, Reason.staleBond);
   });
 

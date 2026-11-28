@@ -15831,10 +15831,13 @@ class AppLocalizationsDa extends AppLocalizations {
   String get firmwareSyncRecordingsFirstTitle => 'Synkroniser dine optagelser først';
 
   @override
+  String get pendantAudioUnconfirmedSyncBlocked =>
+      'Den gemte lyd på din Pendant kunne ikke bekræftes. Hold din Pendant tilsluttet, og prøv at synkronisere igen.';
+
+  @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Nogle optagelser er stadig på din enhed. Lad dem blive færdige med at synkronisere til din telefon, og start derefter opdateringen.';
 
   @override
-  String get pendantAudioUnconfirmedSyncBlocked =>
-      'Den gemte lyd på din Pendant kunne ikke bekræftes. Hold din Pendant tilsluttet, og prøv at synkronisere igen.';
+  String get batteryRestartToRefresh => 'Genstart Omi for at opdatere værdien';
 }

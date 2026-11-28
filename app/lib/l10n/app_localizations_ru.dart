@@ -15893,10 +15893,13 @@ class AppLocalizationsRu extends AppLocalizations {
   String get firmwareSyncRecordingsFirstTitle => 'Сначала синхронизируйте записи';
 
   @override
+  String get pendantAudioUnconfirmedSyncBlocked =>
+      'Не удалось подтвердить аудио, сохранённое на Pendant. Оставьте Pendant подключённым и попробуйте синхронизировать ещё раз.';
+
+  @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Некоторые записи всё ещё находятся на устройстве. Дождитесь завершения их синхронизации с телефоном, а затем начните обновление.';
 
   @override
-  String get pendantAudioUnconfirmedSyncBlocked =>
-      'Не удалось подтвердить аудио, сохранённое на Pendant. Оставьте Pendant подключённым и попробуйте синхронизировать ещё раз.';
+  String get batteryRestartToRefresh => 'Перезапустите Omi, чтобы обновить данные';
 }

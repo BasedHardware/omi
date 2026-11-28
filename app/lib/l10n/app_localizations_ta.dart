@@ -15948,10 +15948,13 @@ class AppLocalizationsTa extends AppLocalizations {
   String get firmwareSyncRecordingsFirstTitle => 'முதலில் உங்கள் பதிவுகளை ஒத்திசைக்கவும்';
 
   @override
+  String get pendantAudioUnconfirmedSyncBlocked =>
+      'உங்கள் Pendant-இல் சேமிக்கப்பட்டுள்ள ஒலியை உறுதிப்படுத்த முடியவில்லை. Pendant-ஐ இணைத்த நிலையில் வைத்து மீண்டும் ஒத்திசைக்க முயற்சிக்கவும்.';
+
+  @override
   String get firmwareSyncRecordingsFirstMessage =>
       'சில பதிவுகள் இன்னும் உங்கள் சாதனத்தில் உள்ளன. அவை உங்கள் தொலைபேசிக்கு ஒத்திசைவை முடிக்க அனுமதித்து, பிறகு புதுப்பிப்பைத் தொடங்கவும்.';
 
   @override
-  String get pendantAudioUnconfirmedSyncBlocked =>
-      'உங்கள் Pendant-இல் சேமிக்கப்பட்டுள்ள ஒலியை உறுதிப்படுத்த முடியவில்லை. Pendant-ஐ இணைத்த நிலையில் வைத்து மீண்டும் ஒத்திசைக்க முயற்சிக்கவும்.';
+  String get batteryRestartToRefresh => 'புதுப்பிக்க Omi ஐ மறுதொடக்கம் செய்யவும்';
 }

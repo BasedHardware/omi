@@ -1,4 +1,4 @@
-"""Own the async transport used by notes' short-lived worker event loop."""
+"""Own the loop-local async transport used by a notes invocation."""
 
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any, AsyncIterator
@@ -74,10 +74,10 @@ async def _recap_request(request: httpx.Request) -> None:
 async def isolated_notes_model(model: BaseChatModel) -> AsyncIterator[BaseChatModel]:
     """Copy model configuration, never reuse/mutate its cached async connection pool.
 
-    Notes enters asyncio.run from its existing synchronous processing worker.
-    A cached SDK pool can otherwise retain sockets bound to an already-closed
-    loop. The clone preserves the gateway subclass, callbacks and request-time
-    attribution, and closes its own transport before that worker loop exits.
+    Inline notes runs in a short-lived worker loop and continued notes runs in
+    the async coordinator. The clone keeps sockets on the invoking loop,
+    preserves the gateway subclass, callbacks and request-time attribution,
+    and closes its transport at the end of the invocation.
     OpenAI-compatible lanes (managed gateway and OpenAI/Gemini/OpenRouter BYOK)
     clone the OpenAI client. Anthropic BYOK is a ``ChatAnthropic`` and needs
     the same loop-local client, or conversation notes die as HTTP 500.

@@ -4768,6 +4768,7 @@
     "playStripePlanPaused": "Din {plan}-plan är pausad.",
     "firmwareNewestSupportedForDevice": "Din enhet har redan den senaste firmwareversionen som stöds",
     "firmwareSyncRecordingsFirstTitle": "Synkronisera dina inspelningar först",
+    "pendantAudioUnconfirmedSyncBlocked": "Det gick inte att bekräfta det lagrade ljudet på din Pendant. Håll din Pendant ansluten och försök synkronisera igen.",
     "firmwareSyncRecordingsFirstMessage": "Vissa inspelningar finns fortfarande på din enhet. Låt dem slutföra synkroniseringen till telefonen och starta sedan uppdateringen.",
-    "pendantAudioUnconfirmedSyncBlocked": "Det gick inte att bekräfta det lagrade ljudet på din Pendant. Håll din Pendant ansluten och försök synkronisera igen."
+    "batteryRestartToRefresh": "Starta om Omi för att uppdatera"
 }

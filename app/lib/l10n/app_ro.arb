@@ -4768,6 +4768,7 @@
     "playStripePlanPaused": "Planul tău {plan} este întrerupt.",
     "firmwareNewestSupportedForDevice": "Dispozitivul tău are deja cea mai recentă versiune de firmware acceptată",
     "firmwareSyncRecordingsFirstTitle": "Sincronizează mai întâi înregistrările",
+    "pendantAudioUnconfirmedSyncBlocked": "Nu am putut confirma sunetul stocat pe Pendant. Păstrează Pendant conectat și încearcă din nou sincronizarea.",
     "firmwareSyncRecordingsFirstMessage": "Unele înregistrări sunt încă pe dispozitivul tău. Lasă-le să termine de sincronizat cu telefonul tău, apoi pornește actualizarea.",
-    "pendantAudioUnconfirmedSyncBlocked": "Nu am putut confirma sunetul stocat pe Pendant. Păstrează Pendant conectat și încearcă din nou sincronizarea."
+    "batteryRestartToRefresh": "Repornește Omi pentru a actualiza valoarea"
 }

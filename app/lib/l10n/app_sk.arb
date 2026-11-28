@@ -4768,6 +4768,7 @@
     "playStripePlanPaused": "Váš plán {plan} je pozastavený.",
     "firmwareNewestSupportedForDevice": "Vaše zariadenie už má najnovšiu podporovanú verziu firmvéru",
     "firmwareSyncRecordingsFirstTitle": "Najprv synchronizujte nahrávky",
+    "pendantAudioUnconfirmedSyncBlocked": "Nepodarilo sa potvrdiť zvuk uložený v zariadení Pendant. Nechajte Pendant pripojený a skúste synchronizáciu znova.",
     "firmwareSyncRecordingsFirstMessage": "Niektoré nahrávky sa stále nachádzajú na zariadení. Počkajte, kým sa dokončí ich synchronizácia s telefónom, a potom spustite aktualizáciu.",
-    "pendantAudioUnconfirmedSyncBlocked": "Nepodarilo sa potvrdiť zvuk uložený v zariadení Pendant. Nechajte Pendant pripojený a skúste synchronizáciu znova."
+    "batteryRestartToRefresh": "Pre obnovenie údajov reštartujte Omi"
 }

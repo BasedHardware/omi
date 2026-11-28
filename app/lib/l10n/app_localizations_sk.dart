@@ -15835,10 +15835,13 @@ class AppLocalizationsSk extends AppLocalizations {
   String get firmwareSyncRecordingsFirstTitle => 'Najprv synchronizujte nahrávky';
 
   @override
+  String get pendantAudioUnconfirmedSyncBlocked =>
+      'Nepodarilo sa potvrdiť zvuk uložený v zariadení Pendant. Nechajte Pendant pripojený a skúste synchronizáciu znova.';
+
+  @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Niektoré nahrávky sa stále nachádzajú na zariadení. Počkajte, kým sa dokončí ich synchronizácia s telefónom, a potom spustite aktualizáciu.';
 
   @override
-  String get pendantAudioUnconfirmedSyncBlocked =>
-      'Nepodarilo sa potvrdiť zvuk uložený v zariadení Pendant. Nechajte Pendant pripojený a skúste synchronizáciu znova.';
+  String get batteryRestartToRefresh => 'Pre obnovenie údajov reštartujte Omi';
 }

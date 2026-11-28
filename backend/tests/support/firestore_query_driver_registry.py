@@ -4308,7 +4308,7 @@ _provider_stt_outbox = FirestoreProviderSttOutbox(
     create_wake=lambda row_id, token, available_at: None,
     collection='batch_pipeline_prod_provider_stt_outbox',
 )
-for _method in ('claim', 'sweep'):
+for _method in ('claim', 'sweep', 'sweep_running', 'sweep_held'):
     _add(
         DriverEntry(
             f'database.outbox_provider_stt.FirestoreProviderSttOutbox.{_method}',

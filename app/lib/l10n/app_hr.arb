@@ -12325,6 +12325,7 @@
     "playStripePlanPaused": "Vaš plan {plan} je pauziran.",
     "firmwareNewestSupportedForDevice": "Tvoj uređaj je već na najnovijoj podržanoj verziji firmvera",
     "firmwareSyncRecordingsFirstTitle": "Prvo sinkroniziraj svoje snimke",
+    "pendantAudioUnconfirmedSyncBlocked": "Nije bilo moguće potvrditi zvuk spremljen na vašem Pendantu. Ostavite Pendant povezan i pokušajte ponovno sinkronizirati.",
     "firmwareSyncRecordingsFirstMessage": "Neke snimke još su na tvojem uređaju. Pričekaj da se sinkroniziraju na tvoj telefon, a zatim pokreni ažuriranje.",
-    "pendantAudioUnconfirmedSyncBlocked": "Nije bilo moguće potvrditi zvuk spremljen na vašem Pendantu. Ostavite Pendant povezan i pokušajte ponovno sinkronizirati."
+    "batteryRestartToRefresh": "Ponovno pokrenite Omi za osvježavanje"
 }

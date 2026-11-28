@@ -4768,6 +4768,7 @@
     "playStripePlanPaused": "Tu plan {plan} está en pausa.",
     "firmwareNewestSupportedForDevice": "Tu dispositivo ya está en la versión de firmware compatible más reciente",
     "firmwareSyncRecordingsFirstTitle": "Sincroniza tus grabaciones primero",
+    "pendantAudioUnconfirmedSyncBlocked": "No se pudo confirmar el audio almacenado en tu Pendant. Mantén el Pendant conectado e intenta sincronizar de nuevo.",
     "firmwareSyncRecordingsFirstMessage": "Algunas grabaciones siguen en tu dispositivo. Deja que terminen de sincronizarse con tu teléfono y luego inicia la actualización.",
-    "pendantAudioUnconfirmedSyncBlocked": "No se pudo confirmar el audio almacenado en tu Pendant. Mantén el Pendant conectado e intenta sincronizar de nuevo."
+    "batteryRestartToRefresh": "Reinicia Omi para actualizar"
 }

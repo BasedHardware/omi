@@ -4768,6 +4768,7 @@
     "playStripePlanPaused": "Je {plan}-abonnement is gepauzeerd.",
     "firmwareNewestSupportedForDevice": "Je apparaat heeft al de nieuwste ondersteunde firmwareversie",
     "firmwareSyncRecordingsFirstTitle": "Synchroniseer eerst je opnames",
+    "pendantAudioUnconfirmedSyncBlocked": "De opgeslagen audio op je Pendant kon niet worden bevestigd. Houd je Pendant verbonden en probeer opnieuw te synchroniseren.",
     "firmwareSyncRecordingsFirstMessage": "Sommige opnames staan nog op je apparaat. Laat ze eerst volledig synchroniseren naar je telefoon en start daarna de update.",
-    "pendantAudioUnconfirmedSyncBlocked": "De opgeslagen audio op je Pendant kon niet worden bevestigd. Houd je Pendant verbonden en probeer opnieuw te synchroniseren."
+    "batteryRestartToRefresh": "Start Omi opnieuw op om te vernieuwen"
 }

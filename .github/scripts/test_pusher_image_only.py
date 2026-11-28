@@ -1429,6 +1429,51 @@ class CanaryOnlyWorkflowTest(unittest.TestCase):
             self.assertIn(f'"{path}"', admission.split("CONTROL_PATHS = (", 1)[1].split(")", 1)[0])
             self.assertIn(f"- '{path}'", qualifier)
 
+    def _run_cleanup(self, status_rc, status_out):
+        block = self.blocks["Remove isolated production Pusher canary"]
+        script = "\n".join(
+            line[10:] for line in block.split("        run: |\n", 1)[1].splitlines() if line.startswith("          ") or not line.strip()
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            calls = Path(tmp) / "calls"
+            for tool in ("kubectl", "helm"):
+                stub = Path(tmp) / tool
+                stub.write_text(
+                    "#!/bin/bash\n"
+                    f'echo "{tool} $*" >> "{calls}"\n'
+                    f'if [ "{tool}" = helm ] && [ "$3" = status ]; then printf "%s\\n" "$STATUS_OUT"; exit "$STATUS_RC"; fi\n'
+                    "exit 0\n"
+                )
+                stub.chmod(0o755)
+            env = dict(
+                os.environ,
+                PATH=f"{tmp}:{os.environ['PATH']}",
+                LISTENER_CANARY="prod-omi-listener-canary-7",
+                PUSHER_CANARY="prod-omi-pusher-canary-7",
+                PUSHER_CANARY_CONFIG="prod-omi-backend-config-canary-7",
+                STATUS_RC=str(status_rc),
+                STATUS_OUT=status_out,
+            )
+            result = subprocess.run(["bash", "-c", script], env=env, capture_output=True, text=True)
+            return result, calls.read_text()
+
+    def test_cleanup_uninstalls_an_installed_release(self):
+        result, calls = self._run_cleanup(0, "STATUS: deployed")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("helm -n prod-omi-backend uninstall prod-omi-pusher-canary-7 --wait", calls)
+
+    def test_cleanup_treats_only_helm_not_found_as_absent(self):
+        result, calls = self._run_cleanup(1, "WARNING: kubeconfig is group-readable\nError: release: not found")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn(" uninstall ", calls)
+        self.assertIn("delete configmap prod-omi-backend-config-canary-7", calls)
+
+    def test_cleanup_fails_when_helm_status_fails_for_another_reason(self):
+        result, calls = self._run_cleanup(1, "Error: Kubernetes cluster unreachable: connection refused")
+        self.assertEqual(result.returncode, 1)
+        self.assertNotIn(" uninstall ", calls)
+        self.assertIn("cannot prove the release is gone", result.stderr)
+
     def test_canary_only_validates_production_pusher_inputs(self):
         validation = self.text.split("Validate Environment Input", 1)[1]
         self.assertIn("CANARY_ONLY_INPUT", validation)

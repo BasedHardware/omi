@@ -15878,10 +15878,13 @@ class AppLocalizationsMs extends AppLocalizations {
   String get firmwareSyncRecordingsFirstTitle => 'Segerakkan rakaman anda terlebih dahulu';
 
   @override
+  String get pendantAudioUnconfirmedSyncBlocked =>
+      'Audio yang disimpan pada Pendant anda tidak dapat disahkan. Pastikan Pendant anda disambungkan dan cuba segerakkan semula.';
+
+  @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Sebahagian rakaman masih berada pada peranti anda. Biarkan ia selesai disegerakkan ke telefon anda, kemudian mulakan kemas kini.';
 
   @override
-  String get pendantAudioUnconfirmedSyncBlocked =>
-      'Audio yang disimpan pada Pendant anda tidak dapat disahkan. Pastikan Pendant anda disambungkan dan cuba segerakkan semula.';
+  String get batteryRestartToRefresh => 'Mulakan semula Omi untuk memuat semula';
 }

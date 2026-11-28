@@ -15765,10 +15765,13 @@ class AppLocalizationsTh extends AppLocalizations {
   String get firmwareSyncRecordingsFirstTitle => 'ซิงค์ไฟล์บันทึกเสียงของคุณก่อน';
 
   @override
+  String get pendantAudioUnconfirmedSyncBlocked =>
+      'ไม่สามารถยืนยันเสียงที่บันทึกไว้ใน Pendant ได้ โปรดเชื่อมต่อ Pendant ไว้ แล้วลองซิงค์อีกครั้ง';
+
+  @override
   String get firmwareSyncRecordingsFirstMessage =>
       'ไฟล์บันทึกเสียงบางส่วนยังอยู่ในอุปกรณ์ของคุณ รอให้ซิงค์ไปยังโทรศัพท์เสร็จก่อน แล้วจึงเริ่มการอัปเดต';
 
   @override
-  String get pendantAudioUnconfirmedSyncBlocked =>
-      'ไม่สามารถยืนยันเสียงที่บันทึกไว้ใน Pendant ได้ โปรดเชื่อมต่อ Pendant ไว้ แล้วลองซิงค์อีกครั้ง';
+  String get batteryRestartToRefresh => 'รีสตาร์ท Omi เพื่อรีเฟรช';
 }

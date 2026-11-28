@@ -15822,10 +15822,13 @@ class AppLocalizationsHi extends AppLocalizations {
   String get firmwareSyncRecordingsFirstTitle => 'पहले अपनी रिकॉर्डिंग सिंक करें';
 
   @override
+  String get pendantAudioUnconfirmedSyncBlocked =>
+      'आपके Pendant में सहेजे गए ऑडियो की पुष्टि नहीं हो सकी। Pendant को कनेक्ट रखें और फिर से सिंक करने का प्रयास करें।';
+
+  @override
   String get firmwareSyncRecordingsFirstMessage =>
       'कुछ रिकॉर्डिंग अभी भी आपके डिवाइस पर हैं। उन्हें आपके फ़ोन पर सिंक होने दें, फिर अपडेट शुरू करें।';
 
   @override
-  String get pendantAudioUnconfirmedSyncBlocked =>
-      'आपके Pendant में सहेजे गए ऑडियो की पुष्टि नहीं हो सकी। Pendant को कनेक्ट रखें और फिर से सिंक करने का प्रयास करें।';
+  String get batteryRestartToRefresh => 'रीफ़्रेश करने के लिए Omi पुनः प्रारंभ करें';
 }

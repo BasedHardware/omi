@@ -647,9 +647,10 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                 ? -1
                 : showUnknownBattery
                     ? provider.settingsBatteryLevel
-                    : provider.batteryLevel,
+                    : provider.displayBatteryLevel,
             isCharging: connected != null && provider.isCharging,
             showUnknownBattery: showUnknownBattery,
+            batteryStuck: connected != null && provider.batteryReadingStuck,
           ),
           if (deviceStreaming && canPause) ...[
             DeviceControlsGroup(paused: devicePaused, onToggle: () => _togglePause(capture)),
@@ -695,6 +696,7 @@ extension _DeviceLiveSections on _DeviceSettingsState {
     required int batteryLevel,
     required bool isCharging,
     required bool showUnknownBattery,
+    bool batteryStuck = false,
   }) {
     const gap = SizedBox(height: OmiSpacing.xxl);
     return Builder(builder: (context) {
@@ -739,6 +741,7 @@ extension _DeviceLiveSections on _DeviceSettingsState {
                           batteryLevel: batteryLevel,
                           isCharging: isCharging,
                           showUnknownBattery: showUnknownBattery,
+                          batteryStuck: batteryStuck,
                           heardTodaySeconds: _heardTodaySeconds(context),
                           onDeviceSeconds: local.onDeviceSeconds,
                           phoneQueueSeconds: local.onPhoneSeconds,

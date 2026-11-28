@@ -447,6 +447,9 @@ are not modelled (see the module's table).
   label's conversation fields (`{"user", "conversations", "default_conversation"}`).
 - `OMI_PIPELINE_LAB_STT_ROUTE_CASSETTES`: JSON mapping a route (`parakeet`, `multilingual`) to the cassette pin
   that stands in for it, e.g. `parakeet_local` for production's GPU Parakeet.
+- Legacy uploads keep each fixed piece's selected provider, model, and language. A route mapping supplies the
+  stand-in provider/model; unless it explicitly pins a cassette language, that piece's detected language selects
+  the cassette. When pieces differ, the lab splices the matching cassette words into their own time ranges.
 - A routed engine with no provider/model pin (from the mapping or the route itself) is a miss, never a
   wildcard match.
 - LID answers are recorded once per 30 s probe under `<lab root>/lid/` on a `--stt record-vendor` run with

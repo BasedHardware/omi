@@ -15865,10 +15865,13 @@ class AppLocalizationsLt extends AppLocalizations {
   String get firmwareSyncRecordingsFirstTitle => 'Pirmiausia sinchronizuokite savo įrašus';
 
   @override
+  String get pendantAudioUnconfirmedSyncBlocked =>
+      'Nepavyko patvirtinti „Pendant“ saugomo garso. Palikite „Pendant“ prijungtą ir bandykite sinchronizuoti dar kartą.';
+
+  @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Kai kurie įrašai dar yra jūsų įrenginyje. Leiskite jiems užbaigti sinchronizavimą į telefoną, tada pradėkite atnaujinimą.';
 
   @override
-  String get pendantAudioUnconfirmedSyncBlocked =>
-      'Nepavyko patvirtinti „Pendant“ saugomo garso. Palikite „Pendant“ prijungtą ir bandykite sinchronizuoti dar kartą.';
+  String get batteryRestartToRefresh => 'Paleiskite Omi iš naujo, kad atnaujintumėte';
 }
