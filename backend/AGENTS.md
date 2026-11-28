@@ -213,6 +213,8 @@ Never log raw sensitive data. Use `sanitize()` and `sanitize_pii()` from `utils/
 
 ## Testing
 
+`deploy/state_readers.yaml`: batch-state writes name every reader's minimum version and switch owner (`pytest tests/unit/test_state_readers_registry.py`).
+
 ```bash
 bash test.sh tests/unit/test_x.py  # Start here: just these files
 bash test.sh                       # Local default --changed: CI's PR selection
@@ -221,7 +223,7 @@ bash test-preflight.sh             # Verify env
 npm run test:listen-lifecycle:emulator  # Real Firestore transaction contention for listen cleanup/content
 ```
 
-**Tests are selector-driven.** `scripts/run-unit-ci.sh` is the full GitHub Actions contract: it selects changed-file tests on PRs, runs preflight and type-checking, then invokes `test.sh`; main CI uses it with `--all`. Local pre-push caps runs at 40 files, affected contracts first, and reports deferred coverage. Do not make the hook call the CI runner: bounded push latency protects the normal development loop. The `Backend Unit Tests` workflow fans the same selection out to eight shard jobs (weighted LPT slices, union = the full selection), each under a 900 s wall budget; every file keeps its own pytest process because sharing sessions is blocked by `sys.modules` contamination. Tests that need live services (Redis, Firebase, real API keys) go in `tests/integration/`, which is not part of selector auto-discovery; note in the PR how you ran them.
+**Tests are selector-driven.** `scripts/run-unit-ci.sh` is the CI contract: changed-file tests on PRs, preflight, type-checking, then `test.sh` (`--all` on main). Local pre-push caps at 40 files, contracts first, and reports deferred coverage; never call the CI runner from the hook, so push latency stays bounded. The `Backend Unit Tests` workflow fans the same selection out to eight shard jobs (weighted LPT slices, union = the full selection), each under a 900 s wall budget; every file keeps its own pytest process because `sys.modules` contamination blocks shared sessions. Live-service tests (Redis, Firebase, real API keys) go in `tests/integration/`, outside selector discovery; note in the PR how you ran them.
 
 **Runtime image contracts.** `runtime_images.json` owns image, Dockerfile, context, entrypoint and deploy-workflow registration. `make runtime-image-source-closure` gates source closure and workflow Dockerfile smoke coverage locally and in CI. `make runtime-image-smoke SERVICE=pusher` builds one image, checks every reachable third-party module is installed offline, then imports the registered isolated entrypoint. PR CI builds every registry-selected CPU image; deployment workflows build, smoke, then publish. GPU builds use the same dependency probe but defer full import until model initialization is lazy. Do not add a hand-maintained image-layout test or workflow mapping; add the service to the registry instead.
 
