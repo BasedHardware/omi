@@ -1,6 +1,6 @@
 # Lifecycle v2 serves 1% of production accounts
 
-**What changed:** production now binds `LIFECYCLE_V2_MODE=shadow` and `LIFECYCLE_V2_MODE_SERVE_PERCENT=1` on all six readers: the backend, backend-sync, backend-sync-backfill and backend-integration Cloud Run services, plus GKE backend-listen and pusher. Dev is unchanged. Before this, the key was unbound everywhere and the default `shadow` applied with no cohort. Contract: [Conversation Lifecycle](../../listen_pusher_pipeline.mdx#2-conversation-lifecycle-silence-timeout-path).
+**What changed:** production now binds `LIFECYCLE_V2_MODE=shadow` and `LIFECYCLE_V2_MODE_SERVE_PERCENT=1` on all six readers: the backend, backend-sync, backend-sync-backfill and backend-integration Cloud Run services, plus GKE backend-listen and pusher. `backend-projection-pump` inherits the binding from backend-integration (`derive_from`); it is dark, with both pump flags false. Dev is unchanged. Before this, the key was unbound everywhere and the default `shadow` applied with no cohort. Contract: [Conversation Lifecycle](../../listen_pusher_pipeline.mdx#2-conversation-lifecycle-silence-timeout-path).
 
 **Why:** David ruled on 2026-11-28 to ramp lifecycle v2 to serve: 1% → 10% → 100% by 2026-12-12, with Release expanding each step. The plan and its gates are on SCA-5312. Over the 7 days before this change, `omi_lifecycle_refactor_shadow_total` recorded no error outcome.
 
