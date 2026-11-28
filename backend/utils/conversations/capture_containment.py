@@ -115,7 +115,7 @@ class CaptureContainment:
 
 
 def capture_group_containment_mode() -> str:
-    value = os.getenv(MODE_ENV, 'shadow').strip().lower()
+    value = os.getenv(MODE_ENV, 'off').strip().lower()
     return value if value in _MODES else 'off'
 
 

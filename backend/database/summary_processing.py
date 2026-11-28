@@ -112,6 +112,19 @@ def record_empty_failure(
             'summary_empty_outcome': 'empty_output',
             'summary_empty_version': old.get('version'),
         }
+        first_week = old.get('first_week_summary')
+        conversation_updates: dict[str, Any] = {}
+        if isinstance(first_week, dict):
+            attempts = old.get('first_week_attempts')
+            attempts = attempts if type(attempts) is int and attempts > 0 else 0
+            updates.update(first_week_attempts=attempts + 1, first_week_last_class='attempt_failed')
+            conversation_updates.update(
+                first_week_summary=first_week,
+                first_week_attempts=attempts + 1,
+                first_week_last_class='attempt_failed',
+            )
+            if 'first_week_outcome' not in conversation:
+                conversation_updates['first_week_outcome'] = None
         if blocked:
             blocked_reason = (
                 EMPTY_LIFETIME_BLOCKED_REASON
@@ -119,8 +132,7 @@ def record_empty_failure(
                 else EMPTY_BLOCKED_REASON
             )
             if not enriched:
-                transaction.update(
-                    reference,
+                conversation_updates.update(
                     {
                         'summary_empty_failures': failures,
                         'summary_blocked_reason': blocked_reason,
@@ -134,6 +146,8 @@ def record_empty_failure(
                 summary_seen=enriched,
                 summary_blocked_reason=None if enriched else blocked_reason,
             )
+        if conversation_updates:
+            transaction.update(reference, conversation_updates)
         transaction.update(outbox, updates)
         return EmptyFailureOutcome.BLOCKED if blocked else EmptyFailureOutcome.RETRY
 
@@ -148,3 +162,58 @@ def record_empty_failure(
             raise
         logger.warning('event=summary_empty_failure outcome=unavailable reason=%s', firestore_failure_reason(error))
         return EmptyFailureOutcome.UNAVAILABLE
+
+
+def record_first_week_attempt_failure(
+    client: Any,
+    collection: str,
+    document_id: str,
+    owner: str,
+    token: str,
+    *,
+    expected_version: int | None = None,
+) -> bool:
+    """Persist a failed first-week generation attempt under the active lease fence."""
+    outbox = client.collection(collection).document(document_id)
+
+    @firestore.transactional
+    def commit(transaction: Any) -> bool:
+        old = outbox.get(transaction=transaction).to_dict() or {}
+        if old.get('owner') != owner or old.get('task_token') != token or old.get('dormant'):
+            return False
+        if expected_version is not None and old.get('version') != expected_version:
+            return False
+        first_week = old.get('first_week_summary')
+        if not isinstance(first_week, dict):
+            return False
+        uid = old.get('uid')
+        conversation_id = old.get('conversation_id')
+        if not isinstance(uid, str) or not uid or not isinstance(conversation_id, str) or not conversation_id:
+            return False
+        reference = client.collection('users').document(uid).collection('conversations').document(conversation_id)
+        conversation = reference.get(transaction=transaction).to_dict() or {}
+        if not python_owns_finalization(conversation):
+            return False
+        # A callback may have committed a usable summary and then lost its ack.
+        if conversation.get('summary_output_present') or conversation.get('summary_completed_at'):
+            return False
+        if conversation.get('summary_processing_owner') != owner:
+            return False
+        attempts = old.get('first_week_attempts')
+        attempts = attempts if type(attempts) is int and attempts > 0 else 0
+        next_attempts = attempts + 1
+        transaction.update(
+            outbox,
+            {'first_week_attempts': next_attempts, 'first_week_last_class': 'attempt_failed'},
+        )
+        conversation_updates: dict[str, Any] = {
+            'first_week_summary': first_week,
+            'first_week_attempts': next_attempts,
+            'first_week_last_class': 'attempt_failed',
+        }
+        if 'first_week_outcome' not in conversation:
+            conversation_updates['first_week_outcome'] = None
+        transaction.update(reference, conversation_updates)
+        return True
+
+    return bool(run_transactional(client, commit))

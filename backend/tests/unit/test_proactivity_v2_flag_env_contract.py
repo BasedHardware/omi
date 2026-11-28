@@ -25,15 +25,18 @@ SURFACES = (
     ('cloud_run', 'services', 'backend-sync-backfill'),
     ('cloud_run', 'services', 'backend-integration'),
 )
+# 2026-11-28 (David, card:prod-shadows-settled-retire-the-dead): dual made 0 compare reads in
+# 7 days, so backend hosts serve posthog directly (no served value changes). llm-gateway stays
+# on omi; desktop-backend keeps dual until its workflow env is moved in a follow-up.
 FROZEN_PROD_SOURCES = (
-    (('gke', 'pusher'), 'dual'),
-    (('gke', 'backend-listen'), 'dual'),
+    (('gke', 'pusher'), 'posthog'),
+    (('gke', 'backend-listen'), 'posthog'),
     (('llm_gateway',), 'omi'),
     (('desktop_backend',), 'dual'),
-    (('cloud_run', 'services', 'backend'), 'dual'),
-    (('cloud_run', 'services', 'backend-sync'), 'dual'),
-    (('cloud_run', 'services', 'backend-sync-backfill'), 'dual'),
-    (('cloud_run', 'services', 'backend-integration'), 'dual'),
+    (('cloud_run', 'services', 'backend'), 'posthog'),
+    (('cloud_run', 'services', 'backend-sync'), 'posthog'),
+    (('cloud_run', 'services', 'backend-sync-backfill'), 'posthog'),
+    (('cloud_run', 'services', 'backend-integration'), 'posthog'),
 )
 
 

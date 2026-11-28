@@ -151,7 +151,7 @@ environments:
           SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED:
             value: 'off'
             category: ops_kill
-          CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
+          CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'off', category: rollout}
           TRANSLATION_DEMAND_GATE_ENABLED: {value: 'true', category: rollout}
           TRANSLATION_ONOPEN_ENABLED: {value: 'true', category: rollout}
           TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
@@ -589,7 +589,7 @@ environments:
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
             value: 'true'
             category: ops_kill
-          CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
+          CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'off', category: rollout}
           CLIENT_SUMMARIES_AT_CAP_ENABLED: {value: 'true', category: rollout}
           LLM_GATEWAY_ACCOUNTING_ENABLED: {value: 'true', category: rollout}
           MEMORY_ENABLED:
@@ -1196,7 +1196,7 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
-            CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
+            CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'off', category: rollout}
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
               category: ops_kill
@@ -1613,7 +1613,7 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
-            CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
+            CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'off', category: rollout}
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
               category: ops_kill
@@ -2037,7 +2037,7 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
-            CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
+            CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'off', category: rollout}
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
               category: ops_kill
@@ -2438,7 +2438,7 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
-            CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
+            CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'off', category: rollout}
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
               category: ops_kill
@@ -3089,7 +3089,7 @@ environments:
           SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED:
             value: 'off'
             category: ops_kill
-          CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
+          CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'off', category: rollout}
           TRANSLATION_DEMAND_GATE_ENABLED: {value: 'true', category: rollout}
           TRANSLATION_ONOPEN_ENABLED: {value: 'true', category: rollout}
           TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
@@ -3335,7 +3335,7 @@ environments:
             secret:
               name: prod-omi-backend-listen-private-env
               key: MEDIA_NOISE_MODE_SERVE_UID_SHA256S
-          MEDIA_NOISE_MODE: {value: shadow, category: rollout}
+          MEDIA_NOISE_MODE: {value: 'off', category: rollout}
           MEDIA_NOISE_MODE_SERVE_PERCENT: {value: '0', category: rollout}
           NOTES_SHORT_CLIP_FLOOR: {value: 'true', category: rollout}
           BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED:
@@ -3446,7 +3446,7 @@ environments:
           OMI_FLAGS_FIRESTORE_DATABASE:
             value: omi-flags
             category: service_discovery
-          OMI_FLAGS_SOURCE: {value: dual, category: rollout}
+          OMI_FLAGS_SOURCE: {value: posthog, category: rollout}
           PARAKEET_WINDOW_REPLICA_RECOVERY_ENABLED:
             value: 'false'
             category: ops_kill
@@ -3469,8 +3469,8 @@ environments:
             value: https://us.posthog.com
             category: telemetry
           MENTOR_PIPELINE: {value: cohort, category: rollout}
-          SPEAKER_GROUPING_SHADOW: {value: cohort, category: rollout}
-          SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
+          SPEAKER_GROUPING_SHADOW: {value: 'off', category: rollout}
+          SPEAKER_GROUPING_SHADOW_PERCENT: {value: '0', category: rollout}
           SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
           OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
           PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS:
@@ -3654,7 +3654,7 @@ environments:
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
             value: 'true'
             category: ops_kill
-          CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
+          CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'off', category: rollout}
           CLIENT_SUMMARIES_AT_CAP_ENABLED: {value: 'true', category: rollout}
           LLM_GATEWAY_ACCOUNTING_ENABLED: {value: 'true', category: rollout}
           MEMORY_ENABLED:
@@ -3777,7 +3777,7 @@ environments:
           OMI_FLAGS_FIRESTORE_DATABASE:
             value: omi-flags
             category: service_discovery
-          OMI_FLAGS_SOURCE: {value: dual, category: rollout}
+          OMI_FLAGS_SOURCE: {value: posthog, category: rollout}
           HOSTED_DIARIZATION_API_URL:
             value: http://172.16.160.20/diarizer-batch
             category: service_discovery
@@ -3787,8 +3787,8 @@ environments:
           TRANSCRIPTION_FINAL_PASS_PERCENT: {value: '5', category: rollout}
           TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE: {value: 'true', category: rollout}
           TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED: {value: 'true', category: rollout}
-          TRANSCRIPTION_SHADOW_ENABLED: {value: 'true', category: rollout}
-          TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
+          TRANSCRIPTION_SHADOW_ENABLED: {value: 'false', category: rollout}
+          TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'true', category: rollout}
           TRANSCRIPTION_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
           TRANSCRIPTION_SHADOW_PERCENT: {value: '5', category: rollout}
           TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS: {value: '1200', category: rollout}
@@ -3817,8 +3817,8 @@ environments:
             value: https://us.posthog.com
             category: telemetry
           MENTOR_PIPELINE: {value: cohort, category: rollout}
-          SPEAKER_GROUPING_SHADOW: {value: cohort, category: rollout}
-          SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
+          SPEAKER_GROUPING_SHADOW: {value: 'off', category: rollout}
+          SPEAKER_GROUPING_SHADOW_PERCENT: {value: '0', category: rollout}
           SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
           OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
           OMI_CUSTOMER_DATA_PROJECT:
@@ -3935,6 +3935,9 @@ environments:
             source: environment
           SYNC_TASKS_INVOKER_SA:
             source: environment
+          FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
+            source: literal
+            value: 'false'
           CONVERSATIONS_V3:
             source: literal
             value: 'on'
@@ -4028,6 +4031,9 @@ environments:
         OMI_CUSTOMER_DATA_PROJECT:
           value: based-hardware
           category: service_discovery
+        FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
+          value: 'false'
+          category: ops_kill
         POSTHOG_HOST:
           value: https://us.posthog.com
           category: telemetry
@@ -4194,7 +4200,7 @@ environments:
             OMI_EXTERNAL_LIST_POLLING_CACHE_ENABLED: {value: 'true', category: rollout}
             OMI_EXTERNAL_LIST_POLLING_CACHE_PERCENT: {value: '100', category: rollout}
             VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
-            BATCH_PIPELINE_SHADOW_PERCENT: {value: '25', category: rollout}
+            BATCH_PIPELINE_SHADOW_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR:
               value: '200'
               category: ops_kill
@@ -4307,7 +4313,7 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
-            CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
+            CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'off', category: rollout}
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
               category: ops_kill
@@ -4581,6 +4587,15 @@ environments:
             ENRICHMENT_FRESH_TASKS_QUEUE:
               value: enrichment-fresh
               category: reliability
+            ENRICHMENT_FIRST_WEEK_TASKS_QUEUE:
+              value: enrichment-first-week
+              category: reliability
+            FIRST_WEEK_SUMMARY_DEADLINE_HOURS:
+              value: '168'
+              category: config
+            FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
+              value: 'false'
+              category: ops_kill
             ENRICHMENT_TASKS_HANDLER_URL:
               value: https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run
               category: reliability
@@ -4595,7 +4610,7 @@ environments:
             OMI_FLAGS_FIRESTORE_DATABASE:
               value: omi-flags
               category: service_discovery
-            OMI_FLAGS_SOURCE: {value: dual, category: rollout}
+            OMI_FLAGS_SOURCE: {value: posthog, category: rollout}
             HOSTED_DIARIZATION_API_URL:
               value: http://172.16.160.20/diarizer-batch
               category: service_discovery
@@ -4604,8 +4619,8 @@ environments:
             TRANSCRIPTION_FINAL_PASS_PERCENT: {value: '5', category: rollout}
             TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE: {value: 'true', category: rollout}
             TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED: {value: 'true', category: rollout}
-            TRANSCRIPTION_SHADOW_ENABLED: {value: 'true', category: rollout}
-            TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
+            TRANSCRIPTION_SHADOW_ENABLED: {value: 'false', category: rollout}
+            TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'true', category: rollout}
             TRANSCRIPTION_SHADOW_PERCENT: {value: '5', category: rollout}
             TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS: {value: '1200', category: rollout}
             TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_AUDIO_HOURS: {value: '150', category: rollout}
@@ -4636,8 +4651,8 @@ environments:
               value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
               category: telemetry
             MENTOR_PIPELINE: {value: cohort, category: rollout}
-            SPEAKER_GROUPING_SHADOW: {value: cohort, category: rollout}
-            SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
+            SPEAKER_GROUPING_SHADOW: {value: 'off', category: rollout}
+            SPEAKER_GROUPING_SHADOW_PERCENT: {value: '0', category: rollout}
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             FIREBASE_SIGNER_SERVICE_ACCOUNT:
               value: backend-runtime@based-hardware.iam.gserviceaccount.com
@@ -4790,7 +4805,7 @@ environments:
               value: 'true'
               category: ops_kill
             VAD_CACHE_TTL_SECONDS: {value: '7200', category: rollout}
-            BATCH_PIPELINE_SHADOW_PERCENT: {value: '25', category: rollout}
+            BATCH_PIPELINE_SHADOW_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR:
               value: '200'
               category: ops_kill
@@ -4908,7 +4923,7 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
-            CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
+            CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'off', category: rollout}
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
               category: ops_kill
@@ -5173,6 +5188,15 @@ environments:
             ENRICHMENT_FRESH_TASKS_QUEUE:
               value: enrichment-fresh
               category: reliability
+            ENRICHMENT_FIRST_WEEK_TASKS_QUEUE:
+              value: enrichment-first-week
+              category: reliability
+            FIRST_WEEK_SUMMARY_DEADLINE_HOURS:
+              value: '168'
+              category: config
+            FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
+              value: 'false'
+              category: ops_kill
             ENRICHMENT_TASKS_HANDLER_URL:
               value: https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run
               category: reliability
@@ -5194,7 +5218,7 @@ environments:
             OMI_FLAGS_FIRESTORE_DATABASE:
               value: omi-flags
               category: service_discovery
-            OMI_FLAGS_SOURCE: {value: dual, category: rollout}
+            OMI_FLAGS_SOURCE: {value: posthog, category: rollout}
             SUMMARY_DEBT_REPAIR_ENABLED: {value: 'false', category: rollout}
             HOSTED_DIARIZATION_API_URL:
               value: http://172.16.160.20/diarizer-batch
@@ -5204,8 +5228,8 @@ environments:
             TRANSCRIPTION_FINAL_PASS_PERCENT: {value: '5', category: rollout}
             TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE: {value: 'true', category: rollout}
             TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED: {value: 'true', category: rollout}
-            TRANSCRIPTION_SHADOW_ENABLED: {value: 'true', category: rollout}
-            TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
+            TRANSCRIPTION_SHADOW_ENABLED: {value: 'false', category: rollout}
+            TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'true', category: rollout}
             TRANSCRIPTION_SHADOW_PERCENT: {value: '5', category: rollout}
             TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS: {value: '1200', category: rollout}
             TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_AUDIO_HOURS: {value: '150', category: rollout}
@@ -5223,8 +5247,8 @@ environments:
             DREAM_AGENT_TOKENS_PER_MINUTE: {value: '2000000', category: rollout}
             DREAM_AGENT_CANARY_UID: {value: dream-canary-prod-01, category: rollout}
             MENTOR_PIPELINE: {value: cohort, category: rollout}
-            SPEAKER_GROUPING_SHADOW: {value: cohort, category: rollout}
-            SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
+            SPEAKER_GROUPING_SHADOW: {value: 'off', category: rollout}
+            SPEAKER_GROUPING_SHADOW_PERCENT: {value: '0', category: rollout}
             LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED: {value: 'true', category: rollout}
             LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED: {value: 'true', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
@@ -5390,7 +5414,7 @@ environments:
               value: 'true'
               category: ops_kill
             VAD_CACHE_TTL_SECONDS: {value: '7200', category: rollout}
-            BATCH_PIPELINE_SHADOW_PERCENT: {value: '25', category: rollout}
+            BATCH_PIPELINE_SHADOW_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR:
               value: '200'
               category: ops_kill
@@ -5502,7 +5526,7 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
-            CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
+            CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'off', category: rollout}
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
               category: ops_kill
@@ -5706,7 +5730,7 @@ environments:
             OMI_FLAGS_FIRESTORE_DATABASE:
               value: omi-flags
               category: service_discovery
-            OMI_FLAGS_SOURCE: {value: dual, category: rollout}
+            OMI_FLAGS_SOURCE: {value: posthog, category: rollout}
             HOME_TRANSCRIPTION_PRESENTATION_GATE:
               value: 'true'
               category: ops_kill
@@ -5753,6 +5777,15 @@ environments:
             ENRICHMENT_FRESH_TASKS_QUEUE:
               value: enrichment-fresh
               category: reliability
+            ENRICHMENT_FIRST_WEEK_TASKS_QUEUE:
+              value: enrichment-first-week
+              category: reliability
+            FIRST_WEEK_SUMMARY_DEADLINE_HOURS:
+              value: '168'
+              category: config
+            FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
+              value: 'false'
+              category: ops_kill
             ENRICHMENT_TASKS_HANDLER_URL:
               value: https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run
               category: reliability
@@ -5767,8 +5800,8 @@ environments:
             TRANSCRIPTION_FINAL_PASS_PERCENT: {value: '5', category: rollout}
             TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE: {value: 'true', category: rollout}
             TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED: {value: 'true', category: rollout}
-            TRANSCRIPTION_SHADOW_ENABLED: {value: 'true', category: rollout}
-            TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
+            TRANSCRIPTION_SHADOW_ENABLED: {value: 'false', category: rollout}
+            TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'true', category: rollout}
             TRANSCRIPTION_SHADOW_PERCENT: {value: '5', category: rollout}
             TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS: {value: '1200', category: rollout}
             TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_AUDIO_HOURS: {value: '150', category: rollout}
@@ -5780,8 +5813,8 @@ environments:
               category: reliability
             DREAM_AGENT_PASSES_PER_DAY: {value: '48', category: rollout}
             MENTOR_PIPELINE: {value: cohort, category: rollout}
-            SPEAKER_GROUPING_SHADOW: {value: cohort, category: rollout}
-            SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
+            SPEAKER_GROUPING_SHADOW: {value: 'off', category: rollout}
+            SPEAKER_GROUPING_SHADOW_PERCENT: {value: '0', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             LISTEN_FINALIZATION_DISPATCH_MODE:
@@ -5942,7 +5975,7 @@ environments:
             SYNC_RECORD_DECODE_FAILURE_MEMO:
               value: 'true'
               category: ops_kill
-            BATCH_PIPELINE_SHADOW_PERCENT: {value: '25', category: rollout}
+            BATCH_PIPELINE_SHADOW_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR:
               value: '200'
               category: ops_kill
@@ -6054,7 +6087,7 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
-            CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
+            CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'off', category: rollout}
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
               category: ops_kill
@@ -6247,7 +6280,7 @@ environments:
             OMI_FLAGS_FIRESTORE_DATABASE:
               value: omi-flags
               category: service_discovery
-            OMI_FLAGS_SOURCE: {value: dual, category: rollout}
+            OMI_FLAGS_SOURCE: {value: posthog, category: rollout}
             HOME_TRANSCRIPTION_PRESENTATION_GATE:
               value: 'true'
               category: ops_kill
@@ -6294,6 +6327,15 @@ environments:
             ENRICHMENT_FRESH_TASKS_QUEUE:
               value: enrichment-fresh
               category: reliability
+            ENRICHMENT_FIRST_WEEK_TASKS_QUEUE:
+              value: enrichment-first-week
+              category: reliability
+            FIRST_WEEK_SUMMARY_DEADLINE_HOURS:
+              value: '168'
+              category: config
+            FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
+              value: 'false'
+              category: ops_kill
             ENRICHMENT_TASKS_HANDLER_URL:
               value: https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run
               category: reliability
@@ -6349,8 +6391,8 @@ environments:
               value: '64'
               category: reliability
             MENTOR_PIPELINE: {value: cohort, category: rollout}
-            SPEAKER_GROUPING_SHADOW: {value: cohort, category: rollout}
-            SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
+            SPEAKER_GROUPING_SHADOW: {value: 'off', category: rollout}
+            SPEAKER_GROUPING_SHADOW_PERCENT: {value: '0', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             ACCOUNT_DELETION_DISPATCH_MODE:
@@ -6468,7 +6510,7 @@ environments:
             SYNC_RECORD_DECODE_FAILURE_MEMO:
               value: 'true'
               category: ops_kill
-            BATCH_PIPELINE_SHADOW_PERCENT: {value: '25', category: rollout}
+            BATCH_PIPELINE_SHADOW_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR:
               value: '200'
               category: ops_kill
@@ -6580,7 +6622,7 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
-            CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
+            CAPTURE_GROUP_CONTAINMENT_MODE: {value: 'off', category: rollout}
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
               category: ops_kill
@@ -6773,7 +6815,7 @@ environments:
             OMI_FLAGS_FIRESTORE_DATABASE:
               value: omi-flags
               category: service_discovery
-            OMI_FLAGS_SOURCE: {value: dual, category: rollout}
+            OMI_FLAGS_SOURCE: {value: posthog, category: rollout}
             HOME_TRANSCRIPTION_PRESENTATION_GATE:
               value: 'true'
               category: ops_kill
@@ -6820,6 +6862,15 @@ environments:
             ENRICHMENT_FRESH_TASKS_QUEUE:
               value: enrichment-fresh
               category: reliability
+            ENRICHMENT_FIRST_WEEK_TASKS_QUEUE:
+              value: enrichment-first-week
+              category: reliability
+            FIRST_WEEK_SUMMARY_DEADLINE_HOURS:
+              value: '168'
+              category: config
+            FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
+              value: 'false'
+              category: ops_kill
             ENRICHMENT_TASKS_HANDLER_URL:
               value: https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run
               category: reliability
@@ -6866,8 +6917,8 @@ environments:
               value: '64'
               category: reliability
             MENTOR_PIPELINE: {value: cohort, category: rollout}
-            SPEAKER_GROUPING_SHADOW: {value: cohort, category: rollout}
-            SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
+            SPEAKER_GROUPING_SHADOW: {value: 'off', category: rollout}
+            SPEAKER_GROUPING_SHADOW_PERCENT: {value: '0', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             ACCOUNT_DELETION_DISPATCH_MODE:
@@ -6999,6 +7050,9 @@ environments:
             DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
+            FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
+              value: 'false'
+              category: ops_kill
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             CONVERSATIONS_V3:
@@ -7070,6 +7124,9 @@ environments:
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
+            FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
+              value: 'false'
+              category: ops_kill
             REDIS_DB_HOST:
               value: redis-13151.c1.us-central1-2.gce.redns.redis-cloud.com
             REDIS_DB_PORT:
@@ -7124,6 +7181,9 @@ environments:
               default: prod-omi-frame-requests-temporary
               provisional: false
               category: storage_retention
+            FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
+              value: 'false'
+              category: ops_kill
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             GOOGLE_CLOUD_PROJECT:
@@ -7185,6 +7245,9 @@ environments:
             DAY3_REENGAGEMENT_EMAIL_KILL_SWITCH:
               value: 'false'
               category: lifecycle_email
+            FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
+              value: 'false'
+              category: ops_kill
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             BASE_API_URL:

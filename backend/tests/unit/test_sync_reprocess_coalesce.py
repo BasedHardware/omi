@@ -22,6 +22,7 @@ def state(monkeypatch):
     # Relative epoch clocks exercise coalescing independently of wall-clock
     # history. The age-gate behavior suite explicitly enables its 72h policy.
     monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '0')
+    monkeypatch.setenv('FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED', 'false')
 
     def mutate(key, operation):
         new, result = operation(deepcopy(rows.get(key)))
@@ -289,6 +290,7 @@ def test_sweep_reports_repair_errors_without_failing_successful_retirement(
     if repair_raises:
         repair.side_effect = RuntimeError('query failed')
     monkeypatch.setattr(reprocess, 'sweep', repair)
+    monkeypatch.setattr(sync_router, 'first_week_enabled', lambda: False)
     response = asyncio.run(sync_router.sweep_sync_backfill_sequencer(0))
     assert response.status_code == status
     assert json.loads(response.body)['outcomes'] == {
@@ -865,6 +867,7 @@ def test_only_scheduled_owner_runs_bounded_summary_scan(sync_router, monkeypatch
         tick_counts['near_expiry_admitted'] = near_expiry
     scan = Mock(return_value=tick_counts)
     monkeypatch.setattr(sync_router.summary_debt_repair, 'tick', scan)
+    monkeypatch.setattr(sync_router, 'first_week_enabled', lambda: False)
     response = asyncio.run(sync_router.sweep_sync_backfill_sequencer(0))
     outcomes = json.loads(response.body)['outcomes']
     if enabled:
@@ -875,6 +878,32 @@ def test_only_scheduled_owner_runs_bounded_summary_scan(sync_router, monkeypatch
     else:
         scan.assert_not_called()
         assert 'summary_debt_scanned' not in outcomes
+
+
+def test_first_week_closeout_runs_when_summary_repair_is_disabled(sync_router, monkeypatch):
+    import asyncio
+    import json
+
+    async def run(_executor, fn):
+        return fn()
+
+    monkeypatch.setattr(sync_router, 'run_blocking', run)
+    monkeypatch.setattr(sync_router.uid_sequencer, 'sweep', Mock(return_value={'error': 0}))
+    monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
+    monkeypatch.setattr(reprocess, 'sweep', Mock(return_value={'repaired': 0, 'error': 0}))
+    monkeypatch.setattr(sync_router, 'summary_repair_enabled', lambda: False)
+    monkeypatch.setattr(sync_router, 'first_week_enabled', lambda: True)
+    closeout = Mock(return_value={'scanned': 2, 'closed': 1, 'errors': 0, 'lease_busy': 0})
+    monkeypatch.setattr(sync_router.first_week_summary_closeout, 'tick', closeout)
+
+    response = asyncio.run(sync_router.sweep_sync_backfill_sequencer(0))
+
+    outcomes = json.loads(response.body)['outcomes']
+    assert 'summary_debt_scanned' not in outcomes
+    assert outcomes['first_week_scanned'] == 2
+    assert outcomes['first_week_closed'] == 1
+    assert outcomes['first_week_lease_busy'] == 0
+    closeout.assert_called_once_with()
 
 
 def test_discard_is_terminal_but_does_not_count_as_a_first_summary(state, monkeypatch):

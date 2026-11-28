@@ -245,7 +245,7 @@ def migrate(capsys, monkeypatch, secret_yaml):
 
 def full_overlay(**changes):
     env = {
-        "MEDIA_NOISE_MODE": "shadow",
+        "MEDIA_NOISE_MODE": "off",
         "MEDIA_NOISE_MODE_SERVE_PERCENT": "0",
         "MEDIA_NOISE_MODE_SERVE_UID_SHA256S": DIGEST,
         "STT_CAP_DISPATCH_COHORT": COHORT,

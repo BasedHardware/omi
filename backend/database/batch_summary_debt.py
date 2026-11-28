@@ -55,18 +55,27 @@ def arm_projection_summary(uid, client, transaction, payload, current):
     # eligibility must describe the committed row, not mistake the sentinel
     # for an active local-processing projection.
     candidate = dict(payload)
+    for field in ('first_week_summary', 'first_week_outcome', 'first_week_outcome_at', 'created_at'):
+        if field not in candidate and current and field in current:
+            candidate[field] = current[field]
     if candidate.get('client_processing') is firestore.DELETE_FIELD:
         candidate.pop('client_processing')
     delivery.stamp_projection_debt(candidate)
-    # Literal sites keep these writes in the reviewed lifecycle inventory.
-    if 'summary_title_provenance' in candidate:
-        payload['summary_title_provenance'] = candidate['summary_title_provenance']
-    if 'summary_first_pending_at' in candidate:
-        payload['summary_first_pending_at'] = candidate['summary_first_pending_at']
+    # Keep the two debt clocks as explicit payload sites for the lifecycle inventory.
     if 'summary_due_at' in candidate:
         payload['summary_due_at'] = candidate['summary_due_at']
-    if 'summary_lane' in candidate:
-        payload['summary_lane'] = candidate['summary_lane']
+    if 'summary_first_pending_at' in candidate:
+        payload['summary_first_pending_at'] = candidate['summary_first_pending_at']
+    for field in (
+        'summary_title_provenance',
+        'summary_lane',
+        'first_week_summary',
+        'first_week_outcome',
+        'first_week_outcome_at',
+        'created_at',
+    ):
+        if field in candidate:
+            payload[field] = candidate[field]
 
 
 def verify_projection_finalization(uid, client, transaction, row):

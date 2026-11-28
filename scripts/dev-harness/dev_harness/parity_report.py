@@ -25,7 +25,8 @@ STANDING_SUBSTITUTIONS = (
     "Firestore, Auth and Redis are local emulators; contention, indexes and latency differ",
     "object storage is a local folder (backend/utils/other/local_storage.py)",
     "Cloud Tasks and Cloud Scheduler are the harness's local queue and timer",
-    "hosted GPU services (diarization, speaker embedding, VAD, language gate) are unreachable by design",
+    "hosted GPU services (diarization, VAD, language gate) are unreachable by design; speaker embedding runs "
+    "locally on CPU when the model runtime is installed",
     "real vendor accounts (speech, LLM) are the developer's own keys, with their own limits",
     "telemetry, payments and messaging channels are switched off",
     "the test account's plan and language are whatever the emulator holds",
@@ -159,6 +160,11 @@ def build(cfg: config.HarnessConfig) -> tuple[str, int]:
         lines.append(f"  batch speech worker: {parity_stack.batch_worker_count()} CPU process(es)")
     else:
         lines.append(f"  batch speech worker: NOT RUNNING ({reason}); recordings are never transcribed")
+        findings += 1
+    if parity_stack.voice_embedding_unavailable(cfg) is None:
+        lines.append("  speaker embedding: 1 CPU process (production's /v2/embedding route and model)")
+    else:
+        lines.append("  speaker embedding: NOT RUNNING; speakers are never joined across units or matched to people")
         findings += 1
     selected = os.environ.get(local_scheduler.JOBS_ENV, "").strip().lower()
     if snapshot is None:

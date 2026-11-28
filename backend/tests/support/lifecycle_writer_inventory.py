@@ -3555,7 +3555,12 @@ FIELD_SITES = {
             'current + deadline_seconds()',
             ('summary_blocked_reason', 'summary_due_at', 'summary_empty_failures', 'summary_empty_rearms'),
         ),
-        ('stamp_projection_debt', 'summary_due_at', 'accepted + deadline_seconds()', ('summary_due_at',)),
+        (
+            'stamp_projection_debt',
+            'summary_due_at',
+            'accepted + summary_deadline_seconds(write)',
+            ('summary_due_at',),
+        ),
         ('stamp_projection_debt', 'summary_first_pending_at', 'accepted', ('summary_first_pending_at',)),
     ],
     # The one settled stamp every completed-status writer splats or applies (not the claim's family).

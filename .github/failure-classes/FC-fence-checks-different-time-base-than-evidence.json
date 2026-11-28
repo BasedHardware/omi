@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-fence-checks-different-time-base-than-evidence",
+  "family": "temporal-correctness",
+  "violated_contract": "A transaction fence that proves 'nothing changed since the evidence was measured' must compare the same fields, in the same time base, that the evidence was measured on and that the writer re-reads. Capture grouping measured overlap on the recorded span (recorded_start/recorded_end) but passed that span as the expected window to join_capture_group, which re-checks the stored lifecycle window (started_at/finished_at). The two differ on most phone and desktop rows (sub-second recorded spans vs rounded or VAD-tailed lifecycle windows), so every confirmed same-speech pair failed the fence as a 'conflict' and never grouped (prod 2026-11-27/28: 2 applied vs 47 conflicts in 15 h). Nothing raises; linked captures of one call just render as two Home cards while every component's tests, built on rows whose two windows are equal, stay green.",
+  "canonical_prevention": "Build a fence's expected values from the same snapshot and fields the writer compares (here the freshly read rows' stored started_at/finished_at), and separately assert the evidence basis is unchanged (the fresh row's recorded span still equals the measured span), abstaining otherwise. Pin it with a test that drives the real writer through StrictFirestore on rows whose recorded span differs from the stored window.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_duplicate_capture_policy.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/conversations/duplicate_capture.py",
+    "backend/database/capture_groups.py",
+    "backend/utils/capture/coverage_crossdevice.py"
+  ],
+  "status": "open"
+}

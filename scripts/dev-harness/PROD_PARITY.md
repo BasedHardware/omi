@@ -77,6 +77,26 @@ Without the model runtime or the token the stack still starts, and says so, but
 no batch worker runs: phone and pendant recordings stay "Transcribing", because
 production transcribes them in the batch pipeline, not in a live stream.
 
+### Speakers
+
+The batch worker separates voices inside one recorded unit, which on a phone is
+a file of a few seconds. Joining a voice across the units of a conversation,
+and matching it to a person the account has named, is a later step in the
+backend. It compares voice vectors that production gets from the diarizer
+service's `/v2/embedding` route.
+
+With the model runtime and the token in place the stack runs that route as the
+`voice-embedding` process: production's handler and pinned model
+(`backend/diarizer/embedding.py`), on CPU, on loopback only. The model is
+downloaded on its first start; until it is loaded, callers get the same
+"unavailable" answer as without it. Without the runtime the route is
+unreachable and every unit keeps its own speaker numbers, so a conversation
+shows a new speaker every few seconds. `make dev-parity` says which of the two
+you have.
+
+The whole-conversation second pass (`HOSTED_DIARIZATION_API_URL`) is not served
+locally.
+
 ## Start the stack
 
 ```bash
@@ -211,9 +231,9 @@ harness leaves a document it did not write alone.
 - Cloud Tasks and Cloud Scheduler are the local stand-ins above. Not
   reproduced: IAM, Google-signed tokens, throttling after bursts of errors,
   duplicate delivery.
-- Hosted GPU services (diarization, speaker embedding, VAD, language gate) are
-  unreachable by design; callers take the fallback they take in production
-  when those are down.
+- Hosted GPU services (diarization, VAD, language gate) are unreachable by
+  design; callers take the fallback they take in production when those are
+  down. Speaker embedding is the exception: see "Speakers" below.
 - Vendor accounts are your own keys, with their own limits.
 - Telemetry, payments and messaging channels are off.
 - The local account's plan and language are whatever the emulator holds. On

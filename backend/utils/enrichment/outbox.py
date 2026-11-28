@@ -35,6 +35,8 @@ from config.summary_guarantee import (
     ADMITTED_OWNER,
     deadline_seconds,
     first_summary_pending,
+    first_week_enabled,
+    first_week_open,
     preserves_admitted,
 )
 from config.policy import FirstSummaryPolicy, resolve_stage_policy
@@ -44,7 +46,12 @@ from utils.sync import processing_hold
 from config.record_latency import record_notes_eager_enabled
 from database import record_notes_hold
 from database._client import get_firestore_client
-from database.summary_processing import record_empty_failure, EmptyFailureOutcome
+from database import users as users_db
+from database.summary_processing import (
+    EmptyFailureOutcome,
+    record_empty_failure,
+    record_first_week_attempt_failure,
+)
 from models.finalization_owner import REFUSAL as FINALIZATION_OWNER_REFUSAL, python_owns_finalization
 
 Row: TypeAlias = dict[str, Any]
@@ -272,15 +279,27 @@ def valid_effects_binding(row: dict[str, Any]) -> bool:
         return False
 
 
-def _conversation_finished_at(uid: str, conversation_id: str) -> object:
-    """Read scheduling metadata only; a late obligation is not a fresh conversation."""
+def _conversation_scheduling_metadata(uid: str, conversation_id: str) -> dict[str, Any]:
+    """Read only scheduling fields; never use mark time as conversation creation time."""
     snapshot = (
         get_firestore_client()
         .document(f'users/{uid}/conversations/{conversation_id}')
-        .get(field_paths=['finished_at', 'created_at'], timeout=2, retry=None)
+        .get(
+            field_paths=['finished_at', 'created_at', 'started_at', 'first_week_summary', 'processing_tier'],
+            timeout=2,
+            retry=None,
+        )
     )
-    data = snapshot.to_dict() or {}
+    return snapshot.to_dict() or {}
+
+
+def _finished_at_from_metadata(data: dict[str, Any]) -> object:
     return data.get('finished_at') if data.get('finished_at') is not None else data.get('created_at')
+
+
+def _conversation_finished_at(uid: str, conversation_id: str) -> object:
+    """Read the freshness clock; a late obligation is not a fresh conversation."""
+    return _finished_at_from_metadata(_conversation_scheduling_metadata(uid, conversation_id))
 
 
 def conversation_finished_at(uid: str, conversation_id: str) -> object:
@@ -288,7 +307,7 @@ def conversation_finished_at(uid: str, conversation_id: str) -> object:
     return _conversation_finished_at(uid, conversation_id)
 
 
-def _recent_conversation(uid: str, conversation_id: str, now: float) -> bool:
+def _recent_conversation(uid: str, conversation_id: str, now: float, *, metadata: dict[str, Any] | None = None) -> bool:
     if (
         enrichment_config.route() != 'enrichment_queue'
         or not enrichment_config.fresh_queue()
@@ -296,7 +315,12 @@ def _recent_conversation(uid: str, conversation_id: str, now: float) -> bool:
     ):
         return False
     try:
-        return enrichment_config.recently_finished(_conversation_finished_at(uid, conversation_id), now=now)
+        finished_at = (
+            _conversation_finished_at(uid, conversation_id)
+            if metadata is None
+            else _finished_at_from_metadata(metadata)
+        )
+        return enrichment_config.recently_finished(finished_at, now=now)
     except Exception:
         # Metadata failure keeps work on the established queue; no obligation is lost.
         record_fallback(
@@ -311,10 +335,12 @@ def _recent_conversation(uid: str, conversation_id: str, now: float) -> bool:
 
 
 def dispatch_binding(
-    *, backfill: bool = False, effects_only: bool = False, recent: bool = False
+    *, backfill: bool = False, effects_only: bool = False, recent: bool = False, first_week: bool = False
 ) -> dict[str, str] | None:
     if enrichment_config.route() == 'enrichment_queue':
-        binding = enrichment_config.dispatch_binding(backfill=backfill, effects_only=effects_only, recent=recent)
+        binding = enrichment_config.dispatch_binding(
+            backfill=backfill, effects_only=effects_only, recent=recent, first_week=first_week
+        )
         if valid_dispatch_binding(binding):
             return binding
         record_fallback(
@@ -425,6 +451,24 @@ def mark(
         raise RuntimeError('sync reprocess projection requires production or a Firestore emulator')
     current = time.time() if now is None else now
     stamps: list[tuple[str, str]] = []
+    first_week = None
+    initial_recent = None
+    if not effects_only and first_week_enabled():
+        try:
+            metadata = _conversation_scheduling_metadata(uid, conversation_id)
+        except Exception as error:
+            record_fallback(
+                component='other',
+                from_mode='first_week_metadata',
+                to_mode='retry',
+                reason='unavailable',
+                outcome='exhausted',
+                log=logger,
+            )
+            raise RuntimeError('first-week conversation metadata read failed; retry the outbox mark') from error
+        else:
+            first_week = _first_week_for_obligation(uid, metadata=metadata)
+            initial_recent = _recent_conversation(uid, conversation_id, current, metadata=metadata)
     update = mark_update(
         uid,
         conversation_id,
@@ -435,6 +479,8 @@ def mark(
         effects_only=effects_only,
         batch=mutate is not None,
         snapshot_summary=snapshot_summary,
+        first_week=first_week,
+        initial_recent=initial_recent,
         stamps=stamps,
         sync_hold=sync_hold,
         merge_hold=merge_hold,
@@ -463,6 +509,8 @@ def mark_update(
     policy_id: str | None = None,
     new_dispatch: Callable[[], dict[str, str] | None] | None = None,
     snapshot_summary: bool = False,
+    first_week: dict[str, Any] | None = None,
+    initial_recent: bool | None = None,
     stamps: list[tuple[str, str]] | None = None,
     sync_hold: bool = False,
     merge_hold: bool = False,
@@ -477,7 +525,7 @@ def mark_update(
     open one that predates snapshots; ``stamps`` collects ``(source, policy_id)`` for telemetry after commit.
     """
     candidate: FirstSummaryPolicy | None = None
-    recent: bool | None = None
+    recent = initial_recent
 
     def update(old: Row | None) -> tuple[Row, tuple[Row, bool]]:
         from utils.enrichment.age_gate import parked
@@ -576,6 +624,11 @@ def mark_update(
             )
 
         row.setdefault('summary_lane', 'batch' if batch else summary_delivery.lane({}))
+        if first_week and not isinstance(row.get('first_week_summary'), dict):
+            # Stored once on the row so the deadline, demotion and age-gate readers
+            # never recompute a window from wall-clock age (SCA-4790).
+            row['first_week_summary'] = dict(first_week)
+        open_first_week = first_week_open(row, now=current)
         backfill = row['summary_lane'] == 'backfill' and not first_summary_pending(row)
         # Reserved slots serve first summaries only; refreshes need no clock lookup.
         if (old is None or old.get('dormant')) and first_summary_pending(row) and recent is None:
@@ -588,10 +641,14 @@ def mark_update(
                 task_due_at=row['due_at'],
                 lease_until=0,
                 dispatch=(new_dispatch() if new_dispatch else None)
-                or dispatch_binding(backfill=backfill, effects_only=effects_only, recent=fresh),
+                or dispatch_binding(
+                    backfill=backfill, effects_only=effects_only, recent=fresh, first_week=open_first_week
+                ),
             )
         elif old.get('dormant'):
-            row['dispatch'] = dispatch_binding(backfill=backfill, effects_only=effects_only, recent=fresh)
+            row['dispatch'] = dispatch_binding(
+                backfill=backfill, effects_only=effects_only, recent=fresh, first_week=open_first_week
+            )
         elif not valid_dispatch_binding(row.get('dispatch')):
             row['dispatch'] = None
         wake = old is None
@@ -636,6 +693,20 @@ def _deadline_seconds(row: Row) -> int:
     if snapshot is not None:
         return FirstSummaryPolicy.from_dict(snapshot).first_summary_deadline_seconds
     return deadline_seconds()
+
+
+def _first_week_for_obligation(uid: str, *, metadata: dict[str, Any]) -> dict[str, Any] | None:
+    if not first_week_enabled():
+        return None
+    if metadata.get('processing_tier') == 'historical':
+        return None
+    stored_stamp = metadata.get('first_week_summary')
+    if isinstance(stored_stamp, dict):
+        return dict(stored_stamp)
+    created_at = metadata.get('created_at') or metadata.get('started_at')
+    if created_at is None:
+        return None
+    return users_db.first_week_stamp_for(uid, created_at)
 
 
 def summary_policy_for(row: Row) -> bool:
@@ -879,6 +950,20 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
                 else:
                     record_delivery('summary', 'failed')
                     empty_blocked = True
+        except Exception:
+            if process_context and isinstance(row.get('first_week_summary'), dict):
+                try:
+                    record_first_week_attempt_failure(
+                        get_firestore_client(),
+                        COLLECTION,
+                        document_id,
+                        owner,
+                        task_token,
+                        expected_version=row.get('version'),
+                    )
+                except Exception:
+                    logger.exception('event=first_week_attempt_receipt outcome=unavailable')
+            raise
         finally:
             ADMITTED_OWNER.reset(admitted_token)
             summary_delivery.REPAIR_CONTEXT.reset(context_token)
@@ -962,6 +1047,15 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
         if old is None or old.get('owner') != owner:
             return old, None
         old = {key: value for key, value in old.items() if key != 'deferred_since'}  # A completed callback ends it.
+        if (
+            process_context is not None
+            and summary_policy
+            and summary_seen
+            and isinstance(old.get('first_week_summary'), dict)
+        ):
+            attempts = old.get('first_week_attempts')
+            attempts = attempts if type(attempts) is int and attempts > 0 else 0
+            old.update(first_week_attempts=attempts + 1, first_week_last_class='summarized')
 
         if superseded and retry_revision is not None:
             # An append may precede the repair claim without another outbox
@@ -1129,9 +1223,10 @@ def sweep(
             # identity. Rotate the token in this CAS so old deliveries are stale.
             # Effects and completed-summary backfill keep their binding and custody.
             fresh_queue = enrichment_config.fresh_queue()
+            reserved_queue = enrichment_config.first_week_queue() or fresh_queue
             if (
                 not injected
-                and fresh_queue
+                and reserved_queue
                 and enrichment_config.route() == 'enrichment_queue'
                 and first_summary_pending(row)
                 and not row.get('fresh_demoted')
@@ -1140,7 +1235,7 @@ def sweep(
             ):
                 if recent is None:
                     recent = _recent_conversation(row['uid'], row['conversation_id'], current)
-                desired = dispatch_binding(recent=recent)
+                desired = dispatch_binding(recent=recent, first_week=first_week_open(row, now=current))
                 previous = row['dispatch']
                 if (
                     desired is not None
@@ -1177,6 +1272,7 @@ def sweep(
                     recent=(
                         first_summary_pending(row) and _recent_conversation(row['uid'], row['conversation_id'], current)
                     ),
+                    first_week=first_week_open(row, now=current),
                 )
                 if binding is None:
                     return old, ('unbound', None)

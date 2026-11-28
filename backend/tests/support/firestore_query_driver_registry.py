@@ -166,6 +166,7 @@ BODY_DIGEST = {
     'database.conversations_v3_live._recent_window_query': '6f2c323bfa8df890362c6bdc4796182a70e4c704376bcb4944358560b12edc75',
     'database.conversations_v3._oldest_pending': 'e2da208a3dcbae7d7c7c59335883b422e27dc71c9cfae51568883aa452bcfc57',
     'database.conversations_v3.commit_projection': 'f6f6c894b77c617cd877358fc70396033bde60277f1c47af8e2adaf22fe24ae9',
+    'services.first_week_summary_closeout.durable_outcome_counts': '2d897eaed1ab4b371b208b10e3297bf4f02d7090f0c4f82aa97b25bf8c2d20a2',
     'database.batch_pipeline_conversation_purge_scans._claim': '662c759fc79795f0851e0b18082b7dcb006e109253e45ba1fde2190d542bddf8',
     'database.batch_privacy_late_sweeps.reconcile_batch_privacy_late_sweeps': 'bd0c62aeb7bab5e86e3fdbb73bc9b6cb395a1218923110590d0a8fcaacabd5f6',
     'database.batch_pipeline_conversation_purge_scans.run_job': 'fe5d30b77da198a7e0dc188115c8906fb6446925079a4e96339d36675a55faeb',
@@ -3995,6 +3996,16 @@ _add(
 
 _add(
     SkipEntry(
+        'services.first_week_summary_closeout.durable_outcome_counts',
+        reason='One operator readback after the first-week cohort closes; streams at most nine fixed '
+        'aggregate documents and is not a serving query path. Its reads are included in the SCA-4790 '
+        'maintenance collection budget.',
+        body_digest=BODY_DIGEST['services.first_week_summary_closeout.durable_outcome_counts'],
+    )
+)
+
+_add(
+    SkipEntry(
         'database.client_telemetry_ops.purge_expired_observations',
         reason='Ops retention cleanup streams whole collections and deletes by '
         'reference (expires_at checked in Python, not as a Firestore filter); '
@@ -4324,6 +4335,18 @@ for _method in ('claim', 'sweep', 'sweep_running', 'sweep_held'):
         )
     )
 
+
+_add(
+    DriverEntry(
+        # SCA-4790 close-out: one sparse collection-group page of uncounted
+        # first-week conversations whose stored window has ended, oldest first.
+        'database.first_week_queries.due_first_week_conversations',
+        neutrals={
+            'now': (T0.timestamp(), 'timestamp operand only'),
+            'limit': (100, 'per-query ceiling; the tick time budget bounds the pass'),
+        },
+    )
+)
 
 _add(
     DriverEntry(
