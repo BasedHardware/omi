@@ -359,7 +359,7 @@ env:
   - name: SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED
     value: "off"
   - name: CAPTURE_GROUP_CONTAINMENT_MODE
-    value: "shadow"
+    value: "off"
   - name: NOTES_PACKET_V2_MODE
     value: "off"
   - name: CALLS_RECAP_MODE

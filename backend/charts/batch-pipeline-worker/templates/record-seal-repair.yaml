@@ -97,6 +97,7 @@ spec:
               ports:
                 - {name: metrics, containerPort: 9090}
               env:
+                - {name: FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED, value: {{ .Values.firstWeekSummaryGuaranteeEnabled | quote }}}
                 - {name: PUSHER_PROJECTION_DEBT_DURABLE_ENABLED, value: {{ .Values.recordSealRepair.projectionDebtDurableEnabled | quote }}}
                 - {name: RECORD_SEAL_REPAIR_JOBS, value: {{ .Values.recordSealRepair.jobsDiscovery | quote }}}
                 - {name: RECORD_SEAL_REPAIR_FRESH_ENABLED, value: {{ if hasKey .Values.recordSealRepair "freshEnabled" }}{{ .Values.recordSealRepair.freshEnabled | quote }}{{ else }}"true"{{ end }}}

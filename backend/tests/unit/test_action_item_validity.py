@@ -20,7 +20,7 @@ def test_reference_fixtures(case):
 
 
 def test_shadow_is_identity_and_text_free(monkeypatch, caplog):
-    monkeypatch.delenv(validity.VALIDITY_MODE_ENV, raising=False)
+    monkeypatch.setenv(validity.VALIDITY_MODE_ENV, 'shadow')
     monkeypatch.delenv(validity.VALIDITY_SERVE_PERCENT_ENV, raising=False)
     items = [{'description': 'Send it here'}]
     with caplog.at_level('INFO', logger=validity.__name__):

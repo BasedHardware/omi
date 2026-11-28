@@ -57,6 +57,7 @@ OUTCOMES = frozenset(
         'degraded',
         'cancelled',
         'unknown',
+        'abstained',
     }
 )
 SOURCES = frozenset({'none', 'client', 'import', 'extract', 'integration', 'live', 'sync', 'desktop'})

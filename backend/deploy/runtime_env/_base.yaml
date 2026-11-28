@@ -178,7 +178,7 @@ environment_shared:
           value: 'off'
           category: ops_kill
         CAPTURE_GROUP_CONTAINMENT_MODE:
-          value: shadow
+          value: 'off'
           category: rollout
         NOTES_PACKET_V2_MODE:
           value: 'off'
@@ -662,7 +662,7 @@ environment_shared:
           value: 'true'
           category: ops_kill
         CAPTURE_GROUP_CONTAINMENT_MODE:
-          value: shadow
+          value: 'off'
           category: rollout
         NOTES_PACKET_V2_MODE:
           value: 'off'
@@ -1141,7 +1141,7 @@ environment_shared:
             value: 'true'
             category: ops_kill
           CAPTURE_GROUP_CONTAINMENT_MODE:
-            value: shadow
+            value: 'off'
             category: rollout
           NOTES_PACKET_V2_MODE:
             value: 'off'
@@ -1558,7 +1558,7 @@ environment_shared:
             value: 'true'
             category: ops_kill
           CAPTURE_GROUP_CONTAINMENT_MODE:
-            value: shadow
+            value: 'off'
             category: rollout
           NOTES_PACKET_V2_MODE:
             value: 'off'
@@ -1939,7 +1939,7 @@ environment_shared:
             value: 'true'
             category: ops_kill
           CAPTURE_GROUP_CONTAINMENT_MODE:
-            value: shadow
+            value: 'off'
             category: rollout
           NOTES_PACKET_V2_MODE:
             value: 'off'
@@ -2298,7 +2298,7 @@ environment_shared:
             value: 'true'
             category: ops_kill
           CAPTURE_GROUP_CONTAINMENT_MODE:
-            value: shadow
+            value: 'off'
             category: rollout
           NOTES_PACKET_V2_MODE:
             value: 'off'

@@ -17,6 +17,8 @@ from utils.stt.transcript_admission import AdmissionState, admit_segments, filte
 def clean_env(monkeypatch):
     for suffix in ('', '_SERVE_PERCENT', '_SERVE_UID_SHA256S'):
         monkeypatch.delenv(FLAG + suffix, raising=False)
+    # Stage 1 of the 2026-11-28 retirement: an unset mode is off now, so bind the shadow under test.
+    monkeypatch.setenv(FLAG, 'shadow')
 
 
 def raw(text):

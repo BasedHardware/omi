@@ -109,6 +109,9 @@ def test_first_summary_owner_stamps_creation_and_keeps_stamp_on_coalescing(monke
     from utils.sync import reprocess
     from config.summary_guarantee import first_summary_pending
 
+    # This test exercises the existing first-summary owner policy; first-week
+    # eligibility has its own coverage and must not require a Firestore read here.
+    monkeypatch.setenv('FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED', 'false')
     saved = None
 
     def mutate(_key, operation):

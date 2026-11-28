@@ -274,7 +274,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "DREAM_ON_DEMAND_ENABLED": "true",
         "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED": "true",
         "OMI_SHAPED_AGENT_MODE": "on",
-        "CAPTURE_GROUP_CONTAINMENT_MODE": "shadow",
+        "CAPTURE_GROUP_CONTAINMENT_MODE": "off",
         "NOTES_PACKET_V2_MODE": "off",
         "CALLS_RECAP_MODE": "off",
         "CLIENT_SUMMARIES_AT_CAP_ENABLED": "true",

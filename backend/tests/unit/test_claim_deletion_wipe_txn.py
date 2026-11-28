@@ -49,6 +49,7 @@ setattr(_fake_client_mod, 'delete_collection_recursive', MagicMock())
 setattr(_fake_client_mod, 'document_id_from_seed', MagicMock())
 setattr(_fake_client_mod, 'get_firestore_client', MagicMock())
 setattr(_fake_client_mod, 'get_data_plane_firestore_client', MagicMock())
+setattr(_fake_client_mod, 'run_transactional', MagicMock())
 setattr(_fake_client_mod, 'data_plane_db', getattr(_fake_client_mod, 'db'))
 _install_stub('database._client', _fake_client_mod)
 

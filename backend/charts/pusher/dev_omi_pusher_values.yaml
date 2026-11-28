@@ -283,7 +283,7 @@ env:
   - name: CONVERSATION_SMART_MERGE_FLATTEN_ENABLED
     value: "true"
   - name: CAPTURE_GROUP_CONTAINMENT_MODE
-    value: "shadow"
+    value: "off"
   - name: NOTES_PACKET_V2_MODE
     value: "off"
   - name: CALLS_RECAP_MODE

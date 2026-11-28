@@ -160,8 +160,12 @@ def test_default_shadow_scheduler_does_no_extra_queries():
 
 def test_discovery_invalid_cohorts_do_not_expand_reads():
     for value in ('nan', 'inf', '-1', '101', 'broken'):
-        assert not refactor_modes.cohort_configured('X_MODE', environ={'X_MODE_SERVE_PERCENT': value})
-    assert refactor_modes.cohort_configured('X_MODE', environ={'X_MODE_SERVE_PERCENT': '1'})
+        assert not refactor_modes.cohort_configured(
+            'X_MODE', environ={'X_MODE': 'shadow', 'X_MODE_SERVE_PERCENT': value}
+        )
+    assert refactor_modes.cohort_configured('X_MODE', environ={'X_MODE': 'shadow', 'X_MODE_SERVE_PERCENT': '1'})
+    # An unset mode is off (R-20261128-01, proposed): a cohort alone no longer enables discovery.
+    assert not refactor_modes.cohort_configured('X_MODE', environ={'X_MODE_SERVE_PERCENT': '1'})
 
 
 def test_state_id_is_stable_even_when_best_effort_lock_is_lost(producer):
