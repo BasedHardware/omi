@@ -346,7 +346,7 @@ jobs:
           # without assuming which files grew. No single file regressed —
           # the per-file session cost is unchanged and the drift tracks
           # selection growth. Raise only again with measured evidence.
-          BACKEND_UNIT_STEP_BUDGET_SECONDS: "900"
+          BACKEND_UNIT_STEP_BUDGET_SECONDS: "1020"
           # Kill switch for import-graph selection (on unless set to 0/false/off).
           BACKEND_UNIT_GRAPH_SELECTION: ${{ vars.BACKEND_UNIT_GRAPH_SELECTION }}
           UNIT_MODE: ${{ needs.ci-tier.outputs.unit_mode }}
