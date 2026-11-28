@@ -47,6 +47,8 @@ def test_pusher_auto_deploy_tracks_its_shared_lifecycle_and_observability_import
         # Bound by source admission; a change requires a fresh qualification.
         '.github/scripts/pusher_canary_inverse.py',
         '.github/scripts/pusher_image_rehearsal.py',
+        '.github/scripts/pusher_image_only.py',
+        'backend/scripts/pusher_canary_from_live.py',
         '.github/workflows/gcp_backend_pusher_auto_deploy.yml',
         '.github/workflows/gcp_backend_pusher.yml',
     }

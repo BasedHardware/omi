@@ -1609,13 +1609,13 @@
       "budget_p50_minutes": 8,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 0.05,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder. 2026-10-21 plan B B2: pusher/Dockerfile now copies backend/omi_logging.py, so that file joins the qualification trigger closure; main-push only, the one-minute bump records the trigger change. 2026-10-22 plan B B3: a qualification may name the backend-pusher role image, so backend/Dockerfile.roles joins the trigger closure; expected runs stay main-push-driven with no PR runs, and the one-minute bump records the trigger change. SCA-4763: the canary inverse helper (.github/scripts/pusher_canary_inverse.py) and its import (.github/scripts/pusher_image_rehearsal.py) join the trigger closure because source admission binds them; both change rarely, main-push only with no PR runs, and the one-minute bump records the trigger change",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder. 2026-10-21 plan B B2: pusher/Dockerfile now copies backend/omi_logging.py, so that file joins the qualification trigger closure; main-push only, the one-minute bump records the trigger change. 2026-10-22 plan B B3: a qualification may name the backend-pusher role image, so backend/Dockerfile.roles joins the trigger closure; expected runs stay main-push-driven with no PR runs, and the one-minute bump records the trigger change. SCA-4763: the canary inverse helper (.github/scripts/pusher_canary_inverse.py) and its import (.github/scripts/pusher_image_rehearsal.py) join the trigger closure because source admission binds them; both change rarely, main-push only with no PR runs, and the one-minute bump records the trigger change. Later SCA-4763 fix: the protected verifier (.github/scripts/pusher_image_only.py) and the live-template derivation (backend/scripts/pusher_canary_from_live.py) join the same closure for the same reason; expected runs move from 0 to 0.05/day to record the widened trigger, still main-push only",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -5603,7 +5603,7 @@
     "gcp_backend_pusher_auto_deploy.yml": {
       "name": "Auto Deploy Backend Pusher to GKE (Development)",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory. 2026-10-21 plan B B2: backend/omi_logging.py added to the pusher source-closure paths. 2026-10-22 plan B B3: backend/Dockerfile.roles added \u2014 a qualification may name the backend-pusher role image, so its image definition joins the bake trigger closure. SCA-4763: the canary inverse helper and pusher_image_rehearsal.py added, so a change to the code that produces the canary inverse receipt requires a fresh qualification",
+      "rationale": "Initial workflow inventory. 2026-10-21 plan B B2: backend/omi_logging.py added to the pusher source-closure paths. 2026-10-22 plan B B3: backend/Dockerfile.roles added \u2014 a qualification may name the backend-pusher role image, so its image definition joins the bake trigger closure. SCA-4763: the canary inverse helper and pusher_image_rehearsal.py added, so a change to the code that produces the canary inverse receipt requires a fresh qualification; later SCA-4763 fix: pusher_image_only.py and pusher_canary_from_live.py join the closure because source admission compares them, so a verifier change must re-qualify main",
       "triggers": {
         "push": {
           "branches": [
@@ -5639,6 +5639,8 @@
             "backend/testing/release_fixtures/transcription-release-probe.wav",
             ".github/scripts/pusher_canary_inverse.py",
             ".github/scripts/pusher_image_rehearsal.py",
+            ".github/scripts/pusher_image_only.py",
+            "backend/scripts/pusher_canary_from_live.py",
             ".github/workflows/gcp_backend_pusher_auto_deploy.yml",
             ".github/workflows/gcp_backend_pusher.yml"
           ]
