@@ -180,6 +180,12 @@ environment_shared:
         CAPTURE_GROUP_CONTAINMENT_MODE:
           value: shadow
           category: rollout
+        NOTES_PACKET_V2_MODE:
+          value: 'off'
+          category: rollout
+        CALLS_RECAP_MODE:
+          value: 'off'
+          category: rollout
         TRANSLATION_DEMAND_GATE_ENABLED:
           value: 'true'
           category: rollout
@@ -658,6 +664,12 @@ environment_shared:
         CAPTURE_GROUP_CONTAINMENT_MODE:
           value: shadow
           category: rollout
+        NOTES_PACKET_V2_MODE:
+          value: 'off'
+          category: rollout
+        CALLS_RECAP_MODE:
+          value: 'off'
+          category: rollout
         CLIENT_SUMMARIES_AT_CAP_ENABLED:
           value: 'true'
           category: rollout
@@ -1131,6 +1143,12 @@ environment_shared:
           CAPTURE_GROUP_CONTAINMENT_MODE:
             value: shadow
             category: rollout
+          NOTES_PACKET_V2_MODE:
+            value: 'off'
+            category: rollout
+          CALLS_RECAP_MODE:
+            value: 'off'
+            category: rollout
           SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
             value: 'true'
             category: ops_kill
@@ -1542,6 +1560,12 @@ environment_shared:
           CAPTURE_GROUP_CONTAINMENT_MODE:
             value: shadow
             category: rollout
+          NOTES_PACKET_V2_MODE:
+            value: 'off'
+            category: rollout
+          CALLS_RECAP_MODE:
+            value: 'off'
+            category: rollout
           SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
             value: 'true'
             category: ops_kill
@@ -1917,6 +1941,12 @@ environment_shared:
           CAPTURE_GROUP_CONTAINMENT_MODE:
             value: shadow
             category: rollout
+          NOTES_PACKET_V2_MODE:
+            value: 'off'
+            category: rollout
+          CALLS_RECAP_MODE:
+            value: 'off'
+            category: rollout
           SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
             value: 'true'
             category: ops_kill
@@ -2269,6 +2299,12 @@ environment_shared:
             category: ops_kill
           CAPTURE_GROUP_CONTAINMENT_MODE:
             value: shadow
+            category: rollout
+          NOTES_PACKET_V2_MODE:
+            value: 'off'
+            category: rollout
+          CALLS_RECAP_MODE:
+            value: 'off'
             category: rollout
           SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
             value: 'true'

@@ -676,7 +676,9 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
     )
     payload = re.sub(
         r'("backend(?:-sync|-sync-backfill|-integration)?":\s*\{.*?"env":\s*\[)',
-        r'\1\n        {"name": "CAPTURE_GROUP_CONTAINMENT_MODE", "value": "shadow"},',
+        r'\1\n        {"name": "CAPTURE_GROUP_CONTAINMENT_MODE", "value": "shadow"},'
+        r'\n        {"name": "NOTES_PACKET_V2_MODE", "value": "off"},'
+        r'\n        {"name": "CALLS_RECAP_MODE", "value": "off"},',
         payload,
         flags=re.DOTALL,
     )
