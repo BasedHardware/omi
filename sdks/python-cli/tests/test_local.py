@@ -855,3 +855,46 @@ def test_screenshot_non_json_local_api_error_has_status_code(config_path: Path, 
     assert result.exception.message == "Local Omi Desktop API error (500)"
     assert result.exception.detail == "plain failure"
     assert payload["status_code"] == 500
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["local", "call", "   "],
+        ["local", "search-screen", "   "],
+        ["local", "screenshot", "   "],
+        ["local", "sql", "   "],
+        ["local", "task", "search", "   "],
+        ["local", "task", "complete", "   "],
+        ["local", "task", "delete", "   ", "--yes"],
+    ],
+)
+def test_local_commands_reject_blank_arguments(config_path: Path, cli_runner, argv) -> None:
+    _configure_local_profile(config_path)
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=False) as router:
+        route = router.post("/v1/local/tool").mock(return_value=httpx.Response(200, json=_tool_response({})))
+        result = cli_runner.invoke(app, ["--json", *argv])
+        assert result.exit_code == 1
+        assert not route.called
+
+
+def test_local_search_screen_strips_query(config_path: Path, cli_runner) -> None:
+    _configure_local_profile(config_path)
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        route = router.post("/v1/local/tool").mock(return_value=httpx.Response(200, json=_tool_response([{"id": 7}])))
+        result = cli_runner.invoke(app, ["--json", "local", "search-screen", "  pricing page  "])
+
+    assert result.exit_code == 0, result.output
+    body = json.loads(route.calls[0].request.content)
+    assert body["arguments"]["query"] == "pricing page"
+
+
+def test_local_task_complete_strips_task_id(config_path: Path, cli_runner) -> None:
+    _configure_local_profile(config_path)
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        route = router.post("/v1/local/tool").mock(return_value=httpx.Response(200, json=_tool_response({"ok": True})))
+        result = cli_runner.invoke(app, ["--json", "local", "task", "complete", "  task-1  "])
+
+    assert result.exit_code == 0, result.output
+    body = json.loads(route.calls[0].request.content)
+    assert body == {"name": "complete_task", "arguments": {"task_id": "task-1"}}
