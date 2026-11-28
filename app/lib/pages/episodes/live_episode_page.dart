@@ -6,11 +6,14 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/speaker_labels.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/pages/conversation_capturing/capture_recovery_status.dart';
+import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/conversation_detail/widgets/conversation_detail_tabs.dart';
 import 'package:omi/pages/conversations/capture_state_labels.dart';
+import 'package:omi/pages/conversations/home_rows.dart';
 import 'package:omi/pages/episodes/episode_presentation.dart';
 import 'package:omi/pages/episodes/episode_content.dart';
 import 'package:omi/pages/episodes/finish_capture.dart';
@@ -22,6 +25,7 @@ import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:omi/providers/episode_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/people_provider.dart';
+import 'package:omi/services/experiments/live_conversation_page_gate.dart';
 import 'package:omi/services/live_preview/live_preview_controller.dart';
 import 'package:omi/services/sockets/listen_client_state.dart';
 import 'package:omi/ui/ui.dart';
@@ -29,6 +33,7 @@ import 'package:omi/utils/conversations/conversation_title.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/widgets/capture_sources.dart';
+import 'package:omi/widgets/conversation_bottom_bar.dart';
 
 /// Switch the home IndexedStack to Home (the conversation list) *before* popping the live route so
 /// the user lands there with no flash of the previous page.
@@ -57,6 +62,12 @@ typedef _LegacyShell = ({
 /// live state, Summary (running notes and captured tasks) and the
 /// live Transcript, with "Wrap up now" at the bottom and Pause in the ⋯ menu. With episodes off it
 /// is today's live capture page, unchanged: the transcript with Pause and Finish.
+///
+/// With [LiveConversationPageGate] on, on a v3 account: one look for a conversation in progress, whether or not the
+/// server has made it yet. Until it has, this page draws the conversation page's layout (the title,
+/// Summary and Transcript, Pause and End) over the phone's own live lines. Once the server
+/// lists the conversation in progress, as Home's live row would show it, the page becomes that
+/// conversation's page in place, on Transcript, with no navigation; it stays that page from then on.
 class LiveEpisodePage extends StatefulWidget {
   const LiveEpisodePage({
     super.key,
@@ -89,10 +100,37 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
   /// re-reads it itself; its title lands here when the server names it.
   Timer? _v3Refresh;
 
+  /// [LiveConversationPageGate]: the server's conversation this page has become. Never cleared: the
+  /// conversation page follows its own conversation from here, as when opened from Home's row.
+  ServerConversation? _handedOver;
+  bool _released = false;
+
+  /// The conversation in progress as Home's live row would show it: listed, not hidden, not failed.
+  static ServerConversation? shownLive(ConversationsV3Provider? v3) {
+    if (v3 == null || !v3.v3) return null;
+    final live = v3.live;
+    if (live == null || live.v3?.homeHidden == true || isFailedConversation(live)) return null;
+    return live;
+  }
+
+  /// Gives up what this page holds for the live capture view: its timers, the episode watch and its
+  /// count as an open capture page. At dispose, and when the conversation page takes over (it keeps
+  /// its own).
+  void _release() {
+    if (_released) return;
+    _released = true;
+    _tick?.cancel();
+    _v3Refresh?.cancel();
+    _episodes?.unwatch();
+    ListenClientState.instance.capturePageClosed();
+  }
+
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 2, vsync: this, initialIndex: widget.initialTab == LiveEpisodeTab.transcript ? 1 : 0);
+    // The one-page layout opens on Transcript, as a conversation in progress does on its page.
+    final transcriptFirst = widget.initialTab == LiveEpisodeTab.transcript || LiveConversationPageGate.enabled;
+    _tabs = TabController(length: 2, vsync: this, initialIndex: transcriptFirst ? 1 : 0);
     ListenClientState.instance.capturePageOpened();
     _episodes = context.read<EpisodeProvider?>();
     _episodes?.watch();
@@ -115,11 +153,8 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
 
   @override
   void dispose() {
-    _tick?.cancel();
-    _v3Refresh?.cancel();
-    _episodes?.unwatch();
+    _release();
     _tabs.dispose();
-    ListenClientState.instance.capturePageClosed();
     super.dispose();
   }
 
@@ -202,8 +237,37 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
 
   @override
   Widget build(BuildContext context) {
+    final design = LiveConversationPageGate.enabled;
+    if (_handedOver == null && design && !_finishing && _held == null) {
+      final live = context.select<ConversationsV3Provider?, ServerConversation?>(shownLive);
+      if (live != null) {
+        _handedOver = live;
+        // After this frame: the conversation page counts itself as an open capture page first.
+        WidgetsBinding.instance.addPostFrameCallback((_) => _release());
+      }
+    }
+    final handedOver = _handedOver;
+    if (handedOver != null) {
+      return ConversationDetailPage(
+        key: ValueKey('live_page_conversation_${handedOver.id}'),
+        conversation: handedOver,
+        initialTab: ConversationTab.transcript,
+      );
+    }
     final episodes = context.watch<EpisodeProvider?>();
     if (episodes == null || !episodes.enabled) {
+      if (design && context.select<ConversationsV3Provider?, bool>((p) => p?.v3 ?? false)) {
+        return Builder(
+          builder: (context) => _conversationShell(
+            context,
+            hasCapture: context.select<CaptureProvider, bool>(_hasCapture),
+            canPause: context.select<CaptureProvider, bool>(
+              (c) => EpisodePresentation.canPause(c) && !c.isCallActive,
+            ),
+            paused: context.select<CaptureProvider, bool>((c) => c.isPaused || c.isPhoneMicPaused),
+          ),
+        );
+      }
       // v3 accounts always land here: their EpisodeProvider is suppressed. The shell (app bar,
       // Pause and Finish) selects only what it shows; the transcript subscribes itself. A
       // whole-page Consumer rebuilt the Scaffold on every capture notify (ingress health,
@@ -298,6 +362,111 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
               ],
             )
           : null,
+    );
+  }
+
+  // ---------------------------------------------- one live page, before the server's conversation
+
+  /// The conversation page's layout for a capture the server has not made a conversation of yet:
+  /// "Listening" as the title, Summary (it comes when the conversation ends) and Transcript (the
+  /// phone's live lines), with Pause and End floating over it.
+  Widget _conversationShell(
+    BuildContext context, {
+    required bool hasCapture,
+    required bool canPause,
+    required bool paused,
+  }) {
+    final l10n = context.l10n;
+    final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
+    final hasBar = hasCapture || _finishing || _held != null;
+    return Scaffold(
+      key: const Key('live_conversation_shell'),
+      backgroundColor: OmiColors.surface0,
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        leading: const Center(child: OmiBackButton.circled()),
+        titleSpacing: 0,
+      ),
+      body: Stack(
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const _V3LiveTitle(),
+              ConversationDetailTabs(controller: _tabs, onTap: (_) {}, showVisibility: false),
+              Expanded(
+                child: TabBarView(
+                  controller: _tabs,
+                  children: [
+                    Padding(
+                      key: const Key('live_conversation_shell_summary'),
+                      padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.md, OmiSpacing.md, 0),
+                      child: Align(
+                        alignment: AlignmentDirectional.topStart,
+                        child: Text(
+                          l10n.conversationSummaryWhenItEnds,
+                          style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+                        ),
+                      ),
+                    ),
+                    LiveTranscriptView(
+                      topConversationId: widget.topConversationId,
+                      rejectSpeaker: widget.rejectSpeaker,
+                      jumpToLatestBottom: detailFloatingBarBottom(bottomInset) + detailFloatingBarHeight + 12,
+                      held: _held,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (hasBar)
+            Positioned(
+              key: const ValueKey('live_conversation_shell_bar'),
+              left: OmiSpacing.md,
+              right: OmiSpacing.md,
+              bottom: detailFloatingBarBottom(bottomInset),
+              child: Row(
+                children: [
+                  if (canPause)
+                    OmiIconButton.filled(
+                      key: const Key('capture_pause_button'),
+                      icon: Icon(paused ? Icons.play_arrow_rounded : Icons.pause_rounded, size: 26),
+                      label: paused ? l10n.resume : l10n.pause,
+                      diameter: detailFloatingBarHeight,
+                      fillColor: OmiColors.surface3,
+                      onPressed: _mutePending ? null : () => _toggleMute(context.read<CaptureProvider>()),
+                    ),
+                  const Spacer(),
+                  Semantics(
+                    button: true,
+                    label: l10n.endConversation,
+                    excludeSemantics: true,
+                    onTap: _finishing ? null : () => _stopConversation(context.read<CaptureProvider>()),
+                    child: GestureDetector(
+                      key: const Key('process_now_button'),
+                      behavior: HitTestBehavior.opaque,
+                      onTap: _finishing ? null : () => _stopConversation(context.read<CaptureProvider>()),
+                      child: Container(
+                        height: detailFloatingBarHeight,
+                        alignment: Alignment.center,
+                        padding: const EdgeInsets.symmetric(horizontal: 22),
+                        decoration: BoxDecoration(color: OmiColors.danger, borderRadius: OmiRadius.pillAll),
+                        child: _finishing
+                            ? const OmiSpinner(size: OmiSpinnerSize.small)
+                            : Text(
+                                l10n.endConversation,
+                                maxLines: 1,
+                                style: OmiType.headline.copyWith(color: Colors.white),
+                              ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
     );
   }
 

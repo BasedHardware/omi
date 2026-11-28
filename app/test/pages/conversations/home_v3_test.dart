@@ -46,6 +46,7 @@ import 'package:omi/pages/conversation_detail/widgets.dart' show ConversationTit
 import 'package:omi/pages/conversations/widgets/date_list_item.dart';
 import 'package:omi/pages/conversations/widgets/empty_conversations.dart';
 import 'package:omi/pages/conversations/widgets/v3_live_placeholder_row.dart';
+import 'package:omi/services/experiments/live_conversation_page_gate.dart';
 import 'package:omi/services/live_preview/live_preview_controller.dart';
 import 'package:omi/utils/reliability_experiments.dart';
 import 'package:omi/pages/conversations/widgets/conversation_state_tile.dart';
@@ -260,6 +261,11 @@ class _LiveCapture extends CaptureProvider {
   /// Taps on End: the pendant double-tap's action, without draining a real capture.
   int endCalls = 0;
   String? endedLiveId;
+
+  int pauseCalls = 0;
+
+  @override
+  Future<void> pauseCapture() async => pauseCalls++;
 
   int finishCalls = 0;
   String? finishedRecordingId;
@@ -1620,6 +1626,105 @@ void main() {
       await tester.pump();
       await tester.pump();
       expect(find.descendant(of: title, matching: find.text('Launch checklist')), findsOneWidget);
+      await _dispose(tester, home);
+    });
+  });
+
+  testWidgets('one live page: before the server lists the conversation, the live page has the tabbed layout',
+      (tester) async {
+    LiveConversationPageGate.debugOverride = true;
+    addTearDown(() => LiveConversationPageGate.debugOverride = null);
+    await withClock(Clock.fixed(_now), () async {
+      final home = await _pumpHome(tester, v3: true);
+      home.liveOpen = false;
+      await home.conversationsV3.refresh();
+      await tester.pump();
+      await tester.pump();
+      await tester.tap(find.byType(V3LivePlaceholderRow));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.byKey(const Key('live_conversation_shell')), findsOneWidget);
+      expect(find.byType(ConversationDetailPage), findsNothing);
+      final title = find.byKey(const Key('live_page_v3_title'));
+      expect(find.descendant(of: title, matching: find.text('Listening')), findsOneWidget);
+      // Summary and Transcript, opened on Transcript; Summary says when it comes.
+      expect(find.byKey(const Key('conversation_tab_summary')), findsOneWidget);
+      expect(find.byKey(const Key('conversation_tab_transcript')), findsOneWidget);
+      expect(find.text('Summary when this conversation ends').hitTestable(), findsNothing);
+      await tester.tap(find.byKey(const Key('conversation_tab_summary')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.text('Summary when this conversation ends').hitTestable(), findsOneWidget);
+      // Pause at the start, a red End at the end.
+      final pause = find.byKey(const Key('capture_pause_button'));
+      expect(pause.hitTestable(), findsOneWidget);
+      expect(tester.getRect(pause).right, lessThan(tester.getRect(finishButton).left));
+      expect(find.bySemanticsLabel('End Conversation'), findsOneWidget);
+      await tester.tap(pause);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(home.capture.pauseCalls, 1);
+      await tester.tap(finishButton);
+      await settleDetailTab(tester);
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(home.capture.finishCalls, 1);
+      expect(find.byType(LiveEpisodePage), findsNothing);
+      await _dispose(tester, home);
+    });
+  });
+
+  testWidgets('one live page: the live page becomes the conversation page when the server lists it', (tester) async {
+    LiveConversationPageGate.debugOverride = true;
+    addTearDown(() => LiveConversationPageGate.debugOverride = null);
+    await withClock(Clock.fixed(_now), () async {
+      final home = await _pumpHome(tester, v3: true);
+      home.liveOpen = false;
+      home.publishManualEnds();
+      await home.conversationsV3.refresh();
+      await tester.pump();
+      await tester.pump();
+      await tester.tap(find.byType(V3LivePlaceholderRow));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.byKey(const Key('live_conversation_shell')), findsOneWidget);
+      final route = ModalRoute.of(tester.element(find.byType(LiveEpisodePage)));
+
+      // The page's own re-read finds the conversation: same route, now its conversation page.
+      home.liveOpen = true;
+      await tester.pump(const Duration(seconds: 15));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.byKey(const Key('live_conversation_shell')), findsNothing);
+      expect(find.byType(ConversationDetailPage), findsOneWidget);
+      expect(ModalRoute.of(tester.element(find.byType(ConversationDetailPage))), same(route));
+      expect(find.byKey(const Key('live_conversation_end')), findsOneWidget);
+      expect(find.byKey(const ValueKey('detail_ask_omi')), findsOneWidget);
+
+      // It stays that conversation's page when the server stops listing it as in progress.
+      home.liveOpen = false;
+      await home.conversationsV3.refresh();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.byType(ConversationDetailPage), findsOneWidget);
+      expect(find.byKey(const Key('live_conversation_shell')), findsNothing);
+      await _dispose(tester, home);
+    });
+  });
+
+  testWidgets('one live page: the live page opens as the conversation page when the server already lists it',
+      (tester) async {
+    LiveConversationPageGate.debugOverride = true;
+    addTearDown(() => LiveConversationPageGate.debugOverride = null);
+    await withClock(Clock.fixed(_now), () async {
+      final home = await _pumpHome(tester, v3: true);
+      final context = tester.element(find.byType(ConversationsPage));
+      unawaited(Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const LiveEpisodePage())));
+      await tester.pump();
+      expect(find.byKey(const Key('live_conversation_shell')), findsNothing, reason: 'no frame of the other layout');
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.byType(ConversationDetailPage), findsOneWidget);
+      expect(find.byKey(const Key('live_page_v3_title')), findsNothing);
       await _dispose(tester, home);
     });
   });
