@@ -76,6 +76,8 @@ run_proof "sync/live overlap admission race (coarse hint, contention retry, no t
   "$PYTHON" scripts/sync_live_overlap_contention_emulator_test.py
 run_proof "canonical apply-control read retry (transient / exhausted / wipe race)" \
   "$PYTHON" scripts/canonical_apply_control_retry_emulator_test.py
+run_proof "memory visibility contention (materialization, fresh transactions and commit readback)" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider scripts/memory_visibility_contention_emulator_test.py
 run_proof "destructive gate contention (same-kind block / stale takeover fence)" \
   "$PYTHON" scripts/destructive_gate_contention_emulator_test.py
 # Purge fixtures deliberately refuse cloud fallback. Make a wrong proof host a

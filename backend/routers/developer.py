@@ -158,7 +158,8 @@ from utils.external_read_contract import ignore_unknown_query, pagination_header
 from utils.request_validation import HistoryDays
 from utils.llm.memories import identify_category_for_memory
 from utils.memory.developer_memory_list import read_developer_memories
-from utils.memory.memory_service import MemoryService, fetch_memory_dict
+from utils.memory.canonical_memory_adapter import CanonicalVisibilityRetryError
+from utils.memory.memory_service import MemoryService, fetch_memory_dict, visibility_retry_http_exception
 from testing.parity_pack_v0.live_capture import capture_memory_write
 from utils.memory.memory_system import MemorySystem
 from utils.memory.product_authorization import (
@@ -788,7 +789,10 @@ def update_memory(
     if request.visibility is not None:
         if request.visibility not in ['public', 'private']:
             raise HTTPException(status_code=422, detail="visibility must be 'public' or 'private'")
-        memory_service.update_visibility(uid, memory_id, request.visibility)
+        try:
+            memory_service.update_visibility(uid, memory_id, request.visibility)
+        except CanonicalVisibilityRetryError as exc:
+            raise visibility_retry_http_exception(exc) from exc
     if request.tags is not None or request.category is not None:
         memory_service.update_product_fields(
             uid,
