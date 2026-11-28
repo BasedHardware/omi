@@ -13,6 +13,7 @@ import pytest
 from tests.support.batch_coalescing_scan import scanner
 
 from config import batch_pipeline_coalescing as config
+from config import batch_pipeline_coalescing_protocol as limits
 from database import batch_pipeline_coalescing as rows
 from database.batch_pipeline_coalescing_identity import digest
 from database.batch_pipeline_staging import reap_one
@@ -152,7 +153,7 @@ def test_overlap_is_not_timestamp_dedup_and_releases_predecessor():
 
 
 def test_global_and_per_owner_quotas_decline_without_claiming_upload(monkeypatch):
-    monkeypatch.setattr(config, 'MAX_OWNER_GROUPS', 1)
+    monkeypatch.setattr(limits, 'MAX_OWNER_GROUPS', 1)
     s = store()
     rows.enqueue(s, member('first'), 'key1', 10)
     assert rows.enqueue(s, member('second'), 'key2', 11) is None

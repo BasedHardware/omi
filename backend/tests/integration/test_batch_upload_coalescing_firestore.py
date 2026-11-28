@@ -181,14 +181,14 @@ async def test_restart_after_unit_commit_before_fanout_and_off_does_not_duplicat
     from utils.batch_pipeline import intake
     from utils.batch_pipeline.upload_coalescing import drain_group
     from database import batch_pipeline_coalescing as rows
-    from config import batch_pipeline_coalescing as config
+    from config import batch_pipeline_coalescing_protocol as limits
 
     store, artifacts, objects, uid, cid = runtime
     args, _ = upload_args(tmp_path, uid, cid, 0)
     assert (await intake.accept_upload(**args)).status_code == 202
     snapshot = next(store.client.collection(store.namespace + '_coalesce_groups').stream())
     rows.release_for_open(store, uid, 'bp_' + args['job_id'], time.time())
-    monkeypatch.setattr(config, 'LEASE_SECONDS', 1.0)
+    monkeypatch.setattr(limits, 'LEASE_SECONDS', 1.0)
     finish = rows.finish
 
     def crash(*args):

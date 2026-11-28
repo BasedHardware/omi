@@ -19,6 +19,7 @@ import time
 from prometheus_client import Counter, Gauge, Histogram
 
 from config import batch_pipeline_coalescing as config
+from config import batch_pipeline_coalescing_protocol as limits
 from config.policy import BatchUnitPolicy
 from database import batch_pipeline_coalescing as rows
 from database.batch_pipeline_coalescing_identity import compatibility_key, digest
@@ -107,14 +108,14 @@ def _pack(paths, arguments):
         if name != str(name) or '/' in name or '\\' in name or not name.endswith('.bin'):
             raise ValueError('bounded original upload basename required')
         with open(path, 'rb') as source:
-            data = source.read(config.MAX_MEMBER_BYTES + 1)
+            data = source.read(limits.MAX_MEMBER_BYTES + 1)
         size += len(data)
-        if size > config.MAX_MEMBER_BYTES:
+        if size > limits.MAX_MEMBER_BYTES:
             return None
         files.append(
             {'name': name, 'body': base64.b64encode(data).decode(), 'sha256': hashlib.sha256(data).hexdigest()}
         )
-    if not 0 < len(files) <= config.MAX_FILES or len({f['name'] for f in files}) != len(files):
+    if not 0 < len(files) <= limits.MAX_FILES or len({f['name'] for f in files}) != len(files):
         return None
     # The existing decoder consumes its .bin inputs. Inspect private copies so
     # a declined hold or a failed commit can still use the original admission.
@@ -140,7 +141,7 @@ def _pack(paths, arguments):
             spans = [(unit.capture_at, unit.duration_seconds) for unit in iterator]
         finally:
             iterator.close()
-    if not spans or sum(d for _, d in spans) > config.MAX_AUDIO_SECONDS:
+    if not spans or sum(d for _, d in spans) > limits.MAX_AUDIO_SECONDS:
         return None
     start, end = min(s for s, _ in spans), max(s + d for s, d in spans)
     if not all(math.isfinite(v) for v in (start, end)):
@@ -273,13 +274,13 @@ def _unpack(body, directory):
             raise ValueError('invalid held upload path')
         data = base64.b64decode(file['body'], validate=True)
         size += len(data)
-        if size > config.MAX_MEMBER_BYTES or hashlib.sha256(data).hexdigest() != file['sha256']:
+        if size > limits.MAX_MEMBER_BYTES or hashlib.sha256(data).hexdigest() != file['sha256']:
             raise ValueError('held upload size or hash mismatch')
         path = Path(directory) / name
         with path.open('xb') as target:
             target.write(data)
         paths.append(str(path))
-    if not 0 < len(paths) <= config.MAX_FILES:
+    if not 0 < len(paths) <= limits.MAX_FILES:
         raise ValueError('invalid held file count')
     return package['arguments'], paths
 
