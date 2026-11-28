@@ -203,6 +203,9 @@ def test_v2_upload_compares_recovery_labels_without_firestore(
     # Isolate the comparator from the route's existing legacy-mode lookup,
     # which may read rollout_cohorts when its process cache is cold.
     monkeypatch.setattr(legacy_dark, 'current_mode', lambda _uid: legacy_dark.LegacySyncMode.ON)
+    # Batch is the only admission now (C9-C11): its entitlement lookup is the
+    # route's, not the comparator's, so pin it like the legacy seams were.
+    monkeypatch.setattr(upload_entitlement, 'classify', lambda _uid: 'free')
     firestore = RecordingFirestore()
     # The shape recorder captures query terminals. Spy on reference builders
     # as well to cover direct document reads and writes in this path.

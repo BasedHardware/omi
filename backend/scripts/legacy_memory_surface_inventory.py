@@ -87,7 +87,7 @@ RULES: tuple[InventoryRule, ...] = (
             "backend/utils/conversations/process_conversation.py",
             "backend/routers/conversations.py",
             "backend/routers/listen/conversations.py",
-            "backend/utils/sync/pipeline.py",
+            "backend/utils/sync/legacy_segment_core.py",
             "backend/routers/developer.py",
             "backend/utils/conversations/merge_conversations.py",
         ),

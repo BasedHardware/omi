@@ -148,7 +148,6 @@ _ensure_attrs('utils.byok', ['get_byok_keys', 'set_byok_keys', 'has_byok_keys'])
 _ensure_attrs(
     'utils.cloud_tasks',
     [
-        'enqueue_sync_job',
         'get_sync_tasks_max_attempts',
         'is_audio_merge_dispatch_enabled',
         'is_cloud_tasks_dispatch_enabled',

@@ -56,7 +56,6 @@ from routers import (
     support,
     trends,
     sync,
-    sync_worker,
     batch_pipeline,
     batch_provider_stt,
     pipeline_ledger,
@@ -243,7 +242,6 @@ ROUTER_MOUNTS: tuple[Mount, ...] = (
     Mount(firmware),
     Mount(updates),
     Mount(sync, roles=API_WORKERS),  # uploads (api) and Cloud Tasks /v2/sync-jobs/run (workers)
-    Mount(sync_worker, roles=API_WORKERS),  # OIDC backfill pull-worker control plane
     Mount(batch_pipeline, roles=API_WORKERS),  # GPU worker RPC pull and recovery tasks
     Mount(pipeline_ledger, roles=API),  # operator census and explain reads
     Mount(enrichment, roles=API_WORKERS),  # Cloud Tasks /v2/enrichment/run (lane 9; contract (a) phase 1)

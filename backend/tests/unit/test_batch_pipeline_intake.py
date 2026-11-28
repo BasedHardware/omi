@@ -340,39 +340,6 @@ def test_completed_legacy_content_gets_durable_alias_without_gpu_or_redis(cohort
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('status', ['processing', 'retryable', 'completed'])
-async def test_prior_legacy_receipt_uses_canonical_legacy_recovery_without_staging(monkeypatch, status):
-    from utils.batch_pipeline import intake
-
-    store = MemoryStore()
-    store.rows['content', 'synthetic-owner/content'] = {'status': status, 'job_id': 'expired-legacy'}
-    monkeypatch.setattr(intake, 'FirestoreStore', lambda *a, **kw: store)
-    monkeypatch.setattr(intake, 'current_stage', lambda: 'dev')
-
-    def forbidden(*args, **kwargs):
-        raise AssertionError('legacy receipt entered batch staging')
-
-    monkeypatch.setattr(intake, 'decode_units', forbidden)
-    monkeypatch.setattr(intake, 'artifacts_for', forbidden)
-    response = await intake.accept_upload(
-        uid='synthetic-owner',
-        job_id='retry',
-        content_id='content',
-        paths=['retained.bin'],
-        lane='backfill',
-        recording_age_seconds=60,
-        source='omi',
-        should_lock=False,
-        conversation_id=None,
-        client_device_id=None,
-        client_platform='ios',
-        byok_enabled=True,
-    )
-    assert response is None  # Caller invokes original cap/stale/missing-Redis claim logic.
-    assert not any(table == 'jobs' for table, _ in store.rows)
-
-
-@pytest.mark.asyncio
 async def test_prior_batch_receipt_or_ambiguous_error_never_selects_legacy(monkeypatch):
     from utils.batch_pipeline import intake
 

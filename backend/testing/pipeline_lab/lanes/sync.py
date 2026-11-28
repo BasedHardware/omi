@@ -12,7 +12,7 @@ What this driver runs:
 | Step | Here | Production code? |
 |---|---|---|
 | WAL decode | ``utils.sync.files.decode_files_to_wav`` when the corpus clip is an original ``.bin`` upload; otherwise the clip is already PCM | yes / skipped |
-| VAD split | real ``utils.sync.pipeline.retrieve_vad_segments`` (merge/cap, <1 s drop, segment naming) | yes |
+| VAD split | real ``utils.sync.legacy_segment_core.retrieve_vad_segments`` (merge/cap, <1 s drop, segment naming) | yes |
 | VAD model | ``vad_is_empty`` routed to its own local Silero fallback (``utils.stt.vad._run_file_vad``); prod calls hosted pyannote first | partly |
 | STT | cassette: ``exact`` per segment file (what prod sends) or ``span`` from a conversation cassette | simulated |
 | Empty-result retry, cap/allowance admission, provider selection | not run | - |
@@ -118,7 +118,7 @@ def replay_sync_lane(
     """Replay one conversation. ``recorder`` instead of ``player`` records the
     exact per-segment cassettes a later ``player`` run needs (cold STT step)."""
     from utils.stt.pre_recorded import postprocess_words
-    from utils.sync import pipeline as sync_pipeline
+    from utils.sync import legacy_segment_core as sync_pipeline
     from utils.sync.word_timing import first_word_offset
 
     stt_source = _SegmentSTT(

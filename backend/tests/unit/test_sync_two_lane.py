@@ -328,6 +328,16 @@ def test_sync_backfill_lifecycle_no_longer_owns_the_retired_sequencer():
     assert 'sync-backfill-uid-sequencer' not in jobs
 
 
+def test_retired_sequencer_scheduler_alerts_are_no_longer_provisioned():
+    # C10 deletes the sequencer and its Scheduler job; a train must not recreate the failure/heartbeat alerts,
+    # whose heartbeat condition would page once the sweep logs stop (the live policies are disabled at deploy).
+    action = (REPOSITORY_ROOT / '.github/actions/sync-backfill-lifecycle/action.yml').read_text()
+    assert 'Provision backfill sequencer Scheduler execution alerts' not in action
+    assert 'sync_backfill_uid_sequencer_scheduler' not in action
+    assert 'scheduler_${KIND}' not in action
+    assert 'action=sweep_summary outcome=done' not in action
+
+
 def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
     root = REPOSITORY_ROOT
     action = (root / '.github/actions/sync-backfill-lifecycle/action.yml').read_text()
@@ -568,21 +578,6 @@ def test_production_cloud_run_only_smokes_the_promoted_serving_api():
         'gcloud run services describe backend --project=${{ inputs.project_id }}'
         in by_name['Verify validated revisions are still current']['run']
     )
-
-
-def test_static_processed_segment_marker_follows_partial_result_checkpoint():
-    """Static ordering contract for retry-safe partial-result persistence."""
-    pipeline = (Path(__file__).resolve().parents[2] / 'utils/sync/pipeline.py').read_text()
-    checkpoint = pipeline.index("_update_sync_job_for_run(job_id, active_run_lock_token, {'partial_result': partial})")
-    durable_checkpoint = pipeline.index('checkpoint_sync_content_partial_result(', checkpoint)
-    marker = pipeline.index('_add_processed_segment_for_run(job_id, active_run_lock_token, path)', checkpoint)
-
-    assert checkpoint < durable_checkpoint < marker
-    durable_call = pipeline[durable_checkpoint:marker]
-    assert 'run_token=active_run_lock_token' in durable_call
-    assert 'run_epoch=active_run_lock_epoch' in durable_call
-    assert "set(partial_result.get('new_memories') or [])" in pipeline
-    assert 'get_sync_content_partial_result' in pipeline
 
 
 def test_segment_identity_survives_job_directory_change(tmp_path, monkeypatch):

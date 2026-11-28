@@ -44,15 +44,9 @@ Token read failures propagate on enforcement; shadow failures are counted and
 leave the original live result/exception intact.
 
 Batch memo entries belong to one sync/pump attempt, including inline sync, and
-close on every exit. The pull worker opens its attempt before its first await,
-including preflight/convergence/cleanup; the shared coordinator opens a nested
-attempt for both Cloud Tasks and pull execution. The worker supervisor exposes
-the privacy counter families in [`COUNTERS`](../../utils/sync/worker_privacy_metrics.py)
-at `/metrics`, preserving child counters
-across exit/SIGKILL via Prometheus mmap files and removing each child's files
-only after the process group is reaped. The worker chart enables PodMonitoring
-by default. Include that installed worker target in all-plane coverage before
-satisfying the [evidence gate](#deploy-and-ramp); no 14-day window applies.
+close on every exit. The legacy sync pull worker and its privacy-metrics
+supervisor were deleted with legacy sync (2026-11-17, plan C C9-C11); it was
+never installed, so all-plane coverage has no worker target.
 A missing scrape or denominator blocks qualification.
 Transactions reusing a batch memo read the token in their
 conflict set. Existing transactional legal-hold fences retain both live authority
@@ -124,7 +118,7 @@ The denominator for qualification is shadow **hits**, not cold misses. Both
 Cloud Run keep-lists retain it; GKE PodMonitoring retains application counters
 without a name keep-list. The GPU worker registers the counter on its private
 metrics registry, and its pod parent merges each child's series with a
-`worker_process` label. Isolated sync workers fold the counter across exits.
+`worker_process` label.
 
 Proposed ramp after the lead verifies writer-fence coverage on every plane:
 hour 0–2 set `privacy_negative_lookup_cache:100` and `privacy_checks_shadow:100`

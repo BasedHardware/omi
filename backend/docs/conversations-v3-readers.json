@@ -1063,11 +1063,7 @@
     "policy": "both",
     "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
   },
-  "backend/utils/sync/minimal_redrive.py:get_conversation": {
-    "policy": "both",
-    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
-  },
-  "backend/utils/sync/pipeline.py:get_conversation": {
+  "backend/utils/sync/legacy_segment_core.py:get_conversation": {
     "policy": "both",
     "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
   },

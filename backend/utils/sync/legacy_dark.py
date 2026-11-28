@@ -1,21 +1,21 @@
 """Legacy-sync kill switch ("legacy dark"): contract (h) of the legacy-retire swarm.
 
-One runtime switch, ``rollout_cohorts/_ramp.envs.<env>.legacy_sync``, moves the
+Historical contract (``current_mode()`` is now hard-wired to ``dark``; see below):
+one runtime switch, ``rollout_cohorts/_ramp.envs.<env>.legacy_sync``, moved the
 legacy sync lane through ``on`` -> ``draining`` -> ``dark`` without a deploy.
 The value is read through ``utils.rollout.runtime_percent.legacy_sync_mode``
 (contract (f): 30s TTL; a read error keeps the last-known-good mode, a process that
 never read the document serves on). This module owns what
 the legacy call sites do with it:
 
-* ``on``: today's behaviour, byte for byte.
+* ``on``: the pre-deletion legacy behaviour.
 * ``draining``: no new legacy admission and no new sequencer owner. Accepted
   legacy work (running tasks, ``sync_backfill_pending`` entries) finishes.
 * ``dark``: as ``draining``, and the sequencer sweep stops claiming.
 
-Fail-safe direction. A read error keeps the last-known-good mode (SCA-2965:
-serving ``on`` there re-created legacy jobs after legacy went dark). A process
-with no mode at all (reader absent, or an exception here) serves ``on``. Writing
-``on`` to ``_ramp`` remains the one-write rollback (h, "Reversibility window").
+Legacy transcription is deleted (plan C C9-C11), so the served mode is always
+``dark`` (``current_mode``): neither the ramp document nor a read failure can
+select a path that no longer exists. Rollback is an image redeploy.
 
 The double-processing fence (h, invariant 4) is decided here from the content
 ledger row the batch intake already reads. Call sites only translate the
@@ -88,6 +88,7 @@ class LegacyDarkReason(StrEnum):
     SEQUENCER_REGISTRATION_SKIPPED = 'sequencer_registration_skipped'
     SEQUENCER_OWNS_JOB = 'sequencer_owns_job'
     SEQUENCER_OWNER_ACTIVE = 'sequencer_owner_active'
+    LEGACY_RETIRED = 'legacy_retired'
 
 
 class LegacyOwnership(StrEnum):
@@ -146,38 +147,17 @@ def _publish_mode(mode: LegacySyncMode) -> None:
         pass
 
 
-def _fallback(source: str) -> LegacySyncMode:
-    try:
-        OMI_LEGACY_SYNC_MODE_READ_TOTAL.labels(source=source).inc()
-    except Exception:
-        pass
-    _publish_mode(LegacySyncMode.ON)
-    return LegacySyncMode.ON
-
-
 def current_mode(uid: str | None = None) -> LegacySyncMode:
-    """The served mode. Never raises; every failure serves ``on``."""
-    try:
-        # Imported per call (a cached module lookup): router test harnesses replace
-        # ``utils`` wholesale, and a missing reader must serve ``on``, not fail import.
-        from utils.rollout import runtime_percent
-    except Exception:  # ImportError, or a harness's stub package without __spec__
-        return _fallback('absent')
-    try:
-        raw: object = runtime_percent.legacy_sync_mode(uid)
-    except NotImplementedError:
-        # The (f) stub before lane 6's implementation: the switch does not exist yet.
-        return _fallback('absent')
-    except Exception as error:
-        logger.error('event=legacy_dark action=mode_read outcome=error exception_type=%s', type(error).__name__)
-        return _fallback('error')
-    try:
-        mode = LegacySyncMode(raw)
-    except ValueError:
-        logger.error('event=legacy_dark action=mode_read outcome=malformed')
-        return _fallback('malformed')
-    _publish_mode(mode)
-    return mode
+    """The served mode: always ``dark``.
+
+    Legacy transcription, the backfill sequencer and the legacy worker were
+    deleted (plan C C9-C11) after the 2026-11-04 dark switch soaked. ``on`` and
+    ``draining`` no longer name a runnable path, so neither the ramp document
+    nor a read failure can select them; rollback is an image redeploy. The
+    ``uid`` argument is kept for call-site compatibility.
+    """
+    _publish_mode(LegacySyncMode.DARK)
+    return LegacySyncMode.DARK
 
 
 def legacy_admission_allowed(mode: Optional[LegacySyncMode] = None, *, uid: str | None = None) -> bool:
@@ -424,12 +404,19 @@ def fence_response(decision: FenceDecision, *, total_files: int, lane: str) -> O
         return sync_content_in_progress_response(decision.job_id)
     if decision.action is FenceAction.RETRY:
         record_dark_ack(decision.reason or LegacyDarkReason.UNKNOWN)
-        retry_after = decision.retry_after_seconds or DARK_RETRY_AFTER_SECONDS
+        # Clamp to the short fence hint: released clients turn a job-less
+        # ``sync_content_in_progress`` into an account-wide edge cooldown for the
+        # whole Retry-After, so a 24 h repeat-failure pause on one recording would
+        # stall every other upload. The fence re-reads the pause on each attempt.
+        retry_after = min(decision.retry_after_seconds or DARK_RETRY_AFTER_SECONDS, DARK_RETRY_AFTER_SECONDS)
         return JSONResponse(
             status_code=409,
             headers={'Retry-After': str(retry_after)},
             content={
-                'code': 'sync_content_retry_later',
+                # Released clients honor Retry-After only for this existing 409 code.
+                # A stranded/capped claim has no live owner to poll.
+                'code': 'sync_content_in_progress',
+                'job_id': None,
                 'reason': 'dependency_warming',
                 'detail': 'This audio will be processed shortly; local audio was not consumed',
                 'poll_after_ms': retry_after * 1000,
@@ -450,7 +437,8 @@ def admission_refused_response() -> JSONResponse:
         status_code=409,
         headers={'Retry-After': str(DARK_RETRY_AFTER_SECONDS)},
         content={
-            'code': 'sync_content_retry_later',
+            'code': 'sync_content_in_progress',
+            'job_id': None,
             'reason': 'dependency_warming',
             'detail': 'Sync is moving to a new pipeline; local audio was not consumed',
             'poll_after_ms': DARK_RETRY_AFTER_SECONDS * 1000,

@@ -43,19 +43,15 @@ Revision identity is **the executing artifact**, distinct from `_ramp.revision`:
 - Cloud Run: `revision=K_REVISION`; `revision_name=K_REVISION` is also emitted
   because the existing P4 guard joins that label to traffic revisions.
 - GKE: `revision=ROLLOUT_POD_TEMPLATE_HASH`, injected through the downward API
-  from `metadata.labels['pod-template-hash']`. This covers listen, pusher, GPU
-  batch and CPU sync worker charts and propagates to their children.
+  from `metadata.labels['pod-template-hash']`. This covers listen, pusher and GPU
+  batch charts and propagates to their children.
 - Other stamped processes: `OMI_BACKEND_RELEASE_SHA` is the fallback identity;
   an unstamped process explicitly reports `unknown`. `revision_name` is empty
   outside Cloud Run. No UID, request, conversation or ramp revision is a label.
 
 Each process has one value series per flag. Existing `name` and `source` labels
 are unchanged. GPU supervision adds its existing `worker_process` label while
-merging child expositions. Isolated sync jobs write live gauges to the existing
-Prometheus mmap directory, and their parent exposes those gauges with its
-existing privacy metrics. The mmap reader adds `pid` to distinguish processes.
-The parent never substitutes its own `_ramp` cache; after child exit its gauges
-are removed, while privacy counters retain their existing accumulated totals.
+merging child expositions.
 
 ## Entrypoints and collection
 
@@ -69,9 +65,7 @@ with the three `omi_runtime_percent*` families added to its allowlist.
 Pusher uses its default registry. The GPU batch entrypoint
 `diarizer.batch_pipeline_runtime.health_server` explicitly registers the same
 exporter on its private registry; both single-process and supervised modes
-serve it on the existing `8080/metrics`. The CPU sync worker exposes each active
-`utils.sync.worker_job` child's own gauges through `WorkerPrivacyMetrics` on
-that same port. Existing PodMonitoring selectors cover those serving ports;
+serve it on the existing `8080/metrics`. Existing PodMonitoring selectors cover those serving ports;
 no new monitor, public endpoint, sidecar, IAM grant or external configuration is
 required. The sync Cloud Monitoring bridge already imports the `omi_` prefix.
 
@@ -94,6 +88,5 @@ coverage and any zero-instance policy remain the guard's responsibility.
 
 Unit coverage: `tests/unit/test_runtime_percent_export.py` exercises the real
 scrape exposition, runtime values, TTL/pending/LKG, revision labels, GPU child
-merge, Cloud Run allowlists and rendered PodMonitoring/port identity;
-`tests/unit/test_sync_worker_privacy_metrics.py` exercises a real mmap child
-through normal exit and SIGKILL. Existing runtime-percent tests cover admission.
+merge, Cloud Run allowlists and rendered PodMonitoring/port identity.
+Existing runtime-percent tests cover admission.

@@ -15,11 +15,6 @@
     "batch-pipeline-worker": {
       "platform": "gke",
       "current_image": "batch-pipeline-worker"
-    },
-    "sync-backfill-worker": {
-      "platform": "gke",
-      "current_image": "backend",
-      "image_built_elsewhere": "No pilot is installed by this declaration."
     }
   }
 }

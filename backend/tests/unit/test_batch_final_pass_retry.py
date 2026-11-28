@@ -185,7 +185,6 @@ def test_cas_removes_due_field_when_closing_receipt():
 @pytest.mark.parametrize('edge', ['enrichment', 'sync'])
 def test_existing_task_edges_dispatch_speaker_kind_without_enrichment(ready, monkeypatch, edge):
     monkeypatch.setenv('OMI_ENV_STAGE', 'offline')
-    monkeypatch.setattr(sync.uid_sequencer, 'production_fence_mode', lambda: sync.SyncLedgerFenceMode.LEGACY)
     monkeypatch.setattr(sync, 'enrichment_response', lambda *a: pytest.fail('full enrichment route called'))
     monkeypatch.setattr(enrichment, 'consume', lambda *a: pytest.fail('full enrichment consumer called'))
     module = enrichment if edge == 'enrichment' else sync

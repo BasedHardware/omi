@@ -316,6 +316,8 @@ runs:
         # Elsewhere reconcile the queue the manifest routes backfill to, defaulting to sync-backfill.
         BACKFILL_QUEUE="$(sed -n 's/^SYNC_BACKFILL_TASKS_QUEUE=//p' <<<"${BACKFILL_ENV:-}" | tail -n 1)"
         BACKFILL_QUEUE="${BACKFILL_QUEUE:-sync-backfill}"
+        # Batch backfill enrichment (sync_reprocess, SYNC_BACKFILL_TASKS_QUEUE) still
+        # delivers through this queue after the legacy sequencer's deletion (C10).
         # Keep the train ceiling of 90, bounded by the live worker cap x concurrency 6.
         # The 15/s rate caps starts, not in-flight work; the concurrency limit below
         # independently prevents dispatch beyond worker capacity, including bursts.
@@ -356,7 +358,7 @@ runs:
             --min-backoff=5s \
             --max-backoff=60s
         fi
-        # The fresh lane and the fallback route in _enqueue_sync_job_routed
+        # Enrichment and batch final-pass tasks
         # deliver through the main sync-jobs queue (SYNC_TASKS_QUEUE), whose
         # throughput limits another team owns; update-only reconciliation
         # here still caps attempts so a deferral chain ended through the 409

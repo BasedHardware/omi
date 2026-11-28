@@ -1,8 +1,8 @@
 """Static tripwire: the enrichment callback and its frozen legacy copy stay identical.
 
-C2 moved the ``sr-`` callback to ``utils/enrichment/callback.py``. ``utils/sync/pipeline.py`` is frozen
-(#21932/#20662) and keeps its copy for the non-coalescing direct path, so a change to either body must be
-mirrored until the legacy copy is deleted (C11). Log calls are excluded: the new copy logs no conversation id.
+C2 moved the ``sr-`` callback to ``utils/enrichment/callback.py``. Cap-hold recovery still runs the
+legacy copy, now in ``utils/sync/legacy_segment_core.py`` (moved out of the deleted ``pipeline.py``), so a
+change to either body must be mirrored until the C11 cap-hold rehome deletes that module and this test. Log calls are excluded: the new copy logs no conversation id.
 This compares source structure only; behaviour is covered by the callback tests that drive the legacy copy
 and by the batch enrichment tests that drive this one.
 """
@@ -41,7 +41,7 @@ def _shape(node: ast.FunctionDef) -> str:
 
 
 def test_callback_body_matches_the_legacy_copy():
-    legacy = _function('utils/sync/pipeline.py', '_reprocess_conversation_after_update')
+    legacy = _function('utils/sync/legacy_segment_core.py', '_reprocess_conversation_after_update')
     moved = _function('utils/enrichment/callback.py', 'enrich_conversation')
     assert ast.dump(legacy.args) == ast.dump(moved.args)
     assert _shape(legacy) == _shape(moved)
@@ -65,12 +65,12 @@ def test_callback_helpers_share_the_legacy_custody_primitive():
         'require_transcript_decoded': ('utils.enrichment.admission', 'require_transcript_decoded'),
         '_run_conversation_created_webhook': ('utils.enrichment.admission', 'run_created_webhook'),
     }
-    assert shared_imports('utils/sync/pipeline.py') == expected
+    assert shared_imports('utils/sync/legacy_segment_core.py') == expected
     assert shared_imports('utils/enrichment/callback.py') == expected
 
 
 def test_lineage_retry_language_matches_the_legacy_sentinel():
-    legacy = ast.parse((BACKEND / 'utils/sync/pipeline.py').read_text())
+    legacy = ast.parse((BACKEND / 'utils/sync/legacy_segment_core.py').read_text())
     values = [
         node.value.value
         for node in legacy.body

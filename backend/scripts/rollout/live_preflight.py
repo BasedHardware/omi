@@ -97,7 +97,6 @@ def image_family(image: str | None) -> str | None:
         'backend-workers',
         'backend-realtime',
         'backend-gateway',
-        'backend-sync-backfill-worker',
     }:
         return 'backend'
     if image in {'pusher', 'backend-pusher'}:

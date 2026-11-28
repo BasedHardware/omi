@@ -1,11 +1,9 @@
-"""Fenced run-lease helpers shared by the pipeline and the uid sequencer.
+"""Fenced run-lease helpers for sync ledger completion.
 
-This module is the lightweight top-level seam for ledger completion: importing
-``utils.sync.pipeline`` here would drag its heavy dependency graph (pydub,
-numpy, providers) into every ``uid_sequencer`` importer, so the fenced
-completion boundary — which only needs the database layer — lives on its own.
-The pipeline re-exports these names, so catch sites and test seams keep
-working unchanged.
+The lightweight seam for the fenced completion boundary, which only needs the
+database layer. Its legacy callers (the job pipeline and the uid sequencer) were
+deleted on 2026-11-17 (plan C C9-C11); ``routers/sync.py`` and the batch path
+keep importing it from here.
 """
 
 from __future__ import annotations

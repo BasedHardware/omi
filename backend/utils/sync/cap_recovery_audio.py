@@ -7,7 +7,7 @@ from config.sync_safety_wal import sync_safety_wal_enabled
 from utils.executors import run_blocking, db_executor, storage_executor, sync_executor
 from utils.sync import recording_lineage
 from utils.sync.files import get_timestamp_from_path, get_wav_duration
-from utils.sync.pipeline import retrieve_vad_segments, cleanup_recovered_sync_files
+from utils.sync.legacy_segment_core import retrieve_vad_segments, cleanup_recovered_sync_files
 from utils.sync.safety_wal_coverage import apply_safety_wal_coverage
 from utils.capture.sync_coverage import (
     apply_sync_coverage as apply_sync_wal_audio_coverage,

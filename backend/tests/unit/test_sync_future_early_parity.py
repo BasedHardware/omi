@@ -221,7 +221,6 @@ def test_early_placement_and_coverage_implementations_are_main_bytes():
     for path in [
         'backend/utils/batch_pipeline/capture_decode.py',
         'backend/utils/capture/batch_coverage.py',
-        'backend/utils/sync/pipeline.py',
         'backend/utils/sync/wal_audio_coverage.py',
     ]:
         actual = without_retiring_banner((ROOT / path).read_text())
@@ -501,7 +500,7 @@ def test_existing_gpu_scheduler_filters_unknown_work_fields_but_retains_full_job
 def test_default_staging_preserves_main_clock_and_bytes(monkeypatch, tmp_path, stamp):
     from datetime import datetime, timezone
     from tests.unit.test_sync_capture_time_skew import _Upload
-    from utils.sync import pipeline
+    from utils.sync import legacy_segment_core as pipeline
     from utils.sync.capture_clock import SyncCaptureTimeRejected
 
     monkeypatch.setenv('SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'false')

@@ -18,7 +18,7 @@ from utils.stt.prerecorded_health import CREDIT_AUTH, PROVIDER_ERROR, note_provi
 from utils.sync import empty_success_guard
 from utils.sync.empty_success_guard import GUARD_TOTAL, settle
 
-_PIPELINE = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync', 'pipeline.py')
+_PIPELINE = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync', 'legacy_segment_core.py')
 
 
 def _wav(path: Path, seconds: float = 8.0) -> str:

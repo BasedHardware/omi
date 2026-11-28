@@ -305,9 +305,7 @@ persist. No cohort change or percentage ramp is part of this rollback.
    off enabled revisions before rollback is complete.
 3. Update the **prod-omi-backend-config ConfigMap** in every serving namespace and
    cluster. Then rollout-restart **backend-listen and every Pusher deployment**
-   (including pools/canaries). If the dedicated **sync-backfill-worker** is installed,
-   update its `runtimeConfigMapName` target too and restart that deployment. Its
-   pipeline subprocess inherits this explicit ConfigMap flag. ConfigMap updates
+   (including pools/canaries). ConfigMap updates
    alone do not change running process environments.
 4. Wait for old pods/revisions and in-flight passes to drain; verify the flag is
    false in each replacement container's process environment and each traffic-

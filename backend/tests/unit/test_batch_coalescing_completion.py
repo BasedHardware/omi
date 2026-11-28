@@ -40,6 +40,8 @@ async def test_mobile_hold_headers_survive_coalescing_and_publication(client, tm
     monkeypatch.setattr(router, 'compute_sync_content_id', lambda _uid, paths: Path(paths[0]).stem)
     monkeypatch.setattr(router, 'registered_record_response', AsyncMock(return_value=router.RecordUploadRoute.BATCH))
     monkeypatch.setattr(legacy_dark, 'current_mode', lambda _: legacy_dark.LegacySyncMode.ON)
+    # The shared client fixture stubs batch acceptance; this test drives the real intake.
+    monkeypatch.setattr(router, 'accept_batch_upload', intake.accept_upload)
     monkeypatch.setattr(upload_entitlement, 'classify', lambda _: 'free')
     monkeypatch.setattr(intake, 'FirestoreStore', lambda *_: db)
     monkeypatch.setattr(intake, 'serving_for', lambda *a, **k: False)

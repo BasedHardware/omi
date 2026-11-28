@@ -251,9 +251,7 @@ def calls_in(path):
     return {n.func.id for n in ast.walk(tree) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)}
 
 
-@pytest.mark.parametrize(
-    'path', ['main.py', 'pusher/main.py', 'diarizer/batch_pipeline_runtime.py', 'utils/sync/worker_job.py']
-)
+@pytest.mark.parametrize('path', ['main.py', 'pusher/main.py', 'diarizer/batch_pipeline_runtime.py'])
 def test_consumer_entrypoints_bind_runtime_exporter(path):
     assert 'configure_rollout_runtime' in calls_in(path)
     assert 'configure_runtime_percent' in calls_in('utils/rollout_cohorts.py')
@@ -281,7 +279,6 @@ def test_cloud_run_scrape_keeps_every_runtime_family(config_name):
     'chart,suffix',
     [
         ('batch-pipeline-worker', 'batch-pipeline-worker'),
-        ('sync-backfill-worker', 'sync_backfill_worker'),
         ('backend-listen', 'backend_listen'),
         ('pusher', 'pusher'),
     ],
@@ -292,8 +289,6 @@ def test_gke_podmonitoring_scrapes_consumer_port_and_revision(chart, suffix):
         pytest.skip('helm is not installed')
     directory = BACKEND / 'charts' / chart
     values_file = directory / f'prod_omi_{suffix}_values.yaml'
-    if chart == 'sync-backfill-worker':
-        values_file = directory / 'values.yaml'
     command = [
         helm,
         'template',
@@ -310,19 +305,6 @@ def test_gke_podmonitoring_scrapes_consumer_port_and_revision(chart, suffix):
         '--set-string',
         'image.pullPolicy=IfNotPresent',
     ]
-    if chart == 'sync-backfill-worker':
-        command += [
-            '--set-string',
-            'image.repository=example/worker',
-            '--set-string',
-            'runtimeSecret=synthetic-runtime',
-            '--set-string',
-            'serviceAccount.gcpEmail=synthetic@example.iam.gserviceaccount.com',
-            '--set-string',
-            'worker.apiUrl=https://synthetic.run.app',
-            '--set-string',
-            'worker.audience=https://synthetic.run.app',
-        ]
     rendered = subprocess.run(command, check=True, capture_output=True, text=True, timeout=30)
     docs = [d for d in yaml.safe_load_all(rendered.stdout) if d]
     deployments = [

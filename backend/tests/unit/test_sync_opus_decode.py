@@ -170,7 +170,6 @@ _ensure_attrs('utils.byok', ['get_byok_keys', 'set_byok_keys', 'has_byok_keys'])
 _ensure_attrs(
     'utils.cloud_tasks',
     [
-        'enqueue_sync_job',
         'get_sync_tasks_max_attempts',
         'is_audio_merge_dispatch_enabled',
         'is_cloud_tasks_dispatch_enabled',
@@ -246,7 +245,7 @@ sys.modules['utils.log_sanitizer'].sanitize_pii = lambda x: x
 
 _remove_python_multipart_stub = _install_python_multipart_stub()
 try:
-    from utils.sync.pipeline import _merge_and_cap_vad_segments, MAX_VAD_SEGMENT_SECONDS  # noqa: E402
+    from utils.sync.legacy_segment_core import _merge_and_cap_vad_segments, MAX_VAD_SEGMENT_SECONDS  # noqa: E402
     from utils.sync.files import (  # noqa: E402
         MAX_SYNC_FRAME_BYTES,
         decode_files_to_wav,

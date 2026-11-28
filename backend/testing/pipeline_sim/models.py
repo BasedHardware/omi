@@ -147,7 +147,7 @@ class SequencerStats:
 
 
 class SequencerModel:
-    """MODEL of ``utils/sync/uid_sequencer.py`` + ``database/sync_backfill_sequencer.py``.
+    """MODEL of the retired per-UID backfill sequencer (deleted with legacy sync, plan C C10).
 
     Production keeps ONE active backfill job per UID: ``claim_next`` refuses
     while ``active_job_id`` is set, and the next job is only kicked after

@@ -9,7 +9,7 @@ import pytest
 
 from models.transcript_segment import TranscriptSegment
 from utils.manual_speaker_assignments import manual_assignment
-from utils.sync import pipeline
+from utils.sync import legacy_segment_core as pipeline
 from utils.observability.speaker_identification import record_speaker_review, SYNC_SPEAKER_REVIEWS
 from utils.stt.sync_speaker_evidence import collect_speaker_audio
 

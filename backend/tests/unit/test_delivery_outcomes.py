@@ -13,7 +13,7 @@ from utils.observability import delivery
 def load_terminal_modules():
     # Load real boundary dependencies in setup, outside the call-only CPU guard.
     from utils import task_sync
-    from utils.sync import pipeline
+    from utils.sync import legacy_segment_core as pipeline
     from utils.conversations import summary_delivery
 
     assert task_sync and pipeline and summary_delivery
@@ -138,7 +138,7 @@ async def test_observation_preserves_unexpected_results_without_new_exceptions(o
 
 
 def test_actual_sync_missing_and_deleted_terminal_sites(observed, monkeypatch):
-    from utils.sync import pipeline
+    from utils.sync import legacy_segment_core as pipeline
 
     for row, outcome in ((None, 'deferred'), ({'deleted': True}, 'no_op')):
         monkeypatch.setattr(pipeline.conversations_db, 'get_conversation', lambda *args, **_kwargs: row)

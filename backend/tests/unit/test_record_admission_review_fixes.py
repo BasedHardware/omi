@@ -103,36 +103,6 @@ def test_dark_legacy_shadow_uses_its_existing_read_without_claim_or_reload(monke
     assert read.call_count == 1
 
 
-@pytest.mark.parametrize('winner', [None, 'legacy_final_pass_v1', 'batch_live_v1', 'batch_sync_v1'])
-def test_shadow_reloads_failed_cas_and_retries_only_when_needed(monkeypatch, winner):
-    monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'true')
-    refreshed = {'id': 'record', 'record_lane_owner': winner, 'updated_at': 2}
-    read = Mock(return_value=refreshed)
-    claim = Mock(side_effect=[None, 3])
-    monkeypatch.setattr(shadow.conversations_db, 'get_conversation', read)
-    monkeypatch.setattr(shadow.conversations_db, 'claim_record_lane_owner', claim)
-    result = shadow._claim_shadow_owner('synthetic', 'record', {'id': 'record', 'updated_at': 1})
-    assert read.call_count == 1
-    if winner in {'batch_live_v1', 'batch_sync_v1'}:
-        assert result is None and claim.call_count == 1
-    else:
-        assert result['record_lane_owner'] == 'legacy_final_pass_v1'
-        assert claim.call_count == (2 if winner is None else 1)
-        assert result['updated_at'] == (3 if winner is None else 2)
-        if winner is None:
-            assert claim.call_args.args[-1] == 2
-
-
-def test_shadow_contention_is_bounded_and_explicitly_retryable(monkeypatch):
-    monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'true')
-    read, claim = Mock(return_value={'updated_at': 2}), Mock(return_value=None)
-    monkeypatch.setattr(shadow.conversations_db, 'get_conversation', read)
-    monkeypatch.setattr(shadow.conversations_db, 'claim_record_lane_owner', claim)
-    with pytest.raises(RecordOwnerContention):
-        shadow._claim_shadow_owner('synthetic', 'record', {'updated_at': 1})
-    assert read.call_count == claim.call_count == 3
-
-
 @pytest.mark.parametrize('already_owned', [False, True])
 def test_admission_only_patches_missing_owner_and_never_sets_conversation(monkeypatch, already_owned):
     monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
@@ -226,7 +196,9 @@ async def test_finalizer_reloads_contention_inside_attempt_and_defers_without_bu
         ('', 'en', 'desktop', True, True),
         (None, 'de-DE', 'desktop', True, True),
         ('en', None, 'desktop', True, True),
-        ('', '', 'desktop', True, None),  # no language at all keeps the legacy route
+        # Legacy sync is deleted: an upload without an escape language no longer returns
+        # None to the legacy route; it stays in batch intake and is never record-origin.
+        ('', '', 'desktop', True, None),
         ('', 'vi', 'desktop', True, None),
         ('vi', 'en', 'desktop', True, None),  # a set conversation language wins over the user's
         ('', 'en', 'omi', True, False),  # only desktop uploads are record-origin
@@ -286,6 +258,6 @@ async def test_desktop_record_origin_uses_the_escape_language(
         ),  # integration intake uses dataclasses.replace (contract (c))
     )
     if expected is None:
-        assert outcome is None and not bindings
+        assert outcome is not None and not any(binding.record_origin for binding in bindings)
     else:
         assert outcome is not None and len(bindings) == 1 and bindings[0].record_origin is expected

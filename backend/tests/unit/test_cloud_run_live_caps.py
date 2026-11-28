@@ -219,7 +219,7 @@ def test_backfill_queue_create_and_update_obey_live_capacity(tmp_path, action, c
     calls = (tmp_path / 'queue-args').read_text().splitlines()
     # The backfill queue reconcile (describe + create/update) plus the
     # update-only max-attempts reconciliation of the main sync-jobs queue
-    # that the fallback route and fresh lane deliver through: its describe
+    # that enrichment and batch final-pass tasks deliver through: its describe
     # succeeds under the same double, so update-only adds describe+update
     # when the queue exists and just the failed describe when it does not
     # (create is deliberately omitted — another team owns that queue).

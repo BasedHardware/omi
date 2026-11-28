@@ -368,5 +368,4 @@ batch:
   - backend/utils/sync/job_retry_policy.py
   - backend/utils/sync/record_token_lease.py
   - backend/utils/sync/recovery_source.py
-  - backend/utils/sync/redrive_policy.py
   - backend/utils/sync/source_reuse_decode.py

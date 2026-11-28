@@ -437,23 +437,14 @@ class _LocalFirstIdToken:
 
 
 def _accept_backfill_deliveries(env: Mapping[str, str]) -> None:
-    """Let this stack's worker run the backfill tasks its own queue delivers.
+    """Refuse a non-emulator stack; legacy backfill deliveries no longer exist.
 
-    Outside the ``prod`` stage the worker acknowledges every backfill-lane task
-    without running it (``uid_sequencer.foreign_delivery``): a dev deployment
-    used to share queue and sequencer state with production, and a task from
-    the other environment must not touch it. Here the queue, Redis and
-    Firestore emulator all belong to this harness instance, so no delivery can
-    be foreign, and leaving the guard on would admit an old upload (202) and
-    then never process it. Refused unless Firestore is the emulator.
+    The legacy sync worker and its ``uid_sequencer.foreign_delivery`` guard were
+    deleted with legacy sync (SCA-2965), so there is nothing left to lift here.
+    The emulator check stays: this queue is for emulator-backed stacks only.
     """
     if not env.get("FIRESTORE_EMULATOR_HOST", "").strip():
         raise RuntimeError("the local task queue is for emulator-backed stacks only (FIRESTORE_EMULATOR_HOST is unset)")
-    if env.get("OMI_ENV_STAGE", "").strip().lower() == "prod":
-        return  # the production stage runs backfill deliveries itself; nothing to lift
-    from utils.sync import uid_sequencer
-
-    uid_sequencer.foreign_delivery = lambda _payload: False
 
 
 # ---- one queue shared by every service of a prod-parity stack ----------

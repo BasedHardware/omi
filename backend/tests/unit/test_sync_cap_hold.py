@@ -9,7 +9,8 @@ import wave
 
 import pytest
 
-from utils.sync import cap_hold, pipeline
+from utils.sync import cap_hold
+from utils.sync import legacy_segment_core as pipeline
 from utils import stt_cap_dispatch as cap
 
 
