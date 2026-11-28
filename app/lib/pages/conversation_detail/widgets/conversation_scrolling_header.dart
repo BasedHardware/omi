@@ -188,6 +188,7 @@ class _TabOffsetReporterState extends State<_TabOffsetReporter> {
         return false;
       },
       child: NotificationListener<ScrollNotification>(
+        // omi-perf-allow: global-input-listener -- scoped to one tab page's own list; the callback compares one number and sets a notifier
         onNotification: (notification) {
           _report(notification.metrics, notification.depth);
           return false;

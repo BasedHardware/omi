@@ -2,44 +2,30 @@
   "version": 1,
   "images": [
     {
-      "file": "001-mobile-ios-home-dark-before.png",
+      "file": "001-mobile-ios-home-top-bar.png",
       "platform": "mobile-ios",
-      "description": "Home, dark, before: flat Ask anything and record buttons over a solid page-coloured backdrop. iOS 27.2 simulator, production widgets with fixture data.",
+      "description": "Home top bar with Experimental Design on: device chip and the four buttons on one capsule",
       "captured_by": "agent",
       "source": "screencapture"
     },
     {
-      "file": "002-mobile-ios-home-dark-glass.png",
+      "file": "002-mobile-ios-home-top-bar-pressed.png",
       "platform": "mobile-ios",
-      "description": "Home, dark, after: glass buttons with the list passing behind them and no backdrop. iOS 27.2 simulator, production widgets with fixture data.",
+      "description": "Home top bar while Search is pressed: only that button grows, on its own bubble",
       "captured_by": "agent",
       "source": "screencapture"
     },
     {
-      "file": "003-mobile-ios-home-light-before.png",
+      "file": "003-mobile-ios-conversation-top-bar-pressed.png",
       "platform": "mobile-ios",
-      "description": "Home, light, before. iOS 27.2 simulator, production widgets with fixture data.",
+      "description": "Conversation page top bar while Share is pressed; Back in its own circle",
       "captured_by": "agent",
       "source": "screencapture"
     },
     {
-      "file": "004-mobile-ios-home-light-glass.png",
+      "file": "004-mobile-ios-conversation-tabs.png",
       "platform": "mobile-ios",
-      "description": "Home, light, after. iOS 27.2 simulator, production widgets with fixture data.",
-      "captured_by": "agent",
-      "source": "screencapture"
-    },
-    {
-      "file": "005-mobile-ios-conversation-ask-bar-before.png",
-      "platform": "mobile-ios",
-      "description": "Conversation page, dark, before: flat Ask Omi bar. iOS 27.2 simulator, production widgets with fixture data.",
-      "captured_by": "agent",
-      "source": "screencapture"
-    },
-    {
-      "file": "006-mobile-ios-conversation-ask-bar-glass.png",
-      "platform": "mobile-ios",
-      "description": "Conversation page, dark, after: glass Ask Omi bar. iOS 27.2 simulator, production widgets with fixture data.",
+      "description": "Conversation page tabs as capsules with glyphs, Transcript open",
       "captured_by": "agent",
       "source": "screencapture"
     }

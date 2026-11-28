@@ -80,7 +80,9 @@ class _TranscriptLineMenu extends StatelessWidget {
               onTap: () => Navigator.of(context).pop(),
               child: AnimatedBuilder(
                 animation: curved,
+                // omi-perf-allow: blur-filter -- a transient menu route over a still page, closed by any tap; nothing scrolls under it
                 builder: (context, _) => BackdropFilter(
+                  // omi-perf-allow: blur-filter -- same transient menu route
                   filter: ImageFilter.blur(sigmaX: 18 * curved.value, sigmaY: 18 * curved.value),
                   child: ColoredBox(color: Colors.black.withValues(alpha: (dark ? 0.45 : 0.18) * curved.value)),
                 ),

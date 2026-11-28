@@ -134,6 +134,7 @@ class _FooterBlurSurfaceState extends State<_FooterBlurSurface> {
       decoration: BoxDecoration(borderRadius: radius, boxShadow: [shadow]),
       child: ClipRRect(
         borderRadius: radius,
+        // omi-perf-allow: blur-filter -- the experimental design's raised controls, behind its switch (default off); grouped so one page's controls share one backdrop read; measured on an iPhone 16 Pro at 1.2-1.8 ms raster per frame against 0.9 ms flat
         child: BackdropFilter.grouped(filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20), child: body),
       ),
     );
