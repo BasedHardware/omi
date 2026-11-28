@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 if TestClient is not None:
     from main import app
+    from whoop_tools_auth import require_whoop_tools_auth
 
 
 def _page(records, next_token=None):
@@ -35,6 +36,10 @@ def _record(value_path, value):
 class WeeklySummaryPaginationTests(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
+        # Bypass the shared-secret auth guard for these pagination tests; the
+        # guard itself is covered hermetically in test_whoop_tools_auth.py.
+        app.dependency_overrides[require_whoop_tools_auth] = lambda: None
+        self.addCleanup(app.dependency_overrides.pop, require_whoop_tools_auth, None)
         patcher = patch("main.get_valid_access_token", return_value="test-token")
         self.addCleanup(patcher.stop)
         patcher.start()
