@@ -15868,4 +15868,17 @@ class AppLocalizationsTr extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return '$date tarihinde işlenecek';
   }
+
+  @override
+  String planAutoRenewTerms(String plan, String price, String path) {
+    return '$plan, $price ile otomatik yenilenir. $path bölümünden istediğin zaman iptal edebilirsin.';
+  }
+
+  @override
+  String planPriceBeforeDiscounts(String price) {
+    return 'İndirimler öncesi $price';
+  }
+
+  @override
+  String get checkoutShowsFinalCharge => 'Son tutar ödeme sayfasında gösterilir.';
 }

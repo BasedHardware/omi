@@ -4772,5 +4772,8 @@
     "batteryRestartToRefresh": "Κάντε επανεκκίνηση του Omi για να ανανεωθεί η ένδειξη",
     "onTheWayAllowanceHeldTitle": "Θα επεξεργαστούν στις {date} όταν ανανεωθούν τα λεπτά σας",
     "onTheWayAllowanceHeldUpgrade": "Ή επεξεργαστείτε τα αμέσως με μια αναβάθμιση προγράμματος",
-    "onTheWayDayProcessesOn": "Επεξεργασία στις {date}"
+    "onTheWayDayProcessesOn": "Επεξεργασία στις {date}",
+    "planAutoRenewTerms": "Το {plan} ανανεώνεται αυτόματα στα {price} μέχρι να το ακυρώσετε στο {path}.",
+    "planPriceBeforeDiscounts": "{price} πριν από εκπτώσεις",
+    "checkoutShowsFinalCharge": "Η τελική χρέωση εμφανίζεται στην πληρωμή."
 }

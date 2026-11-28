@@ -15896,4 +15896,17 @@ class AppLocalizationsMs extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Diproses pada $date';
   }
+
+  @override
+  String planAutoRenewTerms(String plan, String price, String path) {
+    return '$plan diperbaharui secara automatik pada $price sehingga anda membatalkannya di $path.';
+  }
+
+  @override
+  String planPriceBeforeDiscounts(String price) {
+    return '$price sebelum diskaun';
+  }
+
+  @override
+  String get checkoutShowsFinalCharge => 'Checkout menunjukkan caj akhir.';
 }

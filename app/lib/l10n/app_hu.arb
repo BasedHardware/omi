@@ -4868,5 +4868,8 @@
     "batteryRestartToRefresh": "Indítsa újra az Omit a frissítéshez",
     "onTheWayAllowanceHeldTitle": "Feldolgozás: {date}, amikor megújulnak a perceid",
     "onTheWayAllowanceHeldUpgrade": "Vagy dolgozd fel őket azonnal csomagfrissítéssel",
-    "onTheWayDayProcessesOn": "Feldolgozás: {date}"
+    "onTheWayDayProcessesOn": "Feldolgozás: {date}",
+    "planAutoRenewTerms": "A(z) {plan} automatikusan megújul {price} áron, amíg le nem mondod itt: {path}.",
+    "planPriceBeforeDiscounts": "{price} kedvezmények előtt",
+    "checkoutShowsFinalCharge": "A végleges összeget a fizetésnél látod."
 }

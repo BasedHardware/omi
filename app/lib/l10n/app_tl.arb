@@ -12329,5 +12329,8 @@
     "batteryRestartToRefresh": "I-restart ang Omi upang i-refresh",
     "onTheWayAllowanceHeldTitle": "Ipo-proseso sa {date} kapag mag-renew na ang iyong mga minuto",
     "onTheWayAllowanceHeldUpgrade": "O mag-plan upgrade para maiproseso agad ang mga ito",
-    "onTheWayDayProcessesOn": "Maiiproseso sa {date}"
+    "onTheWayDayProcessesOn": "Maiiproseso sa {date}",
+    "planAutoRenewTerms": "Awtomatikong nagre-renew ang {plan} sa {price} hanggang kanselahin mo sa {path}.",
+    "planPriceBeforeDiscounts": "{price} bago ang mga diskwento",
+    "checkoutShowsFinalCharge": "Makikita sa checkout ang huling singil."
 }

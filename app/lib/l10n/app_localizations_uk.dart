@@ -15891,4 +15891,17 @@ class AppLocalizationsUk extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Буде оброблено $date';
   }
+
+  @override
+  String planAutoRenewTerms(String plan, String price, String path) {
+    return '$plan подовжується автоматично за $price, доки ви не скасуєте в $path.';
+  }
+
+  @override
+  String planPriceBeforeDiscounts(String price) {
+    return '$price без урахування знижок';
+  }
+
+  @override
+  String get checkoutShowsFinalCharge => 'Остаточну суму покаже сторінка оплати.';
 }

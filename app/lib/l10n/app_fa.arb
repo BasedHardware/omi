@@ -12329,5 +12329,8 @@
     "batteryRestartToRefresh": "برای بازخوانی، Omi را دوباره راه‌اندازی کنید",
     "onTheWayAllowanceHeldTitle": "وقتی دقیقه‌های شما تمدید می‌شوند، در {date} پردازش می‌شود",
     "onTheWayAllowanceHeldUpgrade": "یا با ارتقای طرح، فوراً آن‌ها را پردازش کنید",
-    "onTheWayDayProcessesOn": "در {date} پردازش می‌شود"
+    "onTheWayDayProcessesOn": "در {date} پردازش می‌شود",
+    "planAutoRenewTerms": "{plan} به‌طور خودکار با {price} تمدید می‌شود تا زمانی که در {path} لغوش کنید.",
+    "planPriceBeforeDiscounts": "{price} پیش از تخفیف",
+    "checkoutShowsFinalCharge": "مبلغ نهایی در صفحه پرداخت نمایش داده می‌شود."
 }

@@ -15985,4 +15985,17 @@ class AppLocalizationsTl extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Maiiproseso sa $date';
   }
+
+  @override
+  String planAutoRenewTerms(String plan, String price, String path) {
+    return 'Awtomatikong nagre-renew ang $plan sa $price hanggang kanselahin mo sa $path.';
+  }
+
+  @override
+  String planPriceBeforeDiscounts(String price) {
+    return '$price bago ang mga diskwento';
+  }
+
+  @override
+  String get checkoutShowsFinalCharge => 'Makikita sa checkout ang huling singil.';
 }

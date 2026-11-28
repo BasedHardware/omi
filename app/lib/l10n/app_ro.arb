@@ -4772,5 +4772,8 @@
     "batteryRestartToRefresh": "Repornește Omi pentru a actualiza valoarea",
     "onTheWayAllowanceHeldTitle": "Vor fi procesate pe {date} când se reînnoiesc minutele tale",
     "onTheWayAllowanceHeldUpgrade": "Sau procesează-le imediat cu un upgrade de plan",
-    "onTheWayDayProcessesOn": "Se procesează {date}"
+    "onTheWayDayProcessesOn": "Se procesează {date}",
+    "planAutoRenewTerms": "{plan} se reînnoiește automat la {price} până când anulezi din {path}.",
+    "planPriceBeforeDiscounts": "{price} înainte de reduceri",
+    "checkoutShowsFinalCharge": "Suma finală apare la plată."
 }

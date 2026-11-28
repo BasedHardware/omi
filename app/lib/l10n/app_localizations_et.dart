@@ -15850,4 +15850,17 @@ class AppLocalizationsEt extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Töödeldakse $date';
   }
+
+  @override
+  String planAutoRenewTerms(String plan, String price, String path) {
+    return '$plan uueneb automaatselt hinnaga $price, kuni tühistad selle jaotises $path.';
+  }
+
+  @override
+  String planPriceBeforeDiscounts(String price) {
+    return '$price enne allahindlusi';
+  }
+
+  @override
+  String get checkoutShowsFinalCharge => 'Lõplik summa kuvatakse maksmisel.';
 }

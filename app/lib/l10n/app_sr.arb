@@ -12329,5 +12329,8 @@
     "batteryRestartToRefresh": "Поново покрените Omi да освежите податке",
     "onTheWayAllowanceHeldTitle": "Обрадиће се {date} када се обнове ваши минути",
     "onTheWayAllowanceHeldUpgrade": "Или их одмах обрадите уз надоградњу плана",
-    "onTheWayDayProcessesOn": "Обрадиће се {date}"
+    "onTheWayDayProcessesOn": "Обрадиће се {date}",
+    "planAutoRenewTerms": "{plan} се аутоматски обнавља по цени {price} док не откажете у {path}.",
+    "planPriceBeforeDiscounts": "{price} пре попуста",
+    "checkoutShowsFinalCharge": "Коначни износ видите при плаћању."
 }

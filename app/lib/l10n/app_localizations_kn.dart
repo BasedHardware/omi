@@ -15910,4 +15910,17 @@ class AppLocalizationsKn extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return '$date ರಂದು ಪ್ರಕ್ರಿಯೆ';
   }
+
+  @override
+  String planAutoRenewTerms(String plan, String price, String path) {
+    return '$plan ಸ್ವಯಂಚಾಲಿತವಾಗಿ $price ಗೆ ನವೀಕರಣಗೊಳ್ಳುತ್ತದೆ, $path ನಲ್ಲಿ ರದ್ದುಮಾಡುವವರೆಗೆ.';
+  }
+
+  @override
+  String planPriceBeforeDiscounts(String price) {
+    return 'ರಿಯಾಯಿತಿಗೆ ಮೊದಲು $price';
+  }
+
+  @override
+  String get checkoutShowsFinalCharge => 'ಅಂತಿಮ ಶುಲ್ಕವನ್ನು ಚೆಕ್‌ಔಟ್‌ನಲ್ಲಿ ತೋರಿಸಲಾಗುತ್ತದೆ.';
 }

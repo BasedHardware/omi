@@ -4772,5 +4772,8 @@
     "batteryRestartToRefresh": "Mulakan semula Omi untuk memuat semula",
     "onTheWayAllowanceHeldTitle": "Akan diproses pada {date} apabila minit anda diperbaharui",
     "onTheWayAllowanceHeldUpgrade": "Atau proses terus dengan naik taraf pelan",
-    "onTheWayDayProcessesOn": "Diproses pada {date}"
+    "onTheWayDayProcessesOn": "Diproses pada {date}",
+    "planAutoRenewTerms": "{plan} diperbaharui secara automatik pada {price} sehingga anda membatalkannya di {path}.",
+    "planPriceBeforeDiscounts": "{price} sebelum diskaun",
+    "checkoutShowsFinalCharge": "Checkout menunjukkan caj akhir."
 }

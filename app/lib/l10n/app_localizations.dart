@@ -27824,6 +27824,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Processes {date}'**
   String onTheWayDayProcessesOn(String date);
+
+  /// Beside Upgrade on the free Plans sheet. plan = plan name (Omi Pro), price = recurring price like US$269.91/year, path = where to cancel, e.g. Settings > Plan & Usage
+  ///
+  /// In en, this message translates to:
+  /// **'{plan} renews automatically at {price} until you cancel in {path}.'**
+  String planAutoRenewTerms(String plan, String price, String path);
+
+  /// Charge line above Upgrade when a promo code is entered; price like US$269.91/year
+  ///
+  /// In en, this message translates to:
+  /// **'{price} before discounts'**
+  String planPriceBeforeDiscounts(String price);
+
+  /// Under Upgrade when a promo code is entered: the Stripe checkout page shows the discounted amount
+  ///
+  /// In en, this message translates to:
+  /// **'Checkout shows the final charge.'**
+  String get checkoutShowsFinalCharge;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

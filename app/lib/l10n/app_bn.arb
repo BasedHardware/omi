@@ -12329,5 +12329,8 @@
     "batteryRestartToRefresh": "রিফ্রেশ করতে Omi পুনরায় চালু করুন",
     "onTheWayAllowanceHeldTitle": "আপনার মিনিট নবায়ন হলে {date} তারিখে প্রসেস হবে",
     "onTheWayAllowanceHeldUpgrade": "অথবা প্ল্যান আপগ্রেড করে সেগুলো এখনই প্রসেস করুন",
-    "onTheWayDayProcessesOn": "{date} তারিখে প্রসেস হবে"
+    "onTheWayDayProcessesOn": "{date} তারিখে প্রসেস হবে",
+    "planAutoRenewTerms": "{plan} স্বয়ংক্রিয়ভাবে {price}-এ নবায়ন হয়, যতক্ষণ না আপনি {path}-এ বাতিল করেন।",
+    "planPriceBeforeDiscounts": "ছাড়ের আগে {price}",
+    "checkoutShowsFinalCharge": "চেকআউটে চূড়ান্ত চার্জ দেখানো হবে।"
 }

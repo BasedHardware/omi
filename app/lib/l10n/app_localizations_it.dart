@@ -15937,4 +15937,17 @@ class AppLocalizationsIt extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Elaborazione il $date';
   }
+
+  @override
+  String planAutoRenewTerms(String plan, String price, String path) {
+    return '$plan si rinnova automaticamente a $price finché non annulli in $path.';
+  }
+
+  @override
+  String planPriceBeforeDiscounts(String price) {
+    return '$price prima degli sconti';
+  }
+
+  @override
+  String get checkoutShowsFinalCharge => 'Il checkout mostra l\'importo finale.';
 }

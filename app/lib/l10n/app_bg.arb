@@ -4772,5 +4772,8 @@
     "batteryRestartToRefresh": "Рестартирайте Omi, за да опресните стойността",
     "onTheWayAllowanceHeldTitle": "Ще се обработят на {date}, когато се подновят минутите ви",
     "onTheWayAllowanceHeldUpgrade": "Или ги обработете веднага с надграждане на плана",
-    "onTheWayDayProcessesOn": "Ще се обработят на {date}"
+    "onTheWayDayProcessesOn": "Ще се обработят на {date}",
+    "planAutoRenewTerms": "{plan} се подновява автоматично за {price}, докато не откажете в {path}.",
+    "planPriceBeforeDiscounts": "{price} преди отстъпки",
+    "checkoutShowsFinalCharge": "Крайната сума се вижда при плащането."
 }

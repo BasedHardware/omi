@@ -4772,5 +4772,8 @@
     "batteryRestartToRefresh": "أعد تشغيل Omi لتحديث القراءة",
     "onTheWayAllowanceHeldTitle": "ستتم المعالجة في {date} عندما تتجدد دقائقك",
     "onTheWayAllowanceHeldUpgrade": "أو عالجها فورًا بترقية خطتك",
-    "onTheWayDayProcessesOn": "تتم المعالجة في {date}"
+    "onTheWayDayProcessesOn": "تتم المعالجة في {date}",
+    "planAutoRenewTerms": "يتجدد {plan} تلقائيًا بسعر {price} حتى تلغيه من {path}.",
+    "planPriceBeforeDiscounts": "{price} قبل الخصومات",
+    "checkoutShowsFinalCharge": "تعرض صفحة الدفع المبلغ النهائي."
 }

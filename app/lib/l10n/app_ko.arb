@@ -4772,5 +4772,8 @@
     "batteryRestartToRefresh": "새로고침하려면 Omi를 다시 시작하세요",
     "onTheWayAllowanceHeldTitle": "분이 갱신되는 {date}에 처리됩니다",
     "onTheWayAllowanceHeldUpgrade": "또는 플랜을 업그레이드하여 바로 처리할 수 있습니다",
-    "onTheWayDayProcessesOn": "{date}에 처리"
+    "onTheWayDayProcessesOn": "{date}에 처리",
+    "planAutoRenewTerms": "{plan}은(는) {price}에 자동 갱신됩니다. 해지는 {path}에서 할 수 있습니다.",
+    "planPriceBeforeDiscounts": "할인 전 {price}",
+    "checkoutShowsFinalCharge": "최종 결제 금액은 결제 화면에 표시됩니다."
 }

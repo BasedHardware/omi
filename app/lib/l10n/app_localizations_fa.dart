@@ -15851,4 +15851,17 @@ class AppLocalizationsFa extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'در $date پردازش می‌شود';
   }
+
+  @override
+  String planAutoRenewTerms(String plan, String price, String path) {
+    return '$plan به‌طور خودکار با $price تمدید می‌شود تا زمانی که در $path لغوش کنید.';
+  }
+
+  @override
+  String planPriceBeforeDiscounts(String price) {
+    return '$price پیش از تخفیف';
+  }
+
+  @override
+  String get checkoutShowsFinalCharge => 'مبلغ نهایی در صفحه پرداخت نمایش داده می‌شود.';
 }

@@ -15,7 +15,8 @@ class PlanPromoCodeField extends StatefulWidget {
       required this.applied,
       required this.onApply,
       required this.onChanged,
-      this.initiallyExpanded = false});
+      this.initiallyExpanded = false,
+      this.locked = false});
 
   final TextEditingController controller;
   final String? error;
@@ -26,6 +27,9 @@ class PlanPromoCodeField extends StatefulWidget {
   final Future<void> Function() onApply;
   final VoidCallback onChanged;
   final bool initiallyExpanded;
+
+  /// A checkout is pending: the code it was sent with cannot change.
+  final bool locked;
 
   @override
   State<PlanPromoCodeField> createState() => _PlanPromoCodeFieldState();
@@ -44,7 +48,7 @@ class _PlanPromoCodeFieldState extends State<PlanPromoCodeField> {
           button: true,
           expanded: _expanded,
           child: InkWell(
-            onTap: () => setState(() => _expanded = !_expanded),
+            onTap: widget.locked ? null : () => setState(() => _expanded = !_expanded),
             borderRadius: OmiRadius.smAll,
             child: ConstrainedBox(
                 constraints: const BoxConstraints(minHeight: 44),
@@ -63,7 +67,7 @@ class _PlanPromoCodeFieldState extends State<PlanPromoCodeField> {
         TextField(
           key: const ValueKey('plans_sheet_promo_code'),
           controller: widget.controller,
-          enabled: !widget.busy,
+          enabled: !widget.busy && !widget.locked,
           textInputAction: widget.canApply ? TextInputAction.done : null,
           onSubmitted: widget.canApply ? (_) => widget.onApply() : null,
           style: OmiType.callout,
@@ -87,7 +91,7 @@ class _PlanPromoCodeFieldState extends State<PlanPromoCodeField> {
                     icon: const Icon(Icons.clear, size: 20),
                     label: l10n.clear,
                     color: OmiColors.textSecondary,
-                    onPressed: widget.busy
+                    onPressed: widget.busy || widget.locked
                         ? null
                         : () {
                             widget.controller.clear();

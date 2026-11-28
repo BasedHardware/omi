@@ -15853,4 +15853,17 @@ class AppLocalizationsBn extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return '$date তারিখে প্রসেস হবে';
   }
+
+  @override
+  String planAutoRenewTerms(String plan, String price, String path) {
+    return '$plan স্বয়ংক্রিয়ভাবে $price-এ নবায়ন হয়, যতক্ষণ না আপনি $path-এ বাতিল করেন।';
+  }
+
+  @override
+  String planPriceBeforeDiscounts(String price) {
+    return 'ছাড়ের আগে $price';
+  }
+
+  @override
+  String get checkoutShowsFinalCharge => 'চেকআউটে চূড়ান্ত চার্জ দেখানো হবে।';
 }

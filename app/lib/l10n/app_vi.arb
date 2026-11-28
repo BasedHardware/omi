@@ -4772,5 +4772,8 @@
     "batteryRestartToRefresh": "Khởi động lại Omi để làm mới",
     "onTheWayAllowanceHeldTitle": "Sẽ xử lý vào {date} khi số phút của bạn được gia hạn",
     "onTheWayAllowanceHeldUpgrade": "Hoặc xử lý ngay bằng cách nâng cấp gói",
-    "onTheWayDayProcessesOn": "Xử lý vào {date}"
+    "onTheWayDayProcessesOn": "Xử lý vào {date}",
+    "planAutoRenewTerms": "{plan} tự động gia hạn với giá {price} cho đến khi bạn hủy trong {path}.",
+    "planPriceBeforeDiscounts": "{price} trước giảm giá",
+    "checkoutShowsFinalCharge": "Trang thanh toán hiển thị số tiền cuối cùng."
 }

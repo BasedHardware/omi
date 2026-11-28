@@ -4772,5 +4772,8 @@
     "batteryRestartToRefresh": "Reinicieu Omi per actualitzar el valor",
     "onTheWayAllowanceHeldTitle": "Es processaran el {date} quan es renovin els vostres minuts",
     "onTheWayAllowanceHeldUpgrade": "O processa'ls de seguida amb una actualització del pla",
-    "onTheWayDayProcessesOn": "Es processaran el {date}"
+    "onTheWayDayProcessesOn": "Es processaran el {date}",
+    "planAutoRenewTerms": "{plan} es renova automàticament per {price} fins que el cancel·lis a {path}.",
+    "planPriceBeforeDiscounts": "{price} abans de descomptes",
+    "checkoutShowsFinalCharge": "El pagament mostra l'import final."
 }

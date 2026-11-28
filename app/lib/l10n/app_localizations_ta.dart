@@ -15966,4 +15966,17 @@ class AppLocalizationsTa extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return '$date அன்று செயலாக்கம்';
   }
+
+  @override
+  String planAutoRenewTerms(String plan, String price, String path) {
+    return '$plan தானாக $price க்கு புதுப்பிக்கப்படும், $path இல் ரத்து செய்யும் வரை.';
+  }
+
+  @override
+  String planPriceBeforeDiscounts(String price) {
+    return 'தள்ளுபடிக்கு முன் $price';
+  }
+
+  @override
+  String get checkoutShowsFinalCharge => 'இறுதிக் கட்டணம் செக்அவுட்டில் காட்டப்படும்.';
 }

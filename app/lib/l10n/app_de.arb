@@ -4772,5 +4772,8 @@
     "batteryRestartToRefresh": "Starten Sie Omi neu, um den Wert zu aktualisieren",
     "onTheWayAllowanceHeldTitle": "Wird am {date} verarbeitet, wenn sich Ihre Minuten erneuern",
     "onTheWayAllowanceHeldUpgrade": "Oder verarbeiten Sie sie sofort mit einem Plan-Upgrade",
-    "onTheWayDayProcessesOn": "Wird am {date} verarbeitet"
+    "onTheWayDayProcessesOn": "Wird am {date} verarbeitet",
+    "planAutoRenewTerms": "{plan} verlängert sich automatisch für {price}, bis du in {path} kündigst.",
+    "planPriceBeforeDiscounts": "{price} vor Rabatten",
+    "checkoutShowsFinalCharge": "Den endgültigen Betrag siehst du an der Kasse."
 }

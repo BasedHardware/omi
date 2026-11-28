@@ -4807,5 +4807,8 @@
     "batteryRestartToRefresh": "Uruchom ponownie Omi, aby odświeżyć odczyt",
     "onTheWayAllowanceHeldTitle": "Zostaną przetworzone {date}, gdy odnowią się Twoje minuty",
     "onTheWayAllowanceHeldUpgrade": "Albo przetwórz je od razu, ulepszając plan",
-    "onTheWayDayProcessesOn": "Zostaną przetworzone {date}"
+    "onTheWayDayProcessesOn": "Zostaną przetworzone {date}",
+    "planAutoRenewTerms": "{plan} odnawia się automatycznie za {price}, dopóki nie anulujesz w {path}.",
+    "planPriceBeforeDiscounts": "{price} przed rabatami",
+    "checkoutShowsFinalCharge": "Ostateczną kwotę zobaczysz przy płatności."
 }

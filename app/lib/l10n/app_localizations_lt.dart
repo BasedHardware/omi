@@ -15883,4 +15883,17 @@ class AppLocalizationsLt extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Apdorojama $date';
   }
+
+  @override
+  String planAutoRenewTerms(String plan, String price, String path) {
+    return '$plan automatiškai atnaujinamas už $price, kol neatšauksite skiltyje $path.';
+  }
+
+  @override
+  String planPriceBeforeDiscounts(String price) {
+    return '$price be nuolaidų';
+  }
+
+  @override
+  String get checkoutShowsFinalCharge => 'Galutinė suma rodoma atsiskaitant.';
 }

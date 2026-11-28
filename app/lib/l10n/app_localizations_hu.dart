@@ -15916,4 +15916,17 @@ class AppLocalizationsHu extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Feldolgozás: $date';
   }
+
+  @override
+  String planAutoRenewTerms(String plan, String price, String path) {
+    return 'A(z) $plan automatikusan megújul $price áron, amíg le nem mondod itt: $path.';
+  }
+
+  @override
+  String planPriceBeforeDiscounts(String price) {
+    return '$price kedvezmények előtt';
+  }
+
+  @override
+  String get checkoutShowsFinalCharge => 'A végleges összeget a fizetésnél látod.';
 }

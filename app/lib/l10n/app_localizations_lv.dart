@@ -15893,4 +15893,17 @@ class AppLocalizationsLv extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Apstrādās $date';
   }
+
+  @override
+  String planAutoRenewTerms(String plan, String price, String path) {
+    return '$plan automātiski atjaunojas par $price, līdz to atcelsiet sadaļā $path.';
+  }
+
+  @override
+  String planPriceBeforeDiscounts(String price) {
+    return '$price pirms atlaidēm';
+  }
+
+  @override
+  String get checkoutShowsFinalCharge => 'Galīgā summa redzama norēķinoties.';
 }

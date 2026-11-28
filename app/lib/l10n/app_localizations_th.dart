@@ -15783,4 +15783,17 @@ class AppLocalizationsTh extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'ประมวลผลในวันที่ $date';
   }
+
+  @override
+  String planAutoRenewTerms(String plan, String price, String path) {
+    return '$plan ต่ออายุอัตโนมัติในราคา $price จนกว่าคุณจะยกเลิกใน $path';
+  }
+
+  @override
+  String planPriceBeforeDiscounts(String price) {
+    return '$price ก่อนส่วนลด';
+  }
+
+  @override
+  String get checkoutShowsFinalCharge => 'ยอดชำระสุดท้ายจะแสดงในหน้าชำระเงิน';
 }

@@ -15770,4 +15770,17 @@ class AppLocalizationsAr extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'تتم المعالجة في $date';
   }
+
+  @override
+  String planAutoRenewTerms(String plan, String price, String path) {
+    return 'يتجدد $plan تلقائيًا بسعر $price حتى تلغيه من $path.';
+  }
+
+  @override
+  String planPriceBeforeDiscounts(String price) {
+    return '$price قبل الخصومات';
+  }
+
+  @override
+  String get checkoutShowsFinalCharge => 'تعرض صفحة الدفع المبلغ النهائي.';
 }

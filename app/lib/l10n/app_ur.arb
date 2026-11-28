@@ -12329,5 +12329,8 @@
     "batteryRestartToRefresh": "ریفریش کرنے کے لیے Omi کو دوبارہ شروع کریں",
     "onTheWayAllowanceHeldTitle": "آپ کے منٹ تجدید ہونے پر {date} کو پروسیس ہوں گے",
     "onTheWayAllowanceHeldUpgrade": "یا پلان اپ گریڈ کے ساتھ انہیں فوراً پروسیس کریں",
-    "onTheWayDayProcessesOn": "{date} کو پروسیس ہوں گے"
+    "onTheWayDayProcessesOn": "{date} کو پروسیس ہوں گے",
+    "planAutoRenewTerms": "{plan} خودکار طور پر {price} پر تجدید ہوتا ہے جب تک آپ {path} میں منسوخ نہ کریں۔",
+    "planPriceBeforeDiscounts": "رعایت سے پہلے {price}",
+    "checkoutShowsFinalCharge": "حتمی رقم چیک آؤٹ پر دکھائی جائے گی۔"
 }

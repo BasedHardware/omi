@@ -15963,4 +15963,17 @@ class AppLocalizationsEl extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Επεξεργασία στις $date';
   }
+
+  @override
+  String planAutoRenewTerms(String plan, String price, String path) {
+    return 'Το $plan ανανεώνεται αυτόματα στα $price μέχρι να το ακυρώσετε στο $path.';
+  }
+
+  @override
+  String planPriceBeforeDiscounts(String price) {
+    return '$price πριν από εκπτώσεις';
+  }
+
+  @override
+  String get checkoutShowsFinalCharge => 'Η τελική χρέωση εμφανίζεται στην πληρωμή.';
 }

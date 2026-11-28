@@ -15863,4 +15863,17 @@ class AppLocalizationsFi extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Käsitellään $date';
   }
+
+  @override
+  String planAutoRenewTerms(String plan, String price, String path) {
+    return '$plan uusiutuu automaattisesti hintaan $price, kunnes peruutat sen kohdassa $path.';
+  }
+
+  @override
+  String planPriceBeforeDiscounts(String price) {
+    return '$price ennen alennuksia';
+  }
+
+  @override
+  String get checkoutShowsFinalCharge => 'Lopullinen veloitus näkyy kassalla.';
 }

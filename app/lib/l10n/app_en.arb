@@ -19388,5 +19388,33 @@
                 "example": "Dec 1"
             }
         }
+    },
+    "planAutoRenewTerms": "{plan} renews automatically at {price} until you cancel in {path}.",
+    "@planAutoRenewTerms": {
+        "description": "Beside Upgrade on the free Plans sheet. plan = plan name (Omi Pro), price = recurring price like US$269.91/year, path = where to cancel, e.g. Settings > Plan & Usage",
+        "placeholders": {
+            "plan": {
+                "type": "String"
+            },
+            "price": {
+                "type": "String"
+            },
+            "path": {
+                "type": "String"
+            }
+        }
+    },
+    "planPriceBeforeDiscounts": "{price} before discounts",
+    "@planPriceBeforeDiscounts": {
+        "description": "Charge line above Upgrade when a promo code is entered; price like US$269.91/year",
+        "placeholders": {
+            "price": {
+                "type": "String"
+            }
+        }
+    },
+    "checkoutShowsFinalCharge": "Checkout shows the final charge.",
+    "@checkoutShowsFinalCharge": {
+        "description": "Under Upgrade when a promo code is entered: the Stripe checkout page shows the discounted amount"
     }
 }

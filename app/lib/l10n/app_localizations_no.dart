@@ -15863,4 +15863,17 @@ class AppLocalizationsNo extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Behandles $date';
   }
+
+  @override
+  String planAutoRenewTerms(String plan, String price, String path) {
+    return '$plan fornyes automatisk for $price til du sier opp i $path.';
+  }
+
+  @override
+  String planPriceBeforeDiscounts(String price) {
+    return '$price før rabatter';
+  }
+
+  @override
+  String get checkoutShowsFinalCharge => 'Det endelige beløpet vises i kassen.';
 }

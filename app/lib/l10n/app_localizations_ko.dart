@@ -15630,4 +15630,17 @@ class AppLocalizationsKo extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return '$date에 처리';
   }
+
+  @override
+  String planAutoRenewTerms(String plan, String price, String path) {
+    return '$plan은(는) $price에 자동 갱신됩니다. 해지는 $path에서 할 수 있습니다.';
+  }
+
+  @override
+  String planPriceBeforeDiscounts(String price) {
+    return '할인 전 $price';
+  }
+
+  @override
+  String get checkoutShowsFinalCharge => '최종 결제 금액은 결제 화면에 표시됩니다.';
 }

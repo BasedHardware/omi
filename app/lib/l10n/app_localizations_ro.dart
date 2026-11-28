@@ -15924,4 +15924,17 @@ class AppLocalizationsRo extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Se procesează $date';
   }
+
+  @override
+  String planAutoRenewTerms(String plan, String price, String path) {
+    return '$plan se reînnoiește automat la $price până când anulezi din $path.';
+  }
+
+  @override
+  String planPriceBeforeDiscounts(String price) {
+    return '$price înainte de reduceri';
+  }
+
+  @override
+  String get checkoutShowsFinalCharge => 'Suma finală apare la plată.';
 }

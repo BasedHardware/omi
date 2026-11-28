@@ -15744,4 +15744,17 @@ class AppLocalizationsHe extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'ייעבדו ב-$date';
   }
+
+  @override
+  String planAutoRenewTerms(String plan, String price, String path) {
+    return '$plan מתחדש אוטומטית ב-$price עד שתבטלו ב-$path.';
+  }
+
+  @override
+  String planPriceBeforeDiscounts(String price) {
+    return '$price לפני הנחות';
+  }
+
+  @override
+  String get checkoutShowsFinalCharge => 'הסכום הסופי יוצג בתשלום.';
 }

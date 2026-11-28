@@ -4772,5 +4772,8 @@
     "batteryRestartToRefresh": "Taaskäivitage Omi värskendamiseks",
     "onTheWayAllowanceHeldTitle": "Töödeldakse {date}, kui teie minutid uuenevad",
     "onTheWayAllowanceHeldUpgrade": "Või töödelge need kohe plaani täiendusega",
-    "onTheWayDayProcessesOn": "Töödeldakse {date}"
+    "onTheWayDayProcessesOn": "Töödeldakse {date}",
+    "planAutoRenewTerms": "{plan} uueneb automaatselt hinnaga {price}, kuni tühistad selle jaotises {path}.",
+    "planPriceBeforeDiscounts": "{price} enne allahindlusi",
+    "checkoutShowsFinalCharge": "Lõplik summa kuvatakse maksmisel."
 }

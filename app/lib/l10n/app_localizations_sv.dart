@@ -15866,4 +15866,17 @@ class AppLocalizationsSv extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Bearbetas $date';
   }
+
+  @override
+  String planAutoRenewTerms(String plan, String price, String path) {
+    return '$plan förnyas automatiskt för $price tills du säger upp i $path.';
+  }
+
+  @override
+  String planPriceBeforeDiscounts(String price) {
+    return '$price före rabatter';
+  }
+
+  @override
+  String get checkoutShowsFinalCharge => 'Slutbeloppet visas i kassan.';
 }

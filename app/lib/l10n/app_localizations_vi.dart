@@ -15859,4 +15859,17 @@ class AppLocalizationsVi extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Xử lý vào $date';
   }
+
+  @override
+  String planAutoRenewTerms(String plan, String price, String path) {
+    return '$plan tự động gia hạn với giá $price cho đến khi bạn hủy trong $path.';
+  }
+
+  @override
+  String planPriceBeforeDiscounts(String price) {
+    return '$price trước giảm giá';
+  }
+
+  @override
+  String get checkoutShowsFinalCharge => 'Trang thanh toán hiển thị số tiền cuối cùng.';
 }

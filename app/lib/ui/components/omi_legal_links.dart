@@ -19,7 +19,8 @@ class OmiLegalLinks extends StatelessWidget {
   final VoidCallback onTerms;
   final VoidCallback onPrivacy;
 
-  /// Defaults to [OmiColors.textSecondary]; a fixed-palette page passes its own.
+  /// Defaults to [OmiColors.textTertiary] (4.5:1 or more on surface1 in light and dark); a fixed-palette page
+  /// passes its own.
   final Color? color;
   final Key? termsKey;
   final Key? privacyKey;
@@ -27,7 +28,7 @@ class OmiLegalLinks extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final color = this.color ?? OmiColors.textSecondary;
+    final color = this.color ?? OmiColors.textTertiary;
     final style = OmiType.caption.copyWith(color: color);
     Widget link(Key? key, String label, VoidCallback onTap) => Semantics(
           link: true,

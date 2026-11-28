@@ -12329,5 +12329,8 @@
     "batteryRestartToRefresh": "Перазагрузіце Omi, каб абнавіць паказанне",
     "onTheWayAllowanceHeldTitle": "Будуць апрацаваны {date}, калі абновяцца вашыя хвіліны",
     "onTheWayAllowanceHeldUpgrade": "Або апрацуйце іх адразу з абнаўленнем плана",
-    "onTheWayDayProcessesOn": "Будуць апрацаваны {date}"
+    "onTheWayDayProcessesOn": "Будуць апрацаваны {date}",
+    "planAutoRenewTerms": "{plan} падаўжаецца аўтаматычна за {price}, пакуль вы не скасуеце ў {path}.",
+    "planPriceBeforeDiscounts": "{price} без уліку зніжак",
+    "checkoutShowsFinalCharge": "Канчатковую суму пакажа старонка аплаты."
 }

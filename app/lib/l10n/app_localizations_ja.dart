@@ -15624,4 +15624,17 @@ class AppLocalizationsJa extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return '$dateに処理予定';
   }
+
+  @override
+  String planAutoRenewTerms(String plan, String price, String path) {
+    return '$planは$priceで自動更新されます。解約は$pathでできます。';
+  }
+
+  @override
+  String planPriceBeforeDiscounts(String price) {
+    return '割引前 $price';
+  }
+
+  @override
+  String get checkoutShowsFinalCharge => '最終的な請求額は決済画面に表示されます。';
 }

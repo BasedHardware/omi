@@ -12329,5 +12329,8 @@
     "batteryRestartToRefresh": "రిఫ్రెష్ చేయడానికి Omi ను రీస్టార్ట్ చేయండి",
     "onTheWayAllowanceHeldTitle": "మీ నిమిషాలు రిన్యూ అయ్యే {date}న ప్రాసెస్ అవుతుంది",
     "onTheWayAllowanceHeldUpgrade": "లేదా ప్లాన్ అప్‌గ్రేడ్‌తో వెంటనే ప్రాసెస్ చేయించండి",
-    "onTheWayDayProcessesOn": "{date}న ప్రాసెస్ అవుతుంది"
+    "onTheWayDayProcessesOn": "{date}న ప్రాసెస్ అవుతుంది",
+    "planAutoRenewTerms": "{plan} స్వయంచాలకంగా {price}కి పునరుద్ధరించబడుతుంది, {path}లో రద్దు చేసే వరకు.",
+    "planPriceBeforeDiscounts": "తగ్గింపులకు ముందు {price}",
+    "checkoutShowsFinalCharge": "చివరి ఛార్జీ చెక్‌అవుట్‌లో కనిపిస్తుంది."
 }

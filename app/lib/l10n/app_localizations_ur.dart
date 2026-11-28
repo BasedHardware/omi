@@ -15870,4 +15870,17 @@ class AppLocalizationsUr extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return '$date کو پروسیس ہوں گے';
   }
+
+  @override
+  String planAutoRenewTerms(String plan, String price, String path) {
+    return '$plan خودکار طور پر $price پر تجدید ہوتا ہے جب تک آپ $path میں منسوخ نہ کریں۔';
+  }
+
+  @override
+  String planPriceBeforeDiscounts(String price) {
+    return 'رعایت سے پہلے $price';
+  }
+
+  @override
+  String get checkoutShowsFinalCharge => 'حتمی رقم چیک آؤٹ پر دکھائی جائے گی۔';
 }

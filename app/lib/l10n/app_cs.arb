@@ -4772,5 +4772,8 @@
     "batteryRestartToRefresh": "Restartujte Omi pro obnovení údaje",
     "onTheWayAllowanceHeldTitle": "Zpracuje se {date}, až se obnoví vaše minuty",
     "onTheWayAllowanceHeldUpgrade": "Nebo je zpracujte hned upgradem plánu",
-    "onTheWayDayProcessesOn": "Zpracuje se {date}"
+    "onTheWayDayProcessesOn": "Zpracuje se {date}",
+    "planAutoRenewTerms": "{plan} se automaticky obnovuje za {price}, dokud ho nezrušíte v {path}.",
+    "planPriceBeforeDiscounts": "{price} před slevami",
+    "checkoutShowsFinalCharge": "Konečnou částku uvidíte při platbě."
 }

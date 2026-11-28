@@ -15938,4 +15938,17 @@ class AppLocalizationsCa extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Es processaran el $date';
   }
+
+  @override
+  String planAutoRenewTerms(String plan, String price, String path) {
+    return '$plan es renova automàticament per $price fins que el cancel·lis a $path.';
+  }
+
+  @override
+  String planPriceBeforeDiscounts(String price) {
+    return '$price abans de descomptes';
+  }
+
+  @override
+  String get checkoutShowsFinalCharge => 'El pagament mostra l\'import final.';
 }

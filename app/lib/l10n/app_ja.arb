@@ -4772,5 +4772,8 @@
     "batteryRestartToRefresh": "Omiを再起動して更新",
     "onTheWayAllowanceHeldTitle": "分数が更新される{date}に処理されます",
     "onTheWayAllowanceHeldUpgrade": "またはプランのアップグレードですぐに処理できます",
-    "onTheWayDayProcessesOn": "{date}に処理予定"
+    "onTheWayDayProcessesOn": "{date}に処理予定",
+    "planAutoRenewTerms": "{plan}は{price}で自動更新されます。解約は{path}でできます。",
+    "planPriceBeforeDiscounts": "割引前 {price}",
+    "checkoutShowsFinalCharge": "最終的な請求額は決済画面に表示されます。"
 }

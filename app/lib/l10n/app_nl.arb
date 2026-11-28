@@ -4772,5 +4772,8 @@
     "batteryRestartToRefresh": "Start Omi opnieuw op om te vernieuwen",
     "onTheWayAllowanceHeldTitle": "Worden verwerkt op {date} wanneer je minuten vernieuwen",
     "onTheWayAllowanceHeldUpgrade": "Of verwerk ze direct met een upgrade van je plan",
-    "onTheWayDayProcessesOn": "Worden verwerkt op {date}"
+    "onTheWayDayProcessesOn": "Worden verwerkt op {date}",
+    "planAutoRenewTerms": "{plan} wordt automatisch verlengd voor {price} tot je opzegt via {path}.",
+    "planPriceBeforeDiscounts": "{price} vóór kortingen",
+    "checkoutShowsFinalCharge": "Bij het afrekenen zie je het definitieve bedrag."
 }

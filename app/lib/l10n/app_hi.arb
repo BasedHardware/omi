@@ -4772,5 +4772,8 @@
     "batteryRestartToRefresh": "रीफ़्रेश करने के लिए Omi पुनः प्रारंभ करें",
     "onTheWayAllowanceHeldTitle": "आपके मिनट रिन्यू होने पर {date} को प्रोसेस होगा",
     "onTheWayAllowanceHeldUpgrade": "या प्लान अपग्रेड के साथ उन्हें तुरंत प्रोसेस करें",
-    "onTheWayDayProcessesOn": "{date} को प्रोसेस होगा"
+    "onTheWayDayProcessesOn": "{date} को प्रोसेस होगा",
+    "planAutoRenewTerms": "{plan} अपने आप {price} पर रिन्यू होता है, जब तक आप {path} में रद्द न करें।",
+    "planPriceBeforeDiscounts": "छूट से पहले {price}",
+    "checkoutShowsFinalCharge": "अंतिम शुल्क चेकआउट में दिखेगा।"
 }

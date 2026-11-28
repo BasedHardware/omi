@@ -15899,4 +15899,17 @@ class AppLocalizationsNl extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Worden verwerkt op $date';
   }
+
+  @override
+  String planAutoRenewTerms(String plan, String price, String path) {
+    return '$plan wordt automatisch verlengd voor $price tot je opzegt via $path.';
+  }
+
+  @override
+  String planPriceBeforeDiscounts(String price) {
+    return '$price vóór kortingen';
+  }
+
+  @override
+  String get checkoutShowsFinalCharge => 'Bij het afrekenen zie je het definitieve bedrag.';
 }

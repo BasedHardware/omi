@@ -4772,5 +4772,8 @@
     "batteryRestartToRefresh": "Start Omi på nytt for å oppdatere verdien",
     "onTheWayAllowanceHeldTitle": "Behandles på {date} når minuttene dine fornyes",
     "onTheWayAllowanceHeldUpgrade": "Eller behandle dem umiddelbart med en planoppgradering",
-    "onTheWayDayProcessesOn": "Behandles {date}"
+    "onTheWayDayProcessesOn": "Behandles {date}",
+    "planAutoRenewTerms": "{plan} fornyes automatisk for {price} til du sier opp i {path}.",
+    "planPriceBeforeDiscounts": "{price} før rabatter",
+    "checkoutShowsFinalCharge": "Det endelige beløpet vises i kassen."
 }

@@ -15990,4 +15990,17 @@ class AppLocalizationsFr extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Traitement le $date';
   }
+
+  @override
+  String planAutoRenewTerms(String plan, String price, String path) {
+    return '$plan se renouvelle automatiquement à $price jusqu\'à ce que vous résiliiez dans $path.';
+  }
+
+  @override
+  String planPriceBeforeDiscounts(String price) {
+    return '$price avant réductions';
+  }
+
+  @override
+  String get checkoutShowsFinalCharge => 'Le paiement affiche le montant final.';
 }

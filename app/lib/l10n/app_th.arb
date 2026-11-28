@@ -4772,5 +4772,8 @@
     "batteryRestartToRefresh": "รีสตาร์ท Omi เพื่อรีเฟรช",
     "onTheWayAllowanceHeldTitle": "จะประมวลผลในวันที่ {date} เมื่อจำนวนนาทีของคุณต่ออายุ",
     "onTheWayAllowanceHeldUpgrade": "หรืออัปเกรดแพ็กเกจเพื่อประมวลผลทันที",
-    "onTheWayDayProcessesOn": "ประมวลผลในวันที่ {date}"
+    "onTheWayDayProcessesOn": "ประมวลผลในวันที่ {date}",
+    "planAutoRenewTerms": "{plan} ต่ออายุอัตโนมัติในราคา {price} จนกว่าคุณจะยกเลิกใน {path}",
+    "planPriceBeforeDiscounts": "{price} ก่อนส่วนลด",
+    "checkoutShowsFinalCharge": "ยอดชำระสุดท้ายจะแสดงในหน้าชำระเงิน"
 }

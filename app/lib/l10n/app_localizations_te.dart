@@ -15922,4 +15922,17 @@ class AppLocalizationsTe extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return '$dateన ప్రాసెస్ అవుతుంది';
   }
+
+  @override
+  String planAutoRenewTerms(String plan, String price, String path) {
+    return '$plan స్వయంచాలకంగా $priceకి పునరుద్ధరించబడుతుంది, $pathలో రద్దు చేసే వరకు.';
+  }
+
+  @override
+  String planPriceBeforeDiscounts(String price) {
+    return 'తగ్గింపులకు ముందు $price';
+  }
+
+  @override
+  String get checkoutShowsFinalCharge => 'చివరి ఛార్జీ చెక్‌అవుట్‌లో కనిపిస్తుంది.';
 }

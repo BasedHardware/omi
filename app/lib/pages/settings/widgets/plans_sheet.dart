@@ -21,6 +21,7 @@ import 'package:omi/pages/settings/widgets/plans/storefront_plans_content.dart';
 import 'package:omi/services/experiments/plan_storefront_gate.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/pages/settings/widgets/plans/plan_cards.dart';
+import 'package:omi/pages/settings/widgets/plans/free_plan_footer.dart';
 import 'package:omi/pages/settings/widgets/plans/promo_code_field.dart';
 import 'package:omi/pages/settings/widgets/plans/plan_display_name.dart';
 import 'package:omi/pages/settings/widgets/plans/plans_hero.dart';
@@ -28,7 +29,6 @@ import 'package:omi/pages/settings/widgets/plans/play_plans_content.dart';
 import 'package:omi/pages/settings/widgets/plans/training_data_option.dart';
 import 'package:omi/pages/settings/widgets/plans/prepaid_code_sheet.dart';
 import 'package:omi/pages/settings/widgets/yearly_switch.dart';
-import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/user_provider.dart';
@@ -109,6 +109,8 @@ class _PlansSheetState extends State<PlansSheet> {
   bool _cancelSelectionTouched = false;
   String? _renewalConfirmation;
   String? _purchaseError;
+  final _freeFooterKey = GlobalKey();
+  double? _freeFooterHeight;
 
   Future<void> _initializeStorefront() async {
     final enabled = await (widget.readStorefrontGate ?? PlanStorefrontGate.sheetEnabled)();
@@ -816,9 +818,17 @@ class _PlansSheetState extends State<PlansSheet> {
     }
   }
 
+  // The free footer labels its amount "before discounts" once a code is typed, however the text got there.
+  bool _promoTyped = false;
+  void _onPromoTextChanged() {
+    final typed = _promoCodeController.text.trim().isNotEmpty;
+    if (typed != _promoTyped && mounted) setState(() => _promoTyped = typed);
+  }
+
   @override
   void initState() {
     PaywallPacing.markShown();
+    _promoCodeController.addListener(_onPromoTextChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // Reopening the sheet re-reads the plan; the last answer stays on screen while it loads.
       if (mounted) unawaited(context.read<UsageProvider>().fetchSubscription());
@@ -835,13 +845,18 @@ class _PlansSheetState extends State<PlansSheet> {
     super.dispose();
   }
 
-  /// Plan cards, their loading placeholder, or the failure state with Try Again.
+  /// Plan cards, their loading placeholder, or the failure state with Try Again (also for an empty catalog).
   Widget _plansOrPlaceholder(UsageProvider usageProvider) {
     if (usageProvider.isLoadingPlans) {
       return const Column(children: [PlanOptionShimmer(), SizedBox(height: 18), PlanOptionShimmer()]);
     }
-    if (usageProvider.availablePlans != null) {
-      return _buildTierPlanCards(availablePlans: usageProvider.availablePlans!);
+    final catalog = usageProvider.availablePlans?['plans'];
+    if (catalog is List && catalog.isNotEmpty) {
+      // Like the trial paywall: the selection cannot change while a checkout for it is pending.
+      return IgnorePointer(
+        ignoring: _isUpgrading,
+        child: _buildTierPlanCards(availablePlans: usageProvider.availablePlans!),
+      );
     }
     return OmiErrorState(
       title: context.l10n.unableToLoadPlans,
@@ -958,314 +973,338 @@ class _PlansSheetState extends State<PlansSheet> {
               currentGrantsDesktop: sub?.plan.grantsDesktop ?? false,
               selectedPriceIsCurrent: _selectedPriceIsCurrent(provider.availablePlans),
             );
-        // Free plan: the charge, Upgrade and Terms/Privacy stay pinned under the scrolling plans. At
-        // accessibility text sizes a pinned footer would cover the page, so it scrolls in Upgrade's place.
-        final pinFooter = !isUnlimited && MediaQuery.textScalerOf(context).scale(1) < 1.6;
-        final body = <Widget>[
-          const SizedBox(height: OmiSpacing.xs),
-          PlansHero(waveController: widget.waveController, notesController: widget.notesController),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl),
-            child: Column(
-              children: [
-                const SizedBox(height: OmiSpacing.xl),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+        // The footer is only for a confirmed free account: no Stripe agreement (live, past due, unpaid, trial or
+        // scheduled), no payment issue, no prepaid plan. Everyone else keeps the sheet and recovery path as before.
+        final confirmedFree = sub != null &&
+            sub.plan == PlanType.basic &&
+            !sub.prepaid &&
+            !sub.cancelAtPeriodEnd &&
+            !sub.billedByPlay &&
+            (sub.stripeSubscriptionId?.isEmpty ?? true) &&
+            provider.subscription?.paymentIssue == null;
+        if (confirmedFree) WidgetsBinding.instance.addPostFrameCallback((_) => _measureFreeFooter());
+        List<Widget> body(bool pinFooter) => <Widget>[
+              const SizedBox(height: OmiSpacing.xs),
+              PlansHero(waveController: widget.waveController, notesController: widget.notesController),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl),
+                child: Column(
                   children: [
-                    Flexible(
-                      child: Semantics(
-                        header: true,
-                        child: Text(
-                          hasScheduledUpgrade
-                              ? l10n.upgradeScheduled
-                              : (isUnlimited ? l10n.changePlan : l10n.upgradeYourPlan),
-                          style: OmiType.title3,
+                    const SizedBox(height: OmiSpacing.xl),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Flexible(
+                          child: Semantics(
+                            header: true,
+                            child: Text(
+                              hasScheduledUpgrade
+                                  ? l10n.upgradeScheduled
+                                  : (isUnlimited ? l10n.changePlan : l10n.upgradeYourPlan),
+                              style: OmiType.title3,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: OmiSpacing.xs),
+                    Text(
+                      hasScheduledUpgrade
+                          ? l10n.upgradeAlreadyScheduled
+                          : (isUnlimited ? l10n.youAreOnAPaidPlan : l10n.planSheetChooseYourPlan),
+                      textAlign: TextAlign.center,
+                      style: secondary,
+                    ),
+                    if (isUnlimited && isCancelled) ...[
+                      const SizedBox(height: OmiSpacing.xs),
+                      Text(
+                        _renewalConfirmation ??
+                            (periodEnded
+                                ? l10n.planEndedOn(renewalDate)
+                                : knownFutureEnd
+                                    ? l10n.yourPlanEndsOn(
+                                        currentPlanDisplayName(context, provider.subscription), renewalDate)
+                                    : l10n.subscriptionSetToCancel),
+                        key: const ValueKey('plans_sheet_cancel_status'),
+                        textAlign: TextAlign.center,
+                        style: OmiType.subhead.copyWith(
+                          color: _renewalConfirmation == null ? OmiColors.warning : OmiColors.success,
                         ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: OmiSpacing.xs),
-                Text(
-                  hasScheduledUpgrade
-                      ? l10n.upgradeAlreadyScheduled
-                      : (isUnlimited ? l10n.youAreOnAPaidPlan : l10n.planSheetChooseYourPlan),
-                  textAlign: TextAlign.center,
-                  style: secondary,
-                ),
-                if (isUnlimited && isCancelled) ...[
-                  const SizedBox(height: OmiSpacing.xs),
-                  Text(
-                    _renewalConfirmation ??
-                        (periodEnded
-                            ? l10n.planEndedOn(renewalDate)
-                            : knownFutureEnd
-                                ? l10n.yourPlanEndsOn(
-                                    currentPlanDisplayName(context, provider.subscription), renewalDate)
-                                : l10n.subscriptionSetToCancel),
-                    key: const ValueKey('plans_sheet_cancel_status'),
-                    textAlign: TextAlign.center,
-                    style: OmiType.subhead.copyWith(
-                      color: _renewalConfirmation == null ? OmiColors.warning : OmiColors.success,
-                    ),
-                  ),
-                  if (_renewalConfirmation == null && knownFutureEnd) ...[
-                    const SizedBox(height: OmiSpacing.xxs),
-                    Text(
-                      l10n.resubscribeNowNoChargeUntil(renewalDate),
-                      key: const ValueKey('plans_sheet_cancel_reassurance'),
-                      textAlign: TextAlign.center,
-                      style: OmiType.subhead.copyWith(color: OmiColors.warning),
-                    ),
-                  ],
-                ] else if (_renewalConfirmation != null) ...[
-                  const SizedBox(height: OmiSpacing.xs),
-                  Text(
-                    _renewalConfirmation!,
-                    key: const ValueKey('plans_sheet_renew_confirmation'),
-                    textAlign: TextAlign.center,
-                    style: OmiType.subhead.copyWith(color: OmiColors.success),
-                  ),
-                ] else if (isUnlimited && !isCancelled) ...[
-                  const SizedBox(height: OmiSpacing.xs),
-                  Text(
-                    hasScheduledUpgrade ? l10n.annualPlanStartsAutomatically : l10n.planRenewsOn(renewalDate),
-                    textAlign: TextAlign.center,
-                    style: secondary,
-                  ),
-                  if (!hasScheduledUpgrade) const YearlySwitchPlansRow(),
-                ],
-                const SizedBox(height: OmiSpacing.xl),
-                // Features list - shown to all users
-                PlanFeatureItem(icon: FontAwesomeIcons.infinity, text: l10n.unlimitedConversations),
-                const SizedBox(height: OmiSpacing.md),
-                PlanFeatureItem(icon: FontAwesomeIcons.solidComments, text: l10n.askOmiAnything),
-                const SizedBox(height: OmiSpacing.md),
-                PlanFeatureItem(icon: FontAwesomeIcons.brain, text: l10n.unlockOmiInfiniteMemory),
-                const SizedBox(height: OmiSpacing.md),
-                PlanFeatureItem(icon: FontAwesomeIcons.globe, text: l10n.availableOnMacMobileWeb),
-                const SizedBox(height: OmiSpacing.xxl),
-
-                // Training Data Opt-in Option - only show after plans are loaded
-                if (_showTrainingDataOptIn && plansLoaded)
-                  Consumer<UserProvider>(
-                    builder: (context, userProvider, child) => Padding(
-                      padding: const EdgeInsets.only(top: OmiSpacing.xl, bottom: 18),
-                      child: TrainingDataOptionCard(
-                        optedIn: userProvider.trainingDataOptedIn,
-                        status: userProvider.trainingDataStatus,
-                        isLoading: userProvider.isLoading,
-                        onOptIn: _handleTrainingDataOptIn,
+                      if (_renewalConfirmation == null && knownFutureEnd) ...[
+                        const SizedBox(height: OmiSpacing.xxs),
+                        Text(
+                          l10n.resubscribeNowNoChargeUntil(renewalDate),
+                          key: const ValueKey('plans_sheet_cancel_reassurance'),
+                          textAlign: TextAlign.center,
+                          style: OmiType.subhead.copyWith(color: OmiColors.warning),
+                        ),
+                      ],
+                    ] else if (_renewalConfirmation != null) ...[
+                      const SizedBox(height: OmiSpacing.xs),
+                      Text(
+                        _renewalConfirmation!,
+                        key: const ValueKey('plans_sheet_renew_confirmation'),
+                        textAlign: TextAlign.center,
+                        style: OmiType.subhead.copyWith(color: OmiColors.success),
                       ),
-                    ),
-                  ),
+                    ] else if (isUnlimited && !isCancelled) ...[
+                      const SizedBox(height: OmiSpacing.xs),
+                      Text(
+                        hasScheduledUpgrade ? l10n.annualPlanStartsAutomatically : l10n.planRenewsOn(renewalDate),
+                        textAlign: TextAlign.center,
+                        style: secondary,
+                      ),
+                      if (!hasScheduledUpgrade) const YearlySwitchPlansRow(),
+                    ],
+                    const SizedBox(height: OmiSpacing.xl),
+                    // Features list - shown to all users
+                    PlanFeatureItem(icon: FontAwesomeIcons.infinity, text: l10n.unlimitedConversations),
+                    const SizedBox(height: OmiSpacing.md),
+                    PlanFeatureItem(icon: FontAwesomeIcons.solidComments, text: l10n.askOmiAnything),
+                    const SizedBox(height: OmiSpacing.md),
+                    PlanFeatureItem(icon: FontAwesomeIcons.brain, text: l10n.unlockOmiInfiniteMemory),
+                    const SizedBox(height: OmiSpacing.md),
+                    PlanFeatureItem(icon: FontAwesomeIcons.globe, text: l10n.availableOnMacMobileWeb),
+                    const SizedBox(height: OmiSpacing.xxl),
 
-                if (isUnlimited && !isCancelled)
-                  Builder(
-                    builder: (context) {
-                      if (hasScheduledUpgrade) {
-                        return PlanStatusCard(
-                          icon: Icons.schedule,
-                          title: l10n.upgradeScheduled,
-                          message: l10n.annualPlanStartsAutomatically,
-                        );
-                      }
-                      if (_getCurrentPlanDetails()?['interval'] == 'year') {
-                        // Already on the annual plan - only the cancel option applies.
-                        return PlanStatusCard(
-                          icon: Icons.check_circle_outline,
-                          iconColor: OmiColors.success,
-                          title: l10n.youreOnAnnualPlan,
-                          message: l10n.alreadyBestValuePlan,
-                        );
-                      }
-                      return _plansOrPlaceholder(provider);
-                    },
-                  )
-                else
-                  // Cancelled (resubscribe) or on the free plan (upgrade).
-                  _plansOrPlaceholder(provider),
+                    // Training Data Opt-in Option - only show after plans are loaded
+                    if (_showTrainingDataOptIn && plansLoaded)
+                      Consumer<UserProvider>(
+                        builder: (context, userProvider, child) => Padding(
+                          padding: const EdgeInsets.only(top: OmiSpacing.xl, bottom: 18),
+                          child: TrainingDataOptionCard(
+                            optedIn: userProvider.trainingDataOptedIn,
+                            status: userProvider.trainingDataStatus,
+                            isLoading: userProvider.isLoading,
+                            onOptIn: _handleTrainingDataOptIn,
+                          ),
+                        ),
+                      ),
 
-                const SizedBox(height: OmiSpacing.xl),
-                // One code entry: "Have a code?" redeems a prepaid code; a discount code goes to today's
-                // promo field for checkout.
-                if (provider.canRedeemPrepaidCode && !_showPromoField)
-                  PrepaidCodeEntry(
-                    onDiscountCode: (code) => setState(() {
-                      _promoCodeController.text = code;
-                      _promoCodeError = null;
-                      _showPromoField = true;
-                    }),
-                  )
-                else
-                  _buildPromoCodeField(),
-                const SizedBox(height: OmiSpacing.md),
+                    if (isUnlimited && !isCancelled)
+                      Builder(
+                        builder: (context) {
+                          if (hasScheduledUpgrade) {
+                            return PlanStatusCard(
+                              icon: Icons.schedule,
+                              title: l10n.upgradeScheduled,
+                              message: l10n.annualPlanStartsAutomatically,
+                            );
+                          }
+                          if (_getCurrentPlanDetails()?['interval'] == 'year') {
+                            // Already on the annual plan - only the cancel option applies.
+                            return PlanStatusCard(
+                              icon: Icons.check_circle_outline,
+                              iconColor: OmiColors.success,
+                              title: l10n.youreOnAnnualPlan,
+                              message: l10n.alreadyBestValuePlan,
+                            );
+                          }
+                          return _plansOrPlaceholder(provider);
+                        },
+                      )
+                    else
+                      // Cancelled (resubscribe) or on the free plan (upgrade).
+                      _plansOrPlaceholder(provider),
 
-                // Continue — hidden for same-tier annual (nothing to change) and for
-                // desktop-plan → mobile-tier switches. The free plan's Upgrade is in the footer.
-                if (isUnlimited && showContinue())
-                  _primaryAction(key: const ValueKey('plans_sheet_upgrade_button'), label: l10n.continueText)
-                else if (!isUnlimited && !pinFooter)
-                  _freeFooter(provider, showUpgrade: showContinue(), pinned: false),
+                    const SizedBox(height: OmiSpacing.xl),
+                    // One code entry: "Have a code?" redeems a prepaid code; a discount code goes to today's
+                    // promo field for checkout.
+                    if (provider.canRedeemPrepaidCode && !_showPromoField)
+                      PrepaidCodeEntry(
+                        onDiscountCode: (code) => setState(() {
+                          _promoCodeController.text = code;
+                          _promoCodeError = null;
+                          _showPromoField = true;
+                        }),
+                      )
+                    else
+                      _buildPromoCodeField(),
+                    const SizedBox(height: OmiSpacing.md),
 
-                // Freemium limitations and the downgrade option - basic users only
-                if (!isUnlimited) ...[
-                  const SizedBox(height: OmiSpacing.xxl),
-                  Text(
-                    l10n.freemiumLimitsIntro,
-                    textAlign: TextAlign.center,
-                    style: secondary.copyWith(fontWeight: FontWeight.w500),
-                  ),
-                  const SizedBox(height: OmiSpacing.md),
-                  PlanFeatureItem(
-                    icon: FontAwesomeIcons.carBattery,
-                    text: l10n.downgradeLimitBattery,
-                    isLimitation: true,
-                  ),
-                  const SizedBox(height: OmiSpacing.sm),
-                  PlanFeatureItem(
-                    icon: FontAwesomeIcons.triangleExclamation,
-                    text: l10n.downgradeLimitQuality,
-                    isLimitation: true,
-                  ),
-                  const SizedBox(height: OmiSpacing.sm),
-                  PlanFeatureItem(
-                    icon: FontAwesomeIcons.clock,
-                    text: l10n.downgradeLimitDelayNotRealTime,
-                    isLimitation: true,
-                  ),
-                  const SizedBox(height: OmiSpacing.sm),
-                  PlanFeatureItem(
-                    icon: FontAwesomeIcons.userSlash,
-                    text: l10n.downgradeLimitSpeakers,
-                    isLimitation: true,
-                  ),
-                  if (plansLoaded) ...[
-                    const SizedBox(height: OmiSpacing.sm),
-                    OmiButton.secondary(
-                      label: l10n.downgradeToFreemiumAction,
-                      expand: true,
-                      isLoading: _isSwitchingToFree,
-                      onPressed: _handleDowngradeToFreemium,
-                    ),
+                    // Continue/Upgrade — hidden for same-tier annual (nothing to change) and for
+                    // desktop-plan → mobile-tier switches. A confirmed free account's Upgrade is in the footer.
+                    if (confirmedFree) ...[
+                      if (!pinFooter) _freeFooter(provider, showUpgrade: showContinue(), pinned: false),
+                    ] else if (showContinue())
+                      _primaryAction(
+                        key: const ValueKey('plans_sheet_upgrade_button'),
+                        label: isUnlimited ? l10n.continueText : l10n.upgrade,
+                      ),
+
+                    // Freemium limitations and the downgrade option - basic users only
+                    if (!isUnlimited) ...[
+                      const SizedBox(height: OmiSpacing.xxl),
+                      Text(
+                        l10n.freemiumLimitsIntro,
+                        textAlign: TextAlign.center,
+                        style: secondary.copyWith(fontWeight: FontWeight.w500),
+                      ),
+                      const SizedBox(height: OmiSpacing.md),
+                      PlanFeatureItem(
+                        icon: FontAwesomeIcons.carBattery,
+                        text: l10n.downgradeLimitBattery,
+                        isLimitation: true,
+                      ),
+                      const SizedBox(height: OmiSpacing.sm),
+                      PlanFeatureItem(
+                        icon: FontAwesomeIcons.triangleExclamation,
+                        text: l10n.downgradeLimitQuality,
+                        isLimitation: true,
+                      ),
+                      const SizedBox(height: OmiSpacing.sm),
+                      PlanFeatureItem(
+                        icon: FontAwesomeIcons.clock,
+                        text: l10n.downgradeLimitDelayNotRealTime,
+                        isLimitation: true,
+                      ),
+                      const SizedBox(height: OmiSpacing.sm),
+                      PlanFeatureItem(
+                        icon: FontAwesomeIcons.userSlash,
+                        text: l10n.downgradeLimitSpeakers,
+                        isLimitation: true,
+                      ),
+                      if (plansLoaded) ...[
+                        const SizedBox(height: OmiSpacing.sm),
+                        OmiButton.secondary(
+                          label: l10n.downgradeToFreemiumAction,
+                          expand: true,
+                          isLoading: _isSwitchingToFree,
+                          onPressed: _handleDowngradeToFreemium,
+                        ),
+                      ],
+                    ],
+
+                    if (isCancelled && plansLoaded && !_selectionMatchesCurrentPrice(provider)) ...[
+                      Text(
+                        l10n.resubscribeFirstToChangePlans,
+                        key: const ValueKey('plans_sheet_resubscribe_first'),
+                        textAlign: TextAlign.center,
+                        style: OmiType.subhead.copyWith(color: OmiColors.warning),
+                      ),
+                      const SizedBox(height: OmiSpacing.sm),
+                    ],
+                    if (!confirmedFree && _purchaseError != null) ...[
+                      Text(
+                        _purchaseError!,
+                        key: const ValueKey('plans_sheet_purchase_error'),
+                        textAlign: TextAlign.center,
+                        style: OmiType.subhead.copyWith(color: OmiColors.danger),
+                      ),
+                      const SizedBox(height: OmiSpacing.sm),
+                    ],
+
+                    // Resubscribe for cancelled subscriptions. Always the current price.
+                    if (isCancelled && plansLoaded)
+                      OmiButton(
+                        key: const ValueKey('plans_sheet_resubscribe_button'),
+                        label: l10n.resubscribe,
+                        expand: true,
+                        isLoading: _isUpgrading,
+                        onPressed: () {
+                          HapticFeedback.mediumImpact();
+                          return _resubscribeCurrent();
+                        },
+                      ),
+                    const SizedBox(height: OmiSpacing.md),
+                    if (isUnlimited || sub?.stripeSubscriptionId?.isNotEmpty == true) ...[
+                      OmiButton.secondary(
+                        label: l10n.managePaymentMethod,
+                        icon: Icons.credit_card,
+                        expand: true,
+                        onPressed: _openPaymentPortal,
+                      ),
+                      const SizedBox(height: OmiSpacing.sm),
+                      if (isUnlimited && !isCancelled)
+                        OmiButton.tertiary(
+                          label: l10n.cancelSubscription,
+                          expand: true,
+                          onPressed: _handleCancelSubscription,
+                        ),
+                      const SizedBox(height: OmiSpacing.xs),
+                    ],
                   ],
-                ],
-
-                if (isCancelled && plansLoaded && !_selectionMatchesCurrentPrice(provider)) ...[
-                  Text(
-                    l10n.resubscribeFirstToChangePlans,
-                    key: const ValueKey('plans_sheet_resubscribe_first'),
-                    textAlign: TextAlign.center,
-                    style: OmiType.subhead.copyWith(color: OmiColors.warning),
-                  ),
-                  const SizedBox(height: OmiSpacing.sm),
-                ],
-                if (isUnlimited && _purchaseError != null) ...[
-                  Text(
-                    _purchaseError!,
-                    key: const ValueKey('plans_sheet_purchase_error'),
-                    textAlign: TextAlign.center,
-                    style: OmiType.subhead.copyWith(color: OmiColors.danger),
-                  ),
-                  const SizedBox(height: OmiSpacing.sm),
-                ],
-
-                // Resubscribe for cancelled subscriptions. Always the current price.
-                if (isCancelled && plansLoaded)
-                  OmiButton(
-                    key: const ValueKey('plans_sheet_resubscribe_button'),
-                    label: l10n.resubscribe,
-                    expand: true,
-                    isLoading: _isUpgrading,
-                    onPressed: () {
-                      HapticFeedback.mediumImpact();
-                      return _resubscribeCurrent();
-                    },
-                  ),
-                const SizedBox(height: OmiSpacing.md),
-                if (isUnlimited || sub?.stripeSubscriptionId?.isNotEmpty == true) ...[
-                  OmiButton.secondary(
-                    label: l10n.managePaymentMethod,
-                    icon: Icons.credit_card,
-                    expand: true,
-                    onPressed: _openPaymentPortal,
-                  ),
-                  const SizedBox(height: OmiSpacing.sm),
-                  if (isUnlimited && !isCancelled)
-                    OmiButton.tertiary(
-                      label: l10n.cancelSubscription,
-                      expand: true,
-                      onPressed: _handleCancelSubscription,
-                    ),
-                  const SizedBox(height: OmiSpacing.xs),
-                ],
-              ],
-            ),
-          ),
-        ];
-        final list = ListView(padding: const EdgeInsets.only(bottom: OmiSpacing.md), children: body);
-        return DecoratedBox(
-          // Paints the sheet surface itself too, for hosts that present it without showOmiSheet.
-          decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.sheetTop),
-          child: SizedBox(
-            height: MediaQuery.sizeOf(context).height * 0.85,
-            child: pinFooter
+                ),
+              ),
+            ];
+        return LayoutBuilder(builder: (context, constraints) {
+          final height = MediaQuery.sizeOf(context).height * 0.85;
+          // Pinned under the plans while the list keeps room for the promo field. With the keyboard up, a
+          // wrapped error or accessibility text, the footer scrolls with the page in Upgrade's place.
+          final pinFooter = confirmedFree &&
+              MediaQuery.textScalerOf(context).scale(1) < 1.6 &&
+              (_freeFooterHeight == null ||
+                  (constraints.maxHeight < height ? constraints.maxHeight : height) - _pinnedFooterHeight(context) >=
+                      _minPinnedListHeight);
+          final list = ListView(padding: const EdgeInsets.only(bottom: OmiSpacing.md), children: body(pinFooter));
+          return DecoratedBox(
+            // Paints the sheet surface itself too, for hosts that present it without showOmiSheet.
+            decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.sheetTop),
+            child: SizedBox(
+              height: height,
+              // The list keeps its place in the tree either way, so its scroll position and the focused promo field
+              // survive the footer moving in or out of it.
+              child: Column(children: [
+                Expanded(child: list),
                 // Built after the plan cards, which settle the selected plan.
-                ? Column(
-                    children: [Expanded(child: list), _freeFooter(provider, showUpgrade: showContinue(), pinned: true)])
-                : list,
-          ),
-        );
+                if (pinFooter) _freeFooter(provider, showUpgrade: showContinue(), pinned: true),
+              ]),
+            ),
+          );
+        });
       },
     );
   }
 
-  /// The selected plan's charge, Upgrade (with its error above it) and Terms/Privacy, for the free plan.
+  /// The list keeps at least this much height under a pinned footer: the promo field, its error and part of a card.
+  static const double _minPinnedListHeight = 200;
+
+  /// The pinned footer's height: the measured content plus its top padding and bottom safe area.
+  double _pinnedFooterHeight(BuildContext context) {
+    final bottom = MediaQuery.paddingOf(context).bottom;
+    return _freeFooterHeight! + OmiSpacing.sm + (bottom > OmiSpacing.xs ? bottom : OmiSpacing.xs);
+  }
+
+  /// Pinned and inline footers have the same width, so one measurement decides where the next frame puts it.
+  void _measureFreeFooter() {
+    if (!mounted) return;
+    final box = _freeFooterKey.currentContext?.findRenderObject();
+    if (box is! RenderBox || !box.hasSize) return;
+    final height = box.size.height;
+    if (_freeFooterHeight == null || (height - _freeFooterHeight!).abs() > 0.5) {
+      setState(() => _freeFooterHeight = height);
+    }
+  }
+
+  /// The confirmed free account's footer for the offer Upgrade submits ([planForCheckout]); none, no Upgrade.
   Widget _freeFooter(UsageProvider provider, {required bool showUpgrade, required bool pinned}) {
     final interval = selectedPlan == 'yearly' ? 'year' : 'month';
-    final selected = (provider.availablePlans?['plans'] as List?)?.whereType<Map<String, dynamic>>().firstWhereOrNull(
-        (plan) => plan['interval'] == interval && (selectedTierId == null || plan['plan_id'] == selectedTierId));
-    final footer = Column(
-      key: const ValueKey('plans_sheet_free_footer'),
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (_purchaseError != null) ...[
-          Text(
-            _purchaseError!,
-            key: const ValueKey('plans_sheet_purchase_error'),
-            textAlign: TextAlign.center,
-            style: OmiType.subhead.copyWith(color: OmiColors.danger),
-          ),
-          const SizedBox(height: OmiSpacing.sm),
-        ],
-        if (showUpgrade) ...[
-          if (selected != null) ...[
-            Text(
-              l10n.billingRecurringPrice(planBillingTotal(selected), interval),
-              key: const ValueKey('plans_sheet_charge_line'),
-              textAlign: TextAlign.center,
-              style: OmiType.subhead.copyWith(color: OmiColors.textPrimary, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: OmiSpacing.sm),
-          ],
-          _primaryAction(key: const ValueKey('plans_sheet_upgrade_button'), label: l10n.upgrade),
-        ],
-        IgnorePointer(
-          ignoring: _isUpgrading,
-          child: OmiLegalLinks(
-            termsKey: const ValueKey('plans_sheet_terms'),
-            privacyKey: const ValueKey('plans_sheet_privacy'),
-            onTerms: () => context.read<AuthenticationProvider>().openTermsOfService(),
-            onPrivacy: () => context.read<AuthenticationProvider>().openPrivacyPolicy(),
-          ),
-        ),
-      ],
-    );
-    if (!pinned) return footer;
-    return SafeArea(
-      top: false,
-      minimum: const EdgeInsets.only(bottom: OmiSpacing.xs),
-      child: Padding(padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, OmiSpacing.sm, OmiSpacing.xl, 0), child: footer),
+    final plansLoaded = !provider.isLoadingPlans && provider.availablePlans != null;
+    final plans = (provider.availablePlans?['plans'] as List?)?.whereType<Map<String, dynamic>>().toList() ?? const [];
+    final offer = plansLoaded ? planForCheckout(plans, interval: interval, selectedTierId: selectedTierId) : null;
+    final price = offer == null ? null : l10n.billingRecurringPrice(planBillingTotal(offer), interval);
+    // Checkout applies a promo code; this sheet cannot know the discounted charge.
+    final discounted = _promoTyped;
+    final planName = offer == null
+        ? ''
+        : planTitleForTier(offer['plan_id'] as String? ?? '', provider.subscription?.availablePlans ?? const []) ??
+            offer['title'] as String? ??
+            '';
+    final show = showUpgrade && price != null;
+    return FreePlanFooter(
+      contentKey: _freeFooterKey,
+      error: _purchaseError,
+      chargeLine: !show ? null : (discounted ? l10n.planPriceBeforeDiscounts(price) : price),
+      renewalTerms: !show
+          ? null
+          : [
+              l10n.planAutoRenewTerms(planName, price, '${l10n.settings} > ${l10n.planAndUsage}'),
+              if (discounted) l10n.checkoutShowsFinalCharge,
+            ].join(' '),
+      upgrade: show ? _primaryAction(key: const ValueKey('plans_sheet_upgrade_button'), label: l10n.upgrade) : null,
+      locked: _isUpgrading,
+      pinned: pinned,
     );
   }
 
@@ -1324,6 +1363,7 @@ class _PlansSheetState extends State<PlansSheet> {
         canApply: context.read<UsageProvider>().canRedeemSubscriptionCode,
         busy: _isRedeemingCode,
         applyEnabled: !_isUpgrading && _codeRetryTimer == null,
+        locked: _isUpgrading,
         applied: _promoCodeApplied,
         initiallyExpanded: _showPromoField,
         onApply: _applySubscriptionCode,
@@ -1352,6 +1392,7 @@ class _PlansSheetState extends State<PlansSheet> {
   Widget _buildTierPlanCards({required Map<String, dynamic> availablePlans}) {
     final plans = (availablePlans['plans'] as List).cast<Map<String, dynamic>>();
     _keepCurrentPriceSelected(plans);
+    _settleBillingPeriod(plans);
 
     // Group plans by plan_id
     final Map<String, List<Map<String, dynamic>>> grouped = {};
@@ -1389,15 +1430,17 @@ class _PlansSheetState extends State<PlansSheet> {
 
     return Column(
       children: [
-        PlanBillingPeriodToggle(
-          isYearly: isYearly,
-          savePercent: bestAnnualDiscountPercent(grouped.values),
-          onChanged: (yearly) {
-            _cancelSelectionTouched = true;
-            setState(() => selectedPlan = yearly ? 'yearly' : 'monthly');
-          },
-        ),
-        const SizedBox(height: 18),
+        if (plans.any((p) => p['interval'] == 'year') && plans.any((p) => p['interval'] == 'month')) ...[
+          PlanBillingPeriodToggle(
+            isYearly: isYearly,
+            savePercent: bestAnnualDiscountPercent(grouped.values),
+            onChanged: (yearly) {
+              _cancelSelectionTouched = true;
+              setState(() => selectedPlan = yearly ? 'yearly' : 'monthly');
+            },
+          ),
+          const SizedBox(height: 18),
+        ],
         ...sortedTierIds.map((tierId) {
           final tierPlans = grouped[tierId]!;
           final planForPeriod = tierPlans.firstWhereOrNull((p) => p['interval'] == (isYearly ? 'year' : 'month'));
@@ -1429,9 +1472,10 @@ class _PlansSheetState extends State<PlansSheet> {
     );
   }
 
-  /// Fallback for single-tier plan display (old monthly/yearly cards).
+  /// Fallback for single-tier plan display (old monthly/yearly cards). Only intervals the catalog offers.
   Widget _buildLegacyPlanCards({required List<Map<String, dynamic>> plans}) {
     _keepCurrentPriceSelected(plans);
+    _settleBillingPeriod(plans);
     final tierId = plans.first['plan_id'];
     final desktopAccess = tierId is String ? _tierGrantsDesktop(tierId) : null;
     // A known tier shows its canonical name (e.g. Omi Pro), not a stale backend title.
@@ -1439,33 +1483,49 @@ class _PlansSheetState extends State<PlansSheet> {
     Map<String, dynamic> named(Map<String, dynamic> plan) => tierName == null
         ? plan
         : {...plan, 'title': '$tierName · ${plan['interval'] == 'year' ? l10n.billingYearly : l10n.billingMonthly}'};
+    final yearly = plans.firstWhereOrNull((plan) => plan['interval'] == 'year');
+    final monthly = plans.firstWhereOrNull((plan) => plan['interval'] == 'month');
     return Column(
       children: [
-        _buildDynamicPlanOption(
-          isSelected: selectedPlan == 'yearly',
-          planData: named(plans.firstWhere((plan) => plan['interval'] == 'year', orElse: () => plans.first)),
-          saveTag: _monthsFreeLabel(annualMonthsFree(plans)),
-          isPopular: true,
-          desktopAccess: desktopAccess,
-          onTap: () {
-            HapticFeedback.lightImpact();
-            _cancelSelectionTouched = true;
-            setState(() => selectedPlan = 'yearly');
-          },
-        ),
-        const SizedBox(height: 18),
-        _buildDynamicPlanOption(
-          isSelected: selectedPlan == 'monthly',
-          planData: named(plans.firstWhere((plan) => plan['interval'] == 'month', orElse: () => plans.first)),
-          desktopAccess: desktopAccess,
-          onTap: () {
-            HapticFeedback.lightImpact();
-            _cancelSelectionTouched = true;
-            setState(() => selectedPlan = 'monthly');
-          },
-        ),
+        if (yearly != null)
+          _buildDynamicPlanOption(
+            isSelected: selectedPlan == 'yearly',
+            planData: named(yearly),
+            saveTag: _monthsFreeLabel(annualMonthsFree(plans)),
+            isPopular: true,
+            desktopAccess: desktopAccess,
+            onTap: () {
+              HapticFeedback.lightImpact();
+              _cancelSelectionTouched = true;
+              setState(() => selectedPlan = 'yearly');
+            },
+          ),
+        if (yearly != null && monthly != null) const SizedBox(height: 18),
+        if (monthly != null)
+          _buildDynamicPlanOption(
+            isSelected: selectedPlan == 'monthly',
+            planData: named(monthly),
+            desktopAccess: desktopAccess,
+            onTap: () {
+              HapticFeedback.lightImpact();
+              _cancelSelectionTouched = true;
+              setState(() => selectedPlan = 'monthly');
+            },
+          ),
       ],
     );
+  }
+
+  /// A catalog can come back with one interval (a per-price Stripe failure): select the one that exists.
+  void _settleBillingPeriod(List<Map<String, dynamic>> plans) {
+    if (_isUpgrading) return;
+    final interval = selectedPlan == 'yearly' ? 'year' : 'month';
+    if (plans.any((plan) => plan['interval'] == interval)) return;
+    if (plans.any((plan) => plan['interval'] == 'year')) {
+      selectedPlan = 'yearly';
+    } else if (plans.any((plan) => plan['interval'] == 'month')) {
+      selectedPlan = 'monthly';
+    }
   }
 
   Widget _buildDynamicPlanOption({

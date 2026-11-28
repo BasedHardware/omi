@@ -4772,5 +4772,8 @@
     "batteryRestartToRefresh": "Restartējiet Omi, lai atsvaidzinātu",
     "onTheWayAllowanceHeldTitle": "Tiks apstrādāti {date}, kad atjaunosies jūsu minūtes",
     "onTheWayAllowanceHeldUpgrade": "Vai jauniniet plānu, lai tos apstrādātu uzreiz",
-    "onTheWayDayProcessesOn": "Apstrādās {date}"
+    "onTheWayDayProcessesOn": "Apstrādās {date}",
+    "planAutoRenewTerms": "{plan} automātiski atjaunojas par {price}, līdz to atcelsiet sadaļā {path}.",
+    "planPriceBeforeDiscounts": "{price} pirms atlaidēm",
+    "checkoutShowsFinalCharge": "Galīgā summa redzama norēķinoties."
 }

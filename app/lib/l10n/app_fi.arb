@@ -4772,5 +4772,8 @@
     "batteryRestartToRefresh": "Käynnistä Omi uudelleen päivittämiseksi",
     "onTheWayAllowanceHeldTitle": "Käsitellään {date}, kun minuittisi uudistuvat",
     "onTheWayAllowanceHeldUpgrade": "Tai käsittele ne heti tilauksen päivityksellä",
-    "onTheWayDayProcessesOn": "Käsitellään {date}"
+    "onTheWayDayProcessesOn": "Käsitellään {date}",
+    "planAutoRenewTerms": "{plan} uusiutuu automaattisesti hintaan {price}, kunnes peruutat sen kohdassa {path}.",
+    "planPriceBeforeDiscounts": "{price} ennen alennuksia",
+    "checkoutShowsFinalCharge": "Lopullinen veloitus näkyy kassalla."
 }

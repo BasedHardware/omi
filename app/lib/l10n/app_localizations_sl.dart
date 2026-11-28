@@ -15886,4 +15886,17 @@ class AppLocalizationsSl extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Obdelani bodo $date';
   }
+
+  @override
+  String planAutoRenewTerms(String plan, String price, String path) {
+    return '$plan se samodejno podaljša za $price, dokler ga ne prekličete v $path.';
+  }
+
+  @override
+  String planPriceBeforeDiscounts(String price) {
+    return '$price pred popusti';
+  }
+
+  @override
+  String get checkoutShowsFinalCharge => 'Končni znesek vidite pri plačilu.';
 }

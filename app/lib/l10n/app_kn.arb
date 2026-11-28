@@ -12329,5 +12329,8 @@
     "batteryRestartToRefresh": "ರಿಫ್ರೆಶ್ ಮಾಡಲು Omi ಅನ್ನು ಮರುಪ್ರಾರಂಭ ಮಾಡಿ",
     "onTheWayAllowanceHeldTitle": "ನಿಮ್ಮ ನಿಮಿಷಗಳು ನವೀಕರಣವಾಗುವ {date} ರಂದು ಪ್ರಕ್ರಿಯೆಗೊಳ್ಳುತ್ತದೆ",
     "onTheWayAllowanceHeldUpgrade": "ಅಥವಾ ಪ್ಲಾನ್ ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡುವ ಮೂಲಕ ತಕ್ಷಣ ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಿ",
-    "onTheWayDayProcessesOn": "{date} ರಂದು ಪ್ರಕ್ರಿಯೆ"
+    "onTheWayDayProcessesOn": "{date} ರಂದು ಪ್ರಕ್ರಿಯೆ",
+    "planAutoRenewTerms": "{plan} ಸ್ವಯಂಚಾಲಿತವಾಗಿ {price} ಗೆ ನವೀಕರಣಗೊಳ್ಳುತ್ತದೆ, {path} ನಲ್ಲಿ ರದ್ದುಮಾಡುವವರೆಗೆ.",
+    "planPriceBeforeDiscounts": "ರಿಯಾಯಿತಿಗೆ ಮೊದಲು {price}",
+    "checkoutShowsFinalCharge": "ಅಂತಿಮ ಶುಲ್ಕವನ್ನು ಚೆಕ್‌ಔಟ್‌ನಲ್ಲಿ ತೋರಿಸಲಾಗುತ್ತದೆ."
 }

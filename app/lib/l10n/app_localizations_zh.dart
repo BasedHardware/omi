@@ -15600,4 +15600,17 @@ class AppLocalizationsZh extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return '将于 $date 处理';
   }
+
+  @override
+  String planAutoRenewTerms(String plan, String price, String path) {
+    return '$plan 将按 $price 自动续订，直到你在 $path 中取消。';
+  }
+
+  @override
+  String planPriceBeforeDiscounts(String price) {
+    return '折扣前 $price';
+  }
+
+  @override
+  String get checkoutShowsFinalCharge => '最终金额以结账页面为准。';
 }
