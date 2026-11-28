@@ -266,6 +266,7 @@ from utils.llm.chat import (
 from utils.llm.external_integrations import get_message_structure
 from utils.llm.clients import generate_embedding
 from utils.notifications import send_notification
+from utils.other.from_segments_timing import mark_from_segments_persisted
 from utils.other.request_deadline import RequestDeadlineExceeded, require_request_budget
 from utils.other.hume import (
     get_hume,
@@ -795,6 +796,7 @@ def _get_structured_steps(
                 open_loop_out=open_loop_out,
                 **notes_agent_inputs(main_conv, desktop_capture),
             )
+            require_request_budget()
             if async_notes:
                 structured = yield from llm_input_dedupe.notes_steps(
                     uid, main_conv, prefix, conversation_notes_steps, llm_hashes, **notes_inputs
@@ -2881,6 +2883,7 @@ def _process_conversation_steps(
         completed: Conversation | None = None,
         derived_effects: DerivedEffectsDisposition = DerivedEffectsDisposition.RUN,
     ) -> None:
+        mark_from_segments_persisted(current)
         for settle in final_pass_settlements:
             settle(current)
         final_pass_settlements.clear()

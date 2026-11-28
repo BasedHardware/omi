@@ -93,6 +93,7 @@ from utils.apps import update_personas_async
 from utils.log_sanitizer import sanitize
 from utils.other.endpoints import with_rate_limit, get_current_user_uid
 from utils.other.from_segments_503 import FromSegments503Route
+from utils.other.from_segments_timing import FromSegmentsTiming, mark_from_segments_persisted
 from utils.other.raise_site import raise_site_of
 from utils.other.request_deadline import (
     RequestDeadlineExceeded,
@@ -150,6 +151,7 @@ from utils.conversations.meeting_receipt import (
 from utils.executors import (
     db_executor,
     from_segments_executor,
+    ios_from_segments_executor,
     postprocess_executor,
     run_blocking,
     start_background_task,
@@ -2094,7 +2096,7 @@ def _ingest_conversation_from_segments(
     client_platform: Optional[str] = None,
     client_kind: Optional[str] = None,
     app_build: Optional[str] = None,
-    continue_processing: bool = False,
+    async_notes: bool = False,
 ) -> PreparedFromSegments:
     """Shared impl: validate already-transcribed segments, build a CreateConversation, run the full
     processing pipeline (title, memories, action items, sync), and return the result. Used by both
@@ -2197,7 +2199,7 @@ def _ingest_conversation_from_segments(
             if (
                 existing_conversation.get('status') == ConversationStatus.in_progress
                 and metadata.get('from_segments_client_session_id') == request.client_session_id
-            ) or (stale_claim is not None and continue_processing):
+            ) or (stale_claim is not None and client_kind == 'mobile_ios'):
                 # The persisted projection is display data. Strip it before
                 # model validation so it cannot block or drive transcript reuse.
                 resumable_conversation = OmiConversation.model_validate(
@@ -2325,7 +2327,7 @@ def _ingest_conversation_from_segments(
         client_projection=client_projection,
         client_kind=client_kind,
         app_build=app_build,
-        continue_processing=continue_processing,
+        async_notes=async_notes,
     )
 
 
@@ -2356,9 +2358,10 @@ def _process_validated_from_segments(
     client_projection: ClientProcessing | None,
     client_kind: str | None,
     app_build: str | None,
-    continue_processing: bool,
+    async_notes: bool,
 ) -> Steps[ConversationResponse]:
     require_request_budget()
+    keyed_ios = bool(conversation_id and client_kind == 'mobile_ios')
     if conversation_id:
         if create_payload is None:
             claim_updates = {'external_data.from_segments_claimed_at': datetime.now(timezone.utc)}
@@ -2369,7 +2372,7 @@ def _process_validated_from_segments(
                     uid, conversation_id, expected_fields=stale_claim, extra_updates=claim_updates
                 )
             if not admitted:
-                if continue_processing:
+                if keyed_ios:
                     raise retryable_processing_response('from_segments_processing_in_flight')
                 raise HTTPException(status_code=409, detail="Conversation creation already in progress")
             create_conversation_obj.status = ConversationStatus.processing
@@ -2401,8 +2404,10 @@ def _process_validated_from_segments(
     process_kwargs['trigger'] = ProcessingTrigger.CLIENT_FINALIZE
     try:
         if conversation_id:
-            with lifecycle_service.processing_admission_guard(uid, conversation_id, rollback_on_failure=False):
-                if continue_processing:
+            with lifecycle_service.processing_admission_guard(
+                uid, conversation_id, rollback_on_failure=False, log_errors=not keyed_ios
+            ):
+                if async_notes:
                     yield
                     conversation = yield from continued_conversation_steps(
                         uid, language_code, create_conversation_obj, **process_kwargs
@@ -2414,11 +2419,11 @@ def _process_validated_from_segments(
     except Exception as error:
         budget_cut = isinstance(error, RequestDeadlineExceeded) or raise_site_of(error) == 'request_budget_exhausted'
         provider_error = None
-        if continue_processing and not isinstance(error, (HTTPException, RequestDeadlineExceeded)):
+        if keyed_ios and not isinstance(error, (HTTPException, RequestDeadlineExceeded)):
             provider_error = retryable_provider_failure_http_exception(error, route='conversation_processing')
         if conversation_id:
             retain_claim = budget_cut or (
-                continue_processing and (provider_error is not None or is_retryable_processing_http_exception(error))
+                keyed_ios and (provider_error is not None or is_retryable_processing_http_exception(error))
             )
             if retain_claim:
                 try:
@@ -2460,8 +2465,10 @@ def _process_validated_from_segments(
                 logger.warning('from_segments_tombstoned_cleanup_failed')
             return ConversationResponse(id=conversation.id, status='deleted', discarded=True)
 
-        lifecycle_service.persist_processed_conversation(
-            uid, omit_null_processing_state(strip_client_processing(conversation.model_dump()))
+        mark_from_segments_persisted(
+            lifecycle_service.persist_processed_conversation(
+                uid, omit_null_processing_state(strip_client_processing(conversation.model_dump()))
+            )
         )
 
     if request.folder_id is not None:
@@ -2499,7 +2506,14 @@ def _process_validated_from_segments(
     )
 
 
-def _continued_from_segments_steps(
+def _timed_from_segments_steps(
+    process: Callable[[], Steps[ConversationResponse]], timing: FromSegmentsTiming
+) -> Steps[ConversationResponse]:
+    with timing.worker():
+        return (yield from process())
+
+
+def _budgeted_from_segments_steps(
     process: Callable[[], Steps[ConversationResponse]],
 ) -> Steps[ConversationResponse]:
     require_request_budget()
@@ -2516,12 +2530,21 @@ async def _run_continued_from_segments(
     process: Callable[[], Steps[ConversationResponse]],
 ) -> ConversationResponse | Exception:
     try:
-        return await run_async(_continued_from_segments_steps(process), postprocess_executor)
+        return await run_async(_budgeted_from_segments_steps(process), postprocess_executor)
     except Exception as error:
         # The request may already have returned. Keep detached failures
         # visible without logging the provider error body or transcript.
         logger.warning('from_segments_processing_failed error_type=%s', type(error).__name__)
         return error
+
+
+def _run_inline_ios_from_segments(process: Callable[[], Steps[ConversationResponse]]) -> ConversationResponse:
+    try:
+        return run_inline(_budgeted_from_segments_steps(process))
+    except Exception as error:
+        # An expired HTTP waiter may no longer receive the worker's result.
+        logger.warning('from_segments_processing_failed error_type=%s', type(error).__name__)
+        raise
 
 
 @router.post("/v1/conversations/from-segments", response_model=ConversationResponse, tags=["conversations"])
@@ -2539,34 +2562,41 @@ async def create_conversation_from_segments_user(
     device_ctx = resolve_client_device_from_request(http_request)
     client_kind = extract_client_kind(http_request)
     keyed = bool(request.client_session_id or request.sent_blank_client_session_id)
-    continue_processing = (
-        client_kind == 'mobile_ios'
-        and keyed
-        and serving_for(FROM_SEGMENTS_CONTINUED_PROCESSING_MODE_ENV, uid, default='off')
-    )
+    timing = FromSegmentsTiming(http_request.state.from_segments_started, client_kind, keyed)
+    http_request.state.from_segments_timing = timing
+    keyed_ios = keyed and client_kind == 'mobile_ios'
+    async_notes = keyed_ios and serving_for(FROM_SEGMENTS_CONTINUED_PROCESSING_MODE_ENV, uid, default='off')
     try:
         prepared = await await_within_request_deadline(
             lambda: run_blocking(
                 db_executor,
-                _prepare_conversation_from_segments,
-                uid,
-                request,
-                client_device_id=device_ctx.client_device_id,
-                client_platform=device_ctx.platform,
-                client_kind=client_kind,
-                app_build=extract_app_build(http_request),
-                continue_processing=continue_processing,
+                timing.intake,
+                partial(
+                    _prepare_conversation_from_segments,
+                    uid,
+                    request,
+                    client_device_id=device_ctx.client_device_id,
+                    client_platform=device_ctx.platform,
+                    client_kind=client_kind,
+                    app_build=extract_app_build(http_request),
+                    async_notes=async_notes,
+                ),
             )
         )
         if not callable(prepared):
             return prepared
+        prepared = partial(_timed_from_segments_steps, prepared, timing)
         if not keyed:
             # After an unkeyed create commits, a retry has no stable identity
             # to reuse. Keep waiting for its response once processing starts.
             return await run_in_threadpool(lambda: run_inline(prepared()))
-        if not continue_processing:
+        if not keyed_ios:
             return await await_within_request_deadline(
                 lambda: run_blocking(from_segments_executor, lambda: run_inline(prepared()))
+            )
+        if not async_notes:
+            return await await_within_request_deadline(
+                lambda: run_blocking(ios_from_segments_executor, _run_inline_ios_from_segments, prepared)
             )
 
         require_request_budget()

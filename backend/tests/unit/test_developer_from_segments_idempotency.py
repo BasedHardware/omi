@@ -1,6 +1,8 @@
 import asyncio
+import json
+import logging
 from time import monotonic
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime, timedelta, timezone
 from threading import Event
 from types import SimpleNamespace
@@ -8,12 +10,14 @@ from unittest.mock import ANY, MagicMock
 
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
+from google.api_core.exceptions import DeadlineExceeded
 from httpx import ASGITransport, AsyncClient
 import pytest
 
 from config import refactor_modes
 import database.conversations as conversations_db
 from database.firestore_read_metrics import FirestoreReadSite
+from omi_logging import JsonFormatter, TraceContextMiddleware
 import routers.developer as developer
 import utils.conversations.meeting_receipt as meeting_receipt
 from models.conversation import Conversation, CreateConversation
@@ -23,6 +27,7 @@ from utils.conversations.meeting_treatment import meeting_treatment_verdict
 from utils.llm.gateway_error_contract import conversation_processing_http_exception
 from utils.other.raise_site import raise_site_of
 from utils.other import request_deadline
+from utils.other.from_segments_timing import FromSegmentsTiming
 from utils.other.request_deadline import RequestDeadlineExceeded
 from utils.conversations.transcript_hash import transcript_sha256_for_binding
 from utils.conversations.processing_steps import AsyncStep
@@ -846,15 +851,27 @@ def test_budget_cut_keeps_claim_and_next_upload_resumes_same_row(monkeypatch, st
     event.assert_called_once_with('conversation_created', client_kind='ios', app_build='12574', uid='uid1')
 
 
-async def test_ios_notes_continue_after_http_deadline_and_same_row_replays(monkeypatch, segment_api_app, caplog):
+@pytest.mark.parametrize('mode', ['off', 'serve'])
+async def test_ios_notes_continue_after_http_deadline_and_same_row_replays(monkeypatch, segment_api_app, caplog, mode):
     row = {}
-    entered_notes = asyncio.Event()
-    release_notes = asyncio.Event()
+    entered_notes = Event()
+    release_notes = Event()
+    finished = Event()
+    worker_timing_finished = Event()
     delete = MagicMock()
     event = MagicMock()
     tasks = []
-    monkeypatch.setenv(developer.FROM_SEGMENTS_CONTINUED_PROCESSING_MODE_ENV, 'serve')
+    monkeypatch.setenv(developer.FROM_SEGMENTS_CONTINUED_PROCESSING_MODE_ENV, mode)
     monkeypatch.setattr(request_deadline, 'FROM_SEGMENTS_REQUEST_BUDGET_SECONDS', 1.0)
+    caplog.set_level(logging.INFO, logger='utils.other.from_segments_timing')
+    timed_worker = developer._timed_from_segments_steps
+
+    def track_worker(process, timing):
+        result = yield from timed_worker(process, timing)
+        worker_timing_finished.set()
+        return result
+
+    monkeypatch.setattr(developer, '_timed_from_segments_steps', track_worker)
 
     def create(_uid, payload, *, idempotent):
         assert idempotent and not row
@@ -867,16 +884,18 @@ async def test_ios_notes_continue_after_http_deadline_and_same_row_replays(monke
         assert request_deadline.capped_deadline_seconds(180.0) == 180.0
         assert conversation.transcript_segments[0].text == _segment()['text']
 
-        async def provider():
-            entered_notes.set()
-            await asyncio.wait_for(release_notes.wait(), 5)
+        def provider():
+            with notes.notes_observation():
+                entered_notes.set()
+                assert release_notes.wait(5)
 
-        yield AsyncStep(provider)
+        yield AsyncStep(lambda: asyncio.to_thread(provider), run_sync=provider)
         conversation.status = ConversationStatus.completed
         return conversation
 
     def persist(_uid, payload):
         row.update(payload)
+        return True
 
     claim = MagicMock(side_effect=create)
     processor = MagicMock(side_effect=process)
@@ -887,7 +906,15 @@ async def test_ios_notes_continue_after_http_deadline_and_same_row_replays(monke
     monkeypatch.setattr(developer.lifecycle_service, 'rollback_processing_admission', rollback)
     monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', persist)
     monkeypatch.setattr(developer, 'continued_conversation_steps', processor)
-    monkeypatch.setattr(developer, 'record_product_event', event)
+    monkeypatch.setattr(
+        developer, 'process_conversation', lambda *args, **kwargs: developer.run_inline(processor(*args, **kwargs))
+    )
+
+    def record_event(*args, **kwargs):
+        event(*args, **kwargs)
+        finished.set()
+
+    monkeypatch.setattr(developer, 'record_product_event', record_event)
     body = _request(source='phone', client_session_id='ondevice-test').model_dump(mode='json')
     path = '/v1/conversations/from-segments'
     headers = {'X-App-Platform': 'ios', 'X-App-Build': '12574'}
@@ -907,25 +934,24 @@ async def test_ios_notes_continue_after_http_deadline_and_same_row_replays(monke
             assert first.headers['Retry-After'] == '2'
             assert entered_notes.is_set()
             assert row['status'] == ConversationStatus.processing
-            assert len(tasks) == 1
-            assert not tasks[0].done()
+            assert len(tasks) == int(mode == 'serve')
 
             active = await client.post(path, headers=headers, json=body)
             assert active.status_code == 503
             assert active.json() == first.json()
-            assert len(tasks) == 1
+            assert len(tasks) == int(mode == 'serve')
         finally:
             release_notes.set()
-            (completed,) = await asyncio.gather(*tasks)
+            await asyncio.gather(*tasks)
+        assert await asyncio.to_thread(finished.wait, 5)
+        assert await asyncio.to_thread(worker_timing_finished.wait, 5)
 
         retry = await client.post(path, headers=headers, json=body)
 
     assert retry.status_code == 200
-    assert retry.json() == completed.model_dump(mode='json')
     assert retry.json()['status'] == 'completed'
     assert retry.json()['id'] == row['id']
     assert row['status'] == ConversationStatus.completed
-    assert len(tasks) == 1
     claim.assert_called_once()
     processor.assert_called_once()
     event.assert_called_once_with('conversation_created', client_kind='mobile_ios', app_build='12574', uid='uid1')
@@ -934,9 +960,74 @@ async def test_ios_notes_continue_after_http_deadline_and_same_row_replays(monke
     assert [
         record.raise_site for record in caplog.records if getattr(record, 'event', None) == 'from_segments_503'
     ] == ['request_budget_exhausted', 'from_segments_processing_in_flight']
+    timing_entries = [
+        json.loads(record.getMessage().split(' ', 1)[1])
+        for record in caplog.records
+        if getattr(record, 'event', None) == 'from_segments_timing'
+    ]
+    http_entries = [entry for entry in timing_entries if entry['phase'] == 'http']
+    assert [entry['http_status'] for entry in http_entries] == [503, 503, 200]
+    initial, active, replay = http_entries
+    assert initial['intake_finished_ms'] <= initial['notes_started_ms'] < initial['http_finished_ms']
+    assert 'notes_finished_ms' not in initial and 'persisted_ms' not in initial
+    assert all('notes_started_ms' not in entry and 'persisted_ms' not in entry for entry in (active, replay))
+    assert all(entry['intake_finished_ms'] <= entry['http_finished_ms'] for entry in (active, replay))
+    (worker,) = [entry for entry in timing_entries if entry['phase'] == 'worker']
+    assert worker['http_status'] == 503
+    assert worker['http_finished_ms'] == initial['http_finished_ms']
+    assert worker['notes_succeeded'] is True
+    assert (
+        worker['http_finished_ms']
+        < worker['notes_finished_ms']
+        <= worker['persisted_ms']
+        <= worker['worker_finished_ms']
+    )
+    allowed_fields = {
+        'event',
+        'phase',
+        'client_kind',
+        'keyed',
+        'http_status',
+        'http_finished_ms',
+        'intake_finished_ms',
+        'notes_started_ms',
+        'notes_finished_ms',
+        'notes_succeeded',
+        'persisted_ms',
+        'worker_finished_ms',
+    }
+    assert all(entry.keys() <= allowed_fields for entry in timing_entries)
+    assert all(entry['client_kind'] == 'mobile_ios' and entry['keyed'] is True for entry in timing_entries)
 
 
-async def test_eight_waiting_ios_continuations_do_not_starve_a_keyed_android_upload(monkeypatch, segment_api_app):
+def test_timing_emits_closed_label_and_one_http_entry_when_worker_finishes_first(caplog):
+    caplog.set_level(logging.INFO, logger='utils.other.from_segments_timing')
+    timing = FromSegmentsTiming(monotonic(), 'untrusted-platform', False)
+
+    with timing.worker():
+        timing.mark('persisted_ms')
+    timing.finish_http(200)
+
+    (record,) = caplog.records
+    assert record.phase == 'http'
+    assert record.client_kind == 'unknown'
+    assert record.keyed is False
+    assert record.persisted_ms <= record.worker_finished_ms <= record.http_finished_ms
+    assert 'untrusted-platform' not in record.getMessage()
+
+    async def format_record(_scope, _receive, _send):
+        return JsonFormatter('backend', 'test', 'test-project').format(record)
+
+    trace = 'a' * 32
+    scope = {'type': 'http', 'headers': [(b'x-cloud-trace-context', f'{trace}/42;o=1'.encode())]}
+    formatted = asyncio.run(TraceContextMiddleware(format_record)(scope, None, None))
+    assert trace not in formatted
+    assert 'logging.googleapis.com/spanId' not in formatted
+
+
+async def test_eight_waiting_ios_continuations_do_not_starve_a_keyed_android_upload(
+    monkeypatch, segment_api_app, caplog
+):
     rows = {}
     waiting = 0
     all_waiting = asyncio.Event()
@@ -944,6 +1035,7 @@ async def test_eight_waiting_ios_continuations_do_not_starve_a_keyed_android_upl
     android_started = []
     monkeypatch.setenv(developer.FROM_SEGMENTS_CONTINUED_PROCESSING_MODE_ENV, 'serve')
     monkeypatch.setenv('OMI_SHAPED_AGENT_MODE', 'on')
+    caplog.set_level(logging.INFO, logger='utils.other.from_segments_timing')
 
     def create(_uid, payload, *, idempotent):
         assert idempotent and payload['id'] not in rows
@@ -1051,12 +1143,33 @@ async def test_eight_waiting_ios_continuations_do_not_starve_a_keyed_android_upl
                 slow_responses = await asyncio.gather(*slow_uploads)
 
     assert [response.status_code for response in slow_responses] == [200] * 8
+    ios_timings = [
+        record
+        for record in caplog.records
+        if getattr(record, 'event', None) == 'from_segments_timing' and record.client_kind == 'mobile_ios'
+    ]
+    assert len(ios_timings) == 8
+    for timing in ios_timings:
+        assert timing.phase == 'http'
+        assert timing.http_status == 200
+        assert timing.notes_succeeded
+        assert timing.notes_started_ms <= timing.notes_finished_ms <= timing.persisted_ms <= timing.http_finished_ms
 
 
-def test_ios_provider_timeout_retains_claim_and_fast_retry_returns_completed(monkeypatch, segment_api_client, caplog):
+@pytest.mark.parametrize(
+    ('mode', 'failure', 'raise_site'),
+    [
+        ('serve', 'provider', 'conversation_processing_retryable'),
+        ('off', 'notes_dependency', 'conversation_processing_retryable'),
+        ('off', 'admission_budget', 'request_budget_exhausted'),
+    ],
+)
+def test_ios_retryable_cut_retains_claim_and_fast_retry_returns_completed(
+    monkeypatch, segment_api_client, caplog, mode, failure, raise_site
+):
     row = {}
     session = 'ondevice-provider-timeout'
-    monkeypatch.setenv(developer.FROM_SEGMENTS_CONTINUED_PROCESSING_MODE_ENV, 'serve')
+    monkeypatch.setenv(developer.FROM_SEGMENTS_CONTINUED_PROCESSING_MODE_ENV, mode)
 
     def create(_uid, payload, *, idempotent):
         assert idempotent and not row
@@ -1077,8 +1190,14 @@ def test_ios_provider_timeout_retains_claim_and_fast_retry_returns_completed(mon
         return True
 
     def process(_uid, _language, conversation, **kwargs):
+        if failure == 'notes_dependency' and processor.call_count == 1:
+            try:
+                notes.get_conversation_notes(MagicMock())
+            except Exception as error:
+                raise conversation_processing_http_exception(error) from error
+
         async def provider():
-            if processor.call_count == 1:
+            if failure == 'provider' and processor.call_count == 1:
                 raise TimeoutError('synthetic provider timeout')
 
         yield AsyncStep(provider)
@@ -1089,6 +1208,25 @@ def test_ios_provider_timeout_retains_claim_and_fast_retry_returns_completed(mon
     claim = MagicMock(side_effect=create)
     processor = MagicMock(side_effect=process)
     delete = MagicMock()
+    if failure == 'notes_dependency':
+        monkeypatch.setattr(notes, 'route_for_uid', lambda _uid: 'new')
+        monkeypatch.setattr(
+            notes,
+            '_shaped_conversation_notes_steps',
+            MagicMock(side_effect=DeadlineExceeded('synthetic notes timeout')),
+        )
+    if failure == 'admission_budget':
+        guard = developer.lifecycle_service.processing_admission_guard
+
+        @contextmanager
+        def cut_first_admission(*args, **kwargs):
+            with guard(*args, **kwargs):
+                if admit.call_count == 0:
+                    raise RequestDeadlineExceeded('synthetic budget cut at admission')
+                yield
+
+        monkeypatch.setattr(developer.lifecycle_service, 'processing_admission_guard', cut_first_admission)
+    admit = MagicMock(side_effect=admit)
     monkeypatch.setattr(conversations_db, 'get_conversation', lambda *_args, **_kwargs: dict(row) or None)
     monkeypatch.setattr(conversations_db, 'delete_conversation', delete)
     monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', claim)
@@ -1098,6 +1236,9 @@ def test_ios_provider_timeout_retains_claim_and_fast_retry_returns_completed(mon
         developer.lifecycle_service, 'persist_processed_conversation', lambda _uid, row_data: row.update(row_data)
     )
     monkeypatch.setattr(developer, 'continued_conversation_steps', processor)
+    monkeypatch.setattr(
+        developer, 'process_conversation', lambda *args, **kwargs: developer.run_inline(processor(*args, **kwargs))
+    )
 
     path = '/v1/conversations/from-segments'
     headers = {'X-App-Platform': 'ios'}
@@ -1107,9 +1248,13 @@ def test_ios_provider_timeout_retains_claim_and_fast_retry_returns_completed(mon
     assert first.status_code == 503
     assert first.headers['Retry-After'] == '2'
     assert row['status'] == ConversationStatus.in_progress
-    assert [
-        record.raise_site for record in caplog.records if getattr(record, 'event', None) == 'from_segments_503'
-    ] == ['conversation_processing_retryable']
+    attributions = [
+        (record.raise_site, record.failure_class)
+        for record in caplog.records
+        if getattr(record, 'event', None) == 'from_segments_503'
+    ]
+    assert attributions == [(raise_site, 'timeout')]
+    assert not any('synthetic' in record.getMessage() or record.exc_info for record in caplog.records)
 
     replay = _request(
         source='phone', client_session_id=session, transcript_segments=[{**_segment(), 'text': 'retry payload'}]
@@ -1119,10 +1264,13 @@ def test_ios_provider_timeout_retains_claim_and_fast_retry_returns_completed(mon
     assert retry.json()['id'] == row['id']
     assert retry.json()['status'] == 'completed'
     claim.assert_called_once()
+    admit.assert_called_once()
+    assert processor.call_count == (1 if failure == 'admission_budget' else 2)
     delete.assert_not_called()
 
 
-def test_ios_stale_claim_reuses_transcript_and_fences_takeover(monkeypatch, segment_api_client):
+@pytest.mark.parametrize('mode', ['off', 'serve'])
+def test_ios_stale_claim_reuses_transcript_and_fences_takeover(monkeypatch, segment_api_client, mode):
     session = 'ondevice-stale-claim'
     request = _request(source='phone', client_session_id=session)
     conversation_id = developer._from_segments_conversation_id('uid1', session)
@@ -1143,7 +1291,7 @@ def test_ios_stale_claim_reuses_transcript_and_fences_takeover(monkeypatch, segm
     reclaim = MagicMock(return_value=False)
     delete = MagicMock()
     processor = MagicMock()
-    monkeypatch.setenv(developer.FROM_SEGMENTS_CONTINUED_PROCESSING_MODE_ENV, 'serve')
+    monkeypatch.setenv(developer.FROM_SEGMENTS_CONTINUED_PROCESSING_MODE_ENV, mode)
     monkeypatch.setattr(conversations_db, 'get_conversation', lambda *_args, **_kwargs: dict(row))
     monkeypatch.setattr(conversations_db, 'delete_conversation', delete)
     monkeypatch.setattr(developer.lifecycle_service, 'reclaim_stale_processing', reclaim)

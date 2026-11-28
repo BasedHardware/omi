@@ -343,6 +343,15 @@ from_segments_executor = MonitoredThreadPoolExecutor(
     wait_on_saturation=True,
     thread_name_prefix="from-segments",
 )
+# Keyed iOS work can outlive the HTTP wait. Keep its longer provider calls
+# from filling the pool used by the other from-segments clients.
+ios_from_segments_executor = MonitoredThreadPoolExecutor(
+    name="ios_from_segments",
+    max_workers=4,
+    max_queue_size=4,
+    wait_on_saturation=True,
+    thread_name_prefix="ios-from-segments",
+)
 # Optional per-window LID must not hold the shared sync coordination pool.
 # Bound outstanding calls; run_blocking awaits capacity without blocking a loop.
 record_language_executor = MonitoredThreadPoolExecutor(
@@ -420,6 +429,7 @@ _ALL_EXECUTORS = [
     sync_executor,
     auth_deadline_executor,
     from_segments_executor,
+    ios_from_segments_executor,
     record_language_executor,
     postprocess_executor,
     cleanup_executor,

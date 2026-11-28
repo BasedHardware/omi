@@ -39,7 +39,9 @@ FROM_SEGMENTS_503_EVENT = 'from_segments_503'
 FROM_SEGMENTS_503_UNATTRIBUTED_EVENT = 'from_segments_503_unattributed'
 
 
-def log_from_segments_503(*, raise_site: str, body_bytes: int, elapsed_ms: float) -> None:
+def log_from_segments_503(
+    *, raise_site: str, body_bytes: int, elapsed_ms: float, failure_class: str | None = None
+) -> None:
     """Emit the single attribution line for one 503 on the route.
 
     A tagged site is the expected outcome and logs at WARNING. An untagged one
@@ -54,6 +56,8 @@ def log_from_segments_503(*, raise_site: str, body_bytes: int, elapsed_ms: float
         'body_bytes': body_bytes,
         'elapsed_ms': elapsed_ms,
     }
+    if failure_class is not None:
+        fields['failure_class'] = failure_class
     if raise_site == UNATTRIBUTED_RAISE_SITE:
         fields['event'] = FROM_SEGMENTS_503_UNATTRIBUTED_EVENT
         logger.error('%s %s', FROM_SEGMENTS_503_UNATTRIBUTED_EVENT, json.dumps(fields, sort_keys=True), extra=fields)
@@ -71,10 +75,14 @@ class FromSegments503Route(ExternalListCacheRoute):
 
         async def handler(request: Request) -> Response:
             started = time.monotonic()
+            request.state.from_segments_started = started
+            status = None
             try:
                 with defer_retryable_processing_response_count():
                     response = await original(request)
+                status = response.status_code
             except HTTPException as exc:
+                status = exc.status_code
                 if exc.status_code == 503:
                     failure_class = retryable_processing_response_failure_class(exc)
                     if failure_class is not None:
@@ -83,8 +91,15 @@ class FromSegments503Route(ExternalListCacheRoute):
                         raise_site=raise_site_of(exc),
                         body_bytes=serialized_detail_bytes(exc.detail),
                         elapsed_ms=round((time.monotonic() - started) * 1000, 2),
+                        failure_class=failure_class,
                     )
                 raise
+            finally:
+                # Auth, rate limiting or validation can finish before the
+                # handler can classify the parsed session key.
+                timing = getattr(request.state, 'from_segments_timing', None)
+                if timing is not None:
+                    timing.finish_http(status)
             if response.status_code == 503:
                 # No reachable site returns a 503 response; a returned one has no
                 # tag to read, so it is reported as the defect it is.
