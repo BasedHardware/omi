@@ -1,6 +1,7 @@
 import 'package:omi/services/sockets/local_stt_failure.dart';
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -11,6 +12,7 @@ import 'package:omi/env/env.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
 import 'package:omi/services/audio_sources/audio_source.dart';
+import 'package:omi/services/custom_stt_log_service.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 
@@ -105,6 +107,99 @@ void main() {
 
       expect(primary.sent, isEmpty);
       expect(secondary.sent, [controlMessage]);
+    });
+
+    for (final provider in [
+      SttProvider.custom,
+      SttProvider.geminiLive,
+      SttProvider.deepgramLive,
+      SttProvider.onDeviceWhisper,
+    ]) {
+      test('routes Omi controls away from the audio-only ${provider.name} primary (#24191)', () async {
+        final primary = _FakeSocket();
+        final secondary = _FakeSocket();
+        final socket = CompositeTranscriptionSocket(
+          primarySocket: primary,
+          secondarySocket: secondary,
+          sttProvider: provider.name,
+          forwardRawAudioToSecondary: false,
+        );
+        addTearDown(socket.stop);
+
+        expect(await socket.connect(), isTrue);
+        final controlMessage = jsonEncode({'type': 'speaker_assigned', 'speaker_id': 1});
+        socket.send(controlMessage);
+
+        expect(primary.sent, isEmpty);
+        expect(secondary.sent, [controlMessage]);
+      });
+    }
+
+    test('sends audio to a polling custom STT primary and Omi control text only to Omi (#24191)', () async {
+      final primary = _FakeSocket();
+      final secondary = _FakeSocket();
+      final socket = CompositeTranscriptionSocket(
+        primarySocket: primary,
+        secondarySocket: secondary,
+        sttProvider: SttProvider.custom.name,
+      );
+      addTearDown(socket.stop);
+
+      expect(await socket.connect(), isTrue);
+      final evidence = jsonEncode({'type': 'capture_evidence_frame', 'version': 1, 'source_frame': 7});
+      final audio = Uint8List.fromList([1, 2, 3]);
+      final listAudio = <int>[4, 5];
+      socket.send(evidence);
+      socket.send(audio);
+      socket.send(listAudio);
+
+      expect(primary.sent, [same(audio), same(listAudio)]);
+      expect(secondary.sent, [evidence, same(audio), same(listAudio)]);
+    });
+
+    test('a live custom STT WebSocket for a non-Live provider receives only binary audio (#24191)', () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final received = <dynamic>[];
+      final gotAudio = Completer<void>();
+      server.transform(WebSocketTransformer()).listen((ws) {
+        ws.listen((frame) {
+          received.add(frame);
+          if (frame is List<int> && !gotAudio.isCompleted) gotAudio.complete();
+        });
+      });
+      addTearDown(() => server.close(force: true));
+      CustomSttLogService.instance.clear();
+
+      final primary = PureStreamingSttSocket(
+        config: StreamingSttConfig(
+          url: 'ws://127.0.0.1:${server.port}/live',
+          responseSchema: const SttResponseSchema(),
+          serviceId: 'custom',
+        ),
+      );
+      final secondary = _FakeSocket();
+      final socket = CompositeTranscriptionSocket(
+        primarySocket: primary,
+        secondarySocket: secondary,
+        sttProvider: SttProvider.custom.name,
+      );
+      addTearDown(socket.stop);
+
+      expect(await socket.connect(), isTrue);
+      final evidence = jsonEncode({'type': 'capture_evidence_frame', 'version': 1, 'source_frame': 1});
+      final clientState = jsonEncode({'type': 'client_state', 'foreground': true});
+      final audio = Uint8List.fromList([9, 8, 7, 6]);
+      socket.send(evidence);
+      socket.send(audio);
+      socket.send(clientState);
+      await gotAudio.future.timeout(const Duration(seconds: 5));
+
+      expect(received, [audio]);
+      expect(secondary.sent, [evidence, same(audio), clientState]);
+      expect(
+        CustomSttLogService.instance.logs.where((entry) => entry.message.contains('Unsupported message type')),
+        isEmpty,
+      );
     });
 
     for (final shareRawAudio in [false, true]) {
