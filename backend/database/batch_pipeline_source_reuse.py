@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from config.batch_pipeline import FRESH_CAPTURE_LAG_SECONDS
-from database.batch_pipeline_staging import artifact_id
+from database.batch_pipeline_staging import artifact_id, retire_upload_reservation
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from utils.batch_pipeline.retention import RECEIPT_RETENTION
 from utils.batch_pipeline.result_protocol import stamp
@@ -230,5 +230,5 @@ def attach_alias_artifacts(tx, item, proposal):
         ):
             raise SourceReuseUnavailable('source alias artifact reservation unavailable')
         artifact['source_conversation_ids'] = job['source_conversation_ids']
-        artifact.pop('write_pending_until', None)
+        retire_upload_reservation(artifact)
         tx.put('artifacts', key, artifact)

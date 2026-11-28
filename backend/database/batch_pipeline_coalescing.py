@@ -204,15 +204,20 @@ def finish(store, group, targets, now):
             # Attach the encrypted original to that same completion-led
             # retention lifecycle; never leave accepted originals orphan-reapable
             # or silently introduce permanent retention for sync-off users.
-            from database.batch_pipeline_staging import artifact_id
+            from database.batch_pipeline_staging import artifact_id, retire_upload_reservation
 
             source_id = member['item']['segment_id']
-            artifact_key = artifact_id(source_id, member['uri'])
+            source_uri = member['uri']
+            artifact_key = artifact_id(source_id, source_uri)
             artifact = tx.get('artifacts', artifact_key)
             if not artifact or artifact.get('erasure_requested') or artifact.get('cleanup_after'):
                 raise ValueError('coalescing source custody metadata lost')
+            # The original object's name still uses the source segment after
+            # reattachment. Retain the held member's generation for that address.
+            if artifact.get('uri') == source_uri.split('#', 1)[0]:
+                artifact['uri'] = source_uri
             artifact['segment_id'] = intake['segment_ids'][-1]
-            artifact.pop('write_pending_until', None)
+            retire_upload_reservation(artifact)
             completed = tx.get('results', artifact['segment_id'])
             if completed.get('expires_at'):
                 # A very fast worker may finish before receipt fanout. Native

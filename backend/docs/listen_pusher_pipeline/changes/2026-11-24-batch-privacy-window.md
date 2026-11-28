@@ -81,9 +81,13 @@ reconciler captures Commit-time scope and keeps it on the intent. Existing
 deletion obligations keep their regular schedule. The new artifact sweep and
 second conversation pass hold durable execution dates in separate queues.
 Eligible rows persist without a TTL while execution is closed. Admission
-preserves an audio receipt's original reservation window when retiring its
-active upload marker. The staging reaper preserves the same window for audio
-and other artifacts, so a sweep still matches after a pause past orphan grace.
+and the staging reaper preserve the original reservation deadline when they
+retire an upload marker. Coalescing completion, missing-input reupload restore
+and alias attachment use the same transition. Coalescing retains the original
+object's generation pin when it attaches the receipt to a new segment.
+Alias attachment preserves the deadline on both its result and audio receipts,
+including audio that already retired its marker during admission. A sweep
+can still match these artifacts after a pause past orphan grace.
 If normal retention already deleted an object and left its terminal receipt,
 the sweep clears the receipt and reconciles its mirror without touching storage.
 An absent or invalid address without that cleanup evidence still enters retry.
@@ -120,9 +124,7 @@ scenario assumes much wider proven sink coverage and GPU connectivity.
    production Firestore history window and SDK path, measure queued intents
    and their age, budget the second owner-wide discovery scan, and confirm
    that the dead-letter alert has been provisioned and sees its source before
-   enabling execution. The full privacy review must also clear reservation
-   retirement in coalescing completion, missing-input reupload restore and
-   alias result attachment before activation.
+   enabling execution.
 4. When execution is verified, set `bpp_tokenless_write_shadow=0` on the
    scoped integration canary and enable the approved
    `bpp_tokenless_write_cache` cohort with `bpp_tokenless_write_audit=100`.

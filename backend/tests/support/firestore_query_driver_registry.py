@@ -157,6 +157,11 @@ _CACHE_MISS = SimpleNamespace(mode='MISS', data=None)
 _DEV_KEY = 'omi_dev_' + 'a' * 32
 _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
+# Payload-only helpers have no query driver. Pin their reviewed bodies separately.
+RECEIPT_PAYLOAD_BODY_DIGESTS = {
+    'database.batch_pipeline_staging.retire_upload_reservation': '57a0e902dd6be3e218eb1a6aa77bccbb31fe78a9c8b02eb81127b93c96b26348',
+}
+
 BODY_DIGEST = {
     'llm_gateway.gateway.idempotency._request_body': '821d003b89db821c83bd02ba648b9f4a0fba5081d9e450a7cac38192b6382abd',
     'database.legal_holds.list_legal_holds': 'adb83d85cbbabaa98a4d435147d92e2139b4e483c19a9c09e695c5f7fa4c517b',

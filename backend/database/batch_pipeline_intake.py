@@ -16,7 +16,7 @@ from config.record_seal_rules import token_lease_mode
 from config.record_latency import recent_record_end, record_fresh_merge_enabled, record_notes_eager_enabled
 from database.batch_pipeline_store import Store
 from database import batch_pipeline_allowance_hold as allowance_hold
-from database.batch_pipeline_staging import artifact_id
+from database.batch_pipeline_staging import artifact_id, retire_upload_reservation
 from database import batch_pipeline_coalescing_completion as coalescing_completion
 from database.sync_ledger import LEDGER_RETENTION_DAYS, is_valid_completed_sync_content_result
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
@@ -206,10 +206,7 @@ def admit(
                     or artifact.get('erasure_requested')
                 ):
                     raise ValueError('audio staging reservation missing or reclaimed')
-                deadline = artifact.pop('write_pending_until', None)
-                if isinstance(deadline, datetime):
-                    # Admission ends the active upload, but a policy Commit during it still owes erasure.
-                    artifact['late_erasure_pending_until'] = deadline
+                retire_upload_reservation(artifact)
                 tx.put('artifacts', key, artifact)
             proposal = (source_aliases or {}).get(item.segment_id)
             if proposal is not None:
