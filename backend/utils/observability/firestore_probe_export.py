@@ -18,7 +18,6 @@ from database.firestore_document_probe import (
 
 from database import record_token_lease_metrics as lease_metrics
 from database.firestore_write_probe import FIRESTORE_BILLED_WRITES_BY_CALLER, FIRESTORE_BILLED_WRITES_BY_ORIGIN
-from config.record_seal_rules import token_lease_mode
 
 from utils.observability.reasons import (
     ReasonFamily,
@@ -136,11 +135,9 @@ def repair_probe_server(*, port=9090, addr='0.0.0.0'):
 def terminal_totals():
     # Only totals and the producer's bounded labels; no created timestamps,
     # document IDs, query operands, or a second SDK patch.
-    # A disabled lease rollout must omit its counters, even after a rollback.
-    collectors = (*_READ_COLLECTORS, *_WRITE_COLLECTORS) if token_lease_mode() == 'off' else COLLECTORS
     return [
         [sample.name, sample.labels, sample.value]
-        for collector in collectors
+        for collector in COLLECTORS
         for family in collector.collect()
         for sample in family.samples
         if sample.name.endswith('_total') and (collector in _READ_COLLECTORS or sample.value > 0)

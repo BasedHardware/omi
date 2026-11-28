@@ -78,6 +78,7 @@ def test_kill_switch_restores_typed_400_for_new_future_uploads(client, monkeypat
     assert response.json()['code'] == 'invalid_capture_time'
 
 
+@pytest.mark.usefixtures('record_custody_not_acquired')
 def test_future_batch_admission_freezes_receipt_and_discards_session_clock_bounds(client, monkeypatch):
     captured = {}
 

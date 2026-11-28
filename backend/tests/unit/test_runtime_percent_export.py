@@ -12,6 +12,7 @@ from urllib.request import urlopen
 
 import pytest
 import yaml
+from tests.unit._worker_lease_render import WORKER_LEASE_SET_ARGS
 from prometheus_client import CollectorRegistry, generate_latest
 from prometheus_client.parser import text_string_to_metric_families
 
@@ -323,6 +324,8 @@ def test_gke_podmonitoring_scrapes_consumer_port_and_revision(chart, suffix):
             '--set-string',
             'worker.audience=https://synthetic.run.app',
         ]
+    if chart == 'batch-pipeline-worker':
+        command += list(WORKER_LEASE_SET_ARGS)
     rendered = subprocess.run(command, check=True, capture_output=True, text=True, timeout=30)
     docs = [d for d in yaml.safe_load_all(rendered.stdout) if d]
     deployments = [

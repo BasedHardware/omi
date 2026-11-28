@@ -1891,10 +1891,11 @@ def test_invalid_conversation_finish_clock_preserves_selection(monkeypatch, bad_
     assert saturated is False and cursor is None
 
 
+@pytest.mark.parametrize('mode', ['off', 'shadow'])
 @pytest.mark.parametrize('diagnostics', [False, True])
 @pytest.mark.parametrize('pending', [False, True])
-def test_active_full_repair_counts_shadow_lease_would_expire(source, monkeypatch, diagnostics, pending):
-    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'shadow')
+def test_killed_full_repair_holds_a_lapsed_lease_without_counting_it(source, monkeypatch, mode, diagnostics, pending):
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', mode)
     monkeypatch.setenv('RECORD_TOKEN_LEASE_DEPLOYED_AT', '1')
     monkeypatch.setattr(producer.time, 'time', lambda: 10000)
     store, client, artifacts = source
@@ -1934,9 +1935,12 @@ def test_active_full_repair_counts_shadow_lease_would_expire(source, monkeypatch
         )
         == 'upload_pending'
     )
-    assert record_token_lease_metrics.EXPIRED_WOULD._value.get() == before + 1
+    # The kill switch withdraws lease expiry as authority, so the lapsed lease
+    # neither releases the seal nor reports that it would have.
+    assert record_token_lease_metrics.EXPIRED_WOULD._value.get() == before
     if observed is not None:
-        assert observed['lease_reason'] == 'lease_would_expire'
+        assert 'lease_reason' not in observed
+    assert not client.rows[PATH].get('record_audio_closed')
 
 
 @pytest.mark.parametrize('stop_at', ['discovery', 'checkpoint'])

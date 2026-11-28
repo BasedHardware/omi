@@ -186,7 +186,10 @@ def test_late_producer_cannot_promote_partial_to_complete(source):
     set_record_upload_pending('synthetic', 'record', 'late', False, firestore_client=source[1])
     assert seal_record_audio('synthetic', 'record', firestore_client=source[1]) is None
     assert not source[1].rows[ROW]['record_audio_closed']
-    assert finish(source) == 'partial_finished'
+    # The late registration re-armed the existing continuation in its own
+    # transaction; that coordinator, not a second finish, owns the new audio.
+    assert finish(source) == 'already_partial'
+    assert pending(source)['state'] == 'record_pending' and pending(source)['partial_coordinator']
     require_record_audio_barrier(source[1].rows[ROW])
 
 
@@ -204,7 +207,9 @@ def test_late_refresh_keeps_the_original_closed_metric_reason(source):
     )
     set_record_upload_pending('synthetic', 'record', 'late', True, firestore_client=source[1])
     set_record_upload_pending('synthetic', 'record', 'late', False, firestore_client=source[1])
-    details = {}
+    # The late registration re-arms the continuation and keeps its reason.
+    assert source[1].rows[ROW]['record_audio_partial']['reason'] == 'budget_limit'
+    assert pending(source)['partial_reason'] == 'budget_limit'
     assert (
         cluster.repair_one(
             source[0],
@@ -214,11 +219,9 @@ def test_late_refresh_keeps_the_original_closed_metric_reason(source):
             flags=FLAGS,
             inventory=lambda: source[2],
             budget=SweepBudget(240),
-            reason_out=details,
         )
-        == 'partial_finished'
+        == 'already_partial'
     )
-    assert details['partial_reason'] == 'budget_limit'
     assert pending(source)['partial_reason'] == 'budget_limit'
 
 
@@ -385,8 +388,9 @@ def test_real_repair_skips_unchanged_partial_inventory_but_rearms_upload_revisio
     assert source[1].rows == before
     set_record_upload_pending('synthetic', 'record', 'late', True, firestore_client=source[1])
     set_record_upload_pending('synthetic', 'record', 'late', False, firestore_client=source[1])
-    assert sweep() == 'partial_finished'
-    assert inventory.call_count == 1
+    # The registration itself re-arms the coordinator; repair has nothing to do.
+    assert sweep() == 'already_partial'
+    inventory.assert_not_called()
     assert pending(source)['state'] == 'record_pending'
     assert 'retired_at' not in pending(source)['partial_run']
     assert pending(source)['partial_run']['coverage'] == job['partial_run']['coverage']
@@ -394,7 +398,7 @@ def test_real_repair_skips_unchanged_partial_inventory_but_rearms_upload_revisio
     assert source[1].rows[ROW]['transcript_segments'] == before[ROW]['transcript_segments']
     for _ in range(288):
         assert sweep() == 'already_partial'
-    assert inventory.call_count == 1
+    inventory.assert_not_called()
 
 
 def set_byok(source):
@@ -907,7 +911,8 @@ async def test_producer_starts_during_staging_prevents_intake_commit(source, aud
         return uri
 
     monkeypatch.setattr(audio.artifacts, 'stage_audio', racing)
-    with pytest.raises(ValueError, match='barrier'):
+    # The registration re-arms the continuation, so the stale plan loses its CAS.
+    with pytest.raises(ValueError, match='barrier|ownership changed'):
         await audio.drain()
     assert len([path for path in source[1].rows if path[0] == 'batch_pipeline_dev_jobs']) == 1
 

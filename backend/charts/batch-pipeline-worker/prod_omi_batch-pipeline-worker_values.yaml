@@ -13,6 +13,17 @@ dataPlaneProject: based-hardware
 stage: prod
 namespace: batch_pipeline_prod
 secretName: prod-omi-backend-secrets
+# Durable lease vector for record-seal-worker and record-seal-repair (SCA-3748).
+# Deliberately empty: gcp_diarizer.yml passes all four with --set-string from
+# vars.RECORD_TOKEN_LEASE_*, the same variables Sync, Listen and Pusher bind, and
+# the chart refuses to render prod without them. A literal here would undo an
+# operator's epoch change or "off" on the next worker Helm upgrade. "off" is an
+# upload pause, not a rollback; roll back by reverting the PR or the image.
+recordTokenLease:
+  mode: ""
+  servePercent: ""
+  seconds: ""
+  deployedAt: ""
 # Floor 6 (David, 2026-11-20, superseding D4's floor 4 of 2026-11-06): over the
 # prior 3 days the HPA never asked for fewer than 6 workers, so the floor costs
 # ~0 extra machine-hours at current demand and keeps 6 L4s standing through an

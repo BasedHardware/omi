@@ -57,7 +57,7 @@ from utils.executors import db_executor, storage_executor, run_blocking, sync_ex
 from utils.metrics import OMI_PIPELINE_RECORD_WAIT_ANSWERS_TOTAL, OMI_PIPELINE_RECORD_WAIT_MEMO_HITS_TOTAL
 from utils.observability.reasons import ReasonFamily, reason_label
 from utils.sync.stage import current_stage
-from utils.sync.record_token_lease import handoff_committed
+from utils.sync.record_token_lease import bind_upload_target, handoff_committed
 from utils.sync.legacy_dark import LegacySyncMode
 
 
@@ -340,18 +340,29 @@ async def registered_record_response(
         return None
     store = await run_blocking(db_executor, FirestoreStore, f'batch_pipeline_{current_stage()}')
 
-    def target_snapshot() -> tuple[str | None, Any]:
-        user = store.client.collection('users').document(uid)
-        target = resolve_target(uid, conversation_id, recording_session_id, firestore_client=store.client)
-        return (target, user.collection('conversations').document(target).get()) if target else (None, None)
+    def read_snapshot(target: str) -> Any:
+        return store.client.collection('users').document(uid).collection('conversations').document(target).get()
 
     snapshot = None
     if loaded_conversation is not None:
         row = loaded_conversation
+        if isinstance(conversation_id, str) and conversation_id:
+            # One target decision for admission and routing (see below).
+            await bind_upload_target(uid, conversation_id)
     else:
-        conversation_id, snapshot = await run_blocking(db_executor, target_snapshot)
-        if snapshot is None or conversation_id is None:
+        conversation_id = await run_blocking(
+            db_executor, resolve_target, uid, conversation_id, recording_session_id, firestore_client=store.client
+        )
+        if not conversation_id:
             return _pending(RecordUploadWait.TARGET_UNRESOLVED) if policy.live_record_enabled else None
+        # One target decision for admission and routing: a session that
+        # registered after Sync admission's resolve is fenced (or killed) here,
+        # before the handoff, archive or retention writes below. Bind before the
+        # read: acquiring the fence writes this conversation, so a snapshot taken
+        # first would carry a stale update_time into the owner claim's CAS and
+        # refuse with owner_claim_raced although nothing else wrote (SCA-3748).
+        await bind_upload_target(uid, conversation_id)
+        snapshot = await run_blocking(db_executor, read_snapshot, conversation_id)
         row = snapshot.to_dict() or {}
     if row.get('record_lane_owner') != OWNER:
         if row.get('record_lane_owner') == 'legacy_final_pass_v1':

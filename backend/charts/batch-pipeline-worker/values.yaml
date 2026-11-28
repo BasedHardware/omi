@@ -2,14 +2,17 @@
 # durable admitted work; the lead separately controls backend admission cohorts.
 enabled: false
 audioDerivedBucket: ""
-# Part A only. All repair children inherit a stable release epoch; 0 is
-# dormant while off. The release owner pins the epoch with the shadow flip,
-# then retains it across restarts and later ramp steps.
+# The lease is the only producer custody path (SCA-3748). "serve" serves every
+# account; "off" (or any other value) is the fail-closed kill that pauses
+# custody, never the behavior rollback. Development and staging inherit the
+# shared serve-enable epoch David ruled for SCA-3748 (1795662310), so an unset
+# value never renders a kill or re-anchors stock tokens per process. Prod values
+# blank all four: the prod deploy passes them from vars.RECORD_TOKEN_LEASE_*.
 recordTokenLease:
-  mode: "off"
-  servePercent: 0
+  mode: "serve"
+  servePercent: 100
   seconds: 3600
-  deployedAt: 0
+  deployedAt: "1795662310"  # quoted: Helm would render a bare int as 1.79566231e+09
 podLabels:
   service_name: batch-pipeline-worker
 recordSealRules:

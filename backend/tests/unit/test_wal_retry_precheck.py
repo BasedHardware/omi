@@ -79,6 +79,7 @@ def test_live_manifest_and_probe_recheck_state_independently(poll_client, monkey
     assert miss.status_code == 200 and 'x-omi-wal-retry' not in miss.headers
 
 
+@pytest.mark.usefixtures('record_custody_not_acquired')
 @pytest.mark.parametrize('case', ['exact', 'legacy', 'mixed_torn', 'stale_manifest', 'coverage', 'empty', 'future'])
 def test_handle_only_after_exact_nonempty_verified_post(case, poll_client, monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)

@@ -7,6 +7,7 @@ import subprocess
 
 import pytest
 import yaml
+from tests.unit._worker_lease_render import WORKER_LEASE_SET_ARGS
 
 BACKEND = Path(__file__).resolve().parents[2]
 CHART = BACKEND / 'charts/batch-pipeline-worker'
@@ -26,6 +27,8 @@ def render(*args, namespace='prod-omi-backend'):
             str(CHART / 'prod_omi_batch-pipeline-worker_values.yaml'),
             '--set-string',
             'image.digest=sha256:' + 'a' * 64,
+            # The deploy binds the lease vector from vars (SCA-3748); a later --set in args wins.
+            *WORKER_LEASE_SET_ARGS,
             *args,
         ],
         capture_output=True,

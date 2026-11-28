@@ -1,5 +1,14 @@
 # Producer custody token leases (Part A)
 
+> **Superseded by SCA-3748 (2026-11-27). Historical record only; do not follow
+> its rollout or rollback steps.** The non-lease path is deleted: the lease serves
+> every account, `RECORD_TOKEN_LEASE_MODE` defaults to `serve`, and `off` or any
+> other value (including the retired `shadow`) is a fail-closed kill switch that
+> pauses Sync custody. "Roll back with mode shadow/off" below no longer returns to
+> unfenced uploads; it engages that kill. Roll back code with an image rollback.
+> Current behavior: [record custody contract](../../../utils/batch_pipeline/CONTRACT.md#record_audio-custody-and-conversation)
+> and the [Listen/Pusher pipeline guide](../../listen_pusher_pipeline.mdx).
+
 Contract: [record custody](../../../utils/batch_pipeline/CONTRACT.md#record_audio-custody-and-conversation).
 Supersedes #24832: no completed-age exemption is retained. Its chart locations
 and identity/status/boundary tests are adapted to three quiet lease clocks.

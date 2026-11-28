@@ -11,6 +11,7 @@ import pytest
 import httpx
 from google.api_core.exceptions import Aborted
 
+from config import record_seal_rules
 from database.conversations import create_audio_files_from_chunks
 from database import record_audio
 from database import conversation_finalization_jobs as finalization_jobs
@@ -225,10 +226,12 @@ async def test_open_sessions_dead_producer_sealed_within_budget(lifecycle_sim, m
     assert sim.seal() == 'producer_pending'
     sim.kill_pusher()
     assert sim.row()['record_upload_sessions'], 'process death unexpectedly removed its durable tokens'
-    # Cross the integer process-start safety margin with fake proof time. No
-    # token timestamps or custody fields are edited and no sleep is needed.
-    sim.proof_time = time.time() + 3
-    monkeypatch.setattr(record_producer_proof, 'time', SimpleNamespace(time=lambda: sim.proof_time))
+    # SCA-3748: the token's frame lease clocks, not pod inventory, release a dead
+    # producer. Cross the lease with fake proof time. No token timestamps or
+    # custody fields are edited and no sleep is needed.
+    sim.proof_time = time.time() + record_seal_rules.token_lease_seconds() + 61
+    for module in (record_seal_sweeper, record_producer_proof):
+        monkeypatch.setattr(module, 'time', SimpleNamespace(time=lambda: sim.proof_time))
     for _ in range(3):
         sim.sweep()
         await sim.tick()

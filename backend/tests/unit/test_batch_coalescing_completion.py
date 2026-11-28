@@ -26,6 +26,7 @@ from utils.stt import batch_language
 from utils.sync import legacy_dark
 
 
+@pytest.mark.usefixtures('record_custody_not_acquired')
 @pytest.mark.asyncio
 @pytest.mark.parametrize('mode', ['merged', 'individual'])
 async def test_mobile_hold_headers_survive_coalescing_and_publication(client, tmp_path, monkeypatch, mode):

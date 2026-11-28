@@ -41,10 +41,68 @@ inputs:
     description: 'Optional release version label for the deployment summary'
     required: false
     default: ''
+  # SCA-3748: the pump renders the shared record token lease keys (and mounts Sync),
+  # so it binds the same four raw Actions variables as every other lease writer.
+  record_token_lease_mode:
+    description: 'Caller-supplied record token lease mode; prod fails when empty (SCA-3748)'
+    required: false
+    default: ''
+  record_token_lease_mode_serve_percent:
+    description: 'Caller-supplied record token lease serve percentage; prod fails when empty (SCA-3748)'
+    required: false
+    default: ''
+  record_token_lease_seconds:
+    description: 'Caller-supplied record token lease duration in seconds; prod fails when empty (SCA-3748)'
+    required: false
+    default: ''
+  record_token_lease_deployed_at:
+    description: 'Caller-supplied pinned record token lease release epoch; prod fails when empty (SCA-3748)'
+    required: false
+    default: ''
 
 runs:
   using: composite
   steps:
+    # First step: render and apply below read these from GITHUB_ENV, and a missing
+    # or invalid prod vector refuses before any registry read or Cloud Run write.
+    - name: Bind shared record token lease rollout inputs
+      shell: bash
+      env:
+        RECORD_TOKEN_LEASE_ENVIRONMENT: ${{ inputs.environment }}
+        RECORD_TOKEN_LEASE_MODE: ${{ inputs.record_token_lease_mode }}
+        RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT: ${{ inputs.record_token_lease_mode_serve_percent }}
+        RECORD_TOKEN_LEASE_SECONDS: ${{ inputs.record_token_lease_seconds }}
+        RECORD_TOKEN_LEASE_DEPLOYED_AT: ${{ inputs.record_token_lease_deployed_at }}
+      run: |
+        python3 - <<'PYTHON'
+        import math, os
+        # SCA-3748: prod binds the four Actions variables verbatim. GitHub cannot tell a
+        # missing variable from an empty one, and a blank mode is the runtime kill, so a
+        # prod deploy refuses either instead of inventing serve. Only development keeps
+        # the documented defaults; any other environment name fails closed like prod.
+        keys = ('RECORD_TOKEN_LEASE_MODE', 'RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT',
+                'RECORD_TOKEN_LEASE_SECONDS', 'RECORD_TOKEN_LEASE_DEPLOYED_AT')
+        development_defaults = dict(zip(keys, ('serve', '100', '3600', '1795662310')))
+        raw = {key: os.environ.get(key, '').strip() for key in keys}
+        missing = [key for key in keys if not raw[key]]
+        if missing and os.environ.get('RECORD_TOKEN_LEASE_ENVIRONMENT') != 'development':
+            raise ValueError('set non-empty Actions variables before a prod deploy: ' + ', '.join(missing))
+        raw.update({key: development_defaults[key] for key in missing})
+        mode = raw['RECORD_TOKEN_LEASE_MODE']
+        percent = int(raw['RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT'])
+        seconds = int(raw['RECORD_TOKEN_LEASE_SECONDS'])
+        epoch = float(raw['RECORD_TOKEN_LEASE_DEPLOYED_AT'])
+        if mode not in {'off', 'shadow', 'serve'} or not 0 <= percent <= 100 or not 1800 <= seconds <= 7200:
+            raise ValueError('invalid record token lease rollout vector')
+        if not math.isfinite(epoch) or epoch < 0 or (mode != 'off' and epoch <= 0):
+            raise ValueError('enabled record token leases require a pinned release epoch')
+        epoch_value = str(int(epoch)) if epoch.is_integer() else repr(epoch)
+        with open(os.environ['GITHUB_ENV'], 'a') as output:
+            for key, value in {'RECORD_TOKEN_LEASE_MODE': mode, 'RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT': percent,
+                               'RECORD_TOKEN_LEASE_SECONDS': seconds, 'RECORD_TOKEN_LEASE_DEPLOYED_AT': epoch_value}.items():
+                output.write(f'{key}={value}\n')
+        PYTHON
+
     - name: Validate projection pump deploy boundary
       shell: bash
       env:

@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from tests.unit._worker_lease_render import WORKER_LEASE_SET_ARGS
 
 from scripts.diff_prod_adapter import (
     API_SERVICES,
@@ -80,7 +81,7 @@ def test_prod_hpa_consumed_metrics_have_adapter_rules(service):
     for template in templates:
         command.extend(['--show-only', template])
     if service == 'batch-pipeline-worker':
-        command.extend(['--set-string', 'image.digest=sha256:' + 'b' * 64])
+        command.extend(['--set-string', 'image.digest=sha256:' + 'b' * 64, *WORKER_LEASE_SET_ARGS])
         # The production default remains fixed4 until qualification. Verify the
         # prepared HPA cutover against the adapter without enabling it by default.
         # f05065 cutover shape: single OD-pinned HPA from the prod 3/16 budget.

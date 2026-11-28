@@ -199,17 +199,30 @@ jobs:
         if: ${{ inputs.mode != 'evidence' && ((github.event.inputs.mode || 'deploy') == 'deploy') }}
         shell: bash
         env:
-          RECORD_TOKEN_LEASE_MODE: ${{ vars.RECORD_TOKEN_LEASE_MODE || 'off' }}
-          RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT: ${{ vars.RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT || '0' }}
-          RECORD_TOKEN_LEASE_SECONDS: ${{ vars.RECORD_TOKEN_LEASE_SECONDS || '3600' }}
-          RECORD_TOKEN_LEASE_DEPLOYED_AT: ${{ vars.RECORD_TOKEN_LEASE_DEPLOYED_AT || '0' }}
+          RECORD_TOKEN_LEASE_ENVIRONMENT: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
+          RECORD_TOKEN_LEASE_MODE: ${{ vars.RECORD_TOKEN_LEASE_MODE }}
+          RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT: ${{ vars.RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT }}
+          RECORD_TOKEN_LEASE_SECONDS: ${{ vars.RECORD_TOKEN_LEASE_SECONDS }}
+          RECORD_TOKEN_LEASE_DEPLOYED_AT: ${{ vars.RECORD_TOKEN_LEASE_DEPLOYED_AT }}
         run: |
           python3 - <<'PYTHON'
           import math, os
-          mode = os.environ['RECORD_TOKEN_LEASE_MODE']
-          percent = int(os.environ['RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT'])
-          seconds = int(os.environ['RECORD_TOKEN_LEASE_SECONDS'])
-          epoch = float(os.environ['RECORD_TOKEN_LEASE_DEPLOYED_AT'])
+          # SCA-3748: prod binds the four Actions variables verbatim. GitHub cannot tell a
+          # missing variable from an empty one, and a blank mode is the runtime kill, so a
+          # prod deploy refuses either instead of inventing serve. Only development keeps
+          # the documented defaults; any other environment name fails closed like prod.
+          keys = ('RECORD_TOKEN_LEASE_MODE', 'RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT',
+                  'RECORD_TOKEN_LEASE_SECONDS', 'RECORD_TOKEN_LEASE_DEPLOYED_AT')
+          development_defaults = dict(zip(keys, ('serve', '100', '3600', '1795662310')))
+          raw = {key: os.environ.get(key, '').strip() for key in keys}
+          missing = [key for key in keys if not raw[key]]
+          if missing and os.environ.get('RECORD_TOKEN_LEASE_ENVIRONMENT') != 'development':
+              raise ValueError('set non-empty Actions variables before a prod deploy: ' + ', '.join(missing))
+          raw.update({key: development_defaults[key] for key in missing})
+          mode = raw['RECORD_TOKEN_LEASE_MODE']
+          percent = int(raw['RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT'])
+          seconds = int(raw['RECORD_TOKEN_LEASE_SECONDS'])
+          epoch = float(raw['RECORD_TOKEN_LEASE_DEPLOYED_AT'])
           if mode not in {'off', 'shadow', 'serve'} or not 0 <= percent <= 100 or not 1800 <= seconds <= 7200:
               raise ValueError('invalid record token lease rollout vector')
           if not math.isfinite(epoch) or epoch < 0 or (mode != 'off' and epoch <= 0):
@@ -333,6 +346,19 @@ jobs:
           cluster_name: ${{ vars.GKE_CLUSTER }}
           location: ${{ env.REGION }}
           project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      # SCA-3748: image-only keeps the live env and swaps only the image. Before the
+      # image write, read the live Listen lease env and refuse unless it serves; new
+      # code over a live off/shadow vector would engage the kill. A rollback restores
+      # the attested prior image and is not gated.
+      - name: Refuse an image-only roll over a non-serving live lease env
+        if: ${{ inputs.mode != 'evidence' && inputs.mode == 'image-only' && fromJSON(inputs.evidence_request).operation == 'deploy' }}
+        run: |
+          set -euo pipefail
+          export LD_LIBRARY_PATH="$RUNNER_TEMP/listen-runtime/python/lib"
+          unset LD_PRELOAD PYTHONHOME PYTHONPATH
+          "$RUNNER_TEMP/listen-runtime/python/bin/python3.12" -I -B .github/scripts/record_token_lease_live_guard.py \
+            --namespace prod-omi-backend --require deployment/prod-omi-backend-listen
 
       - name: Authenticate digest inspection for the protected Listen route
         if: ${{ inputs.mode == 'image-only' || (inputs.mode == 'evidence' && fromJSON(inputs.evidence_request).image_only != null) }}

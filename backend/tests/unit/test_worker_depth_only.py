@@ -300,7 +300,8 @@ class WorkflowValidationTest(unittest.TestCase):
         self.assertIn("'prod-train'", workflow["concurrency"]["group"])
         self.assertIn("github.event.inputs.break_glass_lock != 'true'", workflow["concurrency"]["group"])
         self.assertEqual(workflow["concurrency"]["cancel-in-progress"], "false")
-        first = workflow["jobs"]["deploy"]["steps"][0]
+        # SCA-3748 put the lease binding first; the dispatch gate is the input validator.
+        first = next(s for s in workflow["jobs"]["deploy"]["steps"] if s.get("name") == "Validate Environment Input")
         fields = {
             "DEPTH_OPERATION": "plan",
             "TARGET_DEPTH": "4",

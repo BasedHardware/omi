@@ -56,9 +56,6 @@ CONVERSATION_TERMINAL_FAMILY_MODE_ENV = 'CONVERSATION_TERMINAL_FAMILY_MODE'
 PUSHER_RECORD_CLOSE_NOTIFY_ENV = 'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED'
 PUSHER_RECORD_CLOSE_NOTIFY_SERVE_PERCENT_ENV = 'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT'
 PUSHER_RECORD_CLOSE_NOTIFY_SERVE_UID_SHA256S_ENV = 'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S'
-RECORD_TOKEN_LEASE_MODE_ENV = 'RECORD_TOKEN_LEASE_MODE'
-RECORD_TOKEN_LEASE_SERVE_PERCENT_ENV = 'RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT'
-RECORD_TOKEN_LEASE_SERVE_UID_SHA256S_ENV = 'RECORD_TOKEN_LEASE_MODE_SERVE_UID_SHA256S'
 FROM_SEGMENTS_CONTINUED_PROCESSING_MODE_ENV = 'FROM_SEGMENTS_CONTINUED_PROCESSING_MODE'
 FROM_SEGMENTS_CONTINUED_PROCESSING_SERVE_PERCENT_ENV = 'FROM_SEGMENTS_CONTINUED_PROCESSING_MODE_SERVE_PERCENT'
 FROM_SEGMENTS_CONTINUED_PROCESSING_SERVE_UID_SHA256S_ENV = 'FROM_SEGMENTS_CONTINUED_PROCESSING_MODE_SERVE_UID_SHA256S'
@@ -80,7 +77,6 @@ _COHORT_ENVS = {
         FROM_SEGMENTS_CONTINUED_PROCESSING_SERVE_PERCENT_ENV,
         FROM_SEGMENTS_CONTINUED_PROCESSING_SERVE_UID_SHA256S_ENV,
     ),
-    RECORD_TOKEN_LEASE_MODE_ENV: (RECORD_TOKEN_LEASE_SERVE_PERCENT_ENV, RECORD_TOKEN_LEASE_SERVE_UID_SHA256S_ENV),
     'CALLS_RECAP_MODE': (CALLS_RECAP_SERVE_PERCENT_ENV, CALLS_RECAP_SERVE_UID_SHA256S_ENV),
     'ACTION_ITEMS_V2_MODE': (ACTION_ITEMS_V2_SERVE_PERCENT_ENV, ACTION_ITEMS_V2_SERVE_UID_SHA256S_ENV),
     'STT_VOCAB_MODE': (STT_VOCAB_SERVE_PERCENT_ENV, STT_VOCAB_SERVE_UID_SHA256S_ENV),
@@ -103,8 +99,6 @@ def _warn_once(name: str, raw: str) -> None:
 
 
 def mode(name: str, default: Mode = 'shadow', *, environ: Mapping[str, str] | None = None) -> Mode:
-    if name == RECORD_TOKEN_LEASE_MODE_ENV:
-        default = 'off'
     raw = (os.environ if environ is None else environ).get(name, '').strip().lower()
     if not raw:
         return default
@@ -195,11 +189,7 @@ def serving_for(
     current = mode(name, default, environ=env)
     if current == 'off':
         return False
-    if name == RECORD_TOKEN_LEASE_MODE_ENV:
-        # Lease shadow is observation only; serve always honors its own cohort.
-        if current != 'serve':
-            return False
-    elif current == 'serve':
+    if current == 'serve':
         return True
     if not uid:
         return False
@@ -215,11 +205,7 @@ def serving_for(
     if not math.isfinite(percent) or not 0 <= percent <= 100:
         _warn_once(percent_env, 'invalid')
         percent = 0.0
-    salt = (
-        'record-token-lease'
-        if name == RECORD_TOKEN_LEASE_MODE_ENV
-        else WAVE2_COHORT_SALT if name in WAVE2_MODES else name.lower()
-    )
+    salt = WAVE2_COHORT_SALT if name in WAVE2_MODES else name.lower()
     return percent > 0 and cohort_bucket(uid, salt) < percent
 
 

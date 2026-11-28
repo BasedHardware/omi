@@ -12,6 +12,7 @@ from copy import deepcopy
 from pathlib import Path
 
 import pytest
+from tests.unit._worker_lease_render import WORKER_LEASE_SET_ARGS
 from datetime import datetime, timezone
 from config.firestore_read_levers import lever_percent
 from config.plan_catalog import (
@@ -1635,7 +1636,7 @@ def test_post_seal_switches_reach_rendered_pods_and_can_be_disabled(environment,
         'image.pullPolicy=IfNotPresent',
     ]
     if chart == 'batch-pipeline-worker':
-        command += ['--set', 'enabled=true']
+        command += ['--set', 'enabled=true', *WORKER_LEASE_SET_ARGS]
         command += ['--namespace', f'{environment}-omi-backend']
         if mode != 'staged':
             for key in flags:

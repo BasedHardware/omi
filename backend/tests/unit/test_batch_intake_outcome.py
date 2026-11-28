@@ -376,6 +376,7 @@ async def test_batch_response_without_fresh_admission_is_not_counted(monkeypatch
         _restore(saved)
 
 
+@pytest.mark.usefixtures('record_custody_not_acquired')
 async def test_rehomed_final_pass_owner_batch_landing_is_not_counted(monkeypatch, _router):
     """Luna r1 P1: a rehomed legacy_final_pass_v1 owner follows a durable owner,
     so its batch landing is an owner transition, not a fresh ramp admission."""
@@ -435,6 +436,7 @@ async def test_heavy_owner_excluded_upload_counts_heavy_excluded(monkeypatch, _r
         _restore(saved)
 
 
+@pytest.mark.usefixtures('record_custody_not_acquired')
 async def test_language_excluded_upload_counts_language_excluded(monkeypatch, _router):
     world = _language_world(monkeypatch)
     module, saved, BytesIO = _router

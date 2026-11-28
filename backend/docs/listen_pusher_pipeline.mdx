@@ -461,15 +461,18 @@ After a partial trim, the next overlap is checked against the full previous
 object span, retaining the earlier accepted bytes within that span. A wholly
 covered object does not replace this comparison history.
 
-`RECORD_TOKEN_LEASE_MODE=off|shadow|serve` defaults off; shadow records leases
-without changing seal decisions. Serve honors `RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT`
-(default 0) with salt `record-token-lease`. Only observed custody appends and
+The record token lease serves every account; SCA-3748 deleted the non-lease
+path. `RECORD_TOKEN_LEASE_MODE` defaults to `serve`: only an unset variable or
+`serve` serves. `off`, or any other value (including the retired `shadow`, blank
+and whitespace), is the fail-closed kill switch: Sync refuses
+new custody with 503 "Retain local audio" and a lapsed lease grants no seal or
+partial-finish authority, while registration and renewal keep stamping clocks.
+`RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT` is inert. Only observed custody appends and
 frame batches renew `last_signal_at` / `lease_expires_at` / `signal_source` inside
 the existing token map. `RECORD_TOKEN_LEASE_SECONDS` defaults 3600 (1800–7200).
 Registration also persists `append_late`, so a committed registration whose reply
 is lost returns the same late observation. Manifest admission renews custody-source
-tokens only in the serve cohort; it cannot extend frame-producer leases or fail
-shadow requests. A failed pusher registration remains an abandonment candidate,
+tokens only; it cannot extend frame-producer leases. A failed pusher registration remains an abandonment candidate,
 not a committed registration eligible for renewal. Metadata renewal failures do
 not interrupt frame storage or close the live socket.
 Exact custody tokens additionally cover the backend-sync request timeout from
@@ -482,9 +485,22 @@ stamps cannot extend it. Only explicit server-observed activity renews it. Lease
 proof. Custody uploads first acquire an exact fence and bump revision only after
 durable acceptance; failed/refused uploads clear only that fence. Intentionally
 disabled archives do not advance the revision or schedule recovery; any already
-acquired fence is cleared. A serve-created
-podless custody fence retains its own lease exit in off/shadow; accepted bytes
-still schedule recovery after a mode rollback.
+acquired fence is cleared. A podless custody fence exits by its upload's finish
+or its own lease; the kill switch withholds that lease exit even after expiry.
+Accepted bytes still schedule recovery after the kill switch engages mid-request.
+The fence's steps (begin, each file's archive commit, finish) run on worker
+threads, and the thread that settles the last step runs finish with the true
+outcome. A cancelled request, or a shut-down event loop, only abandons its waits:
+the fence stays held until an in-flight archive commits, then finishes accepted
+when it did. A begin retry that finds this request's exact token reports it held,
+so finish clears it; an owner who opted out meanwhile gets only that token removed.
+Every deploy writer of the vector (Sync and the backend stack, Listen, Pusher,
+and the worker Helm upgrade for record-seal-worker and record-seal-repair) binds
+all four `vars.RECORD_TOKEN_LEASE_*`; a prod deploy fails when any is missing or
+empty, and the prod worker chart refuses to render without them. Image-only
+paths keep the live env, so the Listen and Pusher image-only operations and the
+worker preserve-live roll first read the target's live lease env and refuse
+unless it is `serve` at 100% with a positive epoch (rollbacks are not gated).
 An accepted durable append whose exact fence was lost records a revision bump
 and partial continuation transactionally, with an idempotent per-request receipt
 under the conversation's `record_custody_recoveries` subcollection. Privacy gates
@@ -504,7 +520,7 @@ only `recording_session_id` resolves its user-scoped conversation through the sa
 resolver as record admission and fences that target. If the session does not
 resolve, the original archive/admission response remains unchanged and there is
 no custody append for an unknown target. Captured native input pins
-`record_input_upload_revision` on its jobs while lease observation is enabled.
+`record_input_upload_revision` on its jobs in every lease mode.
 A newer append schedules partial continuation regardless of conversation status;
 uncaptured admission reads the current revision and CAS-validates it after staging.
 Separate continuation jobs enter `record_recovery_waiting` until the original
@@ -515,10 +531,20 @@ worker returns. Original work and projection bindings are not rewritten.
 Frame late-append counting follows successful durable window/object commit.
 Producer Helm env bindings use the shared runtime ConfigMap; Cloud Run and that
 ConfigMap render the same protected-environment `RECORD_TOKEN_LEASE_*` input
-vector with off defaults. Roll every producer before setting the separately typed
-repair vector to serve; the first serve-enable epoch stays pinned.
+vector. Every prod writer (the backend stack and projection pump composites,
+Listen, Pusher and the worker Helm upgrade) binds the four Actions variables
+verbatim before every deploy write: as its first step, except Listen, which runs
+only its pinned read-only input validation and checkout first. A missing, empty
+or invalid variable fails the run before any deploy write (registry, the backend
+break-glass audit issue, Secret Manager, ConfigMap, Helm or Cloud Run). Status
+reporters that run under `always()`, such as the deploy Telegram notifier, still
+run after a rejected binding; they write no workload.
+Prod has no fallback and the prod worker chart refuses to render without the
+vector. Only development fills `serve`, percent 100, 3600 seconds and the shared
+serve-enable epoch `1795662310`. `off` is an upload pause, not a rollback. The
+first serve-enable epoch stays pinned.
 Custody late-append accounting observes the post-storage renewal/finish transaction
-in shadow, non-cohort and serve requests, including throttled renewals. Each
+for owned and unowned archives, including throttled renewals. Each
 request retains every durable-file observation through transaction retries and
 counts once only after accepted storage; serve receipts preserve that decision
 without another count on finish replay. No pre-storage row snapshot controls the counter.
@@ -526,11 +552,14 @@ This includes a new pusher session's first durable frame when an older token on
 the still-open row has lapsed; registration alone never increments the counter.
 The active repair CronJob exports the sampled oldest-unsealed age and child
 probe counters on `/metrics`, scraped every 15s, without enabling the idle worker.
-Memoized waits do no token IO; observed append heartbeats coalesce to lease/2. Serve-only frames
-after complete seal re-open the row and use the existing partial continuation
+Memoized waits do no token IO; observed append heartbeats coalesce to lease/2. Frames
+after complete seal re-open the row in every mode and use the existing partial continuation
 for interior gaps. Late WAL holes are retained create-only for that same worker;
 raw audio stays retained. See the [review fixes](listen_pusher_pipeline/changes/2026-11-09-token-lease-review-fixes.md).
-See [rollout and rollback](listen_pusher_pipeline/changes/2026-11-09-record-token-lease.md).
+Rollback after SCA-3748 is an image rollback; `RECORD_TOKEN_LEASE_MODE=off` is now
+the kill switch that pauses Sync custody, not a return to unfenced uploads. For
+history only, see the [original rollout plan, superseded by SCA-3748](listen_pusher_pipeline/changes/2026-11-09-record-token-lease.md);
+its shadow/off rollback no longer applies.
 
 Only the independent repair job opts into retrying `record_upload_failed` rows.
 `RECORD_SEAL_UPLOAD_FAILED_REPAIR_ENABLED=false` disables that rule. After full

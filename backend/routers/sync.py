@@ -73,7 +73,6 @@ from models.sync_job_status import (
 from routers.enrichment import enrichment_response
 from database import conversations as conversations_db
 from database import record_audio as record_audio_db
-from config import record_seal_rules as record_lease
 from utils.sync import record_token_lease as custody_lease
 from utils.sync import capture_end
 from database import capture_end as capture_end_db
@@ -351,8 +350,6 @@ router.include_router(coverage_router)
 
 
 async def _renew_custody_lease(uid, conversation_id):
-    if not record_lease.token_lease_serving(uid):
-        return
     try:
         await run_blocking(
             db_executor,

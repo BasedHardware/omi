@@ -27,7 +27,6 @@ from utils.batch_pipeline.record_seal_repair import (
 
 from utils.batch_pipeline.record_producer_proof import leases_would_release
 from database import record_token_lease_metrics as lease_metrics
-from config import record_seal_rules as lease
 
 OPERATION = 'record-seal-nojob-v1'
 REGISTRATION_FIELDS = ('source', 'language', 'client_device_id', 'client_platform', 'uses_custom_stt', 'external_data')
@@ -278,15 +277,11 @@ def apply_backfill(store, plan, approved_digest):
         try:
             result = run_transactional(store.client, commit, transient=True)
             outcomes[result] += 1
-            if (
-                result in {'sealed_registered', 'upload_failed_cleared'}
-                and lease.token_lease_serving(uid)
-                and leases_would_release(
-                    entry['row'].get('record_upload_sessions'),
-                    plan['producer_proof'],
-                    uid=uid,
-                    row=entry['row'],
-                )
+            if result in {'sealed_registered', 'upload_failed_cleared'} and leases_would_release(
+                entry['row'].get('record_upload_sessions'),
+                plan['producer_proof'],
+                uid=uid,
+                row=entry['row'],
             ):
                 lease_metrics.EXPIRED_SEALED.inc()
             observe_existing_orphan(

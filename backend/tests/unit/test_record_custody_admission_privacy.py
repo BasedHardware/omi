@@ -112,11 +112,19 @@ def test_sync_opt_out_keeps_existing_no_custody_admission(client):
 
 
 @pytest.mark.parametrize('mode', ['off', 'shadow'])
-def test_non_serving_begin_preserves_no_metadata_io(client, monkeypatch, mode):
+async def test_killed_admission_refuses_before_metadata_io(client, monkeypatch, mode):
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', mode)
-    forbidden = Mock(side_effect=AssertionError('non-serving admission performed metadata IO'))
+    forbidden = Mock(side_effect=AssertionError('killed admission performed metadata IO'))
     monkeypatch.setattr(custody, 'get_firestore_client', forbidden)
-    assert not custody.begin('synthetic', 'record', 'custody:off')
+    state = {}
+    context = request._upload.set(state)
+    try:
+        with pytest.raises(HTTPException) as refused:
+            await request.begin_upload('synthetic', 'record', 'off')
+    finally:
+        request._upload.reset(context)
+    assert refused.value.status_code == 503
+    assert 'session' not in state
     forbidden.assert_not_called()
     assert client.transactions == []
 
@@ -234,3 +242,63 @@ async def test_real_sync_endpoint_refuses_before_raw_gcs_or_admission_write(
     assert client.rows == before
     assert not any(tx.has_written for tx in client.transactions)
     assert request._upload.get() is None
+
+
+@pytest.mark.parametrize('mode', ['serve', 'off', 'shadow'])
+async def test_routing_resolution_after_unfenced_admission_applies_the_same_custody_gate(client, monkeypatch, mode):
+    # Race (SCA-3748 review P2): admission resolved the recording session
+    # before registration landed and so acquired no fence. The real record
+    # router then resolves it after staging. It must check the kill and fence
+    # the target before any handoff, archive or retention write.
+    from utils.batch_pipeline import live_upload
+
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', mode)
+
+    async def blocking(executor, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(request, 'run_blocking', blocking)
+    monkeypatch.setattr(live_upload, 'run_blocking', blocking)
+    monkeypatch.setattr(live_upload, 'FirestoreStore', lambda name: SimpleNamespace(client=client))
+    handoff = AsyncMock(side_effect=AssertionError('unfenced upload reached the WAL handoff'))
+    monkeypatch.setattr(live_upload.record_wal_handoff, 'handoff', handoff)
+    before_coverage = AsyncMock(side_effect=AssertionError('unfenced upload reached the archive callback'))
+    policy = SimpleNamespace(live_admission_enabled=True, live_record_enabled=True)
+    state = {}
+    context = request._upload.set(state)
+    try:
+        await request.begin_upload('synthetic', None, 'late-registration', recording_session_id='synthetic-session')
+        assert 'cid' not in state and 'session' not in state
+        client.rows['users', 'synthetic', 'recording_sessions', 'synthetic-session'] = {'conversation_id': 'record'}
+        before = deepcopy(client.rows)
+        call = live_upload.registered_record_response(
+            uid='synthetic',
+            conversation_id=None,
+            content_id='synthetic-content',
+            paths=['synthetic-audio'],
+            source='synthetic-source',
+            client_device_id='synthetic-device',
+            recording_session_id='synthetic-session',
+            policy=policy,
+            before_coverage=before_coverage,
+        )
+        if mode != 'serve':
+            with pytest.raises(HTTPException) as refused:
+                await call
+            assert refused.value.status_code == 503
+            assert refused.value.detail == 'Retain local audio; record custody is paused'
+            assert 'session' not in state
+            assert client.rows == before
+            assert not any(tx.has_written for tx in client.transactions)
+        else:
+            await call
+            assert (state['uid'], state['cid'], state['session']) == (
+                'synthetic',
+                'record',
+                'custody:late-registration',
+            )
+            assert 'custody:late-registration' in client.rows[PATH]['record_upload_sessions']
+    finally:
+        request._upload.reset(context)
+    handoff.assert_not_called()
+    before_coverage.assert_not_called()

@@ -11,6 +11,7 @@ from google.api_core.exceptions import ServiceUnavailable
 from google.auth.credentials import AnonymousCredentials
 from google.cloud import firestore
 import pytest
+from fastapi import HTTPException
 from starlette.responses import JSONResponse
 
 from config.record_audio import record_identity
@@ -124,14 +125,15 @@ async def test_finish_receipt_survives_a_real_committed_transaction(monkeypatch,
         client.close()
 
 
-@pytest.mark.parametrize('lose_reply', [False, True])
-@pytest.mark.parametrize('transition', ['none', 'closed', 'lapsed'])
-async def test_shadow_observes_post_storage_state_through_real_renewal_reply_loss(
-    monkeypatch, tmp_path, lose_reply, transition
-):
-    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'shadow')
+@pytest.mark.parametrize('mode', ['shadow', 'off'])
+async def test_killed_custody_refuses_before_archive_with_no_real_write(monkeypatch, tmp_path, mode):
+    # SCA-3748 deleted the shadow observation path: any non-serve mode is the
+    # fail-closed kill. Against real Firestore, a killed upload answers 503
+    # before the archive callback runs and commits nothing, so the phone keeps
+    # its WAL and no record metadata moves.
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', mode)
     client = _emulator_client()
-    uid, cid = 'synthetic-post-storage-' + uuid.uuid4().hex, 'record'
+    uid, cid = 'synthetic-killed-' + uuid.uuid4().hex, 'record'
     user = client.collection('users').document(uid)
     row = user.collection('conversations').document(cid)
     user.set({'private_cloud_sync_enabled': True})
@@ -143,61 +145,42 @@ async def test_shadow_observes_post_storage_state_through_real_renewal_reply_los
             'record_upload_sessions': {},
         }
     )
+    before = row.get().to_dict()
     monkeypatch.setattr(record_audio, 'get_firestore_client', lambda: client)
     monkeypatch.setattr(custody, 'get_firestore_client', lambda: client)
     original_commit = client._firestore_api.commit
-    artifact = tmp_path / 'durable-shadow-audio'
-    lost = []
+    commits = []
 
-    def commit_then_lose_reply(*args, **kwargs):
-        result = original_commit(*args, **kwargs)
-        if lose_reply and artifact.exists() and not lost:
-            lost.append(True)
-            raise ServiceUnavailable('synthetic renewal response lost after real commit')
-        return result
+    def record_commit(*args, **kwargs):
+        commits.append(True)
+        return original_commit(*args, **kwargs)
 
-    monkeypatch.setattr(client._firestore_api, 'commit', commit_then_lose_reply)
+    monkeypatch.setattr(client._firestore_api, 'commit', record_commit)
     counter = metrics.LATE_APPEND._value.get()
-
-    def archive(owner, paths, metadata):
-        if transition == 'closed':
-            row.update({'record_audio_closed': True})  # Repair wins before bytes land.
-        elif transition == 'lapsed':
-            now = datetime.now(timezone.utc).timestamp()
-            row.update(
-                {
-                    'record_upload_sessions': {
-                        'older': {
-                            'pod': 'synthetic-pusher',
-                            'process_started_at': now - 86400,
-                            'last_signal_at': now - 7200,
-                            'lease_expires_at': now - 3600,
-                            'signal_source': 'frames',
-                        }
-                    }
-                }
-            )
-        artifact.write_bytes(b'synthetic durable shadow bytes')
-        assert metrics.LATE_APPEND._value.get() == counter
-        return [str(artifact)]
+    artifact = tmp_path / 'killed-audio'
+    archive = Mock(side_effect=lambda *args: artifact.write_bytes(b'must not land') and [str(artifact)])
 
     @request.custody_upload
     async def upload():
-        await request.begin_upload(uid, cid, 'shadow')
+        await request.begin_upload(uid, cid, 'killed')
         paths = ['local-audio']
         archived = await request.archive(archive, uid, paths, {})
         request.stored(paths, archived)
-        assert metrics.LATE_APPEND._value.get() == counter
         return JSONResponse(status_code=202, content={'status': 'queued'})
 
     try:
-        assert (await upload()).status_code == 202
-        assert lost == ([True] if lose_reply else [])
-        assert artifact.read_bytes() == b'synthetic durable shadow bytes'
-        assert metrics.LATE_APPEND._value.get() == counter + (transition != 'none')
-        assert row.get().to_dict()['record_upload_revision'] == 7
+        with pytest.raises(HTTPException) as refused:
+            await upload()
+        assert refused.value.status_code == 503
+        assert refused.value.detail == 'Retain local audio; record custody is paused'
+        archive.assert_not_called()
+        assert not artifact.exists()
+        assert commits == []
+        assert row.get().to_dict() == before
+        assert metrics.LATE_APPEND._value.get() == counter
+        assert request._upload.get() is None
     finally:
-        # Exact synthetic owner only; this view creates no receipts or jobs.
+        # Exact synthetic owner only; the kill creates no receipts or jobs.
         monkeypatch.setattr(client._firestore_api, 'commit', original_commit)
         row.delete()
         user.delete()

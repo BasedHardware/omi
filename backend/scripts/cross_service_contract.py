@@ -206,9 +206,20 @@ READER_SPLIT_SCOPES: dict[str, tuple[str, ...]] = {
 READER_SPLIT_ROLE_LOCAL: frozenset[str] = frozenset({'cloud_run/backend-projection-pump'})
 
 # Charts rendered with ``helm template`` exactly like their deploy workflow does. Values files are
-# ``{env}_omi_{name}_values.yaml``; ``image_set`` is the workflow's --set-string image argument.
-HELM_CHARTS: tuple[tuple[str, str, str], ...] = (
-    ('batch-pipeline-worker', 'diarizer.batch_pipeline_runtime', 'image.digest=sha256:' + 'a' * 64),
+# ``{env}_omi_{name}_values.yaml``; ``image_set`` holds the workflow's --set-string pins: the image
+# digest and the record token lease vector the deploy binds from vars.RECORD_TOKEN_LEASE_* (SCA-3748;
+# prod values leave it empty so the chart refuses to render without it). The lease env lives on the
+# seal children, not the worker Deployment read here, so the synthetic vector changes no compared key.
+HELM_CHARTS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    (
+        'batch-pipeline-worker',
+        'diarizer.batch_pipeline_runtime',
+        (
+            'image.digest=sha256:' + 'a' * 64,
+            'recordTokenLease.mode=serve,recordTokenLease.servePercent=100,'
+            'recordTokenLease.seconds=3600,recordTokenLease.deployedAt=1795662310',
+        ),
+    ),
 )
 
 # Process entrypoints (module paths under backend/) per deployment kind, for "who reads this flag".
@@ -496,7 +507,9 @@ def _gke_env(raw_env: ConfigDict, config_map: dict[str, str]) -> dict[str, str]:
     return env
 
 
-def _helm_env(source: Source, env: str, chart: str, image_set: str, errors: list[str]) -> dict[str, str] | None:
+def _helm_env(
+    source: Source, env: str, chart: str, image_set: tuple[str, ...], errors: list[str]
+) -> dict[str, str] | None:
     helm = shutil.which('helm')
     if helm is None:
         return None
@@ -515,8 +528,7 @@ def _helm_env(source: Source, env: str, chart: str, image_set: str, errors: list
             f'{env}-omi-backend',
             '-f',
             str(chart_dir / f'{env}_omi_{chart}_values.yaml'),
-            '--set-string',
-            image_set,
+            *(arg for pin in image_set for arg in ('--set-string', pin)),
         ],
         capture_output=True,
         text=True,

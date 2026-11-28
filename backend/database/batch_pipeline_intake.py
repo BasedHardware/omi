@@ -12,7 +12,6 @@ import time
 from config.policy import BatchUnitPolicy, resolve_batch_policy
 from config.batch_pipeline import require_record_protocol_ready
 from config.record_audio import record_identity, require_record_audio_barrier, restore_pending
-from config.record_seal_rules import token_lease_mode
 from config.record_latency import recent_record_end, record_fresh_merge_enabled, record_notes_eager_enabled
 from database.batch_pipeline_store import Store
 from database import batch_pipeline_allowance_hold as allowance_hold
@@ -268,7 +267,7 @@ def admit(
                         # behind this owner's unresolved historical captures.
                         # All siblings use the recording end, not unit ends.
                         job['fresh_capture'] = True
-            if binding.native_record and record_barrier is not None and token_lease_mode() != 'off':
+            if binding.native_record and record_barrier is not None:
                 job['record_input_upload_revision'] = record_barrier.get('record_upload_revision')
             if partial_metadata.get('release'):
                 # Readers (hard-3, the 2h alarm) split released backfill from fresh audio per row.

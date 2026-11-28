@@ -199,7 +199,7 @@ def set_record_upload_pending(
             if len(sessions) >= 128:
                 raise RecordUploadCapacityExceeded('record upload session budget exceeded')
             value = producer or True
-            if record_seal_rules.token_lease_mode() != 'off' and isinstance(value, dict):
+            if isinstance(value, dict):
                 now = time.time()
                 value = {
                     **value,
@@ -207,9 +207,8 @@ def set_record_upload_pending(
                     'lease_expires_at': now + record_seal_rules.token_lease_seconds(),
                     'signal_source': 'frames',
                 }
-            late = record_seal_rules.token_lease_mode() != 'off' and (
-                bool(row.get('record_audio_closed') or row.get('record_audio_partial'))
-                or any(record_seal_rules.token_lease_lapsed(token, time.time(), row=row) for token in sessions.values())
+            late = bool(row.get('record_audio_closed') or row.get('record_audio_partial')) or any(
+                record_seal_rules.token_lease_lapsed(token, time.time(), row=row) for token in sessions.values()
             )
             sessions[session] = value
             patch = {
@@ -218,17 +217,16 @@ def set_record_upload_pending(
                 'record_upload_revision': int(row.get('record_upload_revision') or 0) + 1,
             }
             observed['late'] = late
-            if record_seal_rules.token_lease_serving(uid):
-                from database.batch_pipeline_record_lease_recovery import prepare_recovery
+            from database.batch_pipeline_record_lease_recovery import prepare_recovery
 
-                recovered, recovery = prepare_recovery(
-                    client, tx, uid, conversation_id, row, patch['record_upload_revision'], time.time()
-                )
-                patch.update(recovered)
-                observed['late'] |= bool(recovery)
-                if recovery:
-                    tx.set(*recovery)
-            if isinstance(value, dict) and record_seal_rules.token_lease_mode() != 'off':
+            recovered, recovery = prepare_recovery(
+                client, tx, uid, conversation_id, row, patch['record_upload_revision'], time.time()
+            )
+            patch.update(recovered)
+            observed['late'] |= bool(recovery)
+            if recovery:
+                tx.set(*recovery)
+            if isinstance(value, dict):
                 # The same registration after a committed-but-lost response
                 # must return the original late observation.
                 sessions[session]['append_late'] = bool(observed['late'])
@@ -307,10 +305,8 @@ def renew_record_token_lease(
     """Renew observed signals; upload custody uses a separate exact-token fence.
 
     Manifest heartbeats never invalidate revisions or count accepted appends.
-    Serve-only frames after a complete seal re-arm partial continuation.
+    Frames after a complete seal re-arm partial continuation.
     """
-    if record_seal_rules.token_lease_mode() == 'off':
-        return False
     if source not in {'frames', 'custody_append'}:
         raise ValueError('unrecognized record lease signal')
     client = firestore_client if firestore_client is not None else get_firestore_client()
@@ -334,9 +330,6 @@ def renew_record_token_lease(
         late = bool(row.get('record_audio_closed') or row.get('record_audio_partial'))
         reactivated = source == 'frames' and bool(row.get('record_audio_partial'))
         closed_frame = source == 'frames' and bool(row.get('record_audio_closed'))
-        serving = record_seal_rules.token_lease_serving(uid)
-        if closed_frame and not serving:
-            return False, True, []  # Shadow observes a seal; it never mutates it.
         identified = [token for token in sessions.values() if isinstance(token, dict)]
         targets = [
             token
@@ -352,9 +345,9 @@ def renew_record_token_lease(
             # Publish only after renewal succeeds, but retain post-storage
             # observations if its committed response is lost and retried.
             observed_late |= late
-            # An unowned/non-serving archive may observe lateness, never renew
-            # another upload's custody. Frame renewal keeps its own contract.
-            if not serving or not session:
+            # An unowned archive may observe lateness, never renew another
+            # upload's custody. Frame renewal keeps its own contract.
+            if not session:
                 return False, late, []
         if (
             source == 'custody_append'
@@ -367,13 +360,12 @@ def renew_record_token_lease(
         ):
             return False, late, []
         changed = False
-        # Restore only this socket's identity. Serve also reopens complete
+        # Restore only this socket's identity. This also reopens complete
         # seals so newly retained interior audio gets a continuation pass.
         if (
             source == 'frames'
             and session is not None
             and session not in sessions
-            and (not row.get('record_audio_closed') or serving)
             and isinstance(producer, dict)
             and isinstance(producer.get('pod'), str)
             and producer['pod']
@@ -395,7 +387,7 @@ def renew_record_token_lease(
             clocks = record_seal_rules.token_lease_clocks(token, row=row)
             lapsed = record_seal_rules.token_lease_lapsed(token, now, row=row)
             if source == 'frames':
-                reactivated |= lapsed or closed_frame and serving
+                reactivated |= lapsed or closed_frame
             late |= lapsed
             if clocks:
                 gaps.append(max(0, now - clocks[0]))
@@ -417,7 +409,7 @@ def renew_record_token_lease(
             if reactivated:
                 revision = int(row.get('record_upload_revision') or 0) + 1
                 patch['record_upload_revision'] = revision
-                if source == 'frames' and serving and changed:
+                if source == 'frames' and changed:
                     from database.batch_pipeline_record_lease_recovery import prepare_recovery
 
                     recovered, recovery = prepare_recovery(client, tx, uid, conversation_id, row, revision, now)

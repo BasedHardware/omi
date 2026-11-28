@@ -569,6 +569,48 @@ jobs:
       admitted_sha: ${{ steps.admitted_source.outputs.admitted_sha }}
       break_glass: ${{ steps.admitted_source.outputs.break_glass }}
     steps:
+      # SCA-3748: a deploy run validates the record token lease vector here, before
+      # record_break_glass opens its audit issue and before deploy or the projection
+      # pump write anything. Both lease writers rebind inside their own composites.
+      - name: Bind shared record token lease rollout inputs
+        if: github.event.inputs.mode == 'deploy'
+        shell: bash
+        env:
+          RECORD_TOKEN_LEASE_ENVIRONMENT: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
+          RECORD_TOKEN_LEASE_MODE: ${{ vars.RECORD_TOKEN_LEASE_MODE }}
+          RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT: ${{ vars.RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT }}
+          RECORD_TOKEN_LEASE_SECONDS: ${{ vars.RECORD_TOKEN_LEASE_SECONDS }}
+          RECORD_TOKEN_LEASE_DEPLOYED_AT: ${{ vars.RECORD_TOKEN_LEASE_DEPLOYED_AT }}
+        run: |
+          python3 - <<'PYTHON'
+          import math, os
+          # SCA-3748: prod binds the four Actions variables verbatim. GitHub cannot tell a
+          # missing variable from an empty one, and a blank mode is the runtime kill, so a
+          # prod deploy refuses either instead of inventing serve. Only development keeps
+          # the documented defaults; any other environment name fails closed like prod.
+          keys = ('RECORD_TOKEN_LEASE_MODE', 'RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT',
+                  'RECORD_TOKEN_LEASE_SECONDS', 'RECORD_TOKEN_LEASE_DEPLOYED_AT')
+          development_defaults = dict(zip(keys, ('serve', '100', '3600', '1795662310')))
+          raw = {key: os.environ.get(key, '').strip() for key in keys}
+          missing = [key for key in keys if not raw[key]]
+          if missing and os.environ.get('RECORD_TOKEN_LEASE_ENVIRONMENT') != 'development':
+              raise ValueError('set non-empty Actions variables before a prod deploy: ' + ', '.join(missing))
+          raw.update({key: development_defaults[key] for key in missing})
+          mode = raw['RECORD_TOKEN_LEASE_MODE']
+          percent = int(raw['RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT'])
+          seconds = int(raw['RECORD_TOKEN_LEASE_SECONDS'])
+          epoch = float(raw['RECORD_TOKEN_LEASE_DEPLOYED_AT'])
+          if mode not in {'off', 'shadow', 'serve'} or not 0 <= percent <= 100 or not 1800 <= seconds <= 7200:
+              raise ValueError('invalid record token lease rollout vector')
+          if not math.isfinite(epoch) or epoch < 0 or (mode != 'off' and epoch <= 0):
+              raise ValueError('enabled record token leases require a pinned release epoch')
+          epoch_value = str(int(epoch)) if epoch.is_integer() else repr(epoch)
+          with open(os.environ['GITHUB_ENV'], 'a') as output:
+              for key, value in {'RECORD_TOKEN_LEASE_MODE': mode, 'RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT': percent,
+                                 'RECORD_TOKEN_LEASE_SECONDS': seconds, 'RECORD_TOKEN_LEASE_DEPLOYED_AT': epoch_value}.items():
+                  output.write(f'{key}={value}\n')
+          PYTHON
+
       - name: Validate Firestore readiness inputs
         env:
           DEPLOY_ENVIRONMENT: ${{ github.event.inputs.environment }}
@@ -1403,12 +1445,12 @@ jobs:
         with:
           deploy_profile: manual
           # SCA-3748: bind the shared record token lease vector exactly as
-          # Listen and Pusher do. Without these the composite defaults would
-          # reset Cloud Run and prod-omi-backend-config lease env on every deploy.
-          record_token_lease_mode: ${{ vars.RECORD_TOKEN_LEASE_MODE || 'off' }}
-          record_token_lease_mode_serve_percent: ${{ vars.RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT || '0' }}
-          record_token_lease_seconds: ${{ vars.RECORD_TOKEN_LEASE_SECONDS || '3600' }}
-          record_token_lease_deployed_at: ${{ vars.RECORD_TOKEN_LEASE_DEPLOYED_AT || '0' }}
+          # Listen, Pusher and the worker do. The composite has no defaults: a
+          # prod deploy fails when any of the four variables is missing or empty.
+          record_token_lease_mode: ${{ vars.RECORD_TOKEN_LEASE_MODE }}
+          record_token_lease_mode_serve_percent: ${{ vars.RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT }}
+          record_token_lease_seconds: ${{ vars.RECORD_TOKEN_LEASE_SECONDS }}
+          record_token_lease_deployed_at: ${{ vars.RECORD_TOKEN_LEASE_DEPLOYED_AT }}
           # SCA-2283 captain ruling 01a1dca2: finite exact-source path only.
           integration_canary: ${{ github.event.inputs.environment == 'prod' && (needs.validate-production-boundary.outputs.integration_only == 'true' || needs.firestore_readiness.outputs.admitted_sha == '0714c5198be8f0183c8fd7dd3810d53c91af17a4') && 'true' || 'false' }}
           integration_only: ${{ needs.validate-production-boundary.outputs.integration_only || 'false' }}
@@ -1547,6 +1589,11 @@ jobs:
         with:
           admitted_sha: ${{ needs.firestore_readiness.outputs.admitted_sha }}
           reviewed_control_sha: ${{ inputs.pump_control_sha }}
+          # SCA-3748: the pump renders the shared lease keys, so it binds the same raw vars.
+          record_token_lease_mode: ${{ vars.RECORD_TOKEN_LEASE_MODE }}
+          record_token_lease_mode_serve_percent: ${{ vars.RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT }}
+          record_token_lease_seconds: ${{ vars.RECORD_TOKEN_LEASE_SECONDS }}
+          record_token_lease_deployed_at: ${{ vars.RECORD_TOKEN_LEASE_DEPLOYED_AT }}
           release_disposition: ${{ inputs.pump_release_disposition }}
           environment: ${{ github.event.inputs.environment }}
           runtime_env: ${{ vars.ENV }}

@@ -716,16 +716,16 @@ environment_shared:
       entries:
         RECORD_TOKEN_LEASE_MODE:
           source: environment
-          default: 'off'
+          default: 'serve'
         RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT:
           source: environment
-          default: '0'
+          default: '100'
         RECORD_TOKEN_LEASE_SECONDS:
           source: environment
           default: '3600'
         RECORD_TOKEN_LEASE_DEPLOYED_AT:
           source: environment
-          default: '0'
+          default: '1795662310'
         LADDER_V1_PLUS_MONTH_PRICE_ID:
           source: environment
           default: ''
@@ -1001,11 +1001,11 @@ environment_shared:
           RECORD_SEAL_OVERLAP_TRIM_ENABLED: {value: 'true', category: ops_kill}
           RECORD_TOKEN_LEASE_MODE:
             env_var: RECORD_TOKEN_LEASE_MODE
-            default: 'off'
+            default: 'serve'
             category: rollout
           RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT:
             env_var: RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT
-            default: '0'
+            default: '100'
             category: rollout
           RECORD_TOKEN_LEASE_SECONDS:
             env_var: RECORD_TOKEN_LEASE_SECONDS
@@ -1013,7 +1013,7 @@ environment_shared:
             category: rollout
           RECORD_TOKEN_LEASE_DEPLOYED_AT:
             env_var: RECORD_TOKEN_LEASE_DEPLOYED_AT
-            default: '0'
+            default: '1795662310'
             category: rollout
           BATCH_PROJECTION_OUTBOX: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_SERVING_ENABLED:
@@ -1404,11 +1404,11 @@ environment_shared:
           RECORD_SEAL_OVERLAP_TRIM_ENABLED: {value: 'true', category: ops_kill}
           RECORD_TOKEN_LEASE_MODE:
             env_var: RECORD_TOKEN_LEASE_MODE
-            default: 'off'
+            default: 'serve'
             category: rollout
           RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT:
             env_var: RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT
-            default: '0'
+            default: '100'
             category: rollout
           RECORD_TOKEN_LEASE_SECONDS:
             env_var: RECORD_TOKEN_LEASE_SECONDS
@@ -1416,7 +1416,7 @@ environment_shared:
             category: rollout
           RECORD_TOKEN_LEASE_DEPLOYED_AT:
             env_var: RECORD_TOKEN_LEASE_DEPLOYED_AT
-            default: '0'
+            default: '1795662310'
             category: rollout
           BATCH_PROJECTION_OUTBOX: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_SERVING_ENABLED:
@@ -1783,11 +1783,11 @@ environment_shared:
           RECORD_SEAL_OVERLAP_TRIM_ENABLED: {value: 'true', category: ops_kill}
           RECORD_TOKEN_LEASE_MODE:
             env_var: RECORD_TOKEN_LEASE_MODE
-            default: 'off'
+            default: 'serve'
             category: rollout
           RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT:
             env_var: RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT
-            default: '0'
+            default: '100'
             category: rollout
           RECORD_TOKEN_LEASE_SECONDS:
             env_var: RECORD_TOKEN_LEASE_SECONDS
@@ -1795,7 +1795,7 @@ environment_shared:
             category: rollout
           RECORD_TOKEN_LEASE_DEPLOYED_AT:
             env_var: RECORD_TOKEN_LEASE_DEPLOYED_AT
-            default: '0'
+            default: '1795662310'
             category: rollout
           BATCH_PROJECTION_OUTBOX: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_SERVING_ENABLED:
@@ -2137,11 +2137,11 @@ environment_shared:
           RECORD_SEAL_OVERLAP_TRIM_ENABLED: {value: 'true', category: ops_kill}
           RECORD_TOKEN_LEASE_MODE:
             env_var: RECORD_TOKEN_LEASE_MODE
-            default: 'off'
+            default: 'serve'
             category: rollout
           RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT:
             env_var: RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT
-            default: '0'
+            default: '100'
             category: rollout
           RECORD_TOKEN_LEASE_SECONDS:
             env_var: RECORD_TOKEN_LEASE_SECONDS
@@ -2149,7 +2149,7 @@ environment_shared:
             category: rollout
           RECORD_TOKEN_LEASE_DEPLOYED_AT:
             env_var: RECORD_TOKEN_LEASE_DEPLOYED_AT
-            default: '0'
+            default: '1795662310'
             category: rollout
           BATCH_PROJECTION_OUTBOX: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_SERVING_ENABLED:

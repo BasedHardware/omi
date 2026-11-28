@@ -5,7 +5,9 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
+from fastapi import HTTPException
 from starlette.datastructures import UploadFile
+from starlette.responses import JSONResponse
 
 from config.policy import BatchUnitPolicy
 from services import summary_debt_repair  # noqa: F401 - initialize the router harness dependency at collection
@@ -91,6 +93,7 @@ def sync_router(defaults):
         _restore(saved)
 
 
+@pytest.mark.usefixtures('record_custody_not_acquired')
 @pytest.mark.parametrize('mode', [LegacySyncMode.ON])
 @pytest.mark.parametrize('language', ['auto', 'ja'])
 async def test_actual_sync_router_excludes_before_claim_and_batch_intake(monkeypatch, mode, language, sync_router):
@@ -218,6 +221,7 @@ async def test_existing_batch_owner_and_kill_switch_never_read_new_preferences(m
     assert world.claims == (['batch_sync_v1'] if disabled else [])
 
 
+@pytest.mark.usefixtures('record_custody_not_acquired')
 async def test_negative_control_router_without_preclaim_gate_exposes_the_reviewed_bypass(monkeypatch, sync_router):
     # Disable only the early gate, leaving the intake exclusion ON. The real
     # router reserves batch_sync_v1 first, and the regression catches staging.
@@ -226,3 +230,86 @@ async def test_negative_control_router_without_preclaim_gate_exposes_the_reviewe
         await test_actual_sync_router_excludes_before_claim_and_batch_intake(
             monkeypatch, LegacySyncMode.ON, 'auto', sync_router
         )
+
+
+@pytest.mark.parametrize('lease_mode', ['serve', 'off'])
+async def test_session_resolved_during_routing_claims_owner_after_its_own_fence(monkeypatch, lease_mode):
+    # SCA-3748 r2 finding 2: Sync admission saw an unregistered recording session
+    # and bound nothing. Routing then resolved it, and acquiring the fence wrote
+    # the conversation. A snapshot read before that write carried a stale
+    # update_time into the owner CAS: 503 owner_claim_raced with no other writer.
+    from database import record_custody_append
+    from utils.sync import record_token_lease
+
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', lease_mode)
+    world = setup(monkeypatch, 'en')
+    registered = {'capture': False}
+
+    def resolve(uid, cid, session, *args, **kwargs):
+        return cid or (CID if session == 'capture' and registered['capture'] else None)
+
+    def begin(uid, cid, session, *args, **kwargs):
+        # The real fence commit: it writes the conversation, moving its revision.
+        row = world.client.rows[CONVERSATION]
+        row['record_upload_sessions'] = {**(row.get('record_upload_sessions') or {}), session: {'pod': ''}}
+        row['_test_revision'] += 1
+        return True
+
+    finished = []
+
+    def finish(uid, cid, session, *, accepted, late_observed=False, firestore_client=None):
+        finished.append((cid, session, accepted))
+        world.client.rows[CONVERSATION]['record_upload_sessions'].pop(session)
+        return False
+
+    claims = []
+
+    def claim(uid, cid, selected, expected, *, firestore_client):
+        # Firestore's last_update_time precondition, against the live revision.
+        if expected != world.client.rows[CONVERSATION]['_test_revision']:
+            return None
+        claims.append(selected)
+        world.client.rows[CONVERSATION]['record_lane_owner'] = selected
+        return expected + 1
+
+    monkeypatch.setattr(record_custody_append, 'resolve_target', resolve)
+    monkeypatch.setattr(live_upload, 'resolve_target', resolve)
+    monkeypatch.setattr(record_custody_append, 'begin', begin)
+    monkeypatch.setattr(record_custody_append, 'finish', finish)
+    monkeypatch.setattr(live_upload, 'claim_record_lane_owner', claim)
+
+    @record_token_lease.custody_upload
+    async def upload():
+        await record_token_lease.begin_upload(UID, None, 'late', recording_session_id='capture')
+        assert 'cid' not in record_token_lease._upload.get()  # Admission bound no target.
+        registered['capture'] = True  # Registration lands between the two resolves.
+        routed = await live_upload.registered_record_response(
+            uid=UID,
+            conversation_id=None,
+            content_id='new',
+            paths=[],
+            source='omi',
+            client_device_id=None,
+            recording_session_id='capture',
+            policy=world.policy,
+            legacy_mode=LegacySyncMode.ON,
+        )
+        assert routed is RecordUploadRoute.BATCH, routed
+        # The batch route's durable append, as the handoff records it.
+        record_token_lease.stored(['local'], ['committed-object'])
+        return JSONResponse(status_code=202, content={'status': 'queued'})
+
+    if lease_mode == 'off':
+        # The kill still refuses before the snapshot read, the claim and every write.
+        before = deepcopy(world.client.rows[CONVERSATION])
+        with pytest.raises(HTTPException) as refused:
+            await upload()
+        assert refused.value.detail == 'Retain local audio; record custody is paused'
+        assert not claims and not finished and world.client.rows[CONVERSATION] == before
+        return
+    assert (await upload()).status_code == 202
+    assert claims == ['batch_sync_v1']
+    assert world.client.rows[CONVERSATION]['record_lane_owner'] == 'batch_sync_v1'
+    # Routing fenced the target under this request and released it on completion.
+    assert finished == [(CID, 'custody:late', True)]
+    assert record_token_lease._upload.get() is None
