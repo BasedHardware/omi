@@ -732,6 +732,7 @@ def apply_speaker_resolution(
     owner_voiceprint_available: bool,
     contradicted_segment_ids: Optional[set[str]] = None,
     scope: Optional[str] = None,
+    match_source: str = MATCH_SOURCE,
 ) -> None:
     scope = scope or f'conversation:{conversation.id}'
     origin = _started_at(conversation)
@@ -789,7 +790,7 @@ def apply_speaker_resolution(
             segment.speaker_identity_status = (
                 SpeakerIdentityStatus.user if identity.is_user else SpeakerIdentityStatus.not_user
             )
-            segment.speaker_match_source = MATCH_SOURCE
+            segment.speaker_match_source = match_source
             segment.speaker_label_source = 'auto'
         elif new_id in identity_statuses:
             if identity_statuses[new_id] == SpeakerIdentityStatus.unknown:
@@ -801,7 +802,7 @@ def apply_speaker_resolution(
             segment.is_user = False
             segment.person_id = None
             segment.speaker_identity_status = identity_statuses[new_id]
-            segment.speaker_match_source = MATCH_SOURCE
+            segment.speaker_match_source = match_source
             segment.speaker_label_source = None
 
 

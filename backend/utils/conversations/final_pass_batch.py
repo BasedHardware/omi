@@ -39,6 +39,7 @@ from utils.product_telemetry import emit_product_event
 from database.batch_pipeline_store import FirestoreStore
 from database.redis_db import create_bounded_redis_client
 from models.conversation import ConversationSpeakers
+from models.speaker_label_provenance import FINAL_CENTROID_MATCH_SOURCE
 from utils.batch_pipeline.contracts import projection_speech_spans
 from utils.batch_pipeline.artifact_policy import artifacts_for
 from utils.batch_pipeline.artifact_reads import ArtifactReadBudget, ArtifactReadLimit
@@ -853,7 +854,13 @@ def _run(uid, conversation, receipt, load_prints, apply, failure_context: UnitFa
                 for segment in copy.transcript_segments
                 for piece in (splits.get(segment.id) or [segment])
             ]
-        apply(copy, *plan, owner_voiceprint_available=bool(cache and 'user' in cache), scope=scope)
+        apply(
+            copy,
+            *plan,
+            owner_voiceprint_available=bool(cache and 'user' in cache),
+            scope=scope,
+            match_source=FINAL_CENTROID_MATCH_SOURCE,
+        )
         return copy
 
     candidate, partial_resolution = None, None

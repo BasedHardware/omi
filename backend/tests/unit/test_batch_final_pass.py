@@ -944,6 +944,38 @@ def run_prod(lane):
     )
 
 
+@pytest.mark.parametrize(
+    'vector,evidence_seconds,expected_status,expected_person,expected_source',
+    [
+        ([1.0, 0.0], 12, 'user', None, 'final_centroid'),
+        ([0.0, 1.0], 12, 'no_match', None, 'final_centroid'),
+        ([1.0, 0.0], 2, 'not_user', 'provisional-person', 'live_embedding'),
+    ],
+)
+def test_batch_final_pass_projects_provenance_for_evaluated_live_labels(
+    prod_shaped, monkeypatch, vector, evidence_seconds, expected_status, expected_person, expected_source
+):
+    provisional = prod_shaped.conversation.transcript_segments[0]
+    provisional.person_id = 'provisional-person'
+    provisional.speaker_identity_status = 'not_user'
+    provisional.speaker_label_source = 'auto'
+    provisional.speaker_match_source = 'live_embedding'
+    original_diarize = final.diarize
+
+    def diarize(*args, **kwargs):
+        output = original_diarize(*args, **kwargs)
+        output['centroids']['voice'] = {'embedding': vector, 'evidence_seconds': evidence_seconds}
+        return output
+
+    monkeypatch.setattr(final, 'diarize', diarize)
+    assert run_prod(prod_shaped)['outcome'] == 'success'
+    projected = prod_shaped.conversation.transcript_segments[0]
+    assert projected.speaker_identity_status == expected_status
+    assert projected.is_user == (expected_status == 'user')
+    assert projected.person_id == expected_person
+    assert projected.speaker_match_source == expected_source
+
+
 @pytest.mark.parametrize('scope', ['final:batch:sync:opaque', 'sync:opaque', 'live:opaque'])
 @pytest.mark.parametrize('resolved', [False, True])
 def test_prod_mixed_scope_only_changes_batch_evidenced_part(prod_shaped, scope, resolved):

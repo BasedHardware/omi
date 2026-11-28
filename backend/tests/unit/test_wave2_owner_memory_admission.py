@@ -64,8 +64,10 @@ def test_carried_owner_and_loose_or_unknown_match_provenance_cannot_authorize_me
     assert confident_owner_segments([owner]) == []
 
 
-def test_confident_and_manual_owner_are_retained_without_synthesized_or_conflicting_ids():
+@pytest.mark.parametrize('match_source', ['conversation_voice', 'final_centroid'])
+def test_confident_and_manual_owner_are_retained_without_synthesized_or_conflicting_ids(match_source):
     owner = segment('owner', 0, owner=True, status='user')
+    owner.speaker_match_source = match_source
     manual = segment('manual', 0, owner=True, label_source='manual')
     other = segment('other', 1)
     assert confident_owner_segments([owner, manual, other]) == [owner, manual]
