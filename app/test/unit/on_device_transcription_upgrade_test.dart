@@ -3,10 +3,15 @@ import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:omi/services/experiments/on_device_runner_gate.dart';
 import 'package:omi/services/sockets/on_device_apple_provider.dart';
 import 'package:omi/services/sockets/on_device_transcript_quality_gate.dart';
 
 void main() {
+  // These cases cover the legacy Apple recognizer path; the runner gate would pick SpeechAnalyzer.
+  setUp(() => OnDeviceRunnerGate.debugForce = false);
+  tearDown(OnDeviceRunnerGate.debugReset);
+
   group('OnDeviceTranscriptQualityGate', () {
     test('drops repeated one-word no hallucinations', () {
       final gate = OnDeviceTranscriptQualityGate();

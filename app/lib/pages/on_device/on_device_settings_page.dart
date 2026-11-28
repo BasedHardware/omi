@@ -317,7 +317,8 @@ class _OnDeviceSettingsEntryState extends State<OnDeviceSettingsEntry> {
     return ListenableBuilder(
       listenable: _controller,
       builder: (context, _) {
-        if (!_controller.isActive) return const SizedBox.shrink();
+        // The overflow opt-in (enable, save live hours) is the held at-cap product.
+        if (!_controller.storefrontActive) return const SizedBox.shrink();
         return Padding(
           padding: const EdgeInsets.only(top: OmiSpacing.sm),
           child: OmiSettingsGroup(

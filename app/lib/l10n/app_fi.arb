@@ -4769,5 +4769,8 @@
     "firmwareNewestSupportedForDevice": "Laiteellasi on jo uusin tuettu laiteohjelmistoversio",
     "firmwareSyncRecordingsFirstTitle": "Synkronoi nauhoituksesi ensin",
     "firmwareSyncRecordingsFirstMessage": "Osaa nauhoituksista on vielä laitteella. Anna niiden synkronoitua puhelimeen loppuun ja käynnistä sitten päivitys.",
-    "batteryRestartToRefresh": "Käynnistä Omi uudelleen päivittämiseksi"
+    "batteryRestartToRefresh": "Käynnistä Omi uudelleen päivittämiseksi",
+    "onTheWayAllowanceHeldTitle": "Käsitellään {date}, kun minuittisi uudistuvat",
+    "onTheWayAllowanceHeldUpgrade": "Tai käsittele ne heti tilauksen päivityksellä",
+    "onTheWayDayProcessesOn": "Käsitellään {date}"
 }

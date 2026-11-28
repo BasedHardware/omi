@@ -4769,5 +4769,8 @@
     "firmwareNewestSupportedForDevice": "Peranti anda sudah menggunakan versi firmware terbaharu yang disokong",
     "firmwareSyncRecordingsFirstTitle": "Segerakkan rakaman anda terlebih dahulu",
     "firmwareSyncRecordingsFirstMessage": "Sebahagian rakaman masih berada pada peranti anda. Biarkan ia selesai disegerakkan ke telefon anda, kemudian mulakan kemas kini.",
-    "batteryRestartToRefresh": "Mulakan semula Omi untuk memuat semula"
+    "batteryRestartToRefresh": "Mulakan semula Omi untuk memuat semula",
+    "onTheWayAllowanceHeldTitle": "Akan diproses pada {date} apabila minit anda diperbaharui",
+    "onTheWayAllowanceHeldUpgrade": "Atau proses terus dengan naik taraf pelan",
+    "onTheWayDayProcessesOn": "Diproses pada {date}"
 }

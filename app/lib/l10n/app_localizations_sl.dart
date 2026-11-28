@@ -15873,4 +15873,17 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'Ponovno zaženite Omi, da osvežite podatke';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Obdelani bodo $date, ko se obnovijo vaše minute';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Ali pa jih obdelajte takoj z nadgradnjo paketa';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Obdelani bodo $date';
+  }
 }

@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-on-the-way-allowance-held.png",
+      "platform": "mobile-ios",
+      "description": "On the Way with two uploaded days parked behind the monthly allowance: the top row says they will process on Dec 1 when minutes renew, or right away with a plan upgrade (tapping opens the plans page); each day says Processes Dec 1 instead of Transcribing. Rendered from a widget test; the AppBar title glyphs show as boxes in the test engine only.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

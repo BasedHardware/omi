@@ -4804,5 +4804,8 @@
     "firmwareNewestSupportedForDevice": "Cihazınız zaten desteklenen en yeni firmware sürümünü kullanıyor",
     "firmwareSyncRecordingsFirstTitle": "Önce kayıtlarınızı senkronize edin",
     "firmwareSyncRecordingsFirstMessage": "Bazı kayıtlar hâlâ cihazınızda. Telefonunuza senkronize edilmelerini bekleyin, ardından güncellemeyi başlatın.",
-    "batteryRestartToRefresh": "Yenilemek için Omi'yi yeniden başlatın"
+    "batteryRestartToRefresh": "Yenilemek için Omi'yi yeniden başlatın",
+    "onTheWayAllowanceHeldTitle": "Dakikalarınız yenilendiğinde {date} tarihinde işlenecek",
+    "onTheWayAllowanceHeldUpgrade": "Ya da plan yükseltmesiyle bunları hemen işleme alın",
+    "onTheWayDayProcessesOn": "{date} tarihinde işlenecek"
 }

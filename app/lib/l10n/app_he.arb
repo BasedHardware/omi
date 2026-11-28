@@ -12326,5 +12326,8 @@
     "firmwareNewestSupportedForDevice": "המכשיר שלך כבר נמצא בגרסת הקושחה החדשה ביותר הנתמכת עבורו",
     "firmwareSyncRecordingsFirstTitle": "סנכרן תחילה את ההקלטות שלך",
     "firmwareSyncRecordingsFirstMessage": "חלק מההקלטות עדיין נמצאות במכשיר שלך. תן להן להשלים את הסינכרון לטלפון, ואז התחל את העדכון.",
-    "batteryRestartToRefresh": "הפעל מחדש את Omi כדי לרענן"
+    "batteryRestartToRefresh": "הפעל מחדש את Omi כדי לרענן",
+    "onTheWayAllowanceHeldTitle": "ייעבדו ב-{date} כשהדקות שלך יתחדשו",
+    "onTheWayAllowanceHeldUpgrade": "או עבד אותן מיד עם שדרוג תוכנית",
+    "onTheWayDayProcessesOn": "ייעבדו ב-{date}"
 }

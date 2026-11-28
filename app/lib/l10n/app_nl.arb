@@ -4769,5 +4769,8 @@
     "firmwareNewestSupportedForDevice": "Je apparaat heeft al de nieuwste ondersteunde firmwareversie",
     "firmwareSyncRecordingsFirstTitle": "Synchroniseer eerst je opnames",
     "firmwareSyncRecordingsFirstMessage": "Sommige opnames staan nog op je apparaat. Laat ze eerst volledig synchroniseren naar je telefoon en start daarna de update.",
-    "batteryRestartToRefresh": "Start Omi opnieuw op om te vernieuwen"
+    "batteryRestartToRefresh": "Start Omi opnieuw op om te vernieuwen",
+    "onTheWayAllowanceHeldTitle": "Worden verwerkt op {date} wanneer je minuten vernieuwen",
+    "onTheWayAllowanceHeldUpgrade": "Of verwerk ze direct met een upgrade van je plan",
+    "onTheWayDayProcessesOn": "Worden verwerkt op {date}"
 }

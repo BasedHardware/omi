@@ -4804,5 +4804,8 @@
     "firmwareNewestSupportedForDevice": "Votre appareil utilise déjà la dernière version de firmware prise en charge",
     "firmwareSyncRecordingsFirstTitle": "Synchronisez d'abord vos enregistrements",
     "firmwareSyncRecordingsFirstMessage": "Certains enregistrements sont encore sur votre appareil. Laissez-les terminer leur synchronisation vers votre téléphone, puis lancez la mise à jour.",
-    "batteryRestartToRefresh": "Redémarrez Omi pour actualiser"
+    "batteryRestartToRefresh": "Redémarrez Omi pour actualiser",
+    "onTheWayAllowanceHeldTitle": "Seront traités le {date} au renouvellement de vos minutes",
+    "onTheWayAllowanceHeldUpgrade": "Ou traitez-les tout de suite en passant à un forfait supérieur",
+    "onTheWayDayProcessesOn": "Traitement le {date}"
 }

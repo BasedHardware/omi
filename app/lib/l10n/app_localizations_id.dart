@@ -15860,4 +15860,17 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'Mulai ulang Omi untuk menyegarkan';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Akan diproses pada $date saat menit Anda diperbarui';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Atau proses langsung dengan upgrade paket';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Diproses pada $date';
+  }
 }
