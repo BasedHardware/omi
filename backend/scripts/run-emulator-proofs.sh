@@ -59,6 +59,9 @@ run_proof() {
 # ordinary unit shards intentionally do not stand up emulator services.
 run_proof "v3 Finish (bounded source query and concurrent window fence)" \
   "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_conversations_v3_finish_emulator.py
+run_proof "PL-158 quiet discovery and admission speech clock" \
+  env GOOGLE_CLOUD_PROJECT=demo-pl158-quiet-clock GCLOUD_PROJECT=demo-pl158-quiet-clock FIREBASE_PROJECT_ID=demo-pl158-quiet-clock \
+  "$PYTHON" -m scripts.quiet_speech_clock_emulator_test
 run_proof "record custody append (committed reply loss, retries, privacy)" \
   "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_record_custody_append_emulator.py
 run_proof "LLM gateway idempotency (claim, replay, expiry, stale settlement)" \
