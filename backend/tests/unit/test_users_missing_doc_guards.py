@@ -49,6 +49,7 @@ def users():
             get_firestore_client=MagicMock(),
             get_data_plane_firestore_client=MagicMock(),
             get_customer_firestore_client=MagicMock(),
+            run_transactional=MagicMock(side_effect=AssertionError("unexpected transaction runner call")),
             data_plane_db=MagicMock(),
         ),
         "database.firestore_cache": _module(
