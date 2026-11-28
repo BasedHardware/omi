@@ -530,6 +530,10 @@ def test_real_reject_removes_note_added_identifiers(monkeypatch):
 
     db, _, note, _ = fixture()
     pid = person_id_for(NAME, EMAIL)
+    # This rejection targets a persisted label written before notes became prose-only.
+    note['transcript_segments'][0].update(
+        person_id=pid, speaker_label_source='auto', speaker_match_source='notes_inferred'
+    )
     path = ('users', UID, 'conversations', CID)
     db.rows[path] = conversations_db._prepare_conversation_for_write(note, UID, 'standard')
     monkeypatch.setattr(conversations_db, 'get_firestore_client', lambda: db)
