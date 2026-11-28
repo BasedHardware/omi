@@ -1851,6 +1851,12 @@ class SafeModulateSocket(STTSocket):
             await self._ws.close()
         except Exception:
             pass
+        finally:
+            self._record_spend_close()
+
+    def _record_spend_close(self) -> None:
+        # A terminal provider duration has no verified billing semantics here.
+        telemetry_call(self, '_demand_wire', 'close_spend', text_seen=self.stream_end.text_seen)
 
     def _note_wire_audio(self, data: bytes) -> None:
         try:
@@ -1992,6 +1998,8 @@ class SafeModulateSocket(STTSocket):
             self.stream_end.record(self._ws, error=e)
         except Exception as e:
             self._mark_dead(f'ws recv error: {e}', cause=connection_loss_cause(e))
+        finally:
+            self._record_spend_close()
 
     def _handle_partial_utterance(self, msg: Dict[str, Any]) -> None:
         # Modulate sends cumulative partial_utterance messages during streaming

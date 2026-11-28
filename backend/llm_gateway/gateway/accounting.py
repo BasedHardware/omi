@@ -197,6 +197,8 @@ class AccountingContext:
     client_platform: str | None = None
     idempotency_scope: str | None = None
     idempotency_environment: str | None = None
+    margin_revision: str = 'unknown'
+    margin_input_size: str = 'unknown'
 
     @classmethod
     def create(
@@ -376,6 +378,8 @@ class AccountingEvent:
     billable_usage_complete: bool = False
     idempotency_scope: str | None = None
     idempotency_environment: str | None = None
+    margin_revision: str = 'unknown'
+    margin_input_size: str = 'unknown'
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -706,6 +710,8 @@ def build_accounting_event(
         attempt_id=f'{context.invocation_id}:{attempt.ordinal}',
         idempotency_scope=context.idempotency_scope,
         idempotency_environment=context.idempotency_environment,
+        margin_revision=context.margin_revision,
+        margin_input_size=context.margin_input_size,
         invocation_id=context.invocation_id,
         occurred_at=now.isoformat(),
         date=now.date().isoformat(),

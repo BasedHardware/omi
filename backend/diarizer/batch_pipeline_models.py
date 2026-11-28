@@ -28,6 +28,7 @@ except ImportError:
 from config.batch_pipeline_providers import provider_config
 from config.batch_pipeline_empty_asr import safety_net_enabled
 from utils.batch_pipeline.word_validation import validate_words
+from diarizer import asr_spend
 from diarizer.batch_pipeline import (
     PipelineWorker,
     SAMPLE_RATE,
@@ -104,14 +105,15 @@ class ParakeetWords:
         if self.cuda_graphs is not None:
             assert_decoding_mode(self.model, self.cuda_graphs)
         # NeMo accepts float32 16kHz arrays: no file write, read or second decode.
-        hypotheses = self.model.transcribe(
-            samples,
-            batch_size=len(samples),
-            timestamps=True,
-            return_hypotheses=True,
-            num_workers=0,
-            verbose=False,
-        )
+        with asr_spend.measure(torch, self.model, len(samples)) as outcomes:
+            hypotheses = self.model.transcribe(
+                samples,
+                batch_size=len(samples),
+                timestamps=True,
+                return_hypotheses=True,
+                num_workers=0,
+                verbose=False,
+            )
         if self.cuda_graphs is not None:
             assert_decoding_mode(self.model, self.cuda_graphs)
         result = []
@@ -121,6 +123,8 @@ class ParakeetWords:
             if hypothesis.text.strip() and not words and not safety_net_enabled():
                 raise ValueError('Parakeet returned text without word clocks')
             result.append(words)
+        if outcomes is not None:
+            outcomes.extend('words' if words else 'empty' for words in result)
         return result
 
     def recover_empty(self, samples, max_padded_seconds, *, before_dispatch=None, after_dispatch=None):

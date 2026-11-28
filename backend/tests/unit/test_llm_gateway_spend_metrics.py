@@ -17,6 +17,8 @@ def registry(monkeypatch):
         'ACCOUNTED_ATTEMPTS_TOTAL',
         'ACCOUNTED_TOKENS_TOTAL',
         'ESTIMATED_COST_MICRO_USD_TOTAL',
+        'MARGIN_ATTEMPTS_TOTAL',
+        'MARGIN_COST_MICRO_USD_TOTAL',
     ):
         original = getattr(metrics, name)
         monkeypatch.setattr(
@@ -102,6 +104,27 @@ def test_nonwritten_delivery_never_inflates_tokens_or_dollars(registry, delivery
     assert samples(registry, 'llm_gateway_estimated_cost_micro_usd_total')[0].value == value.estimated_cost_micro_usd
     assert sum(s.value for s in samples(registry, 'llm_gateway_accounted_attempts_total')) == 1
     assert sum(s.value for s in samples(registry, 'llm_gateway_accounting_events_total')) == 2
+
+
+def test_margin_partitions_only_written_omi_attempts_and_keeps_unpriced_coverage(registry):
+    lane = 'omi:auto:conversation-v3-summary'
+    priced = replace(event(), lane_id=lane, margin_revision='same_revision')
+    unpriced = replace(priced, margin_revision='unbounded-input', billable_usage_complete=False)
+    for value, delivery in (
+        (priced, 'written'),
+        (unpriced, 'written'),
+        (priced, 'duplicate'),
+        (replace(priced, payer='byok'), 'written'),
+    ):
+        metrics.observe_accounting_event(value, delivery=delivery)
+    attempts = samples(registry, 'llm_gateway_margin_attempts_total')
+    assert {(s.labels['revision'], s.labels['cost_status'], s.value) for s in attempts} == {
+        ('same_revision', 'estimated', 1),
+        ('unknown', 'indeterminate', 1),
+    }
+    cost = samples(registry, 'llm_gateway_margin_cost_micro_usd_total')
+    assert [(s.labels['revision'], s.value) for s in cost] == [('same_revision', priced.estimated_cost_micro_usd)]
+    assert 'margin_revision' not in priced.as_dict()
 
 
 def test_separate_reasoning_is_added_once_and_cache_writes_are_exposed(registry):

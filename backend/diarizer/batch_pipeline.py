@@ -38,6 +38,7 @@ from config.stt_provider_policy import PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL
 from config.sync_live_dedupe import sync_live_dedupe_active_for
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline import leaf_timings
+from diarizer import asr_spend
 from utils.batch_pipeline.capacity import within_unit_ceiling
 from utils.batch_pipeline.contracts import (
     WorkItem,
@@ -656,6 +657,10 @@ class PipelineWorker:
         strict_measurements = {}
         shapes = {item.segment_id: {'samples': -1, 'vad_spans': -1, 'windows': -1, 'asr_words': 0} for item in items}
 
+        def spend_cohort(segment_id):
+            state = states[segment_id]
+            return asr_spend.audio_cohort(state.get('speech_seconds'), shadow=state['item'].shadow)
+
         def inspect_silence(item, samples):
             if not safety_net_enabled():
                 return inspect_worker_silence(item, samples)
@@ -1010,7 +1015,8 @@ class PipelineWorker:
                 if not batch:
                     continue
                 try:
-                    hypotheses = self.timings.call('asr', self.words.transcribe_batch, [w.samples for w in batch])
+                    with asr_spend.windows('primary', (spend_cohort(w.segment_id) for w in batch)):
+                        hypotheses = self.timings.call('asr', self.words.transcribe_batch, [w.samples for w in batch])
                     for window in batch:
                         if not states[window.segment_id]['item'].shadow and cap_dispatch_enabled(
                             states[window.segment_id]['item'].owner_id, 'batch'
@@ -1099,14 +1105,15 @@ class PipelineWorker:
                                     dispatch_hold.append(reason)
                                     return reason is None
 
-                                recovered = self.timings.call(
-                                    'asr_recovery',
-                                    self.recover_words,
-                                    retry_samples,
-                                    self.config.max_padded_seconds,
-                                    before_dispatch=recheck,
-                                    after_dispatch=lambda seconds: accepted(item.segment_id, seconds),
-                                )
+                                with asr_spend.windows('recovery', (spend_cohort(item.segment_id),)):
+                                    recovered = self.timings.call(
+                                        'asr_recovery',
+                                        self.recover_words,
+                                        retry_samples,
+                                        self.config.max_padded_seconds,
+                                        before_dispatch=recheck,
+                                        after_dispatch=lambda seconds: accepted(item.segment_id, seconds),
+                                    )
                                 if recovered is None and (
                                     fits_retry
                                     or not (
@@ -1122,9 +1129,13 @@ class PipelineWorker:
                                     results.append(HeldWork(item.segment_id, reason=hold_reason))
                                     continue
                             else:
-                                recovered = self.timings.call(
-                                    'asr_recovery', self.recover_words, retry_samples, self.config.max_padded_seconds
-                                )
+                                with asr_spend.windows('recovery', (spend_cohort(item.segment_id),)):
+                                    recovered = self.timings.call(
+                                        'asr_recovery',
+                                        self.recover_words,
+                                        retry_samples,
+                                        self.config.max_padded_seconds,
+                                    )
                             if recovered is None or not fits_retry:
                                 words = []
                                 state['padded_retry'] = 'skipped_oversize'

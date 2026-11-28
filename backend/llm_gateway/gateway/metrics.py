@@ -9,6 +9,7 @@ from typing import Protocol
 
 from prometheus_client import Counter, Gauge, Histogram
 
+from utils.llm import margin_attribution
 from llm_gateway.gateway.accounting import AccountingEvent, rate_card_for
 from llm_gateway.gateway.config_loader import GatewayConfig
 from llm_gateway.gateway.errors import GatewayError, GatewayErrorCode, INVALID_REQUEST_REJECTION_CODES
@@ -146,6 +147,17 @@ ESTIMATED_COST_MICRO_USD_TOTAL = Counter(
     'llm_gateway_estimated_cost_micro_usd_total',
     'Rate-card estimated Omi cost on newly persisted attempts, never invoice-backed savings',
     [*_SPEND_LABELS, 'rate_card_id'],
+)
+
+MARGIN_ATTEMPTS_TOTAL = Counter(
+    'llm_gateway_margin_attempts_total',
+    'Omi-paid conversation attempts by completion cohort and rate-card coverage',
+    ['lane_id', 'revision', 'input_size', 'cost_status'],
+)
+MARGIN_COST_MICRO_USD_TOTAL = Counter(
+    'llm_gateway_margin_cost_micro_usd_total',
+    'Rate-card estimated Omi-paid conversation cost by completion cohort',
+    ['lane_id', 'revision', 'input_size'],
 )
 
 GATEWAY_CONFIG_INFO = Gauge(
@@ -531,12 +543,13 @@ def observe_accounted_spend(event: AccountingEvent) -> None:
             else 'unknown'
         ),
     }
+    cost_status = event.cost_status.value if complete or event.cost_status.value != 'estimated' else 'indeterminate'
     ACCOUNTED_ATTEMPTS_TOTAL.labels(
         **labels,
         usage_status=(
             event.usage_status.value if complete or event.usage_status.value != 'confirmed' else 'indeterminate'
         ),
-        cost_status=event.cost_status.value if complete or event.cost_status.value != 'estimated' else 'indeterminate',
+        cost_status=cost_status,
     ).inc()
     if complete and event.usage_status.value == 'confirmed' and event.unit_type == 'tokens':
         for token_type, value in {
@@ -553,15 +566,22 @@ def observe_accounted_spend(event: AccountingEvent) -> None:
             'reasoning': event.reasoning_tokens,
         }.items():
             ACCOUNTED_TOKENS_TOTAL.labels(**labels, token_type=token_type).inc(max(value, 0))
-    if (
-        complete
-        and event.payer == 'omi'
-        and event.cost_status.value == 'estimated'
-        and event.estimated_cost_micro_usd is not None
-    ):
+    price = event.estimated_cost_micro_usd if cost_status == 'estimated' and event.payer == 'omi' else None
+    if price is not None:
         ESTIMATED_COST_MICRO_USD_TOTAL.labels(**labels, rate_card_id=_bounded(event.rate_card_id or 'unknown')).inc(
-            max(event.estimated_cost_micro_usd, 0)
+            max(price, 0)
         )
+    if event.payer == 'omi' and event.lane_id in margin_attribution.LANES:
+        margin = {
+            'lane_id': event.lane_id,
+            'revision': event.margin_revision if event.margin_revision in margin_attribution.REVISIONS else 'unknown',
+            'input_size': (
+                event.margin_input_size if event.margin_input_size in margin_attribution.INPUTS else 'unknown'
+            ),
+        }
+        MARGIN_ATTEMPTS_TOTAL.labels(**margin, cost_status=cost_status).inc()
+        if price is not None:
+            MARGIN_COST_MICRO_USD_TOTAL.labels(**margin).inc(max(price, 0))
 
 
 def observe_gateway_config_identity(config: GatewayConfig, *, build_identity: str) -> None:

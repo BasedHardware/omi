@@ -35,6 +35,7 @@ from utils.conversations.processing_steps import blocking_step, run_inline
 from utils.summary_quality import clean_structured, capture_availability
 
 from utils.conversations.summary_delivery import present as summary_present
+from utils.llm import margin_attribution
 from config.sync_reprocess import dedupe_enabled
 
 from utils.sync.repeat_work_metrics import record_feature
@@ -311,12 +312,33 @@ def notes_steps(uid: str, conversation: Any, prefix: Any, generate, hashes: dict
             CHECKPOINT_ERRORS.labels(feature='notes').inc()
         MISSES.labels(feature='notes').inc()
         record_feature(uid, conversation, 'notes', 'invoked')
-        output = yield from generate(prefix, uid=uid, open_loop_out=open_loop_out, **kwargs)
+        with margin_attribution.observe(revision=_completion_cohort(row, matched_input)):
+            output = yield from generate(prefix, uid=uid, open_loop_out=open_loop_out, **kwargs)
     if saved is not None and not summary_present(output):
         hashes[QUALITY_FILTER_HASH] = repair_key
     hashes[NOTES_HASH] = digest
     hashes[NOTES_OUTPUT_HASH] = output_fingerprint(output)
     return output
+
+
+def _completion_cohort(row, matched_input):
+    if not row or row.get('discarded'):
+        return 'unknown'
+    if row.get(NOTES_HASH) and row.get(NOTES_OUTPUT_HASH):
+        return 'same_revision' if matched_input else 'changed_revision'
+    if (
+        row.get('v3_derived')
+        and not row.get('v3_notes_written')
+        and not row.get('summary_covers_through')
+        and not row.get(NOTES_HASH)
+        and not row.get(NOTES_OUTPUT_HASH)
+    ):
+        try:
+            if not summary_present(row.get('structured')):
+                return 'first_completion'
+        except TypeError:
+            pass  # A malformed legacy checkpoint cannot establish first completion.
+    return 'unknown'
 
 
 def _quality_violation(structured: dict[str, Any]) -> NotesQualityRepairReason | None:

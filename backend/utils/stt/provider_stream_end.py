@@ -315,6 +315,10 @@ class ProviderStreamEnd:
         if self._first_audio_at is None:
             self._first_audio_at = self._clock()
 
+    @property
+    def text_seen(self) -> bool:
+        return self._first_text_seen
+
     def note_text(self) -> None:
         if self._first_text_seen:
             return
@@ -413,6 +417,7 @@ class _DetachedStreamEnd(ProviderStreamEnd):
 
     def __init__(self) -> None:
         self.provider = 'unknown'
+        self._first_text_seen = False
         self.request_id_header = self.request_id = None
 
     @property
