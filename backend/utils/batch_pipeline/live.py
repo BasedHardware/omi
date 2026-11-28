@@ -450,20 +450,24 @@ async def _manual_finish_admitted(
     """
     from config.server_batch import manual_end_marker_enabled
     from database import conversations as conversations_db, conversations_v3
-    from utils.conversations.v3 import fast_finish, metrics as v3_metrics, triggers as v3_triggers
+    from utils.conversations.v3 import fast_finish, finish_home_sli, metrics as v3_metrics, triggers as v3_triggers
     from utils.conversations.v3.policy import NATIVE_MANUAL_STOP
 
     # One end-to-end budget for the pass, from here: slot wait and every provider request count.
     deadline = time.monotonic() + fast_finish.PASS_DEADLINE_SECONDS
     try:
-        if (
-            not current.get('recording')
-            or not current.get('v3_manual_end_requested')
-            or current.get(NATIVE_MANUAL_STOP)
-        ):
+        if not current.get('recording'):
             return
-        if not manual_end_marker_enabled():
+        if current.get(NATIVE_MANUAL_STOP):
+            # A native recording's explicit stop: its cut and notes wait for the native batch
+            # completion, so the confirmed admission only names this Finish's route, once.
+            if await finish_home_sli.measured_async(uid):
+                finish_home_sli.observe_route(uid, conversation_id, 'batch')
             return
+        if not current.get('v3_manual_end_requested') or not manual_end_marker_enabled():
+            return
+        if await finish_home_sli.measured_async(uid):
+            finish_home_sli.observe_route(uid, conversation_id, 'batch')
         single = len(units) == 1
         recording_finish = bool(current.get(FINISH_RECORDING_FIELD))
         promoted = False

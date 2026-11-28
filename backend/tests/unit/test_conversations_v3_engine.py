@@ -733,6 +733,28 @@ def test_copy_carries_the_recording_location_and_keeps_its_own():
     assert planner.build('u', window, {'r': row}, prior)['geolocation'] == kept
 
 
+def test_finish_sli_keeps_adjacent_cuts_on_their_own_cards():
+    a = recording('a', NOW, finished_at=NOW + timedelta(seconds=15), v3_manual_end=True)
+    b = recording('b', NOW + timedelta(seconds=16), finished_at=NOW + timedelta(seconds=35), v3_manual_end=True)
+    c = recording('c', NOW + timedelta(seconds=36), finished_at=NOW + timedelta(seconds=45), v3_manual_end=True)
+    c['transcript_segments'] = []
+    groups = outline.stretches([a, b, c], NOW + timedelta(minutes=2), finish_routes=set())
+    windows = planner.windows(groups, [[entry()], [entry()]])
+    assert [w['_finish_sli_sources'] for w in windows] == [('a',), ('b',)]
+
+
+def test_finish_sli_binds_a_native_finish_window_to_its_recording():
+    # SCA-4489 x #25992: a native Finish cuts through its sealed tail, not a recording cut, and must still
+    # carry its recording into the Finish→Home window binding. Unmeasured passes carry nothing.
+    end = NOW + timedelta(seconds=30)
+    native = recording('native', **native_ready_fields(end))
+    (group,) = outline.stretches([native], end + timedelta(seconds=1), finish_routes=set())
+    assert group['native_manual_end'] and group['manual_end']
+    assert group['_finish_sli_sources'] == ('native',)
+    (unmeasured,) = outline.stretches([dict(native)], end + timedelta(seconds=1))
+    assert unmeasured['manual_end'] and '_finish_sli_sources' not in unmeasured
+
+
 def test_native_tail_cannot_cut_when_earlier_overlapping_speech_continues_past_stop():
     end = NOW + timedelta(seconds=30)
     overlapping = recording('overlapping', segments=[{'text': 'continuous speech', 'start': 0, 'end': 60}])

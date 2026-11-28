@@ -1,0 +1,961 @@
+import asyncio
+from datetime import datetime, timedelta, timezone
+import json
+from types import SimpleNamespace
+from uuid import uuid4
+
+import pytest
+
+from database import conversations_v3
+from scripts import finish_home_readback as readback
+
+# Imported at module load: record admission is a heavy import.
+from utils.batch_pipeline import live
+from utils.conversations.v3 import finish_home_sli as sli, outline
+from utils.conversations.v3.finish import deliberate_finish
+from utils.conversations.v3.policy import NATIVE_MANUAL_STOP
+
+START = datetime(2026, 11, 26, tzinfo=timezone.utc)
+THROUGH = START + timedelta(days=1, minutes=1)
+
+
+def test_cut_is_scoped_and_retry_uses_the_same_opaque_key(monkeypatch, caplog):
+    monkeypatch.setattr(sli, 'conversations_v3_enabled', lambda uid: uid == 'owner')
+    request = SimpleNamespace(
+        headers={
+            sli.HEADER: f'pendant,{uuid4()},{int(datetime.now(timezone.utc).timestamp() * 1000)}',
+            sli.APP_CHANNEL_HEADER: 'beta',
+        },
+    )
+    monkeypatch.delenv('CONVERSATIONS_V3_FINISH_HOME_SLI', raising=False)
+    assert sli.from_request('owner', request) is None
+    monkeypatch.setenv('CONVERSATIONS_V3_FINISH_HOME_SLI', 'on')
+    assert sli.from_request('outsider', request) is None
+    assert (
+        sli.from_request('owner', SimpleNamespace(headers={**request.headers, sli.APP_CHANNEL_HEADER: 'store'})) is None
+    )
+    with caplog.at_level('INFO'):
+        for _ in range(2):
+            finish = sli.from_request('owner', request)
+            assert finish is not None
+            assert finish.basis == 'client_cut'
+            finish.bind('recording-id')
+    events = [json.loads(record.message.split(readback.MARKER)[1]) for record in caplog.records]
+    assert [e['stage'] for e in events] == ['cut', 'binding', 'cut', 'binding']
+    assert events[0]['source'] == 'pendant'
+    assert events[:2] == events[2:]
+    assert 'owner' not in caplog.text
+    assert 'recording-id' not in caplog.text
+    assert request.headers[sli.HEADER] not in caplog.text
+
+
+def test_legacy_finish_requires_a_bound_recording(monkeypatch, caplog):
+    monkeypatch.setenv('CONVERSATIONS_V3_FINISH_HOME_SLI', 'on')
+    monkeypatch.setattr(sli, 'conversations_v3_enabled', lambda uid: True)
+    request = SimpleNamespace(headers={sli.APP_CHANNEL_HEADER: 'beta'})
+    with caplog.at_level('INFO'):
+        finish = sli.from_request('owner', request)
+        assert finish is not None
+        assert not caplog.records
+        finish.bind('recording-id')
+    records = [json.loads(record.message.split(readback.MARKER)[1]) for record in caplog.records]
+    assert [record['stage'] for record in records] == ['legacy_candidate']
+    assert records[0]['source'] == 'unknown'
+    assert records[0]['basis'] == 'server_cut'
+    assert 'owner' not in caplog.text
+    assert 'recording-id' not in caplog.text
+
+
+@pytest.mark.parametrize('header', [None, f'app,{uuid4()},{int(datetime.now(timezone.utc).timestamp() * 1000)}'])
+def test_held_out_owner_finish_emits_no_cut(monkeypatch, caplog, header):
+    # Home sends a held-out owner (SCA-2918) to legacy Home: the cut must not enter the v3 cohort.
+    monkeypatch.setenv('CONVERSATIONS_V3_FINISH_HOME_SLI', 'on')
+    monkeypatch.setattr(sli, 'conversations_v3_enabled', lambda uid: True)
+    monkeypatch.setattr(sli, 'v3_intake_held_out', lambda uid: uid == 'held')
+    headers = {sli.APP_CHANNEL_HEADER: 'beta', **({sli.HEADER: header} if header else {})}
+    request = SimpleNamespace(headers=headers)
+    with caplog.at_level('INFO'):
+        assert sli.from_request('held', request) is None
+        assert sli.from_request('owner', request) is not None
+    stages = [json.loads(r.message.split(readback.MARKER)[1])['stage'] for r in caplog.records]
+    assert stages == (['cut'] if header else [])
+
+
+def test_holdout_is_asked_only_after_stage_admission(monkeypatch):
+    monkeypatch.setattr(sli, 'conversations_v3_enabled', lambda uid: False)
+    monkeypatch.setattr(sli, 'v3_intake_held_out', lambda uid: pytest.fail('holdout read before admission'))
+    assert sli.home_cohort('owner') is False
+
+
+def test_client_cut_uses_the_same_key_as_finish_header(monkeypatch, caplog):
+    monkeypatch.setenv('CONVERSATIONS_V3_FINISH_HOME_SLI', 'on')
+    cut_id = str(uuid4())
+    cut_at = datetime.now(timezone.utc)
+    with caplog.at_level('INFO'):
+        sli.observe_client_cut('owner', cut_id, cut_at, 'app')
+    event = json.loads(caplog.records[0].message.split(readback.MARKER)[1])
+    assert event['stage'] == 'cut'
+    assert event['finish'] == sli._key('finish', 'owner', cut_id.replace('-', ''))
+    assert event['source'] == 'app'
+    assert event['basis'] == 'client_cut'
+    assert 'owner' not in caplog.text
+    assert cut_id not in caplog.text
+
+
+def test_readback_only_admits_proven_legacy_candidates():
+    def event(stage, seconds, **fields):
+        return {'stage': stage, 'observed_at': START + timedelta(seconds=seconds), **fields}
+
+    events = [
+        event(
+            'legacy_candidate',
+            1,
+            finish='legacy-a',
+            recording='recording-a',
+            request='a' * 32,
+            cut_at=(START + timedelta(seconds=1)).isoformat(),
+            source='unknown',
+            basis='server_cut',
+        ),
+        event(
+            'legacy_candidate',
+            2,
+            finish='legacy-b',
+            recording='recording-b',
+            cut_at=(START + timedelta(seconds=2)).isoformat(),
+            source='unknown',
+            basis='server_cut',
+        ),
+        event('legacy_manual_end', 3, recording='recording-a', request='a' * 32),
+        event('window', 4, recording='recording-a', card='card-a'),
+        event('eligible', 20, card='card-a'),
+    ]
+    result = readback.readback(events, START, THROUGH)
+    assert result['totals']['finishes'] == 1
+    assert result['totals']['timing_unknown'] == 1
+    assert result['by_route_source'][0]['source'] == 'unknown'
+    assert result['legacy_excluded'] == {
+        'no_proof': 1,
+        'not_the_proven_request': 0,
+        'recording_only_proof': 0,
+        'retry': 0,
+    }
+
+
+def test_readback_keeps_missing_and_late_finishes_in_the_cohort():
+    def event(stage, elapsed, **fields):
+        return {'stage': stage, 'observed_at': START + timedelta(seconds=elapsed), **fields}
+
+    def cut(finish, at, source, basis='client_cut'):
+        return event(
+            'cut', at + 1, cut_at=(START + timedelta(seconds=at)).isoformat(), finish=finish, source=source, basis=basis
+        )
+
+    events = [
+        cut('a', 0, 'app'),
+        cut('a', 0, 'app'),
+        cut('b', 20, 'pendant'),
+        cut('c', 500, 'unknown'),
+        cut('d', 560, 'unknown', 'server_cut'),
+        cut('next-day', 86400, 'app'),
+        event('binding', 5, finish='a', recording='a-rec'),
+        event('binding', 7, finish='a', recording='wrong-rec'),
+        event('route', 8, recording='a-rec', route='batch'),
+        event('route', 40, recording='a-rec', route='fast'),
+        event('eligible', 42, card='a-card'),  # Previous notes on a reused card.
+        event('window', 45, recording='a-rec', card='a-card'),
+        event('eligible', 60, card='a-card'),
+        event('eligible', 100, card='a-card'),
+        event('binding', 25, finish='b', recording='b-rec'),
+        event('route', 30, recording='b-rec', route='batch'),
+        event('route', 35, recording='b-rec', route='held'),
+        event('window', 85, recording='b-rec', card='b-card'),
+        event('eligible', 120, card='b-card'),
+        event('binding', 565, finish='d', recording='d-rec'),
+        event('window', 575, recording='d-rec', card='d-card'),
+        event('eligible', 580, card='d-card'),
+    ]
+    result = readback.readback(reversed(events), START, THROUGH)
+    assert result['totals'] == {
+        'finishes': 4,
+        'within_60s': 1,
+        'late': 1,
+        'unmatched': 1,
+        'timing_unknown': 1,
+        'matched_client_cut_p95_seconds': 100,
+        'p95_seconds': None,
+        'p95_at_or_below_60s': False,
+    }
+    assert [(row['route'], row['source']) for row in result['by_route_source']] == [
+        ('fast', 'app'),
+        ('held', 'pendant'),
+        ('unknown', 'unknown'),
+    ]
+    assert result['by_route_source'][0]['p95_seconds'] == 60
+    with pytest.raises(ValueError, match='full 60 seconds'):
+        readback.readback(events, START, THROUGH - timedelta(microseconds=1))
+
+
+def test_all_finish_p95_counts_right_censored_finishes():
+    assert readback.counts([(50, True)] * 19 + [(None, True)], 60)['p95_seconds'] == 50
+    assert readback.counts([(70, True)] * 19 + [(None, True)], 60)['p95_seconds'] is None
+
+
+@pytest.mark.parametrize(
+    'outcome,deliberate',
+    [
+        ('cut', True),
+        ('requested', True),
+        ('already_cut', True),
+        ('consumed', True),
+        ('recording_cut', True),
+        ('named_recording_cut', True),
+        ('named_recording_requested', True),
+        # Outcomes of a Finish that moved to a newer capture (``newer_*``, ``newer_dual_*``).
+        ('newer_recording_cut', True),
+        ('newer_recording_requested', True),
+        ('newer_already_requested', True),
+        ('newer_consumed', True),
+        ('newer_dual_cut', True),
+        ('newer_dual_already_requested', True),
+        ('already_visible', False),
+        ('already_empty', False),
+        ('resolved_empty', False),
+        ('named_not_finishable', False),
+        ('named_superseded', False),
+        ('newer_recording_ineligible', False),
+        ('newer_dual_resolved_empty', False),
+        ('no_live_window', False),
+    ],
+)
+def test_deliberate_finish_counts_named_and_newer_paths(outcome, deliberate):
+    assert deliberate_finish(outcome) is deliberate
+
+
+def test_owner_end_cut_carries_the_finish_it_answered():
+    now = START + timedelta(minutes=10)
+    finished = {
+        'id': 'a',
+        'started_at': START,
+        'source': 'omi',
+        'recording': True,
+        'finished_at': START + timedelta(seconds=8),
+        'v3_manual_end': True,
+        'transcript_segments': [{'text': 'first part', 'start': 0, 'end': 8, 'is_user': True}],
+    }
+    later = {
+        'id': 'b',
+        'started_at': START + timedelta(seconds=10),
+        'source': 'omi',
+        'recording': True,
+        'transcript_segments': [{'text': 'second part', 'start': 0, 'end': 15, 'is_user': True}],
+    }
+    end = START + timedelta(seconds=30)
+    (group,) = outline.stretches([finished, later], now, manual_cuts=[end], finish_routes=set())
+    assert group['manual_end'] is True
+    assert group['_finish_sli_sources'] == ('a',)
+    (unmeasured,) = outline.stretches([finished, later], now, manual_cuts=[end])
+    assert unmeasured['manual_end'] is True and '_finish_sli_sources' not in unmeasured
+
+
+@pytest.mark.parametrize(
+    'updates,visible',
+    [
+        ({}, True),
+        ({'is_locked': True}, False),
+        ({'sync_merged_into': 'survivor'}, False),
+        ({'backfilled': True}, False),
+        ({'manual_end': False}, False),
+        ({'tile_state': 'writing'}, False),
+        ({'structured': {'title': 'Plan'}}, False),
+    ],
+)
+def test_home_summary_requires_a_finished_readable_card(monkeypatch, updates, visible):
+    monkeypatch.setenv('CONVERSATIONS_V3_FINISH_HOME_SLI', 'on')
+    observed = []
+    monkeypatch.setattr(sli, 'observe_summary', lambda uid, cid: observed.append(cid))
+    row = {
+        'id': 'c',
+        'v3_derived': True,
+        'manual_end': True,
+        'v3_notes_written': True,
+        'tile_state': 'done',
+        'status': 'completed',
+        'structured': {'title': 'Plan', 'overview': 'We set a date.'},
+    }
+    sli.observe_home_summaries('owner', [row | updates])
+    assert observed == (['c'] if visible else [])
+
+
+def _linked_finish(*extra):
+    def event(stage, elapsed, **fields):
+        return {'stage': stage, 'observed_at': START + timedelta(seconds=elapsed), **fields}
+
+    return [
+        event('cut', 1, cut_at=START.isoformat(), finish='f', source='app', basis='client_cut'),
+        event('binding', 2, finish='f', recording='rec'),
+        event('window', 5, recording='rec', card='card'),
+        *(event(stage, elapsed, card='card') for stage, elapsed in extra),
+    ]
+
+
+def test_finish_is_scored_when_the_summary_became_eligible_not_when_home_fetched_it():
+    result = readback.readback(_linked_finish(('eligible', 20), ('summary', 90)), START, THROUGH)
+    assert result['totals']['within_60s'] == 1
+    assert result['totals']['late'] == 0
+    assert result['totals']['matched_client_cut_p95_seconds'] == 20
+    assert result['home_fetch_validation'] == {
+        'eligible': 1,
+        'fetched': 1,
+        'eligible_card_not_fetched': 0,
+        'other_linked_card_fetched': 0,
+        'fetched_without_eligible': 0,
+        'fetch_after_eligible_p95_seconds': 70,
+    }
+
+
+def test_an_eligible_summary_that_home_never_fetched_is_still_scored():
+    result = readback.readback(_linked_finish(('eligible', 20)), START, THROUGH)
+    assert result['totals']['within_60s'] == 1
+    assert result['totals']['unmatched'] == 0
+    assert result['home_fetch_validation']['eligible_card_not_fetched'] == 1
+    assert result['home_fetch_validation']['other_linked_card_fetched'] == 0
+
+
+@pytest.mark.parametrize('fetched', [False, True])
+def test_a_summary_that_never_became_eligible_is_a_miss(fetched):
+    # Hidden, below the word floor or discarded: the write path never emits ``eligible``.
+    result = readback.readback(_linked_finish(*([('summary', 30)] if fetched else [])), START, THROUGH)
+    assert result['totals']['finishes'] == 1
+    assert result['totals']['within_60s'] == 0
+    assert result['totals']['unmatched'] == 1
+    assert result['totals']['p95_at_or_below_60s'] is False
+    assert result['home_fetch_validation']['fetched_without_eligible'] == int(fetched)
+
+
+def test_fetch_validation_follows_the_card_that_won_eligibility():
+    def event(stage, elapsed, **fields):
+        return {'stage': stage, 'observed_at': START + timedelta(seconds=elapsed), **fields}
+
+    # Card A wins eligibility at 20 s but Home never returns it; Home returns linked card B at 30 s.
+    events = [
+        event('cut', 1, cut_at=START.isoformat(), finish='f', source='app', basis='client_cut'),
+        event('binding', 2, finish='f', recording='rec'),
+        event('window', 5, recording='rec', card='card-a'),
+        event('window', 6, recording='rec', card='card-b'),
+        event('eligible', 20, card='card-a'),
+        event('eligible', 25, card='card-b'),
+        event('summary', 30, card='card-b'),
+    ]
+    result = readback.readback(events, START, THROUGH)
+    assert result['totals']['within_60s'] == 1
+    assert result['totals']['matched_client_cut_p95_seconds'] == 20
+    assert result['home_fetch_validation'] == {
+        'eligible': 1,
+        'fetched': 0,
+        'eligible_card_not_fetched': 1,
+        'other_linked_card_fetched': 1,
+        'fetched_without_eligible': 0,
+        'fetch_after_eligible_p95_seconds': None,
+    }
+    # The score never depends on what Home fetched: without the fetch it is the same.
+    unfetched = readback.readback(events[:-1], START, THROUGH)
+    assert unfetched['totals'] == result['totals']
+
+
+class _AdmissionStore:
+    client = object()
+
+
+def _admit_record(uid, recording_id, current):
+    asyncio.run(live._manual_finish_admitted(_AdmissionStore(), uid, recording_id, current, [UNIT], object(), b'k'))
+
+
+UNIT = (0.0, 1.0, [{'bucket': 'b', 'path': 'p', 'generation': 1}])
+NATIVE_STOP = {'job_id': 'bp_job', 'revision': 1, 'finished_at': START}
+
+
+def _sli_events(caplog):
+    return [
+        json.loads(record.getMessage().split(readback.MARKER)[1])
+        for record in caplog.records
+        if readback.MARKER in record.getMessage()
+    ]
+
+
+def test_native_batch_finish_reads_back_as_the_batch_route(monkeypatch, caplog):
+    # End to end through the real emitters: the Finish header's cut, its binding, the confirmed
+    # native batch admission, the window and the eligible card, exported and read back.
+    monkeypatch.setenv('CONVERSATIONS_V3_FINISH_HOME_SLI', 'on')
+    monkeypatch.setattr(sli, 'conversations_v3_enabled', lambda uid: True)
+    monkeypatch.setattr(sli, 'v3_intake_held_out', lambda uid: False)
+    now = datetime.now(timezone.utc)
+    request = SimpleNamespace(
+        headers={
+            sli.HEADER: f'app,{uuid4()},{int(now.timestamp() * 1000)}',
+            sli.APP_CHANNEL_HEADER: 'beta',
+        },
+    )
+    native = {'recording': True, 'v3_manual_end_requested': True, NATIVE_MANUAL_STOP: NATIVE_STOP}
+    with caplog.at_level('INFO'):
+        finish = sli.from_request('owner', request)
+        assert finish is not None
+        finish.bind('recording')
+        _admit_record('owner', 'recording', native)
+        sli.observe_window('owner', 'recording', 'card')
+        sli.observe_eligible('owner', 'card')
+    entries = [
+        {
+            'timestamp': datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
+            'textPayload': record.getMessage(),
+        }
+        for record in caplog.records
+    ]
+    start = now.replace(microsecond=0) - timedelta(minutes=1)
+    through = start + timedelta(days=1, minutes=1)
+
+    result = readback.readback(readback.observations(entries, through), start, through)
+
+    assert [(row['route'], row['source'], row['finishes']) for row in result['by_route_source']] == [
+        ('batch', 'app', 1)
+    ]
+    assert result['totals']['within_60s'] == 1
+
+
+def _in_cohort(monkeypatch, member=True):
+    monkeypatch.setattr(sli, 'conversations_v3_enabled', lambda uid: member)
+    monkeypatch.setattr(sli, 'v3_intake_held_out', lambda uid: False)
+
+
+def test_native_batch_admission_names_the_route_once_and_nothing_else(monkeypatch, caplog):
+    monkeypatch.setenv('CONVERSATIONS_V3_FINISH_HOME_SLI', 'on')
+    _in_cohort(monkeypatch)
+    monkeypatch.setattr(conversations_v3, 'promote_manual_end', lambda *a, **k: pytest.fail('native cut promoted'))
+    # The app's Finish also asks for the legacy manual end; the native stop must not take that path too.
+    native = {'recording': True, 'v3_manual_end_requested': True, NATIVE_MANUAL_STOP: NATIVE_STOP}
+    with caplog.at_level('INFO'):
+        _admit_record('owner', 'recording', native)
+    # The native completion records its own manual-end proof; admission adds only the route.
+    assert _sli_events(caplog) == [
+        {'stage': 'route', 'recording': sli._key('recording', 'owner', 'recording'), 'route': 'batch'}
+    ]
+
+
+def test_legacy_manual_end_admission_names_the_batch_route_once(monkeypatch, caplog):
+    monkeypatch.setenv('CONVERSATIONS_V3_FINISH_HOME_SLI', 'on')
+    _in_cohort(monkeypatch)
+    monkeypatch.setenv('CONVERSATIONS_V3_FAST_FINISH', 'off')
+    monkeypatch.setattr(conversations_v3, 'promote_manual_end', lambda *a, **k: False)
+    with caplog.at_level('INFO'):
+        _admit_record('owner', 'recording', {'recording': True, 'v3_manual_end_requested': True})
+        # Neither a natural end nor a non-recording capture names a route.
+        _admit_record('owner', 'natural', {'recording': True})
+        _admit_record('owner', 'capture', {'v3_manual_end_requested': True, NATIVE_MANUAL_STOP: NATIVE_STOP})
+    assert [(event['stage'], event.get('route')) for event in _sli_events(caplog)] == [('route', 'batch')]
+
+
+# --- SCA-4489 review fixes --------------------------------------------------------------------------------
+
+
+def _event(stage, elapsed, **fields):
+    return {'stage': stage, 'observed_at': START + timedelta(seconds=elapsed), **fields}
+
+
+def test_already_visible_finish_is_ready_at_its_cut_not_a_miss():
+    # The Finish found its card on Home with notes: no eligibility write follows, and none is needed.
+    events = [
+        _event('cut', 1, cut_at=START.isoformat(), finish='f', source='app', basis='client_cut'),
+        _event('binding', 2, finish='f', recording='rec'),
+        _event('already_visible', 2, finish='f', card='card', summary=True),
+        _event('summary', 9, card='card'),
+    ]
+    result = readback.readback(events, START, THROUGH)
+    assert result['totals']['finishes'] == 1
+    assert result['totals']['unmatched'] == 0
+    assert result['totals']['within_60s'] == 1
+    assert result['totals']['matched_client_cut_p95_seconds'] == 0
+    assert [(row['route'], row['finishes']) for row in result['by_route_source']] == [('already_visible', 1)]
+    assert result['home_fetch_validation']['eligible'] == 1
+    assert result['home_fetch_validation']['fetched'] == 1
+
+
+def test_already_visible_bind_emits_a_scoreable_event(monkeypatch, caplog):
+    monkeypatch.setenv('CONVERSATIONS_V3_FINISH_HOME_SLI', 'on')
+    _in_cohort(monkeypatch)
+    now = datetime.now(timezone.utc)
+    request = SimpleNamespace(
+        headers={sli.HEADER: f'pendant,{uuid4()},{int(now.timestamp() * 1000)}', sli.APP_CHANNEL_HEADER: 'beta'}
+    )
+    with caplog.at_level('INFO'):
+        finish = sli.from_request('owner', request)
+        finish.bind('recording', prove_legacy_manual_end=True, visible_card='card', visible_summary=True)
+    events = _sli_events(caplog)
+    assert [e['stage'] for e in events] == ['cut', 'binding', 'already_visible']
+    assert events[2] == {
+        'stage': 'already_visible',
+        'finish': events[0]['finish'],
+        'card': sli._key('card', 'owner', 'card'),
+        'summary': True,
+    }
+    entries = [
+        {'timestamp': datetime.fromtimestamp(r.created, tz=timezone.utc).isoformat(), 'textPayload': r.getMessage()}
+        for r in caplog.records
+    ]
+    start = now.replace(microsecond=0) - timedelta(minutes=1)
+    through = start + timedelta(days=1, minutes=1)
+    result = readback.readback(readback.observations(entries, through), start, through)
+    assert result['totals']['within_60s'] == 1 and result['totals']['unmatched'] == 0
+
+
+def test_legacy_already_visible_finish_is_scored_once_proven(monkeypatch, caplog):
+    monkeypatch.setenv('CONVERSATIONS_V3_FINISH_HOME_SLI', 'on')
+    _in_cohort(monkeypatch)
+    with caplog.at_level('INFO'):
+        finish = sli.from_request('owner', SimpleNamespace(headers={sli.APP_CHANNEL_HEADER: 'beta'}))
+        finish.bind('recording', prove_legacy_manual_end=True, visible_card='card')
+    assert [e['stage'] for e in _sli_events(caplog)] == ['legacy_candidate', 'legacy_manual_end', 'already_visible']
+
+
+def test_acknowledge_binds_already_visible_with_its_card(monkeypatch):
+    from utils.conversations.v3 import finish as v3_finish
+
+    monkeypatch.setattr(v3_finish, 'deserialize_conversation', lambda window: SimpleNamespace())
+    monkeypatch.setattr(v3_finish, 'CreateConversationResponse', lambda **kwargs: kwargs)
+    monkeypatch.setattr(v3_finish.live, 'has_finish_content', lambda *a: True)
+    monkeypatch.setattr(
+        v3_finish.metrics, 'FINISH_NO_POINTER', SimpleNamespace(labels=lambda o: SimpleNamespace(inc=lambda: None))
+    )
+    observed = []
+
+    def observe(recording_id, **kwargs):
+        observed.append((recording_id, kwargs))
+
+    shown = {'id': 'card', 'status': 'completed', 'structured': {'overview': 'Planned the release train.'}}
+    v3_finish._acknowledge('owner', {'id': 'card'}, 'already_visible', 'rec', observe)
+    v3_finish._acknowledge('owner', shown, 'already_visible', 'rec', observe)
+    v3_finish._acknowledge('owner', {'id': 'card'}, 'already_empty', 'rec', observe)
+    assert observed == [
+        ('rec', {'visible_card': 'card', 'visible_summary': False}),
+        ('rec', {'visible_card': 'card', 'visible_summary': True}),
+    ]
+
+
+def test_route_observations_are_limited_to_the_home_cohort(monkeypatch, caplog):
+    monkeypatch.setenv('CONVERSATIONS_V3_FINISH_HOME_SLI', 'on')
+    monkeypatch.setenv('CONVERSATIONS_V3_FAST_FINISH', 'off')
+    monkeypatch.setattr(conversations_v3, 'promote_manual_end', lambda *a, **k: False)
+    monkeypatch.setattr(sli, 'conversations_v3_enabled', lambda uid: uid != 'stage-outsider')
+    monkeypatch.setattr(sli, 'v3_intake_held_out', lambda uid: uid == 'held-out')
+    native = {'recording': True, 'v3_manual_end_requested': True, NATIVE_MANUAL_STOP: NATIVE_STOP}
+    with caplog.at_level('INFO'):
+        for uid in ('stage-outsider', 'held-out'):
+            _admit_record(uid, 'recording', native)
+            _admit_record(uid, 'recording', {'recording': True, 'v3_manual_end_requested': True})
+    assert _sli_events(caplog) == []
+    assert sli.measured('held-out') is False and sli.measured('owner') is True
+    assert asyncio.run(sli.measured_async('stage-outsider')) is False
+    monkeypatch.delenv('CONVERSATIONS_V3_FINISH_HOME_SLI')
+    assert sli.measured('owner') is False and asyncio.run(sli.measured_async('owner')) is False
+
+
+def _reconcile_groups(monkeypatch, uid, *, derive=False, on_open=False):
+    from utils.conversations.v3 import service
+
+    held = {'held-recording'}
+
+    def stretches(eligible, now, **kwargs):
+        if 'finish_routes' in kwargs:
+            kwargs['finish_routes'].update(held)
+        return []
+
+    monkeypatch.setattr(service.outline, 'stretches', stretches)
+    monkeypatch.setattr(service.manual_cuts, 'enabled', lambda uid: False)
+    return asyncio.run(
+        service._reconcile_groups(
+            uid,
+            [],
+            START,
+            since=None,
+            until=None,
+            internal_end=None,
+            historical_timing=None,
+            silence_gap=timedelta(seconds=120),
+            lock_delay=timedelta(seconds=120),
+            custom_timing=False,
+            cohesion=False,
+            derive=derive,
+            on_open=on_open,
+        )
+    )
+
+
+def test_reconcile_measures_only_home_cohort_owners_and_holds_once(monkeypatch, caplog):
+    monkeypatch.setenv('CONVERSATIONS_V3_FINISH_HOME_SLI', 'on')
+    monkeypatch.setattr(sli, '_held_seen', {})
+    monkeypatch.setattr(sli, 'conversations_v3_enabled', lambda uid: True)
+    monkeypatch.setattr(sli, 'v3_intake_held_out', lambda uid: uid == 'held-out')
+    with caplog.at_level('INFO'):
+        assert _reconcile_groups(monkeypatch, 'held-out')[2] is False
+        assert _reconcile_groups(monkeypatch, 'owner', derive=True)[2] is False
+        assert _sli_events(caplog) == []
+        # Three reconcile passes over the same held Finish (one on open) name the held route once.
+        assert _reconcile_groups(monkeypatch, 'owner')[2] is True
+        assert _reconcile_groups(monkeypatch, 'owner')[2] is True
+        assert _reconcile_groups(monkeypatch, 'owner', on_open=True)[2] is True
+    assert _sli_events(caplog) == [
+        {'stage': 'route', 'recording': sli._key('recording', 'owner', 'held-recording'), 'route': 'held'}
+    ]
+
+
+def test_held_route_repeats_only_after_its_window(monkeypatch, caplog):
+    monkeypatch.setenv('CONVERSATIONS_V3_FINISH_HOME_SLI', 'on')
+    monkeypatch.setattr(sli, '_held_seen', {})
+    clock = iter([0.0, 10.0, sli.HELD_SEEN_SECONDS + 1])
+    with caplog.at_level('INFO'):
+        for _ in range(3):
+            sli.observe_held('owner', ['r'], clock=lambda: next(clock))
+    assert [e['route'] for e in _sli_events(caplog)] == ['held', 'held']
+
+
+def _ended_window(*sources):
+    return {'manual_end': True, '_finish_sli_sources': sources}
+
+
+@pytest.mark.parametrize(
+    'prior,was_ended,expected',
+    [
+        (None, False, {'card': ('a', 'b')}),
+        # The stored card was not yet ended: this commit ends it, so it binds.
+        ({'id': 'card', 'manual_end': True, 'v3_recording_ids': ['a', 'b']}, False, {'card': ('a', 'b')}),
+        # The stored card ended without a Finish cut (silence): the cut is new in this commit.
+        ({'id': 'card', 'manual_end': False, 'v3_recording_ids': ['a', 'b']}, True, {'card': ('a', 'b')}),
+        # A later pass rewrites the same ended Finish card: nothing new to bind.
+        ({'id': 'card', 'manual_end': True, 'v3_recording_ids': ['a', 'b']}, True, {}),
+        # Only a recording newly joining the ended card binds.
+        ({'id': 'card', 'manual_end': True, 'v3_recording_ids': ['a']}, True, {'card': ('b',)}),
+    ],
+)
+def test_window_binding_is_remembered_only_when_new_in_the_commit(prior, was_ended, expected):
+    windows = {}
+    sli.remember_window(
+        windows,
+        enabled=True,
+        ended=True,
+        window=_ended_window('a', 'b'),
+        row={'id': 'card'},
+        prior=prior,
+        was_ended=was_ended,
+    )
+    assert windows == expected
+
+
+def test_repeated_reconcile_commits_emit_one_window_event(monkeypatch, caplog):
+    monkeypatch.setenv('CONVERSATIONS_V3_FINISH_HOME_SLI', 'on')
+    stored = None
+    with caplog.at_level('INFO'):
+        for _ in range(3):
+            windows = {}
+            row = {'id': 'card', 'manual_end': True, 'v3_recording_ids': ['rec']}
+            sli.remember_window(
+                windows,
+                enabled=True,
+                ended=True,
+                window=_ended_window('rec'),
+                row=row,
+                prior=stored,
+                was_ended=stored is not None,
+            )
+            sli.observe_windows('owner', [row], windows)
+            stored = row
+    assert [e['stage'] for e in _sli_events(caplog)] == ['window']
+
+
+# --- SCA-4489 review: a legacy proof proves the request that committed it, not the recording's first one ---
+
+
+def _legacy_candidate(elapsed, recording='rec'):
+    return _event(
+        'legacy_candidate',
+        elapsed,
+        finish='legacy-' + recording,
+        recording=recording,
+        cut_at=(START + timedelta(seconds=elapsed)).isoformat(),
+        source='unknown',
+        basis='server_cut',
+    )
+
+
+def test_recording_level_proof_with_several_candidates_is_not_guessed():
+    # A committed manual-end marker names the recording, not a request. With two headerless requests on the
+    # recording, neither is established as the Finish, so both are excluded instead of picked by timing.
+    events = [
+        _legacy_candidate(1),
+        _legacy_candidate(5),
+        _event('legacy_manual_end', 5, recording='rec'),
+        _event('window', 6, recording='rec', card='card'),
+        _event('eligible', 64, card='card'),
+    ]
+    result = readback.readback(events, START, THROUGH)
+    assert result['totals']['finishes'] == 0
+    assert result['legacy_excluded'] == {
+        'no_proof': 0,
+        'not_the_proven_request': 0,
+        'recording_only_proof': 2,
+        'retry': 0,
+    }
+
+
+def test_recording_only_proof_after_an_unrelated_sole_candidate_is_not_scored_as_its_finish():
+    # 1 s: an unrelated headerless request logs the recording's only candidate. 30 s: the deliberate Finish
+    # (which logged no candidate of its own) commits a recording-level manual-end marker. Scoring the sole
+    # candidate would time the unrelated request as the Finish (and its 49 s as within 60 s).
+    events = [
+        _tied_candidate(1, R1),
+        _event('legacy_manual_end', 30, recording='rec'),
+        _event('window', 2, recording='rec', card='card'),
+        _event('eligible', 50, card='card'),
+    ]
+    result = readback.readback(events, START, THROUGH)
+    assert result['totals']['finishes'] == 0
+    assert result['totals']['within_60s'] == 0
+    assert result['by_route_source'] == []
+    assert result['legacy_excluded'] == {
+        'no_proof': 0,
+        'not_the_proven_request': 0,
+        'recording_only_proof': 1,
+        'retry': 0,
+    }
+
+
+def test_recording_level_proof_long_before_the_only_candidate_does_not_prove_it():
+    events = [_event('legacy_manual_end', 1, recording='rec'), _legacy_candidate(30)]
+    result = readback.readback(events, START, THROUGH)
+    assert result['totals']['finishes'] == 0
+    assert result['legacy_excluded']['recording_only_proof'] == 1
+
+
+def test_legacy_candidate_without_proof_is_excluded_and_reported_not_a_miss():
+    events = [_legacy_candidate(1), _legacy_candidate(3), _event('window', 2, recording='rec', card='card')]
+    result = readback.readback(events, START, THROUGH)
+    assert result['totals']['finishes'] == 0
+    assert result['totals']['unmatched'] == 0
+    assert result['by_route_source'] == []
+    assert result['legacy_excluded'] == {
+        'no_proof': 2,
+        'not_the_proven_request': 0,
+        'recording_only_proof': 0,
+        'retry': 0,
+    }
+
+
+def test_emitted_legacy_events_read_back_as_the_proven_finish_request(monkeypatch, caplog):
+    # End to end through the emitters: the conversation path binds without proof, then the live-window
+    # Finish binds the same recording and proves it in the same call.
+    monkeypatch.setenv('CONVERSATIONS_V3_FINISH_HOME_SLI', 'on')
+    _in_cohort(monkeypatch)
+    beta = SimpleNamespace(headers={sli.APP_CHANNEL_HEADER: 'beta'})
+    with caplog.at_level('INFO'):
+        sli.from_request('owner', beta).bind('recording')
+        sli.from_request('owner', beta).bind('recording', prove_legacy_manual_end=True)
+    emitted = _sli_events(caplog)
+    assert [e['stage'] for e in emitted] == ['legacy_candidate', 'legacy_candidate', 'legacy_manual_end']
+    events = [{**e, 'observed_at': START + timedelta(seconds=index)} for index, e in enumerate(emitted)]
+    for e, at in zip(events[:2], (START, START + timedelta(seconds=1))):
+        e['cut_at'] = at.isoformat()
+    result = readback.readback(events, START, THROUGH)
+    assert result['totals']['finishes'] == 1
+    assert result['legacy_excluded'] == {
+        'no_proof': 0,
+        'not_the_proven_request': 1,
+        'recording_only_proof': 0,
+        'retry': 0,
+    }
+
+
+# --- SCA-4489 review at 0ff2da52: a proof names its request; retries keep the original cut; already-visible
+# needs a summary --------------------------------------------------------------------------------------------
+
+
+def _tied_candidate(elapsed, request, recording='rec'):
+    return {**_legacy_candidate(elapsed, recording), 'request': request}
+
+
+def _tied_proof(elapsed, request, recording='rec'):
+    return _event('legacy_manual_end', elapsed, recording=recording, request=request)
+
+
+R1, R2, R3 = ('1' * 32, '2' * 32, '3' * 32)
+
+
+def test_intervening_earlier_candidate_never_takes_the_finish_requests_proof():
+    # 1 s: a headerless request that was not the Finish. 2 s: a recording-level marker commits. 3 s: the
+    # Finish request proves itself. Eligible at 62 s: 59 s after the Finish, 61 s after the earlier request.
+    # A rule that picks the last candidate before the first proof scores 1 s and calls the Finish late.
+    events = [
+        _tied_candidate(1, R1),
+        _event('legacy_manual_end', 2, recording='rec'),
+        _tied_candidate(3, R3),
+        _tied_proof(3, R3),
+        _event('window', 4, recording='rec', card='card'),
+        _event('eligible', 62, card='card'),
+    ]
+    result = readback.readback(events, START, THROUGH)
+    assert result['totals']['finishes'] == 1
+    assert result['totals']['late'] == 0, 'the earlier request is not the cut'
+    assert result['totals']['timing_unknown'] == 1
+    assert result['legacy_excluded'] == {
+        'no_proof': 0,
+        'not_the_proven_request': 1,
+        'recording_only_proof': 0,
+        'retry': 0,
+    }
+
+
+def test_out_of_order_recording_proof_between_candidates_is_not_scored():
+    # The same shape with no request-tied proof: the recording proof cannot name either request.
+    events = [
+        _legacy_candidate(1),
+        _event('legacy_manual_end', 2, recording='rec'),
+        _legacy_candidate(3),
+        _event('window', 4, recording='rec', card='card'),
+        _event('eligible', 30, card='card'),
+    ]
+    result = readback.readback(events, START, THROUGH)
+    assert result['totals']['finishes'] == 0
+    assert result['totals']['unmatched'] == 0
+    assert result['legacy_excluded'] == {
+        'no_proof': 0,
+        'not_the_proven_request': 0,
+        'recording_only_proof': 2,
+        'retry': 0,
+    }
+
+
+def test_retry_never_moves_the_cut_forward():
+    # The Finish at 1 s and its retry at 6 s both prove themselves; the retry's proof is logged first. The
+    # summary is eligible at 63 s: 62 s after the Finish (late), 57 s after the retry. The earliest proven
+    # cut is scored, so a retry cannot make a late summary look within 60 s.
+    events = [
+        _tied_candidate(1, R1),
+        _tied_candidate(6, R2),
+        _tied_proof(6.5, R2),
+        _tied_proof(7, R1),
+        _event('window', 7, recording='rec', card='card'),
+        _event('eligible', 63, card='card'),
+    ]
+    result = readback.readback(events, START, THROUGH)
+    assert result['totals']['finishes'] == 1
+    assert result['totals']['late'] == 1
+    assert result['totals']['timing_unknown'] == 0
+    assert result['legacy_excluded'] == {
+        'no_proof': 0,
+        'not_the_proven_request': 0,
+        'recording_only_proof': 0,
+        'retry': 1,
+    }
+
+
+def test_retry_logged_before_the_original_keeps_the_original_cut():
+    # Log order inverted on another instance: the retry's candidate is logged before the original's.
+    events = [
+        {**_tied_candidate(6, R2), 'observed_at': START + timedelta(seconds=1)},
+        {**_tied_candidate(1, R1), 'observed_at': START + timedelta(seconds=2)},
+        _tied_proof(2, R1),
+        _tied_proof(2, R2),
+        _event('window', 3, recording='rec', card='card'),
+        _event('eligible', 63, card='card'),
+    ]
+    result = readback.readback(events, START, THROUGH)
+    assert result['totals']['late'] == 1
+    assert result['legacy_excluded']['retry'] == 1
+
+
+def test_a_proof_for_another_recording_does_not_prove_this_request():
+    events = [_tied_candidate(1, R1), _tied_proof(2, R1, recording='other')]
+    result = readback.readback(events, START, THROUGH)
+    assert result['totals']['finishes'] == 0
+    assert result['legacy_excluded']['no_proof'] == 1
+
+
+def test_emitted_proof_carries_its_own_requests_id(monkeypatch, caplog):
+    monkeypatch.setenv('CONVERSATIONS_V3_FINISH_HOME_SLI', 'on')
+    _in_cohort(monkeypatch)
+    beta = SimpleNamespace(headers={sli.APP_CHANNEL_HEADER: 'beta'})
+    with caplog.at_level('INFO'):
+        sli.from_request('owner', beta).bind('recording', prove_legacy_manual_end=True)
+        sli.from_request('owner', beta).bind('recording', prove_legacy_manual_end=True)
+        sli.observe_legacy_manual_end('owner', 'recording')
+    first, first_proof, second, second_proof, marker = _sli_events(caplog)
+    assert first_proof['request'] == first['request'] and second_proof['request'] == second['request']
+    assert first['request'] != second['request']
+    assert all(readback.KEY.fullmatch(e['request']) for e in (first, second))
+    assert 'request' not in marker
+
+
+def test_already_visible_without_a_proven_summary_stays_in_the_cohort():
+    events = [
+        _event('cut', 1, cut_at=START.isoformat(), finish='f', source='app', basis='client_cut'),
+        _event('binding', 2, finish='f', recording='rec'),
+        _event('already_visible', 2, finish='f', card='card', summary=False),
+        # A later eligibility of the card it answered with scores it.
+        _event('eligible', 40, card='card'),
+        _event('cut', 1, cut_at=START.isoformat(), finish='g', source='app', basis='client_cut'),
+        _event('binding', 2, finish='g', recording='rec-g'),
+        # An event from an emitter that predates the summary field proves nothing either; with no later
+        # eligibility within 60 s it is a miss, not dropped.
+        _event('already_visible', 2, finish='g', card='card-g'),
+        _event('eligible', 75, card='card-g'),
+        _event('cut', 1, cut_at=START.isoformat(), finish='h', source='app', basis='client_cut'),
+        _event('binding', 2, finish='h', recording='rec-h'),
+        _event('already_visible', 2, finish='h', card='card-h', summary=False),
+    ]
+    result = readback.readback(events, START, THROUGH)
+    assert result['totals']['finishes'] == 3
+    assert result['totals']['within_60s'] == 1
+    assert result['totals']['late'] == 1
+    assert result['totals']['unmatched'] == 1
+    assert result['totals']['p95_at_or_below_60s'] is False
+    assert [(row['route'], row['finishes']) for row in result['by_route_source']] == [('already_visible_unproven', 3)]
+    assert result['already_visible_unproven'] == 3
+
+
+def test_more_than_five_percent_unproven_already_visible_cannot_pass_the_objective():
+    # 94 Finishes ready in 10 s and 6 that found an unproven card on Home with no later eligibility: 94% are
+    # within 60 s, under the 95% objective. Dropping the 6 would report 94/94 and pass.
+    events = []
+    for index in range(100):
+        finish = f'f{index}'
+        events += [
+            _event('cut', 1, cut_at=START.isoformat(), finish=finish, source='app', basis='client_cut'),
+            _event('binding', 2, finish=finish, recording=f'rec-{index}'),
+        ]
+        if index < 94:
+            events += [
+                _event('window', 3, recording=f'rec-{index}', card=f'card-{index}'),
+                _event('eligible', 10, card=f'card-{index}'),
+            ]
+        else:
+            events.append(_event('already_visible', 2, finish=finish, card=f'card-{index}', summary=False))
+    result = readback.readback(events, START, THROUGH)
+    assert result['totals']['finishes'] == 100
+    assert result['totals']['within_60s'] == 94
+    assert result['totals']['p95_at_or_below_60s'] is False
+    assert result['totals']['p95_seconds'] is None
+    assert result['already_visible_unproven'] == 6
+
+
+@pytest.mark.parametrize(
+    ('row', 'shown'),
+    [
+        ({'status': 'completed', 'structured': {'overview': 'Planned the release.'}}, True),
+        ({'status': 'completed', 'structured': {'sections': [{'body_markdown': '- ship'}]}}, True),
+        ({'status': 'completed', 'structured': {'overview': '  '}}, False),
+        ({'status': 'completed'}, False),
+        ({'status': 'processing', 'structured': {'overview': 'Planned the release.'}}, False),
+        ({'status': 'completed', 'discarded': True, 'structured': {'overview': 'Planned the release.'}}, False),
+        ({'status': 'completed', 'home_hidden': True, 'structured': {'overview': 'Planned the release.'}}, False),
+        (None, False),
+    ],
+)
+def test_visible_summary_requires_notes_on_a_shown_card(row, shown):
+    assert sli.visible_summary(row) is shown

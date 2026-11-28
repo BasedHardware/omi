@@ -55,6 +55,29 @@ def _day_view(db, day="2026-10-12"):
     return merge_day_for_query(summary, shards)
 
 
+def test_finish_cut_batch_accepts_only_content_free_beta_fields():
+    payload = {
+        "schema_version": 1,
+        "batch_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "observations": [
+            {
+                "event_id": "11111111-1111-4111-8111-111111111111",
+                "occurred_at": datetime.now(timezone.utc).isoformat(),
+                "platform": "ios",
+                "channel": "beta",
+                "family": "finish_cut",
+                "attributes": {"operation_id": "22222222-2222-4222-8222-222222222222", "source": "pendant"},
+            }
+        ],
+    }
+    batch_id, observations = telemetry_router._parse_finish_cut_batch(payload)
+    assert batch_id == payload["batch_id"]
+    assert observations[0]["source"] == "pendant"
+    payload["observations"][0]["attributes"]["transcript"] = "must never be accepted"
+    with pytest.raises(ValueError, match="attributes"):
+        telemetry_router._parse_finish_cut_batch(payload)
+
+
 def _upload(event_id: str, phase: str, attempt: str = ATTEMPT, **extra):
     attributes = {"attempt_id": attempt, "phase": phase, "source": "pendant"}
     attributes.update(extra)
@@ -576,6 +599,109 @@ def test_http_auth_size_and_admin_gate(monkeypatch):
         headers={"X-Admin-Key": "nope"},
     )
     assert wrong.status_code == 403
+
+
+def test_finish_cut_route_authenticates_and_logs_only_the_opaque_cut(monkeypatch, caplog):
+    monkeypatch.setattr(telemetry_router.auth, "_enforce_rate_limit", lambda *args, **kwargs: None)
+    monkeypatch.setattr(telemetry_router.finish_home_sli, "enabled", lambda: True)
+    monkeypatch.setattr(telemetry_router.finish_home_sli, "conversations_v3_enabled", lambda uid: uid == OWNER)
+    monkeypatch.setattr(telemetry_router.finish_home_sli, "v3_intake_held_out", lambda uid: False)
+    authed = TestClient(_app(OWNER))
+    payload = {
+        "schema_version": 1,
+        "batch_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "observations": [
+            {
+                "event_id": "11111111-1111-4111-8111-111111111111",
+                "occurred_at": datetime.now(timezone.utc).isoformat(),
+                "platform": "ios",
+                "channel": "beta",
+                "family": "finish_cut",
+                "attributes": {"operation_id": "22222222-2222-4222-8222-222222222222", "source": "app"},
+            }
+        ],
+    }
+    with caplog.at_level("INFO"):
+        response = authed.post("/v1/telemetry/v3-finish-cuts", json=payload, headers={"X-Omi-App-Channel": "beta"})
+    assert response.status_code == 200
+    assert response.json()["accepted_count"] == 1
+    assert "event=v3_finish_home_sli" in caplog.text
+    assert OWNER not in caplog.text
+    assert payload["observations"][0]["attributes"]["operation_id"] not in caplog.text
+
+    anonymous = TestClient(_app(None))
+    assert (
+        anonymous.post("/v1/telemetry/v3-finish-cuts", json=payload, headers={"X-Omi-App-Channel": "beta"}).status_code
+        == 401
+    )
+
+
+def test_finish_cut_route_drops_a_held_out_owners_cut(monkeypatch, caplog):
+    # SCA-4489: Home sends a held-out owner to legacy Home, so the durable outbox's cut is accepted
+    # (the client must not retry) but never enters the v3 Finish→Home cohort.
+    monkeypatch.setattr(telemetry_router.auth, "_enforce_rate_limit", lambda *args, **kwargs: None)
+    monkeypatch.setattr(telemetry_router.finish_home_sli, "enabled", lambda: True)
+    monkeypatch.setattr(telemetry_router.finish_home_sli, "conversations_v3_enabled", lambda uid: True)
+    monkeypatch.setattr(telemetry_router.finish_home_sli, "v3_intake_held_out", lambda uid: uid == OWNER)
+    payload = {
+        "schema_version": 1,
+        "batch_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaab",
+        "observations": [
+            {
+                "event_id": "11111111-1111-4111-8111-111111111112",
+                "occurred_at": datetime.now(timezone.utc).isoformat(),
+                "platform": "ios",
+                "channel": "beta",
+                "family": "finish_cut",
+                "attributes": {"operation_id": "22222222-2222-4222-8222-222222222223", "source": "app"},
+            }
+        ],
+    }
+    with caplog.at_level("INFO"):
+        response = TestClient(_app(OWNER)).post(
+            "/v1/telemetry/v3-finish-cuts", json=payload, headers={"X-Omi-App-Channel": "beta"}
+        )
+    assert response.status_code == 200
+    assert response.json()["accepted_count"] == 1
+    assert "event=v3_finish_home_sli" not in caplog.text
+
+
+def test_finish_cut_route_runs_the_cohort_check_on_the_db_executor(monkeypatch, caplog):
+    # SCA-4489: home_cohort can do synchronous Redis I/O (stage admission cache miss) and a holdout
+    # membership lookup, so the async ingest handler must await it through run_blocking(db_executor, ...).
+    monkeypatch.setattr(telemetry_router.auth, "_enforce_rate_limit", lambda *args, **kwargs: None)
+    monkeypatch.setattr(telemetry_router.finish_home_sli, "enabled", lambda: True)
+    monkeypatch.setattr(telemetry_router.finish_home_sli, "conversations_v3_enabled", lambda uid: True)
+    monkeypatch.setattr(telemetry_router.finish_home_sli, "v3_intake_held_out", lambda uid: False)
+    real_run_blocking = telemetry_router.run_blocking
+    offloaded: list[tuple[object, object, tuple]] = []
+
+    async def recording_run_blocking(executor, fn, *args, **kwargs):
+        offloaded.append((executor, fn, args))
+        return await real_run_blocking(executor, fn, *args, **kwargs)
+
+    monkeypatch.setattr(telemetry_router, "run_blocking", recording_run_blocking)
+    payload = {
+        "schema_version": 1,
+        "batch_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaac",
+        "observations": [
+            {
+                "event_id": "11111111-1111-4111-8111-111111111113",
+                "occurred_at": datetime.now(timezone.utc).isoformat(),
+                "platform": "ios",
+                "channel": "beta",
+                "family": "finish_cut",
+                "attributes": {"operation_id": "22222222-2222-4222-8222-222222222224", "source": "app"},
+            }
+        ],
+    }
+    with caplog.at_level("INFO"):
+        response = TestClient(_app(OWNER)).post(
+            "/v1/telemetry/v3-finish-cuts", json=payload, headers={"X-Omi-App-Channel": "beta"}
+        )
+    assert response.status_code == 200
+    assert offloaded == [(telemetry_router.db_executor, telemetry_router.finish_home_sli.home_cohort, (OWNER,))]
+    assert "event=v3_finish_home_sli" in caplog.text
 
 
 def test_router_is_registered_on_the_backend_app():

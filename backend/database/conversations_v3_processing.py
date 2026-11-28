@@ -3,7 +3,7 @@
 from database import conversations_v3_leases as leases
 from database.conversations_v3_fence import permits_native_source, wake_repairs
 from utils.conversations.v3.live import FINISH_STAMP_FIELD, FINISH_WINDOW_FIELD, finish_stamp_sample
-from utils.conversations.v3 import metrics
+from utils.conversations.v3 import finish_home_sli, metrics
 
 import hashlib
 import json
@@ -50,6 +50,19 @@ def _observe_first_notes(row):
             _lane(row), summary_delivery.processed_latencies(row.get('finished_at'), row.get('arrival_at'), time.time())
         )
     )
+
+
+def _home_visible(row):
+    # Same owner-visibility filters as the Home feed (database/home_feed._visible) for a derived row.
+    return not is_relevance_discarded(row) and conversations.is_visible_conversation(
+        row, hide_home=True, presentation=True
+    )
+
+
+def _observe_eligible(uid, cid, eligible):
+    """After commit: a Finish window became Home-eligible with a summary (SCA-4489, no extra reads)."""
+    if eligible:
+        metrics.safe_metric(lambda: finish_home_sli.observe_eligible(uid, cid))
 
 
 def _live_scope(row):
@@ -190,6 +203,7 @@ def store_summary(uid, cid, token, revision, structured, covers, *, live_input=N
         )
     settle_enabled = terminal_settled.serving(uid)
     first_notes = {}
+    eligible = []
 
     repairs = []
 
@@ -197,6 +211,7 @@ def store_summary(uid, cid, token, revision, structured, covers, *, live_input=N
     def persist(tx):
         repairs.clear()
         first_notes.clear()
+        eligible.clear()
         snapshot = ref.get(transaction=tx)
         deletion = account_deletion_document(uid, firestore_client=client).get(transaction=tx)
         if account_deletion_marker_blocks_access(
@@ -261,24 +276,26 @@ def store_summary(uid, cid, token, revision, structured, covers, *, live_input=N
                 {**current, **open_lock, 'v3_notes_written': True, 'v3_process_failed': False, 'tile_state': 'done'}
             )
         )
-        tx.update(
-            ref,
-            {
-                **patch,
-                **open_lock,
-                'summary_covers_through': covers,
-                **({'tile_state': 'done', 'v3_process_failed': False, 'summary_retryable': False} if settled else {}),
-                **(
-                    {'title_locked': True}
-                    if current.get('v3_derived') and not current.get('home_hidden') and patch['structured'].get('title')
-                    else {}
-                ),
-                **({'v3_notes_written': True} if settled else {}),
-                **({policy.NATIVE_MANUAL_NOTES_VISIBILITY: visibility_receipt} if visibility_receipt else {}),
-                **({'v3_created_pending': True} if armed else {}),
-                **clearing,
-            },
-        )
+        update = {
+            **patch,
+            **open_lock,
+            'summary_covers_through': covers,
+            **({'tile_state': 'done', 'v3_process_failed': False, 'summary_retryable': False} if settled else {}),
+            **(
+                {'title_locked': True}
+                if current.get('v3_derived') and not current.get('home_hidden') and patch['structured'].get('title')
+                else {}
+            ),
+            **({'v3_notes_written': True} if settled else {}),
+            **({policy.NATIVE_MANUAL_NOTES_VISIBILITY: visibility_receipt} if visibility_receipt else {}),
+            **({'v3_created_pending': True} if armed else {}),
+            **clearing,
+        }
+        tx.update(ref, update)
+        if settled and finish_home_sli.eligible_after(
+            current, {**current, **update, 'structured': structured}, rewritten=True, visible=_home_visible
+        ):
+            eligible.append(cid)
         return armed
 
     armed = run_preloaded_transaction_with_contention_retry(client, persist)
@@ -287,6 +304,7 @@ def store_summary(uid, cid, token, revision, structured, covers, *, live_input=N
         raise Conflict('summary_source_changed')
     if first_notes:
         _observe_first_notes(first_notes)
+    _observe_eligible(uid, cid, eligible)
     return armed
 
 
@@ -326,6 +344,7 @@ def settle_processing(
     client = firestore_client or store.get_firestore_client()
     ref = store.user_conversations(client, uid).document(cid)
     held = leases.lease_ref(client, uid, 'summary-' + cid)
+    eligible = []
     # The committed attempt's Finish-to-visible sample; each attempt of the transaction body resets it.
     finish_latency: list = []
 
@@ -333,6 +352,7 @@ def settle_processing(
 
     @firestore.transactional
     def settle(tx):
+        eligible.clear()
         finish_latency.clear()
         repairs.clear()
         snapshot = ref.get(transaction=tx)
@@ -395,32 +415,32 @@ def settle_processing(
             sample = finish_stamp_sample(row.get(FINISH_STAMP_FIELD), datetime.now(timezone.utc)) if visible else None
             if sample is not None:
                 finish_latency.append(sample)
-        tx.update(
-            ref,
-            {
-                'v3_process_pending': False,
-                'v3_process_attempts': 0,
-                **({'v3_process_retry_after': None} if row.get('v3_process_retry_after') else {}),
-                'tile_state': 'done',
-                'v3_process_failed': False,
-                'v3_process_failure_reason': None,
-                'summary_retryable': False,
-                **(
-                    {'summary_covers_through': row.get('finished_at') if absorbed_landing else covers}
-                    if not skipped and not row.get('deleted')
-                    else {}
-                ),
-                **(
-                    {'title_locked': True}
-                    if not skipped and not row.get('home_hidden') and (row.get('structured') or {}).get('title')
-                    else {}
-                ),
-                **({'v3_notes_written': True} if written else {}),
-                **({'v3_created_pending': True} if armed else {}),
-                # First settlement only: a late rewrite re-settles the same row and must not count again.
-                **({'v3_manual_end_home_counted': True} if manual_visibility is not None else {}),
-            },
-        )
+        update = {
+            'v3_process_pending': False,
+            'v3_process_attempts': 0,
+            **({'v3_process_retry_after': None} if row.get('v3_process_retry_after') else {}),
+            'tile_state': 'done',
+            'v3_process_failed': False,
+            'v3_process_failure_reason': None,
+            'summary_retryable': False,
+            **(
+                {'summary_covers_through': row.get('finished_at') if absorbed_landing else covers}
+                if not skipped and not row.get('deleted')
+                else {}
+            ),
+            **(
+                {'title_locked': True}
+                if not skipped and not row.get('home_hidden') and (row.get('structured') or {}).get('title')
+                else {}
+            ),
+            **({'v3_notes_written': True} if written else {}),
+            **({'v3_created_pending': True} if armed else {}),
+            # First settlement only: a late rewrite re-settles the same row and must not count again.
+            **({'v3_manual_end_home_counted': True} if manual_visibility is not None else {}),
+        }
+        tx.update(ref, update)
+        if finish_home_sli.eligible_after(row, {**row, **update}, rewritten=written, visible=_home_visible):
+            eligible.append(cid)
         first = None if row.get('v3_notes_written') else 'notes' if written else 'no_notes' if settled else None
         return (
             armed,
@@ -452,6 +472,7 @@ def settle_processing(
         metrics.safe_metric(lambda: metrics.FINISH_TO_VISIBLE.labels(path).observe(seconds))
     if settled and word_floor_outcomes is not None:
         metrics.safe_metric(lambda: metrics.observe_word_floor(*word_floor_outcomes))
+    _observe_eligible(uid, cid, eligible)
     return armed
 
 
@@ -529,8 +550,11 @@ def show_summary_stored(uid, cid, token, *, firestore_client=None):
     ref = store.user_conversations(client, uid).document(cid)
     held = leases.lease_ref(client, uid, 'summary-' + cid)
 
+    eligible = []
+
     @firestore.transactional
     def show(tx):
+        eligible.clear()
         row = ref.get(transaction=tx).to_dict() or {}
         lease = held.get(transaction=tx).to_dict() or {}
         if lease.get('token') != token or not lease.get('until') or lease['until'] <= datetime.now(timezone.utc):
@@ -546,9 +570,13 @@ def show_summary_stored(uid, cid, token, *, firestore_client=None):
         ):
             return False
         tx.update(ref, {'tile_state': 'done'})
+        if finish_home_sli.eligible_after(row, {**row, 'tile_state': 'done'}, rewritten=True, visible=_home_visible):
+            eligible.append(cid)
         return True
 
-    return show(client.transaction())
+    shown = show(client.transaction())
+    _observe_eligible(uid, cid, eligible)
+    return shown
 
 
 CREATED_CLAIM = timedelta(minutes=5)

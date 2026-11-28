@@ -90,6 +90,7 @@ Map<String, String> endedAtHeaders(DateTime? endedAt) =>
 Future<InProgressProcessOutcome> processInProgressConversationOutcome({
   String? liveConversationId,
   DateTime? endedAt,
+  String? finishCut,
   // Reliability experiment `live_words_cascade`: the live words the phone was showing for the
   // conversation being ended (LiveTail.payload). The server keeps them with the stored End for that
   // conversation's first summary only. Null (the experiment is off, or no words): the field is not sent.
@@ -100,7 +101,10 @@ Future<InProgressProcessOutcome> processInProgressConversationOutcome({
 }) async {
   final request = ApiRequest(
     url: '${Env.apiBaseUrl}v1/conversations',
-    headers: endedAtHeaders(endedAt),
+    headers: {
+      ...endedAtHeaders(endedAt),
+      if (Env.isTestFlight && !Env.hasApiBaseUrlOverride) 'X-Omi-Finish-Cut': finishCut ?? 'none',
+    },
     method: 'POST',
     body: jsonEncode({
       if (liveConversationId != null) 'live_conversation_id': liveConversationId,

@@ -56,6 +56,7 @@ import 'package:omi/pages/home/home_navigation.dart';
 import 'package:omi/pages/episodes/finish_capture.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/services/telemetry/finish_home_sli_telemetry.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -307,7 +308,8 @@ class _LiveCapture extends CaptureProvider {
   String? verifiedLiveServerRecordingId;
 
   @override
-  Future<void> forceProcessingCurrentConversation({bool manualFinish = false, String? liveConversationId}) async {
+  Future<void> forceProcessingCurrentConversation(
+      {bool manualFinish = false, FinishCutSource? finishSource, String? liveConversationId}) async {
     endCalls++;
     endedLiveId = liveConversationId;
     final row = manualFinish ? onManualEnd?.call(liveConversationId) : null;

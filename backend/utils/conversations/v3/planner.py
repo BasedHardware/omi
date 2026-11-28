@@ -292,6 +292,8 @@ def windows(groups, outlines, *, cohesion=False, silence_gap=SILENCE, defer_topi
                     ),
                     'finished': (group['finished'] or end < len(group['lines']) or part_index < len(capped) - 1),
                 }
+                if candidate['manual_end'] and group.get('_finish_sli_sources'):
+                    candidate['_finish_sli_sources'] = group['_finish_sli_sources']
                 if defer_topic_lock and not group.get('locked', group['finished']) and part_index == len(capped) - 1:
                     candidate['_defer_lock'] = True
                     candidate['_lock_end'] = group.get('settle_from', group['end'])
@@ -331,6 +333,8 @@ def windows(groups, outlines, *, cohesion=False, silence_gap=SILENCE, defer_topi
                         prior['_stretch_words'] = word_count(prior['lines'])
                     prior['finished'] = candidate['finished']
                     prior['manual_end'] = candidate['manual_end']
+                    if candidate.get('_finish_sli_sources'):
+                        prior['_finish_sli_sources'] = candidate['_finish_sli_sources']
                     if defer_topic_lock:
                         prior['_defer_lock'] = candidate.get('_defer_lock', False)
                         if candidate.get('_defer_lock'):
@@ -925,6 +929,8 @@ def preserve_finished_windows(planned, existing, recordings=None, *, protect_pro
                     target['_defer_lock'] = False
                 if line is window['lines'][-1] and window.get('manual_end'):
                     target['manual_end'] = True
+                    if window.get('_finish_sli_sources'):
+                        target['_finish_sli_sources'] = window['_finish_sli_sources']
                     if line is window.get('_native_manual_tail'):
                         target['_native_manual_tail'] = line
                         target['native_manual_end'] = True

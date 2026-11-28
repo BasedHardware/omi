@@ -203,6 +203,7 @@ from utils.conversations.v3 import live as v3_live, manual_cuts as v3_manual_cut
 from utils.conversations.v3 import summary_wake as v3_summary_wake
 from utils.conversations.v3 import end_answer as v3_end_answer
 from utils.conversations.v3 import capture_device as v3_capture_device
+from utils.conversations.v3 import finish_home_sli
 from utils.conversations.v3.finish import finish_live_window
 from database import conversations_v3_live, conversations_v3_processing
 from utils.conversations import list_page_headers
@@ -715,7 +716,9 @@ def process_in_progress_conversation(
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:create")),
     ended_at: Optional[str] = Header(None, alias=v3_manual_cuts.ENDED_AT_HEADER, include_in_schema=False),
     response: Response = None,  # type: ignore[assignment]
+    http_request: Request = None,  # type: ignore[assignment]
 ):
+    finish = finish_home_sli.from_request(uid, http_request)
     # Experiment end_open_conversation: End also cuts the owner's v3 conversation, at the End time the app
     # sent in this header (else now), and wakes the builder at once, so it closes whatever the listening
     # session's recording below is doing. Off: the header is ignored and nothing is written.
@@ -741,6 +744,8 @@ def process_in_progress_conversation(
         # the window closes exactly that window; the legacy row keeps recording. A miss runs the legacy Finish.
         # No experiment wake here: record_end stores no cut for a held-out owner, and the window cut
         # wakes its builder itself (finish._acknowledge enqueues the pending recording).
+        # No Finish→Home cut to bind: a held-out owner reads legacy Home, so finish_home_sli.home_cohort
+        # produced none for this request.
         finished = finish_live_window(uid, named, named_only=True)
         if finished is not None:
             return finished
@@ -749,6 +754,16 @@ def process_in_progress_conversation(
             uid,
             request.live_conversation_id if request else None,
             allow_recording_fallback=request is None or request.finish_only_body,
+            **(
+                {
+                    # ``visible_card`` arrives only for an already visible Finish (finish._acknowledge).
+                    'observe_recording': lambda recording_id, **visible: finish.bind(
+                        recording_id, prove_legacy_manual_end=True, **visible
+                    )
+                }
+                if finish
+                else {}
+            ),
         )
         # The baseline path wakes the builder itself when it cut the window (answered as writing); a second
         # wake at the same instant only collides with it. Every other answer leaves the wake to the experiment.
@@ -764,6 +779,8 @@ def process_in_progress_conversation(
         # exact-ID finalization. A disconnected HTTP caller must not own the
         # only processing attempt. BYOK retains its request-scoped credentials.
         finalized = finalize_conversation(conversation['id'], request=request, uid=uid)
+        if finish and conversation.get('recording') is True:
+            finish.bind(conversation['id'])
         # Experiment end_open_conversation: the listening session's own recording had nothing to process
         # (upload mode), but the cut above is stored. Answer with the conversation it ended, or mark the End
         # accepted when none has landed yet, instead of "this recording is still in progress". With no
@@ -772,6 +789,8 @@ def process_in_progress_conversation(
             uid, cut_id, finalized, request.live_conversation_id if request else None, response=response
         )
 
+    if finish and conversation.get('recording') is True:
+        finish.bind(conversation['id'])
     conversation = deserialize_conversation(conversation)
 
     # Inject calendar context if provided
@@ -1392,11 +1411,13 @@ def get_conversations(
     read_started = time.monotonic()
     prepared = []
     read_mode = 'legacy'
+    v3_home_read = False
     requested_mode = request.headers.get(list_page_headers.HOME_MODE_HEADER) if request is not None else None
 
     def read_page():
-        nonlocal read_mode
+        nonlocal read_mode, v3_home_read
         v3_home = default_home and conversations_v3_enabled(uid) and not v3_intake_held_out(uid)
+        v3_home_read = v3_home
         show_held = default_home and not v3_home
         indexed_home = (
             v3_home
@@ -1523,6 +1544,15 @@ def get_conversations(
         }
         headers = {}
 
+    if (
+        v3_home_read
+        and request is not None
+        and app_channel(request.headers.get(APP_CHANNEL_HEADER)) == 'beta'
+        and request.headers.get(home_membership.OWNERSHIP_HEADER) == '1'
+    ):
+        # This is the actual TestFlight Home response after owner and acknowledged
+        # episode projection, so readiness reflects what the reader can display.
+        finish_home_sli.observe_home_summaries(uid, conversations)
     if response is not None:
         for name, value in headers.items():
             response.headers[name] = value

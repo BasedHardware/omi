@@ -245,6 +245,22 @@ def _held_cuts(members, lines, now, silence_gap, continuity):
     return held
 
 
+def _cut_sources(cut, members, answered):
+    """Deliberate-Finish SLI: the manual-end recordings behind a cut instant, in id order.
+
+    An owner-level End cut (experiment ``end_open_conversation``) stands for the recording marks it
+    answered, so the Finish that finalized those recordings still joins the window it closed.
+    """
+    instants = {cut} | {mark for mark, owner_cut in answered.items() if owner_cut == cut}
+    return tuple(
+        sorted(
+            row['id']
+            for row in members
+            if row.get('v3_manual_end') and row.get('finished_at') and utc(row['finished_at']) in instants
+        )
+    )
+
+
 def stretches(
     members,
     now,
@@ -255,6 +271,7 @@ def stretches(
     max_window=timedelta(0),
     manual_cuts=(),
     continuity=False,
+    finish_routes=None,
 ):
     """``manual_cuts`` are owner-level end instants (experiment ``end_open_conversation``); empty is the baseline.
 
@@ -380,6 +397,8 @@ def stretches(
         # pending), so the window it closes is the last one and can stay open without joining later speech.
         first = min(held)
         until, finishing, awaited = held[first]
+        if finish_routes is not None and any(source['id'] != finishing for source in awaited):
+            finish_routes.add(finishing)
         waiting = {finishing} | {line['conversation_id'] for line in lines if line['start'] >= first}
         lines = [line for line in lines if line['start'] < first]
         hold = first, until
@@ -401,13 +420,21 @@ def stretches(
             if hold is None or cut < hold[0]
         )
     )
+
+    def apply_cut(group, cut):
+        if finish_routes is not None and not group['manual_end']:
+            sources = _cut_sources(cut, members, answered)
+            if sources:
+                group['_finish_sli_sources'] = sources
+        group['manual_end'] = True
+
     cut = next(cuts, None)
     for mark in marks:
         previous = groups[-1] if groups else None
         # A segment belongs to the side on which it starts, even if it crosses the cut.
         while cut is not None and cut <= mark['start']:
             if previous and previous['first'] < cut and ends(cut, previous, mark):
-                previous['manual_end'] = True
+                apply_cut(previous, cut)
             cut = next(cuts, None)
         silence = previous is None
         if previous is not None:
@@ -471,7 +498,7 @@ def stretches(
         group['end'] = max(line['end'] for line in group['lines'])
     while groups and cut is not None and cut <= now:
         if ends(cut, groups[-1]):
-            groups[-1]['manual_end'] = True
+            apply_cut(groups[-1], cut)
             break
         cut = next(cuts, None)
     # The window the held cut will close: the last one, when the awaited speech joins it.
@@ -494,6 +521,10 @@ def stretches(
         group['native_manual_end'] = native_manual_end
         if native_manual_end:
             group['native_manual_source'] = native_source
+            if finish_routes is not None:
+                # A native Finish cuts here, not through apply_cut (its recording is not a recording cut),
+                # so the Finish→Home SLI binds the window to that recording too (SCA-4489).
+                group['_finish_sli_sources'] = tuple(sorted({*group.get('_finish_sli_sources', ()), native_source}))
         group['legacy_manual_end'] = group['manual_end']
         group['manual_end'] = native_manual_end or group['legacy_manual_end']
         # Silence, a manual cut or the window cap starts a later stretch, so only the last one can

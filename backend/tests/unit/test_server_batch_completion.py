@@ -113,14 +113,18 @@ def test_zero_preview_terminal_preserves_explicit_v3_end_as_inert_provenance(rec
 
     with pytest.raises(ValueError, match='barrier not closed'):
         require_record_audio_barrier(db.rows[ROW])
-    assert complete(db, row) == 'completed'
+    result = complete(db, row)
+    # SCA-4489: the transaction reports its committed server manual-end marker privately; the public
+    # complete_server_batch_capture still answers 'completed'.
+    expected = 'completed_manual_end' if db.rows[ROW].get('v3_manual_end_requested') is True else 'completed'
+    assert result == expected
     assert require_record_audio_barrier(db.rows[ROW])['finished_at'] == NOW
     assert db.rows[ROW].get('v3_native_manual_stop') == (
         {'job_id': JOB, 'revision': 3, 'finished_at': NOW} if manual else None
     )
     assert 'v3_manual_end' not in db.rows[ROW]
     assert 'v3_pending' not in db.rows[ROW]
-    assert complete(db, row) == 'completed'
+    assert complete(db, row) == expected
     assert not db.transactions[-1].has_written
 
 
@@ -332,7 +336,9 @@ def _v3_finish(trigger, **row):
     db = StrictFirestore(
         {ROW: {**capture(), 'recording': True, **row}, JOB_ROW: {**job(), 'processing_trigger': trigger}}
     )
-    assert complete(db, {**capture(), 'recording': True, **row}) == 'completed'
+    result = complete(db, {**capture(), 'recording': True, **row})
+    expected = 'completed_manual_end' if db.rows[ROW].get('v3_manual_end_requested') is True else 'completed'
+    assert result == expected
     return db.rows[ROW]
 
 
@@ -341,6 +347,36 @@ def test_user_finish_of_audio_only_v3_recording_stores_the_request_not_the_cut()
     assert row['v3_manual_end_requested'] is True
     # Admission promotes it once the recording will land as one transcript; here it must stay inert.
     assert 'v3_manual_end' not in row and 'v3_pending' not in row
+
+
+def test_server_batch_manual_end_proof_is_observed_after_commit(monkeypatch):
+    db = StrictFirestore(
+        {
+            ROW: {**capture(), 'recording': True},
+            JOB_ROW: {**job(), 'processing_trigger': 'client_finalize'},
+        }
+    )
+    monkeypatch.setattr(jobs.firestore, 'transactional', lambda fn: fn)
+    monkeypatch.setattr(jobs, 'stop_quiet_check_for_conversation', lambda *args, **kwargs: None)
+    monkeypatch.setattr(jobs, 'invalidate_people_stats_cache', lambda *args, **kwargs: None)
+    monkeypatch.setattr(jobs.conversations_db, 'serving_for', lambda *args: False)
+
+    def assert_committed(uid, cid):
+        assert db.rows[ROW]['status'] == 'completed'
+        assert db.rows[ROW]['v3_manual_end_requested'] is True
+
+    observe = Mock(side_effect=assert_committed)
+    from utils.conversations.v3 import finish_home_sli
+
+    monkeypatch.setattr(finish_home_sli, 'observe_legacy_manual_end', observe)
+
+    assert (
+        lifecycle.complete_server_batch_capture(
+            UID, CID, {**capture(), 'recording': True}, JOB, 2, 4, firestore_client=db
+        )
+        == 'completed'
+    )
+    observe.assert_called_once_with(UID, CID)
 
 
 @pytest.mark.parametrize('trigger', ['capture_end', 'server_recovery', None])
@@ -352,7 +388,7 @@ def test_natural_end_stores_no_manual_end_request(trigger):
 def test_a_legacy_force_process_job_counts_as_a_user_finish():
     stored = {**capture(), 'recording': True}
     db = StrictFirestore({ROW: stored, JOB_ROW: {**job(), 'force_process': True}})
-    assert complete(db, stored) == 'completed'
+    assert complete(db, stored) == 'completed_manual_end'
     assert db.rows[ROW]['v3_manual_end_requested'] is True
 
 

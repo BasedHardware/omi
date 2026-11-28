@@ -38,6 +38,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import 'package:omi/utils/debugging/crashlytics_manager.dart';
 import 'package:omi/services/telemetry/client_telemetry.dart';
+import 'package:omi/services/telemetry/finish_home_sli_telemetry.dart';
 import 'package:omi/utils/analytics/background_checkpoint_store.dart';
 
 part 'analytics_flag_reader.dart';
@@ -149,6 +150,7 @@ class AnalyticsManager {
     _boundIdentity = identity;
     _identityChanges.value = _identityEpoch;
     ClientTelemetry.instance.onOwnerChanged(previous: previousOwner, next: identity);
+    FinishHomeSliTelemetry.instance.onOwnerChanged(previous: previousOwner, next: identity);
     _droppedEvents += _queuedEvents.length;
     _queuedEvents.clear();
     _pendingTimedEvents.clear();

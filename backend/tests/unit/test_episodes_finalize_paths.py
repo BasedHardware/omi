@@ -1185,6 +1185,19 @@ def test_named_finish_cuts_sealed_tail_of_window_that_left_live(sealed_named_rou
     counter.labels.assert_called_once_with('already_cut')
 
 
+def test_named_finish_binds_the_deliberate_finish_sli(conv, sealed_named_route, monkeypatch):
+    client, db, paths, enqueued, counter = sealed_named_route
+    bound = []
+    finish = Mock(bind=lambda recording_id, **kwargs: bound.append((recording_id, kwargs)))
+    monkeypatch.setattr(conv.finish_home_sli, 'from_request', lambda uid, request: finish)
+
+    assert client.post('/v1/conversations', json={'live_conversation_id': 'window'}).status_code == 200
+    counter.labels.assert_called_once_with('named_recording_cut')
+    # A retry answers from the stored cut and binds the same recording: the readback dedupes the Finish.
+    assert client.post('/v1/conversations', json={'live_conversation_id': 'window'}).status_code == 200
+    assert bound == [('latest', {'prove_legacy_manual_end': True})] * 2
+
+
 def test_named_finish_cuts_named_raw_capture(pre_window_finish_route, monkeypatch):
     client, db, paths, enqueued = pre_window_finish_route
     counter = Mock()
@@ -1432,6 +1445,25 @@ def test_named_finish_leaves_a_completed_visible_window_as_it_is(sealed_named_ro
     assert all(not tx.updates for tx in db.transactions) and not enqueued
     assert 'v3_manual_end' not in db.rows[paths['latest']]
     counter.labels.assert_called_once_with('already_visible')
+
+
+def test_already_visible_finish_binds_the_card_it_answered_with(conv, sealed_named_route, monkeypatch):
+    # SCA-4489 review: the Finish found its window already on Home with notes. Its cut is bound to that
+    # card as ready at the cut, so the readback scores it 0 s instead of an unmatched miss.
+    client, db, paths, enqueued, counter = sealed_named_route
+    db.rows[paths['window']].update(
+        status='completed',
+        tile_state='done',
+        home_hidden=False,
+        structured={'title': 'Morning standup', 'overview': 'Planned the release train.', 'emoji': '🗓️'},
+    )
+    bound = []
+    finish = Mock(bind=lambda recording_id, **kwargs: bound.append((recording_id, kwargs)))
+    monkeypatch.setattr(conv.finish_home_sli, 'from_request', lambda uid, request: finish)
+
+    assert client.post('/v1/conversations', json={'live_conversation_id': 'window'}).status_code == 200
+    counter.labels.assert_called_once_with('already_visible')
+    assert bound == [('latest', {'prove_legacy_manual_end': True, 'visible_card': 'window', 'visible_summary': True})]
 
 
 def _rotated_successor(db, a, *, speech):
@@ -2236,6 +2268,29 @@ def test_retried_live_window_finish_keeps_the_first_stamp(newer_capture_route, p
 
     assert _writes(db) == writes and target[FINISH_STAMP_FIELD] == stamp
     assert FINISH_STAMP_FIELD not in (a if path == 'newer' else b)
+
+
+@pytest.mark.parametrize('path', ['tail', 'newer', 'newer_dual', 'declined'])
+def test_live_window_finish_binds_the_sli_to_its_stamped_response_target(conv, newer_capture_route, monkeypatch, path):
+    """SCA-4489 x SCA-4434: the Finish-to-Home SLI binds the one recording whose card the answer names, the same
+    target that carries the v3_finish_requested stamp, on every live-window Finish path; never the ride-along."""
+    client, db, paths, enqueued, counter = newer_capture_route
+    bound = []
+    finish = Mock(bind=lambda recording_id, **kwargs: bound.append((recording_id, kwargs)))
+    monkeypatch.setattr(conv.finish_home_sli, 'from_request', lambda uid, request: finish)
+    b, a = db.rows[_B], db.rows[paths['latest']]
+    if path == 'tail':
+        del db.rows[_B]
+    elif path == 'newer_dual':
+        _batch_pending(b)
+    elif path == 'declined':
+        b['v3_pending'] = False  # recording_ineligible: the tail is cut and answers
+
+    assert client.post('/v1/conversations', json={}).status_code == 200
+
+    target, recording_id = (b, 'capture-b') if path == 'newer' else (a, 'latest')
+    assert target[FINISH_STAMP_FIELD]['path'] == ('tail' if path == 'declined' else path)
+    assert bound == [(recording_id, {'prove_legacy_manual_end': True})]
 
 
 @pytest.mark.parametrize('target', ['tail', 'newer'])

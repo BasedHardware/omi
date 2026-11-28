@@ -1,5 +1,5 @@
 // Derived by python3 tool/perf_shell.py from main.dart. Do not hand edit.
-// Extracted shell SHA256 (imports, telemetry field, builder chain): b0d1682ba2bc5d10ef3ada62b90bba12fb95af1729c9875300b6b82c03147eac
+// Extracted shell SHA256 (imports, telemetry field, builder chain): f6165f474ac3baecb088a0a681a9799a7adaf4cb90358b9234b3a2ee92357eb8
 // ignore_for_file: unused_import, unnecessary_import
 import 'package:omi/services/on_device/on_device_background.dart';
 import 'package:omi/services/onboarding_sync_runtime.dart';
@@ -8,6 +8,8 @@ import 'dart:async';
 import 'package:omi/services/telemetry/client_telemetry.dart';
 import 'package:omi/services/telemetry/client_telemetry_flags.dart';
 import 'package:omi/services/telemetry/client_telemetry_transport.dart';
+import 'package:omi/services/telemetry/finish_home_sli_telemetry.dart';
+import 'package:omi/services/telemetry/finish_home_sli_telemetry_transport.dart';
 import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';

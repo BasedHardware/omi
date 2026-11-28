@@ -9,6 +9,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/home/home_navigation.dart';
 import 'package:omi/pages/episodes/episode_presentation.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/services/telemetry/finish_home_sli_telemetry.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:omi/providers/home_provider.dart';
@@ -163,7 +164,7 @@ class _LiveConversationEndButtonState extends State<LiveConversationEndButton> {
                 var closed = false;
                 try {
                   final finish = capture.forceProcessingCurrentConversation(
-                      manualFinish: true, liveConversationId: conversation.id);
+                      manualFinish: true, finishSource: FinishCutSource.app, liveConversationId: conversation.id);
                   started = v3?.finishRow != null && !identical(v3!.finishRow, previousFinish);
                   await finish;
                   closed = true;

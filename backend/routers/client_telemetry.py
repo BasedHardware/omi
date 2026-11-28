@@ -14,12 +14,15 @@ import hmac
 import json
 import logging
 import os
+from datetime import datetime, timedelta, timezone
 from typing import Any
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
 from config.client_telemetry import MAX_REQUEST_BYTES, QUERY_CHANNELS, TelemetryContractError
+from config.app_channel import APP_CHANNEL_HEADER, app_channel
 from database.client_telemetry import accept_batch, query_is_stale, recent_owner_ids
 from database.client_telemetry_ops import (
     channel_roster,
@@ -30,11 +33,59 @@ from database.client_telemetry_ops import (
 from utils.client_telemetry_metrics import record_ingest
 from utils.executors import db_executor, run_blocking
 from utils.home_rows_metric import observe_home_rows
+from utils.conversations.v3 import finish_home_sli
+from utils.other import endpoints as auth
 from utils.other.endpoints import get_current_user_uid
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+_FINISH_CUT_KEYS = {"event_id", "occurred_at", "platform", "channel", "family", "attributes"}
+_FINISH_CUT_BATCH_KEYS = {"schema_version", "batch_id", "observations"}
+
+
+def _parse_finish_cut_batch(payload: Any) -> tuple[str, list[dict[str, Any]]]:
+    if not isinstance(payload, dict) or set(payload) != _FINISH_CUT_BATCH_KEYS:
+        raise ValueError("invalid finish cut batch")
+    if type(payload.get("schema_version")) is not int or payload["schema_version"] != 1:
+        raise ValueError("unsupported finish cut schema")
+    batch_id = str(UUID(payload.get("batch_id")))
+    observations = payload.get("observations")
+    if not isinstance(observations, list) or not 1 <= len(observations) <= 100:
+        raise ValueError("observations must contain 1 to 100 cuts")
+    now = datetime.now(timezone.utc)
+    seen_events: set[str] = set()
+    normalized = []
+    for raw in observations:
+        if not isinstance(raw, dict) or set(raw) != _FINISH_CUT_KEYS:
+            raise ValueError("invalid finish cut observation")
+        event_id = str(UUID(raw.get("event_id")))
+        if event_id in seen_events:
+            raise ValueError("duplicate event id")
+        seen_events.add(event_id)
+        raw_time = raw.get("occurred_at")
+        if not isinstance(raw_time, str):
+            raise ValueError("occurred_at must be an ISO timestamp")
+        occurred_at = datetime.fromisoformat(raw_time.replace("Z", "+00:00"))
+        if occurred_at.tzinfo is None:
+            raise ValueError("occurred_at must include a timezone")
+        occurred_at = occurred_at.astimezone(timezone.utc)
+        if not now - timedelta(hours=24) <= occurred_at <= now + timedelta(minutes=5):
+            raise ValueError("occurred_at is outside the accepted window")
+        attributes = raw.get("attributes")
+        if not isinstance(attributes, dict) or set(attributes) != {"operation_id", "source"}:
+            raise ValueError("invalid finish cut attributes")
+        operation_id = str(UUID(attributes.get("operation_id")))
+        source = attributes.get("source")
+        if source not in {"app", "pendant"}:
+            raise ValueError("source must be app or pendant")
+        if raw.get("platform") not in {"ios", "android"} or raw.get("channel") != "beta":
+            raise ValueError("finish cuts require an iOS or Android beta client")
+        if raw.get("family") != "finish_cut":
+            raise ValueError("unexpected finish cut family")
+        normalized.append({"operation_id": operation_id, "occurred_at": occurred_at, "source": source})
+    return batch_id, normalized
 
 
 def _error(error: TelemetryContractError) -> HTTPException:
@@ -119,6 +170,48 @@ async def post_client_telemetry_batch(request: Request, uid: str = Depends(get_c
         "batch_id": result["batch_id"],
         "accepted_count": result["accepted_count"],
         "duplicate_count": result["duplicate_count"],
+    }
+
+
+@router.post("/v1/telemetry/v3-finish-cuts", tags=["telemetry"])
+async def post_v3_finish_cuts(
+    request: Request,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "telemetry:finish_cut", fail_closed=True)),
+) -> Any:
+    """Accept only content-free, authenticated TestFlight Finish-cut observations."""
+    raw = await _raw_body(request)
+    try:
+        payload = json.loads(raw)
+        batch_id, observations = _parse_finish_cut_batch(payload)
+    except (json.JSONDecodeError, TypeError, ValueError, AttributeError):
+        record_ingest("invalid")
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "telemetry_invalid", "message": "invalid Finish-cut batch"},
+        ) from None
+
+    if app_channel(request.headers.get(APP_CHANNEL_HEADER)) != "beta":
+        record_ingest("forbidden")
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "telemetry_forbidden", "message": "beta app channel required"},
+        )
+    # Stage admission can read Redis on a cache miss and the holdout check walks a membership lookup:
+    # both are blocking, so the cohort check runs on the DB executor, never on the event loop.
+    if finish_home_sli.enabled() and await run_blocking(db_executor, finish_home_sli.home_cohort, uid):
+        for observation in observations:
+            finish_home_sli.observe_client_cut(
+                uid,
+                observation["operation_id"],
+                observation["occurred_at"],
+                observation["source"],
+            )
+    record_ingest("accepted")
+    return {
+        "schema_version": 1,
+        "batch_id": batch_id,
+        "accepted_count": len(observations),
+        "duplicate_count": 0,
     }
 
 

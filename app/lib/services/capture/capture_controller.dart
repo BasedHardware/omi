@@ -30,6 +30,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:uuid/uuid.dart';
 import 'package:omi/services/capture/capture_evidence_identity.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
@@ -63,6 +64,7 @@ import 'package:omi/services/capture/stt_mode_resolver.dart';
 import 'package:omi/services/capture/recording_lifecycle_telemetry.dart';
 import 'package:omi/backend/http/shared.dart' show accountDeletionWebSocketCloseCode;
 import 'package:omi/services/telemetry/client_telemetry.dart';
+import 'package:omi/services/telemetry/finish_home_sli_telemetry.dart';
 import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/capture_session_owner.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
@@ -2337,7 +2339,7 @@ class CaptureController extends ChangeNotifier
         PlatformManager.instance.analytics.omiDoubleTap(feature: 'process_conversation');
         HapticFeedback.lightImpact(); // The tap's only feedback on the phone until the processing row.
         unawaited(
-          forceProcessingCurrentConversation(manualFinish: true).catchError(
+          forceProcessingCurrentConversation(manualFinish: true, finishSource: FinishCutSource.pendant).catchError(
             (Object error, StackTrace stack) => _reportDetachedCaptureError(
               'capture_process_now',
               error,
@@ -4439,7 +4441,13 @@ class CaptureController extends ChangeNotifier
     }
   }
 
-  Future<void> forceProcessingCurrentConversation({bool manualFinish = false, String? liveConversationId}) async {
+  /// [manualFinish] shows the manual Finish row. [finishSource] is what the user acted on to ask
+  /// for this Finish; it records the SLI cut with that source. Null (the capture's own Process Now): no cut.
+  Future<void> forceProcessingCurrentConversation({
+    bool manualFinish = false,
+    FinishCutSource? finishSource,
+    String? liveConversationId,
+  }) async {
     // Reliability experiment end_open_conversation: the End happened now, not when the request leaves
     // (it waits for the disk below). Seal the speech file still being written so the audio up to this
     // moment is published, and send the moment with the request. Off: neither happens.
@@ -4450,6 +4458,21 @@ class CaptureController extends ChangeNotifier
     final liveTail = endedAt == null ? null : liveWordsOnEnd?.call(endedAt);
     final recordingSessionId = activeRecordingId;
     final conversationRevision = _systemSurfaceConversationRevision;
+    // Source is the asking action, not whether a live window is named (a Live Activity Finish names
+    // none). Capture the cut before awaiting the WAL snapshot.
+    final finishCutAt = DateTime.now();
+    final finishCutId =
+        finishSource != null && Env.isTestFlight && !Env.hasApiBaseUrlOverride ? const Uuid().v4() : null;
+    final finishCut =
+        finishCutId == null ? null : '${finishSource!.wire},$finishCutId,${finishCutAt.millisecondsSinceEpoch}';
+    // Not awaited here: the manual Finish row (and the End button's Home return, which reads it as soon
+    // as this call returns) must publish synchronously at the tap. The write is joined before the request
+    // leaves, so the cut is still on disk first. A failed telemetry write never blocks the Finish.
+    final Future<void> cutRecorded = finishCutId == null
+        ? Future<void>.value()
+        : FinishHomeSliTelemetry.instance
+            .recordCut(operationId: finishCutId, source: finishSource!.wire, occurredAt: finishCutAt)
+            .catchError((Object error, StackTrace _) => Logger.debug('finish_home_sli: cut not recorded: $error'));
     final close = _admitConversationClose(processNow: true);
     _pendingProcessCloses.add(close);
     final placeholderOwner = ++_processingPlaceholderOwner;
@@ -4472,6 +4495,7 @@ class CaptureController extends ChangeNotifier
       _finalizeGate.markFinalized();
       externalActions.onLiveFinalized();
       await close.snapshot;
+      await cutRecorded;
       if (lifetime.isClosed ||
           !_closeStoreIsCurrent(close) ||
           recordingSessionId != activeRecordingId ||
@@ -4493,6 +4517,7 @@ class CaptureController extends ChangeNotifier
               : processInProgressConversationOutcome(
                   liveConversationId: liveConversationId,
                   endedAt: endedAt,
+                  finishCut: finishCut,
                   liveTail: liveTail,
                   sendRequest: _processRequestSender);
       requestAdmitted = true;
@@ -5120,7 +5145,7 @@ class CaptureController extends ChangeNotifier
           FlushPhoneFramesStage() => Future.sync(_flushPhoneFrames),
           RecordingMarkStage() => Future.sync(() => updateRecordingState(stage.state)),
           DeviceStopTelemetryStage() => _deviceStopTelemetryBody(cleanDevice: stage.cleanDevice),
-          ProcessConversationStage() => _processConversationBody(stage.liveConversationId),
+          ProcessConversationStage() => _processConversationBody(stage),
           SocketClosedStage() => _socketClosedBody(stage.closeCode),
           SocketConnectedStage() => _socketConnectedBody(),
           SocketErrorStage() => _socketErrorBody(stage.error),
@@ -5138,8 +5163,12 @@ class CaptureController extends ChangeNotifier
           StartPhoneBatchStage() => _startPhoneMicBatchBody(auto: stage.auto),
         };
 
-  Future<void> _processConversationBody(String? liveConversationId) async {
-    await forceProcessingCurrentConversation(liveConversationId: liveConversationId);
+  Future<void> _processConversationBody(ProcessConversationStage stage) async {
+    await forceProcessingCurrentConversation(
+      liveConversationId: stage.liveConversationId,
+      // Coordinator Finishes are all asked for on the phone; the pendant double tap comes in directly.
+      finishSource: stage.deliberateFinish ? FinishCutSource.app : null,
+    );
     await _processInFlight;
   }
 }

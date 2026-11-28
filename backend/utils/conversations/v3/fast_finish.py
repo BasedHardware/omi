@@ -1412,6 +1412,11 @@ def _run(
     SECONDS.labels('write').observe(time.monotonic() - started)
     if written is False:
         return 'superseded'
+    from utils.conversations.v3 import finish_home_sli
+
+    # This pass runs on a worker thread, so the cohort read is synchronous here.
+    if finish_home_sli.measured(uid):
+        finish_home_sli.observe_route(uid, conversation_id, 'fast')
     if cut is not None:
         try:
             # After the write returned, so the cut always lands after the transcript. Past its bound

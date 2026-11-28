@@ -67,7 +67,7 @@ from utils.conversations.v3 import (
     visibility,
     context,
 )
-from utils.conversations.v3 import manual_cuts, refinement, preview_wakes, rederive_plan, summary_wake
+from utils.conversations.v3 import finish_home_sli, manual_cuts, refinement, preview_wakes, rederive_plan, summary_wake
 from utils.conversations.v3 import live_tail
 from utils.conversations.v3 import capture_device
 from utils.conversations.v3.word_floor import MIN_TASK_WORDS, has_unspaced_script, text_word_count
@@ -433,6 +433,52 @@ async def _load_live_batch(uid, token, parked, unlocked_page=None, seed_ceiling=
     raise AssertionError('bounded pending batch sizes are empty')
 
 
+async def _reconcile_groups(
+    uid,
+    eligible,
+    now,
+    *,
+    since,
+    until,
+    internal_end,
+    historical_timing,
+    silence_gap,
+    lock_delay,
+    custom_timing,
+    cohesion,
+    derive,
+    on_open,
+):
+    # Live and on-open passes both commit Finish windows: a card first committed by an on-open pass is still
+    # bound once (remember_window skips recordings the stored card already ended with). Backfill and re-derive
+    # never measure. Only owners whose Finish cuts the SLI admits (the Home cohort) are observed.
+    measure_finish = not derive and await finish_home_sli.measured_async(uid)
+    held_finishes = set() if measure_finish else None
+    owner_cuts = []
+    if historical_timing is not None:
+        groups = historical_stretches(eligible, now, since=since, until=until, internal_end=internal_end)
+    else:
+        # Experiment end_open_conversation: owner-level End instants cut the live builder's stretches.
+        # Off (the baseline) this reads nothing and passes no cuts. Backfill and re-derive do not read them.
+        if not derive and manual_cuts.enabled(uid):
+            owner_cuts = await run_blocking(db_executor, manual_cuts.load, uid, eligible)
+        groups = outline.stretches(
+            eligible,
+            now,
+            silence_gap=silence_gap,
+            lock_delay=lock_delay,
+            settle_on_landing=settle_on_landing_enabled(custom_timing=custom_timing, cohesion=cohesion, derive=derive),
+            max_window=timedelta(seconds=max_window_seconds()),
+            **({'manual_cuts': owner_cuts} if owner_cuts else {}),
+            # Live passes only: backfill and re-derive keep their windowing (cuts there are long settled).
+            continuity=capture_continuity_enabled() and not derive,
+            **({'finish_routes': held_finishes} if measure_finish else {}),
+        )
+    if held_finishes:
+        finish_home_sli.observe_held(uid, sorted(held_finishes))
+    return groups, owner_cuts, measure_finish
+
+
 def _smaller_seed_ceiling(error, page, ceiling=None):
     """The next SEED_CEILINGS step after a commit-time locked-closure batch cap, or None to park.
 
@@ -758,7 +804,12 @@ async def _plan_projection(
     lock_delay,
     run_id,
     first_open_gating,
+    finish_windows=None,
+    measure_finish=False,
 ):
+    if finish_windows is not None:
+        # Each (re)plan rebuilds the Finish→Home window bindings from scratch (SCA-4489).
+        finish_windows.clear()
     preferred = conversation_id if on_open and custom_timing else None
     revoked_native_ids = {
         cid for cid, row in existing.items() if not derive and _revoked_native_window(row, recordings)
@@ -1029,6 +1080,16 @@ async def _plan_projection(
             # queue never pick up historical notes.
             row['v3_process_pending'] = False
             row['v3_backfill_process_pending'] = True
+        if finish_windows is not None:
+            finish_home_sli.remember_window(
+                finish_windows,
+                enabled=measure_finish,
+                ended=ended,
+                window=window,
+                row=row,
+                prior=prior,
+                was_ended=bool(was_ended),
+            )
         rows.append(row)
         for rid, claims in row['_v3_claims'].items():
             allocated.setdefault(rid, []).extend((claim['start'], claim['end']) for claim in claims)
@@ -1169,27 +1230,21 @@ async def reconcile(
         eligible = [r for r in recordings.values() if policy.builder_eligible(r)]
         custom_timing = (silence_seconds, lock_seconds) != (DEFAULT_BOUNDARY_SECONDS, DEFAULT_BOUNDARY_SECONDS)
         silence_gap, lock_delay = timedelta(seconds=silence_seconds), timedelta(seconds=lock_seconds)
-        owner_cuts = []
-        if historical_timing is not None:
-            groups = historical_stretches(eligible, now, since=since, until=until, internal_end=internal_end)
-        else:
-            # Experiment end_open_conversation: owner-level End instants cut the live builder's stretches.
-            # Off (the baseline) this reads nothing and passes no cuts. Backfill and re-derive do not read them.
-            if not derive and manual_cuts.enabled(uid):
-                owner_cuts = await run_blocking(db_executor, manual_cuts.load, uid, eligible)
-            groups = outline.stretches(
-                eligible,
-                now,
-                silence_gap=silence_gap,
-                lock_delay=lock_delay,
-                settle_on_landing=settle_on_landing_enabled(
-                    custom_timing=custom_timing, cohesion=cohesion, derive=derive
-                ),
-                max_window=timedelta(seconds=max_window_seconds()),
-                **({'manual_cuts': owner_cuts} if owner_cuts else {}),
-                # Live passes only: backfill and re-derive keep their windowing (cuts there are long settled).
-                continuity=capture_continuity_enabled() and not derive,
-            )
+        groups, owner_cuts, measure_finish = await _reconcile_groups(
+            uid,
+            eligible,
+            now,
+            since=since,
+            until=until,
+            internal_end=internal_end,
+            historical_timing=historical_timing,
+            silence_gap=silence_gap,
+            lock_delay=lock_delay,
+            custom_timing=custom_timing,
+            cohesion=cohesion,
+            derive=derive,
+            on_open=on_open,
+        )
         if live and any(not g['finished'] or (g.get('window_cap_end') and not g['locked']) for g in groups):
             # Speech within five minutes of now is still the live builder's; refuse before any paid call.
             raise Conflict('rederive_live_open')
@@ -1246,6 +1301,7 @@ async def reconcile(
             and not eligible_ids.intersection(row.get('v3_recording_ids') or ())
         }
 
+        finish_windows: dict[str, tuple[str, ...]] = {}
         plan = partial(
             _plan_projection,
             uid,
@@ -1267,6 +1323,8 @@ async def reconcile(
             lock_delay=lock_delay,
             run_id=run_id,
             first_open_gating=first_open_gating,
+            finish_windows=finish_windows,
+            measure_finish=measure_finish,
         )
 
         rows = await plan()
@@ -1352,6 +1410,7 @@ async def reconcile(
                 # again. If this cleanup fails too, the partition stays unfinished until resume or undo.
                 await run_blocking(db_executor, rederive_store.drop_unwritten_priors, uid, run_id, priors)
             raise
+        finish_home_sli.observe_windows(uid, rows, finish_windows)
         if not derive and not on_open:
             # Experiment fast_end_feedback: a client waiting on an ended conversation is woken as soon as
             # it is committed with its outline, before its summary starts. Off, nothing is published.
