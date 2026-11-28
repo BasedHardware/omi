@@ -14,9 +14,7 @@ on:
       - 'backend/charts/monitoring/dashboards/**'
       - 'backend/charts/monitoring/alerts/**'
       - 'backend/charts/monitoring/alert-rules.json'
-      - 'backend/scripts/provision_monitoring_alerts.py'
       - 'backend/scripts/provision_grafana_dashboards.py'
-      - '.github/workflows/grafana_dashboard_provisioning.yml'
       - '.github/scripts/provision_grafana_dashboards.py'
       - '.github/scripts/grafana_business.py'
       - 'web/admin/grafana/dashboards/omi-tv-v2.json'
@@ -29,8 +27,29 @@ on:
         options: [prod, dev]
         default: prod
         required: true
+      alert_scope:
+        description: 'Provision all alerts or only the Soniox daily-hours alert'
+        type: choice
+        options: [all, soniox-alert]
+        default: all
+        required: true
+      alert_operation:
+        description: 'Apply alert definitions, or restore the selected Soniox apply'
+        type: choice
+        options: [apply, restore]
+        default: apply
+        required: true
+      source_run_id:
+        description: 'Original Soniox apply run ID (restore only)'
+        type: string
+        required: false
+      source_sha:
+        description: 'Full source SHA from the original Soniox apply run (restore only)'
+        type: string
+        required: false
 
 permissions:
+  actions: read
   contents: read
 
 concurrency:
@@ -66,8 +85,44 @@ jobs:
               fi
             fi
           done < <(find backend/charts/monitoring/dashboards -name '*.json' -print0)
-          python3 backend/scripts/provision_monitoring_alerts.py --lint
           exit $fail
+      - name: Validate alert scope and operation
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          GITHUB_REF: ${{ github.ref }}
+          ENVIRONMENT: ${{ inputs.environment }}
+          ALERT_SCOPE: ${{ inputs.alert_scope }}
+          ALERT_OPERATION: ${{ inputs.alert_operation }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" != workflow_dispatch ]]; then
+            python3 backend/scripts/provision_monitoring_alerts.py --lint
+            exit 0
+          fi
+          case "$ALERT_SCOPE" in
+            all)
+              [[ "$ALERT_OPERATION" == apply ]] || { echo 'restore is available only for soniox-alert scope' >&2; exit 1; }
+              python3 backend/scripts/provision_monitoring_alerts.py --lint
+              ;;
+            soniox-alert)
+              [[ "$GITHUB_REF" == refs/heads/main ]] || { echo 'Soniox alert writes require main' >&2; exit 1; }
+              [[ "$ENVIRONMENT" == prod ]] || { echo 'Soniox alert writes require the prod environment' >&2; exit 1; }
+              if [[ "$ALERT_OPERATION" == restore ]]; then
+                [[ "$SOURCE_RUN_ID" =~ ^[1-9][0-9]*$ ]] || { echo 'restore requires a positive source_run_id' >&2; exit 1; }
+                [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'restore requires a full lowercase source_sha' >&2; exit 1; }
+              elif [[ "$ALERT_OPERATION" != apply ]]; then
+                echo 'unsupported Soniox alert operation' >&2
+                exit 1
+              fi
+              python3 backend/scripts/provision_monitoring_alerts.py --soniox-alert-only --lint
+              ;;
+            *)
+              echo 'unsupported alert_scope' >&2
+              exit 1
+              ;;
+          esac
 
   provision:
     if: github.ref == 'refs/heads/main'
@@ -83,6 +138,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Provision dashboards
+        if: inputs.alert_scope != 'soniox-alert'
         env:
           # Ops Grafana service-account token (same secret family the pusher
           # auto-deploy uses for alert-route verification). The former TV
@@ -105,7 +161,7 @@ jobs:
             --backup-file "$RUNNER_TEMP/grafana-dashboard-backup.json" \
             --allowlist "$DASHBOARD_ALLOWLIST"
       - name: Provision private Business board (prod only)
-        if: matrix.environment == 'prod'
+        if: matrix.environment == 'prod' && inputs.alert_scope != 'soniox-alert'
         env:
           BUSINESS_GRAFANA_TOKEN: ${{ secrets.BUSINESS_GRAFANA_TOKEN }}
           GRAFANA_URL: ${{ matrix.environment == 'prod' && 'https://monitor.omi.me' || 'https://monitor.omiapi.com' }}
@@ -123,13 +179,72 @@ jobs:
       - name: Apply production alert definitions and check drift
         # Dispatch-only: a push resolves to the dev environment anyway, so no
         # dashboard-path push can reach this prod step.
-        if: github.event_name == 'workflow_dispatch' && matrix.environment == 'prod'
+        if: github.event_name == 'workflow_dispatch' && matrix.environment == 'prod' && inputs.alert_scope != 'soniox-alert'
         env:
           MONITOR_GRAFANA_TOKEN: ${{ secrets.MONITOR_GRAFANA_TOKEN }}
         run: |
           set -euo pipefail
           python3 backend/scripts/provision_monitoring_alerts.py \
             --apply --backup-file "$RUNNER_TEMP/grafana-alert-backup.json"
+      - name: Capture the Soniox alert preimage
+        if: github.event_name == 'workflow_dispatch' && matrix.environment == 'prod' && inputs.alert_scope == 'soniox-alert' && inputs.alert_operation == 'apply'
+        env:
+          MONITOR_GRAFANA_TOKEN: ${{ secrets.MONITOR_GRAFANA_TOKEN }}
+          SOURCE_SHA: ${{ github.sha }}
+          SOURCE_RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 backend/scripts/provision_monitoring_alerts.py \
+            --soniox-alert-only \
+            --prepare-soniox-alert \
+            --source-sha "$SOURCE_SHA" \
+            --source-run-id "$SOURCE_RUN_ID" \
+            --backup-file "$RUNNER_TEMP/grafana-alert-backup.json"
+      - name: Preserve pre-apply Soniox alert state for rollback
+        if: github.event_name == 'workflow_dispatch' && matrix.environment == 'prod' && inputs.alert_scope == 'soniox-alert' && inputs.alert_operation == 'apply'
+        uses: actions/upload-artifact@v7
+        with:
+          name: grafana-soniox-alert-backup-${{ github.run_id }}
+          path: ${{ runner.temp }}/grafana-alert-backup.json
+          if-no-files-found: error
+          retention-days: 15
+      - name: Apply only the Soniox daily-hours alert
+        if: github.event_name == 'workflow_dispatch' && matrix.environment == 'prod' && inputs.alert_scope == 'soniox-alert' && inputs.alert_operation == 'apply'
+        env:
+          MONITOR_GRAFANA_TOKEN: ${{ secrets.MONITOR_GRAFANA_TOKEN }}
+          SOURCE_SHA: ${{ github.sha }}
+          SOURCE_RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          python3 backend/scripts/provision_monitoring_alerts.py \
+            --soniox-alert-only \
+            --apply-soniox-alert \
+            --source-sha "$SOURCE_SHA" \
+            --source-run-id "$SOURCE_RUN_ID" \
+            --backup-file "$RUNNER_TEMP/grafana-alert-backup.json"
+      - name: Download the selected Soniox apply snapshot
+        if: github.event_name == 'workflow_dispatch' && matrix.environment == 'prod' && inputs.alert_scope == 'soniox-alert' && inputs.alert_operation == 'restore'
+        uses: actions/download-artifact@v7
+        with:
+          name: grafana-soniox-alert-backup-${{ inputs.source_run_id }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.source_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: ${{ runner.temp }}/soniox-alert-rollback
+      - name: Restore or remove only the Soniox daily-hours alert
+        if: github.event_name == 'workflow_dispatch' && matrix.environment == 'prod' && inputs.alert_scope == 'soniox-alert' && inputs.alert_operation == 'restore'
+        env:
+          MONITOR_GRAFANA_TOKEN: ${{ secrets.MONITOR_GRAFANA_TOKEN }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+        run: |
+          set -euo pipefail
+          python3 backend/scripts/restore_soniox_alert.py \
+            --backup-file "$RUNNER_TEMP/soniox-alert-rollback/grafana-alert-backup.json" \
+            --expected-source-sha "$SOURCE_SHA" \
+            --expected-source-run-id "$SOURCE_RUN_ID" \
+            --apply --confirm-soniox-alert-restore
       - name: Preserve pre-apply dashboard definitions for reviewed rollback
         if: always()
         uses: actions/upload-artifact@v7
@@ -139,7 +254,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 15
       - name: Preserve pre-apply alert definitions for reviewed rollback
-        if: always() && matrix.environment == 'prod'
+        if: always() && matrix.environment == 'prod' && inputs.alert_scope != 'soniox-alert'
         uses: actions/upload-artifact@v7
         with:
           name: grafana-alert-backup-${{ github.run_id }}

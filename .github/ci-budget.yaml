@@ -2149,7 +2149,7 @@
       "budget_p50_minutes": 6,
       "display_name": "provision",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 1,
+      "expected_runs_per_day": 2,
       "if": "github.ref == 'refs/heads/main'",
       "matrix": {
         "environment": [
@@ -2159,7 +2159,7 @@
       "matrix_size": 1,
       "needs": "validate",
       "owner": "CI maintainers",
-      "rationale": "Funnel trigger row (omi-tv-funnel.json, with the board split in #24942): push to main only when that file changes, so cadence is at most one run per merged funnel change; expected_runs_per_day 1 is a conservative daily ceiling and the runs are not PR runs. Minutes per run: the existing 6-minute p50 budget. Push runs resolve to the dev environment, so the prod-only alert and Business steps cannot run from this trigger (the alert step is also dispatch-gated).",
+      "rationale": "Existing main/manual Grafana workflow now includes the scoped Soniox apply/restore input. Push runs stay limited to dashboard and alert data changes; workflow and alert-helper-only changes are excluded so this PR's merge cannot itself provision dashboards. The Soniox scope uses the prod Environment and shared alert lock, and skips dashboard steps. Expected runs per day 2 conservatively covers data pushes plus the manual scoped operation; 6-minute p50 is retained for the existing environment job.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2171,13 +2171,13 @@
       "budget_p50_minutes": 6,
       "display_name": "provision-prod-ops-dashboards",
       "expected_runs_class": "non-pr",
-      "expected_runs_per_day": 3,
+      "expected_runs_per_day": 2,
       "if": "github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'BasedHardware/omi'",
       "matrix": {},
       "matrix_size": 1,
       "needs": "validate",
       "owner": "CI maintainers",
-      "rationale": "Prod Ops dashboard apply on every push to main that matches the workflow trigger paths (approved by David 2026-11-09); the same job applies the Business TV boards once BUSINESS_GRAFANA_TOKEN is added to the grafana-dashboards-prod environment and warns and skips until then (David 2026-11-12). The apply is idempotent and has no change-detection skip, so a superseded push run cannot drop a dashboard change. Uses the production MONITOR_GRAFANA_TOKEN from the grafana-dashboards-prod environment, which has no required reviewers (the repo-level token is dev-only). expected_runs_per_day 3 is a conservative daily ceiling for merges plus alert and script pushes. The 6-minute p50 is a reviewed estimate for two Grafana API applies (Ops, then Business); re-measure with --reseed after the first runs. The job runs only in BasedHardware/omi.",
+      "rationale": "Prod Ops dashboard apply on dashboard or provisioning-data pushes to main (approved by David 2026-11-09); workflow and alert-helper-only changes are excluded to prevent code-only merges from writing dashboards. The same job applies Business TV boards once BUSINESS_GRAFANA_TOKEN is added to grafana-dashboards-prod and warns and skips until then (David 2026-11-12). The apply remains idempotent and uses the production MONITOR_GRAFANA_TOKEN from the no-reviewer dashboard environment. Expected runs per day 2 conservatively covers dashboard changes after excluding workflow and alert-helper pushes; the reviewed 6-minute p50 covers Ops and Business API applies. The job runs only in BasedHardware/omi.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2189,13 +2189,13 @@
       "budget_p50_minutes": 6,
       "display_name": "validate",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 1,
+      "expected_runs_per_day": 2,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Funnel trigger row (omi-tv-funnel.json, with the board split in #24942): push to main only when that file changes, so cadence is at most one run per merged funnel change; expected_runs_per_day 1 is a conservative daily ceiling and the runs are not PR runs. Minutes per run: the existing 6-minute p50 budget. Push runs resolve to the dev environment, so the prod-only alert and Business steps cannot run from this trigger (the alert step is also dispatch-gated).",
+      "rationale": "Existing workflow validates dashboard and alert sources on data pushes and workflow dispatch; code-only changes are checked in PR CI and do not trigger a dashboard deploy. Added the explicit Soniox-only prod scope and source-bound restore input. Expected runs per day 2 conservatively covers data pushes plus manual scoped operations; 6-minute p50 is retained for validation and dashboard data checks.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -6489,7 +6489,7 @@
     "grafana_dashboard_provisioning.yml": {
       "name": "Provision Grafana dashboards",
       "owner": "CI maintainers",
-      "rationale": "Existing main/manual workflow validates alert sources as well as dashboards, selects one environment, and requires explicit protected prod dispatch for alerts and the Ops boards; every push to main that matches the trigger paths applies prod Ops dashboards through provision-prod-ops-dashboards (prod MONITOR_GRAFANA_TOKEN from the grafana-dashboards-prod environment with no required reviewers, approved by David 2026-11-09); the Business TV boards apply from the same no-reviewer job once BUSINESS_GRAFANA_TOKEN is added to the grafana-dashboards-prod environment and stay on the gated prod path until then (David 2026-11-12); the prod-only Business API step reuses the existing job, no new workflow or PR matrix. #24942 adds the omi-tv-funnel.json path and allowlist entry; push runs resolve to dev, and the prod alert step is dispatch-gated.",
+      "rationale": "Existing main/manual workflow validates dashboard and alert sources, selects one environment, and keeps production alert changes behind explicit prod dispatch. Its Soniox-only input applies or restores one rule under the same protected prod Environment and lock, while skipping dashboard steps. Workflow and alert-helper-only code changes are excluded from push paths so merging this route cannot itself write dashboards; dashboard and alert data changes retain their push behavior. Production Ops dashboards still use the no-reviewer grafana-dashboards-prod environment (David approved 2026-11-09), and Business TV dashboards use it when BUSINESS_GRAFANA_TOKEN is configured (David approved 2026-11-12). The Business API provisioning step remains in the existing job; no new workflow or PR matrix is added.",
       "triggers": {
         "push": {
           "branches": [
@@ -6499,9 +6499,7 @@
             "backend/charts/monitoring/dashboards/**",
             "backend/charts/monitoring/alerts/**",
             "backend/charts/monitoring/alert-rules.json",
-            "backend/scripts/provision_monitoring_alerts.py",
             "backend/scripts/provision_grafana_dashboards.py",
-            ".github/workflows/grafana_dashboard_provisioning.yml",
             ".github/scripts/provision_grafana_dashboards.py",
             ".github/scripts/grafana_business.py",
             "web/admin/grafana/dashboards/omi-tv-v2.json",
@@ -6510,6 +6508,26 @@
         },
         "workflow_dispatch": {
           "inputs": {
+            "alert_operation": {
+              "default": "apply",
+              "description": "Apply alert definitions, or restore the selected Soniox apply",
+              "options": [
+                "apply",
+                "restore"
+              ],
+              "required": "true",
+              "type": "choice"
+            },
+            "alert_scope": {
+              "default": "all",
+              "description": "Provision all alerts or only the Soniox daily-hours alert",
+              "options": [
+                "all",
+                "soniox-alert"
+              ],
+              "required": "true",
+              "type": "choice"
+            },
             "environment": {
               "default": "prod",
               "description": "Select the Grafana to provision",
@@ -6519,6 +6537,16 @@
               ],
               "required": "true",
               "type": "choice"
+            },
+            "source_run_id": {
+              "description": "Original Soniox apply run ID (restore only)",
+              "required": "false",
+              "type": "string"
+            },
+            "source_sha": {
+              "description": "Full source SHA from the original Soniox apply run (restore only)",
+              "required": "false",
+              "type": "string"
             }
           }
         }
