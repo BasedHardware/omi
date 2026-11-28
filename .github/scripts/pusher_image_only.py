@@ -182,28 +182,49 @@ def guarded_image_patch(obj, name, expected, desired, *, allow_same=False):
     ]
 
 
-def submit_image_patch(cluster, obj, name, expected, desired, *, dry_run, allow_same=False):
-    patch = guarded_image_patch(obj, name, expected, desired, allow_same=allow_same)
-    mode = "--dry-run=server" if dry_run else "--dry-run=none"
-    admitted = cluster.call(
-        "patch",
-        "deployment.apps",
-        name,
-        "--namespace",
-        NAMESPACE,
-        "--type=json",
-        "--patch-file=/dev/stdin",
-        mode,
-        "-o",
-        "json",
-        reason="server_dry_run_rejected" if dry_run else "live_patch_unconfirmed_reconcile_before_retry",
-        stdin=json.dumps(patch),
-    )
-    require(
-        admitted["metadata"]["uid"] == version(obj)[0] and comparable(admitted) == with_image(obj, name, desired),
-        "admission_changed_more_than_image",
-    )
-    return admitted
+def submit_image_patch(cluster, obj, name, expected, desired, *, dry_run, allow_same=False, attempts=3):
+    """Submit the one guarded patch, re-reading before a read-only probe retry.
+
+    The post-move inverse probe runs a fraction of a second after the forward patch,
+    while the Deployment's status is still being written for the rollout that patch
+    started. Its resourceVersion precondition then fails on a snapshot that is
+    already stale, which is not an admission refusal: the 2026-11-28 promotion
+    (runs 46148826874, 46150013617) reversed twice on exactly that race. A live
+    write is never retried, and a probe that still fails after the bound fails
+    closed as before.
+    """
+
+    current = obj
+    for attempt in range(1, attempts + 1):
+        patch = guarded_image_patch(current, name, expected, desired, allow_same=allow_same)
+        mode = "--dry-run=server" if dry_run else "--dry-run=none"
+        try:
+            admitted = cluster.call(
+                "patch",
+                "deployment.apps",
+                name,
+                "--namespace",
+                NAMESPACE,
+                "--type=json",
+                "--patch-file=/dev/stdin",
+                mode,
+                "-o",
+                "json",
+                reason="server_dry_run_rejected" if dry_run else "live_patch_unconfirmed_reconcile_before_retry",
+                stdin=json.dumps(patch),
+            )
+        except Refused:
+            if not dry_run or attempt == attempts:
+                raise
+            current = cluster.get("deployment.apps", name, namespace=NAMESPACE)
+            continue
+        require(
+            admitted["metadata"]["uid"] == version(current)[0]
+            and comparable(admitted) == with_image(current, name, desired),
+            "admission_changed_more_than_image",
+        )
+        return admitted
+    raise Refused("server_dry_run_rejected")
 
 
 class ReadOnlyCluster:
