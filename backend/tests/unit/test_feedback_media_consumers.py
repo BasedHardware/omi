@@ -27,6 +27,8 @@ def clean_policy(monkeypatch):
         for suffix in ('', '_SERVE_PERCENT', '_SERVE_UID_SHA256S', '_SHADOW_PERCENT'):
             monkeypatch.delenv(flag + suffix, raising=False)
     monkeypatch.setenv('SPEAKER_EVIDENCE_MODE', 'off')
+    # Stage 1 of the 2026-11-28 retirement: an unset mode is off now, so bind the shadow under test.
+    monkeypatch.setenv(FLAG, 'shadow')
     monkeypatch.setenv(FLAG + '_SHADOW_PERCENT', '100')
     monkeypatch.setattr(admission, 'assert_account_active', lambda *a: None)
 

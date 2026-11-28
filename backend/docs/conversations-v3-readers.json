@@ -351,6 +351,14 @@
     "policy": "storage",
     "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
   },
+  "backend/database/first_week_queries.py:collection_group": {
+    "policy": "storage",
+    "reason": "First-week close-out page reads only the stored window end and counting key of an uncounted conversation; no content, identity or transcript leaves the page."
+  },
+  "backend/database/outbox_firestore.py:collection": {
+    "policy": "storage",
+    "reason": "Producer-side first-week scheduling reads only creation, stored-window, and processing-tier metadata; it does not expose conversation content."
+  },
   "backend/database/summary_debt_queries.py:collection_group": {
     "policy": "storage",
     "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."

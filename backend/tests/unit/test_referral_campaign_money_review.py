@@ -8,6 +8,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 import pytest
 
+from config.summary_guarantee import FIRST_WEEK_ENABLED_ENV
 from database import referral_campaign as ledger, users
 from models.users import PlanType, Subscription
 from routers import referrals
@@ -189,6 +190,38 @@ def test_renewal_delivered_after_original_grant_expired_restores_paid_overlap(st
     assert grant['starts_at'] == int(delivered.timestamp())
     assert grant['ends_at'] - grant['starts_at'] == duration
     assert effective_subscription_payload(paid, grant, now=delivered + timedelta(seconds=1))['plan'] == 'unlimited_v2'
+
+
+@pytest.mark.parametrize('enabled', [False, True])
+def test_commercial_subscription_first_week_fields_follow_the_kill_switch(store, monkeypatch, enabled):
+    monkeypatch.setenv(FIRST_WEEK_ENABLED_ENV, str(enabled).lower())
+    monkeypatch.setattr(users, 'db', store)
+    monkeypatch.setattr(users, 'invalidate_subscription', lambda _uid: None)
+    monkeypatch.setattr(ledger, 'current_policy', lambda: POLICY)
+    paid_start = int(NOW.timestamp())
+    subscription = {
+        'plan': 'unlimited',
+        'status': 'active',
+        'current_period_start': paid_start,
+        'current_period_end': paid_start + 30 * 24 * 60 * 60,
+    }
+    context = {
+        **subscription,
+        '_first_week_payment_status': 'active',
+        '_first_week_paid_since': paid_start,
+    }
+
+    users.update_user_subscription.__wrapped__('owner', context)
+
+    stored = store.rows[('users', 'owner')]
+    assert stored['subscription'] == subscription
+    assert '_first_week_trialing' not in stored['subscription']
+    if enabled:
+        assert stored['paid_since'] == paid_start
+        assert stored['first_week_trialing'] is False
+    else:
+        assert 'paid_since' not in stored
+        assert 'first_week_trialing' not in stored
 
 
 def test_commercial_checkout_uses_raw_period_valid_authority_not_promo(store, monkeypatch):

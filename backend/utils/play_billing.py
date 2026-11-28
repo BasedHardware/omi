@@ -105,6 +105,8 @@ class PlayState:
     obfuscated_account_id: Optional[str]
     linked_token: Optional[str]
     test_purchase: bool
+    offer_phase: Optional[str] = None
+    latest_successful_order_id: Optional[str] = None
 
     def has_access(self, now: int) -> bool:
         if self.state == STATE_GRACE:
@@ -122,6 +124,19 @@ def read_state(resource: Mapping[str, Any]) -> PlayState:
     items = resource.get('lineItems') or []
     item = items[0] if items and isinstance(items[0], Mapping) else {}
     offer = item.get('offerDetails') or {}
+    offer_phase = item.get('offerPhase') or {}
+    phase = (
+        next(
+            (
+                name
+                for name in ('freeTrial', 'introductoryPrice', 'basePrice', 'prorationPeriod')
+                if name in offer_phase
+            ),
+            None,
+        )
+        if isinstance(offer_phase, Mapping)
+        else None
+    )
     renewing = item.get('autoRenewingPlan') or {}
     identifiers = resource.get('externalAccountIdentifiers') or {}
     return PlayState(
@@ -136,6 +151,8 @@ def read_state(resource: Mapping[str, Any]) -> PlayState:
         obfuscated_account_id=identifiers.get('obfuscatedExternalAccountId'),
         linked_token=resource.get('linkedPurchaseToken'),
         test_purchase='testPurchase' in resource,
+        offer_phase=phase,
+        latest_successful_order_id=item.get('latestSuccessfulOrderId'),
     )
 
 
@@ -184,6 +201,26 @@ def paid_after_refund(state: PlayState, through: Optional[int]) -> bool:
     return state.state in PAID_STATES and state.expiry is not None and state.expiry > through
 
 
+def _first_week_payment_context(state: PlayState) -> dict[str, Any]:
+    """Return provider evidence without treating a free-trial entitlement as payment."""
+    configured_trial = state.offer_id == config.trial_offer_id()
+    free_trial = state.offer_phase == 'freeTrial' or (state.offer_phase is None and configured_trial)
+    if free_trial:
+        return {'_first_week_payment_status': 'trialing'}
+    if state.state not in PAID_STATES:
+        return {}
+    if configured_trial and not (
+        state.offer_phase in {'basePrice', 'introductoryPrice'} and state.latest_successful_order_id
+    ):
+        # A trial offer only becomes payment evidence when Play reports a paid
+        # phase and a successful order for it.
+        return {}
+    return {
+        '_first_week_payment_status': 'active',
+        '_first_week_paid_since': state.start,
+    }
+
+
 def play_subscription(state: PlayState, now: Optional[int] = None) -> Subscription:
     """The Omi Pro row a Stripe subscription with the same period would store."""
     return Subscription(
@@ -204,7 +241,9 @@ def _grant(uid: str, state: PlayState, token_hash: str) -> Subscription:
         uid,
         {play_db.USER_POINTER_FIELD: token_hash, play_db.PENDING_FIELD: None, play_db.CUSTOMER_FIELD: True},
     )
-    users_db.update_user_subscription(uid, subscription.model_dump())
+    subscription_data = subscription.model_dump()
+    subscription_data.update(_first_week_payment_context(state))
+    users_db.update_user_subscription(uid, subscription_data)
     redis_db.set_credits_invalidation_signal(uid)
     conversations_db.unlock_all_conversations(uid)
     memories_db.unlock_all_memories(uid)
@@ -221,7 +260,11 @@ def _revoke(uid: str, token_hash: str) -> bool:
     if getattr(current, 'provider', None) != 'play':
         return False
     users_db.update_user_subscription(
-        uid, Subscription(plan=PlanType.basic, status=SubscriptionStatus.active).model_dump()
+        uid,
+        {
+            **Subscription(plan=PlanType.basic, status=SubscriptionStatus.active).model_dump(),
+            '_first_week_payment_status': 'expired',
+        },
     )
     redis_db.set_credits_invalidation_signal(uid)
     return True

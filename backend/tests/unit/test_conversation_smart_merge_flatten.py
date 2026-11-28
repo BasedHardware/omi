@@ -553,6 +553,9 @@ def test_flatten_off_persisted_patches_equal_absorb_payloads_output(world, monke
         clock='device',
         recording_speaker_scopes=['legacy-conversation:n:0'],
     )
+    # The survivor must keep its original creation epoch for the first-week
+    # stamp; this metadata is carried by the write path, outside absorb_payloads.
+    assert decoded_patch.pop('created_at') == survivor_in['created_at']
     assert decoded_patch == expected_survivor
     assert donor_patch == expected_donor
     audit = world.store.rows[_audit_path('n')]

@@ -44,11 +44,15 @@ def generation(snapshot: dict, now: float) -> str:
     # The backfill day cap never parks batch units (it is enforced at sync upload),
     # so allowance holds reset with the month, as before the cap existed.
     reset_period = clock.strftime('%Y-%m')
+    value = [subscription, valid, promotions, grant_authority, effective, reset_period]
     # A support grant or revoke changes the generation, so held work is
     # re-offered to admission at the owner's next check, not the next month.
     # Like promotions, the kill switch gates it: re-enabling re-offers once.
+    # Appended only when present, so an owner with no credit keeps the exact
+    # generation it had before the credit existed (no deploy-time re-offer wave).
     support_credit = (snapshot.get(SUPPORT_CREDIT_FIELD) or None) if support_credit_enabled() else None
-    value = [subscription, valid, promotions, grant_authority, effective, reset_period, support_credit]
+    if support_credit is not None:
+        value.append(support_credit)
     return hashlib.sha256(json.dumps(value, sort_keys=True, default=str).encode()).hexdigest()
 
 

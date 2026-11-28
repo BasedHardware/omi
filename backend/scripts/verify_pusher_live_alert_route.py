@@ -20,6 +20,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -157,6 +158,18 @@ GRAFANA_ASSIGNED_MODEL_DEFAULTS = {"intervalMs": 1000, "maxDataPoints": 43200}
 SINGLE_RULE_SIZE_LIMIT = 1_000_000
 FLEET_LIST_SIZE_LIMIT = 4_000_000
 ALERT_RULE_LIST_PATH = "/api/v1/provisioning/alert-rules"
+BATCH_RUNTIME_PATH = "/api/prometheus/grafana/api/v1/rules"
+BATCH_PAGER_UIDS = (
+    "omi-stt-batch-queue-depth",
+    "omi-stt-batch-queue-latency",
+    "omi-batch-unit-unpublished-2h",
+    "omi-batch-timeliness-sample-stale",
+    "omi-batch-timeliness-scan-blind",
+    "omi-batch-queue-safety-blind",
+    "omi-batch-held-backlog-growing",
+    "omi-firestore-batch-reads-audio-hour",
+    "omi-firestore-batch-reads-no-output",
+)
 MUTE_TIMING_PATH = "/api/v1/provisioning/mute-timings"
 MUTE_TIMINGS_FILE = ROOT / "backend/charts/monitoring/mute-timings.json"
 
@@ -976,8 +989,109 @@ def _run_pusher_gate(grafana_url: str, token: str, phase: str, attempts: int) ->
     return failures
 
 
+def batch_evaluated_states(payload: Any, now: datetime) -> dict[str, str]:
+    """Use Grafana's evaluated rule status, joined by UID, never by title."""
+    data = payload.get("data") if isinstance(payload, dict) and payload.get("status") == "success" else None
+    groups = data.get("groups") if isinstance(data, dict) else None
+    states: dict[str, str] = {}
+    if not isinstance(groups, list):
+        return states
+    for group in groups:
+        rules = group.get("rules") if isinstance(group, dict) else None
+        if not isinstance(rules, list):
+            continue
+        for rule in rules:
+            uid = rule.get("uid") if isinstance(rule, dict) else None
+            if uid not in BATCH_PAGER_UIDS:
+                continue
+            states[uid] = (
+                "NoData/UNKNOWN" if uid in states else _batch_evaluated_state(rule, group.get("interval"), now)
+            )
+    return states
+
+
+def _batch_evaluated_state(rule: dict[str, Any], interval: Any, now: datetime) -> str:
+    unknown = "NoData/UNKNOWN"
+    if rule.get("isPaused") is not False or type(interval) not in (int, float) or not 0 < interval < math.inf:
+        return unknown
+    try:
+        last = datetime.fromisoformat(rule["lastEvaluation"].replace("Z", "+00:00"))
+        age = (now - last).total_seconds()
+    except (AttributeError, KeyError, TypeError, ValueError):
+        return unknown
+    # Grafana can report health=ok and inactive before the first evaluation.
+    # Require a current evaluation within three group intervals, with clock skew.
+    if not -30 <= age <= max(60, 3 * interval):
+        return unknown
+    totals = rule.get("totals")
+    totals = totals if isinstance(totals, dict) else {}
+    # A no-data/error policy can keep the last state or map it to Normal or
+    # Alerting. Grafana includes the originating reason on the alert instance.
+    alerts = rule.get("alerts")
+    reasons = set()
+    if isinstance(alerts, list):
+        for alert in alerts:
+            state = alert.get("state") if isinstance(alert, dict) else None
+            if isinstance(state, str) and state.endswith(")") and " (" in state:
+                reasons.update(state.partition(" (")[2][:-1].split(", "))
+    if rule.get("health") == "error" or totals.get("error", 0) or "Error" in reasons:
+        return "Error"
+    if rule.get("health") != "ok" or totals.get("nodata", 0) or "NoData" in reasons:
+        return unknown
+    states = {"inactive": "Normal", "firing": "Alerting", "pending": "Pending", "recovering": "Recovering"}
+    state = rule.get("state")
+    return states.get(state, unknown) if isinstance(state, str) else unknown
+
+
+def _batch_pager_receipt(
+    grafana_url: str,
+    token: str,
+    committed: dict[str, dict[str, Any]],
+    live_by_uid: dict[str, dict[str, Any]],
+    coverage: FleetCoverage,
+    gated_uids: tuple[str, ...],
+) -> tuple[list[str], bool]:
+    try:
+        groups = sorted({committed[uid]["ruleGroup"] for uid in BATCH_PAGER_UIDS if uid in committed})
+        query = urllib.parse.urlencode({"rule_group": groups}, doseq=True)
+        payload = _request_json(grafana_url, f"{BATCH_RUNTIME_PATH}?{query}", token, size_limit=FLEET_LIST_SIZE_LIMIT)
+        states = batch_evaluated_states(payload, datetime.now(timezone.utc))
+    except AlertRouteError:
+        states = {}
+    try:
+        contacts = _request_json(grafana_url, CONTACT_POINTS_PATH, token)
+        receiver_ready = _has_telegram_receiver(contacts, TELEGRAM_RECEIVER)
+    except AlertRouteError:
+        receiver_ready = False
+    lines = []
+    passed = True
+    for uid in BATCH_PAGER_UIDS:
+        live = live_by_uid.get(uid)
+        if uid not in committed or uid not in gated_uids:
+            definition = "ungated-or-uncommitted"
+        elif live is None:
+            definition = "absent"
+        elif live.get("isPaused") is not False:
+            definition = "paused"
+        elif uid not in coverage.live_and_matching:
+            definition = "divergent"
+        else:
+            definition = "matching"
+        routed = live is not None and rule_route_error(uid, live) is None and receiver_ready
+        state = states.get(uid, "NoData/UNKNOWN")
+        lines.append(f"{uid} definition={definition} route={'verified' if routed else 'unverified'} state={state}")
+        passed &= definition == "matching" and routed and state not in {"NoData/UNKNOWN", "Error"}
+    return lines, passed
+
+
 def _run_fleet_coverage(
-    grafana_url: str, token: str, attempts: int, fail_on: str, *, alert_set: str = "all"
+    grafana_url: str,
+    token: str,
+    attempts: int,
+    fail_on: str,
+    *,
+    alert_set: str = "all",
+    batch_pager_receipt: bool = False,
 ) -> tuple[list[str], list[str]]:
     committed = load_all_committed_rules()
     gated_uids = load_gated_uids(committed)
@@ -985,6 +1099,7 @@ def _run_fleet_coverage(
         committed = load_live_stt_import_rules(production=grafana_url == "https://monitor.omi.me")
         canary_uids = tuple(uid for uid in DATASOURCE_CANARY_UIDS if uid in committed)
         gated_uids = tuple(dict.fromkeys((*canary_uids, *(uid for uid in gated_uids if uid in committed))))
+    live_by_uid: dict[str, dict[str, Any]] = {}
     coverage: FleetCoverage | None = None
     last_error: str | None = None
     for attempt in range(attempts):
@@ -1001,6 +1116,18 @@ def _run_fleet_coverage(
             if attempt + 1 == attempts:
                 break
             time.sleep(5)
+    if batch_pager_receipt:
+        if coverage is None:
+            return ["Grafana fleet definition read failed"], [
+                f"{uid} definition=unverified route=unverified state=NoData/UNKNOWN" for uid in BATCH_PAGER_UIDS
+            ]
+        report, batch_passed = _batch_pager_receipt(grafana_url, token, committed, live_by_uid, coverage, gated_uids)
+        failures = []
+        if fleet_gate_failures(coverage, gated_uids, fail_on):
+            failures.append("Gated Grafana fleet definitions differ from the committed rules")
+        if not batch_passed:
+            failures.append("Batch pager receipt is incomplete or has an evaluation error")
+        return failures, report
     if coverage is None:
         return [last_error or "fleet coverage request failed"], []
     report = format_fleet_report(coverage, committed_count=len(committed), gated_uids=gated_uids)
@@ -1020,6 +1147,9 @@ def main() -> int:
     parser.add_argument("--phase", choices=("prepublish", "postrollout"))
     parser.add_argument("--mode", choices=("pusher", "fleet", "import", "redis-pilot"), default="pusher")
     parser.add_argument("--alert-set", choices=("all", "live-stt"), default="all")
+    parser.add_argument(
+        "--batch-pager-receipt", action="store_true", help="report only the nine production batch rules"
+    )
     parser.add_argument("--fail-on", choices=("none", "gated", "all"))
     parser.add_argument(
         "--attempts",
@@ -1030,6 +1160,13 @@ def main() -> int:
     parser.add_argument("--redis-pilot-url", help="reviewed relay publisher URL for read-only pilot verification")
     parser.add_argument("--redis-pilot-alias-host", action="append", default=[], help="reviewed relay ingress alias")
     args = parser.parse_args()
+    if args.batch_pager_receipt and (
+        args.mode != "fleet"
+        or args.fail_on != "gated"
+        or args.alert_set != "all"
+        or args.grafana_url != "https://monitor.omi.me"
+    ):
+        parser.error("--batch-pager-receipt requires the production Grafana URL and --mode fleet --fail-on gated")
     if not _approved_grafana_url(args.grafana_url):
         print("FAIL: Grafana URL must be an approved HTTPS monitoring origin")
         return 1
@@ -1073,10 +1210,15 @@ def main() -> int:
             if fail_on is None:
                 raise AlertRouteError("fleet mode requires --fail-on none, gated, or all")
             failures, report_lines = _run_fleet_coverage(
-                args.grafana_url, token, attempts, fail_on, alert_set=args.alert_set
+                args.grafana_url,
+                token,
+                attempts,
+                fail_on,
+                alert_set=args.alert_set,
+                batch_pager_receipt=args.batch_pager_receipt,
             )
     except (ValueError, OSError) as exc:
-        failures = [str(exc)]
+        failures = ["Batch pager receipt could not be produced"] if args.batch_pager_receipt else [str(exc)]
     for line in report_lines:
         print(line)
     if failures:

@@ -13,6 +13,11 @@ from tests.unit.test_batch_pipeline_projection_donor_dedupe import batch_project
 from utils.conversations import summary_delivery as delivery
 
 
+@pytest.fixture(autouse=True)
+def disable_first_week_for_projection_contracts(monkeypatch):
+    monkeypatch.setenv('FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED', 'false')
+
+
 def setup_record(lane, **changes):
     binding = replace(lane.binding, record_origin=True, native_record=True)
     lane.client.rows[(f'{lane.namespace}_jobs', 'segment')]['projection_binding'] = asdict(binding)

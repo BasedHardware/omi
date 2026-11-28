@@ -203,6 +203,7 @@ async def test_dark_sweep_stops_claims_but_keeps_enrichment_repair(monkeypatch):
         repair = MagicMock(return_value={'repaired': 2, 'error': 0})
         monkeypatch.setattr(reprocess, 'sweep', repair)
         module.summary_repair_enabled = lambda: False
+        module.first_week_enabled = lambda: False
         response = await module.sweep_sync_backfill_sequencer(0)
         assert response.status_code == 200
         outcomes = json.loads(response.body)['outcomes']

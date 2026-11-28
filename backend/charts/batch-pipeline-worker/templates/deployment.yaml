@@ -141,6 +141,7 @@ spec:
           ports:
             - {name: http, containerPort: 8080}
           env:
+            - {name: FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED, value: {{ .Values.firstWeekSummaryGuaranteeEnabled | quote }}}
             {{- if not (has "ROLLOUT_POD_TEMPLATE_HASH" $preserveLiveEnv) }}
             # Immutable rollout exporter identity, including supervised GPU children.
             - name: ROLLOUT_POD_TEMPLATE_HASH

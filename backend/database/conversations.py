@@ -17,10 +17,12 @@ from utils.conversations import summary_delivery, lifecycle_clocks, terminal_set
 from utils.observability.delivery import summary_terminal_outcome
 from utils.sync import processing_hold, bridge_pending
 from config.refactor_modes import serving_for, shadow_or_serve
+from config.summary_guarantee import first_week_enabled, first_week_open
 import copy
 import hashlib
 import json
 import logging
+import math
 import os
 import uuid
 import zlib
@@ -29,6 +31,7 @@ from functools import partial, wraps
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Any, Callable, Literal, Tuple, overload
 from database import chat_edits
+from database import users as users_db
 from database.dream_dirty import after_write
 from database.account_deletion_policy import account_deletion_marker_blocks_access
 from google.api_core.exceptions import AlreadyExists, Conflict, FailedPrecondition, NotFound
@@ -375,6 +378,49 @@ def update_owner_recognition_diagnostics(uid: str, conversation_id: str, diagnos
     return run_transactional(client, persist)
 
 
+def _first_week_created_epoch(data: Mapping[str, Any]) -> Optional[float]:
+    value = data.get('created_at') or data.get('started_at')
+    if isinstance(value, datetime):
+        return (value if value.tzinfo else value.replace(tzinfo=timezone.utc)).timestamp()
+    if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value):
+        return float(value)
+    return None
+
+
+def _first_week_for_write(
+    data: Dict[str, Any], uid: str, conversation_state: Optional[Mapping[str, Any]] = None
+) -> Optional[dict]:
+    """Resolve the paid-start window once per conversation write, outside the codec.
+
+    The codec is also reached by partial writes, so this only resolves for a write
+    that could stamp a first obligation. The subscription read is the existing
+    60 s cached one; a missing paid-start epoch returns None and leaves today's
+    deadline, lane and age gate in place (SCA-4790).
+    """
+    if 'first_week_summary' in data or not isinstance(data.get('structured'), dict):
+        return None
+    if data.get('processing_tier') == 'historical' or (
+        conversation_state is not None and conversation_state.get('processing_tier') == 'historical'
+    ):
+        return None
+    if not first_week_enabled():
+        return None
+    if conversation_state is not None:
+        existing_stamp = conversation_state.get('first_week_summary')
+        if isinstance(existing_stamp, dict):
+            return dict(existing_stamp)
+        created_from = conversation_state
+    else:
+        created_from = data
+    created_at = _first_week_created_epoch(created_from)
+    if created_at is None:
+        return None
+    stamp = users_db.first_week_stamp_for(uid, created_at)
+    if stamp and not first_week_open({'first_week_summary': stamp}, now=datetime.now(timezone.utc).timestamp()):
+        return None
+    return stamp
+
+
 def _prepare_conversation_for_write(
     data: Dict[str, Any],
     uid: str,
@@ -388,6 +434,9 @@ def _prepare_conversation_for_write(
     data = copy.deepcopy(data)
     data.pop(home_visibility_index.FIELD, None)
     data.pop('transcription_admission', None)  # Current authenticated read evidence, never persisted.
+    carried_first_week_stamp = isinstance(data.get('first_week_summary'), Mapping) or (
+        conversation_state is not None and isinstance(conversation_state.get('first_week_summary'), Mapping)
+    )
 
     # Partial writes cannot certify an entire legacy row. Explicit prepare
     # reconciles them; full creates/processing results get compact content now.
@@ -395,7 +444,30 @@ def _prepare_conversation_for_write(
         data.update(stamp_home_display(uid, data, 'conversation'))
     stamp_scope_index(data)
     conversation_recorded_time.stamp_for_write(data)
-    summary_delivery.prepare(data, uid)
+    first_week = _first_week_for_write(data, uid, conversation_state)
+    if conversation_state is not None:
+        stored_stamp = conversation_state.get('first_week_summary')
+        if isinstance(stored_stamp, Mapping):
+            data['first_week_summary'] = copy.deepcopy(dict(stored_stamp))
+        for field in ('first_week_outcome', 'first_week_outcome_at'):
+            stored_value = conversation_state.get(field)
+            if stored_value is not None:
+                data[field] = stored_value
+            elif carried_first_week_stamp:
+                # Close-out owns these fields. A stale processing snapshot with
+                # null cannot clear a result committed after that snapshot.
+                data.pop(field, None)
+        if 'created_at' not in data and 'created_at' in conversation_state:
+            data['created_at'] = conversation_state['created_at']
+    if isinstance(data.get('first_week_summary'), Mapping):
+        if not carried_first_week_stamp:
+            data.setdefault('first_week_outcome', None)
+        else:
+            if data.get('first_week_outcome') is None:
+                data.pop('first_week_outcome', None)
+            if data.get('first_week_outcome_at') is None:
+                data.pop('first_week_outcome_at', None)
+    summary_delivery.prepare(data, uid, first_week=first_week)
     if owner_diagnostics.FIELD in data:
         try:
             value = owner_diagnostics.normalize(data[owner_diagnostics.FIELD])
