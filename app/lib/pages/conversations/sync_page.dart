@@ -409,7 +409,8 @@ class _SyncPageState extends State<SyncPage> {
     final amounts = provider.storageAmounts;
     final deviceProvider = context.read<DeviceProvider>();
     Future<void> clear(BuildContext sheetContext, StorageClearScope scope) async {
-      Navigator.of(sheetContext).pop();
+      // The flow confirms, then reports its own verified result.
+      Navigator.of(sheetContext).pop(); // omi-ux-allow: pop-before-await -- closes the chooser
       await runStorageClear(
         context: context,
         provider: provider,

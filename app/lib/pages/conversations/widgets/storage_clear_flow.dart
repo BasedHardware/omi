@@ -78,21 +78,19 @@ Future<void> runStorageClear({
         }
       },
     );
-    if (afterClear != null) {
-      try {
-        await afterClear();
-      } catch (error) {
-        Logger.debug('Storage clear: refresh after clear failed: ${error.runtimeType}');
-      }
-    }
+    // Best effort: a failed storage-card re-read must not hide the clear's own
+    // result toast below, so it is logged rather than surfaced.
+    await afterClear?.call().then<void>((_) {}, onError: (Object e) {
+      Logger.debug('Storage clear: refresh after clear failed: ${e.runtimeType}');
+    });
   } finally {
     // The clear can finish before the sheet's first frame; pop it with its
-    // own context once it exists.
+    // own context once it exists. The clear is already done here.
     for (var i = 0; sheetContext == null && i < 10; i++) {
       await WidgetsBinding.instance.endOfFrame;
     }
     final own = sheetContext;
-    if (own != null && own.mounted) Navigator.of(own).pop();
+    if (own != null && own.mounted) Navigator.of(own).pop(); // omi-ux-allow: pop-before-await -- done
     await sheet;
     progress.dispose();
   }
@@ -145,7 +143,7 @@ class StorageClearProgressView extends StatelessWidget {
               if (value.phase == StorageClearPhase.deleting && value.total > 0) ...[
                 const SizedBox(height: OmiSpacing.md),
                 ClipRRect(
-                  borderRadius: BorderRadius.circular(3),
+                  borderRadius: OmiRadius.smAll,
                   child: LinearProgressIndicator(
                     value: value.done / value.total,
                     minHeight: 6,
