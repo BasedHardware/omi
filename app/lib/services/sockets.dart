@@ -87,9 +87,11 @@ class SocketServicePool extends ISocketService {
       if (!force &&
           _socket?.codec == codec &&
           _socket?.sampleRate == sampleRate &&
+          _socket?.language == language &&
           _socket?.state == SocketServiceState.connected &&
           _socket?.sttConfigId == sttConfigId &&
-          _socket?.geolocation?.time == geolocation?.time &&
+          // Geolocation is a session snapshot. A later location refresh does
+          // not justify replacing a healthy live socket and interrupting audio.
           _socket?.clientConversationId == clientConversationId &&
           _socket?.localPreview == localPreview &&
           (custodyOwner == null ? _socket?.audioCustodyEnabled != true : _socket?.hasCurrentListenOwner(uid) == true)) {

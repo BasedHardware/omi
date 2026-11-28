@@ -14,6 +14,7 @@ extension _CaptureUplinkPolicy on CaptureController {
     }
     _socketReconnectPending = true;
     _startKeepAliveServices();
+    _kickLiveRecovery('capture_started_without_socket');
   }
 
   /// A BLE codec request must not hold the serialized KeepAliveTick forever.

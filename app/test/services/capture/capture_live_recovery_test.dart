@@ -84,6 +84,25 @@ void main() {
   });
 
   group('live socket recovery', () {
+    Future<int> reachPendingLongBackoff() async {
+      world.setConnected(false);
+      world.socket!.emitClose(1002);
+      await world.settle();
+      for (final delay in [1, 20, 40, 80]) {
+        await world.elapse(Duration(seconds: delay));
+      }
+      return world.sockets.length;
+    }
+
+    Future<void> expectExpeditedRetry(int before, String signal, {bool connected = true}) async {
+      await world.settle();
+      await world.elapse(const Duration(seconds: 19));
+      expect(world.sockets.length, before, reason: '$signal still respects the 20s attempt floor');
+      await world.elapse(const Duration(seconds: 1));
+      expect(world.sockets.length, before + 1, reason: '$signal replaces the pending 160s backoff');
+      expect(world.socket!.status == PureSocketStatus.connected, connected);
+    }
+
     test('a normal server close reconnects without waiting for the 15 s keep-alive', () async {
       final before = world.sockets.length;
       world.socket!.emitClose(1000);
@@ -93,15 +112,56 @@ void main() {
       expect(world.socket!.status, PureSocketStatus.connected);
     });
 
-    test('repeated closes back off but never stop reconnecting', () async {
+    test('repeated closes recover while respecting the reconnect spacing', () async {
       for (var i = 0; i < 6; i++) {
         final before = world.sockets.length;
         world.socket!.emitClose(1001);
         await world.settle();
-        await world.elapse(const Duration(seconds: 16));
+        await world.elapse(const Duration(seconds: 20));
         expect(world.sockets.length, greaterThan(before), reason: 'close $i');
         expect(world.socket!.status, PureSocketStatus.connected);
       }
+    });
+
+    test('failed reconnects back off and stay below the rolling handshake budget', () async {
+      final before = world.sockets.length;
+      world.setConnected(false);
+      world.socket!.emitClose(1002);
+      await world.settle();
+      world.emitNetworkChange(); // joins the already scheduled close recovery
+      await world.settle();
+
+      await world.elapse(const Duration(seconds: 1));
+      expect(world.sockets.length, before + 1);
+      await world.elapse(const Duration(seconds: 19));
+      expect(world.sockets.length, before + 1, reason: 'retry attempts are at least 20s apart');
+
+      await world.elapse(const Duration(seconds: 1));
+      expect(world.sockets.length, before + 2);
+      await world.elapse(const Duration(seconds: 39));
+      expect(world.sockets.length, before + 2, reason: 'the next failed retry backs off further');
+
+      await world.elapse(const Duration(seconds: 1));
+      expect(world.sockets.length, before + 3);
+    });
+
+    test('connectivity restoration shortens a pending long backoff within the reconnect floor', () async {
+      final beforeRestore = await reachPendingLongBackoff();
+      world.setConnected(true);
+      await expectExpeditedRetry(beforeRestore, 'connectivity restoration');
+    });
+
+    test('network handover shortens a pending long backoff within the reconnect floor', () async {
+      final beforeHandover = await reachPendingLongBackoff();
+      world.setConnected(true);
+      world.emitNetworkChange();
+      await expectExpeditedRetry(beforeHandover, 'network handover');
+    });
+
+    test('app resume shortens a pending long backoff within the reconnect floor', () async {
+      final beforeResume = await reachPendingLongBackoff();
+      world.controller.onAppResumed();
+      await expectExpeditedRetry(beforeResume, 'app resume', connected: false);
     });
 
     test('a network handover re-arms a keep-alive that had cancelled itself', () async {

@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/gen/phone_mic_pigeon.g.dart';
+import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/utils/enums.dart';
 
 import '../../support/capture/capture_replay_world.dart';
@@ -59,6 +60,21 @@ void main() {
     await world.settle();
     return world.hostApi.lastStartSessionId!;
   }
+
+  test('phone mic retries after its initial listen handshake fails', () async {
+    world.nextConnectFailsOnce = true;
+    await world.startLiveCapture();
+    expect(world.sockets, hasLength(1));
+    expect(world.socket!.status, isNot(PureSocketStatus.connected));
+
+    world.emitNativeState(PhoneMicCaptureState.running);
+    await world.settle();
+    expect(world.controller.recordingState, RecordingState.record);
+
+    await world.elapse(const Duration(seconds: 1));
+    expect(world.sockets, hasLength(2));
+    expect(world.socket!.status, PureSocketStatus.connected);
+  });
 
   group('(a) a phone pause keeps one conversation', () {
     test('pause then resume keeps the recording id, the socket and the transcript', () async {

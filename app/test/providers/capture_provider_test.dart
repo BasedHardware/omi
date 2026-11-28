@@ -1943,7 +1943,6 @@ void main() {
         final provider = _NullSocketCaptureProvider();
         provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.omi));
         provider.updateRecordingState(RecordingState.deviceRecord);
-        final timersBefore = async.pendingTimers.length;
         var completed = false;
 
         provider.changeAudioRecordProfile(audioCodec: BleAudioCodec.lc3FS1030).then((_) => completed = true);
@@ -1951,7 +1950,11 @@ void main() {
 
         expect(completed, isTrue);
         expect(SharedPreferencesUtil().getBool('nativeBleStreamingEnabled'), isFalse);
-        expect(async.pendingTimers.length, timersBefore + 1);
+        // The keepalive and continuity watchdog also own periodic timers.
+        expect(
+          async.pendingTimers.any((timer) => !timer.isPeriodic && timer.duration == const Duration(seconds: 1)),
+          isTrue,
+        );
         provider.dispose();
       });
     });

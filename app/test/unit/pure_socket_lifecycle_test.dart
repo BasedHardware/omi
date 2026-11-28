@@ -41,18 +41,22 @@ void main() {
   late HttpServer server;
   late List<WebSocket> peers;
   late List<Completer<void>> peerClosed;
+  late List<dynamic> clientMessages;
   late PureSocket socket;
   late _Listener listener;
   late int upgrades;
   Future<void> Function(HttpRequest)? beforeUpgrade;
   late bool rejectHandshake;
+  late bool echoPeerMessages;
 
   setUp(() async {
     peers = [];
     peerClosed = [];
+    clientMessages = [];
     upgrades = 0;
     beforeUpgrade = null;
     rejectHandshake = false;
+    echoPeerMessages = true;
     server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     server.listen((request) async {
       await beforeUpgrade?.call(request);
@@ -66,7 +70,14 @@ void main() {
       upgrades++;
       final closed = Completer<void>();
       peerClosed.add(closed);
-      peer.listen((message) => peer.add(message), onDone: closed.complete);
+      peer.listen((message) {
+        clientMessages.add(message);
+        if (message == 'probe') {
+          peer.add('probe_ack');
+        } else if (echoPeerMessages) {
+          peer.add(message);
+        }
+      }, onDone: closed.complete);
     });
     socket = PureSocket('ws://127.0.0.1:${server.port}', headersProvider: () async => {});
     listener = _Listener();
@@ -217,6 +228,19 @@ void main() {
     await expectLater(socket.connect(), throwsStateError);
     expect(await socket.connect(), isTrue);
     expect(upgrades, 1);
+  });
+
+  test('application text heartbeat does not inject fake binary audio', () async {
+    expect(await socket.connect(), isTrue);
+    echoPeerMessages = false;
+    listener.messageReceived = Completer<void>();
+    peers.single.add('ping');
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    socket.send('probe');
+    await listener.messageReceived!.future.timeout(const Duration(seconds: 5));
+
+    expect(clientMessages, ['probe']);
+    expect(listener.messages, ['probe_ack']);
   });
 
   test('synchronous stop from onConnected closes once and does not retain a channel', () async {

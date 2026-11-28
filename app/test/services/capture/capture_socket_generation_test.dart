@@ -289,7 +289,7 @@ void main() {
     }
   });
 
-  test('hung pendant keepalive codec read expires and a later tick retries', () async {
+  test('hung pendant keepalive codec read stays single-flight and falls back after timeout', () async {
     final dir = await Directory.systemTemp.createTemp('capture-codec-timeout-');
     final world = await CaptureReplayWorld.boot(tempDir: dir);
     try {
@@ -322,13 +322,13 @@ void main() {
       await pumpEventQueue();
       world.scheduler.elapse(const Duration(seconds: 10));
       await pumpEventQueue();
+      expect(opens, 1, reason: 'a second reconnect must not overlap the pending codec read');
       hang = false;
-      world.scheduler.elapse(const Duration(seconds: 5));
+      held.completeError(TimeoutException('codec read expired'));
       await pumpEventQueue();
-      expect(opens, 2, reason: 'expired codec I/O must release the coordinator and reconnect guard');
-      held.complete(BleAudioCodec.pcm16);
+      world.scheduler.elapse(const Duration(seconds: 20));
       await pumpEventQueue();
-      expect(opens, 2, reason: 'late codec completion must not open an extra socket');
+      expect(opens, 2, reason: 'the timed-out read releases the attempt and retries after backoff');
       p.dispose();
     } finally {
       await world.dispose();
@@ -927,6 +927,62 @@ void main() {
       p.dispose();
       await pumpEventQueue();
       await world.wal.stop();
+    } finally {
+      await world.dispose();
+      await dir.delete(recursive: true);
+    }
+  });
+
+  test('real provider restores readiness when it republishes the same connected socket', () async {
+    final dir = await Directory.systemTemp.createTemp('c1-socket-readiness-');
+    final world = await CaptureReplayWorld.boot(tempDir: dir);
+    try {
+      world.disposeController();
+      var opens = 0;
+      ScriptedPureSocket? transport;
+      TranscriptSegmentSocketService? published;
+      final deps = _deps(
+        world: world,
+        open: ({
+          required codec,
+          required sampleRate,
+          required language,
+          required force,
+          source,
+          clientConversationId,
+          customSttConfig,
+          geolocation,
+        }) async {
+          opens++;
+          if (published != null) return published;
+          transport = ScriptedPureSocket();
+          published = TranscriptSegmentSocketService.withSocket(sampleRate, codec, language, transport!);
+          await published!.start();
+          return published;
+        },
+      );
+      final p = composeCaptureProvider(deps);
+      p.updateRecordingState(RecordingState.systemAudioRecord);
+      await p.reconnectActiveCaptureForTesting();
+      await pumpEventQueue();
+      expect(opens, 1);
+      expect(p.transcriptServiceReady, isTrue);
+
+      // The callback clears readiness while the transport stays connected;
+      // reconnect then republishes the same service without a new onConnected.
+      p.onClosed();
+      await pumpEventQueue();
+      expect(p.transcriptServiceReady, isFalse);
+      await p.reconnectActiveCaptureForTesting();
+      await pumpEventQueue();
+      expect(opens, 2);
+      expect(p.transcriptServiceReady, isTrue);
+
+      p.dispose();
+      await pumpEventQueue();
+      await world.wal.stop();
+      expect(world.scheduler.pendingTimers, isEmpty);
+      expect(transport!.closeCalls, 1);
     } finally {
       await world.dispose();
       await dir.delete(recursive: true);

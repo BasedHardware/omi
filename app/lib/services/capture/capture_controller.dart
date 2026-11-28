@@ -133,6 +133,49 @@ part 'capture_conversation_custody.dart';
 
 enum _VoiceCommandTrigger { toggle, legacyLongPress }
 
+class _CaptureSocketEventListener implements ITransctiptSegmentSocketServiceListener, ListenCustodyReceiptListener {
+  const _CaptureSocketEventListener({required this.controller, required this.socket, required this.generation});
+
+  final CaptureController controller;
+  final TranscriptSegmentSocketService socket;
+  final int generation;
+
+  bool get _isCurrent => controller._isCurrentSocketListener(socket, generation);
+
+  @override
+  void onMessageEventReceived(MessageEvent event) {
+    if (_isCurrent) controller.onMessageEventReceived(event);
+  }
+
+  @override
+  void onSegmentReceived(List<TranscriptSegment> segments) {
+    if (_isCurrent) controller.onSegmentReceived(segments);
+  }
+
+  @override
+  void onError(Object err) {
+    if (_isCurrent) controller.onError(err);
+  }
+
+  @override
+  void onConnected() => controller._onSocketConnected(socket, generation);
+
+  @override
+  void onClosed([int? closeCode]) => controller._onSocketClosed(socket, generation, closeCode);
+
+  @override
+  void onCustodyReceipt(
+    TranscriptSegmentSocketService socket,
+    MessageEvent event, {
+    required String owner,
+    String? recordingSessionId,
+  }) {
+    if (_isCurrent) {
+      controller.onCustodyReceipt(socket, event, owner: owner, recordingSessionId: recordingSessionId);
+    }
+  }
+}
+
 class CaptureController extends ChangeNotifier
     with MessageNotifierMixin, CaptureSpeakerAssignment
     implements ITransctiptSegmentSocketServiceListener, ListenCustodyReceiptListener, LiveWordsCapture {
@@ -298,6 +341,7 @@ class CaptureController extends ChangeNotifier
   Future<void>? _peopleRefreshFuture;
 
   TranscriptSegmentSocketService? _socket;
+  int _socketEventGeneration = 0;
   static const _silencePausedKey = 'uplinkSilencePaused';
   bool get silencePaused => _preferences.getBool(_silencePausedKey);
   late final _uplinkSilence = UplinkSilenceTimer(
@@ -324,8 +368,7 @@ class CaptureController extends ChangeNotifier
   static const Duration _rejectedTokenRefreshInterval = Duration(seconds: 30);
   DateTime? _lastRejectedTokenRefreshAt;
   DateTime? _keepAliveLastExecutedAt;
-  int _keepAliveEpoch = 0;
-  int? _keepAliveReconnectEpoch;
+  bool _keepAliveReconnectInFlight = false;
   Timer? _inProgressConversationRefreshTimer;
   int _inProgressConversationRefreshAttempts = 0;
   bool _isRefreshingInProgressConversation = false;
@@ -1487,6 +1530,11 @@ class CaptureController extends ChangeNotifier
     if (activeRecordingId case final id?) onMobileBatchCaptureEnded?.call(id);
     _localPreview.end(send: _openSocketSender);
     _captureEvidenceIdentity.reset();
+    // A pending retry carries the session token it was scheduled for. Retire
+    // it with that session, but keep attempt history and the shared cooldown so
+    // the next session still respects the authorization rate limit.
+    _liveRecovery.kickTimer?.cancel();
+    _liveRecovery.kickTimer = null;
     _sessionOwner?.replaceSession(identity);
   }
 
@@ -1814,7 +1862,16 @@ class CaptureController extends ChangeNotifier
         }
         await _publishTranscriptionSocket(socket, sessionToken, deviceRevision: deviceRevision);
       } on _TranscriptionSocketSkipped {
-        _startKeepAliveServices();
+        if (_shouldReconnectTranscriptionSocket && !_transcriptServiceReady) {
+          _kickLiveRecovery('socket_open_skipped');
+        } else {
+          _startKeepAliveServices();
+        }
+      } catch (error) {
+        if (_shouldReconnectTranscriptionSocket && !_transcriptServiceReady) {
+          _kickLiveRecovery('socket_owner_connect_failed');
+        }
+        rethrow;
       }
       return;
     }
@@ -1909,6 +1966,9 @@ class CaptureController extends ChangeNotifier
     if (socket == null) {
       _startKeepAliveServices();
       Logger.debug("Can not create new conversation socket");
+      if (_shouldReconnectTranscriptionSocket && !_keepAliveReconnectInFlight) {
+        _kickLiveRecovery('socket_open_failed');
+      }
       return;
     }
     if (generation != _websocketInitGeneration || _deviceIdentityStale(deviceRevision)) {
@@ -2047,20 +2107,29 @@ class CaptureController extends ChangeNotifier
       await _releaseStaleTranscriptionSocket(socket);
       return;
     }
+    _transcriptionSocketRecovered();
+    // A pooled socket can be republished after a queued close cleared the
+    // synchronous readiness flag. Reuse has no new onConnected event, so every
+    // successful publication must restore readiness.
+    _transcriptServiceReady = true;
+    final socketEventGeneration = ++_socketEventGeneration;
     if (!identical(_socket, socket)) {
       _socket?.unsubscribe(this);
       _socket = socket;
       _liveSocketIdentity = (uid: _preferences.uid, recordingId: activeRecordingId, token: sessionToken);
       _lastPublishedSocketCustomStt = socket.customSttMode;
       _localPreview.socketPublished(declared: socket.localPreview, send: _sendPendantToSocket);
-      _socket?.subscribe(this, this);
-      _transcriptServiceReady = true;
       _beginWedgeSession(socket);
       if (_sessionStartSeconds == 0) {
         liveHeldAudio.reset();
         _sessionStartSeconds = _now().millisecondsSinceEpoch ~/ 1000;
       }
     }
+    _socket?.unsubscribe(this);
+    _socket?.subscribe(
+      this,
+      _CaptureSocketEventListener(controller: this, socket: socket, generation: socketEventGeneration),
+    );
 
     // Notify the device connection that the socket reconnected after a network
     // outage so it can re-enable streaming if needed (e.g. Limitless pendant).
@@ -2707,8 +2776,7 @@ class CaptureController extends ChangeNotifier
     if (language != _socket?.language ||
         codec != _socket?.codec ||
         !_canReuseTranscriptionSocket ||
-        _socket?.sttConfigId != sttConfigId ||
-        _sessionGeolocationDiffersFromSocket()) {
+        _socket?.sttConfigId != sttConfigId) {
       await _initiateWebsocket(audioCodec: codec, force: true, source: _getConversationSourceFromDevice());
     }
   }
@@ -3266,16 +3334,6 @@ class CaptureController extends ChangeNotifier
     }
   }
 
-  bool _sessionGeolocationDiffersFromSocket() {
-    final socketGeo = _socket?.geolocation;
-    final sessionGeo = _sessionGeolocation;
-    if (socketGeo == null && sessionGeo == null) return false;
-    if (socketGeo == null || sessionGeo == null) return true;
-    return socketGeo.time != sessionGeo.time ||
-        socketGeo.latitude != sessionGeo.latitude ||
-        socketGeo.longitude != sessionGeo.longitude;
-  }
-
   void _clearSessionLocation() {
     _sessionGeolocationGeneration++;
     _sessionGeolocation = null;
@@ -3377,6 +3435,7 @@ class CaptureController extends ChangeNotifier
           if (!_admitsCapture(revision)) return;
           updateRecordingState(RecordingState.record);
           _markCaptureStarted();
+          if (!_transcriptServiceReady) _kickLiveRecovery('phone_capture_started');
         },
         onStop: () {
           if (!_micInterrupted && !_phoneMicPaused) {
@@ -3746,16 +3805,39 @@ class CaptureController extends ChangeNotifier
 
   @override
   void onClosed([int? closeCode]) {
+    _handleSocketClosed(_socket, _socketEventGeneration, closeCode);
+  }
+
+  bool _isCurrentSocketListener(TranscriptSegmentSocketService socket, int generation) =>
+      !_captureControllerDisposed && generation == _socketEventGeneration && identical(_socket, socket);
+
+  void _onSocketConnected(TranscriptSegmentSocketService socket, int generation) {
+    if (!_isCurrentSocketListener(socket, generation)) return;
+    unawaited(_dispatchLogged(SocketConnected(generation: generation)));
+  }
+
+  void _onSocketClosed(TranscriptSegmentSocketService socket, int generation, int? closeCode) {
+    if (!_isCurrentSocketListener(socket, generation)) return;
+    _handleSocketClosed(socket, generation, closeCode);
+  }
+
+  void _handleSocketClosed(TranscriptSegmentSocketService? socket, int generation, int? closeCode) {
+    if (generation != _socketEventGeneration || (socket != null && !identical(_socket, socket))) return;
+    final closedGeneration = ++_socketEventGeneration;
     _mobileStandardBatchAllowed = false;
     _mobileStandardBatch?.authorize(false);
     _localPreview.revoke();
-    _keepAliveEpoch++;
     _socketCloseQueued = true;
     _transcriptServiceReady = false;
-    unawaited(_dispatchLogged(SocketClosed(closeCode: closeCode)));
+    // Schedule recovery as soon as the transport closes. The serialized
+    // capture queue may still be draining the connection that just ended.
+    _startKeepAliveServices();
+    _kickLiveRecoveryAfterClose(closeCode);
+    unawaited(_dispatchLogged(SocketClosed(closeCode: closeCode, generation: closedGeneration)));
   }
 
-  Future<void> _socketClosedBody(int? closeCode) async {
+  Future<void> _socketClosedBody(int? closeCode, int? generation) async {
+    if (generation != null && generation != _socketEventGeneration) return;
     _socketCloseQueued = false;
     liveHeldAudio.reset();
     _transcriptionServiceStatuses = [];
@@ -3799,8 +3881,6 @@ class CaptureController extends ChangeNotifier
       _sessionTransportInterrupted = true;
     }
 
-    _startKeepAliveServices();
-    _kickLiveRecoveryAfterClose(closeCode);
     notifyListeners();
   }
 
@@ -3819,7 +3899,7 @@ class CaptureController extends ChangeNotifier
     _keepAliveTimer = null;
     if (!_shouldReconnectTranscriptionSocket) return;
     final keepAliveToken = _sessionOwner?.token;
-    _keepAliveTimer = _scheduling.periodic(const Duration(seconds: 15), (t) async {
+    _keepAliveTimer = _scheduling.periodic(const Duration(seconds: 20), (t) async {
       Logger.debug("[Provider] keep alive");
       if (!_captureSessionIsCurrent(keepAliveToken)) {
         t.cancel();
@@ -3831,15 +3911,15 @@ class CaptureController extends ChangeNotifier
         _keepAliveTimer = null;
         return;
       }
-      if (_keepAliveReconnectEpoch == _keepAliveEpoch) return;
-      // rate 1/15s
-      if (_keepAliveLastExecutedAt != null &&
-          _now().subtract(const Duration(seconds: 15)).isBefore(_keepAliveLastExecutedAt!)) {
-        Logger.debug("[Provider] keep alive - hitting rate limits 1/15s");
+      if (_liveRecovery.kickTimer?.isActive ?? false) {
+        return;
+      }
+      if (_keepAliveReconnectInFlight) return;
+      if (_reconnectCooldownRemaining() > Duration.zero) {
+        Logger.debug("[Provider] keep alive - reconnect cooldown is active");
         return;
       }
 
-      _keepAliveLastExecutedAt = _now();
       // onClosed clears readiness without necessarily dropping the socket object.
       // A still-connected transport is not "healthy transcription"; readiness is.
       if (!recordingDeviceServiceReady || _transcriptServiceReady) {
@@ -3855,12 +3935,15 @@ class CaptureController extends ChangeNotifier
         return;
       }
 
-      final reconnectEpoch = _keepAliveEpoch;
-      _keepAliveReconnectEpoch = reconnectEpoch;
+      _keepAliveLastExecutedAt = _now();
+      _keepAliveReconnectInFlight = true;
       try {
         await _capture.dispatch(const KeepAliveTick());
+        if (!_transcriptServiceReady && _shouldReconnectTranscriptionSocket) {
+          _kickLiveRecovery('keepalive_failed');
+        }
       } finally {
-        if (_keepAliveReconnectEpoch == reconnectEpoch) _keepAliveReconnectEpoch = null;
+        _keepAliveReconnectInFlight = false;
       }
     });
   }
@@ -3939,11 +4022,13 @@ class CaptureController extends ChangeNotifier
 
   @override
   void onConnected() {
-    unawaited(_dispatchLogged(const SocketConnected()));
+    unawaited(_dispatchLogged(SocketConnected(generation: _socketEventGeneration)));
   }
 
-  Future<Object?> _socketConnectedBody() async {
+  Future<Object?> _socketConnectedBody(int? generation) async {
+    if (generation != null && generation != _socketEventGeneration) return null;
     liveHeldAudio.reset();
+    _transcriptionSocketRecovered();
     _recordingTelemetry.observeConnected();
     _transcriptServiceReady = true;
     final socket = _socket;
@@ -5121,8 +5206,8 @@ class CaptureController extends ChangeNotifier
           RecordingMarkStage() => Future.sync(() => updateRecordingState(stage.state)),
           DeviceStopTelemetryStage() => _deviceStopTelemetryBody(cleanDevice: stage.cleanDevice),
           ProcessConversationStage() => _processConversationBody(stage.liveConversationId),
-          SocketClosedStage() => _socketClosedBody(stage.closeCode),
-          SocketConnectedStage() => _socketConnectedBody(),
+          SocketClosedStage() => _socketClosedBody(stage.closeCode, stage.generation),
+          SocketConnectedStage() => _socketConnectedBody(stage.generation),
           SocketErrorStage() => _socketErrorBody(stage.error),
           ReconnectDeviceStage() => _reconnectDeviceCaptureBody(testingProbe: stage.testingProbe),
           ReconnectPhoneStage() => _reconnectPhoneCaptureBody(),
