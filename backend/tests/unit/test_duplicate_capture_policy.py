@@ -410,3 +410,55 @@ async def test_completed_fanout_replay_still_delivers_grouped_row_to_episode_hoo
     assert await finalize('desktop') == finalizer.ConversationFinalizationDisposition.completed
     assert seen and seen[0][:2] == (UID, 'desktop')
     assert seen[0][2]['capture_group'] == capture['capture_group']
+
+
+def _confirmed_pair(harness, monkeypatch, *, other_extra=None):
+    from database import capture_groups as groups_db
+
+    own = row('pendant', 'omi', recorded_start=T0, recorded_end=T0 + timedelta(seconds=600), clock='device')
+    # A desktop/imported row: its recorded span is sub-second precise, its stored lifecycle window is not.
+    other = row(
+        'desktop',
+        'desktop',
+        100,
+        610,
+        recorded_start=T0 + timedelta(seconds=100.9),
+        recorded_end=T0 + timedelta(seconds=600.5),
+        clock='imported',
+    )
+    harness.rows.update({path('pendant'): own, path('desktop'): deepcopy(other)})
+    monkeypatch.setattr(groups_db, 'get_firestore_client', lambda: harness)
+    monkeypatch.setattr(
+        conversations_db,
+        'get_conversation_for_capture_check',
+        lambda uid, cid: (deepcopy(harness.rows[path(cid)]), groups_db.transcript_fingerprint(harness.rows[path(cid)])),
+    )
+    monkeypatch.setattr(
+        policy,
+        'measure_shared_speech',
+        lambda *a: SimpleNamespace(confirms=lambda: True, evidence=lambda: {}, containment=1.0, shared_trigrams=20),
+    )
+    monkeypatch.setattr(policy, 'schedule_group_attachments', lambda uid, ids: None)
+    candidate, match = policy.capture_record(own, UID), policy.capture_record(other, UID)
+    if other_extra:
+        harness.rows[path('desktop')].update(other_extra)
+    return own, candidate, match
+
+
+def test_group_join_fences_on_stored_window_when_recorded_span_differs(harness, monkeypatch):
+    own, candidate, match = _confirmed_pair(harness, monkeypatch)
+    assert (match.started_at, match.finished_at) != (
+        harness.rows[path('desktop')]['started_at'],
+        harness.rows[path('desktop')]['finished_at'],
+    )
+    policy._group_confirmed_captures(UID, own, candidate, [match])
+    groups = [harness.rows[path(cid)].get('capture_group') or {} for cid in ('pendant', 'desktop')]
+    assert groups[0].get('id') and groups[0]['id'] == groups[1].get('id')
+
+
+def test_group_join_abstains_when_recorded_span_moved_after_discovery(harness, monkeypatch):
+    moved = {'recorded_end': T0 + timedelta(seconds=605)}
+    own, candidate, match = _confirmed_pair(harness, monkeypatch, other_extra=moved)
+    policy._group_confirmed_captures(UID, own, candidate, [match])
+    assert not harness.rows[path('pendant')].get('capture_group')
+    assert not harness.rows[path('desktop')].get('capture_group')
