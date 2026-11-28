@@ -15794,6 +15794,15 @@ class AppLocalizationsHu extends AppLocalizations {
       'Ehhez a firmware-frissítéshez az Omi alkalmazás újabb verziója szükséges. Frissítse az alkalmazást az alkalmazásboltban, majd ellenőrizze újra.';
 
   @override
+  String get quietPayerTitle => '5 napja nincs felvétel';
+
+  @override
+  String get quietPayerMessage => 'Nézd meg az Omidat.';
+
+  @override
+  String get quietPayerCheck => 'Megnézem';
+
+  @override
   String get playManageSubscription => 'Előfizetés kezelése';
 
   @override
@@ -15876,6 +15885,9 @@ class AppLocalizationsHu extends AppLocalizations {
       'Néhány felvétel még az eszközödön van. Várd meg, amíg a telefonodra szinkronizálásuk befejeződik, majd indítsd el a frissítést.';
 
   @override
+  String get batteryRestartToRefresh => 'Indítsa újra az Omit a frissítéshez';
+
+  @override
   String homeLockedTitle(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -15897,15 +15909,6 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get homeFinishingOpensWhenReady => 'Megnyílik, amint elkészül';
-
-  @override
-  String get quietPayerTitle => '5 napja nincs felvétel';
-
-  @override
-  String get quietPayerMessage => 'Nézd meg az Omidat.';
-
-  @override
-  String get quietPayerCheck => 'Megnézem';
 
   @override
   String get activityOnThisPhone => 'Ezen a telefonon';

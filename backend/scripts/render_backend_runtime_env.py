@@ -21,6 +21,8 @@ from scripts.runtime_env_canary_ops import compose  # noqa: E402
 DEFAULT_MANIFEST = ROOT / 'backend/deploy/runtime_env.yaml'
 ConfigDict = dict[str, Any]
 _DEPLOY_CLOUD_RUN_ENV_SEPARATORS = frozenset({',', '\n', '\r', '\u2028', '\u2029'})
+DESKTOP_CONVERSATIONS_V3_ENV_NAMES = ('CONVERSATIONS_V3', 'CONVERSATIONS_V3_STAGE', 'CONVERSATIONS_V3_FIRST_APP_BUILD')
+
 # Env names that once carried an exportable service-account key (or the path to one). A service
 # pinned to an attached runtime identity drops them in the same deploy: its runtime SA deliberately
 # cannot read the key secret, so a lingering ref would fail revision creation.
@@ -276,6 +278,14 @@ def main() -> int:
             # deploy action binds the same selected-environment reference directly,
             # without copying credential-shaped mappings through workflow outputs.
             _emit_output('firestore_read_env_vars', firestore_read_env_vars)
+            _emit_output(
+                'conversations_v3_env_vars',
+                '\n'.join(
+                    f'{name}={_escape_deploy_cloud_run_env_value(desktop_env[name])}'
+                    for name in DESKTOP_CONVERSATIONS_V3_ENV_NAMES
+                    if name in desktop_env
+                ),
+            )
             return 0
 
     if not args.job:

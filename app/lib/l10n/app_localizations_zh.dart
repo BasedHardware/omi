@@ -15481,6 +15481,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get firmwareUpdateAppRequired => '此固件更新需要更新版本的 Omi 应用。请前往应用商店更新应用，然后重新检查。';
 
   @override
+  String get quietPayerTitle => '5 天没有录音';
+
+  @override
+  String get quietPayerMessage => '请检查你的 Omi。';
+
+  @override
+  String get quietPayerCheck => '检查';
+
+  @override
   String get playManageSubscription => '管理订阅';
 
   @override
@@ -15561,6 +15570,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get firmwareSyncRecordingsFirstMessage => '部分录音仍存储在您的设备上。请等待它们同步到手机完成后，再开始更新。';
 
   @override
+  String get batteryRestartToRefresh => '重启 Omi 以刷新';
+
+  @override
   String homeLockedTitle(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -15582,15 +15594,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get homeFinishingOpensWhenReady => '准备好后会立即打开';
-
-  @override
-  String get quietPayerTitle => '5 天没有录音';
-
-  @override
-  String get quietPayerMessage => '请检查你的 Omi。';
-
-  @override
-  String get quietPayerCheck => '检查';
 
   @override
   String get activityOnThisPhone => '在此手机上';

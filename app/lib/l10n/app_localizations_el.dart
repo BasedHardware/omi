@@ -15838,6 +15838,15 @@ class AppLocalizationsEl extends AppLocalizations {
       'Αυτή η ενημέρωση υλικολογισμικού απαιτεί νεότερη έκδοση της εφαρμογής Omi. Ενημερώστε την εφαρμογή από το κατάστημα εφαρμογών σας και ελέγξτε ξανά.';
 
   @override
+  String get quietPayerTitle => 'Καμία ηχογράφηση εδώ και 5 ημέρες';
+
+  @override
+  String get quietPayerMessage => 'Έλεγξε το Omi σου.';
+
+  @override
+  String get quietPayerCheck => 'Έλεγχος';
+
+  @override
   String get playManageSubscription => 'Διαχείριση συνδρομής';
 
   @override
@@ -15923,6 +15932,9 @@ class AppLocalizationsEl extends AppLocalizations {
       'Μερικές ηχογραφήσεις βρίσκονται ακόμη στη συσκευή σας. Περιμένετε να ολοκληρωθεί ο συγχρονισμός τους στο τηλέφωνό σας και, στη συνέχεια, ξεκινήστε την ενημέρωση.';
 
   @override
+  String get batteryRestartToRefresh => 'Κάντε επανεκκίνηση του Omi για να ανανεωθεί η ένδειξη';
+
+  @override
   String homeLockedTitle(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -15944,15 +15956,6 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get homeFinishingOpensWhenReady => 'Ανοίγει μόλις είναι έτοιμη';
-
-  @override
-  String get quietPayerTitle => 'Καμία ηχογράφηση εδώ και 5 ημέρες';
-
-  @override
-  String get quietPayerMessage => 'Έλεγξε το Omi σου.';
-
-  @override
-  String get quietPayerCheck => 'Έλεγχος';
 
   @override
   String get activityOnThisPhone => 'Σε αυτό το τηλέφωνο';

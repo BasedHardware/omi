@@ -15781,6 +15781,15 @@ class AppLocalizationsEs extends AppLocalizations {
       'Esta actualización del firmware necesita una versión más reciente de la app Omi. Actualiza la app desde tu tienda de aplicaciones y vuelve a comprobarlo.';
 
   @override
+  String get quietPayerTitle => 'Sin grabaciones en 5 días';
+
+  @override
+  String get quietPayerMessage => 'Revisa tu Omi.';
+
+  @override
+  String get quietPayerCheck => 'Revisar';
+
+  @override
   String get playManageSubscription => 'Gestionar suscripción';
 
   @override
@@ -15865,6 +15874,9 @@ class AppLocalizationsEs extends AppLocalizations {
       'Algunas grabaciones siguen en tu dispositivo. Deja que terminen de sincronizarse con tu teléfono y luego inicia la actualización.';
 
   @override
+  String get batteryRestartToRefresh => 'Reinicia Omi para actualizar';
+
+  @override
   String homeLockedTitle(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -15886,15 +15898,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get homeFinishingOpensWhenReady => 'Se abre en cuanto esté lista';
-
-  @override
-  String get quietPayerTitle => 'Sin grabaciones en 5 días';
-
-  @override
-  String get quietPayerMessage => 'Revisa tu Omi.';
-
-  @override
-  String get quietPayerCheck => 'Revisar';
 
   @override
   String get activityOnThisPhone => 'En este teléfono';

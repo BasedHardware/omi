@@ -15738,6 +15738,15 @@ class AppLocalizationsVi extends AppLocalizations {
       'Bản cập nhật firmware này yêu cầu phiên bản ứng dụng Omi mới hơn. Hãy cập nhật ứng dụng từ cửa hàng ứng dụng của bạn, rồi kiểm tra lại.';
 
   @override
+  String get quietPayerTitle => 'Không có bản ghi nào trong 5 ngày';
+
+  @override
+  String get quietPayerMessage => 'Hãy kiểm tra Omi của bạn.';
+
+  @override
+  String get quietPayerCheck => 'Kiểm tra';
+
+  @override
   String get playManageSubscription => 'Quản lý gói đăng ký';
 
   @override
@@ -15820,6 +15829,9 @@ class AppLocalizationsVi extends AppLocalizations {
       'Một số bản ghi âm vẫn còn trên thiết bị của bạn. Hãy đợi chúng đồng bộ xong lên điện thoại, sau đó bắt đầu cập nhật.';
 
   @override
+  String get batteryRestartToRefresh => 'Khởi động lại Omi để làm mới';
+
+  @override
   String homeLockedTitle(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -15841,15 +15853,6 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get homeFinishingOpensWhenReady => 'Sẽ mở ngay khi sẵn sàng';
-
-  @override
-  String get quietPayerTitle => 'Không có bản ghi nào trong 5 ngày';
-
-  @override
-  String get quietPayerMessage => 'Hãy kiểm tra Omi của bạn.';
-
-  @override
-  String get quietPayerCheck => 'Kiểm tra';
 
   @override
   String get activityOnThisPhone => 'Trên điện thoại này';

@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-connect-no-offline-devices.png",
+      "platform": "mobile-ios",
+      "description": "Connect page with 5 saved Omis that are not advertising: no device rows (simulator has no Bluetooth, hence the system dialog)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

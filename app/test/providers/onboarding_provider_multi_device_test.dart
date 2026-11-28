@@ -29,7 +29,7 @@ void main() {
       expect(SharedPreferencesUtil().btDevices.last.name, 'Omi Two Nearby');
     });
 
-    test('visibleDeviceList keeps offline saved devices and replaces them with live scan data', () async {
+    test('visibleDeviceList hides offline saved devices and uses live scan data', () async {
       final savedOffline = _device(id: 'AA:AA:AA:AA:AA:01', name: 'Saved Offline');
       final savedOnline = _device(id: 'AA:AA:AA:AA:AA:02', name: 'Saved Old', rssi: -80);
       final liveOnline = savedOnline.copyWith(name: 'Saved Online', rssi: -30);
@@ -42,9 +42,9 @@ void main() {
       provider.onDevices([liveOnline, liveNew]);
 
       expect(provider.savedDeviceList.map((device) => device.id), [savedOffline.id, savedOnline.id]);
-      expect(provider.visibleDeviceList.map((device) => device.id), [savedOffline.id, savedOnline.id, liveNew.id]);
-      expect(provider.visibleDeviceList[1].name, 'Saved Online');
-      expect(provider.visibleDeviceList[1].rssi, -30);
+      expect(provider.visibleDeviceList.map((device) => device.id), [savedOnline.id, liveNew.id]);
+      expect(provider.visibleDeviceList[0].name, 'Saved Online');
+      expect(provider.visibleDeviceList[0].rssi, -30);
     });
 
     test('a forgotten device is no longer listed as saved on the pairing screen', () async {
@@ -56,9 +56,9 @@ void main() {
       await SharedPreferencesUtil().btDeviceForget(forgotten.id);
 
       final provider = OnboardingProvider();
-      expect(provider.visibleDeviceList.map((device) => device.id), [kept.id]);
+      expect(provider.visibleDeviceList, isEmpty);
       // Still advertising nearby: it is offered as a new device, not as a saved one.
-      provider.onDevices([forgotten]);
+      provider.onDevices([kept, forgotten]);
       expect(provider.visibleDeviceList.map((device) => device.id), [kept.id, forgotten.id]);
       expect(provider.isSavedDevice(forgotten), isFalse);
     });
@@ -72,10 +72,25 @@ void main() {
       final provider = OnboardingProvider();
       provider.onDevices([liveNew]);
 
-      expect(provider.visibleDeviceList.map((device) => device.id), [savedOffline.id, liveNew.id]);
+      expect(provider.visibleDeviceList.map((device) => device.id), [liveNew.id]);
       expect(provider.nearbyDeviceCount, 1);
       expect(provider.isDeviceOnline(savedOffline), isFalse);
       expect(provider.isDeviceOnline(liveNew), isTrue);
+    });
+
+    test('a device that stops advertising leaves the list and notifies', () async {
+      final live = _device(id: 'AA:AA:AA:AA:AA:01', name: 'Live', rssi: -45);
+      await SharedPreferencesUtil().btDeviceSet(live);
+
+      final provider = OnboardingProvider();
+      var notifications = 0;
+      provider.addListener(() => notifications++);
+      provider.onDevices([live]);
+      expect(provider.visibleDeviceList.map((device) => device.id), [live.id]);
+
+      provider.onDevices([]);
+      expect(provider.visibleDeviceList, isEmpty);
+      expect(notifications, 2);
     });
   });
 }

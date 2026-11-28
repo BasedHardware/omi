@@ -15785,6 +15785,15 @@ class AppLocalizationsRu extends AppLocalizations {
       'Для этого обновления прошивки требуется более новая версия приложения Omi. Обновите приложение в магазине приложений, затем проверьте ещё раз.';
 
   @override
+  String get quietPayerTitle => 'Нет записей 5 дней';
+
+  @override
+  String get quietPayerMessage => 'Проверьте свой Omi.';
+
+  @override
+  String get quietPayerCheck => 'Проверить';
+
+  @override
   String get playManageSubscription => 'Управлять подпиской';
 
   @override
@@ -15869,6 +15878,9 @@ class AppLocalizationsRu extends AppLocalizations {
       'Некоторые записи всё ещё находятся на устройстве. Дождитесь завершения их синхронизации с телефоном, а затем начните обновление.';
 
   @override
+  String get batteryRestartToRefresh => 'Перезапустите Omi, чтобы обновить данные';
+
+  @override
   String homeLockedTitle(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -15890,15 +15902,6 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get homeFinishingOpensWhenReady => 'Откроется, как только будет готов';
-
-  @override
-  String get quietPayerTitle => 'Нет записей 5 дней';
-
-  @override
-  String get quietPayerMessage => 'Проверьте свой Omi.';
-
-  @override
-  String get quietPayerCheck => 'Проверить';
 
   @override
   String get activityOnThisPhone => 'На этом телефоне';

@@ -15741,6 +15741,15 @@ class AppLocalizationsFi extends AppLocalizations {
       'Tämä laiteohjelmistopäivitys tarvitsee Omi-sovelluksen uudemman version. Päivitä sovellus sovelluskaupastasi ja tarkista sitten uudelleen.';
 
   @override
+  String get quietPayerTitle => 'Ei tallenteita 5 päivään';
+
+  @override
+  String get quietPayerMessage => 'Tarkista Omisi.';
+
+  @override
+  String get quietPayerCheck => 'Tarkista';
+
+  @override
   String get playManageSubscription => 'Hallinnoi tilausta';
 
   @override
@@ -15823,6 +15832,9 @@ class AppLocalizationsFi extends AppLocalizations {
       'Osaa nauhoituksista on vielä laitteella. Anna niiden synkronoitua puhelimeen loppuun ja käynnistä sitten päivitys.';
 
   @override
+  String get batteryRestartToRefresh => 'Käynnistä Omi uudelleen päivittämiseksi';
+
+  @override
   String homeLockedTitle(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -15844,15 +15856,6 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get homeFinishingOpensWhenReady => 'Aukeaa heti, kun se on valmis';
-
-  @override
-  String get quietPayerTitle => 'Ei tallenteita 5 päivään';
-
-  @override
-  String get quietPayerMessage => 'Tarkista Omisi.';
-
-  @override
-  String get quietPayerCheck => 'Tarkista';
 
   @override
   String get activityOnThisPhone => 'Tässä puhelimessa';

@@ -15866,6 +15866,15 @@ class AppLocalizationsFr extends AppLocalizations {
       'Cette mise à jour du micrologiciel nécessite une version plus récente de l\'application Omi. Mettez l\'application à jour depuis votre boutique d\'applications, puis vérifiez à nouveau.';
 
   @override
+  String get quietPayerTitle => 'Aucun enregistrement depuis 5 jours';
+
+  @override
+  String get quietPayerMessage => 'Vérifiez votre Omi.';
+
+  @override
+  String get quietPayerCheck => 'Vérifier';
+
+  @override
   String get playManageSubscription => 'Gérer l\'abonnement';
 
   @override
@@ -15950,6 +15959,9 @@ class AppLocalizationsFr extends AppLocalizations {
       'Certains enregistrements sont encore sur votre appareil. Laissez-les terminer leur synchronisation vers votre téléphone, puis lancez la mise à jour.';
 
   @override
+  String get batteryRestartToRefresh => 'Redémarrez Omi pour actualiser';
+
+  @override
   String homeLockedTitle(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -15971,15 +15983,6 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get homeFinishingOpensWhenReady => 'S\'ouvre dès qu\'elle est prête';
-
-  @override
-  String get quietPayerTitle => 'Aucun enregistrement depuis 5 jours';
-
-  @override
-  String get quietPayerMessage => 'Vérifiez votre Omi.';
-
-  @override
-  String get quietPayerCheck => 'Vérifier';
 
   @override
   String get activityOnThisPhone => 'Sur ce téléphone';

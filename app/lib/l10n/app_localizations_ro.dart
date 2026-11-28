@@ -15800,6 +15800,15 @@ class AppLocalizationsRo extends AppLocalizations {
       'Această actualizare de firmware necesită o versiune mai nouă a aplicației Omi. Actualizează aplicația din magazinul de aplicații, apoi verifică din nou.';
 
   @override
+  String get quietPayerTitle => 'Nicio înregistrare de 5 zile';
+
+  @override
+  String get quietPayerMessage => 'Verifică-ți Omi.';
+
+  @override
+  String get quietPayerCheck => 'Verifică';
+
+  @override
   String get playManageSubscription => 'Gestionează abonamentul';
 
   @override
@@ -15883,6 +15892,9 @@ class AppLocalizationsRo extends AppLocalizations {
       'Unele înregistrări sunt încă pe dispozitivul tău. Lasă-le să termine de sincronizat cu telefonul tău, apoi pornește actualizarea.';
 
   @override
+  String get batteryRestartToRefresh => 'Repornește Omi pentru a actualiza valoarea';
+
+  @override
   String homeLockedTitle(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -15904,15 +15916,6 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get homeFinishingOpensWhenReady => 'Se deschide imediat ce este gata';
-
-  @override
-  String get quietPayerTitle => 'Nicio înregistrare de 5 zile';
-
-  @override
-  String get quietPayerMessage => 'Verifică-ți Omi.';
-
-  @override
-  String get quietPayerCheck => 'Verifică';
 
   @override
   String get activityOnThisPhone => 'Pe acest telefon';

@@ -15763,6 +15763,15 @@ class AppLocalizationsBs extends AppLocalizations {
       'Ovo ažuriranje firmvera zahtijeva noviju verziju aplikacije Omi. Ažurirajte aplikaciju iz svoje prodavnice aplikacija, a zatim provjerite ponovo.';
 
   @override
+  String get quietPayerTitle => 'Nema snimaka 5 dana';
+
+  @override
+  String get quietPayerMessage => 'Provjerite svoj Omi.';
+
+  @override
+  String get quietPayerCheck => 'Provjeri';
+
+  @override
   String get playManageSubscription => 'Upravljaj pretplatom';
 
   @override
@@ -15845,6 +15854,9 @@ class AppLocalizationsBs extends AppLocalizations {
       'Neki snimci su još uvijek na vašem uređaju. Sačekajte da se sinhronizuju s telefonom, a zatim pokrenite ažuriranje.';
 
   @override
+  String get batteryRestartToRefresh => 'Ponovo pokrenite Omi radi osvježavanja';
+
+  @override
   String homeLockedTitle(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -15866,15 +15878,6 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get homeFinishingOpensWhenReady => 'Otvoriće se čim bude spreman';
-
-  @override
-  String get quietPayerTitle => 'Nema snimaka 5 dana';
-
-  @override
-  String get quietPayerMessage => 'Provjerite svoj Omi.';
-
-  @override
-  String get quietPayerCheck => 'Provjeri';
 
   @override
   String get activityOnThisPhone => 'Na ovom telefonu';

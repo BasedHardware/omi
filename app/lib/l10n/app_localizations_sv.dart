@@ -15744,6 +15744,15 @@ class AppLocalizationsSv extends AppLocalizations {
       'Den här firmwareuppdateringen kräver en nyare Omi-app. Uppdatera appen från din appbutik och kontrollera sedan igen.';
 
   @override
+  String get quietPayerTitle => 'Inga inspelningar på 5 dagar';
+
+  @override
+  String get quietPayerMessage => 'Kolla din Omi.';
+
+  @override
+  String get quietPayerCheck => 'Kolla';
+
+  @override
   String get playManageSubscription => 'Hantera prenumeration';
 
   @override
@@ -15826,6 +15835,9 @@ class AppLocalizationsSv extends AppLocalizations {
       'Vissa inspelningar finns fortfarande på din enhet. Låt dem slutföra synkroniseringen till telefonen och starta sedan uppdateringen.';
 
   @override
+  String get batteryRestartToRefresh => 'Starta om Omi för att uppdatera';
+
+  @override
   String homeLockedTitle(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -15847,15 +15859,6 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get homeFinishingOpensWhenReady => 'Öppnas så snart den är klar';
-
-  @override
-  String get quietPayerTitle => 'Inga inspelningar på 5 dagar';
-
-  @override
-  String get quietPayerMessage => 'Kolla din Omi.';
-
-  @override
-  String get quietPayerCheck => 'Kolla';
 
   @override
   String get activityOnThisPhone => 'På den här telefonen';

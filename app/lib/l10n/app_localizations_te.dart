@@ -15798,6 +15798,15 @@ class AppLocalizationsTe extends AppLocalizations {
       'ఈ ఫర్మ్‌వేర్ నవీకరణకు కొత్త వెర్షన్ Omi యాప్ అవసరం. మీ యాప్ స్టోర్ నుండి యాప్‌ను నవీకరించి, మళ్లీ తనిఖీ చేయండి.';
 
   @override
+  String get quietPayerTitle => '5 రోజులుగా రికార్డింగ్‌లు లేవు';
+
+  @override
+  String get quietPayerMessage => 'మీ Omiని తనిఖీ చేయండి.';
+
+  @override
+  String get quietPayerCheck => 'తనిఖీ';
+
+  @override
   String get playManageSubscription => 'సబ్‌స్క్రిప్షన్ నిర్వహించండి';
 
   @override
@@ -15882,6 +15891,9 @@ class AppLocalizationsTe extends AppLocalizations {
       'కొన్ని రికార్డింగ్‌లు ఇంకా మీ డివైస్‌లో ఉన్నాయి. అవి మీ ఫోన్‌కు పూర్తిగా సమకాలీకరించనివ్వండి, తర్వాత నవీకరణను ప్రారంభించండి.';
 
   @override
+  String get batteryRestartToRefresh => 'రిఫ్రెష్ చేయడానికి Omi ను రీస్టార్ట్ చేయండి';
+
+  @override
   String homeLockedTitle(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -15903,15 +15915,6 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get homeFinishingOpensWhenReady => 'సిద్ధమవగానే తెరుచుకుంటుంది';
-
-  @override
-  String get quietPayerTitle => '5 రోజులుగా రికార్డింగ్‌లు లేవు';
-
-  @override
-  String get quietPayerMessage => 'మీ Omiని తనిఖీ చేయండి.';
-
-  @override
-  String get quietPayerCheck => 'తనిఖీ';
 
   @override
   String get activityOnThisPhone => 'ఈ ఫోన్‌లో';

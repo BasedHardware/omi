@@ -15621,6 +15621,15 @@ class AppLocalizationsHe extends AppLocalizations {
       'עדכון הקושחה הזה דורש גרסה חדשה יותר של אפליקציית Omi. יש לעדכן את האפליקציה מחנות האפליקציות שלך, ואז לבדוק שוב.';
 
   @override
+  String get quietPayerTitle => 'אין הקלטות כבר 5 ימים';
+
+  @override
+  String get quietPayerMessage => 'בדקו את ה-Omi שלכם.';
+
+  @override
+  String get quietPayerCheck => 'בדיקה';
+
+  @override
   String get playManageSubscription => 'ניהול המינוי';
 
   @override
@@ -15702,6 +15711,9 @@ class AppLocalizationsHe extends AppLocalizations {
       'חלק מההקלטות עדיין נמצאות במכשיר שלך. תן להן להשלים את הסינכרון לטלפון, ואז התחל את העדכון.';
 
   @override
+  String get batteryRestartToRefresh => 'הפעל מחדש את Omi כדי לרענן';
+
+  @override
   String homeLockedTitle(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -15723,15 +15735,6 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get homeFinishingOpensWhenReady => 'תיפתח ברגע שתהיה מוכנה';
-
-  @override
-  String get quietPayerTitle => 'אין הקלטות כבר 5 ימים';
-
-  @override
-  String get quietPayerMessage => 'בדקו את ה-Omi שלכם.';
-
-  @override
-  String get quietPayerCheck => 'בדיקה';
 
   @override
   String get activityOnThisPhone => 'בטלפון הזה';

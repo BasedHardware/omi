@@ -15728,6 +15728,15 @@ class AppLocalizationsEt extends AppLocalizations {
       'See püsivara värskendus vajab Omi rakenduse uuemat versiooni. Värskendage rakendust oma rakenduste poes ja kontrollige seejärel uuesti.';
 
   @override
+  String get quietPayerTitle => '5 päeva pole salvestisi';
+
+  @override
+  String get quietPayerMessage => 'Kontrolli oma Omit.';
+
+  @override
+  String get quietPayerCheck => 'Kontrolli';
+
+  @override
   String get playManageSubscription => 'Halda tellimust';
 
   @override
@@ -15810,6 +15819,9 @@ class AppLocalizationsEt extends AppLocalizations {
       'Mõned salvestised on veel teie seadmes. Oodake, kuni need on telefonisse sünkroonitud, ja seejärel alustage uuendust.';
 
   @override
+  String get batteryRestartToRefresh => 'Taaskäivitage Omi värskendamiseks';
+
+  @override
   String homeLockedTitle(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -15831,15 +15843,6 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get homeFinishingOpensWhenReady => 'Avaneb niipea, kui see on valmis';
-
-  @override
-  String get quietPayerTitle => '5 päeva pole salvestisi';
-
-  @override
-  String get quietPayerMessage => 'Kontrolli oma Omit.';
-
-  @override
-  String get quietPayerCheck => 'Kontrolli';
 
   @override
   String get activityOnThisPhone => 'Selles telefonis';

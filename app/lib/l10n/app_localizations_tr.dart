@@ -15747,6 +15747,15 @@ class AppLocalizationsTr extends AppLocalizations {
       'Bu donanım yazılımı güncellemesi için Omi uygulamasının daha yeni bir sürümü gerekiyor. Uygulamayı uygulama mağazanızdan güncelleyin, ardından yeniden kontrol edin.';
 
   @override
+  String get quietPayerTitle => '5 gündür kayıt yok';
+
+  @override
+  String get quietPayerMessage => 'Omi\'ni kontrol et.';
+
+  @override
+  String get quietPayerCheck => 'Kontrol Et';
+
+  @override
   String get playManageSubscription => 'Aboneliği yönet';
 
   @override
@@ -15829,6 +15838,9 @@ class AppLocalizationsTr extends AppLocalizations {
       'Bazı kayıtlar hâlâ cihazınızda. Telefonunuza senkronize edilmelerini bekleyin, ardından güncellemeyi başlatın.';
 
   @override
+  String get batteryRestartToRefresh => 'Yenilemek için Omi\'yi yeniden başlatın';
+
+  @override
   String homeLockedTitle(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -15850,15 +15862,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get homeFinishingOpensWhenReady => 'Hazır olur olmaz açılır';
-
-  @override
-  String get quietPayerTitle => '5 gündür kayıt yok';
-
-  @override
-  String get quietPayerMessage => 'Omi\'ni kontrol et.';
-
-  @override
-  String get quietPayerCheck => 'Kontrol Et';
 
   @override
   String get activityOnThisPhone => 'Bu telefonda';

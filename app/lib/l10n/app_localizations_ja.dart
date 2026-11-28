@@ -15505,6 +15505,15 @@ class AppLocalizationsJa extends AppLocalizations {
   String get firmwareUpdateAppRequired => 'このファームウェアの更新には、新しいバージョンのOmiアプリが必要です。アプリストアからアプリを更新してから、もう一度確認してください。';
 
   @override
+  String get quietPayerTitle => '5日間録音がありません';
+
+  @override
+  String get quietPayerMessage => 'Omiを確認してください。';
+
+  @override
+  String get quietPayerCheck => '確認';
+
+  @override
   String get playManageSubscription => 'サブスクリプションを管理';
 
   @override
@@ -15585,6 +15594,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get firmwareSyncRecordingsFirstMessage => '一部の録音はまだデバイスに残っています。スマートフォンへの同期が完了してから、更新を開始してください。';
 
   @override
+  String get batteryRestartToRefresh => 'Omiを再起動して更新';
+
+  @override
   String homeLockedTitle(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -15606,15 +15618,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get homeFinishingOpensWhenReady => '準備ができ次第開きます';
-
-  @override
-  String get quietPayerTitle => '5日間録音がありません';
-
-  @override
-  String get quietPayerMessage => 'Omiを確認してください。';
-
-  @override
-  String get quietPayerCheck => '確認';
 
   @override
   String get activityOnThisPhone => 'この端末のみ';

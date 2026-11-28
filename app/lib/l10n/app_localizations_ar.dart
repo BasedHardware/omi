@@ -15645,6 +15645,15 @@ class AppLocalizationsAr extends AppLocalizations {
       'يتطلب تحديث البرنامج الثابت هذا إصدارًا أحدث من تطبيق Omi. حدّث التطبيق من متجر التطبيقات لديك، ثم تحقّق مرة أخرى.';
 
   @override
+  String get quietPayerTitle => 'لا توجد تسجيلات منذ 5 أيام';
+
+  @override
+  String get quietPayerMessage => 'تحقّق من Omi.';
+
+  @override
+  String get quietPayerCheck => 'تحقّق';
+
+  @override
   String get playManageSubscription => 'إدارة الاشتراك';
 
   @override
@@ -15727,6 +15736,9 @@ class AppLocalizationsAr extends AppLocalizations {
       'لا تزال بعض التسجيلات على جهازك. دعها تكمل المزامنة إلى هاتفك، ثم ابدأ التحديث.';
 
   @override
+  String get batteryRestartToRefresh => 'أعد تشغيل Omi لتحديث القراءة';
+
+  @override
   String homeLockedTitle(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -15748,15 +15760,6 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get homeFinishingOpensWhenReady => 'ستُفتح بمجرد أن تجهز';
-
-  @override
-  String get quietPayerTitle => 'لا توجد تسجيلات منذ 5 أيام';
-
-  @override
-  String get quietPayerMessage => 'تحقّق من Omi.';
-
-  @override
-  String get quietPayerCheck => 'تحقّق';
 
   @override
   String get activityOnThisPhone => 'على هذا الهاتف';

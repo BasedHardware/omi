@@ -27639,6 +27639,24 @@ abstract class AppLocalizations {
   /// **'This firmware update needs a newer Omi app. Update the app from your app store, then check again.'**
   String get firmwareUpdateAppRequired;
 
+  /// Home row title for a paying monthly subscriber whose Omi has recorded nothing for 5 days
+  ///
+  /// In en, this message translates to:
+  /// **'No recordings in 5 days'**
+  String get quietPayerTitle;
+
+  /// Home row line under quietPayerTitle
+  ///
+  /// In en, this message translates to:
+  /// **'Check your Omi.'**
+  String get quietPayerMessage;
+
+  /// Button on the quiet Home row; opens the Omi device page
+  ///
+  /// In en, this message translates to:
+  /// **'Check'**
+  String get quietPayerCheck;
+
   /// Google Play Billing (Android): playManageSubscription
   ///
   /// In en, this message translates to:
@@ -27765,6 +27783,12 @@ abstract class AppLocalizations {
   /// **'Some recordings are still on your device. Let them finish syncing to your phone, then start the update.'**
   String get firmwareSyncRecordingsFirstMessage;
 
+  /// Short caption under the Battery value (shown as a dash) in Omi device settings when the pendant's near-empty battery reading looks stuck after charging. Tells the user that restarting the Omi pendant refreshes the reading. Omi is the product name; keep it untranslated.
+  ///
+  /// In en, this message translates to:
+  /// **'Restart Omi to refresh'**
+  String get batteryRestartToRefresh;
+
   /// Title of the one Home row that stands for everything over the plan's limit on a day: locked conversations and held recordings together, so the noun is 'recording' for both. {count} is how many.
   ///
   /// In en, this message translates to:
@@ -27794,24 +27818,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Opens as soon as it\'s ready'**
   String get homeFinishingOpensWhenReady;
-
-  /// Home row title for a paying monthly subscriber whose Omi has recorded nothing for 5 days
-  ///
-  /// In en, this message translates to:
-  /// **'No recordings in 5 days'**
-  String get quietPayerTitle;
-
-  /// Home row line under quietPayerTitle
-  ///
-  /// In en, this message translates to:
-  /// **'Check your Omi.'**
-  String get quietPayerMessage;
-
-  /// Button on the quiet Home row; opens the Omi device page
-  ///
-  /// In en, this message translates to:
-  /// **'Check'**
-  String get quietPayerCheck;
 
   /// Section header in Activity listing recordings kept only on this phone: waiting to be transcribed, or ones that could not be sent. Shown in capitals like the other Activity headers.
   ///

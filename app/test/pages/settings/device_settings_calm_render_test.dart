@@ -68,6 +68,12 @@ class _Device extends ChangeNotifier implements DeviceProvider {
   bool get isConnecting => false;
   @override
   int batteryLevel;
+
+  @override
+  int get displayBatteryLevel => batteryReadingStuck ? -1 : batteryLevel;
+
+  @override
+  bool batteryReadingStuck = false;
   @override
   int settingsBatteryLevel;
 
@@ -335,6 +341,31 @@ void main() {
       expect(find.text('Try Again'), findsNothing);
     } finally {
       semantics.dispose();
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('Device Settings hides a stuck near-empty reading and suggests a restart', (tester) async {
+    final device = await pumpDevice(tester, batteryLevel: 1);
+    device
+      ..batteryReadingStuck = true
+      ..settingsBatteryLevel = -1;
+    device.notifyListeners();
+    await tester.pump();
+    final en = lookupAppLocalizations(const Locale('en'));
+    final battery = find.byKey(const Key('device_stat_battery'));
+    try {
+      expect(find.descendant(of: battery, matching: find.text('—')), findsOneWidget);
+      expect(find.descendant(of: battery, matching: find.text(en.batteryRestartToRefresh)), findsOneWidget);
+      expect(find.text('1%'), findsNothing);
+      await writeFrame(tester, '004-mobile-ios-battery-stuck');
+      device
+        ..batteryReadingStuck = false
+        ..publishBatteryLevel(96);
+      await tester.pump();
+      expect(find.text('96%'), findsOneWidget);
+      expect(find.text(en.batteryRestartToRefresh), findsNothing);
+    } finally {
       debugDefaultTargetPlatformOverride = null;
     }
   });

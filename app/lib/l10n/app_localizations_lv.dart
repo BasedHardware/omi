@@ -15770,6 +15770,15 @@ class AppLocalizationsLv extends AppLocalizations {
       'Šim aparātprogrammatūras atjauninājumam nepieciešama jaunāka Omi lietotnes versija. Atjauniniet lietotni savā lietotņu veikalā un pēc tam pārbaudiet vēlreiz.';
 
   @override
+  String get quietPayerTitle => '5 dienas nav ierakstu';
+
+  @override
+  String get quietPayerMessage => 'Pārbaudiet savu Omi.';
+
+  @override
+  String get quietPayerCheck => 'Pārbaudīt';
+
+  @override
   String get playManageSubscription => 'Pārvaldīt abonementu';
 
   @override
@@ -15852,6 +15861,9 @@ class AppLocalizationsLv extends AppLocalizations {
       'Daži ieraksti vēl atrodas jūsu ierīcē. Ļaujiet tiem pabeigt sinhronizēšanu ar tālruni, pēc tam sāciet atjaunināšanu.';
 
   @override
+  String get batteryRestartToRefresh => 'Restartējiet Omi, lai atsvaidzinātu';
+
+  @override
   String homeLockedTitle(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -15873,15 +15885,6 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get homeFinishingOpensWhenReady => 'Tiks atvērta, tiklīdz būs gatava';
-
-  @override
-  String get quietPayerTitle => '5 dienas nav ierakstu';
-
-  @override
-  String get quietPayerMessage => 'Pārbaudiet savu Omi.';
-
-  @override
-  String get quietPayerCheck => 'Pārbaudīt';
 
   @override
   String get activityOnThisPhone => 'Šajā tālrunī';

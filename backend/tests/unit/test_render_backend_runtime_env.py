@@ -656,6 +656,20 @@ def test_desktop_manifest_env_matches_what_the_workflow_deploys(env_name):
     state = _MODULE['_render_desktop_backend_state'](env_config)
     workflow = _DESKTOP_WORKFLOWS[env_name].read_text(encoding='utf-8')
 
+    workflow_config = yaml.safe_load(workflow)
+    deploy_env = next(
+        step['with']['env_vars']
+        for job in workflow_config['jobs'].values()
+        for step in job['steps']
+        if step.get('uses', '').startswith('google-github-actions/deploy-cloudrun@')
+    )
+    assert deploy_env.splitlines().count('${{ steps.desktop-expected-env.outputs.conversations_v3_env_vars }}') == 1
+    for key in _MODULE['DESKTOP_CONVERSATIONS_V3_ENV_NAMES']:
+        assert not any(line.startswith(f'{key}=') for line in deploy_env.splitlines())
+        assert env_config['desktop_backend']['env'].get(key) == env_config['cloud_run']['services']['backend'][
+            'env'
+        ].get(key)
+
     literal_project = {'dev': 'based-hardware-dev', 'prod': 'based-hardware'}[env_name]
     for entry in state['services']['desktop-backend']['env']:
         name, value = entry['name'], entry['value']
@@ -665,6 +679,8 @@ def test_desktop_manifest_env_matches_what_the_workflow_deploys(env_name):
             continue
         if name in _MODULE['FIRESTORE_READ_RUNTIME_ENV_NAMES']:
             assert '${{ steps.desktop-expected-env.outputs.firestore_read_env_vars }}' in workflow
+            continue
+        if name in _MODULE['DESKTOP_CONVERSATIONS_V3_ENV_NAMES']:
             continue
         if value == literal_project:
             # Supplied to the workflow as ${{ vars.GCP_PROJECT_ID }}.
@@ -676,6 +692,8 @@ def test_desktop_manifest_env_matches_what_the_workflow_deploys(env_name):
 def test_desktop_lever_output_tracks_manifest_value_and_escapes_deploy_delimiters(monkeypatch, tmp_path, capsys):
     env_config = deepcopy(_MANIFEST['environments']['dev'])
     env_config['desktop_backend']['env']['FIRESTORE_READ_LEVERS']['value'] = '{"queue_age":true,"subscription":true}'
+    env_config['desktop_backend']['env']['CONVERSATIONS_V3_STAGE']['value'] = 'beta'
+    env_config['desktop_backend']['env']['CONVERSATIONS_V3_FIRST_APP_BUILD']['value'] = '123'
     monkeypatch.setitem(_MODULE['main'].__globals__, '_load_yaml', lambda _path: {'environments': {'dev': env_config}})
     state = tmp_path / 'state.json'
     monkeypatch.setattr('sys.argv', [str(_SCRIPT), '--env', 'dev', '--desktop-state-output', str(state)])
@@ -684,7 +702,9 @@ def test_desktop_lever_output_tracks_manifest_value_and_escapes_deploy_delimiter
 
     output = _read_workflow_outputs()
     assert 'FIRESTORE_READ_LEVERS={"queue_age":true\\,"subscription":true}\n' in output
-    assert output.endswith('__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\n')
+    assert '\n__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\n' in output
+    assert 'CONVERSATIONS_V3_STAGE=beta\n' in output
+    assert 'CONVERSATIONS_V3_FIRST_APP_BUILD=123\n' in output
 
 
 def test_staged_desktop_production_controls_render_without_runtime_checkout(tmp_path):
@@ -735,7 +755,15 @@ def test_staged_desktop_production_controls_render_without_runtime_checkout(tmp_
         'firestore_read_env_vars<<__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\nFIRESTORE_READ_LEVERS={"action_items_page":100\\,"action_items_ttl120":100\\,"backfill_task_reads":100\\,"bpp_decision_cache":0\\,"bpp_generation_memo":100\\,"candidates_page":100\\,"canonical_statuses_dedupe":100\\,"conversation_list_cursor":100\\,"deletion_marker_cache":100\\,"finjob_candidate_queries":100\\,"historical_scan_memo":100\\,"ledger_purge_coalesce":100\\,"lifecycle_record_pending_head":5\\,"mcp_conversation_cards_cache":100\\,"memory_list_index_window":100\\,"people_scan_dedupe":100\\,"privacy_checks_shadow":0\\,"privacy_ttl60":0\\,"queue_age_sample_budget":100\\,"request_read_dedupe":100\\,"serving_config_cache":100\\,"singleton_loops":100\\,"subscription_cache":100\\,"sync_snapshot_resolve_cache":100\\,"usage_month_cache":0\\,"usage_month_total":0}\n'
         in workflow_outputs
     )
-    assert workflow_outputs.endswith('__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\n')
+    prod_env = _MANIFEST['environments']['prod']['cloud_run']['services']['backend']['env']
+    expected_v3 = ''.join(
+        f"{name}={prod_env[name]['value']}\n" for name in _MODULE['DESKTOP_CONVERSATIONS_V3_ENV_NAMES']
+    )
+    assert (
+        'conversations_v3_env_vars<<__BACKEND_RUNTIME_ENV_conversations_v3_env_vars__\n'
+        + expected_v3
+        + '__BACKEND_RUNTIME_ENV_conversations_v3_env_vars__\n'
+    ) in workflow_outputs
     entries = json.loads(state.read_text())['services']['desktop-backend']['env']
     assert {'name': 'CLIENT_SUMMARIES_AT_CAP_ENABLED', 'value': 'true'} in entries
 

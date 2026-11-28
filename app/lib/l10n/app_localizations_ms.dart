@@ -15773,6 +15773,15 @@ class AppLocalizationsMs extends AppLocalizations {
       'Kemas kini perisian tegar ini memerlukan versi apl Omi yang lebih baharu. Kemas kini apl daripada gedung aplikasi anda, kemudian semak semula.';
 
   @override
+  String get quietPayerTitle => 'Tiada rakaman dalam 5 hari';
+
+  @override
+  String get quietPayerMessage => 'Semak Omi anda.';
+
+  @override
+  String get quietPayerCheck => 'Semak';
+
+  @override
   String get playManageSubscription => 'Urus langganan';
 
   @override
@@ -15857,6 +15866,9 @@ class AppLocalizationsMs extends AppLocalizations {
       'Sebahagian rakaman masih berada pada peranti anda. Biarkan ia selesai disegerakkan ke telefon anda, kemudian mulakan kemas kini.';
 
   @override
+  String get batteryRestartToRefresh => 'Mulakan semula Omi untuk memuat semula';
+
+  @override
   String homeLockedTitle(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -15878,15 +15890,6 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get homeFinishingOpensWhenReady => 'Akan dibuka sebaik sahaja siap';
-
-  @override
-  String get quietPayerTitle => 'Tiada rakaman dalam 5 hari';
-
-  @override
-  String get quietPayerMessage => 'Semak Omi anda.';
-
-  @override
-  String get quietPayerCheck => 'Semak';
 
   @override
   String get activityOnThisPhone => 'Pada telefon ini';

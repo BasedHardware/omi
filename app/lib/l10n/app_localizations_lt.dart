@@ -15758,6 +15758,15 @@ class AppLocalizationsLt extends AppLocalizations {
       'Šiam programinės aparatinės įrangos naujinimui reikia naujesnės „Omi“ programėlės versijos. Atnaujinkite programėlę savo programėlių parduotuvėje ir patikrinkite dar kartą.';
 
   @override
+  String get quietPayerTitle => '5 dienas nėra įrašų';
+
+  @override
+  String get quietPayerMessage => 'Patikrinkite savo Omi.';
+
+  @override
+  String get quietPayerCheck => 'Patikrinti';
+
+  @override
   String get playManageSubscription => 'Tvarkyti prenumeratą';
 
   @override
@@ -15841,6 +15850,9 @@ class AppLocalizationsLt extends AppLocalizations {
       'Kai kurie įrašai dar yra jūsų įrenginyje. Leiskite jiems užbaigti sinchronizavimą į telefoną, tada pradėkite atnaujinimą.';
 
   @override
+  String get batteryRestartToRefresh => 'Paleiskite Omi iš naujo, kad atnaujintumėte';
+
+  @override
   String homeLockedTitle(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -15862,15 +15874,6 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get homeFinishingOpensWhenReady => 'Atsidarys, kai tik bus paruošta';
-
-  @override
-  String get quietPayerTitle => '5 dienas nėra įrašų';
-
-  @override
-  String get quietPayerMessage => 'Patikrinkite savo Omi.';
-
-  @override
-  String get quietPayerCheck => 'Patikrinti';
 
   @override
   String get activityOnThisPhone => 'Šiame telefone';

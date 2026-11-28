@@ -15779,6 +15779,15 @@ class AppLocalizationsPl extends AppLocalizations {
       'Ta aktualizacja oprogramowania układowego wymaga nowszej aplikacji Omi. Zaktualizuj aplikację w sklepie z aplikacjami, a następnie sprawdź ponownie.';
 
   @override
+  String get quietPayerTitle => 'Brak nagrań od 5 dni';
+
+  @override
+  String get quietPayerMessage => 'Sprawdź swoje Omi.';
+
+  @override
+  String get quietPayerCheck => 'Sprawdź';
+
+  @override
   String get playManageSubscription => 'Zarządzaj subskrypcją';
 
   @override
@@ -15862,6 +15871,9 @@ class AppLocalizationsPl extends AppLocalizations {
       'Niektóre nagrania wciąż znajdują się na urządzeniu. Poczekaj, aż zostaną zsynchronizowane z telefonem, a następnie rozpocznij aktualizację.';
 
   @override
+  String get batteryRestartToRefresh => 'Uruchom ponownie Omi, aby odświeżyć odczyt';
+
+  @override
   String homeLockedTitle(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -15883,15 +15895,6 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get homeFinishingOpensWhenReady => 'Otworzy się, gdy tylko będzie gotowa';
-
-  @override
-  String get quietPayerTitle => 'Brak nagrań od 5 dni';
-
-  @override
-  String get quietPayerMessage => 'Sprawdź swoje Omi.';
-
-  @override
-  String get quietPayerCheck => 'Sprawdź';
 
   @override
   String get activityOnThisPhone => 'Na tym telefonie';

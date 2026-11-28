@@ -19238,6 +19238,18 @@
     "@firmwareUpdateAppRequired": {
         "description": "Firmware update unavailable because the installed Omi app does not meet the release app version or build requirement."
     },
+    "quietPayerTitle": "No recordings in 5 days",
+    "@quietPayerTitle": {
+        "description": "Home row title for a paying monthly subscriber whose Omi has recorded nothing for 5 days"
+    },
+    "quietPayerMessage": "Check your Omi.",
+    "@quietPayerMessage": {
+        "description": "Home row line under quietPayerTitle"
+    },
+    "quietPayerCheck": "Check",
+    "@quietPayerCheck": {
+        "description": "Button on the quiet Home row; opens the Omi device page"
+    },
     "playManageSubscription": "Manage subscription",
     "@playManageSubscription": {
         "description": "Google Play Billing (Android): playManageSubscription"
@@ -19332,6 +19344,10 @@
     "@firmwareSyncRecordingsFirstMessage": {
         "description": "Dialog body explaining that recordings must finish syncing from the pendant to the phone before the firmware update can start."
     },
+    "batteryRestartToRefresh": "Restart Omi to refresh",
+    "@batteryRestartToRefresh": {
+        "description": "Short caption under the Battery value (shown as a dash) in Omi device settings when the pendant's near-empty battery reading looks stuck after charging. Tells the user that restarting the Omi pendant refreshes the reading. Omi is the product name; keep it untranslated."
+    },
     "homeLockedTitle": "{count, plural, =1{1 recording waiting} other{{count} recordings waiting}}",
     "@homeLockedTitle": {
         "description": "Title of the one Home row that stands for everything over the plan's limit on a day: locked conversations and held recordings together, so the noun is 'recording' for both. {count} is how many.",
@@ -19356,18 +19372,6 @@
     "homeFinishingOpensWhenReady": "Opens as soon as it's ready",
     "@homeFinishingOpensWhenReady": {
         "description": "Short toast when the reader taps the 'Finishing up…' Home row before the conversation they just ended exists on the server."
-    },
-    "quietPayerTitle": "No recordings in 5 days",
-    "@quietPayerTitle": {
-        "description": "Home row title for a paying monthly subscriber whose Omi has recorded nothing for 5 days"
-    },
-    "quietPayerMessage": "Check your Omi.",
-    "@quietPayerMessage": {
-        "description": "Home row line under quietPayerTitle"
-    },
-    "quietPayerCheck": "Check",
-    "@quietPayerCheck": {
-        "description": "Button on the quiet Home row; opens the Omi device page"
     },
     "activityOnThisPhone": "On this phone",
     "@activityOnThisPhone": {

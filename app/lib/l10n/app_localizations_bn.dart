@@ -15730,6 +15730,15 @@ class AppLocalizationsBn extends AppLocalizations {
       'এই ফার্মওয়্যার আপডেটের জন্য Omi অ্যাপের আরও নতুন সংস্করণ প্রয়োজন। আপনার অ্যাপ স্টোর থেকে অ্যাপটি আপডেট করুন, তারপর আবার পরীক্ষা করুন।';
 
   @override
+  String get quietPayerTitle => '৫ দিন ধরে কোনো রেকর্ডিং নেই';
+
+  @override
+  String get quietPayerMessage => 'আপনার Omi দেখে নিন।';
+
+  @override
+  String get quietPayerCheck => 'দেখুন';
+
+  @override
   String get playManageSubscription => 'সাবস্ক্রিপশন পরিচালনা';
 
   @override
@@ -15813,6 +15822,9 @@ class AppLocalizationsBn extends AppLocalizations {
       'কিছু রেকর্ডিং এখনও আপনার ডিভাইসে রয়েছে। সেগুলিকে আপনার ফোনে সিঙ্ক শেষ হতে দিন, তারপর আপডেট শুরু করুন।';
 
   @override
+  String get batteryRestartToRefresh => 'রিফ্রেশ করতে Omi পুনরায় চালু করুন';
+
+  @override
   String homeLockedTitle(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -15834,15 +15846,6 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get homeFinishingOpensWhenReady => 'প্রস্তুত হওয়ামাত্রই খুলে যাবে';
-
-  @override
-  String get quietPayerTitle => '৫ দিন ধরে কোনো রেকর্ডিং নেই';
-
-  @override
-  String get quietPayerMessage => 'আপনার Omi দেখে নিন।';
-
-  @override
-  String get quietPayerCheck => 'দেখুন';
 
   @override
   String get activityOnThisPhone => 'এই ফোনে';

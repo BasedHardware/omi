@@ -15860,6 +15860,15 @@ class AppLocalizationsTl extends AppLocalizations {
       'Kailangan ng firmware update na ito ng mas bagong Omi app. I-update ang app mula sa iyong app store, pagkatapos ay tingnan muli.';
 
   @override
+  String get quietPayerTitle => 'Walang recording sa loob ng 5 araw';
+
+  @override
+  String get quietPayerMessage => 'Tingnan ang iyong Omi.';
+
+  @override
+  String get quietPayerCheck => 'Tingnan';
+
+  @override
   String get playManageSubscription => 'Pamahalaan ang subscription';
 
   @override
@@ -15945,6 +15954,9 @@ class AppLocalizationsTl extends AppLocalizations {
       'May mga recording pa na nasa iyong device. Hayaang matapos munang i-sync ang mga ito sa iyong phone, pagkatapos ay simulan ang pag-update.';
 
   @override
+  String get batteryRestartToRefresh => 'I-restart ang Omi upang i-refresh';
+
+  @override
   String homeLockedTitle(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -15966,15 +15978,6 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get homeFinishingOpensWhenReady => 'Bubuksan agad kapag handa na';
-
-  @override
-  String get quietPayerTitle => 'Walang recording sa loob ng 5 araw';
-
-  @override
-  String get quietPayerMessage => 'Tingnan ang iyong Omi.';
-
-  @override
-  String get quietPayerCheck => 'Tingnan';
 
   @override
   String get activityOnThisPhone => 'Sa teleponong ito';

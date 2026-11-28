@@ -36,6 +36,14 @@ ROOT = Path(__file__).resolve().parents[3]
 NOW = 1794700800.0
 
 
+def without_retiring_banner(text):
+    # SCA-2965 added a five-line RETIRING comment banner to the retiring legacy modules.
+    lines = text.splitlines(keepends=True)
+    if lines and lines[0] == '# LIFECYCLE: one-time\n' and any('# RETIRING:' in line for line in lines[:5]):
+        return ''.join(lines[5:])
+    return text
+
+
 def main_source(path):
     return subprocess.check_output(['git', 'show', f'{MAIN}:{path}'], cwd=ROOT, text=True)
 
@@ -216,7 +224,7 @@ def test_early_placement_and_coverage_implementations_are_main_bytes():
         'backend/utils/sync/pipeline.py',
         'backend/utils/sync/wal_audio_coverage.py',
     ]:
-        actual = (ROOT / path).read_text()
+        actual = without_retiring_banner((ROOT / path).read_text())
         if path.endswith('/capture_decode.py'):
             # Exclude only the export and source-frame telemetry. Every byte
             # involved in the actual early-clock decode and placement stays pinned.

@@ -15800,6 +15800,15 @@ class AppLocalizationsMk extends AppLocalizations {
       'Ова ажурирање на фирмверот бара понова верзија на апликацијата Omi. Ажурирајте ја апликацијата од вашата продавница за апликации, па проверете повторно.';
 
   @override
+  String get quietPayerTitle => 'Нема снимки 5 дена';
+
+  @override
+  String get quietPayerMessage => 'Проверете го вашиот Omi.';
+
+  @override
+  String get quietPayerCheck => 'Провери';
+
+  @override
   String get playManageSubscription => 'Управувај со претплатата';
 
   @override
@@ -15883,6 +15892,9 @@ class AppLocalizationsMk extends AppLocalizations {
       'Некои записи се уште се на вашиот уред. Оставете ги да ја завршат синхронизацијата со телефонот, а потоа започнете со ажурирањето.';
 
   @override
+  String get batteryRestartToRefresh => 'Рестартирајте го Omi за освежување';
+
+  @override
   String homeLockedTitle(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -15904,15 +15916,6 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get homeFinishingOpensWhenReady => 'Ќе се отвори штом ќе биде подготвено';
-
-  @override
-  String get quietPayerTitle => 'Нема снимки 5 дена';
-
-  @override
-  String get quietPayerMessage => 'Проверете го вашиот Omi.';
-
-  @override
-  String get quietPayerCheck => 'Провери';
 
   @override
   String get activityOnThisPhone => 'На овој телефон';

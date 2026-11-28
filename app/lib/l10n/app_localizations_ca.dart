@@ -15814,6 +15814,15 @@ class AppLocalizationsCa extends AppLocalizations {
       'Aquesta actualització del microprogramari necessita una versió més nova de l\'aplicació Omi. Actualitza l\'aplicació des de la botiga d\'aplicacions i torna-ho a comprovar.';
 
   @override
+  String get quietPayerTitle => 'Cap gravació en 5 dies';
+
+  @override
+  String get quietPayerMessage => 'Comprova el teu Omi.';
+
+  @override
+  String get quietPayerCheck => 'Comprova';
+
+  @override
   String get playManageSubscription => 'Gestiona la subscripció';
 
   @override
@@ -15898,6 +15907,9 @@ class AppLocalizationsCa extends AppLocalizations {
       'Alguns enregistraments encara són al vostre dispositiu. Deixeu que acabin de sincronitzar-se al telèfon i, després, inicieu l\'actualització.';
 
   @override
+  String get batteryRestartToRefresh => 'Reinicieu Omi per actualitzar el valor';
+
+  @override
   String homeLockedTitle(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -15919,15 +15931,6 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get homeFinishingOpensWhenReady => 'S\'obrirà tan bon punt estigui a punt';
-
-  @override
-  String get quietPayerTitle => 'Cap gravació en 5 dies';
-
-  @override
-  String get quietPayerMessage => 'Comprova el teu Omi.';
-
-  @override
-  String get quietPayerCheck => 'Comprova';
 
   @override
   String get activityOnThisPhone => 'En aquest telèfon';

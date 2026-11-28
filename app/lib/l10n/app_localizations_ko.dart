@@ -15511,6 +15511,15 @@ class AppLocalizationsKo extends AppLocalizations {
   String get firmwareUpdateAppRequired => '이 펌웨어 업데이트에는 더 최신 버전의 Omi 앱이 필요합니다. 앱 스토어에서 앱을 업데이트한 후 다시 확인하세요.';
 
   @override
+  String get quietPayerTitle => '5일 동안 녹음이 없어요';
+
+  @override
+  String get quietPayerMessage => 'Omi를 확인해 보세요.';
+
+  @override
+  String get quietPayerCheck => '확인';
+
+  @override
   String get playManageSubscription => '구독 관리';
 
   @override
@@ -15591,6 +15600,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get firmwareSyncRecordingsFirstMessage => '일부 녹음이 아직 기기에 남아 있습니다. 휴대폰으로의 동기화가 완료되면 업데이트를 시작해 주세요.';
 
   @override
+  String get batteryRestartToRefresh => '새로고침하려면 Omi를 다시 시작하세요';
+
+  @override
   String homeLockedTitle(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -15612,15 +15624,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get homeFinishingOpensWhenReady => '준비되는 대로 열립니다';
-
-  @override
-  String get quietPayerTitle => '5일 동안 녹음이 없어요';
-
-  @override
-  String get quietPayerMessage => 'Omi를 확인해 보세요.';
-
-  @override
-  String get quietPayerCheck => '확인';
 
   @override
   String get activityOnThisPhone => '이 휴대폰에만 있음';

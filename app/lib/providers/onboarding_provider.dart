@@ -93,11 +93,12 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     unawaited(_ensureOsFacts());
   }
 
+  /// Only devices advertising in the current scan; saved ones sort first.
   List<BtDevice> get visibleDeviceList {
     final visibleDevices = <BtDevice>[];
     for (final savedDevice in savedDeviceList) {
       final onlineDevice = foundDevicesMap[savedDevice.id];
-      visibleDevices.add(onlineDevice ?? savedDevice);
+      if (onlineDevice != null) visibleDevices.add(onlineDevice);
     }
     for (final device in deviceList) {
       if (!visibleDevices.any((visibleDevice) => visibleDevice.id == device.id)) {
@@ -682,9 +683,10 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       if (pairingFailureReason == DeviceConnectFailureShownFailureReason.notFoundOrDropped) {
         pairingFailureReason = null;
       }
-      notifyListeners();
       _didNotMakeItTimer?.cancel();
     }
+    // Also when the list empties, so a device that stopped advertising leaves the screen.
+    notifyListeners();
   }
 
   @override

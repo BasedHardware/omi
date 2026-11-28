@@ -15776,6 +15776,15 @@ class AppLocalizationsNl extends AppLocalizations {
       'Voor deze firmware-update is een nieuwere Omi-app nodig. Werk de app bij via je appwinkel en controleer daarna opnieuw.';
 
   @override
+  String get quietPayerTitle => 'Al 5 dagen geen opnames';
+
+  @override
+  String get quietPayerMessage => 'Controleer je Omi.';
+
+  @override
+  String get quietPayerCheck => 'Controleren';
+
+  @override
   String get playManageSubscription => 'Abonnement beheren';
 
   @override
@@ -15859,6 +15868,9 @@ class AppLocalizationsNl extends AppLocalizations {
       'Sommige opnames staan nog op je apparaat. Laat ze eerst volledig synchroniseren naar je telefoon en start daarna de update.';
 
   @override
+  String get batteryRestartToRefresh => 'Start Omi opnieuw op om te vernieuwen';
+
+  @override
   String homeLockedTitle(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -15880,15 +15892,6 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get homeFinishingOpensWhenReady => 'Wordt geopend zodra het klaar is';
-
-  @override
-  String get quietPayerTitle => 'Al 5 dagen geen opnames';
-
-  @override
-  String get quietPayerMessage => 'Controleer je Omi.';
-
-  @override
-  String get quietPayerCheck => 'Controleren';
 
   @override
   String get activityOnThisPhone => 'Op deze telefoon';

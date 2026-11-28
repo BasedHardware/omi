@@ -15729,6 +15729,15 @@ class AppLocalizationsSk extends AppLocalizations {
       'Táto aktualizácia firmvéru vyžaduje novšiu aplikáciu Omi. Aktualizujte aplikáciu v obchode s aplikáciami a potom znova skontrolujte aktualizácie.';
 
   @override
+  String get quietPayerTitle => 'Žiadne nahrávky za 5 dní';
+
+  @override
+  String get quietPayerMessage => 'Skontrolujte svoj Omi.';
+
+  @override
+  String get quietPayerCheck => 'Skontrolovať';
+
+  @override
   String get playManageSubscription => 'Spravovať predplatné';
 
   @override
@@ -15811,6 +15820,9 @@ class AppLocalizationsSk extends AppLocalizations {
       'Niektoré nahrávky sa stále nachádzajú na zariadení. Počkajte, kým sa dokončí ich synchronizácia s telefónom, a potom spustite aktualizáciu.';
 
   @override
+  String get batteryRestartToRefresh => 'Pre obnovenie údajov reštartujte Omi';
+
+  @override
   String homeLockedTitle(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -15832,15 +15844,6 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get homeFinishingOpensWhenReady => 'Otvorí sa hneď, ako bude hotová';
-
-  @override
-  String get quietPayerTitle => 'Žiadne nahrávky za 5 dní';
-
-  @override
-  String get quietPayerMessage => 'Skontrolujte svoj Omi.';
-
-  @override
-  String get quietPayerCheck => 'Skontrolovať';
 
   @override
   String get activityOnThisPhone => 'V tomto telefóne';
