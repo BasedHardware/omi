@@ -54,6 +54,10 @@ class WalSyncs implements IWalSync {
   int _clearHolds = 0;
   int _clearHoldEpoch = 0;
 
+  /// Single-recording transfers started through [syncWal] (a row's Sync
+  /// button), which run outside the coordinator's pass. A clear joins them.
+  final Set<Future<void>> _singleTransfers = {};
+
   /// True while a bulk clear owns the stores. Transfer drains report contended.
   bool get transfersHeldForClear => _clearHolds > 0;
 
@@ -90,7 +94,12 @@ class WalSyncs implements IWalSync {
     Future<void>? uploadPass,
     Duration poll = const Duration(milliseconds: 100),
   }) async {
-    bool busy() => _ringPass != null || ring.isSyncing || _storageSync.isSyncing || _sdcardSync.isSyncing;
+    bool busy() =>
+        _ringPass != null ||
+        _singleTransfers.isNotEmpty ||
+        ring.isSyncing ||
+        _storageSync.isSyncing ||
+        _sdcardSync.isSyncing;
     final deadline = DateTime.now().add(timeout);
     Future<void> bounded(Future<void> work) async {
       final left = deadline.difference(DateTime.now());
@@ -105,6 +114,7 @@ class WalSyncs implements IWalSync {
     if (uploadPass != null) await bounded(uploadPass);
     final ringPass = _ringPass;
     if (ringPass != null) await bounded(ringPass);
+    if (_singleTransfers.isNotEmpty) await bounded(Future.wait(_singleTransfers.toList()));
     while (busy() && DateTime.now().isBefore(deadline)) {
       await Future<void>.delayed(poll);
     }
@@ -681,8 +691,16 @@ class WalSyncs implements IWalSync {
   }
 
   @override
-  Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
-    if (_clearHolds > 0) throw StateError('Storage clear in progress');
+  Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) {
+    if (_clearHolds > 0) return Future.error(StateError('Storage clear in progress'));
+    final work = _syncOneWal(wal: wal, progress: progress);
+    late final Future<void> tracked;
+    tracked = work.then<void>((_) {}, onError: (Object _) {}).whenComplete(() => _singleTransfers.remove(tracked));
+    _singleTransfers.add(tracked);
+    return work;
+  }
+
+  Future<SyncLocalFilesResponse?> _syncOneWal({required Wal wal, IWalSyncProgressListener? progress}) async {
     if (wal.storage == WalStorage.sdcard) {
       progress?.onWalSyncedProgress(0.0, phase: SyncPhase.downloadingFromDevice);
       if (wal.fileNum == -1) {

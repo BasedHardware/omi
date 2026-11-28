@@ -37,8 +37,8 @@ Future<void> runStorageClear({
       ),
     StorageClearScope.all => (
         l.storageDeleteAllTitle(dur(amounts.allSeconds)),
-        amounts.pendingCount > 0
-            ? l.storageDeleteAllMessage(dur(amounts.pendingSeconds))
+        amounts.unuploadedCount > 0
+            ? l.storageDeleteAllMessage(dur(amounts.unuploadedSeconds))
             : l.storageDeleteAllUploadedMessage,
         l.storageDeleteEverything,
       ),

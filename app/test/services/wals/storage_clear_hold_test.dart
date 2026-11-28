@@ -26,6 +26,15 @@ class _PhoneSync extends LocalWalSyncImpl {
 
   @override
   Future<void> deleteAllPendingWals({WalDeleteProgress? onProgress, bool includeAccepted = true}) async {}
+
+  /// When set, a single-recording upload runs until it completes.
+  Completer<void>? upload;
+
+  @override
+  Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
+    await upload?.future;
+    return null;
+  }
 }
 
 /// A pendant reader that runs until cancelled (or forever, when [ignoresCancel]),
@@ -181,6 +190,28 @@ void main() {
       release();
     });
 
+    test('a single-recording upload started from its row is joined before a clear', () async {
+      final phone = _PhoneSync();
+      final standalone = WalSyncs(_Listener(), phoneSync: phone, ringSync: _Ring());
+      final upload = phone.upload = Completer<void>();
+      final sync = standalone.syncWal(
+        wal: Wal(timerStart: 1704067200, codec: BleAudioCodec.opus, seconds: 60, storage: WalStorage.disk),
+      );
+      final release = standalone.holdTransfersForClear();
+      expect(
+        await standalone.settleTransfersForClear(
+          timeout: const Duration(milliseconds: 200),
+          poll: const Duration(milliseconds: 20),
+        ),
+        isFalse,
+        reason: 'the upload may still be writing the row a clear would delete',
+      );
+      upload.complete();
+      await sync;
+      expect(await standalone.settleTransfersForClear(timeout: const Duration(seconds: 2)), isTrue);
+      release();
+    });
+
     test('a read that will not stop is reported, never cleared over', () async {
       if (!ringDrainRecoveryEnabled) return;
       attach(ignoresCancel: true);
@@ -234,6 +265,17 @@ void main() {
       expect(amounts.phonePendingSeconds, 600);
       expect(amounts.devicePendingSeconds, 7200);
       expect(amounts.pendingCount, 2);
+
+      expect(amounts.unuploadedSeconds, 7800);
+
+      final refusedOnly = StorageAmounts.of([
+        wal(WalStatus.synced, seconds: 3600),
+        wal(WalStatus.uploadRejected, seconds: 1800),
+        wal(WalStatus.outsideRecoveryWindow, seconds: 900),
+      ]);
+      expect(refusedOnly.pendingCount, 0);
+      expect(refusedOnly.unuploadedCount, 2, reason: 'Delete everything must warn that these are lost');
+      expect(refusedOnly.unuploadedSeconds, 2700);
 
       final reading = StorageAmounts.of([wal(WalStatus.miss, seconds: 600)], freshDeviceSeconds: 39600);
       expect(reading.devicePendingSeconds, 39600);

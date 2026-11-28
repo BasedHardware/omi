@@ -64,12 +64,14 @@ class StorageAmounts {
     required this.pendingCount,
     required this.allCount,
     required this.allSeconds,
+    this.otherUnuploadedSeconds = 0,
+    this.otherUnuploadedCount = 0,
   });
 
   factory StorageAmounts.of(Iterable<Wal> wals, {int? freshDeviceSeconds}) {
     var uploadedSeconds = 0, uploadedCount = 0;
     var phonePending = 0, devicePending = 0, pendingCount = 0, deviceRows = 0;
-    var allCount = 0, allSeconds = 0;
+    var allCount = 0, allSeconds = 0, otherUnuploadedSeconds = 0, otherUnuploadedCount = 0;
     for (final wal in wals) {
       final scope = storageClearScopeOf(wal);
       if (scope == null) continue;
@@ -87,6 +89,11 @@ class StorageAmounts {
         } else {
           phonePending += seconds;
         }
+      } else if (wal.status != WalStatus.synced) {
+        // Refused, out-of-window, corrupted or unsupported audio: only Delete
+        // everything removes it, and it was never uploaded.
+        otherUnuploadedCount++;
+        otherUnuploadedSeconds += seconds;
       }
     }
     // While the pendant is being read its virtual row can be unlisted; the
@@ -106,6 +113,8 @@ class StorageAmounts {
       pendingCount: pendingCount,
       allCount: allCount,
       allSeconds: allSeconds,
+      otherUnuploadedSeconds: otherUnuploadedSeconds,
+      otherUnuploadedCount: otherUnuploadedCount,
     );
   }
 
@@ -117,7 +126,16 @@ class StorageAmounts {
   final int allCount;
   final int allSeconds;
 
+  /// Audio only Delete everything removes that was never uploaded (refused,
+  /// outside the recovery window, corrupted, unsupported). Deleting it is final.
+  final int otherUnuploadedSeconds;
+  final int otherUnuploadedCount;
+
   int get pendingSeconds => phonePendingSeconds + devicePendingSeconds;
+
+  /// Everything Delete everything removes that is not already uploaded.
+  int get unuploadedSeconds => pendingSeconds + otherUnuploadedSeconds;
+  int get unuploadedCount => pendingCount + otherUnuploadedCount;
 }
 
 bool isDeviceStoredWal(Wal wal) => wal.storage == WalStorage.sdcard || wal.storage == WalStorage.flashPage;
