@@ -17726,7 +17726,7 @@
             }
         }
     },
-    "trialUpsellBody": "Add a card to start. You pay nothing today. We'll remind you before anything is charged. Cancel anytime.",
+    "trialUpsellBody": "Add a card to start. You pay nothing today. After {days} days, your paid plan starts at the price below unless you cancel first. Cancel in Settings > Plan & Usage.",
     "@trialUpsellBody": {
         "description": "Pocket onboarding arm: trialUpsellBody",
         "placeholders": {

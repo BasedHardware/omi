@@ -14555,7 +14555,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String trialUpsellBody(int days) {
-    return 'Başlamak için bir kart ekle. Bugün hiçbir şey ödemezsin. Ücret alınmadan önce hatırlatırız. İstediğin zaman iptal et.';
+    return 'Başlamak için bir kart ekle. Bugün hiçbir şey ödemezsin. $days gün sonra, daha önce iptal etmezsen ücretli plan aşağıdaki fiyatla başlar. İptal için Ayarlar > Plan ve Kullanım.';
   }
 
   @override

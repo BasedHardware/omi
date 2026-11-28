@@ -11851,7 +11851,7 @@
     "deviceOnboardingAskNowSubtitle": "بلند بگویید. Omi گوش می‌دهد.",
     "deviceOnboardingPressAgainHint": "تمام شد؟ برای ارسال دوباره دکمه را فشار دهید.",
     "trialUpsellTitle": "Omi Pro را {days} روز رایگان امتحان کنید",
-    "trialUpsellBody": "برای شروع یک کارت اضافه کنید. امروز چیزی پرداخت نمی‌کنید. قبل از هر پرداختی یادآوری می‌کنیم. هر زمان لغو کنید.",
+    "trialUpsellBody": "برای شروع یک کارت اضافه کنید. امروز چیزی پرداخت نمی‌کنید. بعد از {days} روز طرح پولی شما با قیمت زیر شروع می‌شود، مگر اینکه قبل از آن لغو کنید. لغو از تنظیمات > طرح و استفاده.",
     "trialUpsellClaim": "دریافت آزمایشی {days} روزه",
     "settingsUpgradeTrialSubtitle": "آزمایش رایگان {days} روزه را شروع کنید",
     "pairingPowerOnTitle": "Omi را روشن کنید",

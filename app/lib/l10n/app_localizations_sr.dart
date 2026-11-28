@@ -14550,7 +14550,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String trialUpsellBody(int days) {
-    return 'Dodajte karticu da biste počeli. Danas ne plaćate ništa. Podsetićemo vas pre naplate. Otkažite bilo kada.';
+    return 'Dodajte karticu da biste počeli. Danas ne plaćate ništa. Posle $days dana počinje plaćeni plan po ceni ispod, osim ako ranije ne otkažete. Otkažite u „Подешавања > План и употреба“.';
   }
 
   @override

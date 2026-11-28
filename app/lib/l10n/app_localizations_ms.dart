@@ -14578,7 +14578,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String trialUpsellBody(int days) {
-    return 'Tambah kad untuk bermula. Anda tidak membayar apa-apa hari ini. Kami ingatkan sebelum dicaj. Batal bila-bila masa.';
+    return 'Tambah kad untuk bermula. Anda tidak membayar apa-apa hari ini. Selepas $days hari, pelan berbayar anda bermula pada harga di bawah melainkan anda batal lebih awal. Batal di Tetapan > Pelan & Penggunaan.';
   }
 
   @override

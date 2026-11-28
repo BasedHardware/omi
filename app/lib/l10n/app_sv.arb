@@ -4428,7 +4428,7 @@
     "deviceOnboardingAskNowSubtitle": "Säg det högt. Omi lyssnar.",
     "deviceOnboardingPressAgainHint": "Klar? Tryck på knappen igen för att skicka.",
     "trialUpsellTitle": "Testa Omi Pro gratis i {days} dagar",
-    "trialUpsellBody": "Lägg till ett kort för att börja. Du betalar inget i dag. Vi påminner dig före debitering. Avsluta när som helst.",
+    "trialUpsellBody": "Lägg till ett kort för att börja. Du betalar inget i dag. Efter {days} dagar startar din betalda plan till priset nedan, om du inte avslutar innan. Avsluta under Inställningar > Plan och användning.",
     "trialUpsellClaim": "Ta min {days}-dagars prövning",
     "settingsUpgradeTrialSubtitle": "Starta din {days}-dagars gratis prövning",
     "pairingPowerOnTitle": "Slå på din Omi",

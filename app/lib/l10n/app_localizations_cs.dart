@@ -14542,7 +14542,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String trialUpsellBody(int days) {
-    return 'Pro začátek přidejte kartu. Dnes nic neplatíte. Připomeneme se před účtováním. Zrušte kdykoli.';
+    return 'Pro začátek přidejte kartu. Dnes nic neplatíte. Po $days dnech začne placený plán za cenu níže, pokud předtím nezrušíte. Zrušit můžete v „Nastavení > Plán a využití“.';
   }
 
   @override

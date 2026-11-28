@@ -4428,7 +4428,7 @@
     "deviceOnboardingAskNowSubtitle": "Sprich es laut aus. Omi hört zu.",
     "deviceOnboardingPressAgainHint": "Fertig? Drücke die Taste erneut zum Senden.",
     "trialUpsellTitle": "Teste Omi Pro {days} Tage kostenlos",
-    "trialUpsellBody": "Füge eine Karte hinzu, um zu starten. Heute zahlst du nichts. Wir erinnern dich vor der Abbuchung. Jederzeit kündbar.",
+    "trialUpsellBody": "Füge eine Karte hinzu, um zu starten. Heute zahlst du nichts. Nach {days} Tagen startet dein bezahltes Abo zum Preis unten, außer du kündigst vorher. Kündigen unter Einstellungen > Abonnement & Nutzung.",
     "trialUpsellClaim": "{days}-Tage-Test sichern",
     "settingsUpgradeTrialSubtitle": "Starte deine {days}-tägige Gratis-Testphase",
     "pairingPowerOnTitle": "Schalte deinen Omi ein",

@@ -14556,7 +14556,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String trialUpsellBody(int days) {
-    return 'Tambahkan kartu untuk mulai. Hari ini kamu tidak membayar apa pun. Kami ingatkan sebelum ada tagihan. Batalkan kapan saja.';
+    return 'Tambahkan kartu untuk mulai. Hari ini kamu tidak membayar apa pun. Setelah $days hari, paket berbayar dimulai dengan harga di bawah, kecuali kamu batalkan sebelumnya. Batalkan di Pengaturan > Paket & Penggunaan.';
   }
 
   @override

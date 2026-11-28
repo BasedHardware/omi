@@ -14565,7 +14565,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String trialUpsellBody(int days) {
-    return 'Norėdami pradėti, pridėkite kortelę. Šiandien nieko nemokate. Priminsime prieš nuskaitymą. Atšaukite bet kada.';
+    return 'Norėdami pradėti, pridėkite kortelę. Šiandien nieko nemokate. Po $days d. prasidės mokamas planas žemiau nurodyta kaina, nebent atšauksite anksčiau. Atšaukti galite skiltyje „Nustatymai > Planas ir naudojimas“.';
   }
 
   @override

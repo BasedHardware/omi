@@ -4463,7 +4463,7 @@
     "deviceOnboardingAskNowSubtitle": "Ucapkan dengan lantang. Omi mendengarkan.",
     "deviceOnboardingPressAgainHint": "Selesai? Tekan tombol lagi untuk mengirim.",
     "trialUpsellTitle": "Coba Omi Pro gratis selama {days} hari",
-    "trialUpsellBody": "Tambahkan kartu untuk mulai. Hari ini kamu tidak membayar apa pun. Kami ingatkan sebelum ada tagihan. Batalkan kapan saja.",
+    "trialUpsellBody": "Tambahkan kartu untuk mulai. Hari ini kamu tidak membayar apa pun. Setelah {days} hari, paket berbayar dimulai dengan harga di bawah, kecuali kamu batalkan sebelumnya. Batalkan di Pengaturan > Paket & Penggunaan.",
     "trialUpsellClaim": "Ambil uji coba {days} hari",
     "settingsUpgradeTrialSubtitle": "Mulai uji coba gratis {days} hari",
     "pairingPowerOnTitle": "Nyalakan Omi kamu",

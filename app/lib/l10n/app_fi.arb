@@ -4428,7 +4428,7 @@
     "deviceOnboardingAskNowSubtitle": "Sano se ääneen. Omi kuuntelee.",
     "deviceOnboardingPressAgainHint": "Valmis? Paina painiketta uudelleen lähettääksesi.",
     "trialUpsellTitle": "Kokeile Omi Prota ilmaiseksi {days} päivää",
-    "trialUpsellBody": "Lisää kortti aloittaaksesi. Tänään et maksa mitään. Muistutamme ennen veloitusta. Peru milloin vain.",
+    "trialUpsellBody": "Lisää kortti aloittaaksesi. Tänään et maksa mitään. {days} päivän jälkeen maksullinen paketti alkaa alla olevalla hinnalla, ellet peru sitä ennen. Peru kohdassa Asetukset > Paketti ja käyttö.",
     "trialUpsellClaim": "Ota {days} päivän kokeilu",
     "settingsUpgradeTrialSubtitle": "Aloita {days} päivän ilmainen kokeilu",
     "pairingPowerOnTitle": "Käynnistä Omi",

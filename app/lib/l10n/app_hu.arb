@@ -4524,7 +4524,7 @@
     "deviceOnboardingAskNowSubtitle": "Mondd ki hangosan. Az Omi figyel.",
     "deviceOnboardingPressAgainHint": "Kész? Nyomd meg újra a gombot a küldéshez.",
     "trialUpsellTitle": "Próbáld ki az Omi Prót {days} napig ingyen",
-    "trialUpsellBody": "Az indításhoz adj meg egy kártyát. Ma nem fizetsz semmit. Terhelés előtt emlékeztetünk. Bármikor lemondható.",
+    "trialUpsellBody": "Az indításhoz adj meg egy kártyát. Ma nem fizetsz semmit. {days} nap után a fizetős előfizetés az alábbi áron indul, hacsak nem mondod le előtte. Lemondás: Beállítások > Előfizetés és használat.",
     "trialUpsellClaim": "Kérem a {days} napos próbát",
     "settingsUpgradeTrialSubtitle": "Indítsd el a {days} napos ingyenes próbát",
     "pairingPowerOnTitle": "Kapcsold be az Omit",

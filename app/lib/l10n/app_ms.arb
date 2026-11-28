@@ -4428,7 +4428,7 @@
     "deviceOnboardingAskNowSubtitle": "Sebut dengan kuat. Omi sedang mendengar.",
     "deviceOnboardingPressAgainHint": "Selesai? Tekan butang sekali lagi untuk menghantar.",
     "trialUpsellTitle": "Cuba Omi Pro percuma selama {days} hari",
-    "trialUpsellBody": "Tambah kad untuk bermula. Anda tidak membayar apa-apa hari ini. Kami ingatkan sebelum dicaj. Batal bila-bila masa.",
+    "trialUpsellBody": "Tambah kad untuk bermula. Anda tidak membayar apa-apa hari ini. Selepas {days} hari, pelan berbayar anda bermula pada harga di bawah melainkan anda batal lebih awal. Batal di Tetapan > Pelan & Penggunaan.",
     "trialUpsellClaim": "Dapatkan percubaan {days} hari",
     "settingsUpgradeTrialSubtitle": "Mulakan percubaan percuma {days} hari",
     "pairingPowerOnTitle": "Hidupkan Omi anda",

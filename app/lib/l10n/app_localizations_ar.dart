@@ -14461,7 +14461,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String trialUpsellBody(int days) {
-    return 'أضف بطاقة للبدء. لن تدفع شيئًا اليوم. سنذكّرك قبل أي خصم. يمكنك الإلغاء في أي وقت.';
+    return 'أضف بطاقة للبدء. لن تدفع شيئًا اليوم. بعد $days يومًا تبدأ خطتك المدفوعة بالسعر أدناه، ما لم تلغِ قبل ذلك. ألغِ من الإعدادات > الخطة والاستخدام.';
   }
 
   @override

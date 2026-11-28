@@ -14601,7 +14601,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String trialUpsellBody(int days) {
-    return 'Az indításhoz adj meg egy kártyát. Ma nem fizetsz semmit. Terhelés előtt emlékeztetünk. Bármikor lemondható.';
+    return 'Az indításhoz adj meg egy kártyát. Ma nem fizetsz semmit. $days nap után a fizetős előfizetés az alábbi áron indul, hacsak nem mondod le előtte. Lemondás: Beállítások > Előfizetés és használat.';
   }
 
   @override

@@ -4428,7 +4428,7 @@
     "deviceOnboardingAskNowSubtitle": "พูดออกมาเลย Omi กำลังฟังอยู่",
     "deviceOnboardingPressAgainHint": "เสร็จแล้ว? กดปุ่มอีกครั้งเพื่อส่ง",
     "trialUpsellTitle": "ทดลองใช้ Omi Pro ฟรี {days} วัน",
-    "trialUpsellBody": "เพิ่มบัตรเพื่อเริ่มต้น วันนี้คุณยังไม่ต้องจ่ายอะไร เราจะเตือนก่อนเรียกเก็บเงิน ยกเลิกได้ทุกเมื่อ",
+    "trialUpsellBody": "เพิ่มบัตรเพื่อเริ่มต้น วันนี้คุณยังไม่ต้องจ่ายอะไร หลังจาก {days} วัน แผนแบบชำระเงินจะเริ่มในราคาด้านล่าง เว้นแต่คุณยกเลิกก่อน ยกเลิกได้ที่ การตั้งค่า > แผนและการใช้งาน",
     "trialUpsellClaim": "รับทดลองใช้ {days} วัน",
     "settingsUpgradeTrialSubtitle": "เริ่มทดลองใช้ฟรี {days} วัน",
     "pairingPowerOnTitle": "เปิด Omi ของคุณ",

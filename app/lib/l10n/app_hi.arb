@@ -4428,7 +4428,7 @@
     "deviceOnboardingAskNowSubtitle": "ज़ोर से बोलें। Omi सुन रहा है।",
     "deviceOnboardingPressAgainHint": "हो गया? भेजने के लिए बटन फिर दबाएँ।",
     "trialUpsellTitle": "Omi Pro को {days} दिन मुफ़्त आज़माएँ",
-    "trialUpsellBody": "शुरू करने के लिए कार्ड जोड़ें। आज आपको कुछ नहीं देना है। किसी भी शुल्क से पहले याद दिलाएँगे। कभी भी रद्द करें।",
+    "trialUpsellBody": "शुरू करने के लिए कार्ड जोड़ें। आज आपको कुछ नहीं देना है। {days} दिन बाद आपका पेड प्लान नीचे दी गई कीमत पर शुरू होगा, जब तक आप पहले रद्द न करें। सेटिंग्स > योजना और उपयोग में रद्द करें।",
     "trialUpsellClaim": "मेरा {days} दिन का ट्रायल लें",
     "settingsUpgradeTrialSubtitle": "अपना {days} दिन का मुफ़्त ट्रायल शुरू करें",
     "pairingPowerOnTitle": "अपना Omi चालू करें",

@@ -4470,7 +4470,7 @@
     "deviceOnboardingAskNowSubtitle": "Sig det højt. Omi lytter.",
     "deviceOnboardingPressAgainHint": "Færdig? Tryk på knappen igen for at sende.",
     "trialUpsellTitle": "Prøv Omi Pro gratis i {days} dage",
-    "trialUpsellBody": "Tilføj et kort for at starte. Du betaler intet i dag. Vi minder dig om det før betaling. Opsig når som helst.",
+    "trialUpsellBody": "Tilføj et kort for at starte. Du betaler intet i dag. Efter {days} dage starter dit betalte abonnement til prisen nedenfor, medmindre du opsiger før. Opsig under Indstillinger > Plan og forbrug.",
     "trialUpsellClaim": "Få min prøveperiode på {days} dage",
     "settingsUpgradeTrialSubtitle": "Start din gratis prøveperiode på {days} dage",
     "pairingPowerOnTitle": "Tænd din Omi",

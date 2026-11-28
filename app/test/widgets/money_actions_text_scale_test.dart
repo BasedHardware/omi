@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -89,6 +90,26 @@ Future<BuildContext> _pumpHost(WidgetTester tester, double textScale, _Usage usa
 void _expectReachable(Finder finder) => expect(finder.hitTestable(), findsOneWidget);
 
 Finder _button(String label) => find.widgetWithText(OmiButton, label);
+
+/// The button is tappable and its whole label is drawn: no ellipsis, no clipping by the button or
+/// the screen.
+void _expectFullLabel(WidgetTester tester, Key key, String label) {
+  final button = find.byKey(key);
+  _expectReachable(button);
+  final text = find.descendant(of: button, matching: find.text(label));
+  expect(text, findsOneWidget);
+  final paragraph = tester.renderObject<RenderParagraph>(text);
+  expect(paragraph.didExceedMaxLines, isFalse, reason: '"$label" is cut off');
+  expect(paragraph.size.height, greaterThanOrEqualTo(paragraph.getMaxIntrinsicHeight(paragraph.size.width) - 0.5),
+      reason: '"$label" is squeezed');
+  final textRect = tester.getRect(text);
+  final buttonRect = tester.getRect(button);
+  final screen = Offset.zero & tester.view.physicalSize / tester.view.devicePixelRatio;
+  expect(buttonRect.top <= textRect.top && textRect.bottom <= buttonRect.bottom, isTrue,
+      reason: '"$label" spills out of its button');
+  expect(screen.top <= textRect.top && textRect.bottom <= screen.bottom - tester.view.padding.bottom, isTrue,
+      reason: '"$label" is off screen');
+}
 
 void main() {
   setUp(() async {
@@ -198,10 +219,16 @@ void main() {
         await tester.pumpAndSettle();
       }
 
-      // At the end of the sheet the price terms sit on screen with the button that commits.
+      // At the end of the sheet the price terms sit on screen with the button that commits, and both
+      // labels show in full (the old fixed 56 pt pill cut Claim to "Claim my").
+      final l10n = AppLocalizations.of(tester.element(find.byType(TrialUpsellContent)));
       _expectReachable(find.byKey(const Key('trial_upsell_price_terms')));
-      _expectReachable(find.byKey(const Key('trial_upsell_claim')));
-      _expectReachable(find.byKey(const Key('trial_upsell_decline')));
+      _expectFullLabel(tester, const Key('trial_upsell_claim'), l10n.trialUpsellClaim(TrialUpsellSheet.trialDays));
+      _expectFullLabel(tester, const Key('trial_upsell_decline'), l10n.noThanks);
+      expect(
+        tester.getRect(find.byKey(const Key('trial_upsell_price_terms'))).bottom,
+        lessThanOrEqualTo(tester.getRect(find.byKey(const Key('trial_upsell_claim'))).top),
+      );
       await tester.tap(find.byKey(const Key('trial_upsell_claim')));
       await tester.pumpAndSettle();
       expect(checkoutPrice, _offer.yearly);

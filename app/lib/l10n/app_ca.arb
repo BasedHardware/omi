@@ -4428,7 +4428,7 @@
     "deviceOnboardingAskNowSubtitle": "Digues-ho en veu alta. L'Omi t'escolta.",
     "deviceOnboardingPressAgainHint": "Fet? Prem el botó de nou per enviar.",
     "trialUpsellTitle": "Prova Omi Pro gratis durant {days} dies",
-    "trialUpsellBody": "Afegeix una targeta per començar. Avui no pagues res. T'avisarem abans de cobrar. Cancel·la quan vulguis.",
+    "trialUpsellBody": "Afegeix una targeta per començar. Avui no pagues res. Després de {days} dies comença el pla de pagament al preu de sota, si no el cancel·les abans. Cancel·la a Configuració > Pla i ús.",
     "trialUpsellClaim": "Vull la prova de {days} dies",
     "settingsUpgradeTrialSubtitle": "Comença la prova gratuïta de {days} dies",
     "pairingPowerOnTitle": "Encén l'Omi",

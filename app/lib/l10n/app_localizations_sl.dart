@@ -14570,7 +14570,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String trialUpsellBody(int days) {
-    return 'Za začetek dodaj kartico. Danes ne plačaš nič. Opomnimo te pred plačilom. Prekliči kadarkoli.';
+    return 'Za začetek dodaj kartico. Danes ne plačaš nič. Po $days dneh se začne plačljivi načrt po spodnji ceni, razen če prej prekličeš. Prekliči v »Nastavitve > Načrt in uporaba«.';
   }
 
   @override

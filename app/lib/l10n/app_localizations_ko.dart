@@ -14340,7 +14340,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String trialUpsellBody(int days) {
-    return '시작하려면 카드를 등록해 주세요. 오늘은 결제되지 않아요. 결제 전에 알려드려요. 언제든 취소할 수 있어요.';
+    return '시작하려면 카드를 등록해 주세요. 오늘은 결제되지 않아요. $days일 후에는 미리 취소하지 않으면 아래 가격으로 유료 플랜이 시작돼요. 설정 > 플랜 및 사용량에서 취소할 수 있어요.';
   }
 
   @override

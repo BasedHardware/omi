@@ -4428,7 +4428,7 @@
     "deviceOnboardingAskNowSubtitle": "قلها بصوت عالٍ. Omi يستمع.",
     "deviceOnboardingPressAgainHint": "انتهيت؟ اضغط الزر مرة أخرى للإرسال.",
     "trialUpsellTitle": "جرّب Omi Pro مجانًا لمدة {days} يومًا",
-    "trialUpsellBody": "أضف بطاقة للبدء. لن تدفع شيئًا اليوم. سنذكّرك قبل أي خصم. يمكنك الإلغاء في أي وقت.",
+    "trialUpsellBody": "أضف بطاقة للبدء. لن تدفع شيئًا اليوم. بعد {days} يومًا تبدأ خطتك المدفوعة بالسعر أدناه، ما لم تلغِ قبل ذلك. ألغِ من الإعدادات > الخطة والاستخدام.",
     "trialUpsellClaim": "احصل على تجربة {days} يومًا",
     "settingsUpgradeTrialSubtitle": "ابدأ تجربتك المجانية لمدة {days} أيام",
     "pairingPowerOnTitle": "شغّل جهاز Omi",

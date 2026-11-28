@@ -14315,7 +14315,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String trialUpsellBody(int days) {
-    return '添加银行卡即可开始。今天无需付款。扣费前会提醒你。随时可取消。';
+    return '添加银行卡即可开始。今天无需付款。$days 天后，除非你提前取消，付费套餐将按下方价格开始。可在“设置 > 套餐与用量”中取消。';
   }
 
   @override

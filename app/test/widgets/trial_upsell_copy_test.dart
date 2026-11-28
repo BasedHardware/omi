@@ -35,10 +35,12 @@ void main() {
 
     expect(find.text('Try Omi Pro free for 30 days'), findsOneWidget);
     expect(
-      find.text(
-          "Add a card to start. You pay nothing today. We'll remind you before anything is charged. Cancel anytime."),
+      find.text('Add a card to start. You pay nothing today. After 30 days, your paid plan starts at the price below '
+          'unless you cancel first. Cancel in Settings > Plan & Usage.'),
       findsOneWidget,
     );
+    // No promise of a reminder: it rides on a push that some buyers never get.
+    expect(find.textContaining('remind'), findsNothing);
     expect(find.textContaining('upgraded'), findsNothing);
     expect(find.textContaining('on us'), findsNothing);
     // Unchanged: the price terms line and the Claim button.
@@ -51,6 +53,9 @@ void main() {
       final l10n = await AppLocalizations.delegate.load(locale);
       expect(l10n.trialUpsellTitle(30), contains('30'), reason: '$locale title');
       expect(l10n.trialUpsellBody(30), isNot(contains('{')), reason: '$locale body');
+      // Names the real cancel path, in that locale's own words for Settings and Plan & Usage.
+      expect(l10n.trialUpsellBody(30), contains(l10n.planAndUsage), reason: '$locale cancel path');
+      expect(l10n.trialUpsellBody(30), contains('30'), reason: '$locale trial end');
       expect(l10n.trialUpsellTitle(30) + l10n.trialUpsellBody(30), isNot(matches(RegExp('[–—]'))),
           reason: '$locale dashes');
     }

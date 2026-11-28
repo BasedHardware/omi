@@ -14653,7 +14653,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String trialUpsellBody(int days) {
-    return 'Füge eine Karte hinzu, um zu starten. Heute zahlst du nichts. Wir erinnern dich vor der Abbuchung. Jederzeit kündbar.';
+    return 'Füge eine Karte hinzu, um zu starten. Heute zahlst du nichts. Nach $days Tagen startet dein bezahltes Abo zum Preis unten, außer du kündigst vorher. Kündigen unter Einstellungen > Abonnement & Nutzung.';
   }
 
   @override

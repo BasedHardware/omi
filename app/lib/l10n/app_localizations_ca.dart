@@ -14616,7 +14616,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String trialUpsellBody(int days) {
-    return 'Afegeix una targeta per començar. Avui no pagues res. T\'avisarem abans de cobrar. Cancel·la quan vulguis.';
+    return 'Afegeix una targeta per començar. Avui no pagues res. Després de $days dies comença el pla de pagament al preu de sota, si no el cancel·les abans. Cancel·la a Configuració > Pla i ús.';
   }
 
   @override

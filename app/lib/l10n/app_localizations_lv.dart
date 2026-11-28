@@ -14576,7 +14576,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String trialUpsellBody(int days) {
-    return 'Lai sāktu, pievienojiet karti. Šodien jūs neko nemaksājat. Atgādināsim pirms maksas. Atceliet jebkurā brīdī.';
+    return 'Lai sāktu, pievienojiet karti. Šodien jūs neko nemaksājat. Pēc $days dienām sāksies maksas plāns par zemāk norādīto cenu, ja vien neatcelsiet iepriekš. Atcelt var sadaļā “Iestatījumi > Plāns un lietojums”.';
   }
 
   @override

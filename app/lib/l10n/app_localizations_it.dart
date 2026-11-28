@@ -14618,7 +14618,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String trialUpsellBody(int days) {
-    return 'Aggiungi una carta per iniziare. Oggi non paghi nulla. Ti avvisiamo prima di qualsiasi addebito. Annulla quando vuoi.';
+    return 'Aggiungi una carta per iniziare. Oggi non paghi nulla. Dopo $days giorni parte il piano a pagamento al prezzo qui sotto, a meno che tu non annulli prima. Annulla in Impostazioni > Piano e Utilizzo.';
   }
 
   @override

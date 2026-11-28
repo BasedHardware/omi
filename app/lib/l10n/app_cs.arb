@@ -4428,7 +4428,7 @@
     "deviceOnboardingAskNowSubtitle": "Řekněte to nahlas. Omi poslouchá.",
     "deviceOnboardingPressAgainHint": "Hotovo? Stiskněte tlačítko znovu pro odeslání.",
     "trialUpsellTitle": "Vyzkoušejte Omi Pro zdarma na {days} dní",
-    "trialUpsellBody": "Pro začátek přidejte kartu. Dnes nic neplatíte. Připomeneme se před účtováním. Zrušte kdykoli.",
+    "trialUpsellBody": "Pro začátek přidejte kartu. Dnes nic neplatíte. Po {days} dnech začne placený plán za cenu níže, pokud předtím nezrušíte. Zrušit můžete v „Nastavení > Plán a využití“.",
     "trialUpsellClaim": "Chci zkušební období {days} dní",
     "settingsUpgradeTrialSubtitle": "Začněte zkušební období {days} dní zdarma",
     "pairingPowerOnTitle": "Zapněte Omi",

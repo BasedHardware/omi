@@ -4428,7 +4428,7 @@
     "deviceOnboardingAskNowSubtitle": "声に出して話してください。Omi が聞いています。",
     "deviceOnboardingPressAgainHint": "話し終えたら、もう一度ボタンを押して送信します。",
     "trialUpsellTitle": "Omi Pro {days}日間無料体験",
-    "trialUpsellBody": "開始するにはカードを登録してください。今日のお支払いはありません。請求前にお知らせします。いつでもキャンセルできます。",
+    "trialUpsellBody": "開始するにはカードを登録してください。今日のお支払いはありません。{days}日後、それまでにキャンセルしない限り下記の料金で有料プランが始まります。キャンセルは「設定 > プランと使用状況」から。",
     "trialUpsellClaim": "{days}日間の無料トライアルを使う",
     "settingsUpgradeTrialSubtitle": "{days}日間の無料トライアルを始める",
     "pairingPowerOnTitle": "Omi の電源を入れてください",

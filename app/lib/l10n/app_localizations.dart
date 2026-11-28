@@ -25758,7 +25758,7 @@ abstract class AppLocalizations {
   /// Pocket onboarding arm: trialUpsellBody
   ///
   /// In en, this message translates to:
-  /// **'Add a card to start. You pay nothing today. We\'ll remind you before anything is charged. Cancel anytime.'**
+  /// **'Add a card to start. You pay nothing today. After {days} days, your paid plan starts at the price below unless you cancel first. Cancel in Settings > Plan & Usage.'**
   String trialUpsellBody(int days);
 
   /// Pocket onboarding arm: trialUpsellClaim

@@ -1,7 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/onboarding_step_scaffold.dart';
 import 'package:omi/pages/paywall/paywall_checkout.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
@@ -98,7 +99,8 @@ class TrialUpsellContentState extends State<TrialUpsellContent> {
         Navigator.of(context).pop(false);
       });
     }
-    // Scrolls so Claim and No Thanks stay reachable at the largest text sizes.
+    // One scroll: at the largest text sizes the price, Claim and No Thanks are taller than a pinned
+    // footer can be, so they scroll in together under the terms, with both labels wrapping in full.
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.lg, OmiSpacing.md, OmiSpacing.md),
       child: Column(
@@ -107,9 +109,11 @@ class TrialUpsellContentState extends State<TrialUpsellContent> {
         children: [
           Text(l10n.trialUpsellTitle(TrialUpsellSheet.trialDays), style: OmiType.title2, textAlign: TextAlign.center),
           const SizedBox(height: OmiSpacing.sm),
+          // Card and charge terms are purchase information: full-contrast text.
           Text(
             l10n.trialUpsellBody(TrialUpsellSheet.trialDays),
-            style: OmiType.body.copyWith(color: OmiColors.textSecondary),
+            key: const Key('trial_upsell_body'),
+            style: OmiType.body.copyWith(color: OmiColors.textPrimary),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: OmiSpacing.sm),
@@ -120,16 +124,23 @@ class TrialUpsellContentState extends State<TrialUpsellContent> {
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: OmiSpacing.lg),
-          // Same full pill as every other onboarding call to action (sign-in, paywall, walkthrough).
-          OnboardingContinueButton(
+          // The onboarding pill at default size; grows and wraps instead of clipping at large text.
+          OmiButton(
             key: const Key('trial_upsell_claim'),
             label: _busy ? l10n.pleaseWait : l10n.trialUpsellClaim(TrialUpsellSheet.trialDays),
-            onPressed: _busy ? () {} : _claim,
+            onPressed: _busy ? () {} : () => unawaited(_claim()),
+            expand: true,
+            pill: true,
+            maxLines: null,
+            height: 56,
+            labelStyle: OmiType.headline,
           ),
           const SizedBox(height: OmiSpacing.xs),
           OmiButton.tertiary(
             key: const Key('trial_upsell_decline'),
             label: l10n.noThanks,
+            expand: true,
+            maxLines: null,
             onPressed: _busy ? null : () => Navigator.of(context).pop(false),
           ),
         ],

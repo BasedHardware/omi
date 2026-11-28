@@ -14582,7 +14582,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String trialUpsellBody(int days) {
-    return 'Voeg een kaart toe om te starten. Vandaag betaal je niets. We herinneren je voor er iets wordt afgeschreven. Altijd opzegbaar.';
+    return 'Voeg een kaart toe om te starten. Vandaag betaal je niets. Na $days dagen start je betaalde abonnement tegen de prijs hieronder, tenzij je eerder opzegt. Opzeggen via Instellingen > Abonnement en gebruik.';
   }
 
   @override

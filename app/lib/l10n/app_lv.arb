@@ -4428,7 +4428,7 @@
     "deviceOnboardingAskNowSubtitle": "Sakiet skaļi. Omi klausās.",
     "deviceOnboardingPressAgainHint": "Gatavs? Nospiediet pogu vēlreiz, lai nosūtītu.",
     "trialUpsellTitle": "Izmēģiniet Omi Pro bez maksas {days} dienas",
-    "trialUpsellBody": "Lai sāktu, pievienojiet karti. Šodien jūs neko nemaksājat. Atgādināsim pirms maksas. Atceliet jebkurā brīdī.",
+    "trialUpsellBody": "Lai sāktu, pievienojiet karti. Šodien jūs neko nemaksājat. Pēc {days} dienām sāksies maksas plāns par zemāk norādīto cenu, ja vien neatcelsiet iepriekš. Atcelt var sadaļā “Iestatījumi > Plāns un lietojums”.",
     "trialUpsellClaim": "Saņemt {days} dienu izmēģinājumu",
     "settingsUpgradeTrialSubtitle": "Sāciet {days} dienu bezmaksas izmēģinājumu",
     "pairingPowerOnTitle": "Ieslēdziet Omi",

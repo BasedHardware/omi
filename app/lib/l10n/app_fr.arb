@@ -4463,7 +4463,7 @@
     "deviceOnboardingAskNowSubtitle": "Dis-le à voix haute. Omi écoute.",
     "deviceOnboardingPressAgainHint": "Terminé ? Appuie à nouveau sur le bouton pour envoyer.",
     "trialUpsellTitle": "Essaie Omi Pro gratuitement pendant {days} jours",
-    "trialUpsellBody": "Ajoute une carte pour commencer. Tu ne paies rien aujourd'hui. On te prévient avant tout prélèvement. Annulable à tout moment.",
+    "trialUpsellBody": "Ajoute une carte pour commencer. Tu ne paies rien aujourd'hui. Après {days} jours, ton forfait payant démarre au prix ci-dessous, sauf si tu annules avant. Annule dans Paramètres > Forfait et utilisation.",
     "trialUpsellClaim": "Profiter de mon essai de {days} jours",
     "settingsUpgradeTrialSubtitle": "Commence ton essai gratuit de {days} jours",
     "pairingPowerOnTitle": "Allume ton Omi",

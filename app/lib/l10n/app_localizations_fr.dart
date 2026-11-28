@@ -14660,7 +14660,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String trialUpsellBody(int days) {
-    return 'Ajoute une carte pour commencer. Tu ne paies rien aujourd\'hui. On te prévient avant tout prélèvement. Annulable à tout moment.';
+    return 'Ajoute une carte pour commencer. Tu ne paies rien aujourd\'hui. Après $days jours, ton forfait payant démarre au prix ci-dessous, sauf si tu annules avant. Annule dans Paramètres > Forfait et utilisation.';
   }
 
   @override

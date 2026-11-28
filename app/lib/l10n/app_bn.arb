@@ -11851,7 +11851,7 @@
     "deviceOnboardingAskNowSubtitle": "জোরে বলুন। Omi শুনছে।",
     "deviceOnboardingPressAgainHint": "শেষ? পাঠাতে আবার বোতাম টিপুন।",
     "trialUpsellTitle": "{days} দিন বিনামূল্যে Omi Pro ব্যবহার করে দেখুন",
-    "trialUpsellBody": "শুরু করতে একটি কার্ড যোগ করুন। আজ আপনাকে কিছুই দিতে হবে না। চার্জের আগে মনে করিয়ে দেব। যেকোনো সময় বাতিল করুন।",
+    "trialUpsellBody": "শুরু করতে একটি কার্ড যোগ করুন। আজ আপনাকে কিছুই দিতে হবে না। {days} দিন পরে নিচের দামে আপনার পেইড প্ল্যান শুরু হবে, যদি না আগে বাতিল করেন। সেটিংস > পরিকল্পনা এবং ব্যবহার থেকে বাতিল করুন।",
     "trialUpsellClaim": "{days} দিনের ট্রায়াল নিন",
     "settingsUpgradeTrialSubtitle": "আপনার {days} দিনের ফ্রি ট্রায়াল শুরু করুন",
     "pairingPowerOnTitle": "আপনার Omi চালু করুন",

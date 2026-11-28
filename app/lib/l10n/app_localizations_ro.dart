@@ -14606,7 +14606,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String trialUpsellBody(int days) {
-    return 'Adaugă un card ca să începi. Astăzi nu plătești nimic. Te anunțăm înainte de orice plată. Anulezi oricând.';
+    return 'Adaugă un card ca să începi. Astăzi nu plătești nimic. După $days de zile începe planul plătit la prețul de mai jos, dacă nu anulezi înainte. Anulezi din Setări > Plan și utilizare.';
   }
 
   @override

@@ -14335,7 +14335,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String trialUpsellBody(int days) {
-    return '開始するにはカードを登録してください。今日のお支払いはありません。請求前にお知らせします。いつでもキャンセルできます。';
+    return '開始するにはカードを登録してください。今日のお支払いはありません。$days日後、それまでにキャンセルしない限り下記の料金で有料プランが始まります。キャンセルは「設定 > プランと使用状況」から。';
   }
 
   @override

@@ -14657,7 +14657,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String trialUpsellBody(int days) {
-    return 'Magdagdag ng card para magsimula. Wala kang babayaran ngayon. Paalalahanan ka namin bago masingil. Kanselahin anumang oras.';
+    return 'Magdagdag ng card para magsimula. Wala kang babayaran ngayon. Pagkalipas ng $days araw, magsisimula ang bayad na plan sa presyo sa ibaba maliban kung magkansela ka bago noon. Magkansela sa Mga Setting > Plan & Paggamit.';
   }
 
   @override

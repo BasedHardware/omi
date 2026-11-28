@@ -14532,7 +14532,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String trialUpsellBody(int days) {
-    return 'Tilføj et kort for at starte. Du betaler intet i dag. Vi minder dig om det før betaling. Opsig når som helst.';
+    return 'Tilføj et kort for at starte. Du betaler intet i dag. Efter $days dage starter dit betalte abonnement til prisen nedenfor, medmindre du opsiger før. Opsig under Indstillinger > Plan og forbrug.';
   }
 
   @override

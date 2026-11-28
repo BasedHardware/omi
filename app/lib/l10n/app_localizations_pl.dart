@@ -14587,7 +14587,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String trialUpsellBody(int days) {
-    return 'Aby zacząć, dodaj kartę. Dziś nic nie płacisz. Przypomnimy przed obciążeniem. Anuluj w każdej chwili.';
+    return 'Aby zacząć, dodaj kartę. Dziś nic nie płacisz. Po $days dniach zacznie się płatny plan w cenie poniżej, chyba że wcześniej anulujesz. Anuluj w „Ustawienia > Plan i wykorzystanie”.';
   }
 
   @override

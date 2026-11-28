@@ -4428,7 +4428,7 @@
     "deviceOnboardingAskNowSubtitle": "Ütle see valjusti. Omi kuulab.",
     "deviceOnboardingPressAgainHint": "Valmis? Vajuta nuppu uuesti, et saata.",
     "trialUpsellTitle": "Proovi Omi Pro'd tasuta {days} päeva",
-    "trialUpsellBody": "Alustamiseks lisa kaart. Täna sa midagi ei maksa. Tuletame enne tasu võtmist meelde. Tühista igal ajal.",
+    "trialUpsellBody": "Alustamiseks lisa kaart. Täna sa midagi ei maksa. {days} päeva pärast algab tasuline pakett allpool toodud hinnaga, kui sa enne ei tühista. Tühista: Seaded > Plaan ja kasutus.",
     "trialUpsellClaim": "Võta {days}-päevane proov",
     "settingsUpgradeTrialSubtitle": "Alusta {days}-päevast tasuta proovi",
     "pairingPowerOnTitle": "Lülita Omi sisse",

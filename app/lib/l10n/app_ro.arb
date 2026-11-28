@@ -4428,7 +4428,7 @@
     "deviceOnboardingAskNowSubtitle": "Spune cu voce tare. Omi ascultă.",
     "deviceOnboardingPressAgainHint": "Gata? Apasă din nou butonul pentru a trimite.",
     "trialUpsellTitle": "Încearcă Omi Pro gratuit {days} de zile",
-    "trialUpsellBody": "Adaugă un card ca să începi. Astăzi nu plătești nimic. Te anunțăm înainte de orice plată. Anulezi oricând.",
+    "trialUpsellBody": "Adaugă un card ca să începi. Astăzi nu plătești nimic. După {days} de zile începe planul plătit la prețul de mai jos, dacă nu anulezi înainte. Anulezi din Setări > Plan și utilizare.",
     "trialUpsellClaim": "Vreau perioada de probă de {days} de zile",
     "settingsUpgradeTrialSubtitle": "Începe perioada gratuită de {days} zile",
     "pairingPowerOnTitle": "Pornește Omi",

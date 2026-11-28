@@ -14536,7 +14536,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String trialUpsellBody(int days) {
-    return 'Alustamiseks lisa kaart. Täna sa midagi ei maksa. Tuletame enne tasu võtmist meelde. Tühista igal ajal.';
+    return 'Alustamiseks lisa kaart. Täna sa midagi ei maksa. $days päeva pärast algab tasuline pakett allpool toodud hinnaga, kui sa enne ei tühista. Tühista: Seaded > Plaan ja kasutus.';
   }
 
   @override

@@ -4463,7 +4463,7 @@
     "deviceOnboardingAskNowSubtitle": "Yüksek sesle söyle. Omi dinliyor.",
     "deviceOnboardingPressAgainHint": "Bitti mi? Göndermek için düğmeye tekrar bas.",
     "trialUpsellTitle": "Omi Pro'yu {days} gün ücretsiz dene",
-    "trialUpsellBody": "Başlamak için bir kart ekle. Bugün hiçbir şey ödemezsin. Ücret alınmadan önce hatırlatırız. İstediğin zaman iptal et.",
+    "trialUpsellBody": "Başlamak için bir kart ekle. Bugün hiçbir şey ödemezsin. {days} gün sonra, daha önce iptal etmezsen ücretli plan aşağıdaki fiyatla başlar. İptal için Ayarlar > Plan ve Kullanım.",
     "trialUpsellClaim": "{days} günlük denemeyi al",
     "settingsUpgradeTrialSubtitle": "{days} günlük ücretsiz denemeyi başlat",
     "pairingPowerOnTitle": "Omi'ni aç",

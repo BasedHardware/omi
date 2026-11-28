@@ -14437,7 +14437,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String trialUpsellBody(int days) {
-    return 'כדי להתחיל, הוסיפו כרטיס. היום לא תשלמו כלום. נזכיר לכם לפני כל חיוב. ביטול בכל עת.';
+    return 'כדי להתחיל, הוסיפו כרטיס. היום לא תשלמו כלום. אחרי $days ימים התוכנית בתשלום מתחילה במחיר שלמטה, אלא אם תבטלו לפני כן. ביטול דרך הגדרות > תוכנית ושימוש.';
   }
 
   @override

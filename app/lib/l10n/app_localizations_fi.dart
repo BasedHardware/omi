@@ -14547,7 +14547,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String trialUpsellBody(int days) {
-    return 'Lisää kortti aloittaaksesi. Tänään et maksa mitään. Muistutamme ennen veloitusta. Peru milloin vain.';
+    return 'Lisää kortti aloittaaksesi. Tänään et maksa mitään. $days päivän jälkeen maksullinen paketti alkaa alla olevalla hinnalla, ellet peru sitä ennen. Peru kohdassa Asetukset > Paketti ja käyttö.';
   }
 
   @override

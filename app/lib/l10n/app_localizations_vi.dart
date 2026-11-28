@@ -14543,7 +14543,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String trialUpsellBody(int days) {
-    return 'Thêm thẻ để bắt đầu. Hôm nay bạn không phải trả gì. Chúng tôi sẽ nhắc trước khi tính phí. Hủy bất cứ lúc nào.';
+    return 'Thêm thẻ để bắt đầu. Hôm nay bạn không phải trả gì. Sau $days ngày, gói trả phí sẽ bắt đầu với giá bên dưới, trừ khi bạn hủy trước. Hủy trong Cài đặt > Gói & Mức sử dụng.';
   }
 
   @override

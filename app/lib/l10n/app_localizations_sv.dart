@@ -14551,7 +14551,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String trialUpsellBody(int days) {
-    return 'Lägg till ett kort för att börja. Du betalar inget i dag. Vi påminner dig före debitering. Avsluta när som helst.';
+    return 'Lägg till ett kort för att börja. Du betalar inget i dag. Efter $days dagar startar din betalda plan till priset nedan, om du inte avslutar innan. Avsluta under Inställningar > Plan och användning.';
   }
 
   @override

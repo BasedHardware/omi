@@ -11851,7 +11851,7 @@
     "deviceOnboardingAskNowSubtitle": "Recite naglas. Omi sluša.",
     "deviceOnboardingPressAgainHint": "Gotovi? Pritisnite dugme ponovo da pošaljete.",
     "trialUpsellTitle": "Isprobajte Omi Pro besplatno {days} dana",
-    "trialUpsellBody": "Dodajte karticu da počnete. Danas ne plaćate ništa. Podsjetićemo vas prije naplate. Otkažite bilo kada.",
+    "trialUpsellBody": "Dodajte karticu da počnete. Danas ne plaćate ništa. Nakon {days} dana počinje plaćeni plan po cijeni ispod, osim ako ranije ne otkažete. Otkažite u „Postavke > Plan & Upotreba“.",
     "trialUpsellClaim": "Preuzmi probu od {days} dana",
     "settingsUpgradeTrialSubtitle": "Započnite besplatnu probu od {days} dana",
     "pairingPowerOnTitle": "Uključite svoj Omi",
