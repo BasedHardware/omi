@@ -29,6 +29,10 @@ SCOPES = (
     "memories.read memories.write conversations.read action_items.read action_items.write "
     "goals.read chat.read screen_activity.read people.read"
 )
+# The ChatGPT directory listing explicitly requests only ``memories.read``; conversation
+# tools require ``conversations.read`` (widened onto first-party ChatGPT grants at consent).
+DIRECTORY_LISTING_SCOPE = "memories.read"
+REQUIRED_LISTING_TOOLS = ("get_memories", "get_conversations", "search_conversations")
 
 
 @dataclass
@@ -91,14 +95,21 @@ def _pkce_challenge(verifier: str) -> str:
     return base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
 
 
-def _authorize_url(client_id: str, redirect_uri: str, verifier: str, state: str) -> str:
+def _authorize_url(
+    client_id: str,
+    redirect_uri: str,
+    verifier: str,
+    state: str,
+    *,
+    scope: str = SCOPES,
+) -> str:
     query = urllib.parse.urlencode(
         {
             "response_type": "code",
             "client_id": client_id,
             "redirect_uri": redirect_uri,
             "resource": RESOURCE,
-            "scope": SCOPES,
+            "scope": scope,
             "state": state,
             "code_challenge": _pkce_challenge(verifier),
             "code_challenge_method": "S256",
@@ -166,6 +177,8 @@ def _authorize_consent(
     verifier: str,
     firebase_id_token: str,
     state: str,
+    *,
+    scope: str = SCOPES,
 ) -> str:
     response = _form_request(
         f"{BASE_URL}/authorize",
@@ -174,7 +187,7 @@ def _authorize_consent(
             "client_id": client_id,
             "redirect_uri": redirect_uri,
             "resource": RESOURCE,
-            "scope": SCOPES,
+            "scope": scope,
             "state": state,
             "code_challenge": _pkce_challenge(verifier),
             "code_challenge_method": "S256",
@@ -237,6 +250,20 @@ def _assert_jsonrpc_success(payload: dict[str, Any], label: str) -> None:
         raise SmokeFailure(f"{label} did not return a JSON-RPC result")
 
 
+def assert_listing_scope_tools(payload: dict[str, Any]) -> list[str]:
+    """Verify a listing-shaped (memories.read) grant surfaces both memory and conversation tools."""
+    _assert_jsonrpc_success(payload, "listing tools/list")
+    tools = payload.get("result", {}).get("tools", [])
+    names = {str(tool.get("name")) for tool in tools if isinstance(tool, dict) and tool.get("name")}
+    missing = [name for name in REQUIRED_LISTING_TOOLS if name not in names]
+    if missing:
+        raise SmokeFailure(
+            "Listing-shaped grant is missing required tools (conversations.read floor not applied): "
+            + ", ".join(missing)
+        )
+    return sorted(names)
+
+
 def _head(value: str, max_len: int = 120) -> str:
     return value.replace("\n", " ")[:max_len]
 
@@ -259,11 +286,19 @@ def main() -> int:
 
         verifier = _pkce_verifier()
         static_authorize = _request(
-            "GET", _authorize_url(CHATGPT_CLIENT_ID, CHATGPT_STATIC_REDIRECT_URI, verifier, "static-smoke")
+            "GET",
+            _authorize_url(
+                CHATGPT_CLIENT_ID,
+                CHATGPT_STATIC_REDIRECT_URI,
+                verifier,
+                "static-smoke",
+                scope=DIRECTORY_LISTING_SCOPE,
+            ),
         )
         summary["static_authorize_get"] = {
             "status": static_authorize.status,
             "has_password_input": "password" in static_authorize.body.lower(),
+            "requested_scope": DIRECTORY_LISTING_SCOPE,
         }
         if static_authorize.status != 200:
             raise SmokeFailure(
@@ -286,12 +321,29 @@ def main() -> int:
         summary["firebase_password_signin"] = {"status": 200, "ok": True}
 
         static_code = _authorize_consent(
-            CHATGPT_CLIENT_ID, CHATGPT_STATIC_REDIRECT_URI, verifier, firebase_id_token, "static-smoke"
+            CHATGPT_CLIENT_ID,
+            CHATGPT_STATIC_REDIRECT_URI,
+            verifier,
+            firebase_id_token,
+            "static-smoke",
+            scope=DIRECTORY_LISTING_SCOPE,
         )
-        summary["static_authorize_post"] = {"status": 200, "code_returned": True}
+        summary["static_authorize_post"] = {
+            "status": 200,
+            "code_returned": True,
+            "requested_scope": DIRECTORY_LISTING_SCOPE,
+        }
 
         static_access_token = _exchange_token(CHATGPT_CLIENT_ID, static_code, CHATGPT_STATIC_REDIRECT_URI, verifier)
         summary["static_token_exchange"] = {"status": 200, "access_token_returned": bool(static_access_token)}
+
+        static_tools = _mcp_call(static_access_token, "tools/list", msg_id=10)
+        static_tool_names = assert_listing_scope_tools(static_tools)
+        summary["static_listing_tools_list"] = {
+            "status": 200,
+            "tool_count": len(static_tool_names),
+            "has_conversation_tools": any("conversation" in name for name in static_tool_names),
+        }
 
         dynamic_verifier = _pkce_verifier()
         dynamic_code = _authorize_consent(
