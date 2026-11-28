@@ -236,3 +236,26 @@ def test_turning_the_credit_switch_back_on_changes_the_generation(monkeypatch):
     monkeypatch.delenv('SUPPORT_TRANSCRIPTION_CREDIT_ENABLED')
     # Off -> on re-offers parked work credited while the switch was off.
     assert generation(user, now) == on != off
+
+
+def test_an_owner_without_credit_keeps_the_generation_it_had_before_the_credit_existed():
+    # The pre-credit formula, byte for byte: a deploy must not re-offer every parked owner.
+    import hashlib
+    import json
+
+    from utils.referral_campaign import effective_subscription_payload
+
+    now = stamp('2026-11-28')
+    subscription = {'plan': 'basic', 'status': 'active'}
+    clock = datetime.fromtimestamp(now, timezone.utc)
+    legacy = [
+        subscription,
+        False,
+        False,
+        None,
+        effective_subscription_payload(subscription, None, now=clock),
+        clock.strftime('%Y-%m'),
+    ]
+    expected = hashlib.sha256(json.dumps(legacy, sort_keys=True, default=str).encode()).hexdigest()
+    assert generation({'subscription': subscription}, now) == expected
+    assert generation({'subscription': subscription, SUPPORT_CREDIT_FIELD: {}}, now) == expected
