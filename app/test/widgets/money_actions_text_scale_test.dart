@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -15,11 +16,14 @@ import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
+import '../helpers/sfpro_font_fixtures.dart';
+
 // Cancelling, and claiming or declining the 30-day offer, must stay reachable at every text size.
 // The app does not clamp the system text scale, so the largest is iOS's largest accessibility size
 // (AX5), which draws 17 pt body text at 53 pt.
 const _textScales = [1.0, 53 / 17];
 const _iphone17Pro = Size(402, 874);
+const _iphoneSE = Size(375, 667);
 
 const _offer = PaywallOffer(
   tierId: 'unlimited_v2',
@@ -61,11 +65,12 @@ _Usage _proPayer() => _Usage()
 GeneratedRetentionOfferResponse _retentionOffer() => GeneratedRetentionOfferResponse.fromJson(
     {'eligible': true, 'percent_off': 50, 'duration_months': 3, 'discounted_amount': 1500, 'currency': 'usd'});
 
-/// An iPhone 17 Pro sized screen at [textScale]; returns a context to open the flow from.
-Future<BuildContext> _pumpHost(WidgetTester tester, double textScale, _Usage usage) async {
-  tester.view.physicalSize = _iphone17Pro;
+/// An iPhone 17 Pro sized screen (or [size]) at [textScale]; returns a context to open the flow from.
+Future<BuildContext> _pumpHost(WidgetTester tester, double textScale, _Usage usage,
+    {Size size = _iphone17Pro, Locale locale = const Locale('en')}) async {
+  tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
-  tester.view.padding = const FakeViewPadding(top: 62, bottom: 34);
+  tester.view.padding = size == _iphoneSE ? const FakeViewPadding(top: 20) : const FakeViewPadding(top: 62, bottom: 34);
   tester.platformDispatcher.textScaleFactorTestValue = textScale;
   addTearDown(tester.view.reset);
   addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
@@ -73,7 +78,7 @@ Future<BuildContext> _pumpHost(WidgetTester tester, double textScale, _Usage usa
   await tester.pumpWidget(ChangeNotifierProvider<UsageProvider>.value(
     value: usage,
     child: MaterialApp(
-      locale: const Locale('en'),
+      locale: locale,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       theme: buildOmiTheme(brightness: Brightness.light),
@@ -90,6 +95,30 @@ Future<BuildContext> _pumpHost(WidgetTester tester, double textScale, _Usage usa
 void _expectReachable(Finder finder) => expect(finder.hitTestable(), findsOneWidget);
 
 Finder _button(String label) => find.widgetWithText(OmiButton, label);
+
+/// SF Pro instead of the square test glyphs, so line breaks match an iPhone. Scripts SF Pro lacks
+/// (Arabic) still draw as full-width squares, which only makes their lines longer.
+Future<void> _loadSfPro(WidgetTester tester) => tester.runAsync(() async {
+      for (final family in ['.SF UI Text', '.SF Pro Text', 'SF Pro Display', 'CupertinoSystemText', 'FlutterTest']) {
+        final loader = FontLoader(family);
+        for (final weight in ['REGULAR', 'MEDIUM', 'BOLD']) {
+          loader.addFont(sfProFont('SFPRODISPLAY$weight.OTF'));
+        }
+        await loader.load();
+      }
+    });
+
+/// Every line of [text] is drawn, none cut short, and the whole of it sits inside [viewport].
+void _expectFullyShown(WidgetTester tester, Finder text, Rect viewport, String what) {
+  expect(text, findsOneWidget, reason: '$what is missing');
+  final paragraph = tester.renderObject<RenderParagraph>(text);
+  expect(paragraph.didExceedMaxLines, isFalse, reason: '$what is cut off');
+  expect(paragraph.size.height, greaterThanOrEqualTo(paragraph.getMaxIntrinsicHeight(paragraph.size.width) - 0.5),
+      reason: '$what is squeezed');
+  final rect = tester.getRect(text);
+  expect(viewport.top <= rect.top && rect.bottom <= viewport.bottom, isTrue,
+      reason: '$what is drawn at $rect, outside the visible sheet $viewport');
+}
 
 /// The button is tappable and its whole label is drawn: no ellipsis, no clipping by the button or
 /// the screen.
@@ -236,6 +265,58 @@ void main() {
       await tester.tap(find.byKey(const Key('trial_upsell_decline')));
       await tester.pumpAndSettle();
       expect(result, isFalse);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  // A 375 x 667 phone (iPhone SE) at the largest text, in a right-to-left and a long left-to-right
+  // locale: the whole renewal price and interval stay on screen with the whole Claim label.
+  for (final locale in const [Locale('ar'), Locale('ro')]) {
+    testWidgets('30-day offer shows the full price beside the full Claim label on a small phone in $locale',
+        (tester) async {
+      await _loadSfPro(tester);
+      final home = await _pumpHost(tester, _textScales.last, _Usage(), size: _iphoneSE, locale: locale);
+      var claims = 0;
+      showOmiSheet<bool>(
+        context: home,
+        showCloseButton: false,
+        builder: (_) => TrialUpsellContent(
+          offer: _offer,
+          price: _offer.yearly!,
+          source: 'test',
+          checkout: (_, __, ___) async {
+            claims++;
+            return PaywallCheckoutOutcome.cancelled;
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+      final sheet = tester.element(find.byType(TrialUpsellContent));
+      final l10n = AppLocalizations.of(sheet);
+      expect(Directionality.of(sheet), locale.languageCode == 'ar' ? TextDirection.rtl : TextDirection.ltr);
+
+      final sheetScroll = find.descendant(of: find.byType(TrialUpsellContent), matching: find.byType(Scrollable));
+      await tester.drag(sheetScroll, const Offset(0, -3000));
+      await tester.pumpAndSettle();
+      final viewport = tester.getRect(sheetScroll);
+
+      final priceLine = _offer.yearly!.trialLabel(sheet, TrialUpsellSheet.trialDays);
+      expect(priceLine, contains(_offer.yearly!.formatted));
+      final priceTerms = find.byKey(const Key('trial_upsell_price_terms'));
+      expect(tester.widget<Text>(priceTerms).data, priceLine);
+      _expectFullyShown(tester, priceTerms, viewport, 'the price line "$priceLine"');
+      final claimLabel = l10n.trialUpsellClaim(TrialUpsellSheet.trialDays);
+      _expectFullyShown(
+          tester,
+          find.descendant(of: find.byKey(const Key('trial_upsell_claim')), matching: find.text(claimLabel)),
+          viewport,
+          'the Claim label "$claimLabel"');
+      _expectFullLabel(tester, const Key('trial_upsell_claim'), claimLabel);
+      _expectFullLabel(tester, const Key('trial_upsell_decline'), l10n.noThanks);
+
+      await tester.tap(find.byKey(const Key('trial_upsell_claim')));
+      await tester.pumpAndSettle();
+      expect(claims, 1);
       expect(tester.takeException(), isNull);
     });
   }
