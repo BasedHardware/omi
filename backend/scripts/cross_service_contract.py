@@ -220,7 +220,8 @@ GKE_ENTRYPOINTS = {'backend-listen': BACKEND_ENTRYPOINT, 'pusher': 'pusher.main'
 UID_KEY_PATTERN = re.compile(r'(UID|USER|OWNER)S?_?(ALLOW|DENY)?LIST|_UIDS$|COHORT_UIDS|TEST_UIDS')
 FIREBASE_UID_PATTERN = re.compile(r'(?<![A-Za-z0-9])[A-Za-z0-9]{28}(?![A-Za-z0-9])')
 
-TRUTHY = frozenset({'true', '1', 'yes', 'on'})
+# Wrappers such as _ON_VALUES also recognize 'enabled' alongside standard boolean words.
+TRUTHY = frozenset({'true', '1', 'yes', 'on', 'enabled'})
 FALSY = frozenset({'false', '0', 'no', 'off', ''})
 
 
@@ -456,7 +457,7 @@ def _render_config_map(
         if _mapping(entry).get('source') == 'environment' and _mapping(entry).get('default') is not None
     }
     legacy = set(renderer.LEGACY_GKE_CONFIG_KEYS.get(env, ()))
-    with tempfile.NamedTemporaryFile('w', suffix='.yaml', delete=False) as handle:
+    with tempfile.NamedTemporaryFile('w', encoding='utf-8', suffix='.yaml', delete=False) as handle:
         handle.write(manifest_text)
         path = Path(handle.name)
     try:
@@ -627,6 +628,7 @@ def build_model(source: Source, env: str) -> EnvModel:
 # --------------------------------------------------------------------------------------------------
 
 _ENV_KEY = re.compile(r'^[A-Z][A-Z0-9_]{2,}$')
+_BOOLEAN_HELPER = re.compile(r'(?:^|_)default_(?:on|off)$')
 
 
 @dataclass
@@ -647,6 +649,10 @@ def _literal_key(node: ast.AST, constants: dict[str, str]) -> str | None:
     return None
 
 
+def _is_boolean_helper(name: str) -> bool:
+    return _BOOLEAN_HELPER.search(name) is not None
+
+
 def _is_env_call(node: ast.AST, constants: dict[str, str], *, reads_env_mapping: bool = False) -> str | None:
     """Env key for os.getenv(K), os.environ.get(K), os.environ[K], *env*(K) and shared boolean helpers."""
     if isinstance(node, ast.Call) and node.args:
@@ -664,16 +670,7 @@ def _is_env_call(node: ast.AST, constants: dict[str, str], *, reads_env_mapping:
             )
         ):
             return key
-        if 'env' in name.lower() or name in {
-            '_default_on',
-            'default_on',
-            'modes_default_on',
-            'rollout_default_on',
-            '_default_off',
-            'default_off',
-            'modes_default_off',
-            'rollout_default_off',
-        }:
+        if 'env' in name.lower() or _is_boolean_helper(name):
             return key
     if isinstance(node, ast.Subscript) and isinstance(node.value, ast.Attribute) and node.value.attr == 'environ':
         return _literal_key(node.slice, constants)
@@ -752,12 +749,50 @@ def _module_collections(tree: ast.AST) -> dict[str, tuple[str, ...]]:
     return collections
 
 
+def _extract_helpers(
+    tree: ast.AST, collections: dict[str, tuple[str, ...]]
+) -> dict[str, tuple[set[str], set[str], str | None]]:
+    """Extract grammar (truthy, compared, default) for wrapper functions like _default_on/default_on."""
+    helpers: dict[str, tuple[set[str], set[str], str | None]] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and _is_boolean_helper(node.name):
+            truthy: set[str] = set()
+            compared: set[str] = set()
+            default: str | None = None
+            for child in ast.walk(node):
+                if isinstance(child, ast.Call):
+                    child_default = _default_of(child)
+                    if child_default is not None:
+                        default = child_default
+                if isinstance(child, ast.Compare) and len(child.ops) == 1:
+                    op = child.ops[0]
+                    comparator = child.comparators[0]
+                    members = _collection_members(comparator)
+                    if members is None and isinstance(comparator, ast.Name):
+                        members = collections.get(comparator.id)
+                    if members is not None:
+                        toks = {t.lower() for t in members}
+                        if isinstance(op, ast.NotIn):
+                            truthy.add('true')
+                            compared |= {'true'} | toks
+                        elif isinstance(op, ast.In):
+                            if toks.issubset(FALSY):
+                                truthy |= set(TRUTHY)
+                                compared |= truthy | toks
+                            else:
+                                truthy |= toks
+                                compared |= toks | {'0', 'false', 'off', 'no'}
+            helpers[node.name] = (truthy, compared, default)
+    return helpers
+
+
 @dataclass
 class _ModuleIndex:
     constants: dict[str, str]
     collections: dict[str, tuple[str, ...]]  # named string sets: _TRUTHY, _FALSY, mode enums
     candidates: list[ast.AST]  # the only node shapes the env-read scan inspects
     imports: list[ast.Import | ast.ImportFrom]
+    helpers: dict[str, tuple[set[str], set[str], str | None]]
 
 
 _INDEX_CACHE: dict[str, _ModuleIndex | None] = {}
@@ -778,7 +813,9 @@ def _index(text: str) -> _ModuleIndex | None:
                 imports.append(node)
             elif isinstance(node, (ast.Call, ast.Subscript)) or (isinstance(node, ast.Compare) and len(node.ops) == 1):
                 candidates.append(node)
-        _INDEX_CACHE[text] = _ModuleIndex(_module_constants(tree), _module_collections(tree), candidates, imports)
+        collections = _module_collections(tree)
+        helpers = _extract_helpers(tree, collections)
+        _INDEX_CACHE[text] = _ModuleIndex(_module_constants(tree), collections, candidates, imports, helpers)
     return _INDEX_CACHE[text]
 
 
@@ -799,6 +836,11 @@ def scan_env_reads(source: Source, module_paths: list[str]) -> dict[str, EnvRead
     for index in indexes.values():
         for name, members in index.collections.items():
             shared_collections.setdefault(name, members)  # named sets (_TRUTHY et al.) resolve by name too
+    shared_helpers: dict[str, tuple[set[str], set[str], str | None]] = {}
+    for index in indexes.values():
+        for name, grammar in index.helpers.items():
+            if grammar[0]:
+                shared_helpers.setdefault(name, grammar)
     reads: dict[str, EnvRead] = {}
     for rel, key, default, boolean in policy_env_reads(source, module_paths):
         read = reads.setdefault(key, EnvRead())
@@ -810,6 +852,7 @@ def scan_env_reads(source: Source, module_paths: list[str]) -> dict[str, EnvRead
     for rel, index in indexes.items():
         constants = {**shared, **index.constants}
         collections = {**shared_collections, **index.collections}
+        helpers = {**shared_helpers, **index.helpers}
         # Parakeet passes its process environment into StreamAdmissionController.from_env.
         # These helpers receive an explicit env mapping instead of reading os.environ directly.
         reads_env_mapping = rel in {
@@ -821,7 +864,29 @@ def scan_env_reads(source: Source, module_paths: list[str]) -> dict[str, EnvRead
             if key:
                 read = reads.setdefault(key, EnvRead())
                 read.modules.add(rel)
-                read.defaults.add(_default_of(node))
+                default = _default_of(node)
+                wrapper_name: str | None = None
+                if isinstance(node, ast.Call):
+                    func = node.func
+                    name = (
+                        func.attr if isinstance(func, ast.Attribute) else func.id if isinstance(func, ast.Name) else ''
+                    )
+                    if name in helpers or _is_boolean_helper(name):
+                        wrapper_name = name
+                if wrapper_name:
+                    h_truthy, h_compared, h_default = helpers.get(wrapper_name, (set(), set(), None))
+                    if h_truthy:
+                        read.truthy |= h_truthy
+                        read.compared |= h_compared
+                    else:
+                        read.truthy.add('true')
+                        read.compared |= {'true', 'false', '0', 'off'}
+                    if h_default is not None:
+                        read.defaults.add(h_default)
+                    else:
+                        read.defaults.add('false' if wrapper_name.endswith('default_off') else 'true')
+                else:
+                    read.defaults.add(default)
             if isinstance(node, ast.Compare) and len(node.ops) == 1:
                 root = _env_root(node.left, constants)
                 if not root:
