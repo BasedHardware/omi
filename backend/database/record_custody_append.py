@@ -52,19 +52,21 @@ def begin(uid, cid, session, *, firestore_client=None):
     @firestore.transactional
     def commit(tx):
         owner = client.collection('users').document(uid).get(transaction=tx).to_dict() or {}
+        opted_out = owner.get('private_cloud_sync_enabled', True) is False
         # Sync opt-out keeps its no-custody path, but never bypasses erasure.
         # Actual custody enrolls the same conversation checks as finish/recovery.
-        assert_batch_write_allowed(
-            client, tx, uid, conversation_ids=() if owner.get('private_cloud_sync_enabled', True) is False else (cid,)
-        )
-        if owner.get('private_cloud_sync_enabled', True) is False:
-            return False
+        assert_batch_write_allowed(client, tx, uid, conversation_ids=() if opted_out else (cid,))
         snapshot = ref.get(transaction=tx)
         if not snapshot.exists:
+            if opted_out:
+                return False
             raise RecordCustodyFenceLost('custody target no longer exists; retain local audio')
         row = snapshot.to_dict() or {}
+        sessions = dict(row.get('record_upload_sessions') or {})
+        own = sessions.get(session)
         if (
-            not row
+            opted_out
+            or not row
             or row.get('deleted')
             or row.get('record_lane_owner')
             not in {
@@ -73,12 +75,18 @@ def begin(uid, cid, session, *, firestore_client=None):
                 'batch_sync_v1',
             }
         ):
+            if isinstance(own, dict) and own.get('signal_source') == 'custody_append':
+                # An earlier attempt of this exact begin committed; only its reply
+                # was lost. Refusing now must not strand that token: remove it
+                # under the same authority check this refusal path already ran
+                # (SCA-3748). False still means no token of this request remains.
+                sessions.pop(session)
+                tx.update(ref, {'record_upload_sessions': sessions})
             return False
         previous = _receipt(ref, session).get(transaction=tx).to_dict() or {}
         if previous.get('accepted'):
             # Keep finish's receipt replay path without reacquiring its fence.
             return True
-        sessions = dict(row.get('record_upload_sessions') or {})
         if session in sessions:
             return True
         if len(sessions) >= 128:
