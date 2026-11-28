@@ -21,7 +21,7 @@ from utils.stt import (
 from utils.metrics import OMI_FALLBACK_TOTAL
 from utils.stt.live_failure import PendingLiveFailover, live_stt_terminal_reason, settle_terminal_socket
 from utils.stt.live_gate import GateState
-from utils.stt.live_metrics import REPLAY_AUDIO, REPLAY_CLOSED, REPLAY_SKIPPED
+from utils.stt.live_metrics import REPLAY_AUDIO, REPLAY_CLOSED, REPLAY_SKIPPED, REPLAY_WALL
 from utils.stt.live_signal import provider_observation
 from utils.stt.replay_delivery import ReplayTailSocket, replay_packets
 from utils.stt.resilient_stream import ResilientAudio, replay_chunks, socket_is_finishing
@@ -30,11 +30,7 @@ from utils.stt.soniox import SafeSonioxSocket
 from utils.stt.streaming import SafeModulateSocket
 
 
-from tests.unit.fixtures.replay_clock import virtual_clock  # noqa: F401
-
-# SCA-1999: replay still races real event-loop deadlines with its virtual clock.
-# backend-slow-timing-tests.yml runs this file on every main push.
-pytestmark = pytest.mark.slow
+from tests.unit.fixtures.replay_clock import coordinated_replay_clock, virtual_clock  # noqa: F401
 
 
 @pytest.fixture(autouse=True)
@@ -561,14 +557,18 @@ async def test_text_during_failed_replay_is_not_replayed_or_emitted_twice(monkey
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('successor', ['soniox', 'modulate-velma-2'])
-async def test_slow_consumer_full_ring_paced_budget_and_realtime_live_order(monkeypatch, virtual_clock, successor):
-
+async def test_slow_consumer_full_ring_paced_budget_and_realtime_live_order(
+    monkeypatch, coordinated_replay_clock, successor
+):
+    virtual_clock = coordinated_replay_clock
     monkeypatch.setattr(replay_delivery, 'REPLAY_PREFIX_SECONDS', 20.0)
     actual, _, raws, legs, _ = await setup_receiver(monkeypatch, ['parakeet-window', successor])
     actual.stt_socket.raw.fail('first_text_deadline')
     original = b''.join(data for _, data in actual._window_ring().snapshot())
     family = 'soniox' if successor == 'soniox' else 'modulate'
     labels = dict(source='parakeet', successor=family)
+    wall = REPLAY_WALL.labels(**labels)
+    wall_before = wall._sum.get()
     skipped_before = REPLAY_SKIPPED.labels(**labels)._value.get()
     audio_before = REPLAY_AUDIO.labels(**labels)._value.get()
     closed_before = REPLAY_CLOSED.labels(**labels)._value.get()
@@ -592,9 +592,7 @@ async def test_slow_consumer_full_ring_paced_budget_and_realtime_live_order(monk
         # past it; the rebased prefix then serialized after the full 21 s of
         # capture and landed past the 20 s wall the budget asserts below
         # (SCA-2182: replay_wall 39.974 vs the 21.537 bound on shard 2/8).
-        async with asyncio.timeout(10):
-            while not (raws and raws[-1]._send_queue.enqueued_audio):
-                await asyncio.sleep(0)
+        await virtual_clock.until(lambda: raws and raws[-1]._send_queue.enqueued_audio, timeout=10)
         for n in range(70):  # 21s of real-time capture; continues past adoption.
             await virtual_clock.sleep(0.3)
             data = (6000 + n).to_bytes(2, 'little') * 4800
@@ -609,11 +607,22 @@ async def test_slow_consumer_full_ring_paced_budget_and_realtime_live_order(monk
     ingestion = asyncio.create_task(ingest())
     try:
         assert await task
-        replay_wall = virtual_clock.now
+        # Sample the production prefix observation, not this test task's later
+        # scheduling slot while ingestion continues advancing the shared clock.
+        replay_wall = wall._sum.get() - wall_before
         assert PREFIX_SECONDS - 0.1 <= replay_wall <= 20 + 3 * 0.512 + 0.001
         await ingestion
         expected = original[-PREFIX_BYTES:] + b''.join(tail)
-        await until(lambda: raws[-1]._ws.byte_count >= len(expected) or raws[-1].is_connection_dead)
+        # Ingestion has ended, so pump completion is the deterministic barrier
+        # for every expected byte to reach the fake transport. Watch it on the
+        # real monotonic clock: this fixture pins the loop's `time()` to virtual
+        # time, so an `asyncio.timeout` here would never fire if the pump
+        # stalled on an event nobody advances.
+        pump = actual.stt_socket._task
+        if pump is not None:
+            await virtual_clock.until(pump.done, timeout=30)
+            await pump
+        assert raws[-1]._ws.byte_count == len(expected), (raws[-1]._ws.byte_count, len(expected))
         assert not raws[-1].is_connection_dead, (
             raws[-1].death_reason,
             raws[-1]._ws.byte_count,
