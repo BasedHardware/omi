@@ -794,8 +794,7 @@ def apply_speaker_resolution(
             segment.speaker_label_source = 'auto'
         elif new_id in identity_statuses:
             if identity_statuses[new_id] == SpeakerIdentityStatus.unknown:
-                # No new identity evidence (missing prints/short audio) cannot
-                # revoke an existing decision, including a prior partial pass.
+                # Missing identity evidence leaves prior decisions intact.
                 continue
             # refactor: superseded by utils.speakers.evidence.project_labels when SPEAKER_EVIDENCE_MODE=serve
             # Manual voices are absent; persistence reapplies the latest receipt.

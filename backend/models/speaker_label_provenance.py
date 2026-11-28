@@ -2,8 +2,6 @@
 
 from typing import Literal, Mapping, Optional
 
-FINAL_CENTROID_MATCH_SOURCE = 'final_centroid'
-
 Source = Literal['manual', 'auto', 'carried']
 _PUBLIC_SOURCES = {'manual', 'auto', 'carried'}
 

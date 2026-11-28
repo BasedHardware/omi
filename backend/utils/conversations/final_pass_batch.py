@@ -39,13 +39,13 @@ from utils.product_telemetry import emit_product_event
 from database.batch_pipeline_store import FirestoreStore
 from database.redis_db import create_bounded_redis_client
 from models.conversation import ConversationSpeakers
-from models.speaker_label_provenance import FINAL_CENTROID_MATCH_SOURCE
 from utils.batch_pipeline.contracts import projection_speech_spans
 from utils.batch_pipeline.artifact_policy import artifacts_for
 from utils.batch_pipeline.artifact_reads import ArtifactReadBudget, ArtifactReadLimit
 from utils.batch_pipeline.projection_parts import split_result, bounded_projection_words
 from utils.batch_pipeline.projection_segments import projection_segments
 from utils.conversations.final_pass_assignment import assign_words
+from utils.conversations.owner_attribution import FINAL_CENTROID_MATCH_SOURCE
 from utils.conversations.final_pass_errors import error_details
 from utils.conversations import final_pass_split as splitting
 from utils.conversations.final_pass_dependencies import transient_cause

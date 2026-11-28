@@ -6,10 +6,10 @@ import re
 from typing import Any, Literal, Optional, Sequence
 
 from config.refactor_modes import default_on
-from models.speaker_label_provenance import FINAL_CENTROID_MATCH_SOURCE
 
 OwnerTrust = Literal["unique_owner", "no_owner", "multi_owner", "no_speaker_ids"]
 ClusterKey = tuple[Optional[str], Any]
+FINAL_CENTROID_MATCH_SOURCE = 'final_centroid'
 OWNER_MATCH_SOURCES = frozenset(('conversation_voice', 'speaker_evidence_v2', FINAL_CENTROID_MATCH_SOURCE))
 
 
