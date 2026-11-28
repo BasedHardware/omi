@@ -9704,49 +9704,13 @@
     "@deleteSynced": {
         "description": "Menu option to delete synced recordings"
     },
-    "deleteSyncedFiles": "ہم آہنگ ریکارڈنگز حذف کریں",
-    "@deleteSyncedFiles": {
-        "description": "Dialog title for deleting synced files"
-    },
-    "deleteSyncedFilesMessage": "یہ ریکارڈنگز پہلے سے آپ کے فون میں ہم آہنگ ہو چکی ہیں۔ یہ تبدیل نہیں ہو سکتا۔",
-    "@deleteSyncedFilesMessage": {
-        "description": "Confirmation message for deleting synced files"
-    },
-    "syncedFilesDeleted": "ہم آہنگ ریکارڈنگز حذف ہو گئیں",
-    "@syncedFilesDeleted": {
-        "description": "Snackbar message after synced files deleted"
-    },
     "deletePending": "زیرِ التوا حذف کریں",
     "@deletePending": {
         "description": "Menu option to delete pending recordings"
     },
-    "deletePendingFiles": "زیرِ التوا ریکارڈنگز حذف کریں",
-    "@deletePendingFiles": {
-        "description": "Dialog title for deleting pending files"
-    },
-    "deletePendingFilesWarning": "یہ ریکارڈنگز آپ کے فون میں ہم آہنگ نہیں ہوئیں اور ہمیشہ کے لیے ضائع ہوں گی۔ یہ تبدیل نہیں ہو سکتا۔",
-    "@deletePendingFilesWarning": {
-        "description": "Warning message for deleting pending files"
-    },
-    "pendingFilesDeleted": "زیرِ التوا ریکارڈنگز حذف ہو گئیں",
-    "@pendingFilesDeleted": {
-        "description": "Snackbar message after pending files deleted"
-    },
-    "deleteAllFiles": "تمام ریکارڈنگز حذف کریں",
-    "@deleteAllFiles": {
-        "description": "Dialog title for deleting all files"
-    },
     "deleteAll": "سب حذف کریں",
     "@deleteAll": {
         "description": "Menu option to delete all recordings"
-    },
-    "deleteAllFilesWarning": "یہ ہم آہنگ اور زیرِ التوا دونوں ریکارڈنگز حذف کرے گا۔ زیرِ التوا ریکارڈنگز ہم آہنگ نہیں ہوئیں اور ہمیشہ کے لیے ضائع ہوں گی۔ یہ تبدیل نہیں ہو سکتا۔",
-    "@deleteAllFilesWarning": {
-        "description": "Warning message for deleting all files"
-    },
-    "allFilesDeleted": "تمام ریکارڈنگز حذف ہو گئیں",
-    "@allFilesDeleted": {
-        "description": "Snackbar message after all files deleted"
     },
     "nFiles": "{count} ریکارڈنگز",
     "@nFiles": {
@@ -9760,18 +9724,6 @@
     "manageStorage": "اسٹوریج منظم کریں",
     "@manageStorage": {
         "description": "Menu option and sheet title for managing recording storage"
-    },
-    "safelyBackedUp": "تیار کی گئی بات چیتیں",
-    "@safelyBackedUp": {
-        "description": "Description for synced files in manage storage sheet"
-    },
-    "notYetSynced": "ابھی آپ کے فون میں ہم آہنگ نہیں ہوا",
-    "@notYetSynced": {
-        "description": "Description for pending files in manage storage sheet"
-    },
-    "clearAll": "سب صاف کریں",
-    "@clearAll": {
-        "description": "Button label to clear all files"
     },
     "phoneKeypad": "کی پیڈ",
     "@phoneKeypad": {
@@ -12326,5 +12278,28 @@
     "firmwareNewestSupportedForDevice": "آپ کا ڈیوائس پہلے ہی سپورٹ شدہ تازہ ترین فرم ویئر ورژن پر ہے",
     "firmwareSyncRecordingsFirstTitle": "پہلے اپنی ریکارڈنگز سنک کریں",
     "firmwareSyncRecordingsFirstMessage": "کچھ ریکارڈنگز ابھی آپ کے ڈیوائس پر ہیں۔ انہیں فون پر سنک ہونے دیں، پھر اپڈیٹ شروع کریں۔",
-    "batteryRestartToRefresh": "ریفریش کرنے کے لیے Omi کو دوبارہ شروع کریں"
+    "batteryRestartToRefresh": "ریفریش کرنے کے لیے Omi کو دوبارہ شروع کریں",
+    "storageUploadedTitle": "پہلے ہی اپ لوڈ ہو چکا ہے",
+    "storageUploadedSubtitle": "ٹرانسکرپٹ ہو چکا ہے۔ فون سے کاپی ہٹانے پر کچھ بھی ضائع نہیں ہوگا۔",
+    "storageFreeUpSpace": "جگہ خالی کریں",
+    "storageNotUploadedTitle": "ابھی اپ لوڈ نہیں ہوا",
+    "storageOnThisPhone": "اس فون پر",
+    "storageOnYourOmi": "آپ کے Omi پر",
+    "storageOnPhoneAndOmi": "اس فون پر {phone} · آپ کے Omi پر {device}",
+    "storageNotUploadedWarning": "حذف کرنے سے یہ آڈیو ہمیشہ کے لیے ختم ہو جائے گا۔",
+    "storageDeleteEverything": "سب کچھ حذف کریں",
+    "storageFreeUpTitle": "{duration} کی جگہ خالی کریں؟",
+    "storageFreeUpMessage": "جو آڈیو پہلے ہی ٹرانسکرپٹ ہو چکا ہے اس کی اس فون والی کاپی حذف ہو جائے گی۔ آپ کی بات چیتیں باقی رہیں گی۔",
+    "storageDeletePendingTitle": "{duration} آڈیو حذف کریں؟",
+    "storageDeletePendingMessage": "یہ آڈیو اپ لوڈ نہیں ہوا، اس لیے اسے واپس حاصل نہیں کیا جا سکتا۔ حذف ہونے کے دوران سنکنگ رک جائے گی۔",
+    "storageDeleteAllTitle": "تمام {duration} آڈیو حذف کریں؟",
+    "storageDeleteAllMessage": "اس میں {duration} شامل ہے جو اپ لوڈ نہیں ہوا اور واپس حاصل نہیں ہو سکتا۔ حذف ہونے کے دوران سنکنگ رک جائے گی۔",
+    "storageDeleteAllUploadedMessage": "اس فون پر محفوظ ہر ریکارڈنگ حذف ہو جائے گی۔ آپ کی بات چیتیں باقی رہیں گی۔",
+    "storageClearStopping": "سنکنگ روکی جا رہی ہے…",
+    "storageClearDeleting": "حذف کیا جا رہا ہے… {progress}",
+    "storageClearVerifying": "چیک کیا جا رہا ہے کہ کیا باقی ہے…",
+    "storageClearDone": "{duration} حذف ہو گیا",
+    "storageClearPartial": "{deleted} حذف ہو گیا۔ {remaining} حذف نہیں ہو سکا۔",
+    "storageClearOmiUnreachable": "{duration} ابھی بھی آپ کے Omi پر ہے۔ اسے کنیکٹ کریں اور دوبارہ کوشش کریں۔",
+    "storageClearFailed": "حذف نہیں ہو سکا۔ دوبارہ کوشش کریں۔"
 }

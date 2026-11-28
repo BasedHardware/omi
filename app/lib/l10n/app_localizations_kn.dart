@@ -8165,40 +8165,10 @@ class AppLocalizationsKn extends AppLocalizations {
   String get deleteSynced => 'ಸಮನ್ವಯಿತ ಅಳಿಸಿ';
 
   @override
-  String get deleteSyncedFiles => 'ಸಮನ್ವಯಿತ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಅಳಿಸಿ';
-
-  @override
-  String get deleteSyncedFilesMessage =>
-      'ಈ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಈಗಾಗಲೇ ನಿಮ್ಮ ಫೋನಕ್ಕೆ ಸಮನ್ವಯ ಮಾಡಲಾಗಿದೆ. ಇದನ್ನು ರದ್ದುಗೊಳಿಸಲು ಸಾಧ್ಯ.';
-
-  @override
-  String get syncedFilesDeleted => 'ಸಮನ್ವಯಿತ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಅಳಿಸಿದೆ';
-
-  @override
   String get deletePending => 'ಪಕ್ಷಾನುಮತಿ ಅಳಿಸಿ';
 
   @override
-  String get deletePendingFiles => 'ಪಕ್ಷಾನುಮತಿ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಅಳಿಸಿ';
-
-  @override
-  String get deletePendingFilesWarning =>
-      'ಈ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ನಿಮ್ಮ ಫೋನಕ್ಕೆ ಸಮನ್ವಯ ಮಾಡಿಲ್ಲ ಮತ್ತು ಶಾಶ್ವತವಾಗಿ ಸೋಲಾಗುತ್ತವೆ. ಇದನ್ನು ರದ್ದುಗೊಳಿಸಲು ಸಾಧ್ಯ.';
-
-  @override
-  String get pendingFilesDeleted => 'ಪಕ್ಷಾನುಮತಿ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಅಳಿಸಿದೆ';
-
-  @override
-  String get deleteAllFiles => 'ಎಲ್ಲ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಅಳಿಸಿ';
-
-  @override
   String get deleteAll => 'ಎಲ್ಲವನ್ನೂ ಅಳಿಸಿ';
-
-  @override
-  String get deleteAllFilesWarning =>
-      'ಇದು ಸಮನ್ವಯಿತ ಮತ್ತು ಪಕ್ಷಾನುಮತಿ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಅಳಿಸಿ. ಪಕ್ಷಾನುಮತಿ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಸಮನ್ವಯ ಮಾಡಿಲ್ಲ ಮತ್ತು ಶಾಶ್ವತವಾಗಿ ಸೋಲಾಗುತ್ತವೆ. ಇದನ್ನು ರದ್ದುಗೊಳಿಸಲು ಸಾಧ್ಯ.';
-
-  @override
-  String get allFilesDeleted => 'ಎಲ್ಲ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಅಳಿಸಿದೆ';
 
   @override
   String nFiles(int count) {
@@ -8207,15 +8177,6 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get manageStorage => 'ಸಂಗ್ರಹಣ ನಿರ್ವಹಿಸಿ';
-
-  @override
-  String get safelyBackedUp => 'ರಚಿಸಿದ ಸಂವಾದಗಳು';
-
-  @override
-  String get notYetSynced => 'ಇನ್ನೂ ನಿಮ್ಮ ಫೋನಕ್ಕೆ ಸಮನ್ವಯ ಮಾಡಿಲ್ಲ';
-
-  @override
-  String get clearAll => 'ಎಲ್ಲವನ್ನೂ ಸ್ವಚ್ಛ ಮಾಡಿ';
 
   @override
   String get phoneKeypad => 'ಕೀಪ್ಯಾಡ್';
@@ -15897,4 +15858,94 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'ರಿಫ್ರೆಶ್ ಮಾಡಲು Omi ಅನ್ನು ಮರುಪ್ರಾರಂಭ ಮಾಡಿ';
+
+  @override
+  String get storageUploadedTitle => 'ಈಗಾಗಲೇ ಅಪ್‌ಲೋಡ್ ಆಗಿದೆ';
+
+  @override
+  String get storageUploadedSubtitle => 'ಪ್ರತಿಲಿಪಿ ಮಾಡಲಾಗಿದೆ. ಫೋನ್‌ನ ಪ್ರತಿಯನ್ನು ತೆಗೆದುಹಾಕಿದರೂ ಏನೂ ನಷ್ಟವಾಗುವುದಿಲ್ಲ.';
+
+  @override
+  String get storageFreeUpSpace => 'ಜಾಗ ಖಾಲಿ ಮಾಡಿ';
+
+  @override
+  String get storageNotUploadedTitle => 'ಇನ್ನೂ ಅಪ್‌ಲೋಡ್ ಆಗಿಲ್ಲ';
+
+  @override
+  String get storageOnThisPhone => 'ಈ ಫೋನ್‌ನಲ್ಲಿ';
+
+  @override
+  String get storageOnYourOmi => 'ನಿಮ್ಮ Omi ನಲ್ಲಿ';
+
+  @override
+  String storageOnPhoneAndOmi(String phone, String device) {
+    return 'ಈ ಫೋನ್‌ನಲ್ಲಿ $phone · ನಿಮ್ಮ Omi ನಲ್ಲಿ $device';
+  }
+
+  @override
+  String get storageNotUploadedWarning => 'ಅಳಿಸಿದರೆ ಈ ಆಡಿಯೊ ಶಾಶ್ವತವಾಗಿ ನಷ್ಟವಾಗುತ್ತದೆ.';
+
+  @override
+  String get storageDeleteEverything => 'ಎಲ್ಲವನ್ನೂ ಅಳಿಸಿ';
+
+  @override
+  String storageFreeUpTitle(String duration) {
+    return '$duration ಜಾಗ ಖಾಲಿ ಮಾಡಬೇಕೆ?';
+  }
+
+  @override
+  String get storageFreeUpMessage =>
+      'ಈಗಾಗಲೇ ಪ್ರತಿಲಿಪಿ ಮಾಡಿದ ಆಡಿಯೊದ ಫೋನ್ ಪ್ರತಿಯನ್ನು ತೆಗೆದುಹಾಕುತ್ತದೆ. ನಿಮ್ಮ ಸಂವಾದಗಳು ಹಾಗೆಯೇ ಇರುತ್ತವೆ.';
+
+  @override
+  String storageDeletePendingTitle(String duration) {
+    return '$duration ಆಡಿಯೊ ಅಳಿಸಬೇಕೆ?';
+  }
+
+  @override
+  String get storageDeletePendingMessage =>
+      'ಈ ಆಡಿಯೊ ಇನ್ನೂ ಅಪ್‌ಲೋಡ್ ಆಗಿಲ್ಲ, ಆದ್ದರಿಂದ ಅದನ್ನು ಮರಳಿ ಪಡೆಯಲು ಸಾಧ್ಯವಿಲ್ಲ. ಅಳಿಸುವ ಸಮಯದಲ್ಲಿ ಸಿಂಕ್ ತಾತ್ಕಾಲಿಕವಾಗಿ ನಿಲ್ಲುತ್ತದೆ.';
+
+  @override
+  String storageDeleteAllTitle(String duration) {
+    return 'ಎಲ್ಲಾ $duration ಆಡಿಯೊ ಅಳಿಸಬೇಕೆ?';
+  }
+
+  @override
+  String storageDeleteAllMessage(String duration) {
+    return 'ಇನ್ನೂ ಅಪ್‌ಲೋಡ್ ಆಗದ ಮತ್ತು ಮರಳಿ ಪಡೆಯಲಾಗದ $duration ಇದರಲ್ಲಿ ಸೇರಿದೆ. ಅಳಿಸುವ ಸಮಯದಲ್ಲಿ ಸಿಂಕ್ ತಾತ್ಕಾಲಿಕವಾಗಿ ನಿಲ್ಲುತ್ತದೆ.';
+  }
+
+  @override
+  String get storageDeleteAllUploadedMessage =>
+      'ಈ ಫೋನ್‌ನಲ್ಲಿ ಇರಿಸಿರುವ ಎಲ್ಲಾ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ತೆಗೆದುಹಾಕುತ್ತದೆ. ನಿಮ್ಮ ಸಂವಾದಗಳು ಹಾಗೆಯೇ ಇರುತ್ತವೆ.';
+
+  @override
+  String get storageClearStopping => 'ಸಿಂಕ್ ನಿಲ್ಲಿಸಲಾಗುತ್ತಿದೆ…';
+
+  @override
+  String storageClearDeleting(String progress) {
+    return 'ಅಳಿಸಲಾಗುತ್ತಿದೆ… $progress';
+  }
+
+  @override
+  String get storageClearVerifying => 'ಉಳಿದಿರುವುದನ್ನು ಪರಿಶೀಲಿಸಲಾಗುತ್ತಿದೆ…';
+
+  @override
+  String storageClearDone(String duration) {
+    return '$duration ಅಳಿಸಲಾಗಿದೆ';
+  }
+
+  @override
+  String storageClearPartial(String deleted, String remaining) {
+    return '$deleted ಅಳಿಸಲಾಗಿದೆ. $remaining ಅಳಿಸಲು ಸಾಧ್ಯವಾಗಿಲ್ಲ.';
+  }
+
+  @override
+  String storageClearOmiUnreachable(String duration) {
+    return '$duration ಇನ್ನೂ ನಿಮ್ಮ Omi ನಲ್ಲಿದೆ. ಸಂಪರ್ಕಿಸಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+  }
+
+  @override
+  String get storageClearFailed => 'ಅಳಿಸಲು ಸಾಧ್ಯವಾಗಿಲ್ಲ. ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
 }

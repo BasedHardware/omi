@@ -8129,40 +8129,10 @@ class AppLocalizationsEt extends AppLocalizations {
   String get deleteSynced => 'Kustuta sünkroniseeritud';
 
   @override
-  String get deleteSyncedFiles => 'Kustuta sünkroniseeritud salvestised';
-
-  @override
-  String get deleteSyncedFilesMessage =>
-      'Need salvestised on juba teie telefoniga sünkroniseeritud. Seda ei saa tagasi võtta.';
-
-  @override
-  String get syncedFilesDeleted => 'Sünkroniseeritud salvestised kustutatud';
-
-  @override
   String get deletePending => 'Kustuta ootel olevad';
 
   @override
-  String get deletePendingFiles => 'Kustuta ootel salvestised';
-
-  @override
-  String get deletePendingFilesWarning =>
-      'Neid salvestisi EI ole teie telefoniga sünkroniseeritud ja need lähevad jäädavalt kaotsi. Seda ei saa tagasi võtta.';
-
-  @override
-  String get pendingFilesDeleted => 'Ootel salvestised kustutatud';
-
-  @override
-  String get deleteAllFiles => 'Kustuta kõik salvestised';
-
-  @override
   String get deleteAll => 'Kustuta kõik';
-
-  @override
-  String get deleteAllFilesWarning =>
-      'See kustutab sünkroniseeritud ja ootel salvestised. Ootel salvestisi EI ole sünkroniseeritud ja need lähevad jäädavalt kaotsi.';
-
-  @override
-  String get allFilesDeleted => 'Kõik salvestised kustutatud';
 
   @override
   String nFiles(int count) {
@@ -8171,15 +8141,6 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get manageStorage => 'Halda salvestusruumi';
-
-  @override
-  String get safelyBackedUp => 'Loodud vestlused';
-
-  @override
-  String get notYetSynced => 'Pole veel teie telefoniga sünkroniseeritud';
-
-  @override
-  String get clearAll => 'Tühjenda kõik';
 
   @override
   String get phoneKeypad => 'Klahvistik';
@@ -15837,4 +15798,94 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'Taaskäivitage Omi värskendamiseks';
+
+  @override
+  String get storageUploadedTitle => 'Juba üles laaditud';
+
+  @override
+  String get storageUploadedSubtitle => 'Transkribeeritud. Telefoni koopia kustutamine ei kaota midagi.';
+
+  @override
+  String get storageFreeUpSpace => 'Vabasta ruumi';
+
+  @override
+  String get storageNotUploadedTitle => 'Pole veel üles laaditud';
+
+  @override
+  String get storageOnThisPhone => 'Selles telefonis';
+
+  @override
+  String get storageOnYourOmi => 'Teie Omis';
+
+  @override
+  String storageOnPhoneAndOmi(String phone, String device) {
+    return 'Selles telefonis $phone · Teie Omis $device';
+  }
+
+  @override
+  String get storageNotUploadedWarning => 'Kustutamisel kaob see heli jäädavalt.';
+
+  @override
+  String get storageDeleteEverything => 'Kustuta kõik';
+
+  @override
+  String storageFreeUpTitle(String duration) {
+    return 'Vabasta $duration?';
+  }
+
+  @override
+  String get storageFreeUpMessage =>
+      'Eemaldab selle telefoni koopia juba transkribeeritud helist. Teie vestlused jäävad alles.';
+
+  @override
+  String storageDeletePendingTitle(String duration) {
+    return 'Kustuta $duration heli?';
+  }
+
+  @override
+  String get storageDeletePendingMessage =>
+      'Seda heli pole üles laaditud, seega seda ei saa taastada. Sünkroonimine peatub kustutamise ajaks.';
+
+  @override
+  String storageDeleteAllTitle(String duration) {
+    return 'Kustuta kõik $duration heli?';
+  }
+
+  @override
+  String storageDeleteAllMessage(String duration) {
+    return 'Sealhulgas $duration, mida pole üles laaditud ja mida ei saa taastada. Sünkroonimine peatub kustutamise ajaks.';
+  }
+
+  @override
+  String get storageDeleteAllUploadedMessage =>
+      'Eemaldab kõik selles telefonis hoitud salvestised. Teie vestlused jäävad alles.';
+
+  @override
+  String get storageClearStopping => 'Sünkroonimise peatamine…';
+
+  @override
+  String storageClearDeleting(String progress) {
+    return 'Kustutamine… $progress';
+  }
+
+  @override
+  String get storageClearVerifying => 'Kontrollitakse, mis on alles…';
+
+  @override
+  String storageClearDone(String duration) {
+    return 'Kustutati $duration';
+  }
+
+  @override
+  String storageClearPartial(String deleted, String remaining) {
+    return 'Kustutati $deleted. $remaining ei õnnestunud kustutada.';
+  }
+
+  @override
+  String storageClearOmiUnreachable(String duration) {
+    return '$duration asub veel teie Omis. Ühendage see ja proovige uuesti.';
+  }
+
+  @override
+  String get storageClearFailed => 'Kustutamine ei õnnestunud. Proovige uuesti.';
 }

@@ -8135,39 +8135,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String get deleteSynced => 'Poista synkronoidut';
 
   @override
-  String get deleteSyncedFiles => 'Poista synkronoidut tallenteet';
-
-  @override
-  String get deleteSyncedFilesMessage => 'Nämä tallenteet on jo synkronoitu puhelimeesi. Tätä ei voi kumota.';
-
-  @override
-  String get syncedFilesDeleted => 'Synkronoidut tallenteet poistettu';
-
-  @override
   String get deletePending => 'Poista odottavat';
 
   @override
-  String get deletePendingFiles => 'Poista odottavat tallenteet';
-
-  @override
-  String get deletePendingFilesWarning =>
-      'Näitä tallenteita EI ole synkronoitu puhelimeesi ja ne menetetään pysyvästi. Tätä ei voi kumota.';
-
-  @override
-  String get pendingFilesDeleted => 'Odottavat tallenteet poistettu';
-
-  @override
-  String get deleteAllFiles => 'Poista kaikki tallenteet';
-
-  @override
   String get deleteAll => 'Poista kaikki';
-
-  @override
-  String get deleteAllFilesWarning =>
-      'Tämä poistaa synkronoidut ja odottavat tallenteet. Odottavia tallenteita EI ole synkronoitu ja ne menetetään pysyvästi.';
-
-  @override
-  String get allFilesDeleted => 'Kaikki tallenteet poistettu';
 
   @override
   String nFiles(int count) {
@@ -8176,15 +8147,6 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get manageStorage => 'Hallitse tallennustilaa';
-
-  @override
-  String get safelyBackedUp => 'Keskustelut luotu';
-
-  @override
-  String get notYetSynced => 'Ei vielä synkronoitu puhelimeesi';
-
-  @override
-  String get clearAll => 'Tyhjennä kaikki';
 
   @override
   String get phoneKeypad => 'Näppäimistö';
@@ -15850,4 +15812,93 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'Käynnistä Omi uudelleen päivittämiseksi';
+
+  @override
+  String get storageUploadedTitle => 'Jo ladattu';
+
+  @override
+  String get storageUploadedSubtitle => 'Litteroitu. Poistamalla puhelinkopion ei menetetä mitään.';
+
+  @override
+  String get storageFreeUpSpace => 'Vapauta tilaa';
+
+  @override
+  String get storageNotUploadedTitle => 'Ei vielä ladattu';
+
+  @override
+  String get storageOnThisPhone => 'Tässä puhelimessa';
+
+  @override
+  String get storageOnYourOmi => 'Omi-laitteessasi';
+
+  @override
+  String storageOnPhoneAndOmi(String phone, String device) {
+    return 'Tässä puhelimessa $phone · Omi-laitteessasi $device';
+  }
+
+  @override
+  String get storageNotUploadedWarning => 'Poistaminen tuhoaa äänen lopullisesti.';
+
+  @override
+  String get storageDeleteEverything => 'Poista kaikki';
+
+  @override
+  String storageFreeUpTitle(String duration) {
+    return 'Vapauta $duration?';
+  }
+
+  @override
+  String get storageFreeUpMessage => 'Poistaa tämän puhelimen kopion jo litteroidusta äänestä. Keskustelusi säilyvät.';
+
+  @override
+  String storageDeletePendingTitle(String duration) {
+    return 'Poista $duration ääntä?';
+  }
+
+  @override
+  String get storageDeletePendingMessage =>
+      'Tätä ääntä ei ole ladattu, joten sitä ei voi palauttaa. Synkronointi pysähtyy poiston ajaksi.';
+
+  @override
+  String storageDeleteAllTitle(String duration) {
+    return 'Poista kaikki $duration ääntä?';
+  }
+
+  @override
+  String storageDeleteAllMessage(String duration) {
+    return 'Mukana on $duration, jota ei ole ladattu eikä sitä voi palauttaa. Synkronointi pysähtyy poiston ajaksi.';
+  }
+
+  @override
+  String get storageDeleteAllUploadedMessage =>
+      'Poistaa kaikki tähän puhelimeen tallennetut äänitteet. Keskustelusi säilyvät.';
+
+  @override
+  String get storageClearStopping => 'Pysäytetään synkronointia…';
+
+  @override
+  String storageClearDeleting(String progress) {
+    return 'Poistetaan… $progress';
+  }
+
+  @override
+  String get storageClearVerifying => 'Tarkistetaan, mitä jäljellä on…';
+
+  @override
+  String storageClearDone(String duration) {
+    return 'Poistettiin $duration';
+  }
+
+  @override
+  String storageClearPartial(String deleted, String remaining) {
+    return 'Poistettiin $deleted. $remaining ei voitu poistaa.';
+  }
+
+  @override
+  String storageClearOmiUnreachable(String duration) {
+    return '$duration on vielä Omi-laitteessasi. Yhdistä se ja yritä uudelleen.';
+  }
+
+  @override
+  String get storageClearFailed => 'Poisto ei onnistunut. Yritä uudelleen.';
 }

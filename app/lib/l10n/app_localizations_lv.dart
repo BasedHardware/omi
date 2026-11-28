@@ -8155,39 +8155,10 @@ class AppLocalizationsLv extends AppLocalizations {
   String get deleteSynced => 'Dzēst sinhronizētos';
 
   @override
-  String get deleteSyncedFiles => 'Dzēst sinhronizētos ierakstus';
-
-  @override
-  String get deleteSyncedFilesMessage => 'Šie ieraksti jau ir sinhronizēti ar jūsu tālruni. To nevar atsaukt.';
-
-  @override
-  String get syncedFilesDeleted => 'Sinhronizētie ieraksti dzēsti';
-
-  @override
   String get deletePending => 'Dzēst gaidošos';
 
   @override
-  String get deletePendingFiles => 'Dzēst gaidošos ierakstus';
-
-  @override
-  String get deletePendingFilesWarning =>
-      'Šie ieraksti NAV sinhronizēti ar jūsu tālruni un tiks neatgriezeniski zaudēti. To nevar atsaukt.';
-
-  @override
-  String get pendingFilesDeleted => 'Gaidošie ieraksti dzēsti';
-
-  @override
-  String get deleteAllFiles => 'Dzēst visus ierakstus';
-
-  @override
   String get deleteAll => 'Dzēst visu';
-
-  @override
-  String get deleteAllFilesWarning =>
-      'Tas dzēsīs sinhronizētos un gaidošos ierakstus. Gaidošie ieraksti NAV sinhronizēti un tiks neatgriezeniski zaudēti.';
-
-  @override
-  String get allFilesDeleted => 'Visi ieraksti dzēsti';
 
   @override
   String nFiles(int count) {
@@ -8196,15 +8167,6 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get manageStorage => 'Pārvaldīt krātuvi';
-
-  @override
-  String get safelyBackedUp => 'Izveidotās sarunas';
-
-  @override
-  String get notYetSynced => 'Vēl nav sinhronizēts ar jūsu tālruni';
-
-  @override
-  String get clearAll => 'Notīrīt visu';
 
   @override
   String get phoneKeypad => 'Tastatūra';
@@ -15880,4 +15842,92 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'Restartējiet Omi, lai atsvaidzinātu';
+
+  @override
+  String get storageUploadedTitle => 'Jau augšupielādēts';
+
+  @override
+  String get storageUploadedSubtitle => 'Transkribēts. Dzēšot tālruņa kopiju, nekas nepazudīs.';
+
+  @override
+  String get storageFreeUpSpace => 'Atbrīvot vietu';
+
+  @override
+  String get storageNotUploadedTitle => 'Vēl nav augšupielādēts';
+
+  @override
+  String get storageOnThisPhone => 'Šajā tālrunī';
+
+  @override
+  String get storageOnYourOmi => 'Jūsu Omi ierīcē';
+
+  @override
+  String storageOnPhoneAndOmi(String phone, String device) {
+    return 'Šajā tālrunī $phone · Jūsu Omi ierīcē $device';
+  }
+
+  @override
+  String get storageNotUploadedWarning => 'Dzēšot, šis audio tiks zaudēts uz visiem laikiem.';
+
+  @override
+  String get storageDeleteEverything => 'Dzēst visu';
+
+  @override
+  String storageFreeUpTitle(String duration) {
+    return 'Atbrīvot $duration vietas?';
+  }
+
+  @override
+  String get storageFreeUpMessage => 'Noņem šī tālruņa jau transkribētā audio kopiju. Jūsu sarunas paliek.';
+
+  @override
+  String storageDeletePendingTitle(String duration) {
+    return 'Dzēst $duration audio?';
+  }
+
+  @override
+  String get storageDeletePendingMessage =>
+      'Šis audio nav augšupielādēts, tāpēc to nevar atjaunot. Dzēšanas laikā sinhronizācija tiek apturēta.';
+
+  @override
+  String storageDeleteAllTitle(String duration) {
+    return 'Dzēst visu $duration audio?';
+  }
+
+  @override
+  String storageDeleteAllMessage(String duration) {
+    return 'Ietver $duration, kas nav augšupielādēts un ko nevar atjaunot. Dzēšanas laikā sinhronizācija tiek apturēta.';
+  }
+
+  @override
+  String get storageDeleteAllUploadedMessage => 'Noņem visus šajā tālrunī saglabātos ierakstus. Jūsu sarunas paliek.';
+
+  @override
+  String get storageClearStopping => 'Sinhronizācijas apturēšana…';
+
+  @override
+  String storageClearDeleting(String progress) {
+    return 'Dzēšana… $progress';
+  }
+
+  @override
+  String get storageClearVerifying => 'Pārbauda, kas palicis…';
+
+  @override
+  String storageClearDone(String duration) {
+    return 'Izdzēsts $duration';
+  }
+
+  @override
+  String storageClearPartial(String deleted, String remaining) {
+    return 'Izdzēsts $deleted. $remaining nevarēja izdzēst.';
+  }
+
+  @override
+  String storageClearOmiUnreachable(String duration) {
+    return '$duration joprojām ir jūsu Omi ierīcē. Savienojiet to un mēģiniet vēlreiz.';
+  }
+
+  @override
+  String get storageClearFailed => 'Nevarēja izdzēst. Mēģiniet vēlreiz.';
 }

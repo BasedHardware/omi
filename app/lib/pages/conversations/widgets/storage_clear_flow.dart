@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/wals/storage_clear.dart';
@@ -125,13 +126,15 @@ class StorageClearProgressView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = context.l10n;
+    final count = NumberFormat.decimalPattern(Localizations.localeOf(context).toString());
     return ValueListenableBuilder<StorageClearProgress>(
       valueListenable: progress,
       builder: (context, value, _) {
         final label = switch (value.phase) {
           StorageClearPhase.stopping => l.storageClearStopping,
-          StorageClearPhase.deleting =>
-            value.total > 0 ? l.storageClearDeleting(value.done, value.total) : l.storageClearStopping,
+          StorageClearPhase.deleting => value.total > 0
+              ? l.storageClearDeleting('${count.format(value.done)} / ${count.format(value.total)}')
+              : l.storageClearStopping,
           StorageClearPhase.verifying => l.storageClearVerifying,
         };
         return Padding(

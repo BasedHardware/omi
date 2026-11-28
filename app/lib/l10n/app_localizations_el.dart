@@ -8194,40 +8194,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String get deleteSynced => 'Διαγραφή συγχρονισμένων';
 
   @override
-  String get deleteSyncedFiles => 'Διαγραφή συγχρονισμένων ηχογραφήσεων';
-
-  @override
-  String get deleteSyncedFilesMessage =>
-      'Αυτές οι ηχογραφήσεις έχουν ήδη συγχρονιστεί με το τηλέφωνό σας. Δεν μπορεί να αναιρεθεί.';
-
-  @override
-  String get syncedFilesDeleted => 'Οι συγχρονισμένες ηχογραφήσεις διαγράφηκαν';
-
-  @override
   String get deletePending => 'Διαγραφή εκκρεμών';
 
   @override
-  String get deletePendingFiles => 'Διαγραφή εκκρεμών ηχογραφήσεων';
-
-  @override
-  String get deletePendingFilesWarning =>
-      'Αυτές οι ηχογραφήσεις ΔΕΝ έχουν συγχρονιστεί με το τηλέφωνό σας και θα χαθούν μόνιμα. Δεν μπορεί να αναιρεθεί.';
-
-  @override
-  String get pendingFilesDeleted => 'Οι εκκρεμείς ηχογραφήσεις διαγράφηκαν';
-
-  @override
-  String get deleteAllFiles => 'Διαγραφή όλων των ηχογραφήσεων';
-
-  @override
   String get deleteAll => 'Διαγραφή όλων';
-
-  @override
-  String get deleteAllFilesWarning =>
-      'Αυτό θα διαγράψει συγχρονισμένες και εκκρεμείς ηχογραφήσεις. Οι εκκρεμείς ηχογραφήσεις ΔΕΝ έχουν συγχρονιστεί και θα χαθούν μόνιμα.';
-
-  @override
-  String get allFilesDeleted => 'Όλες οι ηχογραφήσεις διαγράφηκαν';
 
   @override
   String nFiles(int count) {
@@ -8236,15 +8206,6 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get manageStorage => 'Διαχείριση αποθήκευσης';
-
-  @override
-  String get safelyBackedUp => 'Συνομιλίες δημιουργήθηκαν';
-
-  @override
-  String get notYetSynced => 'Δεν έχει συγχρονιστεί ακόμα με το τηλέφωνό σας';
-
-  @override
-  String get clearAll => 'Εκκαθάριση όλων';
 
   @override
   String get phoneKeypad => 'Πληκτρολόγιο';
@@ -15950,4 +15911,95 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'Κάντε επανεκκίνηση του Omi για να ανανεωθεί η ένδειξη';
+
+  @override
+  String get storageUploadedTitle => 'Έχει ήδη μεταφορτωθεί';
+
+  @override
+  String get storageUploadedSubtitle =>
+      'Έχει ήδη απομαγνητοφωνηθεί. Αφαιρώντας το αντίγραφο από το τηλέφωνο, δεν χάνετε τίποτα.';
+
+  @override
+  String get storageFreeUpSpace => 'Απελευθέρωση χώρου';
+
+  @override
+  String get storageNotUploadedTitle => 'Δεν έχει μεταφορτωθεί ακόμη';
+
+  @override
+  String get storageOnThisPhone => 'Σε αυτό το τηλέφωνο';
+
+  @override
+  String get storageOnYourOmi => 'Στο Omi σας';
+
+  @override
+  String storageOnPhoneAndOmi(String phone, String device) {
+    return 'Σε αυτό το τηλέφωνο $phone · Στο Omi σας $device';
+  }
+
+  @override
+  String get storageNotUploadedWarning => 'Με τη διαγραφή, ο ήχος χάνεται οριστικά.';
+
+  @override
+  String get storageDeleteEverything => 'Διαγραφή όλων';
+
+  @override
+  String storageFreeUpTitle(String duration) {
+    return 'Απελευθέρωση $duration;';
+  }
+
+  @override
+  String get storageFreeUpMessage =>
+      'Αφαιρεί το αντίγραφο του ήχου που έχει ήδη απομαγνητοφωνηθεί από αυτό το τηλέφωνο. Οι συνομιλίες σας παραμένουν.';
+
+  @override
+  String storageDeletePendingTitle(String duration) {
+    return 'Διαγραφή $duration ήχου;';
+  }
+
+  @override
+  String get storageDeletePendingMessage =>
+      'Αυτός ο ήχος δεν έχει μεταφορτωθεί, επομένως δεν μπορεί να ανακτηθεί. Ο συγχρονισμός διακόπτεται προσωρινά κατά τη διαγραφή.';
+
+  @override
+  String storageDeleteAllTitle(String duration) {
+    return 'Διαγραφή όλων των $duration ήχου;';
+  }
+
+  @override
+  String storageDeleteAllMessage(String duration) {
+    return 'Περιλαμβάνει $duration που δεν έχει μεταφορτωθεί και δεν μπορεί να ανακτηθεί. Ο συγχρονισμός διακόπτεται προσωρινά κατά τη διαγραφή.';
+  }
+
+  @override
+  String get storageDeleteAllUploadedMessage =>
+      'Αφαιρεί κάθε ηχογράφηση που είναι αποθηκευμένη σε αυτό το τηλέφωνο. Οι συνομιλίες σας παραμένουν.';
+
+  @override
+  String get storageClearStopping => 'Διακοπή συγχρονισμού…';
+
+  @override
+  String storageClearDeleting(String progress) {
+    return 'Διαγραφή… $progress';
+  }
+
+  @override
+  String get storageClearVerifying => 'Έλεγχος του υπόλοιπου…';
+
+  @override
+  String storageClearDone(String duration) {
+    return 'Διαγράφηκε $duration';
+  }
+
+  @override
+  String storageClearPartial(String deleted, String remaining) {
+    return 'Διαγράφηκε $deleted. Δεν ήταν δυνατή η διαγραφή των $remaining.';
+  }
+
+  @override
+  String storageClearOmiUnreachable(String duration) {
+    return '$duration βρίσκεται ακόμη στο Omi σας. Συνδέστε το και δοκιμάστε ξανά.';
+  }
+
+  @override
+  String get storageClearFailed => 'Δεν ήταν δυνατή η διαγραφή. Δοκιμάστε ξανά.';
 }

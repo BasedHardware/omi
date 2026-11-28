@@ -159,7 +159,7 @@ void main() {
       await pumpSheet(tester, StorageClearProgressView(progress: notifier), closable: false);
       await tester.pump(const Duration(milliseconds: 300));
       if (progress.phase == StorageClearPhase.deleting) {
-        expect(find.text('Deleting 1240 of 4937…'), findsWidgets);
+        expect(find.text('Deleting… 1,240 / 4,937'), findsWidgets);
       } else {
         expect(find.text('Stopping sync…'), findsWidgets);
       }

@@ -8121,40 +8121,10 @@ class AppLocalizationsDa extends AppLocalizations {
   String get deleteSynced => 'Slet synkroniserede';
 
   @override
-  String get deleteSyncedFiles => 'Slet synkroniserede optagelser';
-
-  @override
-  String get deleteSyncedFilesMessage =>
-      'Disse optagelser er allerede synkroniseret med din telefon. Dette kan ikke fortrydes.';
-
-  @override
-  String get syncedFilesDeleted => 'Synkroniserede optagelser slettet';
-
-  @override
   String get deletePending => 'Slet ventende';
 
   @override
-  String get deletePendingFiles => 'Slet ventende optagelser';
-
-  @override
-  String get deletePendingFilesWarning =>
-      'Disse optagelser er IKKE synkroniseret med din telefon og vil gå permanent tabt. Dette kan ikke fortrydes.';
-
-  @override
-  String get pendingFilesDeleted => 'Ventende optagelser slettet';
-
-  @override
-  String get deleteAllFiles => 'Slet alle optagelser';
-
-  @override
   String get deleteAll => 'Slet alle';
-
-  @override
-  String get deleteAllFilesWarning =>
-      'Dette sletter synkroniserede og ventende optagelser. Ventende optagelser er IKKE synkroniseret og vil gå permanent tabt.';
-
-  @override
-  String get allFilesDeleted => 'Alle optagelser slettet';
 
   @override
   String nFiles(int count) {
@@ -8163,15 +8133,6 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get manageStorage => 'Administrer lager';
-
-  @override
-  String get safelyBackedUp => 'Samtaler oprettet';
-
-  @override
-  String get notYetSynced => 'Endnu ikke synkroniseret med din telefon';
-
-  @override
-  String get clearAll => 'Ryd alt';
 
   @override
   String get phoneKeypad => 'Tastatur';
@@ -15836,4 +15797,94 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'Genstart Omi for at opdatere værdien';
+
+  @override
+  String get storageUploadedTitle => 'Allerede uploadet';
+
+  @override
+  String get storageUploadedSubtitle => 'Transskriberet. Du mister intet ved at slette kopien på telefonen.';
+
+  @override
+  String get storageFreeUpSpace => 'Frigør plads';
+
+  @override
+  String get storageNotUploadedTitle => 'Endnu ikke uploadet';
+
+  @override
+  String get storageOnThisPhone => 'På denne telefon';
+
+  @override
+  String get storageOnYourOmi => 'På din Omi';
+
+  @override
+  String storageOnPhoneAndOmi(String phone, String device) {
+    return 'På denne telefon $phone · På din Omi $device';
+  }
+
+  @override
+  String get storageNotUploadedWarning => 'Hvis du sletter, mister du denne lyd for altid.';
+
+  @override
+  String get storageDeleteEverything => 'Slet alt';
+
+  @override
+  String storageFreeUpTitle(String duration) {
+    return 'Frigør $duration?';
+  }
+
+  @override
+  String get storageFreeUpMessage =>
+      'Fjerner telefonens kopi af lyd, der allerede er transskriberet. Dine samtaler forbliver.';
+
+  @override
+  String storageDeletePendingTitle(String duration) {
+    return 'Slet $duration lyd?';
+  }
+
+  @override
+  String get storageDeletePendingMessage =>
+      'Denne lyd er ikke blevet uploadet, så den kan ikke gendannes. Synkroniseringen sættes på pause, mens den slettes.';
+
+  @override
+  String storageDeleteAllTitle(String duration) {
+    return 'Slet alle $duration lyd?';
+  }
+
+  @override
+  String storageDeleteAllMessage(String duration) {
+    return 'Omfatter $duration, der ikke er blevet uploadet og ikke kan gendannes. Synkroniseringen sættes på pause, mens den slettes.';
+  }
+
+  @override
+  String get storageDeleteAllUploadedMessage =>
+      'Fjerner alle optagelser, der er gemt på denne telefon. Dine samtaler forbliver.';
+
+  @override
+  String get storageClearStopping => 'Stopper synkronisering…';
+
+  @override
+  String storageClearDeleting(String progress) {
+    return 'Sletter… $progress';
+  }
+
+  @override
+  String get storageClearVerifying => 'Tjekker, hvad der er tilbage…';
+
+  @override
+  String storageClearDone(String duration) {
+    return 'Slettede $duration';
+  }
+
+  @override
+  String storageClearPartial(String deleted, String remaining) {
+    return 'Slettede $deleted. $remaining kunne ikke slettes.';
+  }
+
+  @override
+  String storageClearOmiUnreachable(String duration) {
+    return '$duration er stadig på din Omi. Tilslut den, og prøv igen.';
+  }
+
+  @override
+  String get storageClearFailed => 'Kunne ikke slette. Prøv igen.';
 }

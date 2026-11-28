@@ -8126,40 +8126,10 @@ class AppLocalizationsSk extends AppLocalizations {
   String get deleteSynced => 'Vymazať synchronizované';
 
   @override
-  String get deleteSyncedFiles => 'Zmazať synchronizované nahrávky';
-
-  @override
-  String get deleteSyncedFilesMessage =>
-      'Tieto nahrávky sú už synchronizované s vaším telefónom. Toto sa nedá vrátiť späť.';
-
-  @override
-  String get syncedFilesDeleted => 'Synchronizované nahrávky zmazané';
-
-  @override
   String get deletePending => 'Vymazať čakajúce';
 
   @override
-  String get deletePendingFiles => 'Zmazať čakajúce nahrávky';
-
-  @override
-  String get deletePendingFilesWarning =>
-      'Tieto nahrávky NIE sú synchronizované s vaším telefónom a budú trvalo stratené. Toto sa nedá vrátiť späť.';
-
-  @override
-  String get pendingFilesDeleted => 'Čakajúce nahrávky zmazané';
-
-  @override
-  String get deleteAllFiles => 'Zmazať všetky nahrávky';
-
-  @override
   String get deleteAll => 'Vymazať všetko';
-
-  @override
-  String get deleteAllFilesWarning =>
-      'Toto zmaže synchronizované aj čakajúce nahrávky. Čakajúce nahrávky NIE sú synchronizované a budú trvalo stratené.';
-
-  @override
-  String get allFilesDeleted => 'Všetky nahrávky zmazané';
 
   @override
   String nFiles(int count) {
@@ -8168,15 +8138,6 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get manageStorage => 'Spravovať úložisko';
-
-  @override
-  String get safelyBackedUp => 'Vytvorené konverzácie';
-
-  @override
-  String get notYetSynced => 'Zatiaľ nesynchronizované s vaším telefónom';
-
-  @override
-  String get clearAll => 'Vymazať všetko';
 
   @override
   String get phoneKeypad => 'Klávesnica';
@@ -15840,4 +15801,94 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'Pre obnovenie údajov reštartujte Omi';
+
+  @override
+  String get storageUploadedTitle => 'Už nahrané';
+
+  @override
+  String get storageUploadedSubtitle => 'Prepísané. Odstránením kópie z telefónu nič nestratíte.';
+
+  @override
+  String get storageFreeUpSpace => 'Uvoľniť miesto';
+
+  @override
+  String get storageNotUploadedTitle => 'Zatiaľ nenahrané';
+
+  @override
+  String get storageOnThisPhone => 'V tomto telefóne';
+
+  @override
+  String get storageOnYourOmi => 'Na vašom Omi';
+
+  @override
+  String storageOnPhoneAndOmi(String phone, String device) {
+    return 'V tomto telefóne $phone · Na vašom Omi $device';
+  }
+
+  @override
+  String get storageNotUploadedWarning => 'Odstránením sa tento zvuk stratí navždy.';
+
+  @override
+  String get storageDeleteEverything => 'Odstrániť všetko';
+
+  @override
+  String storageFreeUpTitle(String duration) {
+    return 'Uvoľniť $duration?';
+  }
+
+  @override
+  String get storageFreeUpMessage =>
+      'Odstráni kópiu už prepísaného zvuku v tomto telefóne. Vaše konverzácie zostanú zachované.';
+
+  @override
+  String storageDeletePendingTitle(String duration) {
+    return 'Odstrániť $duration zvuku?';
+  }
+
+  @override
+  String get storageDeletePendingMessage =>
+      'Tento zvuk nie je nahraný, takže sa nedá obnoviť. Synchronizácia sa počas odstraňovania pozastaví.';
+
+  @override
+  String storageDeleteAllTitle(String duration) {
+    return 'Odstrániť všetky $duration zvuku?';
+  }
+
+  @override
+  String storageDeleteAllMessage(String duration) {
+    return 'Zahŕňa $duration zvuku, ktorý nie je nahraný a nedá sa obnoviť. Synchronizácia sa počas odstraňovania pozastaví.';
+  }
+
+  @override
+  String get storageDeleteAllUploadedMessage =>
+      'Odstráni všetky nahrávky uložené v tomto telefóne. Vaše konverzácie zostanú zachované.';
+
+  @override
+  String get storageClearStopping => 'Zastavuje sa synchronizácia…';
+
+  @override
+  String storageClearDeleting(String progress) {
+    return 'Odstraňuje sa… $progress';
+  }
+
+  @override
+  String get storageClearVerifying => 'Kontroluje sa, čo zostalo…';
+
+  @override
+  String storageClearDone(String duration) {
+    return 'Odstránené $duration';
+  }
+
+  @override
+  String storageClearPartial(String deleted, String remaining) {
+    return 'Odstránené $deleted. $remaining sa nepodarilo odstrániť.';
+  }
+
+  @override
+  String storageClearOmiUnreachable(String duration) {
+    return '$duration sa stále nachádza na vašom Omi. Pripojte ho a skúste to znova.';
+  }
+
+  @override
+  String get storageClearFailed => 'Nepodarilo sa odstrániť. Skúste to znova.';
 }

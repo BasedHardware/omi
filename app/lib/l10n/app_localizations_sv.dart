@@ -8137,40 +8137,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String get deleteSynced => 'Ta bort synkroniserade';
 
   @override
-  String get deleteSyncedFiles => 'Radera synkroniserade inspelningar';
-
-  @override
-  String get deleteSyncedFilesMessage =>
-      'Dessa inspelningar har redan synkroniserats med din telefon. Detta kan inte ångras.';
-
-  @override
-  String get syncedFilesDeleted => 'Synkroniserade inspelningar raderade';
-
-  @override
   String get deletePending => 'Ta bort väntande';
 
   @override
-  String get deletePendingFiles => 'Radera väntande inspelningar';
-
-  @override
-  String get deletePendingFilesWarning =>
-      'Dessa inspelningar har INTE synkroniserats med din telefon och kommer att förloras permanent. Detta kan inte ångras.';
-
-  @override
-  String get pendingFilesDeleted => 'Väntande inspelningar raderade';
-
-  @override
-  String get deleteAllFiles => 'Radera alla inspelningar';
-
-  @override
   String get deleteAll => 'Ta bort alla';
-
-  @override
-  String get deleteAllFilesWarning =>
-      'Detta raderar synkroniserade och väntande inspelningar. Väntande inspelningar har INTE synkroniserats och kommer att förloras permanent.';
-
-  @override
-  String get allFilesDeleted => 'Alla inspelningar raderade';
 
   @override
   String nFiles(int count) {
@@ -8179,15 +8149,6 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get manageStorage => 'Hantera lagring';
-
-  @override
-  String get safelyBackedUp => 'Skapade konversationer';
-
-  @override
-  String get notYetSynced => 'Inte synkroniserat med din telefon ännu';
-
-  @override
-  String get clearAll => 'Rensa allt';
 
   @override
   String get phoneKeypad => 'Knappsats';
@@ -15853,4 +15814,94 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'Starta om Omi för att uppdatera';
+
+  @override
+  String get storageUploadedTitle => 'Redan uppladdat';
+
+  @override
+  String get storageUploadedSubtitle => 'Transkriberat. Ingenting försvinner om du tar bort kopian på telefonen.';
+
+  @override
+  String get storageFreeUpSpace => 'Frigör utrymme';
+
+  @override
+  String get storageNotUploadedTitle => 'Inte uppladdat än';
+
+  @override
+  String get storageOnThisPhone => 'På den här telefonen';
+
+  @override
+  String get storageOnYourOmi => 'På din Omi';
+
+  @override
+  String storageOnPhoneAndOmi(String phone, String device) {
+    return 'På den här telefonen $phone · På din Omi $device';
+  }
+
+  @override
+  String get storageNotUploadedWarning => 'Om du raderar försvinner ljudet för gott.';
+
+  @override
+  String get storageDeleteEverything => 'Radera allt';
+
+  @override
+  String storageFreeUpTitle(String duration) {
+    return 'Frigöra $duration?';
+  }
+
+  @override
+  String get storageFreeUpMessage =>
+      'Tar bort telefonens kopia av ljud som redan är transkriberat. Dina konversationer finns kvar.';
+
+  @override
+  String storageDeletePendingTitle(String duration) {
+    return 'Ta bort $duration ljud?';
+  }
+
+  @override
+  String get storageDeletePendingMessage =>
+      'Det här ljudet har inte laddats upp och kan inte återställas. Synkroniseringen pausas medan det raderas.';
+
+  @override
+  String storageDeleteAllTitle(String duration) {
+    return 'Ta bort $duration ljud?';
+  }
+
+  @override
+  String storageDeleteAllMessage(String duration) {
+    return 'Inkluderar $duration som inte har laddats upp och inte kan återställas. Synkroniseringen pausas medan det raderas.';
+  }
+
+  @override
+  String get storageDeleteAllUploadedMessage =>
+      'Tar bort alla inspelningar som sparas på den här telefonen. Dina konversationer finns kvar.';
+
+  @override
+  String get storageClearStopping => 'Stoppar synkronisering…';
+
+  @override
+  String storageClearDeleting(String progress) {
+    return 'Raderar… $progress';
+  }
+
+  @override
+  String get storageClearVerifying => 'Kontrollerar vad som återstår…';
+
+  @override
+  String storageClearDone(String duration) {
+    return 'Raderade $duration';
+  }
+
+  @override
+  String storageClearPartial(String deleted, String remaining) {
+    return 'Raderade $deleted. $remaining kunde inte raderas.';
+  }
+
+  @override
+  String storageClearOmiUnreachable(String duration) {
+    return '$duration finns kvar på din Omi. Anslut den och försök igen.';
+  }
+
+  @override
+  String get storageClearFailed => 'Kunde inte radera. Försök igen.';
 }

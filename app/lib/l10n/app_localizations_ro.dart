@@ -8175,40 +8175,10 @@ class AppLocalizationsRo extends AppLocalizations {
   String get deleteSynced => 'Șterge sincronizate';
 
   @override
-  String get deleteSyncedFiles => 'Șterge înregistrările sincronizate';
-
-  @override
-  String get deleteSyncedFilesMessage =>
-      'Aceste înregistrări sunt deja sincronizate cu telefonul dvs. Aceasta nu poate fi anulată.';
-
-  @override
-  String get syncedFilesDeleted => 'Înregistrările sincronizate au fost șterse';
-
-  @override
   String get deletePending => 'Șterge în așteptare';
 
   @override
-  String get deletePendingFiles => 'Șterge înregistrările în așteptare';
-
-  @override
-  String get deletePendingFilesWarning =>
-      'Aceste înregistrări NU sunt sincronizate cu telefonul dvs. și vor fi pierdute permanent. Aceasta nu poate fi anulată.';
-
-  @override
-  String get pendingFilesDeleted => 'Înregistrările în așteptare au fost șterse';
-
-  @override
-  String get deleteAllFiles => 'Șterge toate înregistrările';
-
-  @override
   String get deleteAll => 'Șterge tot';
-
-  @override
-  String get deleteAllFilesWarning =>
-      'Aceasta va șterge înregistrările sincronizate și în așteptare. Înregistrările în așteptare NU sunt sincronizate și vor fi pierdute permanent.';
-
-  @override
-  String get allFilesDeleted => 'Toate înregistrările au fost șterse';
 
   @override
   String nFiles(int count) {
@@ -8217,15 +8187,6 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get manageStorage => 'Gestionare stocare';
-
-  @override
-  String get safelyBackedUp => 'Conversații create';
-
-  @override
-  String get notYetSynced => 'Nu a fost încă sincronizat cu telefonul dvs.';
-
-  @override
-  String get clearAll => 'Șterge tot';
 
   @override
   String get phoneKeypad => 'Tastatură';
@@ -15911,4 +15872,94 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'Repornește Omi pentru a actualiza valoarea';
+
+  @override
+  String get storageUploadedTitle => 'Deja încărcate';
+
+  @override
+  String get storageUploadedSubtitle => 'Transcrise. Dacă elimini copia de pe telefon, nu pierzi nimic.';
+
+  @override
+  String get storageFreeUpSpace => 'Eliberează spațiu';
+
+  @override
+  String get storageNotUploadedTitle => 'Încă neîncărcate';
+
+  @override
+  String get storageOnThisPhone => 'Pe acest telefon';
+
+  @override
+  String get storageOnYourOmi => 'Pe Omi-ul tău';
+
+  @override
+  String storageOnPhoneAndOmi(String phone, String device) {
+    return 'Pe acest telefon $phone · Pe Omi-ul tău $device';
+  }
+
+  @override
+  String get storageNotUploadedWarning => 'Dacă ștergi, acest audio se pierde definitiv.';
+
+  @override
+  String get storageDeleteEverything => 'Șterge tot';
+
+  @override
+  String storageFreeUpTitle(String duration) {
+    return 'Eliberezi $duration?';
+  }
+
+  @override
+  String get storageFreeUpMessage =>
+      'Elimină copia de pe telefon a înregistrărilor audio deja transcrise. Conversațiile tale rămân.';
+
+  @override
+  String storageDeletePendingTitle(String duration) {
+    return 'Ștergi $duration de audio?';
+  }
+
+  @override
+  String get storageDeletePendingMessage =>
+      'Acest audio nu a fost încărcat, deci nu poate fi recuperat. Sincronizarea se pune pe pauză în timpul ștergerii.';
+
+  @override
+  String storageDeleteAllTitle(String duration) {
+    return 'Ștergi toate $duration de audio?';
+  }
+
+  @override
+  String storageDeleteAllMessage(String duration) {
+    return 'Include $duration care nu a fost încărcat și nu poate fi recuperat. Sincronizarea se pune pe pauză în timpul ștergerii.';
+  }
+
+  @override
+  String get storageDeleteAllUploadedMessage =>
+      'Elimină toate înregistrările păstrate pe acest telefon. Conversațiile tale rămân.';
+
+  @override
+  String get storageClearStopping => 'Se oprește sincronizarea…';
+
+  @override
+  String storageClearDeleting(String progress) {
+    return 'Se șterge… $progress';
+  }
+
+  @override
+  String get storageClearVerifying => 'Se verifică ce a rămas…';
+
+  @override
+  String storageClearDone(String duration) {
+    return 'S-au șters $duration';
+  }
+
+  @override
+  String storageClearPartial(String deleted, String remaining) {
+    return 'S-au șters $deleted. $remaining nu au putut fi șterse.';
+  }
+
+  @override
+  String storageClearOmiUnreachable(String duration) {
+    return '$duration este încă pe Omi-ul tău. Conectează-l și încearcă din nou.';
+  }
+
+  @override
+  String get storageClearFailed => 'Nu s-a putut șterge. Încearcă din nou.';
 }

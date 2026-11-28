@@ -9704,49 +9704,13 @@
     "@deleteSynced": {
         "description": "Menu option to delete synced recordings"
     },
-    "deleteSyncedFiles": "সিঙ্ক করা রেকর্ডিং মুছুন",
-    "@deleteSyncedFiles": {
-        "description": "Dialog title for deleting synced files"
-    },
-    "deleteSyncedFilesMessage": "এই রেকর্ডিংগুলি ইতিমধ্যে আপনার ফোনে সিঙ্ক করা হয়েছে। এটি পূর্বাবাস করা যায় না।",
-    "@deleteSyncedFilesMessage": {
-        "description": "Confirmation message for deleting synced files"
-    },
-    "syncedFilesDeleted": "সিঙ্ক করা রেকর্ডিং মুছা হয়েছে",
-    "@syncedFilesDeleted": {
-        "description": "Snackbar message after synced files deleted"
-    },
     "deletePending": "মুলতুবি মুছুন",
     "@deletePending": {
         "description": "Menu option to delete pending recordings"
     },
-    "deletePendingFiles": "মুলতুবি রেকর্ডিং মুছুন",
-    "@deletePendingFiles": {
-        "description": "Dialog title for deleting pending files"
-    },
-    "deletePendingFilesWarning": "এই রেকর্ডিংগুলি আপনার ফোনে সিঙ্ক করা হয়নি এবং চিরকালের জন্য হারিয়ে যাবে। এটি পূর্বাবাস করা যায় না।",
-    "@deletePendingFilesWarning": {
-        "description": "Warning message for deleting pending files"
-    },
-    "pendingFilesDeleted": "মুলতুবি রেকর্ডিং মুছা হয়েছে",
-    "@pendingFilesDeleted": {
-        "description": "Snackbar message after pending files deleted"
-    },
-    "deleteAllFiles": "সমস্ত রেকর্ডিং মুছুন",
-    "@deleteAllFiles": {
-        "description": "Dialog title for deleting all files"
-    },
     "deleteAll": "সব মুছুন",
     "@deleteAll": {
         "description": "Menu option to delete all recordings"
-    },
-    "deleteAllFilesWarning": "এটি সিঙ্ক করা এবং মুলতুবি উভয় রেকর্ডিং মুছে ফেলবে। মুলতুবি রেকর্ডিংগুলি সিঙ্ক করা হয়নি এবং চিরকালের জন্য হারিয়ে যাবে। এটি পূর্বাবাস করা যায় না।",
-    "@deleteAllFilesWarning": {
-        "description": "Warning message for deleting all files"
-    },
-    "allFilesDeleted": "সমস্ত রেকর্ডিং মুছা হয়েছে",
-    "@allFilesDeleted": {
-        "description": "Snackbar message after all files deleted"
     },
     "nFiles": "{count} রেকর্ডিং",
     "@nFiles": {
@@ -9760,18 +9724,6 @@
     "manageStorage": "স্টোরেজ পরিচালনা করুন",
     "@manageStorage": {
         "description": "Menu option and sheet title for managing recording storage"
-    },
-    "safelyBackedUp": "কথোপকথন তৈরি হয়েছে",
-    "@safelyBackedUp": {
-        "description": "Description for synced files in manage storage sheet"
-    },
-    "notYetSynced": "এখনো আপনার ফোনে সিঙ্ক হয়নি",
-    "@notYetSynced": {
-        "description": "Description for pending files in manage storage sheet"
-    },
-    "clearAll": "সব পরিষ্কার করুন",
-    "@clearAll": {
-        "description": "Button label to clear all files"
     },
     "phoneKeypad": "কীপ্যাড",
     "@phoneKeypad": {
@@ -12326,5 +12278,28 @@
     "firmwareNewestSupportedForDevice": "আপনার ডিভাইস ইতিমধ্যেই ফার্মওয়্যারের সর্বশেষ সমর্থিত সংস্করণে রয়েছে",
     "firmwareSyncRecordingsFirstTitle": "প্রথমে আপনার রেকর্ডিং সিঙ্ক করুন",
     "firmwareSyncRecordingsFirstMessage": "কিছু রেকর্ডিং এখনও আপনার ডিভাইসে রয়েছে। সেগুলিকে আপনার ফোনে সিঙ্ক শেষ হতে দিন, তারপর আপডেট শুরু করুন।",
-    "batteryRestartToRefresh": "রিফ্রেশ করতে Omi পুনরায় চালু করুন"
+    "batteryRestartToRefresh": "রিফ্রেশ করতে Omi পুনরায় চালু করুন",
+    "storageUploadedTitle": "ইতিমধ্যে আপলোড হয়েছে",
+    "storageUploadedSubtitle": "প্রতিলিপি তৈরি হয়েছে। ফোনের কপি মুছে ফেললে কিছুই হারাবেন না।",
+    "storageFreeUpSpace": "জায়গা খালি করুন",
+    "storageNotUploadedTitle": "এখনও আপলোড হয়নি",
+    "storageOnThisPhone": "এই ফোনে",
+    "storageOnYourOmi": "আপনার Omi-তে",
+    "storageOnPhoneAndOmi": "এই ফোনে {phone} · আপনার Omi-তে {device}",
+    "storageNotUploadedWarning": "মুছে ফেললে এই অডিও চিরতরে হারিয়ে যাবে।",
+    "storageDeleteEverything": "সব মুছে ফেলুন",
+    "storageFreeUpTitle": "{duration} জায়গা খালি করবেন?",
+    "storageFreeUpMessage": "ইতিমধ্যে প্রতিলিপি হওয়া অডিওর এই ফোনের কপি মুছে ফেলা হবে। আপনার কথোপকথনগুলো থেকে যাবে।",
+    "storageDeletePendingTitle": "{duration} অডিও মুছে ফেলুন?",
+    "storageDeletePendingMessage": "এই অডিও এখনও আপলোড হয়নি, তাই এটি পুনরুদ্ধার করা যাবে না। মোছার সময় সিঙ্ক থেমে যাবে।",
+    "storageDeleteAllTitle": "মোট {duration} অডিও মুছে ফেলুন?",
+    "storageDeleteAllMessage": "এর মধ্যে {duration} আছে যা এখনও আপলোড হয়নি এবং পুনরুদ্ধার করা যাবে না। মোছার সময় সিঙ্ক থেমে যাবে।",
+    "storageDeleteAllUploadedMessage": "এই ফোনে রাখা সব রেকর্ডিং মুছে ফেলা হবে। আপনার কথোপকথনগুলো থেকে যাবে।",
+    "storageClearStopping": "সিঙ্ক বন্ধ করা হচ্ছে…",
+    "storageClearDeleting": "মুছে ফেলা হচ্ছে… {progress}",
+    "storageClearVerifying": "কী বাকি আছে তা পরীক্ষা করা হচ্ছে…",
+    "storageClearDone": "{duration} মুছে ফেলা হয়েছে",
+    "storageClearPartial": "{deleted} মুছে ফেলা হয়েছে। {remaining} মোছা যায়নি।",
+    "storageClearOmiUnreachable": "{duration} এখনও আপনার Omi-তে আছে। সংযোগ করে আবার চেষ্টা করুন।",
+    "storageClearFailed": "মোছা যায়নি। আবার চেষ্টা করুন।"
 }

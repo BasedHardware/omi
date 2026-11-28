@@ -8145,40 +8145,10 @@ class AppLocalizationsMr extends AppLocalizations {
   String get deleteSynced => 'सिंक केलेले हटवा';
 
   @override
-  String get deleteSyncedFiles => 'सिंक केलेली रेकॉर्डिंग हटवा';
-
-  @override
-  String get deleteSyncedFilesMessage =>
-      'या रेकॉर्डिंग आधीच तुमच्या फोनशी सिंक केली गेली आहेत. हे पूर्ववत् केले जाऊ शकत नाही.';
-
-  @override
-  String get syncedFilesDeleted => 'सिंक केलेली रेकॉर्डिंग हटवली गेली';
-
-  @override
   String get deletePending => 'प्रलंबित हटवा';
 
   @override
-  String get deletePendingFiles => 'प्रलंबित रेकॉर्डिंग हटवा';
-
-  @override
-  String get deletePendingFilesWarning =>
-      'या रेकॉर्डिंग तुमच्या फोनशी सिंक केल्या गेल्या नाहीत आणि कायमचे हरवली जातील. हे पूर्ववत् केले जाऊ शकत नाही.';
-
-  @override
-  String get pendingFilesDeleted => 'प्रलंबित रेकॉर्डिंग हटवली गेली';
-
-  @override
-  String get deleteAllFiles => 'सर्व रेकॉर्डिंग हटवा';
-
-  @override
   String get deleteAll => 'सर्व हटवा';
-
-  @override
-  String get deleteAllFilesWarning =>
-      'हे सिंक केलेली आणि प्रलंबित दोन्ही रेकॉर्डिंग हटवेल. प्रलंबित रेकॉर्डिंग सिंक केलेली नाहीत आणि कायमचे हरवली जातील. हे पूर्ववत् केले जाऊ शकत नाही.';
-
-  @override
-  String get allFilesDeleted => 'सर्व रेकॉर्डिंग हटवली गेली';
 
   @override
   String nFiles(int count) {
@@ -8187,15 +8157,6 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get manageStorage => 'स्टोरेज व्यवस्थापित करा';
-
-  @override
-  String get safelyBackedUp => 'तयार झालेली संभाषणे';
-
-  @override
-  String get notYetSynced => 'अद्याप तुमच्या फोनशी सिंक केले नाही';
-
-  @override
-  String get clearAll => 'सर्व साफ करा';
 
   @override
   String get phoneKeypad => 'की पॅड';
@@ -15853,4 +15814,94 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'रिफ्रेश करण्यासाठी Omi पुनः सुरू करा';
+
+  @override
+  String get storageUploadedTitle => 'आधीच अपलोड झाले';
+
+  @override
+  String get storageUploadedSubtitle => 'प्रतिलेखन झाले आहे. फोनवरील प्रत काढली तरी काही हरवत नाही.';
+
+  @override
+  String get storageFreeUpSpace => 'जागा मोकळी करा';
+
+  @override
+  String get storageNotUploadedTitle => 'अजून अपलोड झाले नाही';
+
+  @override
+  String get storageOnThisPhone => 'या फोनवर';
+
+  @override
+  String get storageOnYourOmi => 'तुमच्या Omi वर';
+
+  @override
+  String storageOnPhoneAndOmi(String phone, String device) {
+    return 'या फोनवर $phone · तुमच्या Omi वर $device';
+  }
+
+  @override
+  String get storageNotUploadedWarning => 'हटवल्यास हा ऑडिओ कायमचा हरवतो.';
+
+  @override
+  String get storageDeleteEverything => 'सर्व हटवा';
+
+  @override
+  String storageFreeUpTitle(String duration) {
+    return '$duration जागा मोकळी करायची?';
+  }
+
+  @override
+  String get storageFreeUpMessage =>
+      'आधीच प्रतिलेखन झालेल्या ऑडिओची फोनवरील प्रत काढून टाकते. तुमची संभाषणे तशीच राहतात.';
+
+  @override
+  String storageDeletePendingTitle(String duration) {
+    return '$duration ऑडिओ हटवायचे?';
+  }
+
+  @override
+  String get storageDeletePendingMessage =>
+      'हा ऑडिओ अपलोड झालेला नाही, म्हणून तो परत मिळू शकत नाही. हटवताना सिंक तात्पुरते थांबते.';
+
+  @override
+  String storageDeleteAllTitle(String duration) {
+    return 'सर्व $duration ऑडिओ हटवायचे?';
+  }
+
+  @override
+  String storageDeleteAllMessage(String duration) {
+    return 'यात अपलोड न झालेला आणि परत मिळू न शकणारा $duration येतो. हटवताना सिंक तात्पुरते थांबते.';
+  }
+
+  @override
+  String get storageDeleteAllUploadedMessage =>
+      'या फोनवर ठेवलेल्या सर्व रेकॉर्डिंग्ज काढून टाकते. तुमची संभाषणे तशीच राहतात.';
+
+  @override
+  String get storageClearStopping => 'सिंक थांबवत आहे…';
+
+  @override
+  String storageClearDeleting(String progress) {
+    return 'हटवत आहे… $progress';
+  }
+
+  @override
+  String get storageClearVerifying => 'काय उरले आहे ते तपासत आहे…';
+
+  @override
+  String storageClearDone(String duration) {
+    return '$duration हटवले';
+  }
+
+  @override
+  String storageClearPartial(String deleted, String remaining) {
+    return '$deleted हटवले. $remaining हटवता आले नाही.';
+  }
+
+  @override
+  String storageClearOmiUnreachable(String duration) {
+    return '$duration अजून तुमच्या Omi वर आहे. ते कनेक्ट करून पुन्हा प्रयत्न करा.';
+  }
+
+  @override
+  String get storageClearFailed => 'हटवता आले नाही. पुन्हा प्रयत्न करा.';
 }

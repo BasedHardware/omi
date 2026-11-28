@@ -8145,39 +8145,10 @@ class AppLocalizationsTr extends AppLocalizations {
   String get deleteSynced => 'Senkronize edilenleri sil';
 
   @override
-  String get deleteSyncedFiles => 'Senkronize kayıtları sil';
-
-  @override
-  String get deleteSyncedFilesMessage => 'Bu kayıtlar zaten telefonunuzla senkronize edildi. Bu geri alınamaz.';
-
-  @override
-  String get syncedFilesDeleted => 'Senkronize kayıtlar silindi';
-
-  @override
   String get deletePending => 'Bekleyenleri sil';
 
   @override
-  String get deletePendingFiles => 'Bekleyen kayıtları sil';
-
-  @override
-  String get deletePendingFilesWarning =>
-      'Bu kayıtlar telefonunuzla senkronize EDİLMEDİ ve kalıcı olarak kaybolacak. Bu geri alınamaz.';
-
-  @override
-  String get pendingFilesDeleted => 'Bekleyen kayıtlar silindi';
-
-  @override
-  String get deleteAllFiles => 'Tüm kayıtları sil';
-
-  @override
   String get deleteAll => 'Tümünü sil';
-
-  @override
-  String get deleteAllFilesWarning =>
-      'Bu, senkronize ve bekleyen kayıtları silecek. Bekleyen kayıtlar senkronize EDİLMEDİ ve kalıcı olarak kaybolacak.';
-
-  @override
-  String get allFilesDeleted => 'Tüm kayıtlar silindi';
 
   @override
   String nFiles(int count) {
@@ -8186,15 +8157,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get manageStorage => 'Depolamayı yönet';
-
-  @override
-  String get safelyBackedUp => 'Oluşturulan konuşmalar';
-
-  @override
-  String get notYetSynced => 'Henüz telefonunuzla senkronize edilmedi';
-
-  @override
-  String get clearAll => 'Tümünü temizle';
 
   @override
   String get phoneKeypad => 'Tuş takımı';
@@ -15855,4 +15817,92 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'Yenilemek için Omi\'yi yeniden başlatın';
+
+  @override
+  String get storageUploadedTitle => 'Zaten yüklendi';
+
+  @override
+  String get storageUploadedSubtitle => 'Transkripti çıkarıldı. Telefondaki kopyayı silmek hiçbir şey kaybettirmez.';
+
+  @override
+  String get storageFreeUpSpace => 'Alan aç';
+
+  @override
+  String get storageNotUploadedTitle => 'Henüz yüklenmedi';
+
+  @override
+  String get storageOnThisPhone => 'Bu telefonda';
+
+  @override
+  String get storageOnYourOmi => 'Omi\'nizde';
+
+  @override
+  String storageOnPhoneAndOmi(String phone, String device) {
+    return 'Bu telefonda $phone · Omi\'nizde $device';
+  }
+
+  @override
+  String get storageNotUploadedWarning => 'Silerseniz bu ses kalıcı olarak kaybolur.';
+
+  @override
+  String get storageDeleteEverything => 'Tümünü sil';
+
+  @override
+  String storageFreeUpTitle(String duration) {
+    return '$duration alan açılsın mı?';
+  }
+
+  @override
+  String get storageFreeUpMessage =>
+      'Transkripti çıkarılmış sesin bu telefondaki kopyasını kaldırır. Konuşmalarınız kalır.';
+
+  @override
+  String storageDeletePendingTitle(String duration) {
+    return '$duration ses kaydı silinsin mi?';
+  }
+
+  @override
+  String get storageDeletePendingMessage => 'Bu ses yüklenmediği için kurtarılamaz. Silinirken eşitleme duraklatılır.';
+
+  @override
+  String storageDeleteAllTitle(String duration) {
+    return 'Tüm $duration ses kaydı silinsin mi?';
+  }
+
+  @override
+  String storageDeleteAllMessage(String duration) {
+    return 'Henüz yüklenmemiş ve kurtarılamayacak $duration ses de buna dahildir. Silinirken eşitleme duraklatılır.';
+  }
+
+  @override
+  String get storageDeleteAllUploadedMessage => 'Bu telefonda tutulan tüm kayıtları kaldırır. Konuşmalarınız kalır.';
+
+  @override
+  String get storageClearStopping => 'Eşitleme durduruluyor…';
+
+  @override
+  String storageClearDeleting(String progress) {
+    return 'Siliniyor… $progress';
+  }
+
+  @override
+  String get storageClearVerifying => 'Kalanlar kontrol ediliyor…';
+
+  @override
+  String storageClearDone(String duration) {
+    return '$duration silindi';
+  }
+
+  @override
+  String storageClearPartial(String deleted, String remaining) {
+    return '$deleted silindi. $remaining silinemedi.';
+  }
+
+  @override
+  String storageClearOmiUnreachable(String duration) {
+    return '$duration hâlâ Omi\'nizde. Cihazı bağlayıp tekrar deneyin.';
+  }
+
+  @override
+  String get storageClearFailed => 'Silinemedi. Tekrar deneyin.';
 }

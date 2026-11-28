@@ -25,7 +25,7 @@
     {
       "file": "004-mobile-ios-clear-deleting-progress.png",
       "platform": "mobile-ios",
-      "description": "Progress sheet while deleting: Deleting 1240 of 4937 with a bar",
+      "description": "Progress sheet while deleting: Deleting… 1,240 / 4,937 with a bar",
       "captured_by": "agent",
       "source": "visual-audit"
     }

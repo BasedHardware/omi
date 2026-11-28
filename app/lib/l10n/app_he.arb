@@ -9704,49 +9704,13 @@
     "@deleteSynced": {
         "description": "Menu option to delete synced recordings"
     },
-    "deleteSyncedFiles": "מחק הקלטות מסונכרנות",
-    "@deleteSyncedFiles": {
-        "description": "Dialog title for deleting synced files"
-    },
-    "deleteSyncedFilesMessage": "הקלטות אלה כבר סונכרנו לטלפון שלך. לא ניתן לבטל פעולה זו.",
-    "@deleteSyncedFilesMessage": {
-        "description": "Confirmation message for deleting synced files"
-    },
-    "syncedFilesDeleted": "הקלטות מסונכרנות נמחקו",
-    "@syncedFilesDeleted": {
-        "description": "Snackbar message after synced files deleted"
-    },
     "deletePending": "מחק בהמתנה",
     "@deletePending": {
         "description": "Menu option to delete pending recordings"
     },
-    "deletePendingFiles": "מחק הקלטות בהמתנה",
-    "@deletePendingFiles": {
-        "description": "Dialog title for deleting pending files"
-    },
-    "deletePendingFilesWarning": "הקלטות אלה לא סונכרנו לטלפון שלך ויאבדו לצמיתות. לא ניתן לבטל פעולה זו.",
-    "@deletePendingFilesWarning": {
-        "description": "Warning message for deleting pending files"
-    },
-    "pendingFilesDeleted": "הקלטות בהמתנה נמחקו",
-    "@pendingFilesDeleted": {
-        "description": "Snackbar message after pending files deleted"
-    },
-    "deleteAllFiles": "מחק את כל ההקלטות",
-    "@deleteAllFiles": {
-        "description": "Dialog title for deleting all files"
-    },
     "deleteAll": "מחק הכל",
     "@deleteAll": {
         "description": "Menu option to delete all recordings"
-    },
-    "deleteAllFilesWarning": "זה ימחק הן הקלטות מסונכרנות והן בהמתנה. הקלטות בהמתנה לא סונכרנו ויאבדו לצמיתות. לא ניתן לבטל פעולה זו.",
-    "@deleteAllFilesWarning": {
-        "description": "Warning message for deleting all files"
-    },
-    "allFilesDeleted": "כל ההקלטות נמחקו",
-    "@allFilesDeleted": {
-        "description": "Snackbar message after all files deleted"
     },
     "nFiles": "{count} הקלטות",
     "@nFiles": {
@@ -9760,18 +9724,6 @@
     "manageStorage": "נהל אחסון",
     "@manageStorage": {
         "description": "Menu option and sheet title for managing recording storage"
-    },
-    "safelyBackedUp": "שיחות נוצרו",
-    "@safelyBackedUp": {
-        "description": "Description for synced files in manage storage sheet"
-    },
-    "notYetSynced": "עדיין לא סונכרן לטלפון שלך",
-    "@notYetSynced": {
-        "description": "Description for pending files in manage storage sheet"
-    },
-    "clearAll": "נקה הכל",
-    "@clearAll": {
-        "description": "Button label to clear all files"
     },
     "phoneKeypad": "מקלדת מספרים",
     "@phoneKeypad": {
@@ -12326,5 +12278,28 @@
     "firmwareNewestSupportedForDevice": "המכשיר שלך כבר נמצא בגרסת הקושחה החדשה ביותר הנתמכת עבורו",
     "firmwareSyncRecordingsFirstTitle": "סנכרן תחילה את ההקלטות שלך",
     "firmwareSyncRecordingsFirstMessage": "חלק מההקלטות עדיין נמצאות במכשיר שלך. תן להן להשלים את הסינכרון לטלפון, ואז התחל את העדכון.",
-    "batteryRestartToRefresh": "הפעל מחדש את Omi כדי לרענן"
+    "batteryRestartToRefresh": "הפעל מחדש את Omi כדי לרענן",
+    "storageUploadedTitle": "כבר הועלה",
+    "storageUploadedSubtitle": "מתומלל. הסרת העותק בטלפון לא גורמת לאובדן.",
+    "storageFreeUpSpace": "שחרור מקום",
+    "storageNotUploadedTitle": "טרם הועלה",
+    "storageOnThisPhone": "בטלפון הזה",
+    "storageOnYourOmi": "ב-Omi שלך",
+    "storageOnPhoneAndOmi": "בטלפון הזה {phone} · ב-Omi שלך {device}",
+    "storageNotUploadedWarning": "מחיקה תגרום לאיבוד האודיו הזה לצמיתות.",
+    "storageDeleteEverything": "מחיקת הכול",
+    "storageFreeUpTitle": "שחרור {duration}?",
+    "storageFreeUpMessage": "מסיר את העותק בטלפון של אודיו שכבר מתומלל. השיחות שלך נשמרות.",
+    "storageDeletePendingTitle": "מחיקת {duration} של אודיו?",
+    "storageDeletePendingMessage": "האודיו הזה לא הועלה, ולכן לא ניתן לשחזר אותו. הסנכרון מושהה בזמן המחיקה.",
+    "storageDeleteAllTitle": "מחיקת כל {duration} של אודיו?",
+    "storageDeleteAllMessage": "כולל {duration} שלא הועלה ולא ניתן לשחזר. הסנכרון מושהה בזמן המחיקה.",
+    "storageDeleteAllUploadedMessage": "מסיר את כל ההקלטות השמורות בטלפון הזה. השיחות שלך נשמרות.",
+    "storageClearStopping": "עוצר סנכרון…",
+    "storageClearDeleting": "מוחק… {progress}",
+    "storageClearVerifying": "בודק מה נשאר…",
+    "storageClearDone": "נמחקו {duration}",
+    "storageClearPartial": "נמחקו {deleted}. לא ניתן היה למחוק {remaining}.",
+    "storageClearOmiUnreachable": "{duration} עדיין נמצא ב-Omi שלך. חבר אותו ונסה שוב.",
+    "storageClearFailed": "המחיקה נכשלה. נסה שוב."
 }

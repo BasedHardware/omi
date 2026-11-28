@@ -8137,39 +8137,10 @@ class AppLocalizationsId extends AppLocalizations {
   String get deleteSynced => 'Hapus yang disinkronkan';
 
   @override
-  String get deleteSyncedFiles => 'Hapus rekaman tersinkronisasi';
-
-  @override
-  String get deleteSyncedFilesMessage => 'Rekaman ini sudah disinkronkan ke ponsel Anda. Ini tidak dapat dibatalkan.';
-
-  @override
-  String get syncedFilesDeleted => 'Rekaman tersinkronisasi dihapus';
-
-  @override
   String get deletePending => 'Hapus yang tertunda';
 
   @override
-  String get deletePendingFiles => 'Hapus rekaman tertunda';
-
-  @override
-  String get deletePendingFilesWarning =>
-      'Rekaman ini BELUM disinkronkan ke ponsel Anda dan akan hilang secara permanen. Ini tidak dapat dibatalkan.';
-
-  @override
-  String get pendingFilesDeleted => 'Rekaman tertunda dihapus';
-
-  @override
-  String get deleteAllFiles => 'Hapus semua rekaman';
-
-  @override
   String get deleteAll => 'Hapus semua';
-
-  @override
-  String get deleteAllFilesWarning =>
-      'Ini akan menghapus rekaman tersinkronisasi dan tertunda. Rekaman tertunda BELUM disinkronkan dan akan hilang secara permanen.';
-
-  @override
-  String get allFilesDeleted => 'Semua rekaman dihapus';
 
   @override
   String nFiles(int count) {
@@ -8178,15 +8149,6 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get manageStorage => 'Kelola penyimpanan';
-
-  @override
-  String get safelyBackedUp => 'Percakapan dibuat';
-
-  @override
-  String get notYetSynced => 'Belum disinkronkan ke ponsel Anda';
-
-  @override
-  String get clearAll => 'Hapus semua';
 
   @override
   String get phoneKeypad => 'Keypad';
@@ -15860,4 +15822,94 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'Mulai ulang Omi untuk menyegarkan';
+
+  @override
+  String get storageUploadedTitle => 'Sudah diunggah';
+
+  @override
+  String get storageUploadedSubtitle => 'Sudah ditranskripsi. Menghapus salinan di ponsel tidak menghilangkan apa pun.';
+
+  @override
+  String get storageFreeUpSpace => 'Kosongkan ruang penyimpanan';
+
+  @override
+  String get storageNotUploadedTitle => 'Belum diunggah';
+
+  @override
+  String get storageOnThisPhone => 'Di ponsel ini';
+
+  @override
+  String get storageOnYourOmi => 'Di Omi Anda';
+
+  @override
+  String storageOnPhoneAndOmi(String phone, String device) {
+    return 'Di ponsel ini $phone · Di Omi Anda $device';
+  }
+
+  @override
+  String get storageNotUploadedWarning => 'Menghapus akan menghilangkan audio ini secara permanen.';
+
+  @override
+  String get storageDeleteEverything => 'Hapus semuanya';
+
+  @override
+  String storageFreeUpTitle(String duration) {
+    return 'Kosongkan $duration?';
+  }
+
+  @override
+  String get storageFreeUpMessage =>
+      'Menghapus salinan audio yang sudah ditranskripsi dari ponsel ini. Percakapan Anda tetap ada.';
+
+  @override
+  String storageDeletePendingTitle(String duration) {
+    return 'Hapus $duration audio?';
+  }
+
+  @override
+  String get storageDeletePendingMessage =>
+      'Audio ini belum diunggah, sehingga tidak bisa dipulihkan. Sinkronisasi dijeda selama penghapusan.';
+
+  @override
+  String storageDeleteAllTitle(String duration) {
+    return 'Hapus semua $duration audio?';
+  }
+
+  @override
+  String storageDeleteAllMessage(String duration) {
+    return 'Termasuk $duration yang belum diunggah dan tidak bisa dipulihkan. Sinkronisasi dijeda selama penghapusan.';
+  }
+
+  @override
+  String get storageDeleteAllUploadedMessage =>
+      'Menghapus semua rekaman yang disimpan di ponsel ini. Percakapan Anda tetap ada.';
+
+  @override
+  String get storageClearStopping => 'Menghentikan sinkronisasi…';
+
+  @override
+  String storageClearDeleting(String progress) {
+    return 'Menghapus… $progress';
+  }
+
+  @override
+  String get storageClearVerifying => 'Memeriksa yang tersisa…';
+
+  @override
+  String storageClearDone(String duration) {
+    return 'Terhapus $duration';
+  }
+
+  @override
+  String storageClearPartial(String deleted, String remaining) {
+    return 'Terhapus $deleted. $remaining tidak bisa dihapus.';
+  }
+
+  @override
+  String storageClearOmiUnreachable(String duration) {
+    return '$duration masih di Omi Anda. Hubungkan dan coba lagi.';
+  }
+
+  @override
+  String get storageClearFailed => 'Gagal menghapus. Coba lagi.';
 }

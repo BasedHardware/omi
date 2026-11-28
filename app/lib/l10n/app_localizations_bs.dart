@@ -8153,40 +8153,10 @@ class AppLocalizationsBs extends AppLocalizations {
   String get deleteSynced => 'Obriši sinhronizovano';
 
   @override
-  String get deleteSyncedFiles => 'Obriši sinhronizovane snimke';
-
-  @override
-  String get deleteSyncedFilesMessage =>
-      'Ove snimke su već sinhronizovane sa tvojim telefonom. Ovo se ne može vratiti.';
-
-  @override
-  String get syncedFilesDeleted => 'Sinhronizovane snimke su obrisane';
-
-  @override
   String get deletePending => 'Obriši na čekanju';
 
   @override
-  String get deletePendingFiles => 'Obriši snimke na čekanju';
-
-  @override
-  String get deletePendingFilesWarning =>
-      'Ove snimke NISU sinhronizovane sa tvojim telefonom i biće zauvek izgubljene. Ovo se ne može vratiti.';
-
-  @override
-  String get pendingFilesDeleted => 'Snimke na čekanju su obrisane';
-
-  @override
-  String get deleteAllFiles => 'Obriši sve snimke';
-
-  @override
   String get deleteAll => 'Obriši sve';
-
-  @override
-  String get deleteAllFilesWarning =>
-      'Ovo će obrisati i sinhronizovane i snimke na čekanju. Snimke na čekanju NISU sinhronizovane i biće zauvek izgubljene. Ovo se ne može vratiti.';
-
-  @override
-  String get allFilesDeleted => 'Sve snimke su obrisane';
 
   @override
   String nFiles(int count) {
@@ -8195,15 +8165,6 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get manageStorage => 'Upravljaj memorijom';
-
-  @override
-  String get safelyBackedUp => 'Razgovori kreirani';
-
-  @override
-  String get notYetSynced => 'Nije još sinhronizovano sa tvojim telefonom';
-
-  @override
-  String get clearAll => 'Očisti sve';
 
   @override
   String get phoneKeypad => 'Tastatura';
@@ -15873,4 +15834,92 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'Ponovo pokrenite Omi radi osvježavanja';
+
+  @override
+  String get storageUploadedTitle => 'Već otpremljeno';
+
+  @override
+  String get storageUploadedSubtitle => 'Prepisano je. Brisanjem kopije s telefona ne gubite ništa.';
+
+  @override
+  String get storageFreeUpSpace => 'Oslobodi prostor';
+
+  @override
+  String get storageNotUploadedTitle => 'Još nije otpremljeno';
+
+  @override
+  String get storageOnThisPhone => 'Na ovom telefonu';
+
+  @override
+  String get storageOnYourOmi => 'Na vašem Omi';
+
+  @override
+  String storageOnPhoneAndOmi(String phone, String device) {
+    return 'Na ovom telefonu $phone · Na vašem Omi $device';
+  }
+
+  @override
+  String get storageNotUploadedWarning => 'Brisanjem se ovaj audio gubi zauvijek.';
+
+  @override
+  String get storageDeleteEverything => 'Izbriši sve';
+
+  @override
+  String storageFreeUpTitle(String duration) {
+    return 'Osloboditi $duration?';
+  }
+
+  @override
+  String get storageFreeUpMessage => 'Uklanja kopiju već prepisanog audia s ovog telefona. Vaši razgovori ostaju.';
+
+  @override
+  String storageDeletePendingTitle(String duration) {
+    return 'Izbrisati $duration audia?';
+  }
+
+  @override
+  String get storageDeletePendingMessage =>
+      'Ovaj audio nije otpremljen, pa se ne može vratiti. Sinhronizacija se pauzira tokom brisanja.';
+
+  @override
+  String storageDeleteAllTitle(String duration) {
+    return 'Izbrisati svih $duration audia?';
+  }
+
+  @override
+  String storageDeleteAllMessage(String duration) {
+    return 'Uključuje $duration audia koje nije otpremljeno i ne može se vratiti. Sinhronizacija se pauzira tokom brisanja.';
+  }
+
+  @override
+  String get storageDeleteAllUploadedMessage => 'Uklanja sve snimke sačuvane na ovom telefonu. Vaši razgovori ostaju.';
+
+  @override
+  String get storageClearStopping => 'Zaustavljanje sinhronizacije…';
+
+  @override
+  String storageClearDeleting(String progress) {
+    return 'Brisanje… $progress';
+  }
+
+  @override
+  String get storageClearVerifying => 'Provjera šta je ostalo…';
+
+  @override
+  String storageClearDone(String duration) {
+    return 'Izbrisano $duration';
+  }
+
+  @override
+  String storageClearPartial(String deleted, String remaining) {
+    return 'Izbrisano $deleted. $remaining se nije moglo izbrisati.';
+  }
+
+  @override
+  String storageClearOmiUnreachable(String duration) {
+    return '$duration je još uvijek na vašem Omi. Povežite ga i pokušajte ponovo.';
+  }
+
+  @override
+  String get storageClearFailed => 'Brisanje nije uspjelo. Pokušajte ponovo.';
 }

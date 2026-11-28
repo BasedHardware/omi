@@ -8209,39 +8209,10 @@ class AppLocalizationsTl extends AppLocalizations {
   String get deleteSynced => 'Tanggalin ang Synced';
 
   @override
-  String get deleteSyncedFiles => 'Tanggalin ang Synced Recordings';
-
-  @override
-  String get deleteSyncedFilesMessage => 'Ang mga recording na ito ay nag-sync na sa iyong phone. Hindi ito mababawi.';
-
-  @override
-  String get syncedFilesDeleted => 'Ang synced recordings ay nakatanggal';
-
-  @override
   String get deletePending => 'Tanggalin ang Pending';
 
   @override
-  String get deletePendingFiles => 'Tanggalin ang Pending Recordings';
-
-  @override
-  String get deletePendingFilesWarning =>
-      'Ang mga recording na ito ay HINDI nag-sync sa iyong phone at permanent na mawawala. Hindi ito mababawi.';
-
-  @override
-  String get pendingFilesDeleted => 'Ang pending recordings ay nakatanggal';
-
-  @override
-  String get deleteAllFiles => 'Tanggalin ang Lahat ng Recordings';
-
-  @override
   String get deleteAll => 'Tanggalin Ang Lahat';
-
-  @override
-  String get deleteAllFilesWarning =>
-      'Ito ay magtanggal ng parehong synced at pending recordings. Ang pending recordings ay HINDI nag-sync at permanent na mawawala. Hindi ito mababawi.';
-
-  @override
-  String get allFilesDeleted => 'Ang lahat ng recordings ay nakatanggal';
 
   @override
   String nFiles(int count) {
@@ -8250,15 +8221,6 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get manageStorage => 'Pamahalaan ang Storage';
-
-  @override
-  String get safelyBackedUp => 'Mga conversation na nalikha';
-
-  @override
-  String get notYetSynced => 'Hindi pa nag-sync sa iyong phone';
-
-  @override
-  String get clearAll => 'Burahin Ang Lahat';
 
   @override
   String get phoneKeypad => 'Keypad';
@@ -15972,4 +15934,94 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'I-restart ang Omi upang i-refresh';
+
+  @override
+  String get storageUploadedTitle => 'Na-upload na';
+
+  @override
+  String get storageUploadedSubtitle => 'Na-transcribe na. Walang mawawala kapag tinanggal ang kopya sa telepono.';
+
+  @override
+  String get storageFreeUpSpace => 'Palayain ang espasyo';
+
+  @override
+  String get storageNotUploadedTitle => 'Hindi pa na-upload';
+
+  @override
+  String get storageOnThisPhone => 'Sa teleponong ito';
+
+  @override
+  String get storageOnYourOmi => 'Sa Omi mo';
+
+  @override
+  String storageOnPhoneAndOmi(String phone, String device) {
+    return 'Sa teleponong ito $phone · Sa Omi mo $device';
+  }
+
+  @override
+  String get storageNotUploadedWarning => 'Kapag tinanggal, tuluyang mawawala ang audio na ito.';
+
+  @override
+  String get storageDeleteEverything => 'Tanggalin lahat';
+
+  @override
+  String storageFreeUpTitle(String duration) {
+    return 'Palayain ang $duration?';
+  }
+
+  @override
+  String get storageFreeUpMessage =>
+      'Tinatanggal ang kopya ng audio sa teleponong naka-transcribe na. Mananatili ang mga pag-uusap mo.';
+
+  @override
+  String storageDeletePendingTitle(String duration) {
+    return 'Tanggalin ang $duration na audio?';
+  }
+
+  @override
+  String get storageDeletePendingMessage =>
+      'Hindi pa na-upload ang audio na ito, kaya hindi ito maibabalik. Pansamantalang hihinto ang pag-sync habang tinatanggal ito.';
+
+  @override
+  String storageDeleteAllTitle(String duration) {
+    return 'Tanggalin lahat ng $duration na audio?';
+  }
+
+  @override
+  String storageDeleteAllMessage(String duration) {
+    return 'Kasama rito ang $duration na hindi pa na-upload at hindi maibabalik. Pansamantalang hihinto ang pag-sync habang tinatanggal ito.';
+  }
+
+  @override
+  String get storageDeleteAllUploadedMessage =>
+      'Tinatanggal lahat ng recording na nakaimbak sa teleponong ito. Mananatili ang mga pag-uusap mo.';
+
+  @override
+  String get storageClearStopping => 'Humihinto ang pag-sync…';
+
+  @override
+  String storageClearDeleting(String progress) {
+    return 'Tinatanggal… $progress';
+  }
+
+  @override
+  String get storageClearVerifying => 'Tinitingnan kung ano ang natitira…';
+
+  @override
+  String storageClearDone(String duration) {
+    return 'Tinanggal ang $duration';
+  }
+
+  @override
+  String storageClearPartial(String deleted, String remaining) {
+    return 'Tinanggal ang $deleted. Hindi matanggal ang $remaining.';
+  }
+
+  @override
+  String storageClearOmiUnreachable(String duration) {
+    return 'Nasa Omi mo pa rin ang $duration. Ikonekta ito at subukan ulit.';
+  }
+
+  @override
+  String get storageClearFailed => 'Hindi natanggal. Subukan ulit.';
 }

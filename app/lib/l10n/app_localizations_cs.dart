@@ -8132,40 +8132,10 @@ class AppLocalizationsCs extends AppLocalizations {
   String get deleteSynced => 'Smazat synchronizované';
 
   @override
-  String get deleteSyncedFiles => 'Smazat synchronizované nahrávky';
-
-  @override
-  String get deleteSyncedFilesMessage =>
-      'Tyto nahrávky jsou již synchronizovány s vaším telefonem. Toto nelze vrátit zpět.';
-
-  @override
-  String get syncedFilesDeleted => 'Synchronizované nahrávky smazány';
-
-  @override
   String get deletePending => 'Smazat čekající';
 
   @override
-  String get deletePendingFiles => 'Smazat čekající nahrávky';
-
-  @override
-  String get deletePendingFilesWarning =>
-      'Tyto nahrávky NEJSOU synchronizovány s vaším telefonem a budou trvale ztraceny. Toto nelze vrátit zpět.';
-
-  @override
-  String get pendingFilesDeleted => 'Čekající nahrávky smazány';
-
-  @override
-  String get deleteAllFiles => 'Smazat všechny nahrávky';
-
-  @override
   String get deleteAll => 'Smazat vše';
-
-  @override
-  String get deleteAllFilesWarning =>
-      'Toto smaže synchronizované i čekající nahrávky. Čekající nahrávky NEJSOU synchronizovány a budou trvale ztraceny.';
-
-  @override
-  String get allFilesDeleted => 'Všechny nahrávky smazány';
 
   @override
   String nFiles(int count) {
@@ -8174,15 +8144,6 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get manageStorage => 'Správa úložiště';
-
-  @override
-  String get safelyBackedUp => 'Vytvořené konverzace';
-
-  @override
-  String get notYetSynced => 'Zatím nesynchronizováno s vaším telefonem';
-
-  @override
-  String get clearAll => 'Vymazat vše';
 
   @override
   String get phoneKeypad => 'Klávesnice';
@@ -15844,4 +15805,93 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'Restartujte Omi pro obnovení údaje';
+
+  @override
+  String get storageUploadedTitle => 'Již nahráno';
+
+  @override
+  String get storageUploadedSubtitle => 'Již přepsáno. Smazáním kopie v telefonu nic neztratíte.';
+
+  @override
+  String get storageFreeUpSpace => 'Uvolnit prostor';
+
+  @override
+  String get storageNotUploadedTitle => 'Zatím nenahráno';
+
+  @override
+  String get storageOnThisPhone => 'V tomto telefonu';
+
+  @override
+  String get storageOnYourOmi => 'Na vašem Omi';
+
+  @override
+  String storageOnPhoneAndOmi(String phone, String device) {
+    return 'V tomto telefonu $phone · Na vašem Omi $device';
+  }
+
+  @override
+  String get storageNotUploadedWarning => 'Smazáním se tento zvuk nenávratně ztratí.';
+
+  @override
+  String get storageDeleteEverything => 'Smazat vše';
+
+  @override
+  String storageFreeUpTitle(String duration) {
+    return 'Uvolnit $duration?';
+  }
+
+  @override
+  String get storageFreeUpMessage => 'Smaže kopii již přepsaného zvuku v tomto telefonu. Vaše konverzace zůstanou.';
+
+  @override
+  String storageDeletePendingTitle(String duration) {
+    return 'Smazat $duration zvuku?';
+  }
+
+  @override
+  String get storageDeletePendingMessage =>
+      'Tento zvuk nebyl nahrán, takže jej nelze obnovit. Během mazání se synchronizace pozastaví.';
+
+  @override
+  String storageDeleteAllTitle(String duration) {
+    return 'Smazat celých $duration zvuku?';
+  }
+
+  @override
+  String storageDeleteAllMessage(String duration) {
+    return 'Zahrnuje $duration, které nebylo nahráno a nelze jej obnovit. Během mazání se synchronizace pozastaví.';
+  }
+
+  @override
+  String get storageDeleteAllUploadedMessage =>
+      'Smaže všechny nahrávky uložené v tomto telefonu. Vaše konverzace zůstanou.';
+
+  @override
+  String get storageClearStopping => 'Zastavování synchronizace…';
+
+  @override
+  String storageClearDeleting(String progress) {
+    return 'Mazání… $progress';
+  }
+
+  @override
+  String get storageClearVerifying => 'Kontrola, co zbývá…';
+
+  @override
+  String storageClearDone(String duration) {
+    return 'Smazáno $duration';
+  }
+
+  @override
+  String storageClearPartial(String deleted, String remaining) {
+    return 'Smazáno $deleted. $remaining se nepodařilo smazat.';
+  }
+
+  @override
+  String storageClearOmiUnreachable(String duration) {
+    return '$duration je stále na vašem Omi. Připojte jej a zkuste to znovu.';
+  }
+
+  @override
+  String get storageClearFailed => 'Smazání se nepodařilo. Zkuste to znovu.';
 }

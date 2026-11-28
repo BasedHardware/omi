@@ -9704,49 +9704,13 @@
     "@deleteSynced": {
         "description": "Menu option to delete synced recordings"
     },
-    "deleteSyncedFiles": "ஒத்திசைக்கப்பட்ட பதிவுகளை நீக்கு",
-    "@deleteSyncedFiles": {
-        "description": "Dialog title for deleting synced files"
-    },
-    "deleteSyncedFilesMessage": "இந்த பதிவுகள் ஏற்கனவே உங்கள் தொலைபேசிக்கு ஒத்திசைக்கப்பட்டுள்ளன. இதை செய்ய முடியாது.",
-    "@deleteSyncedFilesMessage": {
-        "description": "Confirmation message for deleting synced files"
-    },
-    "syncedFilesDeleted": "ஒத்திசைக்கப்பட்ட பதிவுகள் நீக்கப்பட்டுள்ளன",
-    "@syncedFilesDeleted": {
-        "description": "Snackbar message after synced files deleted"
-    },
     "deletePending": "நிலுவையில் உள்ளவற்றை நீக்கு",
     "@deletePending": {
         "description": "Menu option to delete pending recordings"
     },
-    "deletePendingFiles": "நிலுவையில் உள்ள பதிவுகளை நீக்கு",
-    "@deletePendingFiles": {
-        "description": "Dialog title for deleting pending files"
-    },
-    "deletePendingFilesWarning": "இந்த பதிவுகள் உங்கள் தொலைபேசிக்கு ஒத்திசைக்கப்படவில்லை மற்றும் நிரந்தரமாக இழக்கப்படும். இதை செய்ய முடியாது.",
-    "@deletePendingFilesWarning": {
-        "description": "Warning message for deleting pending files"
-    },
-    "pendingFilesDeleted": "நிலுவையில் உள்ள பதிவுகள் நீக்கப்பட்டுள்ளன",
-    "@pendingFilesDeleted": {
-        "description": "Snackbar message after pending files deleted"
-    },
-    "deleteAllFiles": "அனைத்துப் பதிவுகளையும் நீக்கு",
-    "@deleteAllFiles": {
-        "description": "Dialog title for deleting all files"
-    },
     "deleteAll": "அனைத்தையும் நீக்கு",
     "@deleteAll": {
         "description": "Menu option to delete all recordings"
-    },
-    "deleteAllFilesWarning": "இது ஒத்திசைக்கப்பட்ட மற்றும் நிலுவையில் உள்ள பதிவுகளை நீக்கும். நிலுவையில் உள்ள பதிவுகள் ஒத்திசைக்கப்படவில்லை மற்றும் நிரந்தரமாக இழக்கப்படும். இதை செய்ய முடியாது.",
-    "@deleteAllFilesWarning": {
-        "description": "Warning message for deleting all files"
-    },
-    "allFilesDeleted": "அனைத்துப் பதிவுகளும் நீக்கப்பட்டுள்ளன",
-    "@allFilesDeleted": {
-        "description": "Snackbar message after all files deleted"
     },
     "nFiles": "{count} பதிவுகள்",
     "@nFiles": {
@@ -9760,18 +9724,6 @@
     "manageStorage": "சேமிப்பகத்தை நிர்வகிக்கவும்",
     "@manageStorage": {
         "description": "Menu option and sheet title for managing recording storage"
-    },
-    "safelyBackedUp": "உருவாக்கப்பட்ட உரையாடல்கள்",
-    "@safelyBackedUp": {
-        "description": "Description for synced files in manage storage sheet"
-    },
-    "notYetSynced": "இன்னும் உங்கள் தொலைபேசிக்கு ஒத்திசைக்கப்படவில்லை",
-    "@notYetSynced": {
-        "description": "Description for pending files in manage storage sheet"
-    },
-    "clearAll": "அனைத்தையும் நீக்கவும்",
-    "@clearAll": {
-        "description": "Button label to clear all files"
     },
     "phoneKeypad": "விசைப்பலகை",
     "@phoneKeypad": {
@@ -12326,5 +12278,28 @@
     "firmwareNewestSupportedForDevice": "உங்கள் சாதனம் ஏற்கனவே ஆதரிக்கப்படும் மிகச் சமீபத்திய ஃபார்ம்வேர் பதிப்பில் உள்ளது",
     "firmwareSyncRecordingsFirstTitle": "முதலில் உங்கள் பதிவுகளை ஒத்திசைக்கவும்",
     "firmwareSyncRecordingsFirstMessage": "சில பதிவுகள் இன்னும் உங்கள் சாதனத்தில் உள்ளன. அவை உங்கள் தொலைபேசிக்கு ஒத்திசைவை முடிக்க அனுமதித்து, பிறகு புதுப்பிப்பைத் தொடங்கவும்.",
-    "batteryRestartToRefresh": "புதுப்பிக்க Omi ஐ மறுதொடக்கம் செய்யவும்"
+    "batteryRestartToRefresh": "புதுப்பிக்க Omi ஐ மறுதொடக்கம் செய்யவும்",
+    "storageUploadedTitle": "ஏற்கனவே பதிவேற்றப்பட்டது",
+    "storageUploadedSubtitle": "எழுத்துப்பெயர்ப்பு செய்யப்பட்டது. ஃபோனில் உள்ள நகலை அகற்றினாலும் எதுவும் இழக்கப்படாது.",
+    "storageFreeUpSpace": "இடத்தை விடுவிக்கவும்",
+    "storageNotUploadedTitle": "இன்னும் பதிவேற்றப்படவில்லை",
+    "storageOnThisPhone": "இந்த ஃபோனில்",
+    "storageOnYourOmi": "உங்கள் Omi இல்",
+    "storageOnPhoneAndOmi": "இந்த ஃபோனில் {phone} · உங்கள் Omi இல் {device}",
+    "storageNotUploadedWarning": "நீக்கினால் இந்த ஆடியோ நிரந்தரமாக இழக்கப்படும்.",
+    "storageDeleteEverything": "அனைத்தையும் நீக்கு",
+    "storageFreeUpTitle": "{duration} விடுவிக்கவா?",
+    "storageFreeUpMessage": "ஏற்கனவே எழுத்துப்பெயர்ப்பு செய்யப்பட்ட ஆடியோவின் இந்த ஃபோன் நகலை அகற்றும். உங்கள் உரையாடல்கள் அப்படியே இருக்கும்.",
+    "storageDeletePendingTitle": "{duration} ஆடியோவை நீக்கவா?",
+    "storageDeletePendingMessage": "இந்த ஆடியோ பதிவேற்றப்படவில்லை, எனவே அதை மீட்ட முடியாது. நீக்கும் போது ஒத்திசைவு இடைநிறுத்தப்படும்.",
+    "storageDeleteAllTitle": "அனைத்து {duration} ஆடியோவையும் நீக்கவா?",
+    "storageDeleteAllMessage": "இதில் இன்னும் பதிவேற்றப்படாத, மீட்டெடுக்க முடியாத {duration} அடங்கும். நீக்கும் போது ஒத்திசைவு இடைநிறுத்தப்படும்.",
+    "storageDeleteAllUploadedMessage": "இந்த ஃபோனில் சேமிக்கப்பட்ட அனைத்து பதிவுகளையும் அகற்றும். உங்கள் உரையாடல்கள் அப்படியே இருக்கும்.",
+    "storageClearStopping": "ஒத்திசைவை நிறுத்துகிறது…",
+    "storageClearDeleting": "நீக்குகிறது… {progress}",
+    "storageClearVerifying": "எஞ்சியவற்றைச் சரிபார்க்கிறது…",
+    "storageClearDone": "{duration} நீக்கப்பட்டது",
+    "storageClearPartial": "{deleted} நீக்கப்பட்டது. {remaining} நீக்க முடியவில்லை.",
+    "storageClearOmiUnreachable": "{duration} இன்னும் உங்கள் Omi இல் உள்ளது. அதை இணைத்து மீண்டும் முயலுங்கள்.",
+    "storageClearFailed": "நீக்க முடியவில்லை. மீண்டும் முயலுங்கள்."
 }

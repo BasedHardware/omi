@@ -9704,49 +9704,13 @@
     "@deleteSynced": {
         "description": "Menu option to delete synced recordings"
     },
-    "deleteSyncedFiles": "Obriši sinhronizovane snimke",
-    "@deleteSyncedFiles": {
-        "description": "Dialog title for deleting synced files"
-    },
-    "deleteSyncedFilesMessage": "Ove snimke su već sinhronizovane s vašim telefonom. Ovo se ne može poništiti.",
-    "@deleteSyncedFilesMessage": {
-        "description": "Confirmation message for deleting synced files"
-    },
-    "syncedFilesDeleted": "Sinhronizovane snimke obrisane",
-    "@syncedFilesDeleted": {
-        "description": "Snackbar message after synced files deleted"
-    },
     "deletePending": "Obriši na čekanju",
     "@deletePending": {
         "description": "Menu option to delete pending recordings"
     },
-    "deletePendingFiles": "Obriši snimke na čekanju",
-    "@deletePendingFiles": {
-        "description": "Dialog title for deleting pending files"
-    },
-    "deletePendingFilesWarning": "Ove snimke NISU sinhronizovane s vašim telefonom i bit će trajno izgubljene. Ovo se ne može poništiti.",
-    "@deletePendingFilesWarning": {
-        "description": "Warning message for deleting pending files"
-    },
-    "pendingFilesDeleted": "Snimke na čekanju obrisane",
-    "@pendingFilesDeleted": {
-        "description": "Snackbar message after pending files deleted"
-    },
-    "deleteAllFiles": "Obriši sve snimke",
-    "@deleteAllFiles": {
-        "description": "Dialog title for deleting all files"
-    },
     "deleteAll": "Obriši sve",
     "@deleteAll": {
         "description": "Menu option to delete all recordings"
-    },
-    "deleteAllFilesWarning": "Ovo će obrisati i sinhronizovane i snimke na čekanju. Snimke na čekanju NISU sinhronizovane i bit će trajno izgubljene. Ovo se ne može poništiti.",
-    "@deleteAllFilesWarning": {
-        "description": "Warning message for deleting all files"
-    },
-    "allFilesDeleted": "Sve snimke obrisane",
-    "@allFilesDeleted": {
-        "description": "Snackbar message after all files deleted"
     },
     "nFiles": "{count} snimki",
     "@nFiles": {
@@ -9760,18 +9724,6 @@
     "manageStorage": "Upravljanje pohranom",
     "@manageStorage": {
         "description": "Menu option and sheet title for managing recording storage"
-    },
-    "safelyBackedUp": "Razgovori stvoreni",
-    "@safelyBackedUp": {
-        "description": "Description for synced files in manage storage sheet"
-    },
-    "notYetSynced": "Još nije sinhronizovano s vašim telefonom",
-    "@notYetSynced": {
-        "description": "Description for pending files in manage storage sheet"
-    },
-    "clearAll": "Očisti sve",
-    "@clearAll": {
-        "description": "Button label to clear all files"
     },
     "phoneKeypad": "Brojčana tipka",
     "@phoneKeypad": {
@@ -12326,5 +12278,28 @@
     "firmwareNewestSupportedForDevice": "Tvoj uređaj je već na najnovijoj podržanoj verziji firmvera",
     "firmwareSyncRecordingsFirstTitle": "Prvo sinkroniziraj svoje snimke",
     "firmwareSyncRecordingsFirstMessage": "Neke snimke još su na tvojem uređaju. Pričekaj da se sinkroniziraju na tvoj telefon, a zatim pokreni ažuriranje.",
-    "batteryRestartToRefresh": "Ponovno pokrenite Omi za osvježavanje"
+    "batteryRestartToRefresh": "Ponovno pokrenite Omi za osvježavanje",
+    "storageUploadedTitle": "Već učitano",
+    "storageUploadedSubtitle": "Transkribirano. Uklanjanjem kopije s telefona ništa ne gubite.",
+    "storageFreeUpSpace": "Oslobodi prostor",
+    "storageNotUploadedTitle": "Još nije učitano",
+    "storageOnThisPhone": "Na ovom telefonu",
+    "storageOnYourOmi": "Na vašem Omi uređaju",
+    "storageOnPhoneAndOmi": "Na ovom telefonu {phone} · Na vašem Omi uređaju {device}",
+    "storageNotUploadedWarning": "Brisanjem se ovaj audio trajno gubi.",
+    "storageDeleteEverything": "Obriši sve",
+    "storageFreeUpTitle": "Osloboditi {duration}?",
+    "storageFreeUpMessage": "Uklanja kopiju već transkribiranog audia s ovog telefona. Vaši razgovori ostaju.",
+    "storageDeletePendingTitle": "Obrisati {duration} audia?",
+    "storageDeletePendingMessage": "Ovaj audio nije učitan, pa ga nije moguće vratiti. Sinkronizacija se pauzira dok se briše.",
+    "storageDeleteAllTitle": "Obrisati svih {duration} audia?",
+    "storageDeleteAllMessage": "Uključuje {duration} koji nije učitan i ne može se vratiti. Sinkronizacija se pauzira dok se briše.",
+    "storageDeleteAllUploadedMessage": "Uklanja sve snimke pohranjene na ovom telefonu. Vaši razgovori ostaju.",
+    "storageClearStopping": "Zaustavljanje sinkronizacije…",
+    "storageClearDeleting": "Brisanje… {progress}",
+    "storageClearVerifying": "Provjera preostalog…",
+    "storageClearDone": "Obrisano {duration}",
+    "storageClearPartial": "Obrisano {deleted}. Nije bilo moguće obrisati {remaining}.",
+    "storageClearOmiUnreachable": "{duration} se još nalazi na vašem Omi uređaju. Povežite ga i pokušajte ponovno.",
+    "storageClearFailed": "Brisanje nije uspjelo. Pokušajte ponovno."
 }

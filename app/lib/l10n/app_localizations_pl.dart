@@ -8153,40 +8153,10 @@ class AppLocalizationsPl extends AppLocalizations {
   String get deleteSynced => 'Usuń zsynchronizowane';
 
   @override
-  String get deleteSyncedFiles => 'Usuń zsynchronizowane nagrania';
-
-  @override
-  String get deleteSyncedFilesMessage =>
-      'Te nagrania zostały już zsynchronizowane z telefonem. Tej operacji nie można cofnąć.';
-
-  @override
-  String get syncedFilesDeleted => 'Zsynchronizowane nagrania usunięte';
-
-  @override
   String get deletePending => 'Usuń oczekujące';
 
   @override
-  String get deletePendingFiles => 'Usuń oczekujące nagrania';
-
-  @override
-  String get deletePendingFilesWarning =>
-      'Te nagrania NIE zostały zsynchronizowane z telefonem i zostaną trwale utracone. Tej operacji nie można cofnąć.';
-
-  @override
-  String get pendingFilesDeleted => 'Oczekujące nagrania usunięte';
-
-  @override
-  String get deleteAllFiles => 'Usuń wszystkie nagrania';
-
-  @override
   String get deleteAll => 'Usuń wszystko';
-
-  @override
-  String get deleteAllFilesWarning =>
-      'To usunie zsynchronizowane i oczekujące nagrania. Oczekujące nagrania NIE zostały zsynchronizowane i zostaną trwale utracone.';
-
-  @override
-  String get allFilesDeleted => 'Wszystkie nagrania usunięte';
 
   @override
   String nFiles(int count) {
@@ -8195,15 +8165,6 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get manageStorage => 'Zarządzaj pamięcią';
-
-  @override
-  String get safelyBackedUp => 'Utworzone rozmowy';
-
-  @override
-  String get notYetSynced => 'Jeszcze nie zsynchronizowano z Twoim telefonem';
-
-  @override
-  String get clearAll => 'Wyczyść wszystko';
 
   @override
   String get phoneKeypad => 'Klawiatura';
@@ -15891,4 +15852,94 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'Uruchom ponownie Omi, aby odświeżyć odczyt';
+
+  @override
+  String get storageUploadedTitle => 'Już przesłane';
+
+  @override
+  String get storageUploadedSubtitle => 'Transkrypcja gotowa. Po usunięciu kopii z telefonu niczego nie stracisz.';
+
+  @override
+  String get storageFreeUpSpace => 'Zwolnij miejsce';
+
+  @override
+  String get storageNotUploadedTitle => 'Jeszcze nie przesłane';
+
+  @override
+  String get storageOnThisPhone => 'Na tym telefonie';
+
+  @override
+  String get storageOnYourOmi => 'Na Twoim Omi';
+
+  @override
+  String storageOnPhoneAndOmi(String phone, String device) {
+    return 'Na tym telefonie $phone · Na Twoim Omi $device';
+  }
+
+  @override
+  String get storageNotUploadedWarning => 'Po usunięciu ten dźwięk przepadnie bezpowrotnie.';
+
+  @override
+  String get storageDeleteEverything => 'Usuń wszystko';
+
+  @override
+  String storageFreeUpTitle(String duration) {
+    return 'Zwolnić $duration?';
+  }
+
+  @override
+  String get storageFreeUpMessage =>
+      'Usuwa z tego telefonu kopię nagrania z gotową transkrypcją. Twoje rozmowy pozostają nienaruszone.';
+
+  @override
+  String storageDeletePendingTitle(String duration) {
+    return 'Usunąć $duration dźwięku?';
+  }
+
+  @override
+  String get storageDeletePendingMessage =>
+      'Ten dźwięk nie został przesłany, więc nie można go odzyskać. Synchronizacja zostanie wstrzymana na czas usuwania.';
+
+  @override
+  String storageDeleteAllTitle(String duration) {
+    return 'Usunąć wszystkie $duration dźwięku?';
+  }
+
+  @override
+  String storageDeleteAllMessage(String duration) {
+    return 'Obejmuje $duration dźwięku, który nie został przesłany i nie można go odzyskać. Synchronizacja zostanie wstrzymana na czas usuwania.';
+  }
+
+  @override
+  String get storageDeleteAllUploadedMessage =>
+      'Usuwa wszystkie nagrania zapisane na tym telefonie. Twoje rozmowy pozostają nienaruszone.';
+
+  @override
+  String get storageClearStopping => 'Zatrzymywanie synchronizacji…';
+
+  @override
+  String storageClearDeleting(String progress) {
+    return 'Usuwanie… $progress';
+  }
+
+  @override
+  String get storageClearVerifying => 'Sprawdzanie pozostałości…';
+
+  @override
+  String storageClearDone(String duration) {
+    return 'Usunięto $duration';
+  }
+
+  @override
+  String storageClearPartial(String deleted, String remaining) {
+    return 'Usunięto $deleted. $remaining nie udało się usunąć.';
+  }
+
+  @override
+  String storageClearOmiUnreachable(String duration) {
+    return '$duration wciąż znajduje się na Twoim Omi. Podłącz urządzenie i spróbuj ponownie.';
+  }
+
+  @override
+  String get storageClearFailed => 'Nie udało się usunąć. Spróbuj ponownie.';
 }

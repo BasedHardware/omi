@@ -8153,39 +8153,10 @@ class AppLocalizationsMs extends AppLocalizations {
   String get deleteSynced => 'Padam yang disegerakkan';
 
   @override
-  String get deleteSyncedFiles => 'Padam rakaman disegerakkan';
-
-  @override
-  String get deleteSyncedFilesMessage => 'Rakaman ini telah disegerakkan ke telefon anda. Ini tidak boleh dibuat asal.';
-
-  @override
-  String get syncedFilesDeleted => 'Rakaman disegerakkan dipadam';
-
-  @override
   String get deletePending => 'Padam yang belum selesai';
 
   @override
-  String get deletePendingFiles => 'Padam rakaman tertangguh';
-
-  @override
-  String get deletePendingFilesWarning =>
-      'Rakaman ini BELUM disegerakkan ke telefon anda dan akan hilang secara kekal. Ini tidak boleh dibuat asal.';
-
-  @override
-  String get pendingFilesDeleted => 'Rakaman tertangguh dipadam';
-
-  @override
-  String get deleteAllFiles => 'Padam semua rakaman';
-
-  @override
   String get deleteAll => 'Padam semua';
-
-  @override
-  String get deleteAllFilesWarning =>
-      'Ini akan memadam rakaman disegerakkan dan tertangguh. Rakaman tertangguh BELUM disegerakkan dan akan hilang secara kekal.';
-
-  @override
-  String get allFilesDeleted => 'Semua rakaman dipadam';
 
   @override
   String nFiles(int count) {
@@ -8194,15 +8165,6 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get manageStorage => 'Urus storan';
-
-  @override
-  String get safelyBackedUp => 'Perbualan dicipta';
-
-  @override
-  String get notYetSynced => 'Belum disegerakkan ke telefon anda';
-
-  @override
-  String get clearAll => 'Kosongkan semua';
 
   @override
   String get phoneKeypad => 'Pad kekunci';
@@ -15883,4 +15845,94 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'Mulakan semula Omi untuk memuat semula';
+
+  @override
+  String get storageUploadedTitle => 'Sudah dimuat naik';
+
+  @override
+  String get storageUploadedSubtitle => 'Telah ditranskrip. Membuang salinan telefon tidak menjejaskan apa-apa.';
+
+  @override
+  String get storageFreeUpSpace => 'Kosongkan ruang';
+
+  @override
+  String get storageNotUploadedTitle => 'Belum dimuat naik';
+
+  @override
+  String get storageOnThisPhone => 'Pada telefon ini';
+
+  @override
+  String get storageOnYourOmi => 'Pada Omi anda';
+
+  @override
+  String storageOnPhoneAndOmi(String phone, String device) {
+    return 'Pada telefon ini $phone · Pada Omi anda $device';
+  }
+
+  @override
+  String get storageNotUploadedWarning => 'Jika dipadam, audio ini hilang buat selamanya.';
+
+  @override
+  String get storageDeleteEverything => 'Padam semua';
+
+  @override
+  String storageFreeUpTitle(String duration) {
+    return 'Kosongkan $duration?';
+  }
+
+  @override
+  String get storageFreeUpMessage =>
+      'Membuang salinan telefon bagi audio yang telah ditranskrip. Perbualan anda kekal.';
+
+  @override
+  String storageDeletePendingTitle(String duration) {
+    return 'Padam audio $duration?';
+  }
+
+  @override
+  String get storageDeletePendingMessage =>
+      'Audio ini belum dimuat naik, jadi ia tidak boleh dipulihkan. Penyegerakan dijeda semasa pemadaman.';
+
+  @override
+  String storageDeleteAllTitle(String duration) {
+    return 'Padam semua audio $duration?';
+  }
+
+  @override
+  String storageDeleteAllMessage(String duration) {
+    return 'Termasuk $duration yang belum dimuat naik dan tidak boleh dipulihkan. Penyegerakan dijeda semasa pemadaman.';
+  }
+
+  @override
+  String get storageDeleteAllUploadedMessage =>
+      'Membuang semua rakaman yang disimpan pada telefon ini. Perbualan anda kekal.';
+
+  @override
+  String get storageClearStopping => 'Menghentikan penyegerakan…';
+
+  @override
+  String storageClearDeleting(String progress) {
+    return 'Memadam… $progress';
+  }
+
+  @override
+  String get storageClearVerifying => 'Menyemak apa yang tinggal…';
+
+  @override
+  String storageClearDone(String duration) {
+    return 'Dipadam $duration';
+  }
+
+  @override
+  String storageClearPartial(String deleted, String remaining) {
+    return 'Dipadam $deleted. $remaining tidak dapat dipadam.';
+  }
+
+  @override
+  String storageClearOmiUnreachable(String duration) {
+    return '$duration masih pada Omi anda. Sambungkan ia dan cuba lagi.';
+  }
+
+  @override
+  String get storageClearFailed => 'Tidak dapat memadam. Cuba lagi.';
 }

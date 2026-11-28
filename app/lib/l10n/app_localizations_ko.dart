@@ -8016,37 +8016,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get deleteSynced => '동기화된 항목 삭제';
 
   @override
-  String get deleteSyncedFiles => '동기화된 녹음 삭제';
-
-  @override
-  String get deleteSyncedFilesMessage => '이 녹음은 이미 휴대폰에 동기화되었습니다. 이 작업은 취소할 수 없습니다.';
-
-  @override
-  String get syncedFilesDeleted => '동기화된 녹음 삭제됨';
-
-  @override
   String get deletePending => '대기 중인 항목 삭제';
 
   @override
-  String get deletePendingFiles => '대기 중인 녹음 삭제';
-
-  @override
-  String get deletePendingFilesWarning => '이 녹음은 휴대폰에 동기화되지 않았으며 영구적으로 손실됩니다. 이 작업은 취소할 수 없습니다.';
-
-  @override
-  String get pendingFilesDeleted => '대기 중인 녹음 삭제됨';
-
-  @override
-  String get deleteAllFiles => '모든 녹음 삭제';
-
-  @override
   String get deleteAll => '모두 삭제';
-
-  @override
-  String get deleteAllFilesWarning => '동기화된 녹음과 대기 중인 녹음이 모두 삭제됩니다. 대기 중인 녹음은 동기화되지 않았으며 영구적으로 손실됩니다.';
-
-  @override
-  String get allFilesDeleted => '모든 녹음 삭제됨';
 
   @override
   String nFiles(int count) {
@@ -8055,15 +8028,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get manageStorage => '저장소 관리';
-
-  @override
-  String get safelyBackedUp => '생성된 대화';
-
-  @override
-  String get notYetSynced => '아직 휴대폰에 동기화되지 않음';
-
-  @override
-  String get clearAll => '모두 지우기';
 
   @override
   String get phoneKeypad => '키패드';
@@ -15617,4 +15581,91 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => '새로고침하려면 Omi를 다시 시작하세요';
+
+  @override
+  String get storageUploadedTitle => '업로드됨';
+
+  @override
+  String get storageUploadedSubtitle => '텍스트로 변환되었습니다. 휴대전화 사본을 삭제해도 잃는 것은 없습니다.';
+
+  @override
+  String get storageFreeUpSpace => '공간 확보';
+
+  @override
+  String get storageNotUploadedTitle => '아직 업로드되지 않음';
+
+  @override
+  String get storageOnThisPhone => '이 휴대전화에 있음';
+
+  @override
+  String get storageOnYourOmi => '내 Omi에 있음';
+
+  @override
+  String storageOnPhoneAndOmi(String phone, String device) {
+    return '이 휴대전화에 있음 $phone · 내 Omi에 있음 $device';
+  }
+
+  @override
+  String get storageNotUploadedWarning => '삭제하면 이 오디오는 영구적으로 사라집니다.';
+
+  @override
+  String get storageDeleteEverything => '전체 삭제';
+
+  @override
+  String storageFreeUpTitle(String duration) {
+    return '$duration을(를) 비울까요?';
+  }
+
+  @override
+  String get storageFreeUpMessage => '이미 텍스트로 변환된 오디오의 휴대전화 사본을 삭제합니다. 대화는 그대로 유지됩니다.';
+
+  @override
+  String storageDeletePendingTitle(String duration) {
+    return '$duration의 오디오를 삭제할까요?';
+  }
+
+  @override
+  String get storageDeletePendingMessage => '이 오디오는 업로드되지 않아 복구할 수 없습니다. 삭제 중에는 동기화가 일시 중지됩니다.';
+
+  @override
+  String storageDeleteAllTitle(String duration) {
+    return '전체 $duration의 오디오를 삭제할까요?';
+  }
+
+  @override
+  String storageDeleteAllMessage(String duration) {
+    return '업로드되지 않아 복구할 수 없는 $duration이(가) 포함되어 있습니다. 삭제 중에는 동기화가 일시 중지됩니다.';
+  }
+
+  @override
+  String get storageDeleteAllUploadedMessage => '이 휴대전화에 저장된 모든 녹음을 삭제합니다. 대화는 그대로 유지됩니다.';
+
+  @override
+  String get storageClearStopping => '동기화를 중지하는 중…';
+
+  @override
+  String storageClearDeleting(String progress) {
+    return '삭제하는 중… $progress';
+  }
+
+  @override
+  String get storageClearVerifying => '남은 항목을 확인하는 중…';
+
+  @override
+  String storageClearDone(String duration) {
+    return '$duration 삭제됨';
+  }
+
+  @override
+  String storageClearPartial(String deleted, String remaining) {
+    return '$deleted 삭제됨. $remaining 삭제에 실패했습니다.';
+  }
+
+  @override
+  String storageClearOmiUnreachable(String duration) {
+    return '$duration이(가) 아직 Omi에 있습니다. 연결한 후 다시 시도해 주세요.';
+  }
+
+  @override
+  String get storageClearFailed => '삭제하지 못했습니다. 다시 시도해 주세요.';
 }

@@ -9704,49 +9704,13 @@
     "@deleteSynced": {
         "description": "Menu option to delete synced recordings"
     },
-    "deleteSyncedFiles": "Tanggalin ang Synced Recordings",
-    "@deleteSyncedFiles": {
-        "description": "Dialog title for deleting synced files"
-    },
-    "deleteSyncedFilesMessage": "Ang mga recording na ito ay nag-sync na sa iyong phone. Hindi ito mababawi.",
-    "@deleteSyncedFilesMessage": {
-        "description": "Confirmation message for deleting synced files"
-    },
-    "syncedFilesDeleted": "Ang synced recordings ay nakatanggal",
-    "@syncedFilesDeleted": {
-        "description": "Snackbar message after synced files deleted"
-    },
     "deletePending": "Tanggalin ang Pending",
     "@deletePending": {
         "description": "Menu option to delete pending recordings"
     },
-    "deletePendingFiles": "Tanggalin ang Pending Recordings",
-    "@deletePendingFiles": {
-        "description": "Dialog title for deleting pending files"
-    },
-    "deletePendingFilesWarning": "Ang mga recording na ito ay HINDI nag-sync sa iyong phone at permanent na mawawala. Hindi ito mababawi.",
-    "@deletePendingFilesWarning": {
-        "description": "Warning message for deleting pending files"
-    },
-    "pendingFilesDeleted": "Ang pending recordings ay nakatanggal",
-    "@pendingFilesDeleted": {
-        "description": "Snackbar message after pending files deleted"
-    },
-    "deleteAllFiles": "Tanggalin ang Lahat ng Recordings",
-    "@deleteAllFiles": {
-        "description": "Dialog title for deleting all files"
-    },
     "deleteAll": "Tanggalin Ang Lahat",
     "@deleteAll": {
         "description": "Menu option to delete all recordings"
-    },
-    "deleteAllFilesWarning": "Ito ay magtanggal ng parehong synced at pending recordings. Ang pending recordings ay HINDI nag-sync at permanent na mawawala. Hindi ito mababawi.",
-    "@deleteAllFilesWarning": {
-        "description": "Warning message for deleting all files"
-    },
-    "allFilesDeleted": "Ang lahat ng recordings ay nakatanggal",
-    "@allFilesDeleted": {
-        "description": "Snackbar message after all files deleted"
     },
     "nFiles": "{count} recordings",
     "@nFiles": {
@@ -9760,18 +9724,6 @@
     "manageStorage": "Pamahalaan ang Storage",
     "@manageStorage": {
         "description": "Menu option and sheet title for managing recording storage"
-    },
-    "safelyBackedUp": "Mga conversation na nalikha",
-    "@safelyBackedUp": {
-        "description": "Description for synced files in manage storage sheet"
-    },
-    "notYetSynced": "Hindi pa nag-sync sa iyong phone",
-    "@notYetSynced": {
-        "description": "Description for pending files in manage storage sheet"
-    },
-    "clearAll": "Burahin Ang Lahat",
-    "@clearAll": {
-        "description": "Button label to clear all files"
     },
     "phoneKeypad": "Keypad",
     "@phoneKeypad": {
@@ -12326,5 +12278,28 @@
     "firmwareNewestSupportedForDevice": "Ang iyong device ay nasa pinakabagong firmware version na kayang suportahan nito",
     "firmwareSyncRecordingsFirstTitle": "I-sync muna ang iyong mga recording",
     "firmwareSyncRecordingsFirstMessage": "May mga recording pa na nasa iyong device. Hayaang matapos munang i-sync ang mga ito sa iyong phone, pagkatapos ay simulan ang pag-update.",
-    "batteryRestartToRefresh": "I-restart ang Omi upang i-refresh"
+    "batteryRestartToRefresh": "I-restart ang Omi upang i-refresh",
+    "storageUploadedTitle": "Na-upload na",
+    "storageUploadedSubtitle": "Na-transcribe na. Walang mawawala kapag tinanggal ang kopya sa telepono.",
+    "storageFreeUpSpace": "Palayain ang espasyo",
+    "storageNotUploadedTitle": "Hindi pa na-upload",
+    "storageOnThisPhone": "Sa teleponong ito",
+    "storageOnYourOmi": "Sa Omi mo",
+    "storageOnPhoneAndOmi": "Sa teleponong ito {phone} · Sa Omi mo {device}",
+    "storageNotUploadedWarning": "Kapag tinanggal, tuluyang mawawala ang audio na ito.",
+    "storageDeleteEverything": "Tanggalin lahat",
+    "storageFreeUpTitle": "Palayain ang {duration}?",
+    "storageFreeUpMessage": "Tinatanggal ang kopya ng audio sa teleponong naka-transcribe na. Mananatili ang mga pag-uusap mo.",
+    "storageDeletePendingTitle": "Tanggalin ang {duration} na audio?",
+    "storageDeletePendingMessage": "Hindi pa na-upload ang audio na ito, kaya hindi ito maibabalik. Pansamantalang hihinto ang pag-sync habang tinatanggal ito.",
+    "storageDeleteAllTitle": "Tanggalin lahat ng {duration} na audio?",
+    "storageDeleteAllMessage": "Kasama rito ang {duration} na hindi pa na-upload at hindi maibabalik. Pansamantalang hihinto ang pag-sync habang tinatanggal ito.",
+    "storageDeleteAllUploadedMessage": "Tinatanggal lahat ng recording na nakaimbak sa teleponong ito. Mananatili ang mga pag-uusap mo.",
+    "storageClearStopping": "Humihinto ang pag-sync…",
+    "storageClearDeleting": "Tinatanggal… {progress}",
+    "storageClearVerifying": "Tinitingnan kung ano ang natitira…",
+    "storageClearDone": "Tinanggal ang {duration}",
+    "storageClearPartial": "Tinanggal ang {deleted}. Hindi matanggal ang {remaining}.",
+    "storageClearOmiUnreachable": "Nasa Omi mo pa rin ang {duration}. Ikonekta ito at subukan ulit.",
+    "storageClearFailed": "Hindi natanggal. Subukan ulit."
 }

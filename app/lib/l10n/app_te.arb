@@ -9704,49 +9704,13 @@
     "@deleteSynced": {
         "description": "Menu option to delete synced recordings"
     },
-    "deleteSyncedFiles": "సమకాలీకరించిన రికార్డింగ్‌లను తొలగించండి",
-    "@deleteSyncedFiles": {
-        "description": "Dialog title for deleting synced files"
-    },
-    "deleteSyncedFilesMessage": "ఈ రికార్డింగ్‌లు ఇప్పటికే మీ ఫోన్‌కు సమకాలీకరించబడ్డాయి. ఇది రద్దు చేయబడదు.",
-    "@deleteSyncedFilesMessage": {
-        "description": "Confirmation message for deleting synced files"
-    },
-    "syncedFilesDeleted": "సమకాలీకరించిన రికార్డింగ్‌లు తొలగించబడ్డాయి",
-    "@syncedFilesDeleted": {
-        "description": "Snackbar message after synced files deleted"
-    },
     "deletePending": "పెండింగ్ తొలగించు",
     "@deletePending": {
         "description": "Menu option to delete pending recordings"
     },
-    "deletePendingFiles": "పెండింగ్ రికార్డింగ్‌లను తొలగించండి",
-    "@deletePendingFiles": {
-        "description": "Dialog title for deleting pending files"
-    },
-    "deletePendingFilesWarning": "ఈ రికార్డింగ్‌లు మీ ఫోన్‌కు సమకాలీకరించబడలేదు మరియు శాశ్వతంగా కోల్పోతాయి. ఇది రద్దు చేయబడదు.",
-    "@deletePendingFilesWarning": {
-        "description": "Warning message for deleting pending files"
-    },
-    "pendingFilesDeleted": "పెండింగ్ రికార్డింగ్‌లు తొలగించబడ్డాయి",
-    "@pendingFilesDeleted": {
-        "description": "Snackbar message after pending files deleted"
-    },
-    "deleteAllFiles": "అన్ని రికార్డింగ్‌లను తొలగించండి",
-    "@deleteAllFiles": {
-        "description": "Dialog title for deleting all files"
-    },
     "deleteAll": "అన్నీ తొలగించు",
     "@deleteAll": {
         "description": "Menu option to delete all recordings"
-    },
-    "deleteAllFilesWarning": "ఇది సమకాలీకరించిన మరియు పెండింగ్ రికార్డింగ్‌లను తొలగిస్తుంది. పెండింగ్ రికార్డింగ్‌లు సమకాలీకరించబడలేదు మరియు శాశ్వతంగా కోల్పోతాయి. ఇది రద్దు చేయబడదు.",
-    "@deleteAllFilesWarning": {
-        "description": "Warning message for deleting all files"
-    },
-    "allFilesDeleted": "అన్ని రికార్డింగ్‌లు తొలగించబడ్డాయి",
-    "@allFilesDeleted": {
-        "description": "Snackbar message after all files deleted"
     },
     "nFiles": "{count} రికార్డింగ్‌లు",
     "@nFiles": {
@@ -9760,18 +9724,6 @@
     "manageStorage": "నిల్వను నిర్వహించండి",
     "@manageStorage": {
         "description": "Menu option and sheet title for managing recording storage"
-    },
-    "safelyBackedUp": "సృష్టించిన సంభాషణలు",
-    "@safelyBackedUp": {
-        "description": "Description for synced files in manage storage sheet"
-    },
-    "notYetSynced": "ఇంకా మీ ఫోన్‌కు సమకాలీకరించబడలేదు",
-    "@notYetSynced": {
-        "description": "Description for pending files in manage storage sheet"
-    },
-    "clearAll": "అన్నీ క్లియర్ చేయండి",
-    "@clearAll": {
-        "description": "Button label to clear all files"
     },
     "phoneKeypad": "కీపాడ్",
     "@phoneKeypad": {
@@ -12326,5 +12278,28 @@
     "firmwareNewestSupportedForDevice": "మీ డివైస్ ఇప్పటికే మద్దతు ఉన్న అత్యంత కొత్త ఫర్మ్‌వేర్ వెర్షన్‌లో ఉంది",
     "firmwareSyncRecordingsFirstTitle": "ముందుగా మీ రికార్డింగ్‌లను సమకాలీకరించండి",
     "firmwareSyncRecordingsFirstMessage": "కొన్ని రికార్డింగ్‌లు ఇంకా మీ డివైస్‌లో ఉన్నాయి. అవి మీ ఫోన్‌కు పూర్తిగా సమకాలీకరించనివ్వండి, తర్వాత నవీకరణను ప్రారంభించండి.",
-    "batteryRestartToRefresh": "రిఫ్రెష్ చేయడానికి Omi ను రీస్టార్ట్ చేయండి"
+    "batteryRestartToRefresh": "రిఫ్రెష్ చేయడానికి Omi ను రీస్టార్ట్ చేయండి",
+    "storageUploadedTitle": "ఇప్పటికే అప్‌లోడ్ చేయబడింది",
+    "storageUploadedSubtitle": "ట్రాన్‌స్క్రిప్ట్ చేయబడింది. ఫోన్‌లోని కాపీని తొలగించినా ఏమీ పోదు.",
+    "storageFreeUpSpace": "స్పేస్ ఖాళీ చేయండి",
+    "storageNotUploadedTitle": "ఇంకా అప్‌లోడ్ చేయబడలేదు",
+    "storageOnThisPhone": "ఈ ఫోన్‌లో",
+    "storageOnYourOmi": "మీ Omiలో",
+    "storageOnPhoneAndOmi": "ఈ ఫోన్‌లో {phone} · మీ Omiలో {device}",
+    "storageNotUploadedWarning": "తొలగిస్తే ఈ ఆడియో శాశ్వతంగా పోతుంది.",
+    "storageDeleteEverything": "అన్నీ తొలగించు",
+    "storageFreeUpTitle": "{duration} స్పేస్ ఖాళీ చేయాలా?",
+    "storageFreeUpMessage": "ఇప్పటికే ట్రాన్‌స్క్రిప్ట్ చేయబడిన ఆడియో యొక్క ఈ ఫోన్ కాపీని తొలగిస్తుంది. మీ సంభాషణలు అలాగే ఉంటాయి.",
+    "storageDeletePendingTitle": "{duration} ఆడియోను తొలగించాలా?",
+    "storageDeletePendingMessage": "ఈ ఆడియో ఇంకా అప్‌లోడ్ చేయబడలేదు కాబట్టి దీన్ని తిరిగి పొందలేం. తొలగించే సమయంలో సింకింగ్ ఆగి ఉంటుంది.",
+    "storageDeleteAllTitle": "మొత్తం {duration} ఆడియోను తొలగించాలా?",
+    "storageDeleteAllMessage": "ఇంకా అప్‌లోడ్ చేయబడని, తిరిగి పొందలేని {duration} కూడా ఇందులో ఉంది. తొలగించే సమయంలో సింకింగ్ ఆగి ఉంటుంది.",
+    "storageDeleteAllUploadedMessage": "ఈ ఫోన్‌లో ఉన్న అన్ని రికార్డింగ్‌లను తొలగిస్తుంది. మీ సంభాషణలు అలాగే ఉంటాయి.",
+    "storageClearStopping": "సింక్‌ను ఆపుతోంది…",
+    "storageClearDeleting": "తొలగిస్తోంది… {progress}",
+    "storageClearVerifying": "మిగిలినవాటిని తనిఖీ చేస్తోంది…",
+    "storageClearDone": "{duration} తొలగించబడింది",
+    "storageClearPartial": "{deleted} తొలగించబడింది. {remaining} తొలగించడం సాధ్యం కాలేదు.",
+    "storageClearOmiUnreachable": "{duration} ఇంకా మీ Omiలోనే ఉంది. దీన్ని కనెక్ట్ చేసి మళ్లీ ప్రయత్నించండి.",
+    "storageClearFailed": "తొలగించడం సాధ్యం కాలేదు. మళ్లీ ప్రయత్నించండి."
 }

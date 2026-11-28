@@ -8148,40 +8148,10 @@ class AppLocalizationsUr extends AppLocalizations {
   String get deleteSynced => 'ہم آہنگ حذف کریں';
 
   @override
-  String get deleteSyncedFiles => 'ہم آہنگ ریکارڈنگز حذف کریں';
-
-  @override
-  String get deleteSyncedFilesMessage =>
-      'یہ ریکارڈنگز پہلے سے آپ کے فون میں ہم آہنگ ہو چکی ہیں۔ یہ تبدیل نہیں ہو سکتا۔';
-
-  @override
-  String get syncedFilesDeleted => 'ہم آہنگ ریکارڈنگز حذف ہو گئیں';
-
-  @override
   String get deletePending => 'زیرِ التوا حذف کریں';
 
   @override
-  String get deletePendingFiles => 'زیرِ التوا ریکارڈنگز حذف کریں';
-
-  @override
-  String get deletePendingFilesWarning =>
-      'یہ ریکارڈنگز آپ کے فون میں ہم آہنگ نہیں ہوئیں اور ہمیشہ کے لیے ضائع ہوں گی۔ یہ تبدیل نہیں ہو سکتا۔';
-
-  @override
-  String get pendingFilesDeleted => 'زیرِ التوا ریکارڈنگز حذف ہو گئیں';
-
-  @override
-  String get deleteAllFiles => 'تمام ریکارڈنگز حذف کریں';
-
-  @override
   String get deleteAll => 'سب حذف کریں';
-
-  @override
-  String get deleteAllFilesWarning =>
-      'یہ ہم آہنگ اور زیرِ التوا دونوں ریکارڈنگز حذف کرے گا۔ زیرِ التوا ریکارڈنگز ہم آہنگ نہیں ہوئیں اور ہمیشہ کے لیے ضائع ہوں گی۔ یہ تبدیل نہیں ہو سکتا۔';
-
-  @override
-  String get allFilesDeleted => 'تمام ریکارڈنگز حذف ہو گئیں';
 
   @override
   String nFiles(int count) {
@@ -8190,15 +8160,6 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get manageStorage => 'اسٹوریج منظم کریں';
-
-  @override
-  String get safelyBackedUp => 'تیار کی گئی بات چیتیں';
-
-  @override
-  String get notYetSynced => 'ابھی آپ کے فون میں ہم آہنگ نہیں ہوا';
-
-  @override
-  String get clearAll => 'سب صاف کریں';
 
   @override
   String get phoneKeypad => 'کی پیڈ';
@@ -15857,4 +15818,94 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'ریفریش کرنے کے لیے Omi کو دوبارہ شروع کریں';
+
+  @override
+  String get storageUploadedTitle => 'پہلے ہی اپ لوڈ ہو چکا ہے';
+
+  @override
+  String get storageUploadedSubtitle => 'ٹرانسکرپٹ ہو چکا ہے۔ فون سے کاپی ہٹانے پر کچھ بھی ضائع نہیں ہوگا۔';
+
+  @override
+  String get storageFreeUpSpace => 'جگہ خالی کریں';
+
+  @override
+  String get storageNotUploadedTitle => 'ابھی اپ لوڈ نہیں ہوا';
+
+  @override
+  String get storageOnThisPhone => 'اس فون پر';
+
+  @override
+  String get storageOnYourOmi => 'آپ کے Omi پر';
+
+  @override
+  String storageOnPhoneAndOmi(String phone, String device) {
+    return 'اس فون پر $phone · آپ کے Omi پر $device';
+  }
+
+  @override
+  String get storageNotUploadedWarning => 'حذف کرنے سے یہ آڈیو ہمیشہ کے لیے ختم ہو جائے گا۔';
+
+  @override
+  String get storageDeleteEverything => 'سب کچھ حذف کریں';
+
+  @override
+  String storageFreeUpTitle(String duration) {
+    return '$duration کی جگہ خالی کریں؟';
+  }
+
+  @override
+  String get storageFreeUpMessage =>
+      'جو آڈیو پہلے ہی ٹرانسکرپٹ ہو چکا ہے اس کی اس فون والی کاپی حذف ہو جائے گی۔ آپ کی بات چیتیں باقی رہیں گی۔';
+
+  @override
+  String storageDeletePendingTitle(String duration) {
+    return '$duration آڈیو حذف کریں؟';
+  }
+
+  @override
+  String get storageDeletePendingMessage =>
+      'یہ آڈیو اپ لوڈ نہیں ہوا، اس لیے اسے واپس حاصل نہیں کیا جا سکتا۔ حذف ہونے کے دوران سنکنگ رک جائے گی۔';
+
+  @override
+  String storageDeleteAllTitle(String duration) {
+    return 'تمام $duration آڈیو حذف کریں؟';
+  }
+
+  @override
+  String storageDeleteAllMessage(String duration) {
+    return 'اس میں $duration شامل ہے جو اپ لوڈ نہیں ہوا اور واپس حاصل نہیں ہو سکتا۔ حذف ہونے کے دوران سنکنگ رک جائے گی۔';
+  }
+
+  @override
+  String get storageDeleteAllUploadedMessage =>
+      'اس فون پر محفوظ ہر ریکارڈنگ حذف ہو جائے گی۔ آپ کی بات چیتیں باقی رہیں گی۔';
+
+  @override
+  String get storageClearStopping => 'سنکنگ روکی جا رہی ہے…';
+
+  @override
+  String storageClearDeleting(String progress) {
+    return 'حذف کیا جا رہا ہے… $progress';
+  }
+
+  @override
+  String get storageClearVerifying => 'چیک کیا جا رہا ہے کہ کیا باقی ہے…';
+
+  @override
+  String storageClearDone(String duration) {
+    return '$duration حذف ہو گیا';
+  }
+
+  @override
+  String storageClearPartial(String deleted, String remaining) {
+    return '$deleted حذف ہو گیا۔ $remaining حذف نہیں ہو سکا۔';
+  }
+
+  @override
+  String storageClearOmiUnreachable(String duration) {
+    return '$duration ابھی بھی آپ کے Omi پر ہے۔ اسے کنیکٹ کریں اور دوبارہ کوشش کریں۔';
+  }
+
+  @override
+  String get storageClearFailed => 'حذف نہیں ہو سکا۔ دوبارہ کوشش کریں۔';
 }

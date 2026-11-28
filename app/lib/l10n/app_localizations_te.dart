@@ -8183,39 +8183,10 @@ class AppLocalizationsTe extends AppLocalizations {
   String get deleteSynced => 'సమకాలీకరించిన తొలగించు';
 
   @override
-  String get deleteSyncedFiles => 'సమకాలీకరించిన రికార్డింగ్‌లను తొలగించండి';
-
-  @override
-  String get deleteSyncedFilesMessage => 'ఈ రికార్డింగ్‌లు ఇప్పటికే మీ ఫోన్‌కు సమకాలీకరించబడ్డాయి. ఇది రద్దు చేయబడదు.';
-
-  @override
-  String get syncedFilesDeleted => 'సమకాలీకరించిన రికార్డింగ్‌లు తొలగించబడ్డాయి';
-
-  @override
   String get deletePending => 'పెండింగ్ తొలగించు';
 
   @override
-  String get deletePendingFiles => 'పెండింగ్ రికార్డింగ్‌లను తొలగించండి';
-
-  @override
-  String get deletePendingFilesWarning =>
-      'ఈ రికార్డింగ్‌లు మీ ఫోన్‌కు సమకాలీకరించబడలేదు మరియు శాశ్వతంగా కోల్పోతాయి. ఇది రద్దు చేయబడదు.';
-
-  @override
-  String get pendingFilesDeleted => 'పెండింగ్ రికార్డింగ్‌లు తొలగించబడ్డాయి';
-
-  @override
-  String get deleteAllFiles => 'అన్ని రికార్డింగ్‌లను తొలగించండి';
-
-  @override
   String get deleteAll => 'అన్నీ తొలగించు';
-
-  @override
-  String get deleteAllFilesWarning =>
-      'ఇది సమకాలీకరించిన మరియు పెండింగ్ రికార్డింగ్‌లను తొలగిస్తుంది. పెండింగ్ రికార్డింగ్‌లు సమకాలీకరించబడలేదు మరియు శాశ్వతంగా కోల్పోతాయి. ఇది రద్దు చేయబడదు.';
-
-  @override
-  String get allFilesDeleted => 'అన్ని రికార్డింగ్‌లు తొలగించబడ్డాయి';
 
   @override
   String nFiles(int count) {
@@ -8224,15 +8195,6 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get manageStorage => 'నిల్వను నిర్వహించండి';
-
-  @override
-  String get safelyBackedUp => 'సృష్టించిన సంభాషణలు';
-
-  @override
-  String get notYetSynced => 'ఇంకా మీ ఫోన్‌కు సమకాలీకరించబడలేదు';
-
-  @override
-  String get clearAll => 'అన్నీ క్లియర్ చేయండి';
 
   @override
   String get phoneKeypad => 'కీపాడ్';
@@ -15909,4 +15871,94 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'రిఫ్రెష్ చేయడానికి Omi ను రీస్టార్ట్ చేయండి';
+
+  @override
+  String get storageUploadedTitle => 'ఇప్పటికే అప్‌లోడ్ చేయబడింది';
+
+  @override
+  String get storageUploadedSubtitle => 'ట్రాన్‌స్క్రిప్ట్ చేయబడింది. ఫోన్‌లోని కాపీని తొలగించినా ఏమీ పోదు.';
+
+  @override
+  String get storageFreeUpSpace => 'స్పేస్ ఖాళీ చేయండి';
+
+  @override
+  String get storageNotUploadedTitle => 'ఇంకా అప్‌లోడ్ చేయబడలేదు';
+
+  @override
+  String get storageOnThisPhone => 'ఈ ఫోన్‌లో';
+
+  @override
+  String get storageOnYourOmi => 'మీ Omiలో';
+
+  @override
+  String storageOnPhoneAndOmi(String phone, String device) {
+    return 'ఈ ఫోన్‌లో $phone · మీ Omiలో $device';
+  }
+
+  @override
+  String get storageNotUploadedWarning => 'తొలగిస్తే ఈ ఆడియో శాశ్వతంగా పోతుంది.';
+
+  @override
+  String get storageDeleteEverything => 'అన్నీ తొలగించు';
+
+  @override
+  String storageFreeUpTitle(String duration) {
+    return '$duration స్పేస్ ఖాళీ చేయాలా?';
+  }
+
+  @override
+  String get storageFreeUpMessage =>
+      'ఇప్పటికే ట్రాన్‌స్క్రిప్ట్ చేయబడిన ఆడియో యొక్క ఈ ఫోన్ కాపీని తొలగిస్తుంది. మీ సంభాషణలు అలాగే ఉంటాయి.';
+
+  @override
+  String storageDeletePendingTitle(String duration) {
+    return '$duration ఆడియోను తొలగించాలా?';
+  }
+
+  @override
+  String get storageDeletePendingMessage =>
+      'ఈ ఆడియో ఇంకా అప్‌లోడ్ చేయబడలేదు కాబట్టి దీన్ని తిరిగి పొందలేం. తొలగించే సమయంలో సింకింగ్ ఆగి ఉంటుంది.';
+
+  @override
+  String storageDeleteAllTitle(String duration) {
+    return 'మొత్తం $duration ఆడియోను తొలగించాలా?';
+  }
+
+  @override
+  String storageDeleteAllMessage(String duration) {
+    return 'ఇంకా అప్‌లోడ్ చేయబడని, తిరిగి పొందలేని $duration కూడా ఇందులో ఉంది. తొలగించే సమయంలో సింకింగ్ ఆగి ఉంటుంది.';
+  }
+
+  @override
+  String get storageDeleteAllUploadedMessage =>
+      'ఈ ఫోన్‌లో ఉన్న అన్ని రికార్డింగ్‌లను తొలగిస్తుంది. మీ సంభాషణలు అలాగే ఉంటాయి.';
+
+  @override
+  String get storageClearStopping => 'సింక్‌ను ఆపుతోంది…';
+
+  @override
+  String storageClearDeleting(String progress) {
+    return 'తొలగిస్తోంది… $progress';
+  }
+
+  @override
+  String get storageClearVerifying => 'మిగిలినవాటిని తనిఖీ చేస్తోంది…';
+
+  @override
+  String storageClearDone(String duration) {
+    return '$duration తొలగించబడింది';
+  }
+
+  @override
+  String storageClearPartial(String deleted, String remaining) {
+    return '$deleted తొలగించబడింది. $remaining తొలగించడం సాధ్యం కాలేదు.';
+  }
+
+  @override
+  String storageClearOmiUnreachable(String duration) {
+    return '$duration ఇంకా మీ Omiలోనే ఉంది. దీన్ని కనెక్ట్ చేసి మళ్లీ ప్రయత్నించండి.';
+  }
+
+  @override
+  String get storageClearFailed => 'తొలగించడం సాధ్యం కాలేదు. మళ్లీ ప్రయత్నించండి.';
 }

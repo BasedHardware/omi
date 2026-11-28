@@ -9704,49 +9704,13 @@
     "@deleteSynced": {
         "description": "Menu option to delete synced recordings"
     },
-    "deleteSyncedFiles": "सिंक केलेली रेकॉर्डिंग हटवा",
-    "@deleteSyncedFiles": {
-        "description": "Dialog title for deleting synced files"
-    },
-    "deleteSyncedFilesMessage": "या रेकॉर्डिंग आधीच तुमच्या फोनशी सिंक केली गेली आहेत. हे पूर्ववत् केले जाऊ शकत नाही.",
-    "@deleteSyncedFilesMessage": {
-        "description": "Confirmation message for deleting synced files"
-    },
-    "syncedFilesDeleted": "सिंक केलेली रेकॉर्डिंग हटवली गेली",
-    "@syncedFilesDeleted": {
-        "description": "Snackbar message after synced files deleted"
-    },
     "deletePending": "प्रलंबित हटवा",
     "@deletePending": {
         "description": "Menu option to delete pending recordings"
     },
-    "deletePendingFiles": "प्रलंबित रेकॉर्डिंग हटवा",
-    "@deletePendingFiles": {
-        "description": "Dialog title for deleting pending files"
-    },
-    "deletePendingFilesWarning": "या रेकॉर्डिंग तुमच्या फोनशी सिंक केल्या गेल्या नाहीत आणि कायमचे हरवली जातील. हे पूर्ववत् केले जाऊ शकत नाही.",
-    "@deletePendingFilesWarning": {
-        "description": "Warning message for deleting pending files"
-    },
-    "pendingFilesDeleted": "प्रलंबित रेकॉर्डिंग हटवली गेली",
-    "@pendingFilesDeleted": {
-        "description": "Snackbar message after pending files deleted"
-    },
-    "deleteAllFiles": "सर्व रेकॉर्डिंग हटवा",
-    "@deleteAllFiles": {
-        "description": "Dialog title for deleting all files"
-    },
     "deleteAll": "सर्व हटवा",
     "@deleteAll": {
         "description": "Menu option to delete all recordings"
-    },
-    "deleteAllFilesWarning": "हे सिंक केलेली आणि प्रलंबित दोन्ही रेकॉर्डिंग हटवेल. प्रलंबित रेकॉर्डिंग सिंक केलेली नाहीत आणि कायमचे हरवली जातील. हे पूर्ववत् केले जाऊ शकत नाही.",
-    "@deleteAllFilesWarning": {
-        "description": "Warning message for deleting all files"
-    },
-    "allFilesDeleted": "सर्व रेकॉर्डिंग हटवली गेली",
-    "@allFilesDeleted": {
-        "description": "Snackbar message after all files deleted"
     },
     "nFiles": "{count} रेकॉर्डिंग",
     "@nFiles": {
@@ -9760,18 +9724,6 @@
     "manageStorage": "स्टोरेज व्यवस्थापित करा",
     "@manageStorage": {
         "description": "Menu option and sheet title for managing recording storage"
-    },
-    "safelyBackedUp": "तयार झालेली संभाषणे",
-    "@safelyBackedUp": {
-        "description": "Description for synced files in manage storage sheet"
-    },
-    "notYetSynced": "अद्याप तुमच्या फोनशी सिंक केले नाही",
-    "@notYetSynced": {
-        "description": "Description for pending files in manage storage sheet"
-    },
-    "clearAll": "सर्व साफ करा",
-    "@clearAll": {
-        "description": "Button label to clear all files"
     },
     "phoneKeypad": "की पॅड",
     "@phoneKeypad": {
@@ -12326,5 +12278,28 @@
     "firmwareNewestSupportedForDevice": "तुमचे डिव्हाइस आधीच सर्वात नवीन समर्थित फर्मवेअर आवृत्तीवर आहे",
     "firmwareSyncRecordingsFirstTitle": "आधी तुमची रेकॉर्डिंग सिंक करा",
     "firmwareSyncRecordingsFirstMessage": "काही रेकॉर्डिंग अजून तुमच्या डिव्हाइसवर आहेत. त्या तुमच्या फोनवर पूर्णपणे सिंक होऊ द्या, नंतर अपडेट सुरू करा.",
-    "batteryRestartToRefresh": "रिफ्रेश करण्यासाठी Omi पुनः सुरू करा"
+    "batteryRestartToRefresh": "रिफ्रेश करण्यासाठी Omi पुनः सुरू करा",
+    "storageUploadedTitle": "आधीच अपलोड झाले",
+    "storageUploadedSubtitle": "प्रतिलेखन झाले आहे. फोनवरील प्रत काढली तरी काही हरवत नाही.",
+    "storageFreeUpSpace": "जागा मोकळी करा",
+    "storageNotUploadedTitle": "अजून अपलोड झाले नाही",
+    "storageOnThisPhone": "या फोनवर",
+    "storageOnYourOmi": "तुमच्या Omi वर",
+    "storageOnPhoneAndOmi": "या फोनवर {phone} · तुमच्या Omi वर {device}",
+    "storageNotUploadedWarning": "हटवल्यास हा ऑडिओ कायमचा हरवतो.",
+    "storageDeleteEverything": "सर्व हटवा",
+    "storageFreeUpTitle": "{duration} जागा मोकळी करायची?",
+    "storageFreeUpMessage": "आधीच प्रतिलेखन झालेल्या ऑडिओची फोनवरील प्रत काढून टाकते. तुमची संभाषणे तशीच राहतात.",
+    "storageDeletePendingTitle": "{duration} ऑडिओ हटवायचे?",
+    "storageDeletePendingMessage": "हा ऑडिओ अपलोड झालेला नाही, म्हणून तो परत मिळू शकत नाही. हटवताना सिंक तात्पुरते थांबते.",
+    "storageDeleteAllTitle": "सर्व {duration} ऑडिओ हटवायचे?",
+    "storageDeleteAllMessage": "यात अपलोड न झालेला आणि परत मिळू न शकणारा {duration} येतो. हटवताना सिंक तात्पुरते थांबते.",
+    "storageDeleteAllUploadedMessage": "या फोनवर ठेवलेल्या सर्व रेकॉर्डिंग्ज काढून टाकते. तुमची संभाषणे तशीच राहतात.",
+    "storageClearStopping": "सिंक थांबवत आहे…",
+    "storageClearDeleting": "हटवत आहे… {progress}",
+    "storageClearVerifying": "काय उरले आहे ते तपासत आहे…",
+    "storageClearDone": "{duration} हटवले",
+    "storageClearPartial": "{deleted} हटवले. {remaining} हटवता आले नाही.",
+    "storageClearOmiUnreachable": "{duration} अजून तुमच्या Omi वर आहे. ते कनेक्ट करून पुन्हा प्रयत्न करा.",
+    "storageClearFailed": "हटवता आले नाही. पुन्हा प्रयत्न करा."
 }

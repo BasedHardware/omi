@@ -8079,39 +8079,10 @@ class AppLocalizationsAr extends AppLocalizations {
   String get deleteSynced => 'حذف المتزامن';
 
   @override
-  String get deleteSyncedFiles => 'حذف التسجيلات المتزامنة';
-
-  @override
-  String get deleteSyncedFilesMessage => 'تم مزامنة هذه التسجيلات مع هاتفك بالفعل. لا يمكن التراجع عن هذا.';
-
-  @override
-  String get syncedFilesDeleted => 'تم حذف التسجيلات المتزامنة';
-
-  @override
   String get deletePending => 'حذف المعلق';
 
   @override
-  String get deletePendingFiles => 'حذف التسجيلات المعلقة';
-
-  @override
-  String get deletePendingFilesWarning =>
-      'لم تتم مزامنة هذه التسجيلات مع هاتفك وستفقد نهائياً. لا يمكن التراجع عن هذا.';
-
-  @override
-  String get pendingFilesDeleted => 'تم حذف التسجيلات المعلقة';
-
-  @override
-  String get deleteAllFiles => 'حذف جميع التسجيلات';
-
-  @override
   String get deleteAll => 'حذف الكل';
-
-  @override
-  String get deleteAllFilesWarning =>
-      'سيؤدي هذا إلى حذف التسجيلات المتزامنة والمعلقة. التسجيلات المعلقة لم تتم مزامنتها وستفقد نهائياً. لا يمكن التراجع عن هذا.';
-
-  @override
-  String get allFilesDeleted => 'تم حذف جميع التسجيلات';
 
   @override
   String nFiles(int count) {
@@ -8120,15 +8091,6 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get manageStorage => 'إدارة التخزين';
-
-  @override
-  String get safelyBackedUp => 'محادثات تم إنشاؤها';
-
-  @override
-  String get notYetSynced => 'لم تتم المزامنة بعد مع هاتفك';
-
-  @override
-  String get clearAll => 'مسح الكل';
 
   @override
   String get phoneKeypad => 'لوحة المفاتيح';
@@ -15757,4 +15719,92 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'أعد تشغيل Omi لتحديث القراءة';
+
+  @override
+  String get storageUploadedTitle => 'تم الرفع بالفعل';
+
+  @override
+  String get storageUploadedSubtitle => 'تم تفريغها نصيًا. حذف النسخة من الهاتف لن يفقدك شيئًا.';
+
+  @override
+  String get storageFreeUpSpace => 'تحرير مساحة';
+
+  @override
+  String get storageNotUploadedTitle => 'لم يتم الرفع بعد';
+
+  @override
+  String get storageOnThisPhone => 'على هذا الهاتف';
+
+  @override
+  String get storageOnYourOmi => 'على جهاز Omi الخاص بك';
+
+  @override
+  String storageOnPhoneAndOmi(String phone, String device) {
+    return 'على هذا الهاتف $phone · على جهاز Omi الخاص بك $device';
+  }
+
+  @override
+  String get storageNotUploadedWarning => 'الحذف يعني فقدان هذا الصوت نهائيًا.';
+
+  @override
+  String get storageDeleteEverything => 'حذف كل شيء';
+
+  @override
+  String storageFreeUpTitle(String duration) {
+    return 'تحرير $duration؟';
+  }
+
+  @override
+  String get storageFreeUpMessage => 'يحذف نسخة الهاتف من الصوت الذي تم تفريغه نصيًا بالفعل. ستظل محادثاتك محفوظة.';
+
+  @override
+  String storageDeletePendingTitle(String duration) {
+    return 'حذف $duration من الصوت؟';
+  }
+
+  @override
+  String get storageDeletePendingMessage =>
+      'لم يُرفع هذا الصوت بعد، لذا لا يمكن استعادته. ستتوقف المزامنة مؤقتًا أثناء الحذف.';
+
+  @override
+  String storageDeleteAllTitle(String duration) {
+    return 'حذف كامل $duration من الصوت؟';
+  }
+
+  @override
+  String storageDeleteAllMessage(String duration) {
+    return 'يشمل ذلك $duration لم يُرفَع بعد ولا يمكن استعادته. ستتوقف المزامنة مؤقتًا أثناء الحذف.';
+  }
+
+  @override
+  String get storageDeleteAllUploadedMessage => 'يحذف جميع التسجيلات المحفوظة على هذا الهاتف. ستظل محادثاتك محفوظة.';
+
+  @override
+  String get storageClearStopping => 'إيقاف المزامنة…';
+
+  @override
+  String storageClearDeleting(String progress) {
+    return 'جارٍ الحذف… $progress';
+  }
+
+  @override
+  String get storageClearVerifying => 'جارٍ التحقق مما تبقى…';
+
+  @override
+  String storageClearDone(String duration) {
+    return 'تم حذف $duration';
+  }
+
+  @override
+  String storageClearPartial(String deleted, String remaining) {
+    return 'تم حذف $deleted. تعذر حذف $remaining.';
+  }
+
+  @override
+  String storageClearOmiUnreachable(String duration) {
+    return 'لا يزال $duration موجودًا على جهاز Omi الخاص بك. وصّل الجهاز وحاول مرة أخرى.';
+  }
+
+  @override
+  String get storageClearFailed => 'تعذر الحذف. حاول مرة أخرى.';
 }
