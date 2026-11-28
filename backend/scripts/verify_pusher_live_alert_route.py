@@ -99,6 +99,7 @@ PRODUCTION_ONLY_IMPORT_UIDS = (
     "omi-incluster-guard-unsafe-page",
     "omi-firestore-unattributed-reads",
     "omi-firestore-unattributed-reads-blind",
+    "omi-firestore-unattributed-absolute",
     "omi-firestore-batch-reads-audio-hour",
     "omi-firestore-batch-reads-no-output",
     "omi-firestore-billed-reads-step",

@@ -56,6 +56,81 @@ python backend/scripts/validate-llm-gateway-env.py \
   "backend/charts/backend-listen/${ENVIRONMENT}_omi_backend_listen_values.yaml" \
   "$VALUES_FILE"
 
+HELM_ARGS=(
+  "$RELEASE_NAME"
+  "$CHART_DIR"
+  -f "$VALUES_FILE"
+  --set-string "image.tag=${IMAGE_TAG}"
+  --set-string "serviceAccount.annotations.iam\\.gke\\.io/gcp-service-account=${LLM_GATEWAY_GSA}"
+)
+if [[ -n "$IMAGE_DIGEST" ]]; then
+  HELM_ARGS+=(--set "image.repository=${IMAGE_REPOSITORY}" --set-string "image.digest=${IMAGE_DIGEST}")
+fi
+
+helm template "${HELM_ARGS[@]}" >/dev/null
+
+# Helm 4 upgrades with --server-side=auto, which reuses the release's previous
+# apply method. A release first applied server-side is owned by manager "helm"
+# with operation Apply; one applied client-side (a three-way patch) is owned by
+# "helm" with operation Update. The preflight reads that owner from the live
+# Deployment, dry-runs the same kind of apply, and the rollout pins Helm to the
+# same method, so the check and the apply cannot disagree. A server-side dry-run
+# against a client-side release reports Helm's own Update entry as a conflict,
+# which is not an ownership problem, and a client-side apply has no conflicts.
+GATEWAY_SERVER_SIDE=""
+gateway_apply_method() {
+  local live
+  if ! live="$(kubectl -n "$NAMESPACE" get deployment "$RELEASE_NAME" --ignore-not-found --show-managed-fields -o json)"; then
+    echo "ERROR: could not read deploy/${RELEASE_NAME} in ${NAMESPACE} to choose the Helm apply method" >&2
+    exit 2
+  fi
+  if ! GATEWAY_SERVER_SIDE="$(printf '%s' "$live" | python3 -c '
+import json, sys
+
+text = sys.stdin.read()
+if not text.strip():
+    print("true")  # a fresh install applies server-side
+    raise SystemExit(0)
+operations = {
+    entry.get("operation")
+    for entry in json.loads(text).get("metadata", {}).get("managedFields") or []
+    if entry.get("manager") == "helm" and not entry.get("subresource")
+}
+# Only a release that Helm applies client-side and never server-side is checked client-side;
+# anything else (server-side, mixed, or no Helm owner yet) keeps the strict server-side check.
+print("false" if operations == {"Update"} else "true")
+')"; then
+    echo "ERROR: could not read the Helm apply method from deploy/${RELEASE_NAME} in ${NAMESPACE}" >&2
+    exit 2
+  fi
+}
+
+gateway_apply_preflight() {
+  local rendered
+  gateway_apply_method
+  rendered="$(mktemp)"
+  if ! helm template -n "$NAMESPACE" "${HELM_ARGS[@]}" --show-only templates/deployment.yaml >"$rendered"; then
+    rm -f "$rendered"
+    echo "ERROR: llm-gateway Deployment could not be rendered for ${RELEASE_NAME}" >&2
+    exit 2
+  fi
+  local applied=0
+  if [[ "$GATEWAY_SERVER_SIDE" == "true" ]]; then
+    kubectl -n "$NAMESPACE" apply --server-side --dry-run=server --field-manager=helm -f "$rendered" || applied=$?
+  else
+    echo "deploy/${RELEASE_NAME} is applied client-side by Helm; dry-running a client-side apply"
+    kubectl -n "$NAMESPACE" apply --dry-run=server --field-manager=helm -f "$rendered" || applied=$?
+  fi
+  rm -f "$rendered"
+  if [[ "$applied" -ne 0 ]]; then
+    echo "ERROR: llm-gateway apply preflight failed for deploy/${RELEASE_NAME} in ${NAMESPACE}; nothing was changed." >&2
+    echo "Resolve the field ownership reported above (backend/docs/runbooks/llm-gateway-image-ownership.md) and rerun; do not force the conflict." >&2
+    exit 1
+  fi
+}
+
+gateway_apply_preflight
+
 if [[ "$SKIP_BACKEND_SECRETS" != "true" ]]; then
   env -u CHART_DIR -u VALUES_FILE -u RELEASE_NAME \
     ENVIRONMENT="$ENVIRONMENT" \
@@ -102,19 +177,6 @@ print(f"Gateway credential keys present and non-empty in {secret_name}")
 PY
 fi
 
-HELM_ARGS=(
-  "$RELEASE_NAME"
-  "$CHART_DIR"
-  -f "$VALUES_FILE"
-  --set-string "image.tag=${IMAGE_TAG}"
-  --set-string "serviceAccount.annotations.iam\\.gke\\.io/gcp-service-account=${LLM_GATEWAY_GSA}"
-)
-if [[ -n "$IMAGE_DIGEST" ]]; then
-  HELM_ARGS+=(--set "image.repository=${IMAGE_REPOSITORY}" --set-string "image.digest=${IMAGE_DIGEST}")
-fi
-
-helm template "${HELM_ARGS[@]}" >/dev/null
-
 adopt_for_helm() {
   local kind="$1"
   local name="$2"
@@ -144,7 +206,7 @@ adopt_for_helm() {
 }
 
 if [[ "$DRY_RUN" == "true" ]]; then
-  echo "llm-gateway render preflight OK for ${RELEASE_NAME} in ${NAMESPACE}"
+  echo "llm-gateway render and apply preflight OK for ${RELEASE_NAME} in ${NAMESPACE}"
   exit 0
 fi
 
@@ -153,5 +215,9 @@ fi
 adopt_for_helm ingress "$RELEASE_NAME"
 adopt_for_helm backendconfig "${ENVIRONMENT}-llm-gateway-backend-config"
 
-helm -n "$NAMESPACE" upgrade --install "${HELM_ARGS[@]}"
+# The shared secrets reapply and the credential check can take a minute; re-check
+# so an owner that appeared in that window still fails before Helm touches the release.
+gateway_apply_preflight
+
+helm -n "$NAMESPACE" upgrade --install "${HELM_ARGS[@]}" --server-side="$GATEWAY_SERVER_SIDE"
 kubectl -n "$NAMESPACE" rollout status "deploy/${RELEASE_NAME}" --timeout=300s

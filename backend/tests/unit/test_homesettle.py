@@ -342,13 +342,10 @@ def test_idle_list_read_uses_the_winner_of_a_concurrent_close_or_activity_update
     assert checked == ([] if latest_status == 'closed' else [latest])
 
 
-@pytest.mark.parametrize('not_modified', [False, True])
-def test_member_kill_switch_restores_version_and_cache_with_header(monkeypatch, conversation_routes, not_modified):
+def test_member_kill_switch_returns_source_rows_with_held_header(monkeypatch, conversation_routes):
     from fastapi import Request, Response
-    from types import SimpleNamespace
 
     routes = conversation_routes
-    # All independent time-dependent Home projections must be off for writer-version caching.
     monkeypatch.setenv('HOME_TRANSCRIPTION_PRESENTATION_GATE', 'off')
     monkeypatch.setenv('HOME_STEP_PROJECTION', 'off')
     monkeypatch.setenv('HOME_HIDE_EPISODE_MEMBERS', 'off')
@@ -360,14 +357,11 @@ def test_member_kill_switch_restores_version_and_cache_with_header(monkeypatch, 
                 (b'x-omi-home-episode-ids', b'e:a'),
                 (b'x-omi-home-ownership', b'1'),
                 (b'x-omi-app-channel', b'beta'),
+                (b'if-none-match', b'W/"lp1-retired-validator"'),
             ],
             'query_string': b'',
         }
     )
-    cached = Response(status_code=304) if not_modified else None
-    finish = Mock()
-    start = Mock(return_value=SimpleNamespace(not_modified=cached, finish=finish))
-    monkeypatch.setattr(routes.ListVersionCheck, 'start', start)
     fetch = Mock(return_value=[floor(summary_blocked_reason=None)])
     monkeypatch.setattr(routes.conversations_db, 'get_conversations_without_photos', fetch)
     monkeypatch.setattr(routes, '_heal_locked_conversations_if_eligible', lambda *a: None)
@@ -383,13 +377,11 @@ def test_member_kill_switch_restores_version_and_cache_with_header(monkeypatch, 
         folder_id=None,
         starred=None,
     )
-    start.assert_called_once_with(request, 'u', 'conversations')
-    if not_modified:
-        assert result is cached
-        fetch.assert_not_called()
-    else:
-        assert finish.call_args.kwargs['cacheable'] is True
-        assert home_membership.PAGE_SIZE_HEADER not in response.headers
+    fetch.assert_called_once()
+    assert [row['id'] for row in result] == ['a']
+    assert home_membership.PAGE_SIZE_HEADER not in response.headers
+    assert home_membership.SUPPRESSED_HEADER not in response.headers
+    assert 'etag' not in response.headers
 
 
 @pytest.mark.parametrize('value', ['off', '0', 'false', 'no'])
@@ -619,6 +611,14 @@ def test_live_snapshot_failure_or_disagreement_keeps_recordings_visible(monkeypa
     assert home_membership.project_list('u', rows, request, None, filtered=False) == (
         rows[1:] if echo == 'e:a' else rows
     )
+    response = SimpleNamespace(headers={})
+    assert home_membership.project_list('u', rows, request, response, filtered=False) == (
+        rows[1:] if echo == 'e:a' else rows
+    )
+
+    assert response.headers.get(home_membership.SUPPRESSED_HEADER, '') == ('a' if echo == 'e:a' else '')
+    if not echo:
+        assert home_membership.PAGE_SIZE_HEADER not in response.headers
 
 
 @pytest.mark.parametrize('linked', [False, True])

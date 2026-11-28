@@ -18,11 +18,12 @@ from google.api_core.exceptions import Aborted
 from prometheus_client import Counter, CollectorRegistry
 
 from config.policy import BatchUnitPolicy
+from utils.observability import sync_upload
 from database.batch_pipeline_staging import artifact_id
 from tests.unit.test_batch_pipeline_audio import pcm
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 from tests.unit.test_sync_capture_time_skew import client, _default_skew
-from utils.batch_pipeline import intake, contracts, upload_coalescing
+from utils.batch_pipeline import intake, contracts, upload_coalescing, upload_entitlement
 from utils.batch_pipeline.artifacts import ProtectionContext
 from utils.stt import batch_language
 from utils.sync import legacy_dark, receipt_clock
@@ -33,6 +34,14 @@ from routers import batch_pipeline as batch_router
 MAIN = 'b23851a097739b0a144c60cc4cae54233bc45b76'
 ROOT = Path(__file__).resolve().parents[3]
 NOW = 1794700800.0
+
+
+def without_retiring_banner(text):
+    # SCA-2965 added a five-line RETIRING comment banner to the retiring legacy modules.
+    lines = text.splitlines(keepends=True)
+    if lines and lines[0] == '# LIFECYCLE: one-time\n' and any('# RETIRING:' in line for line in lines[:5]):
+        return ''.join(lines[5:])
+    return text
 
 
 def main_source(path):
@@ -63,7 +72,22 @@ def main_endpoint():
 
 @pytest.mark.parametrize('future_enabled', [False, True])
 @pytest.mark.parametrize('mixed', [False, True])
-def test_early_upload_job_and_context_documents_equal_main(client, monkeypatch, tmp_path, future_enabled, mixed):
+@pytest.mark.parametrize(
+    'hold,expected_hold,recovery_header',
+    [
+        (None, None, None),
+        ('bg300', 'bg300', None),
+        ('bg300', 'bg300', '1'),
+        ('bg300', 'bg300', 'private'),
+        ('private', 'unknown', None),
+    ],
+)
+def test_early_upload_job_and_context_documents_equal_main(
+    client, monkeypatch, tmp_path, future_enabled, mixed, hold, expected_hold, recovery_header
+):
+    histogram = Mock()
+    monkeypatch.setattr(sync_upload, 'HOLD_AGE', histogram)
+    monkeypatch.setattr(upload_entitlement, 'classify', lambda _uid: 'unknown')
     monkeypatch.setenv('SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', str(future_enabled).lower())
     monkeypatch.setenv('BATCH_PIPELINE_PACKING_SAMPLE_RATE', '0.001')
     monkeypatch.setenv('BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED', 'false')
@@ -115,7 +139,7 @@ def test_early_upload_job_and_context_documents_equal_main(client, monkeypatch, 
 
         monkeypatch.setattr(module, 'with_context', freeze)
 
-        def stage(item, wav):
+        def stage(item, wav, *, record_origin=None):
             uri = 'gs://synthetic/audio#1'
             store.rows['artifacts', artifact_id(item.segment_id, uri)] = {
                 'owner_id': item.owner_id,
@@ -148,10 +172,15 @@ def test_early_upload_job_and_context_documents_equal_main(client, monkeypatch, 
         if mixed:
             paths.append(pcm(tmp_path, int(NOW) - 10, 16000))
         files = [('files', (Path(path).name, Path(path).read_bytes(), 'application/octet-stream')) for path in paths]
+        headers = {'X-App-Platform': 'ios', 'X-Device-Id-Hash': 'abcd1234'}
+        if hold is not None:
+            headers['X-Omi-Upload-Hold'] = hold
+            headers['X-Omi-Upload-Hold-Age-Ms'] = '300500' if hold == 'bg300' else 'invalid'
+            headers['X-Omi-Upload-Trace'] = 'sealed=1794700500;gate=retries_exhausted'
+        if recovery_header is not None:
+            headers['X-Omi-Upload-Recovered'] = recovery_header
         with TestClient(app, raise_server_exceptions=False) as routed:
-            response = routed.post(
-                '/v2/sync-local-files', headers={'X-App-Platform': 'ios', 'X-Device-Id-Hash': 'abcd1234'}, files=files
-            )
+            response = routed.post('/v2/sync-local-files', headers=headers, files=files)
         assert response.status_code == 202, response.text
         jobs = {key: row for (table, key), row in store.rows.items() if table == 'jobs'}
         assert jobs and all('capture_time_trust' not in row for row in jobs.values())
@@ -161,9 +190,31 @@ def test_early_upload_job_and_context_documents_equal_main(client, monkeypatch, 
                 'jobs': jobs,
                 'contexts': contexts,
                 'intakes': {key: row for (table, key), row in store.rows.items() if table == 'intakes'},
+                'ledgers': {key: row for (table, key), row in store.rows.items() if table == 'content'},
             }
         )
-    assert records[0] == records[1]
+    # Preserve exact parity for every old field; assert the two approved server
+    # measurement fields explicitly instead of discarding them from actual data.
+    expected = deepcopy(records[0])
+    for context in expected['contexts']:
+        context.update(upload_arrived_at=NOW, upload_entitlement='unknown')
+    for receipt in expected['intakes'].values():
+        receipt.update(upload_arrived_at=NOW, upload_entitlement='unknown')
+    for ledger in expected['ledgers'].values():
+        ledger.update(upload_arrived_at=NOW, upload_entitlement='unknown')
+    if expected_hold is not None:
+        for row in [*expected['contexts'], *expected['intakes'].values(), *expected['ledgers'].values()]:
+            row['upload_hold_state'] = expected_hold
+            if recovery_header == '1':
+                row['upload_recovered'] = True
+    assert expected == records[1]
+    if hold == 'bg300':
+        histogram.labels.assert_called_once_with(
+            'bg300', 'true' if recovery_header == '1' else 'false', 'retries_exhausted'
+        )
+        histogram.labels.return_value.observe.assert_called_once_with(300.5)
+    else:
+        histogram.labels.assert_not_called()
 
 
 def test_early_placement_and_coverage_implementations_are_main_bytes():
@@ -173,7 +224,7 @@ def test_early_placement_and_coverage_implementations_are_main_bytes():
         'backend/utils/sync/pipeline.py',
         'backend/utils/sync/wal_audio_coverage.py',
     ]:
-        actual = (ROOT / path).read_text()
+        actual = without_retiring_banner((ROOT / path).read_text())
         if path.endswith('/capture_decode.py'):
             # Exclude only the export and source-frame telemetry. Every byte
             # involved in the actual early-clock decode and placement stays pinned.
@@ -196,10 +247,17 @@ def test_early_placement_and_coverage_implementations_are_main_bytes():
                 # process_segment lost the backfill day cap (#25677).
                 # The legacy reprocess callback runs after placement and has
                 # its own body parity check in test_enrichment_callback_parity.
+                # Its coordinator also runs after placement. Enrichment route
+                # tests cover the SCA-3874 retry enrollment there.
                 names = (
                     {'apply_wal_audio_coverage'}
                     if path.endswith('/wal_audio_coverage.py')
-                    else {'_retrieve_file_paths_v2', 'process_segment', '_reprocess_conversation_after_update'}
+                    else {
+                        '_retrieve_file_paths_v2',
+                        'process_segment',
+                        '_reprocess_conversation_after_update',
+                        '_reprocess_merged_conversations',
+                    }
                 )
                 lines = text.splitlines(keepends=True)
                 for node in sorted(
@@ -209,7 +267,11 @@ def test_early_placement_and_coverage_implementations_are_main_bytes():
                 ):
                     start = min([node.lineno] + [d.lineno for d in node.decorator_list])
                     lines = lines[: start - 1] + lines[node.end_lineno :]
-                return ''.join(lines).replace('from utils import backfill_hours_cap\n', '')
+                return (
+                    ''.join(lines)
+                    .replace('from utils import backfill_hours_cap\n', '')
+                    .replace('from utils.enrichment.admission import require_transcript_decoded\n', '')
+                )
 
             if path.endswith('/wal_audio_coverage.py'):
                 actual = actual.replace(
@@ -227,6 +289,8 @@ def test_early_placement_and_coverage_implementations_are_main_bytes():
 
 
 def test_anchor_contention_is_503_before_staging_or_acknowledgement(client, monkeypatch, tmp_path):
+    histogram = Mock()
+    monkeypatch.setattr(sync_upload, 'HOLD_AGE', histogram)
     monkeypatch.setenv('SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'true')
     store = MemoryStore()
     store.namespace = 'batch_pipeline_dev'
@@ -267,7 +331,12 @@ def test_anchor_contention_is_503_before_staging_or_acknowledgement(client, monk
     payload = path.read_bytes()
     response = client.post(
         '/v2/sync-local-files',
-        headers={'X-App-Platform': 'ios', 'X-Device-Id-Hash': 'abcd1234'},
+        headers={
+            'X-App-Platform': 'ios',
+            'X-Device-Id-Hash': 'abcd1234',
+            'X-Omi-Upload-Hold': 'bg300',
+            'X-Omi-Upload-Hold-Age-Ms': '1200000',
+        },
         files=[('files', (f'audio_omi_pcm16_16000_clkeone_{future}.bin', payload, 'application/octet-stream'))],
     )
     assert response.status_code == 503, response.text
@@ -275,6 +344,7 @@ def test_anchor_contention_is_503_before_staging_or_acknowledgement(client, monk
     assert response.headers['Retry-After'] == '30'
     artifacts.stage_audio.assert_not_called()
     admit.assert_not_called()
+    histogram.labels.assert_not_called()
     assert path.read_bytes() == payload  # Synthetic phone copy is untouched.
     assert not store.rows
 
@@ -325,7 +395,7 @@ async def test_unmarked_rpc_and_coalescing_documents_equal_main_and_old_readers_
         'client_platform': 'ios',
         'intake_context': {'recording_session_id': 'session'},
     }
-    artifacts = types.SimpleNamespace(stage_audio=lambda *a: 'gs://synthetic/audio#1')
+    artifacts = types.SimpleNamespace(stage_audio=lambda *a, **kw: 'gs://synthetic/audio#1')
     for module, seed in ((previous_coalescing, old), (upload_coalescing, current)):
         assert (
             await module.offer(

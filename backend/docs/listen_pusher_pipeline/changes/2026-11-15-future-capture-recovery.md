@@ -53,6 +53,31 @@ over a day requires a new token. Firebase account creation bounds mapped
 starts. Failed account/anchor reads or transactions return 503 with
 `Retry-After: 30` before any job admission or successful ACK.
 
+## Offset recovery readback
+
+`omi_sync_future_capture_recovery_total{outcome}` is enabled whenever
+`receipt_clock_offsets` runs. The unit is one call attempt, including retries.
+Each classified call increments one outcome even when a call handles several files or scopes.
+
+| Outcome | Meaning |
+| --- | --- |
+| `anchored` | Usable offsets returned for the whole call, including reused frozen anchors. |
+| `anchor_pending` | A frozen mapping ends in the future and must wait for server time. |
+| `identity_required` | Required identity or receipt context is missing or invalid within the offset call. |
+| `anchor_error` | The account or anchor read or transaction failed and the call returned an unavailable-anchor retry. |
+| `refused` | The offset call refused the input or mapped range with `invalid_capture_time`. |
+
+The counter measures offset availability before batch admission. The router's
+earlier provenance lookup and request preflight, and later batch cohort,
+language, and capacity decisions, fall outside this boundary. An outcome series
+first appears when that outcome has been observed in the process.
+
+For SCA-3501, confirm the counter is exported for the serving backend-sync
+revision and aggregate its increases over the observation window by `outcome`
+across that revision's instances. Report future-recovery-specific durable batch
+admissions separately using post-commit evidence or an equivalent cohort-scoped
+aggregate. Roll back the counter by reverting the instrumentation change.
+
 ## Fences and response
 
 The dedicated decoder validates strict future frame counts/full decoded durations

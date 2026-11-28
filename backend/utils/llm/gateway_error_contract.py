@@ -13,6 +13,8 @@ from fastapi import HTTPException
 from utils.byok import get_byok_key, has_validated_byok_keys
 from utils.conversations.processing_metrics import record_retryable_processing_response
 from utils.conversations.processing_retry import retryable_provider_failure_class
+from utils.other.raise_site import raise_site_of, tag_raise_site
+from utils.other.request_deadline import RequestDeadlineExceeded
 
 BYOK_RATE_LIMIT_FAILURE_CLASS = 'byok_rate_limit'
 BYOK_QUOTA_FAILURE_CLASS = 'byok_quota'
@@ -364,6 +366,58 @@ def retryable_provider_failure_answer_enabled() -> bool:
     return raw.strip().lower() not in {'0', 'false', 'no', 'off'}
 
 
+def retryable_provider_failure_http_exception(error: BaseException, *, route: str) -> HTTPException | None:
+    """Answer a transient provider/transport failure with the retryable contract.
+
+    Internal task boundaries (the Cloud Tasks builder routes) use this so a
+    provider 5xx on a gateway-first call cannot surface as an unhandled 500:
+    the task answers 503 + Retry-After and the queue retries it. Returns None
+    for anything that is not a retryable provider fault, or when the kill
+    switch is off, so the caller re-raises the original error and genuine
+    Omi-side bugs keep their loud 500.
+    """
+    failure_class = retryable_provider_failure_class(error)
+    if failure_class is None or not retryable_provider_failure_answer_enabled():
+        return None
+    record_retryable_processing_response(failure_class, route)
+    # Class name only: never the provider message, which can carry request
+    # content. WARNING, not ERROR, because this is a retryable provider
+    # fault, not an Omi-side processing bug.
+    logger.warning(
+        'transient provider failure; answering retryable: failure_class=%s route=%s',
+        failure_class,
+        route,
+    )
+    # Name the raise site so the route-level 503 hook logs one attributable
+    # WARNING line; the tag is metadata only and the response is unchanged.
+    return retryable_processing_response(
+        (
+            'request_budget_exhausted'
+            if isinstance(error, RequestDeadlineExceeded)
+            else 'conversation_processing_retryable'
+        ),
+        failure_class=failure_class,
+    )
+
+
+def retryable_processing_response(raise_site: str, *, failure_class: str | None = None) -> HTTPException:
+    response = HTTPException(
+        status_code=503,
+        detail=RETRYABLE_CONVERSATION_PROCESSING_ERROR_DETAIL,
+        headers={'Retry-After': RETRYABLE_CONVERSATION_PROCESSING_RETRY_AFTER_SECONDS},
+    )
+    if failure_class is not None:
+        setattr(response, 'omi_retryable_processing_failure_class', failure_class)
+    return tag_raise_site(response, raise_site)
+
+
+def retryable_processing_response_failure_class(error: HTTPException) -> str | None:
+    if not is_retryable_processing_http_exception(error):
+        return None
+    default = 'timeout' if raise_site_of(error) == 'request_budget_exhausted' else 'other'
+    return getattr(error, 'omi_retryable_processing_failure_class', default)
+
+
 def conversation_processing_http_exception(
     error: BaseException, *, route: str = 'conversation_processing'
 ) -> HTTPException:
@@ -388,22 +442,8 @@ def conversation_processing_http_exception(
         if failure.failure_class == BYOK_INVALID_KEY_FAILURE_CLASS:
             return HTTPException(status_code=429, detail=BYOK_INVALID_KEY_ERROR_DETAIL)
         return HTTPException(status_code=429, detail=BYOK_QUOTA_ERROR_DETAIL)
-    failure_class = retryable_provider_failure_class(error)
-    if failure_class is not None and retryable_provider_failure_answer_enabled():
-        record_retryable_processing_response(failure_class, route)
-        # Class name only: never the provider message, which can carry request
-        # content. WARNING, not ERROR, because this is a retryable provider
-        # fault, not an Omi-side processing bug.
-        logger.warning(
-            'conversation processing hit a transient provider failure; answering retryable: '
-            'failure_class=%s route=%s',
-            failure_class,
-            route,
-        )
-        return HTTPException(
-            status_code=503,
-            detail=RETRYABLE_CONVERSATION_PROCESSING_ERROR_DETAIL,
-            headers={'Retry-After': RETRYABLE_CONVERSATION_PROCESSING_RETRY_AFTER_SECONDS},
-        )
+    retryable = retryable_provider_failure_http_exception(error, route=route)
+    if retryable is not None:
+        return retryable
     logger.error('Conversation processing failed: %s', type(error).__name__)
     return HTTPException(status_code=500, detail=GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL)

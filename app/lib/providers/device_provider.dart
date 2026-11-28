@@ -6,7 +6,12 @@
 // a time with bounded backoff (app/lib/services/devices/ARCHITECTURE.md).
 import 'dart:async';
 
+import 'package:omi/services/devices/battery_display_policy.dart';
+import 'package:omi/services/devices/battery_stuck_store.dart';
 import 'package:omi/services/devices/charge_start_tracker.dart';
+import 'package:omi/services/experiments/battery_display_guard_gate.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart';
+import 'package:omi/utils/analytics/registry/typed_events.dart';
 import 'package:omi/services/devices/fully_charged_alert_gate.dart';
 import 'package:omi/services/wals/sync_wake_scope.dart';
 import 'dart:io';
@@ -28,6 +33,7 @@ import 'package:omi/providers/native_link_reconciler.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/discovery/device_locator.dart';
+import 'package:omi/services/devices/firmware_device_session.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/connectors/omi_connection.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
@@ -44,6 +50,7 @@ import 'package:omi/utils/firmware_update_build_policy.dart';
 import 'package:omi/utils/firmware_install_verification.dart';
 import 'package:omi/utils/firmware_update_battery.dart';
 import 'package:omi/utils/firmware_update_check_session.dart';
+import 'package:omi/utils/firmware_update_hold.dart';
 import 'package:omi/utils/firmware_update_prompt_coordinator.dart';
 import 'package:omi/utils/analytics/device_health_telemetry.dart';
 import 'package:omi/utils/logger.dart';
@@ -62,7 +69,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   bool isConnecting = false;
   bool isConnected = false;
-  bool isDeviceStorageSupport = false;
+  OfflineStorageCapability _offlineStorageCapability = OfflineStorageCapability.unverified;
+  OfflineStorageCapability get offlineStorageCapability => _offlineStorageCapability;
+  Future<void>? _offlineStorageCheck;
   bool supportsMultiFileSync = SharedPreferencesUtil().deviceSupportsMultiFileSync;
 
   // Latest on-device ring-buffer storage snapshot (firmware 3.0.20+ only).
@@ -116,14 +125,72 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   Future<bool>? _findDeviceRequest;
   StreamSubscription<List<int>>? _bleBatteryLevelListener;
   StreamSubscription? _bleChargingStatusListener;
+
+  /// The percentage the pendant last sent. Firmware-update gating and diagnostics
+  /// read this; UI reads [displayBatteryLevel].
   int batteryLevel = -1;
+
+  /// The percentage to show, or -1 when it is unknown or not believable (see
+  /// [BatteryDisplayPolicy]): a low reading while charging or a stuck near-empty one.
+  int get displayBatteryLevel => batteryHideReason == null ? batteryLevel : -1;
+
+  /// Why [batteryLevel] is withheld from the UI, or null when it shows.
+  BatteryHideReason? get batteryHideReason {
+    if (!_batteryGuardApplies) return null;
+    // Until this connection's charging status is read, a low reading may be 3.0.24's frozen
+    // on-charger value; treat it as charging-low for that moment.
+    if (_batteryDisplay.enabled && !_chargingStatusReady && batteryLevel >= 0 && batteryLevel < 20) {
+      return BatteryHideReason.chargingLow;
+    }
+    return _batteryDisplay.hideReason(batteryLevel, charging: isCharging);
+  }
+
+  /// Only the Omi pendant firmware has the stale-reading behavior the guard handles.
+  bool get _batteryGuardApplies {
+    final device = capabilityNormalizedDevice ?? connectedDevice;
+    return device != null && DeviceConnectionFactory.resolveDeviceType(device) == DeviceType.omi;
+  }
+
+  /// True when a near-empty reading looks stuck; restarting Omi refreshes it.
+  bool get batteryReadingStuck {
+    final reason = batteryHideReason;
+    // A first pairing may be genuinely empty; only an observed stuck reading suggests a restart.
+    return reason == BatteryHideReason.flat || reason == BatteryHideReason.longCharge;
+  }
+
+  int get settingsBatteryLevel => _firstChargeDeviceId == null ? displayBatteryLevel : -1;
+  final BatteryDisplayPolicy _batteryDisplay;
+  final Future<bool> Function() _batteryDisplayGuardAllowed;
+  final void Function(BatteryHideReason reason) _reportBatteryHidden;
+  bool _batteryDisplayGuardLoaded = false;
+  String? _batteryDisplayDeviceId;
+  int _batteryDisplaySession = -1;
+  Timer? _batteryDisplayTimer;
+  final Set<BatteryHideReason> _reportedHideReasons = {};
+
+  /// Whether listeners were last told the number is hidden; null before this connection's first.
+  bool? _publishedBatteryHidden;
   bool isCharging = false;
+  bool? _observedChargingStatus;
+  bool? get observedChargingStatus => _observedChargingStatus;
   int _batterySession = 0;
   final _chargeStarts = ChargeStartTracker();
   late final FullyChargedAlertGate _fullyChargedAlert;
   int _lastNotifiedBatteryLevel = -1;
   DateTime? _lastBatteryNotifyTime;
   bool _hasLowBatteryAlerted = false;
+  @visibleForTesting
+  bool get hasLowBatteryAlertedForTesting => _hasLowBatteryAlerted;
+  static const _firstChargeSettleTime = Duration(seconds: 12);
+  static const _batteryConnectionTimeout = Duration(seconds: 3);
+  // Let the native GATT read finish or time out before queuing another read.
+  static const _batteryReadTimeout = Duration(seconds: 12);
+  static const _batteryRetryDelays = [Duration(seconds: 2), Duration(seconds: 4), Duration(seconds: 8)];
+  String? _firstPairingCandidateId;
+  String? _firstChargeDeviceId;
+  Timer? _batteryReadTimer;
+  bool _firstChargeSettled = false;
+  bool _chargingStatusReady = false;
   bool _havingNewFirmware = false;
   bool get havingNewFirmware =>
       _havingNewFirmware && pairedDevice != null && isConnected && _allowsFirmwareUpdateForPairedDevice;
@@ -192,7 +259,13 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     Duration? fullyChargedMinimumDwell,
     FullyChargedNotification? fullyChargedNotification,
     FullyChargedLevelMismatch? fullyChargedLevelMismatch,
-  })  : _bleDiagnosticsLoader = bleDiagnosticsLoader ?? BleHostApi().getDeviceDiagnostics,
+    Future<bool> Function()? batteryDisplayGuardAllowed,
+    void Function(BatteryHideReason reason)? batteryHiddenReporter,
+    BatteryStuckStore? batteryStuckStore,
+  })  : _batteryDisplay = BatteryDisplayPolicy(clock: clock, store: batteryStuckStore ?? PrefsBatteryStuckStore()),
+        _batteryDisplayGuardAllowed = batteryDisplayGuardAllowed ?? BatteryDisplayGuardGate.allowed,
+        _reportBatteryHidden = batteryHiddenReporter ?? _emitBatteryHidden,
+        _bleDiagnosticsLoader = bleDiagnosticsLoader ?? BleHostApi().getDeviceDiagnostics,
         _findDeviceRunner = findDeviceRunner ?? _defaultFindDeviceRunner,
         _deviceInfoConnectionLoader = deviceInfoConnectionLoader ?? ServiceManager.instance().device.ensureConnection,
         _chargingConnectionLoader = chargingConnectionLoader ?? ServiceManager.instance().device.ensureConnection,
@@ -255,7 +328,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       syncs.setDevice(null);
       syncs.flashPage.setDevice(null);
       syncs.storage.setDevice(null);
-      syncs.ring.setDevice(null);
     } catch (_) {
       // Tests and early construction may not have WAL ready.
     }
@@ -268,6 +340,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   void clearUserData() {
     ServiceManager.instance().device.savedReconnect.stop();
     _sessionGeneration++;
+    _firstPairingCandidateId = null;
     _resetBatteryState();
     _admittedLink = null;
     _readoptExpectedPair = null;
@@ -290,6 +363,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _latestStableFirmwareVersion = '';
     _latestOmiGlassFirmwareDetails = {};
     _ringStatus = null;
+    _resetOfflineStorageCapability();
     isConnecting = false;
     _detachAccountOwnedDeviceBindings();
     notifyListeners();
@@ -374,9 +448,13 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     final endedSessionWasIntentional =
         endedDevice != null && _intentionalDisconnectDevices.remove(endedDevice.id.toUpperCase());
     final isNewConnection = device != null && connectedDevice?.id != device.id;
-    if (isNewConnection || device == null) _resetBatteryState();
+    if (isNewConnection || device == null) {
+      _resetBatteryState();
+      _resetOfflineStorageCapability();
+    }
     connectedDevice = device;
     pairedDevice = device;
+    _beginFirstChargeCheck();
     if (isNewConnection) {
       if (_firmwareUpdateDeviceId != null && _firmwareUpdateDeviceId != device.id) {
         _firmwareUpdatePromptCoordinator.clearAvailableVersion(invalidateDeferral: true);
@@ -512,6 +590,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         return;
       }
       pairedDevice = info;
+      if (info.type == DeviceType.openglass) {
+        _clearFirstChargeCheck();
+      }
       if (connection != null) {
         _firmwareRevisions.add((deviceId: readingDevice.id, version: info.firmwareRevision));
       }
@@ -601,69 +682,34 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   Future<int> _retrieveBatteryLevel(String deviceId) async {
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-    if (connection == null) {
+    try {
+      final connection = await _chargingConnectionLoader(deviceId);
+      return await connection?.retrieveBatteryLevel() ?? -1;
+    } catch (e) {
+      Logger.debug('Initial battery read failed: $e');
       return -1;
     }
-    return connection.retrieveBatteryLevel();
   }
 
-  Future<StreamSubscription<List<int>>?> _getBleBatteryLevelListener(
-    String deviceId, {
-    void Function(int)? onBatteryLevelChange,
-  }) async {
-    {
-      var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-      if (connection == null) {
-        return Future.value(null);
-      }
-      return connection.getBleBatteryLevelListener(onBatteryLevelChange: onBatteryLevelChange);
-    }
-  }
-
-  Future<List<int>> _getStorageList(String deviceId) async {
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-    if (connection == null) {
-      return [];
-    }
-    return connection.getStorageList();
-  }
-
-  initiateBleBatteryListener() async {
+  Future<void> initiateBleBatteryListener() async {
     final generation = _sessionGeneration;
     if (!_isCurrent(generation) || connectedDevice == null) {
       return;
     }
-    final batteryDeviceId = connectedDevice!.id;
+    final device = connectedDevice!;
+    final batteryDeviceId = device.id;
     final batterySession = _batterySession;
+    _beginBatteryDisplay(batteryDeviceId, batterySession);
     _bleBatteryLevelListener?.cancel();
-    final listener = await _getBleBatteryLevelListener(
-      batteryDeviceId,
+    final connection = await _chargingConnectionLoader(batteryDeviceId);
+    if (!_isCurrentBatterySession(generation, batterySession, batteryDeviceId)) return;
+    final listener = await connection?.getBleBatteryLevelListener(
       onBatteryLevelChange: (int value) {
         if (!_isCurrentBatterySession(generation, batterySession, batteryDeviceId)) return;
-        if (batteryLevel != value) {
-          batteryLevel = value;
-          BatteryWidgetService().updateBatteryInfo(
-            deviceName: connectedDevice?.name ?? '',
-            batteryLevel: value,
-            deviceType: connectedDevice?.type.name ?? 'omi',
-            isConnected: true,
-          );
-        }
-        if (batteryLevel < 20 && !_hasLowBatteryAlerted) {
-          _hasLowBatteryAlerted = true;
-          final ctx = globalNavigatorKey.currentContext;
-          unawaited(NotificationService.instance.createNotification(
-            title: ctx?.l10n.lowBatteryAlertTitle ?? "Low Battery Alert",
-            body: ctx?.l10n.lowBatteryAlertBody(value) ?? "Your battery is at $value%. Time for a recharge! 🔋",
-          ));
-        } else if (batteryLevel > 20) {
-          _hasLowBatteryAlerted = false;
-        }
         // Every callback is a sample. A stale 100 from before this charge cannot
         // notify; attribute it to the device this listener was opened for.
         _fullyChargedAlert.onBatterySample(batteryDeviceId, value);
-        _updateBatteryLevel(value);
+        _publishBatterySample(value);
       },
     );
     if (!_isCurrentBatterySession(generation, batterySession, batteryDeviceId)) {
@@ -671,7 +717,199 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       return;
     }
     _bleBatteryLevelListener = listener;
+    if (batteryLevel < 0 &&
+        _firstChargeDeviceId == null &&
+        (connection == null || connection is OmiDeviceConnection) &&
+        DeviceConnectionFactory.resolveDeviceType(capabilityNormalizedDevice ?? device) == DeviceType.omi) {
+      _scheduleBatteryRead(_batteryRetryDelays.first, nextRetry: 1);
+    }
     notifyListeners();
+  }
+
+  void _publishBatterySample(int value, {bool refresh = false}) {
+    if (value < 0 || value > 100) return;
+    final firstChargeResolved = _firstChargeSettled;
+    if (firstChargeResolved) {
+      _clearFirstChargeCheck();
+    } else if (_firstChargeDeviceId == null) {
+      _cancelBatteryRead();
+    }
+    _batteryDisplay.onSample(value, charging: isCharging);
+    final notified = _updateBatteryLevel(value, refresh: refresh);
+    _noteLowBattery(value);
+    // Ordinary changes keep the level throttle; only a number appearing or disappearing forces a rebuild.
+    final visibilityChanged = _noteBatteryDisplay();
+    if ((firstChargeResolved || visibilityChanged) && !notified) notifyListeners();
+  }
+
+  void _beginBatteryDisplay(String deviceId, int session) {
+    if (_batteryDisplayDeviceId == deviceId && _batteryDisplaySession == session) return;
+    _batteryDisplayDeviceId = deviceId;
+    _batteryDisplaySession = session;
+    _batteryDisplayTimer?.cancel();
+    _batteryDisplayTimer = null;
+    _reportedHideReasons.clear();
+    _publishedBatteryHidden = null;
+    _batteryDisplay.beginConnection(deviceId);
+    if (!_batteryDisplayGuardLoaded) {
+      _batteryDisplayGuardLoaded = true;
+      unawaited(_loadBatteryDisplayGuard());
+    }
+  }
+
+  Future<void> _loadBatteryDisplayGuard() async {
+    final allowed = await _batteryDisplayGuardAllowed();
+    if (_isDisposed || _batteryDisplay.enabled == allowed) return;
+    _batteryDisplay.enabled = allowed;
+    _noteBatteryDisplay();
+    notifyListeners();
+  }
+
+  /// Publishes the shown battery to the iOS widget, reports a newly hidden reading
+  /// once per connection, and wakes the UI when a flat reading turns stale. Returns
+  /// true when the number's visibility differs from what listeners were last told.
+  bool _noteBatteryDisplay() {
+    final device = connectedDevice;
+    if (device == null) return false;
+    BatteryWidgetService().updateBatteryInfo(
+      deviceName: device.name,
+      batteryLevel: displayBatteryLevel,
+      deviceType: device.type.name,
+      isConnected: true,
+    );
+    final reason = batteryHideReason;
+    if (reason != null) _batteryDisplay.rememberIfStuck(batteryLevel, charging: isCharging);
+    if (reason != null && _chargingStatusReady && _reportedHideReasons.add(reason)) {
+      _reportBatteryHidden(reason);
+    }
+    final hidden = reason != null;
+    final visibilityChanged = _publishedBatteryHidden != hidden;
+    _publishedBatteryHidden = hidden;
+    _batteryDisplayTimer?.cancel();
+    _batteryDisplayTimer = null;
+    final wait = _batteryDisplay.untilFlat(batteryLevel, charging: isCharging);
+    if (wait != null) {
+      final session = _batterySession;
+      _batteryDisplayTimer = Timer(wait + const Duration(seconds: 1), () {
+        _batteryDisplayTimer = null;
+        if (_isDisposed || session != _batterySession) return;
+        if (_noteBatteryDisplay()) notifyListeners();
+      });
+    }
+    return visibilityChanged;
+  }
+
+  static void _emitBatteryHidden(BatteryHideReason reason) =>
+      const TypedEvents().emit(BatteryReadingHidden(reason: _hiddenReasonWire(reason)));
+
+  static BatteryReadingHiddenReason _hiddenReasonWire(BatteryHideReason reason) => switch (reason) {
+        BatteryHideReason.chargingLow => BatteryReadingHiddenReason.chargingLow,
+        BatteryHideReason.firstPairing => BatteryReadingHiddenReason.firstPairing,
+        BatteryHideReason.longCharge => BatteryReadingHiddenReason.longCharge,
+        BatteryHideReason.flat => BatteryReadingHiddenReason.flat,
+      };
+
+  void _noteLowBattery(int value) {
+    if (value > 20) _hasLowBatteryAlerted = false;
+    if (value >= 20 || _hasLowBatteryAlerted || _firstChargeDeviceId != null) return;
+    // A stuck or charging reading is not a low battery; alert once it shows. A near-empty reading
+    // that may still turn out flat waits too: a real one falls and then alerts.
+    if (batteryHideReason != null) return;
+    if (_batteryGuardApplies && _batteryDisplay.untilFlat(value, charging: isCharging) != null) return;
+    _hasLowBatteryAlerted = true;
+    final ctx = globalNavigatorKey.currentContext;
+    unawaited(NotificationService.instance.createNotification(
+      title: ctx?.l10n.lowBatteryAlertTitle ?? "Low Battery Alert",
+      body: ctx?.l10n.lowBatteryAlertBody(value) ?? "Your battery is at $value%. Time for a recharge! 🔋",
+    ));
+  }
+
+  /// Mark a first pairing before BLE connects so an early sample uses the same
+  /// settle window. The pairing caller retires this marker when the attempt ends.
+  VoidCallback prepareFirstChargeCheck(String deviceId) {
+    _firstPairingCandidateId = deviceId;
+    if (_beginFirstChargeCheck()) notifyListeners();
+    return () {
+      if (_firstPairingCandidateId == deviceId) _firstPairingCandidateId = null;
+    };
+  }
+
+  bool _beginFirstChargeCheck() {
+    final device = connectedDevice;
+    if (device == null ||
+        device.id != _firstPairingCandidateId ||
+        DeviceConnectionFactory.resolveDeviceType(device) != DeviceType.omi ||
+        _firstChargeDeviceId == device.id) {
+      return false;
+    }
+    _cancelBatteryRead();
+    _firstChargeDeviceId = device.id;
+    _firstPairingCandidateId = null;
+    _batteryDisplay.markFirstPairing(device.id);
+    if (_chargingStatusReady) _updateFirstChargeCheck(isCharging);
+    return true;
+  }
+
+  void _updateFirstChargeCheck(bool charging) {
+    _chargingStatusReady = true;
+    if (_firstChargeDeviceId == null) return;
+    if (charging) {
+      _cancelBatteryRead();
+      _firstChargeSettled = false;
+    } else if (!_firstChargeSettled) {
+      _scheduleBatteryRead(_firstChargeSettleTime);
+    }
+  }
+
+  void _clearFirstChargeCheck() {
+    _cancelBatteryRead();
+    _firstChargeSettled = false;
+    _firstChargeDeviceId = null;
+  }
+
+  void _cancelBatteryRead() {
+    _batteryReadTimer?.cancel();
+    _batteryReadTimer = null;
+  }
+
+  void _scheduleBatteryRead(Duration delay, {int nextRetry = 0}) {
+    if (_batteryReadTimer != null) return;
+    late final Timer timer;
+    timer = Timer(delay, () async {
+      _firstChargeSettled = _firstChargeDeviceId != null;
+      final level = await _readBatteryLevelForRetry(timer);
+      // A sample, charge restart, or disconnect supersedes an in-flight read.
+      if (_batteryReadTimer != timer) return;
+      _batteryReadTimer = null;
+      if (level >= 0 && level <= 100) {
+        _publishBatterySample(level, refresh: true);
+        return;
+      }
+      if (nextRetry < _batteryRetryDelays.length) {
+        _scheduleBatteryRead(_batteryRetryDelays[nextRetry], nextRetry: nextRetry + 1);
+      }
+    });
+    _batteryReadTimer = timer;
+  }
+
+  Future<int> _readBatteryLevelForRetry(Timer timer) async {
+    final deviceId = connectedDevice?.id;
+    if (deviceId == null || !isConnected) return -1;
+    final generation = _sessionGeneration;
+    final batterySession = _batterySession;
+    try {
+      final connection = await _chargingConnectionLoader(deviceId).timeout(_batteryConnectionTimeout);
+      if (connection == null ||
+          _batteryReadTimer != timer ||
+          !_isCurrentBatterySession(generation, batterySession, deviceId)) {
+        return -1;
+      }
+      final level = await connection.retrieveBatteryLevel().timeout(_batteryReadTimeout);
+      return _isCurrentBatterySession(generation, batterySession, deviceId) ? level : -1;
+    } catch (e) {
+      Logger.debug('Battery refresh failed: $e');
+      return -1;
+    }
   }
 
   Future<void> initiateChargingStatusListener({bool allowCaptureResume = true}) async {
@@ -683,9 +921,11 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     var connection = await _chargingConnectionLoader(deviceId);
     if (!_isCurrentBatterySession(generation, batterySession, deviceId)) return;
-    if (connection == null) return;
     // TODO(astra): non-Omi connections, including Friend Pendant, expose no charging-status API. (#5491)
-    if (connection is! OmiDeviceConnection) return;
+    if (connection is! OmiDeviceConnection) {
+      _updateFirstChargeCheck(isCharging);
+      return;
+    }
 
     final currentStatus = await connection.readChargingStatus();
     if (!_isCurrentBatterySession(generation, batterySession, deviceId)) return;
@@ -693,14 +933,12 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     var initialObservationDone = currentStatus != null;
     // Failed reads are unknown: retain the last successful observation and UI state.
     if (currentStatus != null) {
+      _updateFirstChargeCheck(currentStatus);
       final chargeStarted = _chargeStarts.observe(connectedDevice!.id, currentStatus);
       // An initial read made by a sync wake is observation, not a charge-start event.
       if (chargeStarted && allowInitialResume) captureProvider?.onChargingStarted();
       final wasCharging = isCharging;
-      if (isCharging != currentStatus) {
-        isCharging = currentStatus;
-        notifyListeners();
-      }
+      _publishChargingStatus(currentStatus);
       BatteryWidgetService().updateChargingState(currentStatus);
       _noteChargingForFullyChargedAlert(currentStatus, wasCharging: wasCharging);
     }
@@ -708,6 +946,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     final listener = await connection.getChargingStatusListener(
       onChargingStatusChange: (bool charging) {
         if (!_isCurrentBatterySession(generation, batterySession, deviceId)) return;
+        _updateFirstChargeCheck(charging);
         // Firmware notifies its current byte on subscribe. After a failed read,
         // that first sample inherits the initial read's observation-only gate.
         // A later scope must defer transport work, not consume an authorized
@@ -717,10 +956,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         final chargeStarted = _chargeStarts.observe(connectedDevice!.id, charging);
         if (chargeStarted && allowResume) captureProvider?.onChargingStarted();
         final wasCharging = isCharging;
-        if (isCharging != charging) {
-          isCharging = charging;
+        _publishChargingStatus(charging);
+        if (wasCharging != charging) {
           BatteryWidgetService().updateChargingState(charging);
-          notifyListeners();
         }
         _noteChargingForFullyChargedAlert(charging, wasCharging: wasCharging);
       },
@@ -730,6 +968,20 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       return;
     }
     _bleChargingStatusListener = listener;
+    // If the initial read was unavailable, begin a bounded check once setup has
+    // finished. Until then the default false value does not imply an unplug.
+    _updateFirstChargeCheck(isCharging);
+    if (_noteBatteryDisplay()) notifyListeners();
+  }
+
+  void _publishChargingStatus(bool charging) {
+    final changed = _observedChargingStatus != charging;
+    _observedChargingStatus = charging;
+    final deviceId = connectedDevice?.id;
+    if (deviceId != null) _batteryDisplay.onCharging(deviceId, charging);
+    isCharging = charging;
+    final visibilityChanged = _noteBatteryDisplay();
+    if (changed || visibilityChanged) notifyListeners();
   }
 
   Future<void> _presentFullyChargedNotification(String deviceId) async {
@@ -788,8 +1040,13 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   void _resetBatteryState() {
     _batterySession++;
+    _batteryDisplayTimer?.cancel();
+    _batteryDisplayTimer = null;
+    _clearFirstChargeCheck();
+    _chargingStatusReady = false;
     batteryLevel = -1;
     isCharging = false;
+    _observedChargingStatus = null;
     _lastNotifiedBatteryLevel = -1;
     _lastBatteryNotifyTime = null;
     unawaited(_bleBatteryLevelListener?.cancel());
@@ -798,7 +1055,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _bleChargingStatusListener = null;
   }
 
-  bool _updateBatteryLevel(int value, {DateTime? now}) {
+  bool _updateBatteryLevel(int value, {DateTime? now, bool refresh = false}) {
+    final levelChanged = value != batteryLevel;
     batteryLevel = value;
     final currentTime = now ?? DateTime.now();
 
@@ -811,7 +1069,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         (value < 20 && _lastNotifiedBatteryLevel >= 20) || (value >= 20 && _lastNotifiedBatteryLevel < 20);
     final crossedFirmwareThreshold =
         (value >= kFirmwareUpdateMinBattery) != (_lastNotifiedBatteryLevel >= kFirmwareUpdateMinBattery);
-    final shouldNotify = _lastNotifiedBatteryLevel == -1 ||
+    final shouldNotify = (refresh && levelChanged) ||
+        _lastNotifiedBatteryLevel == -1 ||
         delta >= 5 ||
         elapsed.inMinutes >= 15 ||
         crossedLowBatteryThreshold ||
@@ -937,7 +1196,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       if (connection != null) {
         await setConnectedDevice(connection.device);
         if (!_isCurrent(generation)) return;
-        await setisDeviceStorageSupport();
+        await refreshOfflineStorageCapability();
         if (!_isCurrent(generation)) return;
         SharedPreferencesUtil().deviceName = connection.device.name;
         setIsConnected(true);
@@ -963,6 +1222,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     if (!value) {
       _admittedLink = null;
       _resetBatteryState();
+      _resetOfflineStorageCapability();
     }
     if (isConnected) {
       _discoveryTimer?.cancel();
@@ -986,6 +1246,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     }
     _bleBatteryLevelListener?.cancel();
     _bleChargingStatusListener?.cancel();
+    _clearFirstChargeCheck();
+    _batteryDisplayTimer?.cancel();
     _fullyChargedAlert.dispose();
     _discoveryTimer?.cancel();
     _disconnectRescanTimer?.cancel();
@@ -1012,7 +1274,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     if (!captureLinkAlreadyHandled) _notifyCaptureLinkLost(disconnectedDeviceId);
     BatteryWidgetService().updateChargingState(false);
     unawaited(setConnectedDevice(null));
-    unawaited(setisDeviceStorageSupport());
     setIsConnected(false);
     updateConnectingStatus(false);
 
@@ -1029,8 +1290,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     // Wals
     try {
-      ServiceManager.instance().wal.getSyncs().sdcard.setDevice(null);
-      ServiceManager.instance().wal.getSyncs().flashPage.setDevice(null);
+      final syncs = ServiceManager.instance().wal.getSyncs();
+      syncs.setDevice(null);
+      syncs.storage.setDevice(null);
+      syncs.flashPage.setDevice(null);
     } catch (_) {
       // Tests and early construction may not have WAL ready.
     }
@@ -1116,6 +1379,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
           hardwareRevision: device.hardwareRevision,
           manufacturerName: device.manufacturerName,
           serialNumber: device.serialNumber,
+          bootloaderSha256: await readConnectedBootloaderSha256(device.id),
         ) ??
         {};
 
@@ -1123,6 +1387,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       currentFirmware: device.firmwareRevision,
       latestFirmwareDetails: latestFirmwareDetails,
     );
+    if (hasUpdate && await FirmwareUpdateHold.heldFor(device.id, version)) hasUpdate = false;
     return (message, hasUpdate, version, latestFirmwareDetails);
   }
 
@@ -1153,7 +1418,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       captureProvider?.updateRecordingDevice(normalizedDevice);
     }
 
-    await setisDeviceStorageSupport();
+    await refreshOfflineStorageCapability();
     if (!_isCurrentBatterySession(generation, batterySession, device.id)) return;
     setIsConnected(true);
     // A live link is sync-activity evidence for the stall watchdog: the
@@ -1161,20 +1426,17 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     SyncHealthWatchdog.instance.recordSyncActivity(source: 'device_connected');
 
     // Read initial battery level
+    _beginBatteryDisplay(device.id, batterySession);
     int currentLevel = await _retrieveBatteryLevel(device.id);
     if (!_isCurrentBatterySession(generation, batterySession, device.id)) return;
     if (_readoptPairMovedOn(device.id)) {
       Logger.debug('Discarding readoption of ${device.id}: pairing moved on before side effects');
       return;
     }
-    if (currentLevel != -1) {
+    if (currentLevel >= 0 && currentLevel <= 100) {
+      _batteryDisplay.onSample(currentLevel, charging: isCharging);
       _updateBatteryLevel(currentLevel);
-      BatteryWidgetService().updateBatteryInfo(
-        deviceName: device.name,
-        batteryLevel: currentLevel,
-        deviceType: device.type.name,
-        isConnected: true,
-      );
+      _noteBatteryDisplay();
     }
 
     // Anchor the charge-start edge before subscribing to battery so a
@@ -1220,7 +1482,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     // WalSyncs attaches legacy SD only for confirmed legacy firmware.
     syncs.flashPage.setDevice(device);
     syncs.storage.setDevice(device);
-    syncs.ring.setDevice(device);
 
     // Device connection and inventory are a recovery wake, even when the
     // home page is not mounted. The coordinator serializes it with every
@@ -1295,6 +1556,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
           notifyListeners();
         }
         if (coherent == null || coherent.unreadPackets <= 0) return;
+        RecordingTransferCoordinator.instance.wakeRingFromBle(device.id);
         Logger.debug(
           'DeviceProvider: Ring auto-sync detected ${coherent.unreadPackets} unread packets (${coherent.usedBytes} bytes)',
         );
@@ -1510,7 +1772,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         // Fetch latest stable version for rollback comparison
         String? latestStableFirmwareVersion;
         try {
-          var stableDetails = await getStableFirmwareVersion(deviceModelNumber: pairedDevice?.modelNumber ?? '') ?? {};
+          var stableDetails = await getStableFirmwareVersion(
+                  deviceModelNumber: pairedDevice?.modelNumber ?? '',
+                  bootloaderSha256: await readConnectedBootloaderSha256(pairedDevice?.id ?? '')) ??
+              {};
           if (!_isCurrent(generation) || !_isCurrentFirmwareCheckSession(checkSession)) {
             Logger.debug('Discarding stable firmware result from a stale device session');
             return false;
@@ -1639,18 +1904,38 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     });
   }
 
-  Future setisDeviceStorageSupport() async {
-    final generation = _sessionGeneration;
-    if (connectedDevice == null) {
-      if (!_isCurrent(generation)) return;
-      isDeviceStorageSupport = false;
-    } else {
-      var storageFiles = await _getStorageList(connectedDevice!.id);
-      if (!_isCurrent(generation)) return;
-      isDeviceStorageSupport = storageFiles.isNotEmpty;
+  void _resetOfflineStorageCapability() {
+    _offlineStorageCheck = null;
+    _offlineStorageCapability = OfflineStorageCapability.unverified;
+  }
+
+  Future<OfflineStorageCapability> _readOfflineStorageCapability(String deviceId) async {
+    try {
+      final connection = await _deviceInfoConnectionLoader(deviceId);
+      return await connection?.probeOfflineStorageCapability() ?? OfflineStorageCapability.unverified;
+    } catch (error) {
+      Logger.debug('Device storage check failed: $error');
+      return OfflineStorageCapability.unverified;
     }
-    if (!_isCurrent(generation)) return;
-    notifyListeners();
+  }
+
+  Future<void> refreshOfflineStorageCapability() {
+    final device = connectedDevice;
+    if (_isDisposed || device == null) return Future<void>.value();
+    final activeCheck = _offlineStorageCheck;
+    if (activeCheck != null) return activeCheck;
+
+    // Link and account resets retire the pending check, even on reconnect to
+    // the same device. Concurrent consumers share the one characteristic read.
+    late final Future<void> check;
+    check = _readOfflineStorageCapability(device.id).then((capability) {
+      if (!identical(_offlineStorageCheck, check)) return;
+      _offlineStorageCheck = null;
+      if (_isDisposed || connectedDevice?.id != device.id) return;
+      _offlineStorageCapability = capability;
+      notifyListeners();
+    });
+    return _offlineStorageCheck = check;
   }
 
   /// Readopts a service link native already holds while the mirror shows the
@@ -1702,6 +1987,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
           _notifyCaptureLinkLost(deviceId);
           // Invalidate immediately, before disconnect UI/capture work is debounced.
           _resetBatteryState();
+          _resetOfflineStorageCapability();
           notifyListeners();
           _disconnectDebouncer.run(() {
             if (!_isCurrent(generation)) return;

@@ -13,8 +13,6 @@ Quarantine recovery is separately fenced by RecoveryStore.start: its task and
 inline fallback adopt the same paid token and cannot both invoke the provider.
 """
 
-from config import audio_archive
-
 import json
 import logging
 import hashlib
@@ -33,6 +31,7 @@ from google.oauth2 import id_token
 from google.protobuf import duration_pb2
 from google.protobuf import timestamp_pb2
 
+from database import speaker_evidence_verification as verification
 from utils.log_sanitizer import sanitize
 from utils.sync.backfill_order import direct_schedule_at
 
@@ -128,13 +127,7 @@ def _oidc_audience() -> str:
     return os.getenv('SYNC_TASKS_OIDC_AUDIENCE') or _handler_url()
 
 
-def _audio_merge_handler_url(uid: str = '') -> str:
-    if audio_archive.admitted(uid, 'SEPARATE_MERGE'):
-        worker = os.getenv('AUDIO_MERGE_WORKER_URL', '').strip()
-        if not worker:
-            logger.warning('separate merge worker missing AUDIO_MERGE_WORKER_URL; retaining legacy handler')
-        else:
-            return worker
+def _audio_merge_handler_url() -> str:
     return os.getenv('AUDIO_MERGE_HANDLER_URL', '')
 
 
@@ -428,9 +421,11 @@ def enqueue_named_task(
     audience: Optional[str] = None,
     invoker_sa: Optional[str] = None,
     schedule_at: Optional[int] = None,
-) -> None:
+) -> bool:
     """Enqueue one named HTTP task. Duplicate names are treated as success —
-    Cloud Tasks deduplicates named tasks. Any other failure raises."""
+    Cloud Tasks deduplicates named tasks. Any other failure raises.
+
+    Returns False when the name was refused as a duplicate, True when this call created the task."""
     project = os.getenv('SYNC_TASKS_PROJECT', '')
     location = os.getenv('SYNC_TASKS_LOCATION', '')
     selected_invoker_sa = invoker_sa or _invoker_sa()
@@ -458,6 +453,8 @@ def enqueue_named_task(
         client.create_task(parent=parent, task=task)  # type: ignore[reportUnknownMemberType]  # google.cloud.tasks_v2 partially untyped
     except AlreadyExists:
         logger.info('task %s already enqueued, skipping duplicate', task_id)
+        return False
+    return True
 
 
 def named_task_exists(queue: str, task_id: str) -> bool:
@@ -595,7 +592,7 @@ def enqueue_audio_merge_job(payload: Dict[str, Any]) -> None:
     and isn't swallowed by the named-task tombstone. 'amc-' cannot collide with
     per-part names (audio_file ids are UUIDv4).
     """
-    handler_url = _audio_merge_handler_url(str(payload.get('uid') or ''))
+    handler_url = _audio_merge_handler_url()
     enqueue_named_task(
         os.getenv('AUDIO_MERGE_TASKS_QUEUE', ''),
         handler_url,
@@ -629,7 +626,7 @@ def enqueue_audio_merge_job_deferred(payload: Dict[str, Any], delay_seconds: int
     gate has cleared. Gate holds last seconds to a few minutes.
     """
     deferral = int(payload['destructive_deferrals'])
-    handler_url = _audio_merge_handler_url(str(payload.get('uid') or ''))
+    handler_url = _audio_merge_handler_url()
     enqueue_named_task(
         os.getenv('AUDIO_MERGE_TASKS_QUEUE', ''),
         handler_url,
@@ -640,7 +637,16 @@ def enqueue_audio_merge_job_deferred(payload: Dict[str, Any], delay_seconds: int
     )
 
 
-def enqueue_account_deletion_wipe(wipe_job_id: str) -> None:
+def account_deletion_queue_path() -> str:
+    project = os.getenv('SYNC_TASKS_PROJECT', '')
+    location = os.getenv('SYNC_TASKS_LOCATION', '')
+    queue = os.getenv('ACCOUNT_DELETION_TASKS_QUEUE', '')
+    if not all((project, location, queue)):
+        return ''
+    return tasks_v2.CloudTasksClient.queue_path(project, location, queue)
+
+
+def enqueue_account_deletion_wipe(wipe_job_id: str, *, verification_uid: str = '') -> None:
     """Wake one durable deletion job without exposing a user identifier.
 
     The Firestore job is canonical. Cloud Tasks diagnostics must not contain a
@@ -651,13 +657,24 @@ def enqueue_account_deletion_wipe(wipe_job_id: str) -> None:
         raise ValueError('wipe_job_id must be non-empty')
     job_hash = hashlib.sha256(wipe_job_id.encode('utf-8')).hexdigest()[:32]
     task_id = f"account-delete-{job_hash}-{uuid.uuid4().hex}"
-    enqueue_named_task(
+
+    payload = {'job_id': wipe_job_id}
+    task = (
+        verification.reserve_task(verification_uid, wipe_job_id, account_deletion_queue_path(), task_id)
+        if verification_uid
+        else None
+    )
+    if task is not None:
+        payload[verification.TASK_FIELD] = task.run.token
+    created = enqueue_named_task(
         os.getenv('ACCOUNT_DELETION_TASKS_QUEUE', ''),
         os.getenv('ACCOUNT_DELETION_HANDLER_URL', ''),
         task_id,
-        {'job_id': wipe_job_id},
+        payload,
         audience=_account_deletion_oidc_audience(),
     )
+    if created and task is not None:
+        verification.confirm_enqueue(task)
 
 
 def _listen_finalization_handler_url() -> str:
@@ -745,12 +762,9 @@ def verify_audio_merge_cloud_tasks_oidc(request: Request) -> int:
 
     Audience is the merge handler URL so an enqueuer whose SYNC_TASKS_*
     audience names a different service (backend-sync-backfill) can still
-    mint a token the merge worker will accept.
+    mint a token the merge handler will accept.
     """
-    audiences = list(filter(None, (_audio_merge_handler_url(), os.getenv('AUDIO_MERGE_WORKER_URL', '').strip())))
-    return verify_configured_cloud_tasks_oidc(
-        request, audience=audiences[0] if len(audiences) == 1 else audiences, invoker_sa=_invoker_sa()
-    )
+    return verify_configured_cloud_tasks_oidc(request, audience=_audio_merge_handler_url(), invoker_sa=_invoker_sa())
 
 
 def verify_account_deletion_cloud_tasks_oidc(request: Request) -> AccountDeletionTaskAuthentication:

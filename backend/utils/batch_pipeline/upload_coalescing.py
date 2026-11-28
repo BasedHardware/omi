@@ -24,6 +24,7 @@ from database import batch_pipeline_coalescing as rows
 from database.batch_pipeline_coalescing_identity import compatibility_key, digest
 from database.batch_pipeline_leader import LeaseLost
 from utils.batch_pipeline.contracts import WorkItem
+from config.request_clock import context_fields
 from utils.batch_pipeline.capture_decode import decode_units
 from utils.batch_pipeline.scheduler import owner_key
 from utils.executors import run_blocking, db_executor, storage_executor, sync_executor
@@ -158,7 +159,7 @@ def _pack(paths, arguments):
 
 
 async def offer(store, artifacts, seed, *, arguments, context, language, policy, now=None):
-    """Called only after ordinary route/privacy selection, before unit staging."""
+    """Hold a non-recording sync upload after route and privacy selection."""
     if not config.enabled():
         return None
     now = time.time() if now is None else now
@@ -182,7 +183,10 @@ async def offer(store, artifacts, seed, *, arguments, context, language, policy,
         EVENTS.labels(outcome='bounded_bypass').inc()
         return None
     body, size, start, end, seconds, unit_count, filenames, source_frames = packed
-    hold = config.hold_seconds(now=now, batch_pre_unit=True)
+    hold = config.window_seconds(
+        upload_context.get('upload_entitlement', 'unknown'),
+        backlog=arguments['lane'] == 'backfill' or int(seed.priority) != 0,
+    )
     if hold <= 0:
         return None
     # This source item is a deletion-outbox identity, never a scheduler job.
@@ -193,7 +197,7 @@ async def offer(store, artifacts, seed, *, arguments, context, language, policy,
         duration_seconds=seconds,
         privacy_generation=context.generation,
     )
-    uri = await run_blocking(storage_executor, artifacts.stage_audio, item, body)
+    uri = await run_blocking(storage_executor, artifacts.stage_audio, item, body, record_origin=False)
     member = {
         'owner_id': arguments['uid'],
         'owner_key': owner_key(arguments['uid']),
@@ -215,6 +219,7 @@ async def offer(store, artifacts, seed, *, arguments, context, language, policy,
         'lane': arguments['lane'],
         'hold_seconds': hold,
         'accepted_at': now,
+        **context_fields(upload_context),
         'policy': policy.to_dict(),
         'language': language,
     }

@@ -1,5 +1,5 @@
 // Derived by python3 tool/perf_shell.py from main.dart. Do not hand edit.
-// Extracted shell SHA256 (imports, telemetry field, builder chain): c10a6e055e0b26a68622653c35cabd909f45eac5ee6b0c6ac58ae892f5e1daa9
+// Extracted shell SHA256 (imports, telemetry field, builder chain): b0d1682ba2bc5d10ef3ada62b90bba12fb95af1729c9875300b6b82c03147eac
 // ignore_for_file: unused_import, unnecessary_import
 import 'package:omi/services/on_device/on_device_background.dart';
 import 'package:omi/services/onboarding_sync_runtime.dart';
@@ -22,6 +22,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/sync_health_watchdog.dart';
+import 'package:omi/utils/reliability_experiments.dart';
 import 'package:omi/services/app_review_service.dart';
 import 'package:omi/services/account_cutover/account_cutover_runtime.dart';
 import 'package:omi/widgets/bluetooth_guidance_listener.dart';

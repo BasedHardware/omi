@@ -7,7 +7,6 @@ call. Each dispatch rechecks admission against current usage.
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import datetime, timezone
-from functools import wraps
 import os
 import logging
 from typing import Any, Mapping
@@ -160,15 +159,12 @@ def period_id() -> str:
     return datetime.now(timezone.utc).strftime('%Y-%m')
 
 
-def scoped(fn):
-    @wraps(fn)
-    def wrapped(*args, **kwargs):
-        uid = args[0] if args else kwargs['uid']
-        if not enabled(uid, 'batch'):
-            return fn(*args, **kwargs)
-        from utils.llm.usage_tracker import track_usage
+@contextmanager
+def processing_usage_scope(uid):
+    if not enabled(uid, 'batch'):
+        yield
+        return
+    from utils.llm.usage_tracker import track_usage
 
-        with track_usage(uid, 'conversation_processing'):
-            return fn(*args, **kwargs)
-
-    return wrapped
+    with track_usage(uid, 'conversation_processing'):
+        yield

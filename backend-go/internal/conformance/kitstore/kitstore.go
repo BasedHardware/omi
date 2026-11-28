@@ -49,19 +49,21 @@ CREATE INDEX IF NOT EXISTS kit_results_uid ON kit_results (uid)`)
 	return nil
 }
 
-// PutInput stores a unit's input under ref unless one is already there: the first admission
-// fixes the input. It runs inside the tenant scope, so an erase either sees the row and
-// removes it or has already refused the admission.
-func (s *Store) PutInput(ctx context.Context, a queue.Admitting, ref, body string) error {
+// StageInput fixes the first input and checks for an existing result in the same statement.
+// A receipt is authoritative only for the admitted tenant, unit reference and speech operation.
+func (s *Store) StageInput(ctx context.Context, a queue.Admitting, ref, body, operation string) (bool, error) {
 	if err := a.Err(); err != nil {
-		return err
+		return false, err
 	}
-	_, err := s.pool.Exec(ctx,
-		"INSERT INTO kit_inputs(ref,uid,body) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING", ref, a.Tenant(), body)
+	var paid bool
+	err := s.pool.QueryRow(ctx, `WITH staged AS (
+INSERT INTO kit_inputs(ref,uid,body) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING
+) SELECT EXISTS(SELECT 1 FROM kit_results WHERE ref=$1 AND uid=$2 AND operation=$4)`,
+		ref, a.Tenant(), body, operation).Scan(&paid)
 	if err != nil {
-		return fmt.Errorf("store kit input: %w", err)
+		return false, fmt.Errorf("stage kit input: %w", err)
 	}
-	return nil
+	return paid, nil
 }
 
 // Input returns the input stored under ref.
@@ -83,6 +85,14 @@ ON CONFLICT DO NOTHING`, ref, g.Tenant(), operation, body)
 		return fmt.Errorf("store kit result: %w", err)
 	}
 	return nil
+}
+
+// RecoverResult reads only a result committed for the guarded tenant and requested operation.
+func (s *Store) RecoverResult(ctx context.Context, g queue.Guarded, ref, operation string) (string, error) {
+	if err := g.Err(); err != nil {
+		return "", err
+	}
+	return s.read(ctx, "SELECT body FROM kit_results WHERE uid=$1 AND ref=$2 AND operation=$3", g.Tenant(), ref, operation)
 }
 
 // Result returns the transcription stored under ref, for the kit's job view.

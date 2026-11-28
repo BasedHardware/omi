@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "id": "FC-device-reported-reading-shown-without-plausibility",
+  "family": "cross-boundary-contract",
+  "violated_contract": "A value a wearable reports over BLE is a firmware-side estimate with known failure modes per firmware line (a battery filter that freezes while charging or refuses increases until restart). The app must not present it as ground truth: a reading that contradicts what the app observed (a long charge, an unchanged near-empty value, a first pairing) must be withheld or qualified on every surface that renders it, while gating and telemetry keep the raw value.",
+  "canonical_prevention": "Route every user-facing rendering of a device-reported value through one plausibility policy owned by the device provider, keep the raw value for gating and diagnostics, test each known firmware failure mode as a policy case, and report how often the policy withholds a value.",
+  "canonical_prevention_artifact": [
+    "app/lib/services/devices/battery_display_policy.dart",
+    "app/test/services/devices/battery_display_policy_test.dart"
+  ],
+  "evidence_prs": [
+    25912
+  ],
+  "scope_hints": [
+    "app/lib/providers/device_provider.dart",
+    "app/lib/pages/home/widgets/battery_info_widget.dart",
+    "omi/firmware/omi/src/battery.c"
+  ],
+  "status": "open"
+}

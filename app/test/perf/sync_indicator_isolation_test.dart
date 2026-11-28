@@ -41,8 +41,20 @@ class _Device extends ChangeNotifier implements DeviceProvider {
   bool get isConnecting => false;
   @override
   int get batteryLevel => 75;
+
+  /// What the guard lets the UI show; -1 hides the number.
+  int shown = 75;
+  bool charging = false;
+
   @override
-  bool get isCharging => false;
+  int get displayBatteryLevel => shown;
+
+  @override
+  bool get batteryReadingStuck => false;
+  @override
+  int get settingsBatteryLevel => batteryLevel;
+  @override
+  bool get isCharging => charging;
   @override
   bool get havingNewFirmware => false;
   @override
@@ -301,6 +313,36 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     });
   }
+
+  testWidgets('home chip shows a charging bolt and no number for a withheld reading', (tester) async {
+    final device = _Device()
+      ..shown = -1
+      ..charging = true;
+    final capture = _Capture();
+    final sync = _Sync();
+    addTearDown(device.dispose);
+    addTearDown(capture.dispose);
+    addTearDown(sync.dispose);
+    await tester.pumpWidget(_app(
+      Scaffold(appBar: AppBar(leadingWidth: 180, leading: const BatteryInfoWidget())),
+      device,
+      capture,
+      sync,
+      reduceMotion: true,
+    ));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.byKey(const Key('battery_pill_charging')), findsOneWidget);
+    expect(find.textContaining('%'), findsNothing, reason: 'a stale 1% never reaches the home chip');
+
+    device
+      ..shown = 88
+      ..charging = true;
+    device.notifyListeners();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('88%'), findsOneWidget);
+    expect(find.byKey(const Key('battery_pill_charging')), findsNothing, reason: 'one bolt, beside the number');
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 
   testWidgets('arc repaints without repainting its static glyph', (tester) async {
     final glyph = _PaintCounter();

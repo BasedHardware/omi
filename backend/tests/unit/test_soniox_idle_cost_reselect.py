@@ -270,16 +270,23 @@ def test_wire_and_connected_origin_is_pinned_and_bounded(monkeypatch, origin):
     try:
         wire = telemetry.create_wire_meter('soniox', 16000)
         connected = telemetry.create_connected_meter()
-        labels = dict(demand_cohort='ineligible', origin=origin)
-        before_wire = telemetry.WIRE_AUDIO.labels(provider='soniox', **labels)._value.get()
-        before_connected = telemetry.SONIOX_CONNECTED.labels(**labels)._value.get()
+        wire_labels = dict(demand_cohort='ineligible', origin=origin)
+        connected_labels = dict(
+            provider='soniox',
+            demand_cohort='ineligible',
+            origin=origin,
+            visibility='unreported',
+            fallback_reason='none',
+        )
+        before_wire = telemetry.WIRE_AUDIO.labels(provider='soniox', **wire_labels)._value.get()
+        before_connected = telemetry.SONIOX_CONNECTED.labels(**connected_labels)._value.get()
         telemetry.current_transport_origin.set('unbounded-input')
         wire.written(b'\x01\x00' * 16000)
         tick[0] += 6
         connected.flush(close=True)
         connected.flush(close=True)
-        assert telemetry.WIRE_AUDIO.labels(provider='soniox', **labels)._value.get() == before_wire + 1
-        assert telemetry.SONIOX_CONNECTED.labels(**labels)._value.get() == before_connected + 6
+        assert telemetry.WIRE_AUDIO.labels(provider='soniox', **wire_labels)._value.get() == before_wire + 1
+        assert telemetry.SONIOX_CONNECTED.labels(**connected_labels)._value.get() == before_connected + 6
         assert telemetry.create_wire_meter('soniox', 16000).origin == 'initial'
     finally:
         telemetry.current_transport_origin.reset(token)

@@ -835,30 +835,141 @@ def test_mobile_android_compile_smoke_uploads_debug_apk_and_runs_jvm_tests_in_pa
     assert "app/setup/prebuilt/debug.keystore" in unit_tests
 
 
-def test_mobile_kiritimati_dart_suite_is_a_parallel_second_pass():
+def test_mobile_far_timezone_suites_are_independent_parallel_jobs():
     repo = BACKEND_DIR.parent
     mobile_checks = (repo / ".github/workflows/mobile-app-checks.yml").read_text(encoding="utf-8")
     jobs = _github_jobs(mobile_checks)
 
-    tz_job = jobs["dart-tests-kiritimati"]
+    kiritimati = jobs["dart-tests-kiritimati"]
+    pago_pago = jobs["dart-tests-pago-pago"]
     journeys = jobs["journeys-hermetic"]
     analyze = jobs["analyze-and-test"]
 
     assert "name: Dart Tests (Pacific/Kiritimati)" in mobile_checks
-    assert "needs: changes" in tz_job
-    assert "needs: analyze-and-test" not in tz_job
-    assert "needs: android-compile-smoke" not in tz_job
-    assert "needs: journeys-hermetic" not in tz_job
-    assert "has_app_dart" in tz_job
-    assert "TZ=Pacific/Kiritimati bash app/test.sh" in tz_job
-    assert "TZ=Pacific/Pago_Pago bash app/test.sh" in tz_job
-    assert "${{ secrets." not in tz_job
+    assert "name: Dart Tests (Pacific/Pago_Pago)" in mobile_checks
+    for job_id, zone in (
+        ("dart-tests-kiritimati", "Pacific/Kiritimati"),
+        ("dart-tests-pago-pago", "Pacific/Pago_Pago"),
+    ):
+        body = jobs[job_id]
+        assert "needs: changes" in body, job_id
+        assert "needs: analyze-and-test" not in body, job_id
+        assert "needs: android-compile-smoke" not in body, job_id
+        assert "needs: journeys-hermetic" not in body, job_id
+        assert "has_app_dart" in body, job_id
+        # Each zone owns a full ceiling; the sequential pair used 59m51s of
+        # steps before the prelude and was cancelled at the 60-minute cap.
+        assert "timeout-minutes: 60" in body, job_id
+        assert f"TZ={zone} bash app/test.sh" in body, job_id
+        assert "${{ secrets." not in body, job_id
+    # Neither zone may run inside the other's job: that is the serialization
+    # that exhausted the single ceiling.
+    assert "TZ=Pacific/Pago_Pago" not in kiritimati
+    assert "TZ=Pacific/Kiritimati" not in pago_pago
     # The UTC Dart job and the journeys lane must not grow this TZ serial
     # dependency — a needs: edge here would lengthen the critical path.
     assert "dart-tests-kiritimati" not in analyze
+    assert "dart-tests-pago-pago" not in analyze
     assert "TZ=" not in journeys
     assert "Pacific/Kiritimati" not in journeys
     assert "Pacific/Pago_Pago" not in journeys
+
+
+def _mobile_eligibility_env(**overrides: str) -> dict[str, str]:
+    env = {
+        "CHANGES_RESULT": "success",
+        "DART_EXPECTED": "false",
+        "FULL_CI": "true",
+        "HAS_GENERATED": "false",
+        "HAS_DART": "false",
+        "HAS_JOURNEYS": "false",
+        "HAS_ANDROID": "false",
+        "HAS_IOS": "false",
+        "GENERATED_FILES_RESULT": "skipped",
+        "ANALYZE_AND_TEST_RESULT": "skipped",
+        "JOURNEYS_RESULT": "skipped",
+        "ANDROID_COMPILE_RESULT": "skipped",
+        "ANDROID_UNIT_RESULT": "skipped",
+        "ANDROID_EMULATOR_RESULT": "skipped",
+        "EMULATOR_EXPECTED": "false",
+        "IOS_COMPILE_RESULT": "skipped",
+        "DART_TIMEZONE_KIRITIMATI_RESULT": "skipped",
+        "DART_TIMEZONE_PAGO_PAGO_RESULT": "skipped",
+        "DART_TIMEZONE_EXPECTED": "false",
+    }
+    env.update(overrides)
+    return env
+
+
+def test_mobile_release_eligibility_requires_both_far_timezone_suites(tmp_path):
+    step = _workflow_run_step("mobile-app-checks.yml", "Aggregate conditional mobile checks")
+    run = step["run"]
+
+    def aggregate(name: str, **overrides: str):
+        case = tmp_path / name
+        case.mkdir(parents=True, exist_ok=True)
+        env = _mobile_eligibility_env(**overrides)
+        env["GITHUB_STEP_SUMMARY"] = str(case / "summary.md")
+        return _run_step(run, env, {}, case)
+
+    # Both zones green on a full-CI push that selected the timezone jobs.
+    proc, _ = aggregate(
+        "both-green",
+        HAS_DART="true",
+        DART_EXPECTED="true",
+        ANALYZE_AND_TEST_RESULT="success",
+        DART_TIMEZONE_EXPECTED="true",
+        DART_TIMEZONE_KIRITIMATI_RESULT="success",
+        DART_TIMEZONE_PAGO_PAGO_RESULT="success",
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "Mobile Release Eligibility: success" in proc.stdout
+
+    # An expected zone that was cancelled or skipped is a missing result, not
+    # an inapplicable lane: the aggregate must fail either way.
+    for zone, result in (
+        ("DART_TIMEZONE_KIRITIMATI_RESULT", "cancelled"),
+        ("DART_TIMEZONE_PAGO_PAGO_RESULT", "cancelled"),
+        ("DART_TIMEZONE_KIRITIMATI_RESULT", "skipped"),
+        ("DART_TIMEZONE_PAGO_PAGO_RESULT", "skipped"),
+        ("DART_TIMEZONE_PAGO_PAGO_RESULT", "failure"),
+    ):
+        env = _mobile_eligibility_env(
+            HAS_DART="true",
+            DART_EXPECTED="true",
+            ANALYZE_AND_TEST_RESULT="success",
+            DART_TIMEZONE_EXPECTED="true",
+            DART_TIMEZONE_KIRITIMATI_RESULT="success",
+            DART_TIMEZONE_PAGO_PAGO_RESULT="success",
+        )
+        env[zone] = result
+        proc, _ = aggregate(f"{zone}-{result}", **env)
+        assert proc.returncode == 1, (zone, result, proc.stdout)
+        assert "Required Dart far-timezone suite did not pass" in proc.stderr
+
+    # A PR that did not select the timezone jobs keeps them skipped and stays
+    # eligible; the requirement is scoped to the jobs' own selection.
+    proc, _ = aggregate(
+        "pr-not-selected",
+        HAS_DART="true",
+        DART_EXPECTED="true",
+        ANALYZE_AND_TEST_RESULT="success",
+        DART_TIMEZONE_EXPECTED="false",
+    )
+    assert proc.returncode == 0, proc.stderr
+
+    # The fork deferral path must also see both zones skipped, not just one.
+    proc, _ = aggregate(
+        "fork-deferral",
+        FULL_CI="false",
+        HAS_DART="true",
+        HAS_ANDROID="true",
+        DART_EXPECTED="true",
+        ANALYZE_AND_TEST_RESULT="success",
+        DART_TIMEZONE_PAGO_PAGO_RESULT="success",
+    )
+    assert proc.returncode == 1
+    assert "A deferred mobile check must be skipped" in proc.stderr
 
 
 def test_mobile_ios_compile_check_is_path_gated_simulator_unsigned_and_secret_free():
@@ -1180,6 +1291,62 @@ def test_firestore_readiness_gate_covers_every_backend_image_shipment():
     policy = _workflow_policy()
     assert policy.repository_gate_violations(BACKEND_DIR.parent, validate_unrelated_workflows=False) == []
     assert policy._yaml_document.cache_info().hits > 0
+
+
+def test_firestore_notifications_forward_gate_cannot_be_bypassed():
+    policy = _workflow_policy()
+    repo = BACKEND_DIR.parent
+    name = 'gcp_notifications_job.yml'
+    text = (repo / '.github/workflows' / name).read_text(encoding='utf-8')
+    dockerfiles = policy._runtime_images(repo)
+    mutations = (
+        (
+            "if: inputs.mode != 'image-only-rollback' && inputs.mode == 'image-only-validate'",
+            "if: inputs.mode == 'image-only-validate'",
+            'lacks an earlier successful Firestore readiness gate',
+        ),
+        (
+            'source_sha: ${{ inputs.release_sha }}',
+            'source_sha: ${{ env.CHECKED_OUT_SHA }}',
+            'notifications image-only readiness must use inputs.release_sha',
+        ),
+        (
+            "if: inputs.mode != 'image-only-rollback'\n        uses: ./.github/firestore-workflow/",
+            'uses: ./.github/firestore-workflow/',
+            'notifications image-only readiness must gate validate and apply while allowing rollback',
+        ),
+    )
+    for original, replacement, expected in mutations:
+        assert original in text
+        violations = policy.workflow_gate_violations(
+            text.replace(original, replacement), name=name, dockerfiles=dockerfiles
+        )
+        assert any(expected in violation for violation in violations), violations
+
+
+def test_firestore_pusher_image_only_forward_gate_cannot_be_bypassed():
+    policy = _workflow_policy()
+    repo = BACKEND_DIR.parent
+    name = 'gcp_backend_pusher.yml'
+    text = (repo / '.github/workflows' / name).read_text(encoding='utf-8')
+    dockerfiles = policy._runtime_images(repo)
+    mutations = (
+        (
+            "if: inputs.pusher_image_only != 'rollback'",
+            "if: inputs.pusher_image_only == 'promote'",
+            'pusher image-only readiness must gate forward operations while allowing rollback',
+        ),
+        (
+            'source_sha: ${{ inputs.branch }}',
+            'source_sha: ${{ env.CHECKED_OUT_SHA }}',
+            'pusher image-only readiness must use inputs.branch',
+        ),
+    )
+    for original, replacement, expected in mutations:
+        assert original in text
+        mutated = text.replace(original, replacement)
+        violations = policy.workflow_gate_violations(mutated, name=name, dockerfiles=dockerfiles)
+        assert any(expected in violation for violation in violations), violations
 
 
 def test_firestore_repository_scan_keeps_worker_workflow_in_scope():
@@ -1877,7 +2044,7 @@ def test_firestore_gate_checkouts_are_sparse():
         count = text.count('path: .github/firestore-workflow')
         assert text.count(controls_sparse) == count, path
         gated += count
-    assert gated == len(_LANE_SOURCE_BINDINGS)
+    assert gated == len(_LANE_SOURCE_BINDINGS) + 2  # Notifications and Pusher image-only gates.
 
     action = (repo / '.github/actions/firestore-readiness/action.yml').read_text(encoding='utf-8')
     assert (
@@ -2096,6 +2263,8 @@ if args[:3] == ['container', 'images', 'describe']:
 if args[:2] == ['config', 'get-value']:
     print(os.environ.get('STUB_GCLOUD_PROJECT', '(unset)'))
     sys.exit(0)
+if args == ['auth', 'configure-docker', 'gcr.io', '--quiet']:
+    sys.exit(0)
 if args[:2] == ['auth', 'print-access-token']:
     print('stub-token')
     sys.exit(0)
@@ -2211,6 +2380,23 @@ def test_listen_deploy_tag_resolution_executes_against_stubbed_tools(tmp_path):
     assert outputs['BACKEND_LISTEN_IMAGE_TAG'] == 'ddddddd'
     assert outputs['BACKEND_LISTEN_SOURCE_SHA'] == 'd' * 40
     assert outputs['neg_coverage_exporter_image_tag'] == 'ddddddd'
+
+    case = tmp_path / 'kept-digest'
+    digest = 'sha256:' + 'a' * 64
+    source = 'c' * 40
+    registry = 'gcr.io/based-hardware/backend'
+    docker = bin_dir / 'docker'
+    docker.write_text(
+        '#!/bin/bash\n'
+        f'[[ "$1 $2 $3 $4" == "buildx imagetools inspect {registry}@{digest}" ]] || exit 1\n'
+        f'echo {source}\n',
+        encoding='utf-8',
+    )
+    docker.chmod(0o755)
+    env = base_env | _listen_env(case, {'ccccccc': source}, image=f'{registry}@{digest}') | {'REQUESTED_TAG': ''}
+    proc, outputs = _run_step(run, env, _LISTEN_SUBSTITUTIONS, case)
+    assert proc.returncode == 0, proc.stderr
+    assert outputs == {'BACKEND_LISTEN_IMAGE_DIGEST': digest}
 
     case = tmp_path / 'missing-tag'
     env = base_env | _listen_env(case, {'abc1234': 'c' * 40}, image='') | {'REQUESTED_TAG': ''}

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "table_version": "en-overflow-1116",
+  "table_version": "soniox-unsupported-1127",
   "selection": "ordered",
   "gpu_floor_percent": 0.0,
   "routes": {
@@ -19,10 +19,10 @@
       "speaker_turns": "discard"
     },
     "soniox": {
-      "price_usd_per_audio_hour": null,
-      "daily_audio_hours_cap": 1000.0,
+      "price_usd_per_audio_hour": 0.12,
+      "daily_audio_hours_cap": null,
       "monthly_budget_usd": null,
-      "failover_only": true,
+      "failover_only": false,
       "speaker_turns": "discard"
     }
   },
@@ -61,14 +61,14 @@
       "language_class": "gpu_unsupported",
       "options": [
         {
+          "route": "soniox",
+          "quality_tier": "accepted",
+          "quality_source": "public_eval_1127"
+        },
+        {
           "route": "modulate",
           "quality_tier": "accepted",
           "quality_source": "legacy_parity"
-        },
-        {
-          "route": "soniox",
-          "quality_tier": "accepted",
-          "quality_source": "staging_drill"
         }
       ]
     },

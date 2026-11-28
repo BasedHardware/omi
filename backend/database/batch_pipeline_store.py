@@ -40,10 +40,15 @@ from database.firestore_read_origin import read_origin
 from database._client import get_data_plane_firestore_client
 from database import record_recovery_gate
 from database.batch_pipeline_privacy import assert_batch_write_allowed
+from database import batch_privacy_write_audit as write_audit
+from database.batch_privacy_write_authority import authorize_buffered_writes, check_cached_write
 from database.batch_pipeline_transaction_attempt import note_direct_reads as _note_direct_reads, prepare_transaction
-from config.firestore_read_levers import lever_enabled
 from database.batch_pipeline_recovery import defer_privacy_blocked_record, quarantine_fenced
-from database.firestore_transaction_retry import FirestoreContentionExhausted, run_with_transaction_contention_retry
+from database.firestore_transaction_retry import (
+    FirestoreContentionExhausted,
+    run_with_transaction_contention_retry,
+    transaction_with_safe_rollback,
+)
 from database.batch_pipeline_transaction_labels import (
     current_operation,
     pull_operation as pull_operation,
@@ -139,6 +144,7 @@ class FirestoreTransaction:
         # Reads that go through the raw transaction instead of the cache (queries, privacy state):
         # their kind only, so contention logs can name them.
         self.direct_reads: set[str] = set()
+        self.tokenless_hits: list[write_audit.Hit] = []
         # (control key, priority) activated from a non-transactional frontier hint; the store
         # re-seeds each one after this transaction commits (reseed_hinted_activation).
         self.hinted_activations: set[tuple[str, int]] = set()
@@ -170,7 +176,8 @@ class FirestoreTransaction:
         if address not in self.cache:
             options = {}
             if self.read_budget is not None:
-                options = dict(timeout=self.read_budget.timeout(10), retry=None)
+                deadline = getattr(self.read_budget, 'point', self.read_budget.timeout)
+                options = dict(timeout=deadline(10), retry=None)
             snapshot = self._ref(table, key).get(transaction=self.transaction, **options)
             self.exists[address] = snapshot.exists
             self.cache[address] = (snapshot.to_dict() or {}) if snapshot.exists else {}
@@ -246,17 +253,49 @@ class FirestoreTransaction:
         return service_frontier(self.client, self.namespace, priority, transaction=self.transaction)
 
     def check_privacy(self, uid: str, conversation_ids=(), expected_generation: int | None = None) -> int:
-        options = {}
-        if self.read_budget is not None:
-            options['read_budget'] = self.read_budget
+        return self._check_privacy(uid, conversation_ids, expected_generation)
+
+    def _probe_write_privacy(self, uid: str, conversation_ids=(), expected_generation: int | None = None) -> int:
+        self.direct_reads.add('privacy')
+        return self._check_privacy(uid, conversation_ids, expected_generation, site='probe')
+
+    def _check_privacy(self, uid, conversation_ids, expected_generation, *, site=None):
+        ids = tuple(conversation_ids)
+        generation = check_cached_write(
+            self.client,
+            self.transaction,
+            uid,
+            conversation_ids=ids,
+            expected_generation=expected_generation,
+            read_budget=self.read_budget,
+            site=site,
+            on_hit=self._note_tokenless_hit,
+        )
+        if generation is not None:
+            return generation
+        return self._check_certified_privacy(uid, ids, expected_generation)
+
+    def _check_certified_privacy(self, uid, ids, expected_generation):
         return assert_batch_write_allowed(
             self.client,
             self.transaction,
             uid,
-            conversation_ids=conversation_ids,
+            conversation_ids=ids,
             expected_generation=expected_generation,
-            **options,
+            shared_owner_cache=True,
+            **({'read_budget': self.read_budget} if self.read_budget is not None else {}),
         )
+
+    def _note_tokenless_hit(self, uid, ids, site, decision):
+        self.tokenless_hits.append(write_audit.Hit(uid, ids, site, decision))
+
+    def _recertify_expired_leases(self):
+        # A previous hit may expire while a later job's authority is being read.
+        # Recheck before enlisting writes; each expired lease falls back once.
+        while expired := [hit for hit in self.tokenless_hits if hit.site == 'lease' and not hit.decision.fresh()]:
+            for hit in expired:
+                self._check_certified_privacy(hit.uid, hit.ids, hit.decision.generation)
+                self.tokenless_hits.remove(hit)
 
     def flush(self):
         # Conversation patches set record_lane_owner, a batch-privacy authority
@@ -264,29 +303,8 @@ class FirestoreTransaction:
         fence_tokens = len({key.split('/', 1)[0] for table, key in self.patches if table == 'conversations'})
         if len(self.writes) + len(self.patches) + len(self.external) + fence_tokens > 450:
             raise RuntimeError('batch transaction write budget exceeded')
-        guarded = set()
-        for (table, key), value in self.writes.items():
-            if table not in {'jobs', 'results', 'coalesce_groups', 'coalesce_sources', 'coalesce_heads'}:
-                continue
-            job = self.get('jobs', key) if table == 'results' else value
-            identity = (
-                job['owner_id'],
-                job.get('conversation_id'),
-                job.get('capture_source_conversation_id'),
-                job.get('privacy_generation'),
-            )
-            if identity in guarded:
-                continue
-            guarded.add(identity)
-            generation = self.check_privacy(
-                job['owner_id'],
-                conversation_ids=tuple(
-                    value for value in (job.get('conversation_id'), job.get('capture_source_conversation_id')) if value
-                ),
-                expected_generation=job.get('privacy_generation'),
-            )
-            if table == 'jobs' and value.get('privacy_generation') is None:
-                value['privacy_generation'] = generation
+        authorize_buffered_writes(self)
+        self._recertify_expired_leases()
         for (table, key), value in self.writes.items():
             self.transaction.set(self._ref(table, key), value)
         for (table, key), fields in self.patches.items():
@@ -374,6 +392,8 @@ class FirestoreStore:
             result = self._run_committed(client, commit, last_view)
         else:
             result = self._run_committed(client, commit, last_view, before_attempt=before_attempt)
+        for hit in last_view[0].tokenless_hits if last_view else ():
+            write_audit.submit(client, hit)
         for key, priority in sorted(last_view[0].hinted_activations) if last_view else ():
             try:
                 reseed_hinted_activation(client, self.namespace, key, priority)
@@ -387,7 +407,7 @@ class FirestoreStore:
 
     def _run_committed(self, client, commit, last_view, *, before_attempt=None):
         if not contention_retry_enabled():
-            return commit(prepare_transaction(client, before_attempt))
+            return commit(transaction_with_safe_rollback(prepare_transaction(client, before_attempt)))
         # The outer budget owns fresh transaction IDs and all retries. The
         # SDK's same-ID commit loop would multiply the contention window.
         operation = current_operation()

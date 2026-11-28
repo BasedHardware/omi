@@ -119,10 +119,12 @@ def test_overlapping_capture_clocks_require_identical_pcm(multi_unit, monkeypatc
     # These units overlap by four seconds on their authenticated audio clock.
     multi_unit.client.rows[path]['capture_at'] = 1004.0
     before = [s.model_copy(deep=True) for s in multi_unit.lane.conversation.transcript_segments]
+    fetched = {}
 
     def fetch(item, *, read_budget):
         sample = b'\x02\0' if shape == 'conflicting' and item.segment_id == 'unit-b' else b'\x01\0'
         pcm = sample * round(item.duration_seconds * 16000)
+        fetched[item.segment_id] = len(pcm)
         if shape == 'padded_hole' and item.segment_id == 'unit-a':
             # Materialized retained manifests can contain zeros outside actual
             # reference slices. PCM alone cannot authenticate that geometry.
@@ -136,11 +138,32 @@ def test_overlapping_capture_clocks_require_identical_pcm(multi_unit, monkeypatc
             load_result=lambda item, *a, **kw: multi_unit.payloads[item.segment_id], fetch_audio=fetch
         ),
     )
+    placed = []
+    real_assemble = batch._assemble
+
+    def assemble(stream):
+        pcm, words, checks = real_assemble(stream)
+        placed.append((len(pcm), stream.capacity, bytes(pcm), [list(w['timestamp']) for w in words]))
+        return pcm, words, checks
+
+    monkeypatch.setattr(batch, '_assemble', assemble)
     result = replay(multi_unit)
-    assert result['outcome'] == ('success' if shape == 'identical' else 'failed_incomplete_coverage'), result
-    if shape != 'identical':
-        assert result['message'] == 'conflicting capture clocks'
-        assert multi_unit.lane.conversation.transcript_segments == before
+    # A unit whose clock contradicts audio already placed is appended after the timeline: labels need each
+    # unit's words on its own audio, not the conversation clock. Identical overlaps still share samples.
+    assert result['outcome'] == 'success', result
+    total = sum(fetched.values())
+    ((length, capacity, pcm, stamps),) = placed
+    if shape == 'identical':
+        assert length == total - 4 * 32000
+    else:
+        # After the whole native timeline (its reserved capacity) and one second of silence, byte for byte.
+        start = capacity + batch.APPEND_GAP_BYTES
+        assert length == start + fetched['unit-b']
+        assert pcm[start:] == b'\x02\0' * (fetched['unit-b'] // 2) if shape == 'conflicting' else True
+        assert pcm[capacity:start] == bytes(batch.APPEND_GAP_BYTES)
+        # unit-b's words moved with its audio: every one of them now sits in the appended region.
+        assert any(stamp[0] >= start / 32000 for stamp in stamps)
+    assert multi_unit.lane.conversation.transcript_segments != before
 
 
 @pytest.mark.parametrize('failure', [None, 'references', 'audio'])

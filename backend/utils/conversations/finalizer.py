@@ -15,9 +15,11 @@ from enum import Enum
 from fastapi import HTTPException
 from config.batch_pipeline import RecordOwnerContention
 from config.merge_before_processing import enabled as merge_before_processing_enabled
+from utils.llm.background_flex import background_flex
 from utils.enrichment.admission import ConversationAbsorbed
 from config.server_batch import owned as server_batch_owned
 from config.server_batch import has_audio as server_batch_has_audio
+from config.server_batch import live_audio_uncommitted as server_batch_live_audio_uncommitted
 from config.server_batch import proven_empty as server_batch_proven_empty
 from config.episodes import episodes_enabled_for
 from config.episode_attach import noop_schedule_enabled
@@ -282,6 +284,33 @@ async def _yield_live_member_notes(job_id: str, generation: int, lease_epoch: in
     return ConversationFinalizationDisposition.deferred if yielded else ConversationFinalizationDisposition.fenced
 
 
+# The listen session commits the audio it holds with the next frame after its rollover, or at teardown.
+LIVE_ARCHIVE_COMMIT_WAIT_SECONDS = 3.0
+LIVE_ARCHIVE_COMMIT_POLL_SECONDS = 0.5
+
+
+async def _await_live_archive_commit(uid: str, conversation_id: str, conversation_data: dict) -> dict:
+    """Wait for the live session to commit the audio of a recording finished inside its first archive window.
+
+    Returns the newest row. A row deleted mid-wait returns the last one seen; the deferred replay's
+    admission read then applies the missing-row handling.
+    """
+    deadline = asyncio.get_running_loop().time() + LIVE_ARCHIVE_COMMIT_WAIT_SECONDS
+    while server_batch_live_audio_uncommitted(conversation_data) and asyncio.get_running_loop().time() < deadline:
+        await asyncio.sleep(LIVE_ARCHIVE_COMMIT_POLL_SECONDS)
+        latest = await run_blocking(
+            db_executor,
+            conversations_db.get_conversation,
+            uid,
+            conversation_id,
+            read_site=FirestoreReadSite.FINALIZER_JOB_REPLAY,
+        )
+        if not latest:
+            break
+        conversation_data = latest
+    return conversation_data
+
+
 async def finalize_persisted_conversation(
     uid: str,
     conversation_id: str,
@@ -292,6 +321,7 @@ async def finalize_persisted_conversation(
     lease_epoch: int,
     trigger: ProcessingTrigger = ProcessingTrigger.CAPTURE_END,
     final_attempt: bool = False,
+    background_flex_eligible: bool = False,
 ) -> ConversationFinalizationDisposition:
     """Finalize persisted data once the caller has acquired the job lease.
 
@@ -313,6 +343,13 @@ async def finalize_persisted_conversation(
         and not conversation.transcript_segments
         and not getattr(conversation, 'photos', None)
     ):
+        wait_for_archive = (
+            trigger is ProcessingTrigger.CLIENT_FINALIZE
+            and not conversation_data.get('discarded')
+            and server_batch_live_audio_uncommitted(conversation_data)
+        )
+        if wait_for_archive:
+            conversation_data = await _await_live_archive_commit(uid, conversation_id, conversation_data)
         if conversation_data.get('discarded'):
             if not await run_blocking(
                 db_executor,
@@ -326,6 +363,27 @@ async def finalize_persisted_conversation(
                 raise ConversationFinalizationError('fanout_completion_conflict')
             logger.info('event=server_batch_finalization outcome=discarded')
             return ConversationFinalizationDisposition.discarded
+        if wait_for_archive and server_batch_live_audio_uncommitted(conversation_data):
+            # Yield the lease without spending an attempt; the job and the held audio stay untouched.
+            try:
+                yielded = await run_blocking(
+                    db_executor,
+                    finalization_jobs_db.mark_finalization_retryable,
+                    finalization_job_id,
+                    dispatch_generation,
+                    lease_epoch,
+                    finalization_jobs_db.LIVE_ARCHIVE_UNCOMMITTED,
+                    count_attempt=False,
+                )
+            except finalization_jobs_db.LiveArchiveWaitExpired:
+                # Bounded: fall through to the counted not-closed retry below.
+                logger.warning('event=live_archive_wait outcome=expired')
+            else:
+                return (
+                    ConversationFinalizationDisposition.deferred
+                    if yielded
+                    else ConversationFinalizationDisposition.fenced
+                )
         if not server_batch_has_audio(conversation_data):
             if not conversation_data.get('server_batch_audio_closed'):
                 raise ServerBatchArchiveNotClosed('server batch archive is not closed')
@@ -472,23 +530,26 @@ async def finalize_persisted_conversation(
         if conversation.status != ConversationStatus.completed or finalization_pending(
             conversation_data, uid, finalization_job_id
         ):
-            conversation = await run_blocking(
-                lifecycle_executor(uid),
-                process_with_episode_budget,
-                process_conversation,
-                uid,
-                resolved_language,
-                conversation,
-                trigger=trigger,
-                user_kept=bool(conversation_data.get('sync_relevance_user_kept')),
-                recovery_transcript_decoded=conversation_data.get('_recovery_transcript_decoded') is True,
-                defer_derived_effects=True,
-                finalization_fence=(finalization_job_id, dispatch_generation, lease_epoch),
-                recovery_final_attempt=final_attempt or recovery_minimum_terminal_enabled(),
-                persistence_observer=lambda owned: persistence.__setitem__('owned', owned),
-                derived_effects_observer=derived_effects.append,
-                derived_effects_disposition_observer=lambda d: derived_disposition.__setitem__(0, d),
-            )
+            with background_flex(
+                conversation.finished_at if background_flex_eligible else None, features=frozenset({'conv_structure'})
+            ):
+                conversation = await run_blocking(
+                    lifecycle_executor(uid),
+                    process_with_episode_budget,
+                    process_conversation,
+                    uid,
+                    resolved_language,
+                    conversation,
+                    trigger=trigger,
+                    user_kept=bool(conversation_data.get('sync_relevance_user_kept')),
+                    recovery_transcript_decoded=conversation_data.get('_recovery_transcript_decoded') is True,
+                    defer_derived_effects=True,
+                    finalization_fence=(finalization_job_id, dispatch_generation, lease_epoch),
+                    recovery_final_attempt=final_attempt or recovery_minimum_terminal_enabled(),
+                    persistence_observer=lambda owned: persistence.__setitem__('owned', owned),
+                    derived_effects_observer=derived_effects.append,
+                    derived_effects_disposition_observer=lambda d: derived_disposition.__setitem__(0, d),
+                )
         elif conversation_data.get(TERMINAL_NO_DERIVED_EFFECTS_FIELD) or conversation_data.get('recording'):
             # The coordinator persisted a no-effects result (including budget waiting).
             # That write is durable; this request-scoped default is not. A
@@ -697,13 +758,19 @@ async def finalize_persisted_conversation(
                 conversation_id,
             )
         elif derived_effects:
-            await run_blocking(lifecycle_executor(uid), derived_effects[0])
+            with background_flex(
+                conversation.finished_at if background_flex_eligible else None, features=frozenset({'memory_l1'})
+            ):
+                await run_blocking(lifecycle_executor(uid), derived_effects[0])
         elif not lazy_effects and not getattr(conversation, 'discarded', False):
             # A finalization job owns a durable lease. Keep canonical memory
             # extraction inside that lease so a temporary fail-closed gate
             # leaves the job retryable instead of dropping the source.
             stage = 'memory_extraction'
-            await run_blocking(lifecycle_executor(uid), extract_memories, uid, conversation)
+            with background_flex(
+                conversation.finished_at if background_flex_eligible else None, features=frozenset({'memory_l1'})
+            ):
+                await run_blocking(lifecycle_executor(uid), extract_memories, uid, conversation)
         stage = 'integrations'
         if not skip_derived_effects:
             await trigger_external_integrations(
@@ -902,6 +969,14 @@ async def _load_admitted_conversation(
             raise ConversationFinalizationError('record_registration_refused')
         return ConversationFinalizationDisposition.fenced, None, None
     for _ in range(3):
+        # A retry can arrive after the lazy transcript commit and before the old
+        # job is acknowledged. Completed intake still owes only first-open work.
+        if (
+            conversation_data.get('deferred') is True
+            and not conversation_data.get('record_lane_owner')
+            and conversation_data.get('status') == ConversationStatus.completed
+        ):
+            return ConversationFinalizationDisposition.fenced, None, None
         try:
             owner = (
                 None

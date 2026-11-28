@@ -213,6 +213,12 @@ class _Device extends ChangeNotifier implements DeviceProvider {
   // The header chip also watches these; no battery makes the connected pill glyph-only.
   @override
   int get batteryLevel => 0;
+
+  @override
+  int get displayBatteryLevel => batteryLevel;
+
+  @override
+  bool get batteryReadingStuck => false;
   @override
   bool get isCharging => false;
   void drop() {

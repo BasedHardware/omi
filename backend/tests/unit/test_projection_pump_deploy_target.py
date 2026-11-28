@@ -215,22 +215,51 @@ def test_prod_pump_is_integration_plus_the_dark_overrides():
     assert list(services)[: len(FOUR)] == list(FOUR)
     assert pump['secrets'] == integration['secrets']
     assert pump['flags'] == integration['flags']
-    assert pump['forbidden_env'] == integration['forbidden_env']
+    integration_only_logging = {
+        'BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_ENABLED',
+        'BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_PERCENT',
+        'BATCH_POLICY_KILL_SWITCH_LOG_ON_CHANGE_ENABLED',
+    }
+    assert pump['forbidden_env'] == [*integration['forbidden_env'], *sorted(integration_only_logging)]
     assert pump['service_account'] == integration['service_account']
     train_pins = {'BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED', 'BATCH_PROJECTION_OUTBOX'}
+    live_title_key = 'CONVERSATIONS_V3_LIVE_TITLE'
+    fast_finish_key = 'CONVERSATIONS_V3_FAST_FINISH'
     # The dark pump keeps the dark successor's silence-skip value (SCA-3318).
     overridden = (
         set(ACTIVE_OVERRIDES)
+        | integration_only_logging
         | {
             'BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED',
             'BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED',
             'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP',
+            live_title_key,
+            fast_finish_key,
         }
         | train_pins
     )
     assert set(pump['env']) - set(integration['env']) <= overridden
     for name in set(integration['env']) - overridden:
         assert pump['env'][name] == integration['env'][name], name
+    # SCA-4316: each lane keeps its serving title setting.
+    backfill_env = services['backend-sync-backfill']['env']
+    assert integration['env'][live_title_key]['value'] == 'off'
+    assert backfill_env[live_title_key]['value'] == 'on'
+    assert pump['env'][live_title_key] == {'value': 'on', 'category': 'ops_kill'}
+    # Fast Finish ships to all users on the two API services that serve Finish. Every other
+    # service keeps the cohort code default; the pump, which derives from integration, pins it.
+    fast_finish_on = {'value': 'on', 'category': 'ops_kill'}
+    assert services['backend']['env'][fast_finish_key] == fast_finish_on
+    assert integration['env'][fast_finish_key] == fast_finish_on
+    assert pump['env'][fast_finish_key] == {'value': 'cohort', 'category': 'ops_kill'}
+    for name, service in services.items():
+        if name not in {'backend', 'backend-integration', PROJECTION_PUMP}:
+            assert fast_finish_key not in service.get('env', {}), name
+    for env_name, env_config in MANIFEST['environments'].items():
+        if env_name == 'prod':
+            continue
+        for name, service in env_config.get('cloud_run', {}).get('services', {}).items():
+            assert fast_finish_key not in (service or {}).get('env', {}), (env_name, name)
     # SCA-3318 2026-11-22: the pump is back to dark (integration's sweep carries the work).
     for name, value in DARK_OVERRIDES.items():
         assert pump['env'][name]['value'] == value, name
@@ -1135,13 +1164,16 @@ def test_cap_recovery_quoted_etag_round_trip(tmp_path, monkeypatch, inverse_read
         assert fixture.cap_requests == []
 
 
-def test_claimed_sibling_skip_is_active_on_every_role():
-    """SCA-3544 activates the skip across roles; the pump derives from integration."""
+def test_claimed_sibling_skip_pins_are_explicit_on_every_role():
+    """SCA-3544: the skip stays on for sync only; backend (SCA-3555) and integration (16:16Z rollback) pin false.
+
+    The pump derives its value from integration. Every role keeps an explicit key because main reads an
+    absent key as ON and Cloud Run merges env.
+    """
     services = _prod_services()
-    # SCA-3555: remove this exception with the backend activation.
-    sca_3555_preservation_pin = {'backend': 'false'}
+    false_pins = {'backend': 'false', 'backend-integration': 'false', PROJECTION_PUMP: 'false'}
     for name in ('backend', 'backend-sync', 'backend-integration', PROJECTION_PUMP):
-        expected = sca_3555_preservation_pin.get(name, 'true')
+        expected = false_pins.get(name, 'true')
         assert services[name]['env']['BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED']['value'] == expected, name
 
 

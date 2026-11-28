@@ -1,3 +1,8 @@
+# LIFECYCLE: one-time
+# DELETE-AFTER: https://github.com/BasedHardware/omi/issues/25578
+# RETIRING: legacy sync is dark in production (rollout_cohorts/_ramp legacy_sync=dark);
+# the batch pipeline serves every sync upload. Do not add behaviour or route work here.
+# Deletion is tracked in SCA-2965; tests/unit/test_sync_legacy_import_ratchet.py freezes it.
 """Sync local-files pipeline: decode → VAD → fair-use → STT → conversation merge.
 
 Extracted from routers/sync.py so the router stays thin and utils never imports routers.
@@ -10,6 +15,7 @@ from __future__ import annotations
 from utils.stt.allowance_session import operation as allowance_operation, current as current_allowance_operation
 from utils.enrichment.admission import SyncConversationPersistenceFenced
 from utils.enrichment.admission import require_current_persistence as _require_current_conversation_persistence
+from utils.enrichment.admission import require_transcript_decoded
 from utils.enrichment.admission import run_created_webhook as _run_conversation_created_webhook
 
 from utils.conversations.silent_redrive import is_silent_redrive
@@ -1071,7 +1077,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     from models.finalization_owner import REFUSAL as FINALIZATION_OWNER_REFUSAL
     from models.finalization_owner import FinalizationOwnedElsewhere, python_owns_finalization
 
-    conversation_data = conversations_db.get_conversation(uid, conversation_id)
+    conversation_data = conversations_db.get_conversation(uid, conversation_id, include_transcript_decode_status=True)
     context = PROCESS_CONTEXT.get()
     if conversation_data is not None and not python_owns_finalization(conversation_data):
         raise processing_hold.finalization_owner_deferral()
@@ -1093,7 +1099,9 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
             # The outbox transfers custody atomically before acknowledging this donor.
             context['redirect_to' if canonical else 'defer_reason'] = canonical or 'redirect_unresolved'
             return sync_result('deferred')
-        conversation_data = conversations_db.get_sync_redirected_conversation(uid, conversation_id)
+        conversation_data = conversations_db.get_sync_redirected_conversation(
+            uid, conversation_id, include_transcript_decode_status=True
+        )
         if conversation_data:
             if not python_owns_finalization(conversation_data):
                 raise processing_hold.finalization_owner_deferral()
@@ -1107,12 +1115,15 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         logger.info('event=sync_reprocess_callback outcome=unavailable')
         return sync_result('no_op' if conversation_data and conversation_data.get('deleted') else 'deferred')
 
+    require_transcript_decoded(conversation_data)
     if conversation_data.get(bridge_pending.FIELD):
         conversation_id, conversation_data = bridge.resume_pending(uid, conversation_id, conversation_data, context)
         if conversation_data is None:
             return sync_result('deferred')
         if not python_owns_finalization(conversation_data):
             raise processing_hold.finalization_owner_deferral()
+
+        require_transcript_decoded(conversation_data)
 
     if repair_fenced(conversation_data):
         raise SummaryRepairSuperseded(
@@ -2101,6 +2112,7 @@ def _reprocess_merged_conversations(
     from config.sync_reprocess import coalesce_enabled
 
     from config.demand_processing import enabled as demand_enabled
+    from utils.enrichment.outbox import FirstSummaryCallbackPending, mark
 
     hold = processing_hold.scheduling_enabled()
     coalescing = (hold or coalesce_enabled() or demand_enabled(uid)) and not user_selected
@@ -2127,8 +2139,6 @@ def _reprocess_merged_conversations(
             if user_selected and not lifecycle_service.restore_discarded(uid, conversation_id):
                 raise SyncConversationPersistenceFenced('selected recording no longer exists')
             if coalescing:
-                from utils.sync.reprocess import mark
-
                 mark(uid, conversation_id, language, sync_hold=hold)
             else:
                 processed = (
@@ -2141,6 +2151,10 @@ def _reprocess_merged_conversations(
                     from utils.conversations.demand_processing import promote_conversation_effects
 
                     promote_conversation_effects(uid, conversation_id)
+        except FirstSummaryCallbackPending:
+            if coalescing or user_selected:
+                raise
+            mark(uid, conversation_id, language, sync_hold=hold)
         except processing_hold.ProcessingDeferred:
             if user_selected:
                 raise
@@ -2155,6 +2169,11 @@ def _reprocess_merged_conversations(
             if on_fenced:
                 on_fenced()
             logger.info('event=sync_conversation_reprocess outcome=fenced conversation_id=%s', conversation_id)
+        except SyncAssignmentSuperseded:
+            # User authority refused this conversation's pending bridge. Its
+            # speech already landed; skip only its reprocess and keep the rest
+            # of the batch (and the job) terminal instead of erroring.
+            logger.debug('event=sync_conversation_reprocess outcome=superseded')
         except Exception as e:
             if coalescing or user_selected or is_destructive_operation_in_progress(e):
                 raise

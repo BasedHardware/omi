@@ -36,7 +36,7 @@ class DemoBillingUsage extends UsageProvider {
   Future<void> loadAvailablePlans() async {}
 
   @override
-  Future<void> fetchSubscription() async {}
+  Future<void> fetchSubscription({bool fresh = false}) async {}
 
   @override
   Future<void> fetchUsageStats({required String period}) async {}

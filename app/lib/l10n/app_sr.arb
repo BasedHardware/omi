@@ -717,11 +717,11 @@
     "@hardwareSection": {
         "description": "Hardware section header"
     },
-    "v2Undetected": "V2 није детектован",
+    "v2Undetected": "Офлајн синхронизација није доступна",
     "@v2Undetected": {
         "description": "V2 device undeteced dialog title"
     },
-    "v2UndetectedMessage": "Видимо да имате V1 уређај или ваш уређај није повезан. Функционалност SD картице је доступна само за V2 уређаје.",
+    "v2UndetectedMessage": "Offline синхронизација захтева повезан Omi уређај са SD картицом. Ваш тренутни уређај га не подржава.",
     "@v2UndetectedMessage": {
         "description": "V2 device undeteced dialog message"
     },
@@ -8712,6 +8712,12 @@
     "@authUnexpectedError": {
         "description": "Error message for unexpected error during sign-in"
     },
+    "accountSignInMethods": "Начини пријављивања",
+    "accountAddSignInMethod": "Додај начин пријављивања",
+    "accountAddSignInMethodDetails": "Додајте начин пријављивања на овај Omi налог. Ваш пакет, снимци и интеграције остају на овом налогу.",
+    "accountSignInConflictTitle": "Овај начин пријављивања припада другом налогу",
+    "accountSignInConflictDetails": "И даље сте на овом налогу. Сваки Omi налог задржава свој пакет, снимке и интеграције.",
+    "accountSignInMethodAdded": "Начин пријављивања је додат",
     "authFailedToLinkGoogle": "Неуспешна повезивање са Google, молим покушајте поново.",
     "@authFailedToLinkGoogle": {
         "description": "Error message when linking Google account fails"
@@ -11805,6 +11811,7 @@
     "processingNewestFirst": "Прво ћемо обрадити најновије снимке до доступне квоте. Остали остају на чекању.",
     "processingAction": "Обради снимке на чекању",
     "processingProgress": "Обрада ваших снимака на чекању…",
+    "waitingForTranscriptionAllowance": "Чека се доступна квота за транскрипцију",
     "processingDeferred": "Чека обраду",
     "processingCount": "{count, plural, =1{1 разговор на чекању} other{{count} разговора на чекању}}",
     "playbackPartialAudioSaved": "Сачувано {saved} од {total} аудија",
@@ -12172,7 +12179,6 @@
     "capturePendantDisconnectedShort": "Omi ће се сам поново повезати",
     "forYou": "За вас",
     "stopThese": "Заустави ово",
-    "meetingActionItemsTitle": "Ставке за рад",
     "addToTasks": "Додај у задатке",
     "showInTranscript": "Прикажи транскрипт",
     "tentativeTaskDueDate": "Рок око {date}",
@@ -12293,6 +12299,32 @@
     "finishedSummaryReady": "Резиме је спреман",
     "writingSummaryStatus": "Пише се резиме…",
     "stillWorkingOnIt": "Још увек радимо на томе.",
+    "deviceReadyToUse": "Спремно за употребу",
     "firmwareUpdateFirmwareTooOld": "Фирмвер вашег уређаја је престар за ово ажурирање. Обратите се подршци за помоћ при ажурирању уређаја.",
-    "firmwareUpdateAppRequired": "Ово ажурирање фирмвера захтева новију апликацију Omi. Ажурирајте апликацију у продавници апликација, па проверите поново."
+    "firmwareUpdateAppRequired": "Ово ажурирање фирмвера захтева новију апликацију Omi. Ажурирајте апликацију у продавници апликација, па проверите поново.",
+    "quietPayerTitle": "Нема снимака 5 дана",
+    "quietPayerMessage": "Проверите свој Omi.",
+    "quietPayerCheck": "Провери",
+    "playManageSubscription": "Управљај претплатом",
+    "playBilledByGoogle": "Наплаћује се преко Google Play-а",
+    "playPurchasePending": "Плаћање је на чекању. Omi Pro почиње када га Google Play потврди.",
+    "playPurchaseOtherAccount": "Ова куповина на Google Play-у припада другом Omi налогу.",
+    "playPurchaseNotConfirmed": "Куповину још нисмо могли да потврдимо. Покушаћемо поново аутоматски.",
+    "playRenewalTerms": "Аутоматски се обнавља по приказаној цени док не откажете. Управљајте или откажите било када на Google Play-у.",
+    "playPaidAppUnavailable": "Није доступно на Android-у",
+    "pageNotAvailableInApp": "Ова страница није доступна у апликацији.",
+    "shopOrderPlacedCheckEmail": "Поруџбина је послата. Потврду потражите у е-пошти.",
+    "prepaidCodeEntry": "Имате код?",
+    "prepaidCodeTitle": "Искористите код",
+    "prepaidCodeFieldHint": "Унесите свој код",
+    "prepaidCodeRedeem": "Искористи",
+    "prepaidCodeRedeemed": "Код је искоришћен",
+    "prepaidCodeResult": "{reason, select, invalid{Овај код није важећи. Проверите га и покушајте поново.} used{Овај код је већ искоришћен.} expired{Овај код је истекао.} hasPlan{Већ имате план. Ваш код није искоришћен. Искористите га када вам план истекне.} notPrepaid{Овај код не може да се искористи овде. Искористите га када изаберете план.} notEligible{Овај код не може да се користи на овом налогу.} rateLimited{Превише покушаја. Покушајте касније.} other{Нешто није у реду. Покушајте поново.}}",
+    "playStripeBilledOnWeb": "Наплаћује се преко omi.me. Откажите овде у било ком тренутку.",
+    "playStripeBilledOnWebShort": "Наплаћује се преко omi.me.",
+    "playStripePlanPaused": "Ваш {plan} план је паузиран.",
+    "firmwareNewestSupportedForDevice": "Ваш уређај већ користи најновију подржану верзију фирмвера",
+    "firmwareSyncRecordingsFirstTitle": "Прво синхронизујте снимке",
+    "firmwareSyncRecordingsFirstMessage": "Неки снимци се још увек налазе на вашем уређају. Сачекајте да заврше синхронизовање са телефоном, а затим покрените ажурирање.",
+    "batteryRestartToRefresh": "Поново покрените Omi да освежите податке"
 }

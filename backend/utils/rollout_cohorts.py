@@ -26,7 +26,7 @@ from config.rollout_cohorts import (
     warm_rollout_cohorts as warm_rollout_cohorts,
 )
 from database.rollout_cohorts import read_memberships, read_cohort_members
-from utils import executors
+from utils import executors, reliability_flags
 from utils.observability.fallback import record_fallback
 from utils.rollout.runtime_percent import configure_runtime_percent, ramp_snapshot, warm_ramp
 from utils.stt_cap_cohort import runtime_cohort
@@ -141,10 +141,20 @@ def _in_rollout_cohort(
         if name == 'dream-agent':
             _dream_cohort_degraded('unavailable')
             raise policy.RolloutCohortUnavailable('dream cohort membership unavailable')
+        if name == 'go-finalization':
+            # The caller (utils/rollout/go_finalization_admission.py) fails closed and records
+            # the fallback; a silent False would hide a membership-store outage during a ramp.
+            raise policy.RolloutCohortUnavailable('go finalization membership unavailable')
+        if name == policy.V3_HOLDOUT_COHORT:
+            # config.conversations_v3 admits (fails open) and records the fallback.
+            raise policy.RolloutCohortUnavailable('conversations v3 holdout membership unavailable')
         return False
     try:
         members = members.get(rollout_environment(), {})
     except ValueError:
+        if name == policy.V3_HOLDOUT_COHORT:
+            # An invalid OMI_ENV_STAGE is unknown membership too: admit and count it, never a plain miss.
+            raise policy.RolloutCohortUnavailable('conversations v3 holdout rollout environment invalid')
         return False
     if name in members:
         return members[name] is True
@@ -203,3 +213,5 @@ def configure_rollout_runtime() -> None:
     )
     # Runtime percents and legacy_sync (`rollout_cohorts/_ramp`, contract (f)) bind with the cohorts.
     configure_runtime_percent()
+    # The reliability experiments read their per-account rules from the Omi flag store.
+    reliability_flags.configure()

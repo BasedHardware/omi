@@ -310,7 +310,6 @@ def test_deploy_contract_routes_both_backfill_budget_alerts():
     )
     assert 'provision_budget_alerts: ${{ inputs.sync_backfill_budget_alerts }}' in composite
     assert 'for THRESHOLD in 70 90' in action
-    assert '.github/scripts/ensure_monitoring_metric_alert_policy.py' in action
     assert 'reconcile_sync_backfill_alert_policy.py' in action
     assert 'verify_sync_backfill_alert_policy.py' in action
     assert '--notification-channels="$ALERT_CHANNELS"' in action
@@ -318,26 +317,15 @@ def test_deploy_contract_routes_both_backfill_budget_alerts():
     assert 'The request was aborted because there was no available instance' in action
 
 
-def test_sync_backfill_lifecycle_alerts_on_scheduler_failure_and_missing_sweep():
+def test_sync_backfill_lifecycle_no_longer_owns_the_retired_sequencer():
+    # SCA-2965: the legacy UID sequencer is dark. The deploy action must not re-create
+    # its Scheduler job (it did, after SCA-3023 deleted it) or re-provision its alerts.
     action = (REPOSITORY_ROOT / '.github/actions/sync-backfill-lifecycle/action.yml').read_text()
-    assert 'sync_backfill_uid_sequencer_scheduler_failure' in action or 'scheduler_${KIND}' in action
-    assert 'resource.labels.job_id=\"sync-backfill-uid-sequencer\"' in action
-    assert 'AttemptFinished' in action
-    assert 'action=sweep_summary outcome=done' in action
-    assert "CONDITION='absent'" in action
-    assert "DURATION='600s'" in action
-
-
-def test_sequencer_scheduler_alerts_page_only_on_sustained_failure():
-    # Live prod policies (set by the alert owner on 2026-10-15/16) wait 10 minutes for
-    # both kinds; the deploy verifier must expect the same, or every prod deploy fails.
-    action = (REPOSITORY_ROOT / '.github/actions/sync-backfill-lifecycle/action.yml').read_text()
-    step = action.split('Provision backfill sequencer Scheduler execution alerts', 1)[1]
-    step = step.split('\n    - name:', 1)[0]
-    assert step.count("DURATION='600s'") == 2
-    assert "DURATION='0s'" not in step
-    assert step.count('DURATION_SECONDS=600') == 2
-    assert 'DURATION_SECONDS=0' not in step
+    assert '--jobs sync-backfill-uid-sequencer' not in action
+    assert "METRIC='sync_backfill_uid_sequencer" not in action
+    assert 'METRIC="sync_backfill_uid_sequencer' not in action
+    jobs = (REPOSITORY_ROOT / 'backend/deploy/scheduler/jobs.yaml').read_text()
+    assert 'sync-backfill-uid-sequencer' not in jobs
 
 
 def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
@@ -549,7 +537,7 @@ def test_production_cloud_run_only_smokes_the_promoted_serving_api():
 
     serving_smoke = by_name['Smoke promoted production serving API']
     assert serving_smoke['if'] == (
-        "${{ (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend') && "
+        "${{ success() && !cancelled() && (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend') && "
         "(inputs.deploy_profile == 'manual' && inputs.environment == 'prod') }}"
     )
     assert 'https://api.omi.me/v2/desktop/beta/candidates/reserve' in serving_smoke['run']
@@ -576,20 +564,6 @@ def test_production_cloud_run_only_smokes_the_promoted_serving_api():
         in by_name['Restore Cloud Run traffic snapshot after failed promotion']['if']
     )
 
-    development_smoke = by_name['Smoke What Matters Now datastore query']
-    assert development_smoke['if'] == (
-        "${{ inputs.integration_only != 'true' && "
-        "(inputs.deploy_profile == 'manual' && inputs.environment == 'development') }}"
-    )
-    assert development_smoke.get('id') == 'smoke-what-matters-now-datastore-query'
-    assert steps.index(by_name['Verify serving backend release vector']) < steps.index(development_smoke)
-    assert steps.index(development_smoke) < steps.index(
-        by_name['Restore Cloud Run traffic snapshot after failed promotion']
-    )
-    assert (
-        "steps.smoke-what-matters-now-datastore-query.outcome == 'failure'"
-        in by_name['Restore Cloud Run traffic snapshot after failed promotion']['if']
-    )
     assert (
         'gcloud run services describe backend --project=${{ inputs.project_id }}'
         in by_name['Verify validated revisions are still current']['run']

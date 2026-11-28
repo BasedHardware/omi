@@ -7,13 +7,13 @@ returns None, so the existing one-shot call writes the notes instead.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping, Optional, Sequence
 
 from prometheus_client import Counter as PromCounter
 
+from utils.conversations.processing_steps import AsyncStep, Steps, inline_steps
 from utils.byok import has_byok_keys
 from utils.conversations.notes_agent_tools import NotesToolbox, build_packet, owner_profile, prefetched_results
 from utils.llm.meeting_notes_rich_prompts import NotesFrameImage
@@ -21,7 +21,7 @@ from utils.llm.notes_agent import langchain_complete, record_decision, record_ru
 from config.refactor_modes import serving_for
 from utils.llm.notes_packet import select_notes_packet
 from utils.llm.notes_identity import notes_identity, screen_speaker_bindings
-from utils.llm.notes_agent_policy import plan_notes_agent
+from utils.llm.notes_agent_policy import bounded_budget, plan_notes_agent
 from utils.llm.notes_lengths import length_guide
 from utils.llm.notes_agent_prompt import (
     version_for_run,
@@ -87,7 +87,7 @@ def _window_end(started_at: datetime, finished_at: Any, words: int) -> datetime:
     return started_at + timedelta(minutes=max(5, words // _WORDS_PER_MINUTE))
 
 
-def agentic_notes_payload(
+def agentic_notes_steps(
     *,
     uid: Optional[str],
     prefix: Any,
@@ -96,7 +96,7 @@ def agentic_notes_payload(
     words: int,
     frames: Sequence[NotesFrameImage],
     kwargs: dict[str, Any],
-) -> Optional[dict[str, Any]]:
+) -> Steps[Optional[dict[str, Any]]]:
     """A validated ``submit_notes`` payload, or None to keep the one-shot path."""
     roster = kwargs.get('roster')
     transport_skip = transport_skip_reason(uid, model)
@@ -189,7 +189,7 @@ def agentic_notes_payload(
                     seed=seed,
                     complete=complete,
                     toolbox=toolbox,
-                    budget=budget,
+                    budget=bounded_budget(budget),
                     transcript_words=words,
                     task_intelligence_capture=bool(kwargs.get('task_intelligence_capture')),
                     prefetched_evidence=packet.get('prefetched_evidence', 0),
@@ -202,7 +202,7 @@ def agentic_notes_payload(
                     identity=identity,
                 )
 
-        result = asyncio.run(invoke())
+        result = yield AsyncStep(invoke)
     except Exception as error:  # noqa: BLE001 - the one-shot path still writes the notes
         reason = 'capability_mismatch' if 'capability' in type(error).__name__.lower() else 'other'
         logger.warning('conversation notes agent failed uid=%s error=%s', uid, type(error).__name__)
@@ -221,3 +221,6 @@ def agentic_notes_payload(
         )
         return None
     return result.submission
+
+
+agentic_notes_payload = inline_steps(agentic_notes_steps)

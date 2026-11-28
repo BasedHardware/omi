@@ -430,6 +430,16 @@ class ServerConversation {
   /// 'writing_notes' or 'failed'. Null on finished rows and from older servers.
   final String? homeStep;
 
+  /// Server-authored read projection: 'overdue' when the transcription wait ran out with no failure
+  /// receipt, so the audio is kept and still waiting. Null on every other row and from older servers.
+  final String? transcriptionWait;
+
+  /// Server-authored admission for this recording. Older servers omit it.
+  final String? transcriptionAdmission;
+
+  bool get isTranscriptionAllowanceHeld => transcriptionAdmission == 'allowance_held';
+  bool get isAdmittedForTranscription => transcriptionAdmission == 'processing';
+
   /// Authoritative episode membership, including before the episode list arrives.
   final String? episodeId;
 
@@ -489,6 +499,8 @@ class ServerConversation {
     this.captureCoverage,
     this.excludedSpeakers,
     this.homeStep,
+    this.transcriptionWait,
+    this.transcriptionAdmission,
     this.episodeId,
     this.v3,
   });
@@ -545,6 +557,8 @@ class ServerConversation {
         processingDeferred: processingDeferred,
         captureCoverage: captureCoverage,
         homeStep: homeStep ?? this.homeStep,
+        transcriptionWait: transcriptionWait,
+        transcriptionAdmission: transcriptionAdmission,
         episodeId: episodeId,
         v3: v3,
       )..isNew = isNew;
@@ -589,6 +603,9 @@ class ServerConversation {
       matchSnippets: snippets,
       processingDeferred: json['processing_deferred'] == true,
       homeStep: json['home_step'] is String ? json['home_step'] as String : null,
+      transcriptionWait: json['transcription_wait'] is String ? json['transcription_wait'] as String : null,
+      transcriptionAdmission:
+          json['transcription_admission'] is String ? json['transcription_admission'] as String : null,
       onDeviceProvenance:
           json['on_device_provenance'] is Map ? Map<String, dynamic>.from(json['on_device_provenance']) : null,
       clientProcessing: json['client_processing'] is Map ? Map<String, dynamic>.from(json['client_processing']) : null,
@@ -608,6 +625,8 @@ class ServerConversation {
     Map<String, dynamic>? onDeviceProvenance,
     Map<String, dynamic>? clientProcessing,
     String? homeStep,
+    String? transcriptionWait,
+    String? transcriptionAdmission,
     ConversationV3Fields? v3,
   }) {
     final snippets = matchSnippets ?? const <TranscriptMatchSnippet>[];
@@ -658,6 +677,8 @@ class ServerConversation {
       captureCoverage: generated.captureCoverage,
       excludedSpeakers: generated.excludedSpeakers,
       homeStep: homeStep,
+      transcriptionWait: transcriptionWait,
+      transcriptionAdmission: transcriptionAdmission,
       episodeId: generated.episodeId,
       v3: v3,
     );
@@ -855,6 +876,7 @@ class ServerConversation {
 }
 
 class SyncLocalFilesResponse {
+  final List<wire.GeneratedFrameProcessingRange>? frameOutcomes;
   List<String> newConversationIds = [];
   List<String> updatedConversationIds = [];
   int failedSegments;
@@ -873,7 +895,11 @@ class SyncLocalFilesResponse {
   /// Last permanent upload error message for SyncStatus.error surfacing.
   String? localUploadPermanentError;
 
+  /// Every eligible local WAL was waiting for its mobile batch hold to release.
+  bool localUploadHeldOnly;
+
   SyncLocalFilesResponse({
+    this.frameOutcomes,
     required this.newConversationIds,
     required this.updatedConversationIds,
     this.failedSegments = 0,
@@ -882,6 +908,7 @@ class SyncLocalFilesResponse {
     this.localUploadFailures = 0,
     this.localUploadPermanentFailures = 0,
     this.localUploadPermanentError,
+    this.localUploadHeldOnly = false,
   });
 
   bool get hasPartialFailure => failedSegments > 0;
@@ -892,6 +919,7 @@ class SyncLocalFilesResponse {
 
   factory SyncLocalFilesResponse.fromGenerated(wire.GeneratedSyncLocalFilesResultResponse generated) {
     return SyncLocalFilesResponse(
+      frameOutcomes: generated.frameOutcomesV1,
       newConversationIds: generated.newMemories ?? [],
       updatedConversationIds: generated.updatedMemories ?? [],
       failedSegments: generated.failedSegments,

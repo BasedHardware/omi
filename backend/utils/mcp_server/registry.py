@@ -401,6 +401,17 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
                     "description": "Candidate documents examined before policy filtering",
                 },
                 scan_truncated={"type": "boolean"},
+                coverage={
+                    "type": "string",
+                    "description": (
+                        "What this page can and cannot establish. has_more/next_cursor describe pageable "
+                        "continuation only; coverage states whether global exhaustion is known."
+                    ),
+                },
+                source_window_limit={
+                    "type": "integer",
+                    "description": "Size of the bounded source window read for a non-keyset sort",
+                },
             )
         ),
         scope="memories.read",

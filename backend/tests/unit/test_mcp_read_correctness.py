@@ -569,6 +569,96 @@ def test_large_account_default_is_bounded_and_never_materializes_all(monkeypatch
     service.read_mcp_filtered.assert_not_called()
 
 
+def test_bounded_window_end_reports_no_pageable_continuation(monkeypatch):
+    stored = [
+        {'id': f'memory-{i}', 'content': 'Synthetic fact', 'created_at': NOW - timedelta(seconds=i)} for i in range(200)
+    ]
+    service = MagicMock()
+    service.read.side_effect = lambda uid, *, limit, offset, **kw: [
+        SimpleNamespace(model_dump=lambda row=row, **k: row) for row in stored[offset : offset + limit]
+    ]
+    monkeypatch.setattr(memories, 'MemoryService', lambda **kw: service)
+
+    seen = []
+    cursor = None
+    while True:
+        page = memories.memories_page_core(
+            OWNER, limit=50, sort='created_desc', cursor_kind='test', cursor_token=cursor
+        )
+        seen.extend(row['id'] for row in page['memories'])
+        # has_more must never advertise a continuation the response cannot mint.
+        assert page['has_more'] == bool(page.get('next_cursor'))
+        cursor = page.get('next_cursor')
+        if cursor is None:
+            break
+
+    # The bounded window is 150 rows; the last page ends it without a cursor.
+    assert len(seen) == len(set(seen)) == 150
+    assert page['has_more'] is False
+    assert page['scan_truncated'] is True
+    assert 'bounded' in page['coverage']
+    assert 'sort=updated_desc' in page['coverage'] and 'no cursor' in page['coverage']
+
+
+def test_cross_sort_cursor_reuse_names_the_minted_sort(monkeypatch):
+    stored = [
+        {'id': f'memory-{i}', 'content': 'Synthetic fact', 'created_at': NOW - timedelta(seconds=i)} for i in range(10)
+    ]
+    service = MagicMock()
+    service.read.side_effect = lambda uid, *, limit, offset, **kw: [
+        SimpleNamespace(model_dump=lambda row=row, **k: row) for row in stored[offset : offset + limit]
+    ]
+    monkeypatch.setattr(memories, 'MemoryService', lambda **kw: service)
+
+    first = memories.memories_page_core(OWNER, limit=2, sort='created_desc', cursor_kind='test')
+    with pytest.raises(ToolExecutionError) as excinfo:
+        memories.memories_page_core(
+            OWNER, limit=2, sort='updated_desc', cursor_kind='test', cursor_token=first['next_cursor']
+        )
+    assert 'sort=created_desc' in str(excinfo.value)
+    assert 'sort=updated_desc' in str(excinfo.value)
+
+
+def test_updated_desc_keyset_pages_without_duplicates(monkeypatch):
+    def mem(cid):
+        return SimpleNamespace(model_dump=lambda **k: {'id': cid})
+
+    service = MagicMock()
+    service.read_page.side_effect = [
+        SimpleNamespace(memories=[mem('a'), mem('b')], next_cursor='uml-1', truncated=False),
+        SimpleNamespace(memories=[mem('c')], next_cursor=None, truncated=False),
+    ]
+    monkeypatch.setattr(memories, 'MemoryService', lambda **k: service)
+
+    first = memories.memories_page_core(OWNER, limit=2, sort='updated_desc', cursor_kind='test')
+    second = memories.memories_page_core(
+        OWNER, limit=2, sort='updated_desc', cursor_kind='test', cursor_token=first['next_cursor']
+    )
+    assert [row['id'] for row in first['memories']] == ['a', 'b']
+    assert [row['id'] for row in second['memories']] == ['c']
+    assert first['has_more'] is True and 'next_cursor' in first
+    assert second['has_more'] is False and 'next_cursor' not in second
+    service.read_mcp_filtered.assert_not_called()
+
+
+def test_keyset_scan_truncation_with_a_cursor_says_continue(monkeypatch):
+    def mem(cid):
+        return SimpleNamespace(model_dump=lambda **k: {'id': cid})
+
+    service = MagicMock()
+    service.read_page.side_effect = [
+        SimpleNamespace(memories=[mem('a')], next_cursor='uml-1', truncated=True),
+        SimpleNamespace(memories=[mem('b')], next_cursor='uml-2', truncated=False),
+    ]
+    monkeypatch.setattr(memories, 'MemoryService', lambda **k: service)
+
+    page = memories.memories_page_core(OWNER, limit=2, sort='updated_desc', cursor_kind='test')
+    assert [row['id'] for row in page['memories']] == ['a', 'b']
+    assert page['has_more'] is True and page['next_cursor']
+    assert page['scan_truncated'] is True
+    assert 'continue with next_cursor' in page['coverage']
+
+
 @pytest.mark.parametrize(
     'options,expected',
     [

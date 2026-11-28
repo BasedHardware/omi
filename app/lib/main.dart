@@ -28,6 +28,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/sync_health_watchdog.dart';
+import 'package:omi/utils/reliability_experiments.dart';
 import 'package:omi/services/app_review_service.dart';
 import 'package:omi/services/account_cutover/account_cutover_runtime.dart';
 import 'package:omi/widgets/bluetooth_guidance_listener.dart';
@@ -531,6 +532,9 @@ void main() {
       } else {
         WidgetsFlutterBinding.ensureInitialized();
       }
+      // Before any capture/WAL service exists. Never throws; with no selection
+      // file and no build-time selection every experiment is off.
+      await ReliabilityExperiments.load();
       await _start();
     },
     (error, stack) {
@@ -724,6 +728,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               peopleProvider: people,
               usageProvider: usage,
               episodeProvider: episodes,
+              conversationsV3: context.read<ConversationsV3Provider>(),
             );
             return (previous?..updateExternalActions(externalActions)) ??
                 composeProductionCaptureProvider(

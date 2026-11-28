@@ -87,7 +87,7 @@ async def test_serving_tick_drains_admitted_recordings_after_admission_rollback(
     reconcile = AsyncMock(side_effect=lambda **kwargs: stop.set())
     service.reconcile_async = reconcile
     await asyncio.wait_for(coro, timeout=1)
-    reconcile.assert_awaited_once_with(recover_quarantine=True, periodic=True)
+    reconcile.assert_awaited_once_with(recover_quarantine=True, periodic=True, run_held_expiry=False)
     assert drain.await_count == 1  # Discovery must retain already-admitted work after rollback.
 
 
@@ -265,7 +265,9 @@ async def test_desktop_record_origin_uses_the_escape_language(
         intake, 'provider_config', lambda: SimpleNamespace(pool_kind='dedicated_batch', max_unit_seconds=600)
     )
     monkeypatch.setattr(intake, 'decode_units', decode_units)
-    monkeypatch.setattr(intake, 'artifacts_for', lambda store_: SimpleNamespace(stage_audio=lambda w, b: 'uri'))
+    monkeypatch.setattr(
+        intake, 'artifacts_for', lambda store_: SimpleNamespace(stage_audio=lambda w, b, *, record_origin: 'uri')
+    )
     monkeypatch.setattr(intake, 'admit', capture_admit)
     outcome = await intake.accept_upload(
         uid='synthetic-owner',

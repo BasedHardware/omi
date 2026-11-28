@@ -28,11 +28,11 @@ from typing import (
 from uuid import UUID
 
 from fastapi import HTTPException
-from google.cloud.firestore_v1 import FieldFilter
+from google.cloud.firestore_v1 import FieldFilter, transactional
 from pydantic import ValidationError
 
 import database.memories as memories_db
-from database import memory_source_index
+from database import memory_source_index, rpc_deadline
 import database.vector_db as vector_db
 from utils.mcp_memory_reads import collect_filtered_mcp_memories
 from utils.memory.index_window import (
@@ -44,6 +44,11 @@ from utils.memory.index_window import (
 )
 from config import firestore_read_levers
 from database._client import db as default_db_client
+from database.conversation_effect_fence import (
+    ConversationEffectFenced,
+    ConversationEffectSource,
+    require_active_account,
+)
 from database.memory_collections import MemoryCollections
 from database.released_memory_projection import projected_stream_list
 from database.memory_apply_store import EvidenceIdentityConflict, privacy_deletion_receipt_id
@@ -51,6 +56,7 @@ from database.memory_ledger import purge_source_replacement_receipts_for_memorie
 from database.legal_holds import (
     DestructiveGateTakeover,
     assert_destructive_gate_still_ours,
+    assert_no_destructive_operation_transaction,
     DestructiveOperationInProgress,
     LegalHoldAuthorityUnavailable,
     destructive_operation_gate,
@@ -76,6 +82,7 @@ from models.product_memory import (
     RESTRICTED_SENSITIVITY_LABELS,
     SourceState,
 )
+from utils.executors import cleanup_executor, submit_with_context
 from utils.log_sanitizer import sanitize, sanitize_validation_error
 from utils.other.account_gate_http import account_gate_busy_http_exception
 from utils.other.list_budget import (
@@ -91,6 +98,10 @@ from utils.memory.canonical_memory_adapter import (
     CanonicalBatchMutationLimitError,
     CanonicalMemoryNotFoundError,
     CanonicalScanCursor,
+    CanonicalVisibilityRetryError,
+    CanonicalVisibilityTimeout,
+    visibility_mutation_budget,
+    visibility_write_deadline,
     canonical_memory_lineage_ids,
     delete_default_canonical_memories,
     delete_all_canonical_memories,
@@ -317,6 +328,14 @@ def _legacy_memorydb(value: MemoryDB | Dict[str, Any]) -> MemoryDB:
     payload = memory_api_payload(value, MemoryApiExposure.LEGACY)
     memory = MemoryDB.model_validate(payload)
     return memory.model_copy(update={"memory_tier": None})
+
+
+def visibility_retry_http_exception(error: CanonicalVisibilityRetryError) -> HTTPException:
+    return HTTPException(
+        status_code=503 if isinstance(error, CanonicalVisibilityTimeout) else 409,
+        detail="Memory visibility update temporarily unavailable",
+        headers={"Retry-After": "1"},
+    )
 
 
 def fetch_memory_dict(uid: str, memory_id: str, *, db_client: Any) -> MemoryPayload:
@@ -2652,11 +2671,9 @@ class MemoryService:
             snapshots_by_path[snapshot_path] = snapshot
         return snapshots_by_path
 
-    def _write_historical_override(self, uid: str, memory_id: str, status: MemoryItemStatus) -> None:
-        """Persist one idempotent canonical suppression/ownership record."""
-        client = self.db_client if self.db_client is not None else default_db_client
-        path = f"{MemoryCollections(uid=uid).memory_historical_overrides}/{memory_id}"
-        payload = {
+    @staticmethod
+    def _historical_override_payload(uid: str, memory_id: str, status: MemoryItemStatus) -> dict:
+        return {
             "uid": uid,
             "memory_id": memory_id,
             "public_id": memory_id,
@@ -2664,6 +2681,12 @@ class MemoryService:
             "status": status.value,
             "updated_at": datetime.now(timezone.utc),
         }
+
+    def _write_historical_override(self, uid: str, memory_id: str, status: MemoryItemStatus) -> None:
+        """Persist one idempotent canonical suppression/ownership record."""
+        client = self.db_client if self.db_client is not None else default_db_client
+        path = f"{MemoryCollections(uid=uid).memory_historical_overrides}/{memory_id}"
+        payload = self._historical_override_payload(uid, memory_id, status)
         try:
             ref = client.document(path)
             try:
@@ -2683,6 +2706,7 @@ class MemoryService:
         status: MemoryItemStatus,
         *,
         batch_size: int = 100,
+        effect_source: ConversationEffectSource | None = None,
     ) -> None:
         """Commit bounded idempotent override batches before legacy cleanup."""
         normalized = list(dict.fromkeys(memory_id for memory_id in memory_ids if memory_id))
@@ -2690,6 +2714,9 @@ class MemoryService:
         client = self.db_client if self.db_client is not None else default_db_client
         for start in range(0, len(normalized), bounded_batch_size):
             chunk = normalized[start : start + bounded_batch_size]
+            if effect_source is not None:
+                self._write_fenced_historical_overrides(client, uid, chunk, status, effect_source)
+                continue
             batch_factory = getattr(client, "batch", None)
             if not callable(batch_factory):
                 for memory_id in chunk:
@@ -2699,14 +2726,7 @@ class MemoryService:
                 batch = cast(Any, batch_factory())
                 for memory_id in chunk:
                     path = f"{MemoryCollections(uid=uid).memory_historical_overrides}/{memory_id}"
-                    payload = {
-                        "uid": uid,
-                        "memory_id": memory_id,
-                        "public_id": memory_id,
-                        "origin": "legacy",
-                        "status": status.value,
-                        "updated_at": datetime.now(timezone.utc),
-                    }
+                    payload = self._historical_override_payload(uid, memory_id, status)
                     ref = client.document(path)
                     try:
                         batch.set(ref, payload, merge=True)
@@ -2718,6 +2738,41 @@ class MemoryService:
                 raise
             except Exception as exc:
                 raise HTTPException(status_code=503, detail="Canonical memory suppression unavailable") from exc
+
+    def _write_fenced_historical_overrides(
+        self,
+        client: Any,
+        uid: str,
+        memory_ids: list[str],
+        status: MemoryItemStatus,
+        effect_source: ConversationEffectSource,
+    ) -> None:
+        collection = MemoryCollections(uid=uid).memory_historical_overrides
+
+        @transactional
+        def apply(transaction):
+            require_active_account(transaction, client, uid)
+            effect_source.validate(transaction, client, uid)
+            assert_no_destructive_operation_transaction(transaction, client, uid=uid)
+            for memory_id in memory_ids:
+                transaction.set(
+                    client.document(f"{collection}/{memory_id}"),
+                    self._historical_override_payload(uid, memory_id, status),
+                    merge=True,
+                )
+
+        _revalidate_explicit_deletion(uid, db_client=client)
+        try:
+            apply(client.transaction())
+        except (
+            ConversationEffectFenced,
+            DestructiveGateTakeover,
+            DestructiveOperationInProgress,
+            LegalHoldAuthorityUnavailable,
+        ):
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="Canonical memory suppression unavailable") from exc
 
     def _canonical_read(
         self,
@@ -4130,12 +4185,26 @@ class MemoryService:
         self._invalidate_prompt_cache(uid)
         return memory_item_to_memorydb(updated)
 
+    def _cleanup_visibility_history(self, uid: str, memory_id: str) -> None:
+        remaining = rpc_deadline.remaining()
+        if remaining is not None and remaining <= 0:
+            logger.warning("visibility_historical_cleanup_deadline_expired")
+            return
+        HistoricalMemoryAdapter.cleanup(uid, memory_id, db_client=self.db_client)
+
     def update_visibility(self, uid: str, memory_id: str, visibility: str) -> None:
         self.ensure_canonical_mutation_ready(uid)
-        materialized = self._ensure_canonical_target(uid, memory_id)
-        self._canonical.update_visibility(uid, memory_id, visibility)
-        if materialized:
-            HistoricalMemoryAdapter.cleanup(uid, memory_id, db_client=self.db_client)
+        with visibility_mutation_budget(self.db_client) as deadline:
+            with rpc_deadline.rpc_deadline(visibility_write_deadline(deadline)):
+                materialized = self._ensure_canonical_target(uid, memory_id)
+            self._canonical.update_visibility(uid, memory_id, visibility)
+            if materialized:
+                # The durable override already suppresses the old row. Best-effort physical
+                # cleanup inherits the deadline but cannot delay or fail the committed request.
+                try:
+                    submit_with_context(cleanup_executor, self._cleanup_visibility_history, uid, memory_id)
+                except RuntimeError as exc:
+                    logger.warning("visibility_historical_cleanup_not_queued error_type=%s", type(exc).__name__)
         self._invalidate_prompt_cache(uid)
 
     def review(self, uid: str, memory_id: str, value: bool) -> None:
@@ -4612,6 +4681,8 @@ class MemoryService:
         uid: str,
         conversation_id: str,
         items: List[Dict[str, Any]],
+        *,
+        effect_source: ConversationEffectSource | None = None,
     ) -> Dict[str, Any]:
         self.ensure_canonical_mutation_ready(uid)
         # This wrapper is the conversation-extraction entry (finalize and
@@ -4624,10 +4695,16 @@ class MemoryService:
             items,
             db_client=self.db_client,
             empty_set_intent="extraction",
+            effect_source=effect_source,
         )
         retracted = list(result.get("retracted_memory_ids") or [])
         if retracted:
-            self._write_historical_overrides(uid, retracted, MemoryItemStatus.tombstoned)
+            if effect_source is None:
+                self._write_historical_overrides(uid, retracted, MemoryItemStatus.tombstoned)
+            else:
+                self._write_historical_overrides(
+                    uid, retracted, MemoryItemStatus.tombstoned, effect_source=effect_source
+                )
         return result
 
     def create_external_memory(

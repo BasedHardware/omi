@@ -26,7 +26,7 @@ change; discover by UUID.
 | Features `19B10020` | Bitmask `21` |
 | Time sync `19B10030` | Write `31`; read `32` |
 | Storage `30295780-4301-EABD-2904-2849ADFEAE43` | `30295781`, CCC; `30295782`, CCC (same suffix) |
-| Diagnostics `19B10040` | Device telemetry `41`; recovery state `42`; both read-only, no CCC |
+| Diagnostics `19B10040` | Device telemetry `41`; recovery state `42`; loader identity `43`; all read-only, no CCC |
 
 Append-only telemetry remains at `19B10041` (25-byte base plus the optional
 battery and connection tails described below), including its coherent
@@ -38,7 +38,7 @@ for 3.0.22 must discover `42` on 3.0.23; never decode `41` as recovery state.
 
 ## SAFE subset
 
-SAFE registers only `19B10040` with recovery characteristic `19B10042`, plus
+SAFE registers only `19B10040` with recovery characteristic `19B10042` and loader identity `19B10043`, plus
 Zephyr's static services (DIS, SMP, configured BAS). Device telemetry `41` and all
 other application services, capture callbacks and workers are absent. A minimal
 connection callback invalidates only the recovery read cache. This avoids normal
@@ -196,3 +196,34 @@ shutdown, not completed shutdown.
 `06` belong to image characteristics. The app also uses `19B10010`–`12` for
 omiGlass OTA; do not reuse image slots on CV1. Future additions must allocate a
 free UUID here and append attributes after existing members.
+
+## Installed bootloader identity (`19B10043`, candidate)
+
+Read-only characteristic appended to diagnostics service `19B10040` in NORMAL
+and SAFE. Fixed 44-byte value, immutable for the current boot, prepared before
+BLE registration; ATT offsets do not initiate flash reads or reset the device.
+No write command, caller-selected range or raw-memory export exists.
+
+| Offset | Size | Meaning |
+|---|---|---|
+| 0 | 1 | Schema 1 |
+| 1 | 1 | Status: 0 unsupported, 1 measured, 2 unsafe/unreadable, 3 read/hash error, 4 not ready |
+| 2 | 1 | Algorithm 1 = SHA-256 |
+| 3 | 1 | Reserved zero |
+| 4 | 4 | LE start address, exactly zero |
+| 8 | 4 | LE byte length, exactly 65536 |
+| 12 | 32 | Digest of actual installed bytes, all zero unless status 1 |
+
+The nRF5340 APP adapter first requires every covered SPU region to permit reads,
+be locked and disallow writes. Unsupported targets return status 0. No protection
+register is changed. Failure is unknown eligibility, not proof of a bad loader.
+Clients must validate schema, algorithm, reserved byte, range and status before
+using a digest, bind it to the same device, and compare full digests against the
+release policy. This is diagnostic self-report, not cryptographic attestation.
+It identifies devices that can install this firmware; it cannot reach or rescue
+unchanged stock-.21-loader devices blocked from OTA. Application version strings,
+SMP bootloader mode and application slot hashes remain different concepts.
+
+Target build and physical read-permission/hash comparison remain required before
+this candidate is considered jig-ready. Approved-loader hashes and qualification
+policy remain in `../bootloader/cv1-bootloader-policy.json`.

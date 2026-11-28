@@ -27,6 +27,7 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/sync_health_watchdog.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
@@ -112,7 +113,7 @@ List<SingleChildWidget> defaultAuditProviders({UsageProvider Function()? usage})
 class AuditDeviceProvider extends ChangeNotifier implements DeviceProvider {
   AuditDeviceProvider({
     this.connected = false,
-    this.battery = 0,
+    this.battery = -1,
     this.charging = false,
     this.newFirmware = false,
     this.device,
@@ -132,11 +133,25 @@ class AuditDeviceProvider extends ChangeNotifier implements DeviceProvider {
   @override
   BtDevice? get pairedDevice => device;
   @override
+  BtDevice? get capabilityNormalizedDevice => device;
+  @override
   bool get hasRememberedDevice => device?.id.isNotEmpty ?? false;
   @override
   int get batteryLevel => battery;
+
+  @override
+  int get displayBatteryLevel => batteryLevel;
+
+  @override
+  bool get batteryReadingStuck => false;
+  @override
+  int get settingsBatteryLevel => batteryLevel;
   @override
   bool get isCharging => charging;
+  @override
+  bool? get observedChargingStatus => charging;
+  @override
+  VoidCallback prepareFirstChargeCheck(String deviceId) => () {};
   @override
   bool get havingNewFirmware => newFirmware;
   @override
@@ -152,7 +167,7 @@ class AuditDeviceProvider extends ChangeNotifier implements DeviceProvider {
   @override
   Future<void> refreshRingStorageStatus() async {}
   @override
-  bool get isDeviceStorageSupport => false;
+  OfflineStorageCapability get offlineStorageCapability => OfflineStorageCapability.unverified;
   @override
   bool get isConnecting => false;
   @override

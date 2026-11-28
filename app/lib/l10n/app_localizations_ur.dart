@@ -560,11 +560,11 @@ class AppLocalizationsUr extends AppLocalizations {
   String get hardwareSection => 'ہارڈ ویئر';
 
   @override
-  String get v2Undetected => 'V2 شناخت نہیں';
+  String get v2Undetected => 'آف لائن سنک دستیاب نہیں ہے';
 
   @override
   String get v2UndetectedMessage =>
-      'ہمیں لگتا ہے کہ آپ کے پاس ایک V1 ڈیوائس ہے یا آپ کا ڈیوائس متصل نہیں ہے۔ SD کارڈ کی فعالیت صرف V2 ڈیوائسز کے لیے دستیاب ہے۔';
+      'آف لائن سنک کے لیے SD کارڈ اسٹوریج والے منسلک Omi ڈیوائس کی ضرورت ہے۔ آپ کا موجودہ ڈیوائس اسے سپورٹ نہیں کرتا۔';
 
   @override
   String get endConversation => 'بات چیت ختم کریں';
@@ -7068,6 +7068,26 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get authUnexpectedError => 'سائن ان میں غیر متوقع خرابی، براہ کرم دوبارہ کوشش کریں';
+
+  @override
+  String get accountSignInMethods => 'سائن اِن کے طریقے';
+
+  @override
+  String get accountAddSignInMethod => 'سائن اِن کا طریقہ شامل کریں';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'اس Omi اکاؤنٹ میں سائن اِن کا ایک طریقہ شامل کریں۔ آپ کا پلان، ریکارڈنگز اور انٹیگریشنز اسی اکاؤنٹ کے ساتھ رہیں گی۔';
+
+  @override
+  String get accountSignInConflictTitle => 'سائن اِن کا یہ طریقہ کسی دوسرے اکاؤنٹ سے منسلک ہے';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'آپ اب بھی اسی اکاؤنٹ میں سائن اِن ہیں۔ ہر Omi اکاؤنٹ کا اپنا پلان، ریکارڈنگز اور انٹیگریشنز برقرار رہتی ہیں۔';
+
+  @override
+  String get accountSignInMethodAdded => 'سائن اِن کا طریقہ شامل ہو گیا';
 
   @override
   String get authFailedToLinkGoogle => 'Google سے لنک کرنے میں ناکام، براہ کرم دوبارہ کوشش کریں۔';
@@ -14373,6 +14393,9 @@ class AppLocalizationsUr extends AppLocalizations {
   String get processingProgress => 'آپ کی منتظر ریکارڈنگز پروسیس ہو رہی ہیں…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'آڈیو کی تحریری نقل کے کوٹے کا انتظار ہے';
+
+  @override
   String get processingDeferred => 'پروسیسنگ کی منتظر';
 
   @override
@@ -15325,9 +15348,6 @@ class AppLocalizationsUr extends AppLocalizations {
   String get stopThese => 'یہ روکیں';
 
   @override
-  String get meetingActionItemsTitle => 'عمل کے نکات';
-
-  @override
   String get addToTasks => 'ٹاسکس میں شامل کریں';
 
   @override
@@ -15733,10 +15753,108 @@ class AppLocalizationsUr extends AppLocalizations {
   String get stillWorkingOnIt => 'ابھی کام جاری ہے۔';
 
   @override
+  String get deviceReadyToUse => 'استعمال کے لیے تیار';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'آپ کے آلے کا فرم ویئر اس اپ ڈیٹ کے لیے بہت پرانا ہے۔ آلے کو اپ ڈیٹ کرنے میں مدد کے لیے سپورٹ سے رابطہ کریں۔';
 
   @override
   String get firmwareUpdateAppRequired =>
       'اس فرم ویئر اپ ڈیٹ کے لیے Omi ایپ کا نیا ورژن درکار ہے۔ اپنے ایپ اسٹور سے ایپ کو اپ ڈیٹ کریں، پھر دوبارہ چیک کریں۔';
+
+  @override
+  String get quietPayerTitle => '5 دن سے کوئی ریکارڈنگ نہیں';
+
+  @override
+  String get quietPayerMessage => 'اپنا Omi چیک کریں۔';
+
+  @override
+  String get quietPayerCheck => 'چیک کریں';
+
+  @override
+  String get playManageSubscription => 'سبسکرپشن کا انتظام کریں';
+
+  @override
+  String get playBilledByGoogle => 'Google Play کے ذریعے بل کیا جاتا ہے';
+
+  @override
+  String get playPurchasePending =>
+      'آپ کی ادائیگی زیر التواء ہے۔ Google Play کی تصدیق ہوتے ہی Omi Pro شروع ہو جائے گا۔';
+
+  @override
+  String get playPurchaseOtherAccount => 'یہ Google Play خریداری کسی دوسرے Omi اکاؤنٹ کی ہے۔';
+
+  @override
+  String get playPurchaseNotConfirmed => 'ہم ابھی آپ کی خریداری کی تصدیق نہیں کر سکے۔ ہم خود بخود دوبارہ کوشش کریں گے۔';
+
+  @override
+  String get playRenewalTerms =>
+      'منسوخ کرنے تک دکھائی گئی قیمت پر خودکار طور پر تجدید ہوتی ہے۔ Google Play میں کسی بھی وقت انتظام یا منسوخ کریں۔';
+
+  @override
+  String get playPaidAppUnavailable => 'Android پر دستیاب نہیں';
+
+  @override
+  String get pageNotAvailableInApp => 'یہ صفحہ ایپ میں دستیاب نہیں ہے۔';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'آرڈر دے دیا گیا۔ تصدیق کے لیے اپنی ای میل دیکھیں۔';
+
+  @override
+  String get prepaidCodeEntry => 'کوڈ ہے؟';
+
+  @override
+  String get prepaidCodeTitle => 'کوڈ ریڈیم کریں';
+
+  @override
+  String get prepaidCodeFieldHint => 'اپنا کوڈ درج کریں';
+
+  @override
+  String get prepaidCodeRedeem => 'ریڈیم کریں';
+
+  @override
+  String get prepaidCodeRedeemed => 'کوڈ ریڈیم ہو گیا';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'یہ کوڈ درست نہیں ہے۔ اسے چیک کریں اور دوبارہ کوشش کریں۔',
+        'used': 'یہ کوڈ پہلے ہی استعمال ہو چکا ہے۔',
+        'expired': 'اس کوڈ کی میعاد ختم ہو گئی ہے۔',
+        'hasPlan': 'آپ کے پاس پہلے سے پلان ہے۔ آپ کا کوڈ استعمال نہیں ہوا۔ پلان ختم ہونے کے بعد اسے ریڈیم کریں۔',
+        'notPrepaid': 'یہ کوڈ یہاں ریڈیم نہیں ہو سکتا۔ پلان منتخب کرتے وقت اسے استعمال کریں۔',
+        'notEligible': 'یہ کوڈ اس اکاؤنٹ پر استعمال نہیں ہو سکتا۔',
+        'rateLimited': 'بہت زیادہ کوششیں۔ بعد میں دوبارہ کوشش کریں۔',
+        'other': 'کچھ غلط ہو گیا۔ براہ کرم دوبارہ کوشش کریں۔',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'omi.me کے ذریعے بل کیا جاتا ہے۔ کسی بھی وقت یہاں سے منسوخ کریں۔';
+
+  @override
+  String get playStripeBilledOnWebShort => 'omi.me کے ذریعے بل کیا جاتا ہے۔';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'آپ کا $plan پلان روک دیا گیا ہے۔';
+  }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'آپ کا ڈیوائس پہلے ہی سپورٹ شدہ تازہ ترین فرم ویئر ورژن پر ہے';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'پہلے اپنی ریکارڈنگز سنک کریں';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'کچھ ریکارڈنگز ابھی آپ کے ڈیوائس پر ہیں۔ انہیں فون پر سنک ہونے دیں، پھر اپڈیٹ شروع کریں۔';
+
+  @override
+  String get batteryRestartToRefresh => 'ریفریش کرنے کے لیے Omi کو دوبارہ شروع کریں';
 }

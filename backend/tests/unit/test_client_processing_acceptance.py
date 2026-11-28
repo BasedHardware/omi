@@ -41,6 +41,8 @@ from unittest.mock import MagicMock
 
 
 import pytest
+from fastapi import FastAPI, HTTPException
+from fastapi.testclient import TestClient
 
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
 
@@ -75,8 +77,9 @@ from models.transcript_segment import TranscriptSegment
 from utils.conversations.projection_payload import PROVENANCE_LOG_MAX_CHARS
 
 
+from database import _client as firestore_client
+from tests.support.isolated_prometheus import isolated_prometheus
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
-from tests.unit.memory_import_isolation import make_database_client_stub
 
 
 from utils.conversations.transcript_hash import transcript_sha256
@@ -118,14 +121,6 @@ def _build_fakes() -> dict[str, ModuleType]:
         fakes[name] = mod
         return mod
 
-    database_pkg = ModuleType('database')
-    database_pkg.__path__ = [str(_BACKEND / 'database')]  # type: ignore[attr-defined]
-    add('database', database_pkg)
-
-    client_mod = make_database_client_stub()
-    client_mod.run_transactional = lambda client, operation: operation(client.transaction())
-    client_mod.document_id_from_seed = lambda seed: 'seed-id'
-    add('database._client', client_mod)
     tombstones = add('database.conversation_tombstones', AutoMockModule('database.conversation_tombstones'))
     tombstones.is_deleted = MagicMock(return_value=False)
 
@@ -197,6 +192,7 @@ def _build_fakes() -> dict[str, ModuleType]:
         'get_app_result',
         'should_discard_conversation',
         'get_conversation_notes',
+        'conversation_notes_steps',
     ):
         setattr(conv_proc, attr, MagicMock())
     conv_proc.validate_structured_source_segment_ids = lambda structured, _ids: structured
@@ -299,7 +295,8 @@ def _add_developer_fakes(fakes: dict[str, ModuleType]) -> None:
         return mod
 
     add('dependencies', AutoMockModule('dependencies'))
-    add('utils.other.endpoints', AutoMockModule('utils.other.endpoints'))
+    endpoints = add('utils.other.endpoints', AutoMockModule('utils.other.endpoints'))
+    endpoints.with_rate_limit = lambda dependency, _policy: dependency
     search = add('utils.conversations.search', AutoMockModule('utils.conversations.search'))
     search.ConversationSearchUnavailableError = type('ConversationSearchUnavailableError', (Exception,), {})
     add('utils.conversations.mcp_transcript_search', AutoMockModule('utils.conversations.mcp_transcript_search'))
@@ -313,7 +310,13 @@ def _add_developer_fakes(fakes: dict[str, ModuleType]) -> None:
 def stack():
     fakes = _build_fakes()
     _add_developer_fakes(fakes)
-    with stub_modules(fakes):
+    with pytest.MonkeyPatch.context() as patch, isolated_prometheus(), stub_modules(fakes):
+        client = MagicMock()
+        patch.setattr(firestore_client, '_firestore_client', client)
+        patch.setattr(firestore_client, '_customer_firestore_client', client)
+        patch.setattr(firestore_client, '_data_plane_firestore_client', client)
+        patch.setattr(firestore_client, 'run_transactional', lambda client, operation: operation(client.transaction()))
+        patch.setattr(firestore_client, 'document_id_from_seed', lambda seed: 'seed-id')
         pc = load_module_fresh(
             'utils.conversations.process_conversation',
             os.path.join(str(_BACKEND), 'utils', 'conversations', 'process_conversation.py'),
@@ -618,6 +621,7 @@ def test_paid_plan_generic_persist_omits_projection_keeps_it_in_memory(monkeypat
 
 
 def test_flag_off_deferred_persist_omits_projection_keeps_it_in_memory(monkeypatch, stack) -> None:
+    monkeypatch.setenv('CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED', 'off')
     pc, _dev = stack
     monkeypatch.setattr(pc.funded_processing, 'enabled', lambda uid, lane=None: False)
     spies = _spy_managed_effects(monkeypatch, pc)
@@ -1049,7 +1053,10 @@ def _race_store_harness(monkeypatch, stack, *, first_projection: Any, retry_titl
         retry = dev.CreateConversationFromTranscriptRequest.model_validate(
             _from_segments_raw_payload(_projection_dict(title=retry_title), client_session_id=session)
         )
-        store['b_response'] = dev._create_conversation_from_segments(_UID, retry)
+        with pytest.raises(HTTPException) as in_flight:
+            dev._create_conversation_from_segments(_UID, retry)
+        assert in_flight.value.status_code == 503
+        assert (in_flight.value.headers or {}).get('Retry-After') == '2'
         return True
 
     def fake_persist(_uid: str, payload: dict[str, Any], **_kwargs: Any) -> bool:
@@ -1072,7 +1079,22 @@ def _race_store_harness(monkeypatch, stack, *, first_projection: Any, retry_titl
     return store
 
 
-def test_late_projection_survives_older_processor_persist(monkeypatch, stack) -> None:
+@pytest.fixture
+def projection_replay_client(monkeypatch, stack):
+    _, dev = stack
+
+    async def run_inline(_executor, function, *args, **kwargs):
+        return function(*args, **kwargs)
+
+    monkeypatch.setattr(dev, 'run_blocking', run_inline)
+    app = FastAPI()
+    app.include_router(dev.router)
+    app.dependency_overrides[dev.get_current_user_uid] = lambda: _UID
+    with TestClient(app) as client:
+        yield client
+
+
+def test_late_projection_survives_older_processor_persist(monkeypatch, stack, projection_replay_client) -> None:
     pc, dev = stack
     _authorize(monkeypatch, pc, _basic_decision())
     store = _race_store_harness(monkeypatch, stack, first_projection=None, retry_title=PROJECTION_TITLE)
@@ -1080,11 +1102,19 @@ def test_late_projection_survives_older_processor_persist(monkeypatch, stack) ->
     response_a = dev._create_conversation_from_segments(_UID, store['first'])
 
     assert response_a.id == store['conv_id']
+    assert response_a.status == 'completed'
     assert store.get('b_ran') is True
-    assert store['b_response'].id == store['conv_id']
     assert store['update'].keys() == {'client_processing'}
     assert store['doc']['client_processing']['structure']['title'] == PROJECTION_TITLE
     assert _nested(store['doc'], 'structured', 'title') == _SEGMENT_TEXT
+
+    replay = projection_replay_client.post(
+        '/v1/conversations/from-segments', json=store['first'].model_dump(mode='json')
+    )
+
+    assert replay.status_code == 200, replay.text
+    assert replay.json()['id'] == store['conv_id']
+    assert replay.json()['status'] == 'completed'
     store['spies']['get_structured'].assert_not_called()
 
 
@@ -1098,8 +1128,8 @@ def test_stale_in_memory_projection_does_not_overwrite_later_ingest_write(monkey
     response_a = dev._create_conversation_from_segments(_UID, store['first'])
 
     assert response_a.id == store['conv_id']
+    assert response_a.status == 'completed'
     assert store.get('b_ran') is True
-    assert store['b_response'].id == store['conv_id']
     assert store['update'].keys() == {'client_processing'}
     assert store['doc']['client_processing']['structure']['title'] == PROJECTION_TITLE
     assert store['doc']['client_processing']['structure']['title'] != PROJECTION_TITLE_A
@@ -1116,8 +1146,8 @@ def test_basic_stale_projection_does_not_overwrite_later_ingest_write(monkeypatc
     response_a = dev._create_conversation_from_segments(_UID, store['first'])
 
     assert response_a.id == store['conv_id']
+    assert response_a.status == 'completed'
     assert store.get('b_ran') is True
-    assert store['b_response'].id == store['conv_id']
     assert store['update'].keys() == {'client_processing'}
     assert store['doc']['client_processing']['structure']['title'] == PROJECTION_TITLE
     assert store['doc']['client_processing']['structure']['title'] != PROJECTION_TITLE_A

@@ -1,10 +1,11 @@
 """Decision comparisons and durable-token validation across real cache helpers."""
 
 from contextlib import nullcontext
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import json
 import re
+import time
 from types import SimpleNamespace
 
 import fakeredis
@@ -13,6 +14,8 @@ import pytest
 import yaml
 
 from database import batch_pipeline_privacy as privacy, conversation_tombstones as tombstones
+from database import batch_privacy_owner_cache as shared_cache
+from database import batch_privacy_write_cache as write_cache
 from database import fsr_read_cache as cache, legal_holds, privacy_check_metrics as metrics
 from database.batch_privacy_attempt import batch_privacy_attempt
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
@@ -47,10 +50,20 @@ def world(monkeypatch):
     monkeypatch.setattr(StrictFirestoreDocument, 'get', get)
     monkeypatch.setattr(tombstones, 'db', db)
     monkeypatch.setattr(cache, '_redis', lambda: redis)
-    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{}')
+    # The shared owner cache merges dark (code default 0); this world exercises it enabled.
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"bpp_shared_owner_cache":100}')
     redis = fakeredis.FakeRedis()
     yield db, reads, revision, redis
     redis.close()
+
+
+def test_shared_owner_cache_merges_dark_and_status_skip_ships_on(monkeypatch):
+    from config.firestore_read_levers import lever_percent
+
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{}')
+    assert lever_percent('bpp_shared_owner_cache') == 0
+    assert lever_percent('bpp_shared_owner_shadow') == 0
+    assert lever_percent('bpp_status_skip') == 100
 
 
 def enable(monkeypatch, *names):
@@ -64,6 +77,158 @@ def check(db, **kwargs):
 def external(db, transaction=None):
     with legal_holds.external_write_fence(UID, firestore_client=db, transaction=transaction):
         return True
+
+
+@pytest.fixture
+def shared_owner_world(world, monkeypatch):
+    db, _, _, redis = world
+    db._database_string = 'projects/synthetic/databases/(default)'
+    monkeypatch.setenv('REDIS_DB_HOST', 'synthetic')
+    monkeypatch.setattr(shared_cache, '_redis_retry_at', 0.0)
+    monkeypatch.setattr(shared_cache, '_redis', lambda: redis)
+    monkeypatch.setattr(privacy, 'ttl_disabled', lambda: False)
+    return world
+
+
+def test_shared_owner_decision_saves_walk_across_client_instances(shared_owner_world, monkeypatch):
+    db, reads, revision, _ = shared_owner_world
+    assert check(db, shared_owner_cache=True) == 7
+    assert TOKEN in reads and SOURCE in reads
+    other = StrictFirestore(db.rows)
+    other._database_string = db._database_string
+    reads.clear()
+    assert check(other, shared_owner_cache=True) == 7
+    assert reads == [TOKEN]
+
+    # The same opaque token may be replayed, but the server revision changes.
+    revision[0] += timedelta(seconds=1)
+    other.rows[TOMBSTONE] = {}
+    reads.clear()
+    with pytest.raises(privacy.BatchPrivacyBlocked, match='conversation_deleted'):
+        check(other, shared_owner_cache=True)
+    assert TOKEN in reads and TOMBSTONE in reads
+
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"bpp_shared_owner_cache":0}')
+    reads.clear()
+    with pytest.raises(privacy.BatchPrivacyBlocked, match='conversation_deleted'):
+        check(other, shared_owner_cache=True)
+    assert TOMBSTONE in reads
+
+
+def test_shared_owner_cache_expiry_coverage_and_plane(shared_owner_world, monkeypatch):
+    db, reads, _, redis = shared_owner_world
+    now = time.time()
+    clock = SimpleNamespace(time=lambda: now, monotonic=time.monotonic)
+    monkeypatch.setattr(shared_cache, 'time', clock)
+    monkeypatch.setattr(privacy, 'time', clock)
+    assert check(db, shared_owner_cache=True) == 7
+    (key,) = redis.keys()
+    assert 0 < redis.pttl(key) <= 300_000
+    assert UID.encode() not in key and b'source' not in redis.get(key)
+    owner = privacy.privacy_owner_key(UID)
+    assert shared_cache.read(db, owner, frozenset({'new-id'}), None) is None
+    assert shared_cache.read(db, owner, frozenset({'source'}), 8) is None
+    other = SimpleNamespace(_database_string='projects/other/databases/(default)')
+    assert shared_cache.read(other, owner, frozenset({'source'}), None) is None
+
+    clock.time = lambda: now + 300
+    reads.clear()
+    assert check(db, shared_owner_cache=True) == 7
+    assert SOURCE in reads
+
+
+def test_shared_shadow_distinguishes_unfenced_mismatch_from_recent_revocation(shared_owner_world, monkeypatch):
+    db, reads, revision, _ = shared_owner_world
+    monkeypatch.setenv(
+        'FIRESTORE_READ_LEVERS',
+        '{"bpp_shared_owner_cache":0,"bpp_status_skip":0,"bpp_shared_owner_shadow":100,"privacy_checks_shadow":0}',
+    )
+    shadow_gets = shared_cache.OUTCOMES.labels('shadow_get_attempt')._value
+    certified_gets = shared_cache.OUTCOMES.labels('certified_get_attempt')._value
+    before_gets = shadow_gets.get(), certified_gets.get()
+    changes = shared_cache.SHADOW.labels('authority_changed')
+    mismatches = shared_cache.SHADOW.labels('mismatch')
+    matches = shared_cache.SHADOW.labels('match')
+    before = (changes._value.get(), mismatches._value.get(), matches._value.get())
+    assert check(db, shared_owner_cache=True) == 7
+    reads.clear()
+    assert check(db, shared_owner_cache=True) == 7
+    assert SOURCE in reads
+    db.rows[TOMBSTONE] = {}
+    with pytest.raises(privacy.BatchPrivacyBlocked, match='conversation_deleted'):
+        check(db, shared_owner_cache=True)
+    revision[0] = datetime.now(timezone.utc)
+    db.rows[TOKEN]['memo_token'] = 'b' * 32
+    with pytest.raises(privacy.BatchPrivacyBlocked, match='conversation_deleted'):
+        check(db, shared_owner_cache=True)
+    assert (changes._value.get(), mismatches._value.get(), matches._value.get()) == tuple(x + 1 for x in before)
+    assert (shadow_gets.get(), certified_gets.get()) == (before_gets[0] + 4, before_gets[1])
+
+
+def test_malformed_shadow_version_preserves_authoritative_allow(shared_owner_world, monkeypatch):
+    db, reads, _, redis = shared_owner_world
+    enable(monkeypatch, 'bpp_shared_owner_shadow')
+    assert check(db, shared_owner_cache=True) == 7
+    (key,) = redis.keys()
+    original_candidate = redis.get(key)
+
+    db.rows[TOKEN]['generation'] = 8
+    monkeypatch.setattr(privacy, 'token_version', lambda snapshot: ('a' * 32, 'invalid-revision', 0))
+    unavailable = shared_cache.SHADOW.labels('unavailable')._value
+    mismatch = shared_cache.SHADOW.labels('mismatch')._value
+    before = unavailable.get(), mismatch.get()
+    reads.clear()
+
+    assert check(db, shared_owner_cache=True) == 8
+    assert TOKEN in reads and SOURCE in reads
+    assert (unavailable.get(), mismatch.get()) == (before[0] + 1, before[1])
+    assert redis.get(key) == original_candidate
+
+
+def test_shared_owner_set_errors_do_not_inflate_get_attempts(shared_owner_world, monkeypatch):
+    from redis.exceptions import ConnectionError
+
+    db, _, _, redis = shared_owner_world
+    attempts = shared_cache.OUTCOMES.labels('certified_get_attempt')._value
+    hits = shared_cache.OUTCOMES.labels('certified_hit')._value
+    set_errors = shared_cache.OUTCOMES.labels('set_error')._value
+    before = attempts.get(), hits.get(), set_errors.get()
+    assert check(db, shared_owner_cache=True) == 7
+    assert check(db, shared_owner_cache=True) == 7
+
+    def fail_set(*args, **kwargs):
+        raise ConnectionError('test Redis SET failure')
+
+    monkeypatch.setattr(redis, 'set', fail_set)
+    shared_cache.store(db, privacy.privacy_owner_key(UID), frozenset(), ('a' * 32, '', 0), 7, started=time.time())
+    assert (attempts.get(), hits.get(), set_errors.get()) == tuple(x + n for x, n in zip(before, (2, 1, 1)))
+
+
+def test_shared_owner_redis_error_falls_back_to_the_live_walk(shared_owner_world, monkeypatch):
+    from redis.exceptions import ConnectionError
+
+    db, reads, _, redis = shared_owner_world
+
+    calls = []
+
+    def broken(*args, **kwargs):
+        calls.append('get')
+        raise ConnectionError('synthetic outage')
+
+    def reject_store(*args, **kwargs):
+        raise AssertionError('Redis cooldown must skip SET')
+
+    monkeypatch.setattr(redis, 'get', broken)
+    monkeypatch.setattr(redis, 'set', reject_store)
+    attempts = shared_cache.OUTCOMES.labels('certified_get_attempt')._value
+    get_errors = shared_cache.OUTCOMES.labels('get_error')._value
+    before = attempts.get(), get_errors.get()
+    assert check(db, shared_owner_cache=True) == 7
+    assert SOURCE in reads and TOKEN in reads
+    reads.clear()
+    assert check(db, shared_owner_cache=True) == 7
+    assert SOURCE in reads and calls == ['get']
+    assert (attempts.get(), get_errors.get()) == (before[0] + 1, before[1] + 1)
 
 
 def test_counters_measure_live_check_reads_walks_and_absent_user_default(world):
@@ -483,3 +648,59 @@ def test_owner_candidate_can_exhaust_shared_artifact_deadline_after_live_allow(w
     assert TOKEN in live_reads and SOURCE in live_reads
     assert reads == live_reads  # Failed candidate budget checks issue no SDK reads.
     assert counter._value.get() == before + 1
+
+
+def test_tokenless_invalidation_fences_out_a_concurrent_fill(monkeypatch):
+    redis = fakeredis.FakeRedis()
+    monkeypatch.setenv('REDIS_DB_HOST', 'synthetic-test-only')
+    monkeypatch.setenv('ENCRYPTION_SECRET', 'synthetic-write-proof-key-for-test-only')
+    monkeypatch.setattr(write_cache, '_redis', lambda: redis)
+    client = SimpleNamespace(_database_string='projects/demo-batch/databases/(default)')
+    owner = privacy.privacy_owner_key(UID)
+    ids = frozenset({'source'})
+    read_time = datetime.now(timezone.utc)
+    version = ('a' * 32, read_time.isoformat(), read_time.microsecond * 1000)
+    snapshot = SimpleNamespace(read_time=read_time)
+    initial = write_cache.read_tokenless(client, owner, ids, 7)
+    assert initial is not None and initial.decision is None
+    write_cache.store_tokenless(initial, ids, snapshot, version, 7, read_time.timestamp())
+    cached = write_cache.read_tokenless(client, owner, ids, 7)
+    assert cached is not None and cached.decision is not None
+
+    # A valid signed proof copied to a different owner cell cannot authorize.
+    other = privacy.privacy_owner_key('different-owner')
+    other_key = write_cache._tokenless_key(client._database_string, other)
+    redis.set(other_key, cached.raw)
+    assert write_cache.read_tokenless(client, other, ids, 7).decision is None
+
+    path = f'{client._database_string}/documents/batch_pipeline_privacy/{owner}'
+    changed_at = read_time + timedelta(milliseconds=1)
+    write_cache.invalidate_tokenless({path}, changed_at)
+    # A late old response cannot erase the newest invalidation watermark.
+    write_cache.invalidate_tokenless({path}, read_time)
+    write_cache.store_tokenless(cached, ids, snapshot, version, 7, read_time.timestamp())
+    after = write_cache.read_tokenless(client, owner, ids, 7)
+    assert after is not None and after.decision is None
+    assert after.changed > write_cache._revision(read_time)
+    # A transaction that began before the write also cannot refill after
+    # reading the newly invalidated Redis cell.
+    write_cache.store_tokenless(after, ids, snapshot, version, 7, read_time.timestamp())
+    assert write_cache.read_tokenless(client, owner, ids, 7) == after
+
+
+def test_tokenless_shadow_separates_fresh_and_outside_window_mismatches(monkeypatch):
+    read_time = datetime.now(timezone.utc)
+    version = ('a' * 32, read_time.isoformat(), 0)
+    decision = write_cache.Decision(read_time.timestamp(), version, 7)
+    snapshot = SimpleNamespace(update_time=read_time + timedelta(seconds=1))
+    within = write_cache.TOKENLESS_SHADOW.labels('probe', 'changed_within_window')
+    outside = write_cache.TOKENLESS_SHADOW.labels('probe', 'mismatch_outside_window')
+    before = within._value.get(), outside._value.get()
+
+    monkeypatch.setattr(write_cache, 'time', SimpleNamespace(time=lambda: read_time.timestamp() + 5))
+    write_cache.compare_tokenless('probe', decision, snapshot, None, None)
+    assert within._value.get() == before[0] + 1
+
+    monkeypatch.setattr(write_cache, 'time', SimpleNamespace(time=lambda: read_time.timestamp() + 300))
+    write_cache.compare_tokenless('probe', decision, snapshot, None, None)
+    assert outside._value.get() == before[1] + 1

@@ -158,7 +158,22 @@ def _resolve_derived_services(env_config: ConfigDict) -> None:
         if source_name in derived:
             raise ValueError(f'Cloud Run service {name} derives from derived service {source_name!r}')
         own = {key: value for key, value in config.items() if key != DERIVE_FROM_KEY}
-        services[name] = _deep_merge(source, own)
+        own_forbidden = list(dict.fromkeys(own.get('forbidden_env', [])))
+        own_env = _as_config_dict(own.get('env')) or {}
+        conflict = sorted(set(own_forbidden) & set(own_env))
+        if conflict:
+            raise ValueError(f'Cloud Run service {name} both declares and forbids env vars: {", ".join(conflict)}')
+
+        resolved = _deep_merge(source, own)
+        inherited_forbidden = list(source.get('forbidden_env', []))
+        resolved_forbidden = list(dict.fromkeys([*inherited_forbidden, *own_forbidden]))
+        if resolved_forbidden:
+            resolved['forbidden_env'] = resolved_forbidden
+        resolved_env = _as_config_dict(resolved.get('env'))
+        if resolved_env is not None:
+            for key in own_forbidden:
+                resolved_env.pop(key, None)
+        services[name] = resolved
 
 
 def _overlay_path(env: str, runtime_env_dir: Path = RUNTIME_ENV_DIR) -> Path:
@@ -250,11 +265,20 @@ def _staging_substitute(value: str, *, run_url_template: str, inputs: dict[str, 
 
 def _apply_conversations_v3_stage(env_config: ConfigDict) -> None:
     """One stage source moves API, capture, finalizers and jobs together (staging mirrors prod)."""
+    for rendered_name in ('CONVERSATIONS_V3', 'CONVERSATIONS_V3_STAGE', 'CONVERSATIONS_V3_FIRST_APP_BUILD'):
+        if rendered_name in env_config:
+            raise ValueError(
+                f'use {rendered_name.lower()} at environment scope; {rendered_name} is the rendered env name'
+            )
     stage = env_config.pop('conversations_v3_stage', None)
     # Kill switch (CONVERSATIONS_V3=off): stops new v3 admission on every writer; marked rows keep draining.
     kill = env_config.pop('conversations_v3', None)
+    if stage is None and kill is None:
+        return
+    desktop_env = env_config.setdefault('desktop_backend', {}).setdefault('env', {})
     if kill is not None:
         kill_descriptor = {'value': str(kill), 'category': 'ops_kill'}
+        desktop_env['CONVERSATIONS_V3'] = deepcopy(kill_descriptor)
         cloud_run = env_config.get('cloud_run', {})
         for group in ('services', 'jobs'):
             for service in cloud_run.get(group, {}).values():
@@ -278,10 +302,9 @@ def _apply_conversations_v3_stage(env_config: ConfigDict) -> None:
                 'value': 'conversations-v3-backfill',
                 'category': 'reliability',
             }
-        # desktop-backend sets its env inline in its deploy workflow and reads the code defaults
-        # (stage beta, no first build), which matches this source while it is beta. If this source
-        # leaves beta, desktop capability/episode responses diverge; desktop creates stay one-to-one.
-        # Moving to all needs that workflow to carry CONVERSATIONS_V3_STAGE too.
+        # The desktop deploy workflows render these settings from the same manifest.
+        desktop_env['CONVERSATIONS_V3_STAGE'] = deepcopy(descriptor)
+        desktop_env['CONVERSATIONS_V3_FIRST_APP_BUILD'] = deepcopy(build_descriptor)
         gke = env_config.get('gke', {})
         config_map = gke.get('config_map')
         if isinstance(config_map, dict):

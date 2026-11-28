@@ -7,6 +7,7 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
+from utils.enrichment.retry_reason import expected_retry_reason
 from fastapi.responses import JSONResponse
 
 from config.conversation_processing_retry import DETERMINISTIC_PROCESSING_FAILURE, PROCESSING_BURST_ATTEMPTS
@@ -24,7 +25,7 @@ from utils.cloud_tasks import verify_listen_finalization_cloud_tasks_oidc
 from utils.account_cutover.access import should_skip_background_account_mutation
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations import quiet_finalization
-from utils.conversations.processing_trigger import trigger_for_finalization_job
+from utils.conversations.processing_trigger import ProcessingTrigger, trigger_for_finalization_job
 from utils.conversations.processing_retry import processing_failure_code
 from utils.conversations.recovery import RecoveryStructureUnavailableError, recovery_minimum_terminal_enabled
 from utils.conversations.finalizer import (
@@ -133,11 +134,9 @@ async def run_listen_finalization_job(
         except (ValueError, TypeError):
             return JSONResponse(status_code=400, content={'status': 'invalid_enrichment_task'})
         except Exception as error:
-            # Same mapping as routers.batch_pipeline.enrichment_response: an expected retry (for example a
+            # Same mapping as routers.enrichment.enrichment_response: an expected retry (for example a
             # first summary whose callback is still pending) answers 409; only an unexpected failure is 500.
             # Never 503 (contract (d)): Cloud Tasks system-throttles the whole queue on it.
-            from routers.batch_pipeline import expected_retry_reason
-
             reason = expected_retry_reason(error)
             if reason is None:
                 logger.error(
@@ -284,13 +283,15 @@ async def run_listen_finalization_job(
             return JSONResponse(status_code=409, content={'status': 'completion_conflict'})
 
         try:
+            trigger = trigger_for_finalization_job(job)
             disposition = await finalize_persisted_conversation(
                 job['uid'],
                 job['conversation_id'],
                 finalization_job_id=job_id,
                 dispatch_generation=dispatch_generation,
                 lease_epoch=claimed_lease_epoch,
-                trigger=trigger_for_finalization_job(job),
+                trigger=trigger,
+                background_flex_eligible=trigger is ProcessingTrigger.CAPTURE_END,
                 final_attempt=max(task_retry_count, failed_attempts)
                 >= get_listen_finalization_tasks_max_attempts_for_worker() - 1,
             )

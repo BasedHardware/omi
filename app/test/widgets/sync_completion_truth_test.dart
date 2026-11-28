@@ -14,9 +14,11 @@ import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/pages/conversations/auto_sync_page.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
+import 'package:omi/pages/conversations/widgets/sync_details_sheet.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/user_provider.dart';
+import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_derived_sync_views.dart';
 import 'package:omi/ui/ui.dart';
@@ -26,7 +28,15 @@ class _Sync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvi
   _Sync(this.wals);
   final List<Wal> wals;
   @override
-  SyncState get syncState => const SyncState();
+  SyncState syncState = const SyncState();
+  @override
+  bool get isRingDownloading => false;
+  @override
+  int get readyRingSeconds => freshRingBacklog?.seconds ?? 0;
+  @override
+  ({int seconds, int bytes})? freshRingBacklog;
+  @override
+  ({int processed, int total}) get offlineServerProcessingCounts => (processed: 0, total: 0);
   @override
   bool get isRateLimited => false;
   @override
@@ -53,13 +63,28 @@ class _Sync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvi
   @override
   int get needsAttentionWalsCount => wals.where((w) => w.status == WalStatus.corrupted).length;
   @override
-  int get clearableWalsCount => 0;
+  int get clearableWalsCount => wals.length;
+  @override
+  List<Wal> get syncedWals => wals.where((wal) => wal.status == WalStatus.synced).toList();
+  @override
+  List<Wal> get pendingDeletableWals => missingWals;
+
   @override
   List<Wal> get retryableAttentionWals => derivedWals.retryable;
   @override
   bool get syncCompleted => false;
   @override
   WalStatusFilter get statusFilter => WalStatusFilter.pending;
+  String? retainedPendingId;
+  List<Wal>? discoveredWals;
+
+  @override
+  Future<void> deleteAllPendingWals() async {
+    final targets = pendingDeletableWals.map((wal) => wal.id).toSet();
+    wals.removeWhere((wal) => targets.contains(wal.id) && wal.id != retainedPendingId);
+    notifyListeners();
+  }
+
   @override
   int get pendingStatusCount => missingWals.length + uploadedWals.length;
   @override
@@ -81,7 +106,11 @@ class _Sync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvi
 
 class _Device extends ChangeNotifier implements DeviceProvider {
   @override
-  String get currentFirmwareVersion => 'Unknown';
+  String currentFirmwareVersion = 'Unknown';
+  @override
+  bool isConnected = false;
+  @override
+  RingStatus? get ringStatus => null;
   @override
   Future<void> refreshRingStorageStatus() async {}
   @override
@@ -95,14 +124,14 @@ class _User extends ChangeNotifier implements UserProvider {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-Future<void> _pump(WidgetTester tester, Widget page, WalStatus status, {List<Wal>? recordings}) async {
+Future<_Sync> _pump(WidgetTester tester, Widget page, WalStatus status, {List<Wal>? recordings}) async {
   SharedPreferences.setMockInitialValues({});
   await SharedPreferencesUtil.init();
   tester.view.physicalSize = const Size(390, 844);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
-  final sync = _Sync(recordings ??
+  final sync = _SyncWithDiscovery(recordings ??
       [
         Wal(
             timerStart: 1790730000,
@@ -141,6 +170,9 @@ Future<void> _pump(WidgetTester tester, Widget page, WalStatus status, {List<Wal
   final baseTheme = buildOmiTheme();
   final theme = baseTheme.copyWith(
     platform: TargetPlatform.iOS,
+    snackBarTheme: baseTheme.snackBarTheme.copyWith(
+      contentTextStyle: baseTheme.snackBarTheme.contentTextStyle?.copyWith(fontFamily: 'SF Pro Display'),
+    ),
     textTheme: baseTheme.textTheme.apply(fontFamily: 'SF Pro Display'),
     primaryTextTheme: baseTheme.primaryTextTheme.apply(fontFamily: 'SF Pro Display'),
     appBarTheme: baseTheme.appBarTheme
@@ -168,6 +200,7 @@ Future<void> _pump(WidgetTester tester, Widget page, WalStatus status, {List<Wal
   } else {
     await tester.pumpAndSettle();
   }
+  return sync;
 }
 
 Future<void> _capture(WidgetTester tester, String name) async {
@@ -181,6 +214,18 @@ Future<void> _capture(WidgetTester tester, String name) async {
     await File('${dir.path}/$name').writeAsBytes(bytes!.buffer.asUint8List());
     image.dispose();
   });
+}
+
+Future<AppLocalizations> _clearPending(WidgetTester tester) async {
+  final l = AppLocalizations.of(tester.element(find.byType(SyncPage)));
+  await tester.tap(find.byTooltip(l.manageStorage));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(l.clear));
+  await tester.pumpAndSettle();
+  expect(find.text(l.deletePendingFiles), findsOneWidget);
+  await tester.tap(find.text(l.clear));
+  await tester.pumpAndSettle();
+  return l;
 }
 
 void main() {
@@ -259,6 +304,52 @@ void main() {
     expect(find.byKey(const Key('offline_sync_card_retry_attention')), findsOneWidget);
   });
 
+  testWidgets('Auto Sync keeps idle work in preparation until a transfer phase starts', (tester) async {
+    final sync = await _pump(tester, const AutoSyncPage(), WalStatus.miss);
+    sync.syncState = const SyncState(status: SyncStatus.syncing, phase: SyncPhase.idle);
+    sync.notifyListeners();
+    await tester.pump();
+
+    final l = AppLocalizations.of(tester.element(find.byType(AutoSyncPage)));
+    expect(find.text(l.syncCardSyncingTitle), findsOneWidget);
+    expect(find.text(l.syncCardProcessing), findsNothing);
+    expect(find.text(l.syncDetailsTranscribing), findsNothing);
+    await tester.pump(const Duration(milliseconds: 300));
+    await _capture(tester, '001-mobile-ios-sync-preparation.png');
+  });
+
+  testWidgets('Sync details shows fresh ring audio without a virtual WAL and otherwise shows unknown', (tester) async {
+    final sync = await _pump(tester, const AutoSyncPage(), WalStatus.miss, recordings: []);
+    final element = tester.element(find.byType(AutoSyncPage));
+    final device = element.read<DeviceProvider>() as _Device;
+    device.currentFirmwareVersion = '3.0.25';
+    device.isConnected = true;
+    final l = AppLocalizations.of(element);
+
+    sync.freshRingBacklog = (seconds: 90, bytes: 800000);
+    sync.notifyListeners();
+    await tester.pump();
+    expect(find.text(l.syncCardReadyAmount(OmiDuration.compact(90, l))), findsOneWidget);
+    await tester.tap(find.text(l.syncDetailsTitle));
+    await tester.pumpAndSettle();
+    expect(find.byType(SyncDetailsSheet), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(SyncDetailsSheet),
+        matching: find.textContaining(OmiDuration.compact(90, l)),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text(l.unknown), findsNothing);
+    await _capture(tester, '002-mobile-ios-fresh-ring-backlog.png');
+
+    sync.freshRingBacklog = null;
+    sync.notifyListeners();
+    await tester.pump();
+    expect(find.text(l.unknown), findsOneWidget);
+    await _capture(tester, '003-mobile-ios-unknown-ring-backlog.png');
+  });
+
   testWidgets('Auto Sync reports processing without inventing a conversation result', (tester) async {
     await _pump(tester, const AutoSyncPage(), WalStatus.synced);
     await tester.tap(find.text('Synced'));
@@ -292,4 +383,68 @@ void main() {
     expect(tester.takeException(), isNull);
     await _capture(tester, '005-mobile-ios-sync-pending-backlog.png');
   });
+
+  for (final retainOne in [true, false]) {
+    testWidgets('Classic Clear Pending reports the actual result (retained: $retainOne)', (tester) async {
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final pending = [
+        for (final secondsAgo in [30, 60])
+          Wal(
+              timerStart: now - secondsAgo,
+              codec: BleAudioCodec.opus,
+              seconds: 30,
+              storage: WalStorage.disk,
+              status: WalStatus.miss),
+      ];
+      final retained = pending.first;
+      final sync = await _pump(tester, const SyncPage(), WalStatus.miss, recordings: pending);
+      if (retainOne) sync.retainedPendingId = retained.id;
+      final l = await _clearPending(tester);
+
+      expect(sync.allWals, retainOne ? [retained] : isEmpty);
+      expect(find.text(l.failedToDeleteSomeItems), retainOne ? findsOneWidget : findsNothing);
+      expect(find.text(l.pendingFilesDeleted), retainOne ? findsNothing : findsOneWidget);
+      await _capture(tester, retainOne ? '001-mobile-ios-pending-retained.png' : '002-mobile-ios-pending-cleared.png');
+    });
+  }
+
+  testWidgets('Classic Clear Pending reports a retained ring after its virtual row is rebuilt', (tester) async {
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    Wal ring(int start) => Wal(
+          timerStart: start,
+          codec: BleAudioCodec.opus,
+          seconds: 30,
+          storage: WalStorage.sdcard,
+          status: WalStatus.miss,
+          device: 'synthetic-pendant',
+          fileNum: -1,
+        );
+
+    final original = ring(now - 30);
+    final rediscovered = ring(now - 29);
+    final sync = await _pump(tester, const SyncPage(), WalStatus.miss, recordings: [original]);
+    sync.retainedPendingId = original.id;
+    sync.discoveredWals = [rediscovered];
+    expect(rediscovered.id, isNot(original.id));
+
+    final l = await _clearPending(tester);
+
+    expect(sync.allWals, [rediscovered]);
+    expect(find.text(l.failedToDeleteSomeItems), findsOneWidget);
+    expect(find.text(l.pendingFilesDeleted), findsNothing);
+  });
+}
+
+class _SyncWithDiscovery extends _Sync {
+  _SyncWithDiscovery(super.wals);
+
+  @override
+  Future<void> discoverDeviceWals({String? firmwareVersion}) async {
+    final refreshed = discoveredWals;
+    if (refreshed == null) return;
+    wals
+      ..clear()
+      ..addAll(refreshed);
+    notifyListeners();
+  }
 }

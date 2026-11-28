@@ -189,6 +189,10 @@ class _OwnWrites:
     def check_privacy(self, uid: str, conversation_ids=(), expected_generation: int | None = None) -> int:
         return self._tx.check_privacy(uid, conversation_ids, expected_generation)
 
+    def probe_write_privacy(self, uid: str, conversation_ids=(), expected_generation: int | None = None) -> int:
+        probe = getattr(self._tx, '_probe_write_privacy', self._tx.check_privacy)
+        return probe(uid, conversation_ids, expected_generation)
+
 
 def _prefer_merge_head(
     tx: Transaction,
@@ -679,7 +683,12 @@ class Scheduler:
                     for _, enqueued_at, relet in receipts:
                         if self.metrics:
                             try:
-                                self.metrics.record('leased', wait_seconds=now - enqueued_at, relet=relet)
+                                self.metrics.record(
+                                    'leased',
+                                    wait_seconds=now - enqueued_at,
+                                    relet=relet,
+                                    priority=priority.name.lower(),
+                                )
                             except Exception:
                                 pass  # Metrics cannot turn an issued lease into a failed pull.
                     return [lease for lease, _, _ in receipts]
@@ -804,7 +813,7 @@ class Scheduler:
                 job.setdefault('unit_kind', 'conversation')
                 if queue_key not in eligible_queues and queue_key not in blocked:
                     try:
-                        tx.check_privacy(
+                        tx.probe_write_privacy(
                             job['owner_id'],
                             (job['conversation_id'],) if job.get('conversation_id') else (),
                             job.get('privacy_generation'),
@@ -833,7 +842,7 @@ class Scheduler:
                         park = None
                         try:
                             if job['segment_id'] != privacy_checked_segment:
-                                tx.check_privacy(
+                                tx.probe_write_privacy(
                                     job['owner_id'],
                                     (job['conversation_id'],) if job.get('conversation_id') else (),
                                     job.get('privacy_generation'),
@@ -1073,11 +1082,9 @@ class Scheduler:
             policy = stage_in_transaction(tx, job, 'scheduler', candidates=candidates, observations=observations)
             attach_held_vad(job, measured_held_vad_speech_seconds, worker_vad_receipt)
             if quarantine or worker_failure is not None or job['attempt'] >= policy.max_attempts:
-                quarantine_job(tx, job, now, 'worker_failed')
+                quarantine_job(tx, job, now, 'worker_failed', worker_failure=worker_failure)
                 if quarantine and padded_retry in {'empty', 'skipped_oversize', 'skipped_long_speech'}:
                     job['worker_empty_evidence'] = {'padded_retry': padded_retry, 'version': 1}
-                if worker_failure is not None:
-                    job['worker_failure'] = dict(worker_failure)
             else:
                 _defer(job, now, 'worker_failed')
             tx.put('jobs', segment_id, job)

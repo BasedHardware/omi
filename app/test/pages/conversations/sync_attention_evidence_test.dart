@@ -50,6 +50,14 @@ class _Device extends ChangeNotifier implements DeviceProvider {
   bool get isConnecting => false;
   @override
   int get batteryLevel => 72;
+
+  @override
+  int get displayBatteryLevel => batteryLevel;
+
+  @override
+  bool get batteryReadingStuck => false;
+  @override
+  int get settingsBatteryLevel => batteryLevel;
   @override
   bool get isCharging => false;
   @override

@@ -14,6 +14,7 @@ import 'package:omi/pages/onboarding/apple_watch_permission_page.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/services/devices/connectors/apple_watch_connection.dart';
+import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/discovery/rayban_meta_discoverer.dart';
 import 'package:omi/utils/error_message.dart';
 import 'package:omi/widgets/rayban_meta_setup_sheet.dart';
@@ -25,9 +26,6 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/widgets/apple_watch_setup_bottom_sheet.dart';
 import 'package:omi/widgets/connection_guide_sheet.dart';
 import 'pairing_failure_card.dart';
-
-@visibleForTesting
-Future<void> retryOfflineSavedDevice(Future<void> Function() connect) => connect();
 
 class FoundDevices extends StatefulWidget {
   final bool isFromOnboarding;
@@ -45,7 +43,7 @@ class FoundDevices extends StatefulWidget {
   /// nothing found, where the page shows its own empty state instead.
   final bool showStatus;
 
-  /// Scans again; offered on an offline saved device's "Try Again".
+  /// Scans again; offered by the pairing failure card's retry.
   final Future<void> Function()? onRescan;
 
   @override
@@ -302,20 +300,32 @@ class _FoundDevicesState extends State<FoundDevices> with WidgetsBindingObserver
     );
   }
 
-  void _showOffline(BtDevice device) {
-    OmiFeedback.error(
-      context,
-      context.l10n.deviceOfflineWakeHint(device.name),
-      actionLabel: context.l10n.tryAgain,
-      onAction: widget.onRescan == null ? null : () => unawaited(widget.onRescan!()),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
+    final (liveDeviceId, liveType, liveBattery, charging) =
+        context.select<DeviceProvider, (String?, DeviceType?, int, bool?)>(
+      (device) {
+        final connected = device.connectedDevice;
+        if (!device.isConnected || connected == null) return (null, null, -1, null);
+        final identity = device.capabilityNormalizedDevice ?? connected;
+        final type = DeviceConnectionFactory.resolveDeviceType(identity);
+        return (
+          connected.id,
+          type,
+          type == DeviceType.openglass ? device.batteryLevel : -1,
+          type == DeviceType.omi ? device.observedChargingStatus : null,
+        );
+      },
+    );
     return Consumer<OnboardingProvider>(
       builder: (context, provider, child) {
         final visibleDevices = provider.visibleDeviceList;
+        final isLiveDevice = liveDeviceId != null && liveDeviceId == provider.deviceId;
+        final pairingType = isLiveDevice ? liveType : provider.deviceType;
+        final showOmiStatus = isLiveDevice && pairingType == DeviceType.omi;
+        final batteryPercentage = provider.isConnected && pairingType != DeviceType.omi
+            ? (isLiveDevice && liveType == DeviceType.openglass ? liveBattery : provider.batteryPercentage)
+            : -1;
         return MessageListener<OnboardingProvider>(
           showError: (error) {
             // The inline card owns connect-failure recovery and its shown event.
@@ -347,7 +357,7 @@ class _FoundDevicesState extends State<FoundDevices> with WidgetsBindingObserver
                       : context.l10n.devicesFoundNearby(provider.nearbyDeviceCount),
                   style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
                 )
-              else
+              else if (!showOmiStatus)
                 Text(context.l10n.pairingSuccessful, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
               if (provider.pairingFailureReason != null && !provider.isConnected)
                 Padding(
@@ -374,23 +384,36 @@ class _FoundDevicesState extends State<FoundDevices> with WidgetsBindingObserver
                   textAlign: TextAlign.center,
                   style: OmiType.body.copyWith(fontWeight: FontWeight.w500),
                 ),
-              if (provider.isConnected && provider.batteryPercentage > 0)
+              if (provider.isConnected && showOmiStatus)
+                Semantics(
+                  liveRegion: true,
+                  child: Text(
+                    switch (charging) {
+                      true => context.l10n.charging,
+                      false => context.l10n.deviceReadyToUse,
+                      null => context.l10n.connected,
+                    },
+                    textAlign: TextAlign.center,
+                    style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                  ),
+                ),
+              if (batteryPercentage > 0)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 10),
                   child: Semantics(
-                    label: context.l10n.batteryLevelSemantics(provider.batteryPercentage),
+                    label: context.l10n.batteryLevelSemantics(batteryPercentage),
                     excludeSemantics: true,
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
-                          provider.batteryPercentage <= 25 ? Icons.battery_alert : Icons.battery_std,
+                          batteryPercentage <= 25 ? Icons.battery_alert : Icons.battery_std,
                           size: 20,
-                          color: provider.batteryPercentage <= 25 ? OmiColors.danger : OmiColors.textSecondary,
+                          color: batteryPercentage <= 25 ? OmiColors.danger : OmiColors.textSecondary,
                         ),
                         const SizedBox(width: OmiSpacing.xxs),
                         Text(
-                          '${provider.batteryPercentage}%',
+                          '$batteryPercentage%',
                           style: OmiType.body.copyWith(fontWeight: FontWeight.w500),
                         ),
                       ],
@@ -407,7 +430,6 @@ class _FoundDevicesState extends State<FoundDevices> with WidgetsBindingObserver
   _devicesList(OnboardingProvider provider) {
     return (provider.visibleDeviceList.mapIndexed((index, device) {
       bool isConnecting = provider.connectingToDeviceId == device.id;
-      final isOfflineSavedDevice = provider.isSavedDevice(device) && !provider.isDeviceOnline(device);
 
       final label = () {
         final sameNameCount = provider.visibleDeviceList.where((d) => d.name == device.name).length;
@@ -416,10 +438,6 @@ class _FoundDevicesState extends State<FoundDevices> with WidgetsBindingObserver
       final onTap = !provider.isClicked
           ? () async {
               OmiHaptics.selection();
-              if (isOfflineSavedDevice) {
-                _showOffline(device);
-                return;
-              }
               if (device.type == DeviceType.appleWatch) {
                 await _handleAppleWatchOnboarding(device, provider);
               } else if (device.type == DeviceType.raybanMeta) {
@@ -447,7 +465,7 @@ class _FoundDevicesState extends State<FoundDevices> with WidgetsBindingObserver
         child: Semantics(
           button: true,
           enabled: onTap != null,
-          label: isOfflineSavedDevice ? '$label, ${context.l10n.offline}' : label,
+          label: label,
           excludeSemantics: true,
           child: Material(
             color: OmiColors.accent,
@@ -493,7 +511,7 @@ class _FoundDevicesState extends State<FoundDevices> with WidgetsBindingObserver
                                 borderRadius: OmiRadius.smAll,
                               ),
                               child: Text(
-                                isOfflineSavedDevice ? context.l10n.offline : context.l10n.saved,
+                                context.l10n.saved,
                                 style: OmiType.footnote.copyWith(
                                   fontWeight: FontWeight.w600,
                                   color: OmiColors.onAccent.withValues(alpha: 0.6),

@@ -21,6 +21,10 @@ KNOWN_RAW = {
         1,
         'Exists-only update of selected calendar account preference fields.',
     ),
+    ('database/play_subscriptions.py', 'set_user_fields', 'users', 'update'): (
+        1,
+        'Exists-only update of the Google Play purchase pointer, pending token and customer flag.',
+    ),
     ('database/notifications.py', 'save_token.save_ordered', 'users', 'set'): (
         1,
         'Notification token and schedule provisioning may create a profile. Keep its existing transactions and observe root creation.',
@@ -131,14 +135,6 @@ KNOWN_RAW = {
         'account_deletions',
         'set',
     ): (1, 'Loopback-only setup and cleanup for synthetic authority fixtures.'),
-    ('scripts/dream_park_race_emulator_test.py', '_reset', 'users', 'set'): (
-        1,
-        'Loopback-only setup and cleanup for synthetic authority fixtures.',
-    ),
-    ('scripts/dream_park_race_emulator_test.py', 'main', 'users', 'delete'): (
-        1,
-        'Loopback-only setup and cleanup for synthetic authority fixtures.',
-    ),
     ('scripts/fsr_people_generation_emulator_test.py', 'main', 'users', 'set'): (
         1,
         'Loopback-only setup and cleanup for synthetic authority fixtures.',

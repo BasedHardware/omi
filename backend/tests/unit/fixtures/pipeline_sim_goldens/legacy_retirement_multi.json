@@ -23,7 +23,15 @@
     "priority": 1,
     "privacy_generation": 0,
     "protocol_version": 1,
+    "quarantine_diagnostic": {
+     "artifact_kind": "unknown",
+     "exception_class": "worker_validation",
+     "provider_error": "unknown",
+     "stage": "vad_windows",
+     "worker_reason": "unsupported_language"
+    },
     "quarantine_reason": "worker_failed",
+    "record_origin": false,
     "recovery": {
      "epoch": 1,
      "privacy_generation": 0,
@@ -127,7 +135,15 @@
     "priority": 1,
     "privacy_generation": 0,
     "protocol_version": 1,
+    "quarantine_diagnostic": {
+     "artifact_kind": "unknown",
+     "exception_class": "worker_validation",
+     "provider_error": "unknown",
+     "stage": "vad_windows",
+     "worker_reason": "unsupported_language"
+    },
     "quarantine_reason": "worker_failed",
+    "record_origin": false,
     "recovery": {
      "epoch": 1,
      "privacy_generation": 0,
@@ -231,7 +247,15 @@
     "priority": 1,
     "privacy_generation": 0,
     "protocol_version": 1,
+    "quarantine_diagnostic": {
+     "artifact_kind": "unknown",
+     "exception_class": "worker_validation",
+     "provider_error": "unknown",
+     "stage": "vad_windows",
+     "worker_reason": "unsupported_language"
+    },
     "quarantine_reason": "worker_failed",
+    "record_origin": false,
     "recovery": {
      "epoch": 1,
      "privacy_generation": 0,
@@ -335,7 +359,15 @@
     "priority": 1,
     "privacy_generation": 0,
     "protocol_version": 1,
+    "quarantine_diagnostic": {
+     "artifact_kind": "unknown",
+     "exception_class": "worker_validation",
+     "provider_error": "unknown",
+     "stage": "vad_windows",
+     "worker_reason": "unsupported_language"
+    },
     "quarantine_reason": "worker_failed",
+    "record_origin": false,
     "recovery": {
      "epoch": 1,
      "privacy_generation": 0,
@@ -439,7 +471,15 @@
     "priority": 1,
     "privacy_generation": 0,
     "protocol_version": 1,
+    "quarantine_diagnostic": {
+     "artifact_kind": "unknown",
+     "exception_class": "worker_validation",
+     "provider_error": "unknown",
+     "stage": "vad_windows",
+     "worker_reason": "unsupported_language"
+    },
     "quarantine_reason": "worker_failed",
+    "record_origin": false,
     "recovery": {
      "epoch": 1,
      "privacy_generation": 0,
@@ -543,7 +583,15 @@
     "priority": 1,
     "privacy_generation": 0,
     "protocol_version": 1,
+    "quarantine_diagnostic": {
+     "artifact_kind": "unknown",
+     "exception_class": "worker_validation",
+     "provider_error": "unknown",
+     "stage": "vad_windows",
+     "worker_reason": "unsupported_language"
+    },
     "quarantine_reason": "worker_failed",
+    "record_origin": false,
     "recovery": {
      "epoch": 1,
      "privacy_generation": 0,
@@ -647,7 +695,15 @@
     "priority": 1,
     "privacy_generation": 0,
     "protocol_version": 1,
+    "quarantine_diagnostic": {
+     "artifact_kind": "unknown",
+     "exception_class": "worker_validation",
+     "provider_error": "unknown",
+     "stage": "vad_windows",
+     "worker_reason": "unsupported_language"
+    },
     "quarantine_reason": "worker_failed",
+    "record_origin": false,
     "recovery": {
      "epoch": 1,
      "privacy_generation": 0,

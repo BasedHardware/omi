@@ -26,6 +26,10 @@ def jobs(text):
 PR_SCHEMA_WRITERS = {"gcp_firestore_indexes.yml"}
 
 INTENTIONAL_BUDGET_CHANGES = {
+    # #26303 adds the advisory Pipeline Lab Scenarios job to the hermetic workflow: the committed lab
+    # scenarios twice each on a local emulator and a Redis service. Budgeted in ci-budget.yaml (p50 7).
+    ("backend-hermetic-e2e.yml", "pipeline-lab-scenarios", "runs-on"): "ubuntu-latest",
+    ("backend-hermetic-e2e.yml", "pipeline-lab-scenarios", "timeout-minutes"): "25",
     # Lane 8 adds a port-map job to the reusable workflow. It is skipped on
     # the pinned nightly, and its PR and main-push budget is fixed here.
     ("backend-go-checks.yml", "port-tasks", "runs-on"): "ubuntu-latest",
@@ -45,6 +49,12 @@ INTENTIONAL_BUDGET_CHANGES = {
     # executed tests passing and ~360 unexecuted, failing Mobile Release
     # Eligibility downstream. 40 restores wedge headroom; budget_p50 stays 17.
     ("mobile-app-checks.yml", "analyze-and-test", "timeout-minutes"): "40",
+    # SCA-3899 splits the far-timezone pass into one job per zone so each suite
+    # owns a 60-minute ceiling. The sequential pair spent 59m51s of steps on
+    # top of a 2m36s prelude on the 2026-11-23 scheduled run (45113684750) and
+    # was cancelled at the cap after both steps had passed.
+    ("mobile-app-checks.yml", "dart-tests-pago-pago", "runs-on"): "ubuntu-latest",
+    ("mobile-app-checks.yml", "dart-tests-pago-pago", "timeout-minutes"): "60",
     # Backend unit shard: the 15-min job ceiling includes runner setup, but
     # the step regression budget excludes it, leaving 180s for setup.
     # Setup measured 73-92s typical, 227s worst (run 39741901310 attempt 2:

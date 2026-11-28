@@ -41,6 +41,15 @@ def return_sites(function):
     source, first = inspect.getsourcelines(function)
     tree = ast.parse(textwrap.dedent(''.join(source)))
     sites = {}
+    structure_assignment = next(
+        (
+            node.lineno
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Assign)
+            and any(isinstance(target, ast.Name) and target.id == 'structure_inputs' for target in node.targets)
+        ),
+        None,
+    )
     for node in ast.walk(tree):
         if not isinstance(node, ast.Return):
             continue
@@ -61,10 +70,9 @@ def return_sites(function):
         }.get(expression)
         if 'build_deterministic_minimum_structured' in expression:
             label = 'recovery_minimum'
-        if function.__name__ == 'process_conversation' and expression == 'conversation':
+        if structure_assignment is not None and expression == 'conversation' and node.lineno < structure_assignment:
             # Before structure generation this is the funded retry denial.
-            if first + node.lineno - 1 < function.__code__.co_firstlineno + 220:
-                label = 'funded_budget'
+            label = 'funded_budget'
         if label:
             sites[first + node.lineno - 1] = label
     return sites
@@ -84,11 +92,11 @@ class SkipObserver:
             if (
                 event == 'return'
                 and not self.cassette.calls
-                and frame.f_code.co_qualname == '_preserve_capture_on_budget_denial.<locals>.preserve_capture'
+                and frame.f_code.co_qualname == '_preserve_capture_steps.<locals>.preserve_capture'
                 and linecache.getline(frame.f_code.co_filename, frame.f_lineno).strip() == 'return captured'
             ):
                 self.skips.append('funded_budget')
-            if frame.f_code.co_qualname == '_preserve_capture_on_budget_denial.<locals>.preserve_capture':
+            if frame.f_code.co_qualname == '_preserve_capture_steps.<locals>.preserve_capture':
                 return trace
             if frame.f_code in self.sites:
                 if event == 'return' and not self.cassette.calls:

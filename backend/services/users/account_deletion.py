@@ -14,7 +14,7 @@ from typing import Any, Callable, Literal, TypedDict, cast
 
 from firebase_admin import auth as firebase_auth
 
-from database import vector_db
+from database import speaker_evidence_verification, vector_db
 from database.sync_jobs import renew_job_run_lock
 from database import _client as database_client
 from database.legal_holds import (
@@ -43,7 +43,7 @@ from database.vector_db import (
     delete_screen_activity_vectors,
     delete_transcript_chunk_vectors_batch,
 )
-from utils import stripe as stripe_utils
+from utils import play_publisher, stripe as stripe_utils
 from utils.cloud_tasks import (
     assert_inline_account_deletion_permitted,
     enqueue_account_deletion_wipe,
@@ -451,6 +451,7 @@ def background_wipe_user_data(
         # A late checkout/webhook could have created a subscription after the
         # grace admission check. Re-read Stripe at the irreversible boundary,
         # even when admission recorded an earlier successful cancellation.
+        play_cancel_confirmed_since = datetime.now(timezone.utc)
         _cancel_subscription_for_account_deletion(uid)
         if erase_claim is not None:
             current_operation = 'go_queue_erase'
@@ -518,6 +519,12 @@ def background_wipe_user_data(
         current_operation = 'lake_prefix_purge'
         heartbeat()
         purge_owner_lake_content(uid)
+        # Google Play purchase records (uid + purchase token) and the account map live outside users/{uid}.
+        # Only purchases whose cancel the billing step above confirmed in this run are deleted; anything
+        # else raises and keeps the wipe retryable.
+        current_operation = 'play_billing_records'
+        heartbeat()
+        play_publisher.purge_account_records(uid, play_cancel_confirmed_since)
         current_operation = 'firestore_user_data'
         heartbeat()
         wipe_result = users_db.delete_user_data(uid)
@@ -587,9 +594,12 @@ def background_wipe_user_data(
             except Exception as persist_err:
                 logger.error(f'delete_account wipe status persist failed for {uid}: {sanitize(str(persist_err))}')
         required_failures, best_effort_failures = _purge_failures(purge_result)
-        failed_operations = [failure['operation'] for failure in required_failures + best_effort_failures] or [
-            current_operation
-        ]
+        failed_operations = [failure['operation'] for failure in required_failures + best_effort_failures]
+        # A later step's failure is named even when the derived purge already recorded best-effort failures
+        # (for example play_billing_records), so no failing step is hidden behind an earlier one.
+        if current_operation != 'derived_data' and current_operation not in failed_operations:
+            failed_operations.append(current_operation)
+        failed_operations = failed_operations or [current_operation]
         _emit_deletion_telemetry(
             uid,
             ACCOUNT_DELETION_WIPE_FAILED,
@@ -639,7 +649,10 @@ def background_wipe_user_data(
 def enqueue_deletion_wipe(uid: str, wipe_job_id: str):
     """Dispatch the account-deletion wipe using the configured durable mechanism."""
     if is_account_deletion_dispatch_enabled() is True:
-        enqueue_account_deletion_wipe(wipe_job_id)
+        if speaker_evidence_verification.enabled_for(uid) is True:
+            enqueue_account_deletion_wipe(wipe_job_id, verification_uid=uid)
+        else:
+            enqueue_account_deletion_wipe(wipe_job_id)
         return
     if go_queue_erase_required():
         raise RuntimeError('Go queue erase requires Cloud Tasks account deletion dispatch')
@@ -684,7 +697,7 @@ def _retry_firestore_write(
     logger.critical(msg)
 
 
-def _cancel_subscription_for_account_deletion(uid: str) -> None:
+def _cancel_stripe_for_account_deletion(uid: str) -> None:
     subscription_id = None
     try:
         sub = users_db.get_existing_user_subscription(uid)
@@ -696,6 +709,14 @@ def _cancel_subscription_for_account_deletion(uid: str) -> None:
             stripe_utils.cancel_subscription_for_account_deletion(subscription_id)
     except Exception as error:
         raise DeletionBillingError(subscription_id, error) from error
+
+
+def _cancel_subscription_for_account_deletion(uid: str) -> None:
+    _cancel_stripe_for_account_deletion(uid)
+    # Google Play bills outside Stripe: stop it too, or the deleted account keeps being charged. A failure
+    # propagates like a Stripe failure: admission is not marked complete (the grace reconciler re-runs it
+    # every cycle) and the wipe retries it with backoff. It is never a parked billing failure.
+    play_publisher.cancel_for_account_deletion(uid)
 
 
 def purge_user_conversation_index(uid: str) -> None:
@@ -889,6 +910,45 @@ def restore_account_deletion(uid: str) -> dict[str, Any]:
     }
 
 
+def _report_grace_actions_failure(uid: str, record: dict, error: Exception) -> None:
+    """Every failed grace admission retry is loud: alertable log plus deletion telemetry with attempts and age.
+
+    The wipe stays blocked (Google may still charge), but the due date is still evaluated so the marker
+    shows when the deletion is overdue instead of failing silently past its deadline.
+    """
+    now = datetime.now(timezone.utc)
+    previous = record.get('grace_actions_failed_attempts')
+    attempts = (previous if isinstance(previous, int) else 0) + 1
+    intent_at = _deletion_due_at(record.get('wipe_intent_at'))
+    age_seconds = int((now - intent_at).total_seconds()) if intent_at else None
+    due_at = _deletion_due_at(record.get('wipe_due_at'))
+    overdue = due_at is not None and due_at <= now
+    log = logger.critical if overdue else logger.error
+    log(
+        'delete_account grace immediate-action retry failed for %s: attempts=%s age_seconds=%s overdue=%s error=%s',
+        uid,
+        attempts,
+        age_seconds,
+        overdue,
+        sanitize(str(error)),
+    )
+    _emit_deletion_telemetry(
+        uid,
+        ACCOUNT_DELETION_WIPE_FAILED,
+        {
+            'failed_operations': ['grace_immediate_actions'],
+            'retry_count': attempts,
+            'age_seconds': age_seconds,
+            'overdue': overdue,
+            'terminal': False,
+        },
+    )
+    try:
+        deletion_grace_db.record_grace_actions_failure(uid, attempts, overdue)
+    except Exception as persist_error:
+        logger.error('delete_account grace failure persist failed for %s: %s', uid, sanitize(str(persist_error)))
+
+
 def reconcile_pending_deletion_wipes(limit: int = 100) -> dict[str, int]:
     """Retry incomplete grace admission actions and re-enqueue due wipes.
 
@@ -932,9 +992,7 @@ def reconcile_pending_deletion_wipes(limit: int = 100) -> dict[str, int]:
                     _run_immediate_deletion_steps(uid)
                     actions_completed = deletion_grace_db.mark_user_deletion_grace_actions_complete(uid, job_id)
                 except Exception as error:
-                    logger.error(
-                        'delete_account grace immediate-action retry failed for %s: %s', uid, sanitize(str(error))
-                    )
+                    _report_grace_actions_failure(uid, record, error)
                     skipped += 1
                     continue
                 if actions_completed is not True:

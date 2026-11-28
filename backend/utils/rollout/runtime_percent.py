@@ -8,8 +8,11 @@ its first read is pending; after a confirmed read error or missing config, it ma
 caller's env_default. A value is never raised above LKG on error. The bucket functions in
 config/ are untouched; only the percent source moves here.
 
-Legacy retirement is stricter: a read error serves mode on until a successful
-read, while the other admission percents retain their last-known-good values.
+Legacy retirement keeps its last-known-good mode on a read error, like the other
+percents. It used to serve mode on until a successful read, which re-created a
+few hundred legacy jobs a week from transient read errors after legacy went dark
+(SCA-2965, 2026-11-27); batch, not legacy, is now the known-good lane. A process
+that never read the document still serves on.
 """
 
 from __future__ import annotations
@@ -284,6 +287,9 @@ def effective_percents(snapshot: RampSnapshot) -> dict[str, float]:
             percent('batch-vendor-routing', parse_percent(os.getenv('BATCH_VENDOR_ROUTING_PERCENT', '0'))), batch
         ),
         'new-owner-cell1': percent('new-owner-cell1', owner_default),
+        # Telemetry only. Go admission reads this name strictly (no last-known-good) in
+        # utils/rollout/go_finalization_admission.py and opens only at exactly 100.
+        'go-finalization': percent('go-finalization', 0.0),
     }
 
 
@@ -389,7 +395,9 @@ def legacy_sync_mode(uid: str | None = None) -> LegacySyncMode:
     """Retire only the stable cohort; absent/invalid scope keeps legacy on.
 
     Ownerless maintenance may stop globally only at an explicit 100%. The mode
-    and percent come from one snapshot, so rollback remains one mode write.
+    and percent come from one snapshot, so rollback remains one mode write. A
+    read error keeps the last-known-good snapshot (source ``lkg``), so a
+    transient error never re-opens legacy admission once it is dark.
     """
     try:
         snapshot = ramp_snapshot()
@@ -397,7 +405,7 @@ def legacy_sync_mode(uid: str | None = None) -> LegacySyncMode:
         percent = snapshot.percents.get('legacy-sync', 0.0)
         batch_percent = snapshot.percents.get('batch-pipeline', 0.0)
         if (
-            snapshot.source != 'firestore'
+            snapshot.source not in ('firestore', 'lkg')
             or mode not in LEGACY_SYNC_MODES
             or any(
                 isinstance(value, bool) or not math.isfinite(value) or not 0 <= value <= 100

@@ -7,8 +7,8 @@ import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 /// The device page's numbers: battery, how much Omi heard today, and audio still on the device —
-/// or, while recordings are catching up, how much is still on its way. Every value is measured; a
-/// stat with nothing to show is left out rather than invented.
+/// or, while recordings are catching up, how much is still on its way. A dash marks a value
+/// that has yet to be confirmed.
 class DeviceStatsRow extends StatelessWidget {
   const DeviceStatsRow({
     super.key,
@@ -20,10 +20,16 @@ class DeviceStatsRow extends StatelessWidget {
     this.catchUpSeconds,
     this.catchUpCaption,
     this.onOpenCatchUp,
+    this.showUnknownBattery = false,
+    this.batteryStuck = false,
   });
 
-  /// Battery percent, or <= 0 when the device has not reported one.
+  /// Battery percent, or -1 while the reading is unavailable.
   final int batteryLevel;
+  final bool showUnknownBattery;
+
+  /// The pendant's near-empty reading looks stuck; the tile suggests a restart.
+  final bool batteryStuck;
   final bool isCharging;
   final int heardTodaySeconds;
   final int onDeviceSeconds;
@@ -45,12 +51,17 @@ class DeviceStatsRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final tiles = <Widget>[
-      if (batteryLevel > 0)
+      if (batteryLevel >= 0 || showUnknownBattery)
         _StatTile(
           key: const Key('device_stat_battery'),
           label: l10n.battery,
-          value: '$batteryLevel%',
-          caption: isCharging ? l10n.charging : null,
+          value: batteryLevel >= 0 ? '$batteryLevel%' : '—',
+          semanticValue: batteryLevel < 0 ? l10n.unknown : null,
+          caption: isCharging
+              ? l10n.charging
+              : batteryStuck
+                  ? l10n.batteryRestartToRefresh
+                  : null,
         ),
       _StatTile(
         key: const Key('device_stat_heard_today'),
@@ -79,6 +90,7 @@ class DeviceStatsRow extends StatelessWidget {
     return Wrap(
       spacing: OmiSpacing.xs,
       runSpacing: OmiSpacing.xxs,
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         for (var i = 0; i < tiles.length; i++) ...[
           if (i > 0) Text('·', style: OmiType.subhead.copyWith(color: OmiColors.textTertiary)),
@@ -92,10 +104,19 @@ class DeviceStatsRow extends StatelessWidget {
 }
 
 class _StatTile extends StatelessWidget {
-  const _StatTile({super.key, required this.label, required this.value, this.caption, this.secondCaption, this.onTap});
+  const _StatTile({
+    super.key,
+    required this.label,
+    required this.value,
+    this.semanticValue,
+    this.caption,
+    this.secondCaption,
+    this.onTap,
+  });
 
   final String label;
   final String value;
+  final String? semanticValue;
   final String? caption;
 
   /// A second caption after the first, in the same style.
@@ -125,10 +146,20 @@ class _StatTile extends StatelessWidget {
       ],
     );
     return Semantics(
-      label: [label, value, if (caption != null) caption!, if (secondCaption != null) secondCaption!].join(', '),
+      label: [label, semanticValue ?? value, if (caption != null) caption!, if (secondCaption != null) secondCaption!]
+          .join(', '),
       button: onTap != null,
       excludeSemantics: true,
-      child: onTap == null ? content : InkWell(onTap: onTap, child: content),
+      onTap: onTap,
+      child: onTap == null
+          ? content
+          : InkWell(
+              onTap: onTap,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+                child: Align(widthFactor: 1, heightFactor: 1, child: content),
+              ),
+            ),
     );
   }
 }

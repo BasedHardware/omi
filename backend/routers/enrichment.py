@@ -15,17 +15,33 @@ import threading
 import time
 
 from fastapi import APIRouter, Depends, Request
+from prometheus_client import Counter
+from config.sync_telemetry import bounded_exception_class
+from utils.batch_pipeline.enrichment import run_enrichment
+from utils.enrichment.retry_reason import expected_retry_reason
+from utils.enrichment import outbox as reprocess
 from fastapi.responses import JSONResponse
 
 from config import enrichment as enrichment_config
+from config.batch_pipeline_vendor_failover import held_redrive_enabled
+from database import outbox_firestore
+from database.firestore_transaction_retry import transaction_retry_deadline_scope
+from database.outbox_firestore import provider_stt_outbox
 from utils.enrichment import fresh_demotion
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.observability.reasons import RetryReason
 from utils.workers.consumer import http_response, run_push
-from utils.workers.retry import retry_response
+from utils.workers.retry import firestore_retry_reason, retry_response
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+# Static retry classes; never IDs. 'unexpected' answers 500, the others 409.
+ENRICHMENT_RETRIES = Counter(
+    'batch_enrichment_sync_reprocess_retries_total',
+    'Enrichment task retries by expected or unexpected class',
+    ['retry_class'],
+)
 
 _KINDS = {'enrichment', 'sync_reprocess', 'batch_final_pass'}
 # TimeoutMiddleware cuts an attempt at HTTP_POST_TIMEOUT (600s), so the request log records a bare 504
@@ -92,17 +108,17 @@ def consume(key: str, token: str, accepted: float | None = None, abandoned: thre
     row under a fresh wake instead of stranding it.
     """
     from database.outbox import Outcome
-    from database.outbox_firestore import ENRICHMENT_OUTBOX
     from utils.enrichment.consumer import EnrichmentConsumer
 
     started = time.monotonic()
     accepted = started if accepted is None else accepted
     outcome, reason = 'error', 'unexpected'
     try:
-        result = run_push(EnrichmentConsumer(ENRICHMENT_OUTBOX), ENRICHMENT_OUTBOX, key, token, now=time.time())
+        outbox = outbox_firestore.ENRICHMENT_OUTBOX
+        result = run_push(EnrichmentConsumer(outbox), outbox, key, token, now=time.time())
         outcome, reason = result.outcome.value, result.reason.value
         if abandoned is not None and abandoned.is_set() and result.outcome is Outcome.RETRY:
-            ENRICHMENT_OUTBOX.rearm_released(key, token, now=time.time())
+            outbox.rearm_released(key, token, now=time.time())
         return result
     finally:
         finished = time.monotonic()
@@ -125,7 +141,21 @@ async def run_enrichment_task(request: Request, _retry_count: int = Depends(veri
     task = _task(payload)
     if payload is None or task is None:
         return JSONResponse(status_code=400, content={'status': 'invalid_enrichment_task'})
-    if payload['kind'] == 'batch_final_pass':
+    budget = _delivery_budget()
+    try:
+        if budget > 0:
+            with transaction_retry_deadline_scope(time.monotonic() + budget):
+                return await _deliver_task(request, payload['kind'], task, budget)
+        return await _deliver_task(request, payload['kind'], task, budget)
+    except Exception as error:
+        reason = firestore_retry_reason(error)
+        if reason is None:
+            raise
+        return retry_response(reason)
+
+
+async def _deliver_task(request: Request, kind: str, task: tuple[str, str], budget: float) -> JSONResponse:
+    if kind == 'batch_final_pass':
         from utils.conversations.final_pass_retry import consume as consume_speaker_pass
 
         return JSONResponse(
@@ -160,7 +190,6 @@ async def run_enrichment_task(request: Request, _retry_count: int = Depends(veri
             if not transient_dependency(error):
                 raise
             return retry_response(RetryReason.DEPENDENCY_WARMING)
-    budget = _delivery_budget()
     if budget <= 0:  # Kill switch: 0 restores the middleware-only cut.
         return http_response(await run_blocking(postprocess_executor, consume, *task, time.monotonic()))
     abandoned = threading.Event()
@@ -181,7 +210,6 @@ def maintain(now: float) -> dict[str, int]:
     Both halves are safe beside the legacy sequencer sweep: the outbox sweep is per-row CAS and the
     summary-debt tick holds its own cursor lease, so a second owner never double-admits.
     """
-    from database.outbox_firestore import ENRICHMENT_OUTBOX
     from services import summary_debt_repair
 
     from utils.conversations import final_pass_retry
@@ -199,7 +227,7 @@ def maintain(now: float) -> dict[str, int]:
         logger.warning(
             'event=owner_identity_availability outcome=refresh_unavailable exception_type=%s', type(error).__name__
         )
-    swept = ENRICHMENT_OUTBOX.sweep(now=now)
+    swept = outbox_firestore.ENRICHMENT_OUTBOX.sweep(now=now)
     counts = {
         'rewoken': swept.rewoken,
         'discarded': swept.discarded,
@@ -207,6 +235,11 @@ def maintain(now: float) -> dict[str, int]:
         'provider_stt_rewoken': 0,
         'provider_stt_discarded': 0,
         'provider_stt_sweep_errors': 0,
+        'provider_stt_running_rewoken': 0,
+        'provider_stt_running_errors': 0,
+        'provider_stt_held_rewoken': 0,
+        'provider_stt_held_errors': 0,
+        'provider_stt_held_expired': 0,
         'summary_debt_scanned': 0,
         'summary_debt_admitted': 0,
         'summary_debt_near_expiry_admitted': 0,
@@ -217,9 +250,7 @@ def maintain(now: float) -> dict[str, int]:
     # invariant 4); it shares the enrichment maintenance schedule (M3 review). Its own failure
     # never blocks the enrichment half.
     try:
-        from database.outbox import OutboxKind, outbox_for
-
-        provider = outbox_for(OutboxKind.PROVIDER_STT).sweep(now=now)
+        provider = provider_stt_outbox().sweep(now=now)
         counts.update(
             provider_stt_rewoken=provider.rewoken,
             provider_stt_discarded=provider.discarded,
@@ -228,6 +259,24 @@ def maintain(now: float) -> dict[str, int]:
     except Exception as error:
         logger.error('event=provider_stt_sweep outcome=error exception_type=%s', type(error).__name__)
         counts['provider_stt_sweep_errors'] = 1
+    try:
+        rewoken, errors = provider_stt_outbox().sweep_running(now=now)
+        counts.update(provider_stt_running_rewoken=rewoken, provider_stt_running_errors=errors)
+    except Exception as error:
+        logger.error('event=provider_stt_running_sweep outcome=error exception_type=%s', type(error).__name__)
+        counts['provider_stt_running_errors'] = 1
+    try:
+        # Kill switch off parks holds on purpose: the guards then measure stale holds as wedges.
+        if held_redrive_enabled():
+            rewoken, errors, expired = provider_stt_outbox().sweep_held(now=now)
+            counts.update(
+                provider_stt_held_rewoken=rewoken,
+                provider_stt_held_errors=errors,
+                provider_stt_held_expired=expired,
+            )
+    except Exception as error:
+        logger.error('event=provider_stt_held_sweep outcome=error exception_type=%s', type(error).__name__)
+        counts['provider_stt_held_errors'] = 1
     try:
         summary = summary_debt_repair.tick(now=now)
     except Exception as error:
@@ -252,3 +301,51 @@ async def sweep_enrichment(_retry_count: int = Depends(verify_enrichment_task)):
         return JSONResponse(status_code=200, content={'status': 'foreign_runtime'})
     counts = await run_blocking(postprocess_executor, maintain, time.time())
     return JSONResponse(status_code=200, content={'status': 'swept', 'counts': counts})
+
+
+async def enrichment_response(payload: dict):
+    document_id, token = payload.get('key'), payload.get('task_token')
+    if set(payload) != {'kind', 'key', 'task_token'} or not all(
+        isinstance(value, str) and value for value in (document_id, token)
+    ):
+        return JSONResponse(status_code=400, content={'status': 'invalid_enrichment_task'})
+    assert isinstance(document_id, str) and isinstance(token, str)
+    if not reprocess.owns_runtime():
+        return JSONResponse(status_code=200, content={'status': 'foreign_runtime'})
+    try:
+        if enrichment_config.route() == 'enrichment_queue':
+            # C3: one state machine. Rows still bound to /v2/sync-jobs/run drain through the same
+            # consumer as /v2/enrichment/run; the route lever flips both together.
+            return http_response(
+                await run_blocking(postprocess_executor, consume, document_id, token, time.monotonic())
+            )
+        # Summaries must not queue behind long transcription jobs. Reuse the
+        # conversation-processing bulkhead for every first-summary obligation.
+        executor = postprocess_executor
+        status = await run_blocking(executor, run_enrichment, document_id, token)
+        if status == 'busy':
+            logger.info('event=batch_enrichment_sync_reprocess outcome=busy')
+            # The leased outbox and task watchdog retain custody after this ACK.
+            return JSONResponse(status_code=200, content={'status': status})
+        return JSONResponse(status_code=200, content={'status': status})
+    except Exception as error:
+        reason = firestore_retry_reason(error) or expected_retry_reason(error)
+        if reason is None and isinstance(error, (ValueError, TypeError)):
+            return JSONResponse(status_code=400, content={'status': 'invalid_enrichment_task'})
+        if reason is None:
+            ENRICHMENT_RETRIES.labels('unexpected').inc()
+            logger.error(
+                'event=batch_enrichment_sync_reprocess outcome=retry retry_class=unexpected site=run_enrichment exception_type=%s',
+                bounded_exception_class(error),
+            )
+            return JSONResponse(status_code=500, content={'status': 'retry'})
+        ENRICHMENT_RETRIES.labels(reason).inc()
+        logger.warning(
+            'event=batch_enrichment_sync_reprocess outcome=retry retry_class=%s site=run_enrichment exception_type=%s',
+            reason,
+            bounded_exception_class(error),
+        )
+        # 409 keeps Cloud Tasks retrying (any non-2xx) without the 429/503
+        # queue throttling that caused the 2026-10-18 backlog, and keeps these
+        # by-design waits out of 5xx error gates.
+        return JSONResponse(status_code=409, content={'status': 'retry', 'reason': reason})

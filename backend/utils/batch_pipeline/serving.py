@@ -11,6 +11,7 @@ import time
 
 from config import batch_pipeline_protected_share as protected_share
 from config.batch_pipeline import (
+    batch_held_dead_letter_enabled,
     held_partial_enabled,
     owner_chain_projection_enabled,
     recovered_merge_release_enabled,
@@ -26,7 +27,7 @@ from config.batch_pipeline import (
     projection_pump_tick_seconds,
 )
 from database.outbox import OutboxKind, outbox_for
-from database.batch_privacy_attempt import with_batch_privacy_attempt
+from database.batch_privacy_attempt import batch_privacy_attempt, with_batch_privacy_attempt
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_shadow_hook import shadow_from_env
 from database.batch_pipeline_staging import reap
@@ -37,7 +38,12 @@ from utils.batch_pipeline.projection_outbox import ProjectionOutbox
 from utils.executors import db_executor, run_blocking, start_background_task, sync_executor
 from utils.batch_pipeline.contracts import PoolCapacity, WorkResult
 from config.batch_pipeline_leader import UPLOAD_COALESCING_SCAN, UPLOAD_COALESCING_SCAN_TTL
-from utils.batch_pipeline.leader import QUEUE_METRICS, SERVING_MAINTENANCE, LeaderLease
+from utils.batch_pipeline.leader import (
+    QUEUE_METRICS,
+    SERVING_LEGACY_METRICS,
+    SERVING_MAINTENANCE,
+    LeaderLease,
+)
 from utils.batch_pipeline.held_dead_letter import HeldDeadLetter, ProjectionHeldDeadLetter
 from utils.batch_pipeline.ready_discovery import ReadyDiscovery
 from utils.batch_pipeline.merge import OrderedMerge
@@ -84,6 +90,7 @@ class Serving:
         enrichment_sweep=None,
         recovery=None,
         leader=None,
+        legacy_metrics_leader=None,
         outbox=None,
     ):
         self.store = store
@@ -100,6 +107,9 @@ class Serving:
         self.allowance_hold_due = 0.0
         # Optional single-owner lease for periodic maintenance (see reconcile).
         self.leader = leader
+        # A non-serving legacy /metrics process still runs idempotent maintenance,
+        # but must not hold the lease used by the serving supervisor.
+        self.legacy_metrics_leader = legacy_metrics_leader
         self.held_dead_letter = HeldDeadLetter(store, metrics=metrics)
         self.projection_held_dead_letter = ProjectionHeldDeadLetter(store, metrics=metrics)
         self.merge = OrderedMerge(store, metrics=metrics)
@@ -168,7 +178,14 @@ class Serving:
 
     @with_batch_privacy_attempt
     async def reconcile_async(
-        self, *, recover_quarantine=False, periodic=False, owner_id=None, recovered=None, owner_only=False
+        self,
+        *,
+        recover_quarantine=False,
+        periodic=False,
+        owner_id=None,
+        recovered=None,
+        owner_only=False,
+        run_held_expiry=True,
     ):
         owner_only = owner_only and recovery_owner_only_enabled()
         priority = await run_blocking(
@@ -179,6 +196,7 @@ class Serving:
             owner_id=owner_id,
             recovered=recovered,
             owner_only=owner_only,
+            run_held_expiry=run_held_expiry,
         )
         # Walk-owed follow-ups keep the drain scheduled until they are queued.
         owes = getattr(self.projector, 'owes_followups', False) is True
@@ -197,11 +215,23 @@ class Serving:
         if self.projector and getattr(self.projector, 'owes_index', False) is True:
             self.projector.schedule_index_flush(owner_id if owner_only else None)
 
-    def _leads(self, periodic: bool) -> bool:
+    def _leads(self, periodic: bool, *, leader=None) -> bool:
         # Explicit global RPC callers (POST /reconcile) always
         # run. Periodic ticks (supervisor, metrics scrape) run maintenance on
         # one serving instance per lease TTL; the lease fails open.
-        return not periodic or self.leader is None or self.leader.acquire()
+        lease = self.leader if leader is None else leader
+        return not periodic or lease is None or lease.acquire()
+
+    def _maintenance_leader(self, *, run_held_expiry: bool):
+        # The held-expiry supervisor owns SERVING_MAINTENANCE. Any maintenance
+        # pass that skips its inline expiry tick uses the separate lease.
+        if not run_held_expiry and self.legacy_metrics_leader is not None:
+            return self.legacy_metrics_leader
+        return self.leader
+
+    def refresh_serving_fresh_guard(self) -> bool:
+        """Use the same lease as the serving loop, which leaves expiry to its supervisor."""
+        return self.refresh_fresh_guard(leader=self._maintenance_leader(run_held_expiry=False))
 
     def _reconcile_owner(self, owner_id: str, recovered: str | None) -> list[str]:
         # The settled job remains result_ready/merge_pending until the fenced
@@ -218,17 +248,33 @@ class Serving:
         return []
 
     def reconcile(
-        self, *, recover_quarantine=False, periodic=False, owner_id=None, recovered=None, owner_only=False
+        self,
+        *,
+        recover_quarantine=False,
+        periodic=False,
+        owner_id=None,
+        recovered=None,
+        owner_only=False,
+        run_held_expiry=True,
     ) -> list[str]:
         """Returns async follow-ups an owner-chain wake wants run first."""
         if owner_only:
             if owner_id is None or recovered is None:
                 raise ValueError('owner-only recovery requires an owner and recovered unit')
             return self._reconcile_owner(owner_id, recovered)
-        if self._leads(periodic):
+        # Metrics and explicit request paths may skip inline expiry. Keep their
+        # maintenance on the separate lease so they cannot retain the
+        # supervisor's expiry lease while omitting its tick.
+        maintenance_leader = self._maintenance_leader(run_held_expiry=run_held_expiry)
+        if self._leads(periodic, leader=maintenance_leader):
+            maintenance_options = {}
+            if maintenance_leader is not self.leader:
+                maintenance_options['maintenance_leader'] = maintenance_leader
             self._maintain(
                 recover_quarantine=recover_quarantine,
                 recovery_caller=RecoveryCaller.SERVING if periodic else RecoveryCaller.RECONCILE,
+                run_held_expiry=run_held_expiry,
+                **maintenance_options,
             )
         elif self.metrics:
             self.metrics.fresh_guard.deactivate()
@@ -260,6 +306,16 @@ class Serving:
         if self.recovery is None or not self._leads(True):
             return None
         return self.recovery.sweep()
+
+    def sweep_held_dead_letters(self, *, periodic=False):
+        if not batch_held_dead_letter_enabled() or not self._leads(periodic):
+            return
+        try:
+            self.held_dead_letter.tick(time.time())
+        except Exception as error:
+            logging.getLogger(__name__).error(
+                'event=batch_held_dead_letter outcome=retry exception_type=%s', type(error).__name__
+            )
 
     def _charge_held_partial_reads(self, counts: dict) -> None:
         reads = counts.get('reads')
@@ -323,21 +379,28 @@ class Serving:
             )
             self.held_pass_started = None
 
-    def refresh_fresh_guard(self) -> bool:
-        """Use the maintenance lease, including outside the potentially slow pass."""
+    def refresh_fresh_guard(self, *, leader=None) -> bool:
+        """Use the selected maintenance lease, including outside the potentially slow pass."""
         if not self.metrics:
             return False
         # Explicit reconcile bypasses the periodic lease; the guard never does.
-        leads = self._leads(True)
+        leads = self._leads(True, leader=leader)
         if leads:
             self.metrics.fresh_guard.refresh(self.store)
         else:
             self.metrics.fresh_guard.deactivate()
         return leads
 
-    def _maintain(self, *, recover_quarantine: bool, recovery_caller=None):
+    def _maintain(
+        self,
+        *,
+        recover_quarantine: bool,
+        recovery_caller=None,
+        run_held_expiry=True,
+        maintenance_leader=None,
+    ):
         """Idempotent, transaction-fenced maintenance: cleanup, sweeps, discovery, recovery, drain."""
-        leads = self.refresh_fresh_guard()
+        leads = self.refresh_fresh_guard(leader=maintenance_leader)
         if self.metrics:
             if leads:
                 self.metrics.delivered_share.refresh(self.store)
@@ -391,12 +454,8 @@ class Serving:
                 logging.getLogger(__name__).error(
                     'event=batch_projection action=release_held outcome=retry exception_type=%s', type(error).__name__
                 )
-        try:
-            self.held_dead_letter.tick(time.time())
-        except Exception as error:
-            logging.getLogger(__name__).error(
-                'event=batch_held_dead_letter outcome=retry exception_type=%s', type(error).__name__
-            )
+        if run_held_expiry:
+            self.sweep_held_dead_letters()
         try:
             self.projection_held_dead_letter.tick(time.time())
         except Exception as error:
@@ -404,7 +463,7 @@ class Serving:
                 'event=batch_projection action=redrive_expired outcome=retry exception_type=%s', type(error).__name__
             )
         self.queue().recover(time.time(), caller=recovery_caller)
-        if time.monotonic() >= self.allowance_hold_due and self._leads(True):
+        if time.monotonic() >= self.allowance_hold_due and self._leads(True, leader=maintenance_leader):
             self.allowance_hold_due = time.monotonic() + 30
             AllowanceHolds(self.store, entitlement).tick(time.time())
         page = self.ready_discovery.page()
@@ -473,6 +532,7 @@ def _serving_for_stage(stage: str) -> Serving:
         enrichment_sweep=reprocess.sweep,
         # Supervisor ticks every 20s; a lapsed holder hands over within 60s.
         leader=LeaderLease(store, SERVING_MAINTENANCE, ttl_seconds=60),
+        legacy_metrics_leader=LeaderLease(store, SERVING_LEGACY_METRICS, ttl_seconds=60),
     )
 
 
@@ -504,18 +564,37 @@ async def _supervise_backlog_heartbeat(stop):
 
 async def _supervise_fresh_guard(stop):
     # General maintenance (and its sync executor) may be occupied for minutes.
-    # Keep the same maintenance leader, but borrow a DB thread only for this
-    # bounded count pair. FreshGuard coalesces overlaps and enforces 60s spacing.
+    # Keep the same lease as the serving loop, but borrow a DB thread only for
+    # this bounded count pair. FreshGuard coalesces overlaps and enforces 60s spacing.
     while not stop.is_set():
         try:
             service = await run_blocking(db_executor, serving_for_stage, current_stage())
-            await run_blocking(db_executor, service.refresh_fresh_guard)
+            await run_blocking(db_executor, service.refresh_serving_fresh_guard)
         except Exception as error:
             logging.getLogger(__name__).error(
                 'event=batch_fresh_guard outcome=retry exception_type=%s', type(error).__name__
             )
         try:
             await asyncio.wait_for(stop.wait(), timeout=20)
+        except asyncio.TimeoutError:
+            pass
+
+
+async def _supervise_held_dead_letters(stop):
+    # A slow or failed reconciliation (including quarantine discovery) must
+    # still let the maintenance leader scan and expire dormant holds.
+    while not stop.is_set():
+        try:
+            if batch_held_dead_letter_enabled():
+                service = await run_blocking(db_executor, serving_for_stage, current_stage())
+                with batch_privacy_attempt():
+                    await run_blocking(db_executor, service.sweep_held_dead_letters, periodic=True)
+        except Exception as error:
+            logging.getLogger(__name__).error(
+                'event=batch_held_dead_letter outcome=retry exception_type=%s', type(error).__name__
+            )
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=serving_tick_seconds())
         except asyncio.TimeoutError:
             pass
 
@@ -575,7 +654,7 @@ def start_serving_from_env():
         while not stop.is_set():
             try:
                 service = await run_blocking(sync_executor, serving_for_stage, current_stage())
-                await service.reconcile_async(recover_quarantine=True, periodic=True)
+                await service.reconcile_async(recover_quarantine=True, periodic=True, run_held_expiry=False)
             except Exception as error:
                 logging.getLogger(__name__).error(
                     'event=batch_serving outcome=retry exception_type=%s', type(error).__name__
@@ -686,6 +765,7 @@ def start_serving_from_env():
                     supervise(),
                     drain(),
                     dispatch_recovery(),
+                    _supervise_held_dead_letters(stop),
                     drain_upload_holds(),
                     _supervise_fresh_guard(stop),
                     _supervise_backlog_heartbeat(stop),

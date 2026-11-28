@@ -104,6 +104,7 @@ func (s *results) Put(_ context.Context, g queue.Guarded, req batchunit.Request,
 }
 
 type accounts struct {
+	fact     queue.EntitlementSnapshot
 	mu       sync.Mutex
 	deleting map[string]bool
 }
@@ -114,24 +115,24 @@ func (a *accounts) is(owner string) bool {
 	return a.deleting[owner]
 }
 
-func (a *accounts) Admissible(_ context.Context, admitting queue.Admitting, owner string) error {
+func (a *accounts) Admissible(_ context.Context, admitting queue.Admitting, owner string) (batchunit.AccountFunding, error) {
 	if err := admitting.Err(); err != nil {
-		return err
+		return batchunit.AccountFunding{}, err
 	}
 	if a.is(owner) {
-		return classified{queue.Hold(causeDeleting, time.Hour)}
+		return batchunit.AccountFunding{}, classified{queue.Hold(causeDeleting, time.Hour)}
 	}
-	return nil
+	return batchunit.AccountFunding{Entitlement: a.fact}, nil
 }
 
-func (a *accounts) Runnable(_ context.Context, g queue.Guarded, owner string) error {
+func (a *accounts) Runnable(_ context.Context, g queue.Guarded, owner string) (batchunit.AccountFunding, error) {
 	if err := g.Err(); err != nil {
-		return err
+		return batchunit.AccountFunding{}, err
 	}
 	if a.is(owner) {
-		return classified{queue.Hold(causeDeleting, time.Hour)}
+		return batchunit.AccountFunding{}, classified{queue.Hold(causeDeleting, time.Hour)}
 	}
-	return nil
+	return batchunit.AccountFunding{Entitlement: a.fact}, nil
 }
 
 type counts struct {
@@ -170,7 +171,12 @@ type rig struct {
 
 func newRig(t *testing.T) *rig {
 	t.Helper()
-	h := queuetest.Open(t, queuetest.Policy(), batchunit.Declaration(causeVendorDown, causeStoreDown, causeDeleting))
+	return newRigWithPolicy(t, queuetest.Policy())
+}
+
+func newRigWithPolicy(t *testing.T, policy queue.Config) *rig {
+	t.Helper()
+	h := queuetest.Open(t, policy, batchunit.Declaration(causeVendorDown, causeStoreDown, causeDeleting))
 	r := &rig{
 		Harness: h, vendor: &vendor{committed: map[string]string{}}, results: &results{stored: map[string]string{}},
 		accounts: &accounts{deleting: map[string]bool{}},
@@ -370,5 +376,46 @@ func TestACorruptedStoredInputParksInsteadOfLooping(t *testing.T) {
 	}
 	if charges, _ := r.vendor.ledger(); charges != 0 {
 		t.Errorf("paid %d time(s) for an unreadable input", charges)
+	}
+}
+
+// Recovery uses the original operation and bypasses a funding hold without
+// starting another transcription, including if the paid vendor has lost its receipt.
+func TestPaidResultRecoveryWhileHeldNeverTranscribes(t *testing.T) {
+	t.Parallel()
+	r := newRig(t)
+	if err := r.Store.HoldCondition(t.Context(), "owner", queue.Entitlement, 1); err != nil {
+		t.Fatal(err)
+	}
+	u := unit("recover", "audio/recover")
+	u.AlreadyPaid = true
+	j := r.admit(t, u)
+	r.start()
+	done := r.Settled(j.Key)
+	charges, calls := r.vendor.ledger()
+	if done.Attempts == 0 || done.Outcome == nil || *done.Outcome != queue.TerminalFailure || charges != 0 || len(calls) != 0 {
+		t.Fatalf("missing paid result: job=%+v charges=%d transcriptions=%d", done, charges, len(calls))
+	}
+}
+
+func TestDisabledConditionHoldDefersPaidSpeech(t *testing.T) {
+	t.Parallel()
+	policy := queuetest.Policy()
+	policy.TimeOnlyEntitlementHold = true
+	r := newRigWithPolicy(t, policy)
+	r.accounts.fact = queue.EntitlementSnapshot{Generation: 1, Exhausted: true}
+	u := unit("unfunded", "audio/unfunded")
+	u.CustodyDeadline = time.Now().Add(time.Hour)
+	u.AudioDuration = time.Minute
+	j := r.admit(t, u)
+	if j.State != queue.StateReady {
+		t.Fatalf("disabled condition parked new intake: %v", j.State)
+	}
+	r.start()
+	r.Until(j.Key, "time-only hold", func(j queue.Job) bool {
+		return j.State == queue.StateWaiting && j.Reason != nil && *j.Reason == queue.CauseAllowanceExhausted && j.Attempts == 0
+	})
+	if charges, calls := r.vendor.ledger(); charges != 0 || len(calls) != 0 {
+		t.Fatalf("unfunded speech: charges=%d calls=%d", charges, len(calls))
 	}
 }

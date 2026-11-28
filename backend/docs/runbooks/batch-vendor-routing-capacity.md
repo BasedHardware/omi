@@ -12,8 +12,8 @@ ladder, the failover drills and the guard interlocks. Numbers marked
 
 | Setting | Where | Owner | Rollback |
 | --- | --- | --- | --- |
-| GPU floor (HPA min and baseline) | `charts/batch-pipeline-worker/prod_omi_batch-pipeline-worker_values.yaml` `replicaCount` + `autoscaling.minReplicas` | Release, live HPA patch plus the next worker Helm roll | floor 4 (both values) |
-| L4 node pool minimum | GKE `batch-pipeline-pool` total minimum (operator-managed, not in this repo) | Release / op1 | `--total-min-nodes 0` (no minimum, the state before 2026-11-20) |
+| GPU floor (HPA min and baseline) | `charts/batch-pipeline-worker/prod_omi_batch-pipeline-worker_values.yaml` `replicaCount` + `autoscaling.minReplicas` | Release, live HPA patch plus the next worker Helm roll | Keep 6 for tuning rollbacks |
+| L4 node pool minimum | GKE `batch-pipeline-pool` total minimum (operator-managed, not in this repo) | Release / op1 | Keep 6 for tuning rollbacks |
 | Worker roll strategy | `templates/deployment.yaml` (RollingUpdate, `maxSurge: 0`) + `rollout.maxUnavailable` | Release, live Deployment patch plus the next worker Helm roll | `rollout.maxUnavailable: 100%`; Recreate only by reverting the chart change |
 | GPU floor share of routed units | route table `gpu_floor_percent`, cohort `batch-vendor-gpu-floor` | lead, runtime config (slice B) | 0 |
 | `provider-stt` queue size | `deploy/ops/prod.yaml` `cloud_tasks.provider-stt` | lead, config-train | previous size |
@@ -23,6 +23,11 @@ All of these are config, not code constants. Changing one is a values or
 config-train change, never a code change.
 
 ## GPU floor
+
+The pre-November 20 settings were HPA/baseline 4 and node minimum 0
+(`--total-min-nodes 0`). Release may restore those settings only as part of an
+explicit rollback of #25842’s capacity policy approved by the Pipeline owner.
+That rollback removes the six-node stockout protection.
 
 **Current bounds (2026-11-20, David, superseding D4's floor 4 of 2026-11-06):
 baseline/min 6, max 16, and a `batch-pipeline-pool` node minimum of 6.** Over the
@@ -179,7 +184,7 @@ never with a burst in prod.
    daily cap above that total. A cap hit ends the ladder early and measures
    nothing, so it is not a clean rung.
 3. Rungs: 5 → 10 → 25 → 50 concurrent, each held 10 min, Modulate first, then
-   Soniox (failover-only, $0.10/h list), with 2-minute rungs to keep its bill
+   Soniox ($0.12/h list), with 2-minute rungs to keep its bill
    near $3 at L = 3s.
 4. Record per rung: 429 count and share, 5xx share, timeout share, L p50/p95,
    integration CPU s/unit, and vendor audio-seconds billed (from
@@ -320,8 +325,7 @@ While saturated:
 
 What never overflows: the GPU floor share (`gpu_floor_percent` owners),
 priorities outside `BATCH_VENDOR_OVERFLOW_PRIORITIES` (RECENT/DEEP by default),
-a language the row has no primary vendor for, and anything when the only other healthy route is failover-only (Soniox stays
-failover). Overflow is part of vendor routing: owners must be in the
+a language the row has no primary vendor for, and anything when the only other healthy route is failover-only. Overflow is part of vendor routing: owners must be in the
 vendor-routing cohort with legacy `draining` or `dark`, and every interlock
 above applies.
 
@@ -329,17 +333,21 @@ Modulate overflow is a supported failover path for GPU stockouts and outages
 (David 065da8, 2026-11-04), not an emergency step.
 
 Standing table: `backend/deploy/batch-pipeline/vendor_route_table.prod.json`,
+`soniox-unsupported-1127` (David 2026-11-27: languages Parakeet cannot serve start on Soniox, Modulate as
+failover; no Soniox daily cap, the `omi-batch-soniox-daily-hours` page instead). It succeeds
 `en-overflow-1116` (lead2 863cd6/fb423f; David 49b7e4: English-only overflow; David 2026-11-16:
 Modulate cap 3,000 -> 5,000 audio-h/day, and prod sets `BATCH_VENDOR_OVERFLOW_PRIORITIES=fresh,recent`
 so RECENT English overflows too while its own backlog is saturated).
 - `selection: ordered`, rows `en: [gpu, modulate, soniox]`, `gpu_supported: [gpu]`,
-  `gpu_unsupported: [modulate, soniox]`, `*: [gpu]`. Fresh English overflows to
+  `gpu_unsupported: [soniox, modulate]`, `*: [gpu]`. Fresh English overflows to
   Modulate once the ring is saturated. Other GPU-capable languages stay on
-  GPU. Languages Parakeet cannot serve start on Modulate (unchanged).
-- Soniox stays `failover_only` (cap 1,000 audio-h/day), exactly as in the earlier
-  prod-gpu-first-v1 table: a Modulate outage fails English and unsupported
-  languages over to Soniox, else holds them with their audio. Overflow never
-  starts on Soniox.
+  GPU. Languages Parakeet cannot serve start on Soniox ($0.12/h list), with Modulate as failover: on a
+  public eval (FLEURS, 12 languages, and ASCEND code-switch), Soniox beat Velma on every language except
+  English, where they tie.
+- Soniox is a primary (`failover_only: false`), with no daily cap or monthly budget. The
+  `omi-batch-soniox-daily-hours` page fires above 1,500 audio-h in 24 h. Because Soniox is a primary in the
+  English row too, a saturated ring with Modulate down overflows fresh English to Soniox instead of waiting.
+  A Soniox outage starts unsupported languages on Modulate.
 - Modulate carries a `daily_audio_hours_cap` of 5,000 (3,000 from lead2, Luna
   P1 on #24637; raised by David 2026-11-16 with RECENT overflow). Non-English
   traffic used about 1,000 audio-h/day in Nov 2026, which leaves about 4,000
@@ -360,8 +368,9 @@ so RECENT English overflows too while its own backlog is saturated).
 on backend-sync, backend-sync-backfill and backend-integration, so every
 backend train re-applies it. `tests/unit/test_batch_vendor_route_table_prod.py`
 pins the overlay value to the file's compact JSON and runs the real selection
-over it. Healthy and unsaturated, it routes every language exactly as
-`resolve_route` does, including blank, `multi` and unknown.
+over it. Healthy and unsaturated, only languages Parakeet cannot serve move (to
+Soniox first, Modulate as failover); English, Parakeet languages, blank, `multi` and
+unknown route exactly as `resolve_route` does.
 `tests/unit/test_batch_vendor_outage_drills.py` drives the real sampler: with
 zero GPU workers, English overflows once the fresh backlog passes the enter
 age, returns to GPU after capacity drains it, and the kill switch keeps

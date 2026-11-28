@@ -225,6 +225,8 @@ env:
     value: "true"
   - name: BATCH_HELD_DEAD_LETTER_ENABLED
     value: "true"
+  - name: BATCH_PARKED_JOB_SWEEPER_ENABLED
+    value: "true"
   - name: RECORD_INTAKE_AGE_PRIORITY_ENABLED
     value: "true"
   - name: RECORD_SEAL_REPAIR_FRESH_ENABLED
@@ -267,10 +269,6 @@ env:
     value: "180"
   - name: CONVERSATIONS_V3_ROTATION_MAX_SECONDS
     value: "300"
-  - name: SYNC_POLL_BACKOFF_ENABLED
-    value: "false"
-  - name: SYNC_POLL_BACKOFF_PERCENT
-    value: "0"
   - name: BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED
     value: "false"
   - name: BATCH_PIPELINE_LIVE_ADMISSION_ENABLED
@@ -313,8 +311,6 @@ env:
     value: "false"
   - name: AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED
     value: "false"
-  - name: AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED
-    value: "false"
   - name: AUDIO_ARCHIVE_PERCENT
     value: "0"
   - name: AUDIO_ARCHIVE_STOP_PCM_PERCENT
@@ -322,8 +318,6 @@ env:
   - name: AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT
     value: "0"
   - name: BUCKET_AUDIO_DERIVED
-    value: ""
-  - name: AUDIO_MERGE_WORKER_URL
     value: ""
   # Public client token for v2 cohort reads only; shared backend PostHog stays disabled.
   - name: PROACTIVITY_V2_POSTHOG_TOKEN
@@ -760,15 +754,11 @@ env:
   # existing v1 sessions and resumed v1 conversations are unaffected.
   - name: AUDIO_TIMELINE_V2
     value: "true"
-  - name: LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION
-    value: 'false'
   - name: LIVE_CAPTURE_WINDOW_MERGE_UNION
     value: 'false'
   - name: LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS
     value: "false"
   - name: SONIOX_WIRE_LEDGER
-    value: "false"
-  - name: SONIOX_ORDERED_FINALIZE
     value: "false"
   - name: SONIOX_CAPTURE_AXIS_DIAGNOSTICS
     value: "false"

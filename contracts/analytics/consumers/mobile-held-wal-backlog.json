@@ -1,0 +1,10 @@
+{
+  "id": "mobile-held-wal-backlog",
+  "kind": "question",
+  "owner": "dazheng",
+  "events": ["mobileHeldWalBacklog"],
+  "namespace_property": "$app_namespace",
+  "question": "Do sealed mobile Standard WALs remain on the phone past H + 900 seconds more often in the hold-on cohort than in control? Compare the backlog count and oldest age distributions by trigger and release build. H is 60 or 300 seconds according to the applicable hold state.",
+  "zero_policy": "An explicit zero means the device reported no pending sealed WALs. No rows is unknown until cohort delivery, release identity and PostHog ingestion coverage are verified.",
+  "query": "contracts/analytics/consumers/mobile-held-wal-backlog.sql"
+}

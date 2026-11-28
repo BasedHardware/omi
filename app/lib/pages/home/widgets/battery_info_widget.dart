@@ -58,7 +58,7 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
         // This reduces battery drain by avoiding unnecessary rebuilds during other provider updates
         return Selector<DeviceProvider, (int, BtDevice?, BtDevice?, bool, bool)>(
           selector: (_, provider) => (
-            provider.batteryLevel,
+            provider.displayBatteryLevel,
             provider.connectedDevice,
             provider.pairedDevice,
             provider.isConnecting,
@@ -72,7 +72,7 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
               final low = hasBattery && batteryLevel <= kLowBatteryPercent && !isCharging;
               final semantics = [
                 connectedDevice.name,
-                if (hasBattery) l10n.batteryLevelSemantics(batteryLevel),
+                if (hasBattery) l10n.batteryLevelSemantics(batteryLevel) else ...[l10n.battery, l10n.unknown],
                 if (isCharging) l10n.charging,
               ].join(', ');
               final batteryPill = _DevicePill(
@@ -97,6 +97,11 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                       ),
                     ),
                   ),
+                  // A charging bolt shows even when the percentage is unknown or withheld.
+                  if (isCharging && !hasBattery) ...[
+                    const SizedBox(width: 6.0),
+                    Icon(Icons.bolt, key: const Key('battery_pill_charging'), color: OmiColors.textSecondary, size: 13),
+                  ],
                   // Only show battery indicator and percentage when battery level is valid (> 0)
                   if (hasBattery) ...[
                     const SizedBox(width: 6.0),
@@ -365,7 +370,7 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
     if (captureProvider.recordingState == RecordingState.record || captureProvider.isPhoneMicPaused) {
       // The phone recording is this button's own: finish it (processed, except Transcribe Later,
       // whose local file is finalized on stop), then any pendant it paused resumes.
-      final outcome = await finishLiveCapture(captureProvider, episodes: context.read<EpisodeProvider?>());
+      final outcome = await finishLiveCapture(context, captureProvider, episodes: context.read<EpisodeProvider?>());
       if (outcome is! FinishFailed) PlatformManager.instance.analytics.phoneMicRecordingStopped();
       if (!context.mounted) return;
       presentFinishOutcome(

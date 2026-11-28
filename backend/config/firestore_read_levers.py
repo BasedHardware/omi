@@ -56,6 +56,13 @@ KNOWN_LEVERS = frozenset(
         'episode_members_cache',  # Home member projections may be stale for <= 60s; absent = 0/off
         'conversation_list_cursor',  # conversations:_collect_visible_conversation_page
         'finjob_candidate_queries',  # conversation_finalization_jobs:{scan_in_progress,get_abandoned_byok,get_stale_processing}
+        'bpp_shared_owner_cache',  # Redis owner memo, certified by the transactional token
+        'bpp_shared_owner_shadow',  # sampled tokenless comparison; never authorizes
+        'bpp_tokenless_write_cache',  # opt in only after write-side shadow qualification
+        'bpp_tokenless_write_audit',  # 0–100 basis points of enforced hits
+        'bpp_tokenless_write_shadow',  # sampled comparison for write authority
+        'bpp_late_erasure_execute',  # 100 opens delayed erasure execution; proof capture stays on
+        'bpp_status_skip',  # ship-on: content-free, read-only status polls
         'bpp_decision_cache',  # batch privacy: token-validated generation reuse across attempts, <= 60s
         'bpp_owner_memo',  # ship-on: batch privacy owner-level decision reuse, same per-use token certification; 0 restores id-set keying
         'bpp_owner_memo_enforce',  # explicit admission after shadow qualification; absent/invalid = off
@@ -78,7 +85,14 @@ DEFAULT_PERCENTAGES = {
     'admission_frontier_hint': 100,
     'sync_allowance_single_resolve': 100,
     'bpp_owner_memo': 100,
+    # SCA-3508 phase 1 merges dark for the shared owner cache: Release ramps
+    # shadow, then enforcement, by config after per-route shadow evidence and
+    # revocation/account-deletion/erasure readbacks (privacy memo admission).
+    'bpp_shared_owner_cache': 0,
+    'bpp_shared_owner_shadow': 0,
+    'bpp_status_skip': 100,
     'bpp_owner_memo_enforce': 0,
+    'bpp_late_erasure_execute': 0,
 }
 
 

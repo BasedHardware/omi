@@ -198,7 +198,7 @@
     },
     {
       "path": "utils/conversations/process_conversation.py",
-      "function": "process_conversation._emit_derived_effects",
+      "function": "_process_conversation_steps.derived_effects_steps",
       "kind": "submit_with_context",
       "count": 5,
       "why": "pre-existing; unreviewed; durability risk: structured vector, action items, goal progress and created webhook are fire-and-forget on postprocess_executor; the created webhook is submitted from one of two mutually exclusive sites (directly, or by the merge via created_webhook_observer once it can no longer roll back, #22415), so still at most once per run"
@@ -272,6 +272,13 @@
       "kind": "submit_with_context",
       "count": 1,
       "why": "best-effort BYOK error telemetry"
+    },
+    {
+      "path": "utils/memory/memory_service.py",
+      "function": "MemoryService.update_visibility",
+      "kind": "submit_with_context",
+      "count": 1,
+      "why": "Best-effort physical cleanup of a historical copy. The canonical item and durable historical suppression are already committed before submission, so losing cleanup cannot expose the copy or change the visibility outcome."
     },
     {
       "path": "utils/observability/sync_phases.py",
@@ -440,6 +447,20 @@
       "kind": "start_background_task",
       "count": 2,
       "why": "Joined worker and lease keeper, not detached work: leased_work awaits (shielded) the worker and then the keeper before returning, so both live exactly as long as the request. At SIGKILL the v3 builder lease expires and the named Cloud Tasks reconcile plus the sweeper redrive the user; no partial write is committed without the lease token."
+    },
+    {
+      "path": "utils/batch_pipeline/live.py",
+      "function": "_manual_finish_admitted",
+      "kind": "start_background_task",
+      "count": 1,
+      "why": "Manual-finish first transcript (SCA-3024), at most one per recording and two at a time per process, only for owners admitted by CONVERSATIONS_V3_FAST_FINISH: a best-effort early provider transcript started after record admission has committed. Losing it at SIGKILL loses only the early transcript; the admitted batch job still owns and delivers the canonical one, a single-unit recording's manual-end cut is stored before the task starts, and a multi-unit cut is stored only after the transcript write."
+    },
+    {
+      "path": "utils/batch_pipeline/commit_wake_sender.py",
+      "function": "CommitWakeSender.__call__",
+      "kind": "threading.Thread",
+      "count": 1,
+      "why": "Flag commit_wake: one daemon thread per worker posts owner ids to the serving backend. The wake is a hint held in memory; a wake lost at SIGKILL leaves the committed row where the serving sweep finds it, as without the flag."
     }
   ]
 }

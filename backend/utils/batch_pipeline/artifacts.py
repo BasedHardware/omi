@@ -18,12 +18,14 @@ from uuid import uuid4
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from google.cloud.storage.retry import DEFAULT_RETRY
-from google.api_core.exceptions import NotFound
+from google.api_core.exceptions import NotFound, PreconditionFailed
 
 from utils.batch_pipeline.contracts import WorkItem
 from utils.batch_pipeline import leaf_timings
 from utils.batch_pipeline import voice_centroids
 from utils.batch_pipeline.source_audio import MAGIC as RECORD_MAGIC, materialize, read_reference
+from config.refactor_modes import default_on
+from utils.other.gcs_read_reuse import ReadMemo, REPLACEMENT_CALLS, avoided
 from utils.batch_pipeline.upload_policy import (
     UPLOAD_CHUNK_BYTES,
     UPLOAD_TIMEOUT,
@@ -61,7 +63,7 @@ class ArtifactStore:
         namespace: str,
         authorize: Callable[[WorkItem], ProtectionContext],
         key_for_owner: Callable[[str], bytes],
-        register_artifact: Callable[[WorkItem, str, str, ProtectionContext], None],
+        register_artifact: Callable[..., None],
         shadow_result: Callable | None = None,
         authorize_read: Callable | None = None,
     ) -> None:
@@ -124,7 +126,17 @@ class ArtifactStore:
         sealed = leaf_timings.call('encrypt', AESGCM(key).encrypt, nonce, body, self._aad(item, kind, context))
         return MAGIC + nonce + sealed
 
-    def _write(self, item: WorkItem, kind: str, body: bytes, limit: int, *, result_key: str | None = None) -> str:
+    def _write(
+        self,
+        item: WorkItem,
+        kind: str,
+        body: bytes,
+        limit: int,
+        *,
+        result_key: str | None = None,
+        record_origin: bool | None = None,
+        record_lane_owner: str | None = None,
+    ) -> str:
         if not body or len(body) > limit:
             raise ValueError('batch artifact exceeds bounded payload size')
         context = self.authorize(item)
@@ -139,7 +151,14 @@ class ArtifactStore:
         # may erase this unique name before the provider returns its generation.
         registered_at = time.monotonic()
         leaf_timings.call(
-            'artifact_register', self.register_artifact, item, f'gs://{self.bucket_name}/{name}', kind, context
+            'artifact_register',
+            self.register_artifact,
+            item,
+            f'gs://{self.bucket_name}/{name}',
+            kind,
+            context,
+            **({'record_origin': record_origin} if record_origin is not None else {}),
+            **({'record_lane_owner': record_lane_owner} if record_lane_owner is not None else {}),
         )
         self._unchanged(item, context)
         if kind == 'voice_evidence':
@@ -213,7 +232,7 @@ class ArtifactStore:
         self._unchanged(item, context)
         return None
 
-    def _read(self, item: WorkItem, uri: str, kind: str, limit: int, *, read_budget=None) -> bytes:
+    def _read(self, item: WorkItem, uri: str, kind: str, limit: int, *, read_budget=None, observed=None) -> bytes:
         context = self._authorize(item, read_budget)
         if item.privacy_generation is None or context.generation != item.privacy_generation:
             raise PermissionError('batch artifacts require the admitted privacy generation')
@@ -221,24 +240,50 @@ class ArtifactStore:
         blob = self.bucket.blob(name, generation=generation)
         if read_budget is not None:
             read_budget.begin()
-        leaf_timings.call(
-            'download_metadata',
-            blob.reload,
-            if_generation_match=generation,
-            timeout=read_budget.timeout(30) if read_budget is not None else 30,
-            retry=None,
-        )
-        if not blob.size or not 0 < blob.size <= limit + len(MAGIC) + 28:
-            raise ValueError('stored batch artifact exceeds bounded payload size')
-        if read_budget is not None:
-            read_budget.reserve(blob.size)
-        sealed = leaf_timings.call(
-            'download',
-            blob.download_as_bytes,
-            if_generation_match=generation,
-            timeout=read_budget.timeout(60) if read_budget is not None else 60,
-            retry=None,
-        )
+
+        def reload_size():
+            leaf_timings.call(
+                'download_metadata',
+                blob.reload,
+                if_generation_match=generation,
+                timeout=read_budget.timeout(30) if read_budget is not None else 30,
+                retry=None,
+            )
+            return blob.size
+
+        def download(size, metageneration=None):
+            if not size or not 0 < size <= limit + len(MAGIC) + 28:
+                raise ValueError('stored batch artifact exceeds bounded payload size')
+            if read_budget is not None:
+                read_budget.reserve(size)
+            return leaf_timings.call(
+                'download',
+                blob.download_as_bytes,
+                if_generation_match=generation,
+                **({'if_metageneration_match': metageneration} if metageneration else {}),
+                timeout=read_budget.timeout(60) if read_budget is not None else 60,
+                retry=None,
+            )
+
+        metageneration = getattr(observed, 'metageneration', None)
+        if (
+            default_on('BATCH_ARTIFACT_METADATA_REUSE_ENABLED')
+            and observed is not None
+            and type(metageneration) is int
+            and metageneration > 0
+            and observed.name == name
+            and observed.generation == generation
+            and observed.size is not None
+        ):
+            try:
+                sealed = download(observed.size, metageneration)
+            except PreconditionFailed:
+                REPLACEMENT_CALLS.labels('staging_metadata', 'payload').inc()
+                sealed = download(reload_size())
+            else:
+                avoided('staging_metadata', 'metadata')
+        else:
+            sealed = download(reload_size())
         if read_budget is not None:
             read_budget.received_bytes += len(sealed)
             read_budget.timeout(60)
@@ -296,18 +341,22 @@ class ArtifactStore:
             raise PermissionError('voice evidence expired or unbound')
         return payload
 
-    def stage_audio(self, item: WorkItem, wav: bytes) -> str:
+    def stage_audio(
+        self, item: WorkItem, wav: bytes, *, record_origin: bool | None = None, record_lane_owner: str | None = None
+    ) -> str:
         """Admission calls this before enqueue; audio AAD excludes its own URI."""
-        return self._write(item, 'audio', wav, AUDIO_LIMIT)
+        return self._write(
+            item, 'audio', wav, AUDIO_LIMIT, record_origin=record_origin, record_lane_owner=record_lane_owner
+        )
 
-    def stage_record_plan(self, item: WorkItem, plan: dict) -> str:
+    def stage_record_plan(self, item: WorkItem, plan: dict, *, record_lane_owner: str | None = None) -> str:
         """Small encrypted continuation, attached to the record coordinator.
 
         Uses the normal owner/privacy-fenced staging outbox. It contains only
         immutable source slices and is never sent to a compute worker.
         """
         body = json.dumps(plan, allow_nan=False, separators=(',', ':')).encode()
-        return self._write(item, 'audio', body, RESULT_LIMIT)
+        return self._write(item, 'audio', body, RESULT_LIMIT, record_origin=True, record_lane_owner=record_lane_owner)
 
     def load_record_plan(self, item: WorkItem, uri: str) -> dict:
         return json.loads(self._read(item, uri, 'audio', RESULT_LIMIT))
@@ -323,7 +372,17 @@ class ArtifactStore:
                 os.getenv('BUCKET_AUDIO_DERIVED', '').strip(),
             }
 
-            def fetch(ref):
+            memo = ReadMemo()
+
+            def fetch(ref, *, fresh=False):
+                listing = None
+                if not fresh and default_on('BATCH_SOURCE_VERIFIED_METADATA_REUSE_ENABLED') and 'metadata' in ref:
+                    listing = {
+                        'size': ref.get('source_size'),
+                        'metageneration': ref.get('source_metageneration'),
+                        'metadata': ref['metadata'],
+                        'source_metadata_reuse': True,
+                    }
                 return read_reference(
                     self.client,
                     ref,
@@ -333,13 +392,17 @@ class ArtifactStore:
                     self.key_for_owner(item.owner_id),
                     source_metadata=True,
                     read_budget=read_budget,
+                    listed_source=listing,
+                    report_payload_bytes=True,
+                    retry_stale_metadata=not fresh,
+                    memo=None if fresh else memo,
                 )
 
             def confirm_mismatch(ref):
                 # The same privacy/ownership fence as the post-materialize check,
                 # applied before the single confirmation read of the same pinned ref.
                 self._authorize(item, read_budget)
-                return fetch(ref)
+                return fetch(ref, fresh=True)
 
             wav = materialize(
                 body,
@@ -351,7 +414,7 @@ class ArtifactStore:
             return wav
         return body
 
-    def persist_result(self, item: WorkItem, payload: dict[str, Any]) -> str:
+    def persist_result(self, item: WorkItem, payload: dict[str, Any], *, record_origin: bool | None = None) -> str:
         if item.shadow:
             # Shadow transcripts/diarization never enter durable storage.
             if self.shadow_result is None:
@@ -360,7 +423,7 @@ class ArtifactStore:
             self.shadow_result(item, payload)
             return 'shadow:' + item.segment_id
         body = json.dumps(payload, allow_nan=False, separators=(',', ':')).encode()
-        return self._write(item, 'results', body, RESULT_LIMIT)
+        return self._write(item, 'results', body, RESULT_LIMIT, record_origin=record_origin)
 
     def persist_recovery_result(self, item: WorkItem, payload: dict[str, Any], token: str) -> str:
         if item.shadow:
@@ -383,11 +446,13 @@ class ArtifactStore:
         uri = f'gs://{self.bucket_name}/{name}#{int(blob.generation)}'
         # Authenticate the owner, admitted clocks, generation and encrypted body
         # before acknowledging an upload whose successful reply was lost.
-        self.load_result(item, uri)
+        self.load_result(item, uri, _observed=blob)
         return uri
 
-    def load_result(self, item: WorkItem, uri: str, *, read_budget=None) -> dict[str, Any]:
-        payload = json.loads(self._read(item, uri, 'results', RESULT_LIMIT, read_budget=read_budget))
+    def load_result(self, item: WorkItem, uri: str, *, read_budget=None, _observed=None) -> dict[str, Any]:
+        payload = json.loads(
+            self._read(item, uri, 'results', RESULT_LIMIT, read_budget=read_budget, observed=_observed)
+        )
         if not isinstance(payload, dict):
             raise ValueError('batch result must be a JSON object')
         return payload

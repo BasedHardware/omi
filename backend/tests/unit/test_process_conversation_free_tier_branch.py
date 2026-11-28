@@ -140,6 +140,7 @@ def _build_fakes() -> dict[str, ModuleType]:
         'get_app_result',
         'should_discard_conversation',
         'get_conversation_notes',
+        'conversation_notes_steps',
         'validate_structured_source_segment_ids',
     ):
         setattr(conv_proc, attr, MagicMock())
@@ -735,6 +736,7 @@ def test_flag_off_fresh_create_persists_no_processing_state_key(monkeypatch, pc)
 
 
 def test_flag_off_legacy_deferred_store_persists_no_processing_state_key(monkeypatch, pc) -> None:
+    monkeypatch.setenv('CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED', 'off')
     spies = _spy_managed_effects(monkeypatch, pc)  # should_defer returns True
     payloads = _capture_all_persists(monkeypatch, pc)
 
@@ -819,6 +821,7 @@ def test_paid_reprocess_clears_a_dead_letter_summary_retryable_marker(monkeypatc
 
 @pytest.mark.parametrize('persisted, expected_event', [(True, 'stored'), (False, 'fenced')])
 def test_legacy_deferral_records_lazy_store_lifecycle(monkeypatch, pc, persisted: bool, expected_event: str) -> None:
+    monkeypatch.setenv('CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED', 'off')
     spies = _spy_managed_effects(monkeypatch, pc)
     recorded: list[str] = []
     monkeypatch.setattr(pc, 'record_lazy_desktop_deferral', lambda *, event: recorded.append(event))

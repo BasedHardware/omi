@@ -560,11 +560,11 @@ class AppLocalizationsEt extends AppLocalizations {
   String get hardwareSection => 'Riistvara';
 
   @override
-  String get v2Undetected => 'V2 tuvastamata';
+  String get v2Undetected => 'Võrguühenduseta sünkroonimine pole saadaval';
 
   @override
   String get v2UndetectedMessage =>
-      'Näeme, et teil on kas V1 seade või teie seade pole ühendatud. SD-kaardi funktsioon on saadaval ainult V2 seadmetele.';
+      'Võrguühenduseta sünkroonimine vajab SD-kaardi salvestusruumiga ühendatud Omi seadet. Teie praegune seade seda ei toeta.';
 
   @override
   String get endConversation => 'Lõpeta vestlus';
@@ -7052,6 +7052,26 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get authUnexpectedError => 'Ootamatu viga sisselogimisel, palun proovige uuesti';
+
+  @override
+  String get accountSignInMethods => 'Sisselogimisviisid';
+
+  @override
+  String get accountAddSignInMethod => 'Lisa sisselogimisviis';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Lisa sellele Omi kontole sisselogimisviis. Sinu pakett, salvestised ja integratsioonid jäävad sellele kontole.';
+
+  @override
+  String get accountSignInConflictTitle => 'See sisselogimisviis on seotud teise kontoga';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Oled endiselt sellele kontole sisse logitud. Igal Omi kontol on oma pakett, salvestised ja integratsioonid.';
+
+  @override
+  String get accountSignInMethodAdded => 'Sisselogimisviis lisatud';
 
   @override
   String get authFailedToLinkGoogle => 'Google\'iga sidumine ebaõnnestus, palun proovige uuesti.';
@@ -14353,6 +14373,9 @@ class AppLocalizationsEt extends AppLocalizations {
   String get processingProgress => 'Sinu ootel salvestiste töötlemine…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Ootab saadaolevat transkribeerimismahtu';
+
+  @override
   String get processingDeferred => 'Ootab töötlemist';
 
   @override
@@ -15306,9 +15329,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get stopThese => 'Peata need';
 
   @override
-  String get meetingActionItemsTitle => 'Tegevusüksused';
-
-  @override
   String get addToTasks => 'Lisa ülesannetesse';
 
   @override
@@ -15714,10 +15734,107 @@ class AppLocalizationsEt extends AppLocalizations {
   String get stillWorkingOnIt => 'Töötame veel selle kallal.';
 
   @override
+  String get deviceReadyToUse => 'Valmis kasutamiseks';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Teie seadme püsivara on selle värskenduse jaoks liiga vana. Seadme värskendamiseks abi saamiseks võtke ühendust klienditoega.';
 
   @override
   String get firmwareUpdateAppRequired =>
       'See püsivara värskendus vajab Omi rakenduse uuemat versiooni. Värskendage rakendust oma rakenduste poes ja kontrollige seejärel uuesti.';
+
+  @override
+  String get quietPayerTitle => '5 päeva pole salvestisi';
+
+  @override
+  String get quietPayerMessage => 'Kontrolli oma Omit.';
+
+  @override
+  String get quietPayerCheck => 'Kontrolli';
+
+  @override
+  String get playManageSubscription => 'Halda tellimust';
+
+  @override
+  String get playBilledByGoogle => 'Arveldus Google Play kaudu';
+
+  @override
+  String get playPurchasePending => 'Makse ootel. Omi Pro algab, kui Google Play selle kinnitab.';
+
+  @override
+  String get playPurchaseOtherAccount => 'See Google Play ost kuulub teisele Omi kontole.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Ostu ei õnnestunud veel kinnitada. Proovime automaatselt uuesti.';
+
+  @override
+  String get playRenewalTerms =>
+      'Uueneb automaatselt näidatud hinnaga, kuni tühistad. Halda või tühista igal ajal Google Plays.';
+
+  @override
+  String get playPaidAppUnavailable => 'Androidis pole saadaval';
+
+  @override
+  String get pageNotAvailableInApp => 'See leht pole rakenduses saadaval.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Tellimus on esitatud. Kinnituse leiad oma e-postist.';
+
+  @override
+  String get prepaidCodeEntry => 'Kas sul on kood?';
+
+  @override
+  String get prepaidCodeTitle => 'Lunasta kood';
+
+  @override
+  String get prepaidCodeFieldHint => 'Sisesta oma kood';
+
+  @override
+  String get prepaidCodeRedeem => 'Lunasta';
+
+  @override
+  String get prepaidCodeRedeemed => 'Kood on lunastatud';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'See kood ei kehti. Kontrolli seda ja proovi uuesti.',
+        'used': 'Seda koodi on juba kasutatud.',
+        'expired': 'Selle koodi kehtivus on lõppenud.',
+        'hasPlan': 'Sul on juba pakett. Sinu koodi ei kasutatud. Lunasta see, kui su pakett lõpeb.',
+        'notPrepaid': 'Seda koodi ei saa siin lunastada. Kasuta seda paketi valimisel.',
+        'notEligible': 'Seda koodi ei saa selles kontos kasutada.',
+        'rateLimited': 'Liiga palju katseid. Proovi hiljem uuesti.',
+        'other': 'Midagi läks valesti. Proovi uuesti.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'Arveldatakse omi.me kaudu. Tühista siin igal ajal.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Arveldatakse omi.me kaudu.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'Sinu $plan pakett on peatatud.';
+  }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'Teie seadmes on juba uusim toetatud püsivaraversioon';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Sünkroonige oma salvestised esmalt';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Mõned salvestised on veel teie seadmes. Oodake, kuni need on telefonisse sünkroonitud, ja seejärel alustage uuendust.';
+
+  @override
+  String get batteryRestartToRefresh => 'Taaskäivitage Omi värskendamiseks';
 }

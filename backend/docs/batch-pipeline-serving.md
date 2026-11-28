@@ -242,8 +242,9 @@ Inside the cohort, selection reads `BATCH_VENDOR_ROUTE_TABLE` (schema in
 `vendor_route_contracts.RouteTable`), keeps the options code-owned capability admits
 (`config/stt_provider_policy.py`), skips unhealthy vendors, sends the GPU floor share
 (`gpu_floor_percent`, a stable owner bucket independent of the ramp) to GPU wherever GPU is
-capable, then takes the cheapest remaining route that is not failover-only. Soniox is
-failover-only. If no capable route is healthy, the unit still takes its first capable vendor
+capable, then takes the cheapest (or, for an ordered table, the first) remaining route that is not
+failover-only. `failover_only` is a per-table choice; since 2026-11-27 the prod table starts languages
+Parakeet cannot serve on Soniox. If no capable route is healthy, the unit still takes its first capable vendor
 route and the provider stage holds it with its audio. Selection never mints a vendor intent.
 
 | Lever | Effect |
@@ -677,7 +678,7 @@ evidence, and provider failures stay held. There are no paid-intent resets.
 **Second multilingual provider — Soniox (ship on).**
 `config.stt_provider_policy.HELD_RECOVERY_SECOND_PROVIDER` names `soniox`.
 An ordinary held unit whose Modulate response is validated empty gets at most
-one Soniox `stt-async-v5` call inside the same `running` recovery intent,
+one Soniox `stt-async-v6` call inside the same `running` recovery intent,
 using the existing sync/operator or async/serving batch adapter. This includes
 short validation holds and oversized units; it no longer requires a long-speech
 handoff. Already-settled padded-empty outcomes do not spend another call.
@@ -999,6 +1000,22 @@ commit body:
   fresh row commits (`head_wait_bypass` too). The commit carries
   `fresh_first: true` and logs `event=batch_merge outcome=fresh_first` with the
   head state only.
+
+At a full depth cap, an aged GPU catch-up row may pass after it has waited at
+least six hours from `ready_at` (or `enqueued_at` for legacy rows without a
+ready clock). The default-on `BATCH_PIPELINE_MERGE_AGED_GPU_RELEASE_ENABLED`
+switch gates this exception; setting it to `false` keeps those rows held.
+Provider-route rows and recovered-release rows do not use this path. Each
+owner can release up to 16 aged rows during a 16-minute budget window while its
+projection watermark is unchanged, with a 60-second durable cooldown between
+releases. The budget refills after each window even if projection is stalled,
+so eligible rows continue to make bounded progress. Projection progress resets
+the per-watermark count. The release, cooldown, budget-window start and count
+are written with the result commit. Both aged-release paths also require a
+successful fresh-work check showing no ready fresh row; probe errors keep aged
+rows held. The hold and successful-release age metrics are scoped by worker
+release and namespace; their `age_source` label distinguishes `ready_at` from
+the legacy `enqueued_at` fallback.
 
 The `merge_fresh` job index backs the fresh probe; without it the merge logs
 `outcome=fresh_first_unavailable` and keeps the plain order (no hold, since a

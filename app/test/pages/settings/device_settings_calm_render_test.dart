@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -15,6 +16,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/pending_work.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/pages/settings/device_settings.dart';
@@ -23,7 +25,9 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/pending_work/pending_work_store.dart';
+import 'package:omi/services/services.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_derived_views.dart';
 import 'package:omi/ui/ui.dart';
@@ -39,7 +43,18 @@ import '../../helpers/sfpro_font_fixtures.dart';
 const _output = String.fromEnvironment('DEVICE_SETTINGS_RENDER_OUTPUT');
 const _frame = Key('device_settings_frame');
 
+class _TestConnectivityPlatform extends ConnectivityPlatform {
+  @override
+  Future<List<ConnectivityResult>> checkConnectivity() async => [ConnectivityResult.wifi];
+
+  @override
+  Stream<List<ConnectivityResult>> get onConnectivityChanged => const Stream.empty();
+}
+
 class _Device extends ChangeNotifier implements DeviceProvider {
+  _Device(this.batteryLevel, {required bool firstChargePending})
+      : settingsBatteryLevel = firstChargePending ? -1 : batteryLevel;
+
   final device = BtDevice(id: 'omi-evidence', name: 'Omi', type: DeviceType.omi, rssi: -40);
   @override
   BtDevice? get connectedDevice => device;
@@ -52,7 +67,22 @@ class _Device extends ChangeNotifier implements DeviceProvider {
   @override
   bool get isConnecting => false;
   @override
-  int get batteryLevel => 72;
+  int batteryLevel;
+
+  @override
+  int get displayBatteryLevel => batteryReadingStuck ? -1 : batteryLevel;
+
+  @override
+  bool batteryReadingStuck = false;
+  @override
+  int settingsBatteryLevel;
+
+  void publishBatteryLevel(int level) {
+    batteryLevel = level;
+    settingsBatteryLevel = level;
+    notifyListeners();
+  }
+
   @override
   bool get isCharging => false;
   @override
@@ -61,6 +91,14 @@ class _Device extends ChangeNotifier implements DeviceProvider {
   String get latestStableFirmwareVersion => '';
   @override
   Future<void> getDeviceInfo({bool forceRefresh = false}) async {}
+  @override
+  void markDisconnectIntentional(String deviceId) {}
+  @override
+  void setIsConnected(bool value) {}
+  @override
+  Future<void> setConnectedDevice(BtDevice? device) async {}
+  @override
+  void updateConnectingStatus(bool value) {}
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -200,6 +238,12 @@ void main() {
     debugDefaultTargetPlatformOverride = null;
     if (_output.isEmpty) return;
     await tester.runAsync(() async {
+      for (final element in find.byType(Image).evaluate()) {
+        await precacheImage((element.widget as Image).image, element);
+      }
+    });
+    await tester.pump();
+    await tester.runAsync(() async {
       final render = tester.renderObject<RenderRepaintBoundary>(find.byKey(_frame));
       final image = await render.toImage(pixelRatio: 3);
       final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
@@ -208,7 +252,7 @@ void main() {
     });
   }
 
-  Future<void> pumpDevice(WidgetTester tester) async {
+  Future<_Device> pumpDevice(WidgetTester tester, {int batteryLevel = 72, bool firstChargePending = false}) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
@@ -220,7 +264,7 @@ void main() {
       loadPending: () async => const ApiSuccess(PendingWorkSnapshot.disabled),
       loadAttention: () async => const ApiSuccess(AttentionItemsPage.disabled),
     );
-    final device = _Device();
+    final device = _Device(batteryLevel, firstChargePending: firstChargePending);
     final capture = _Capture();
     final sync = _Sync([_stalledUpload()]);
     final conversations = ConversationProvider(isSignedIn: () => false);
@@ -259,6 +303,7 @@ void main() {
       ),
     ));
     await tester.pump(const Duration(milliseconds: 120));
+    return device;
   }
 
   testWidgets('Device Settings omits routine disconnects and the stalled upload card', (tester) async {
@@ -276,5 +321,103 @@ void main() {
     await Scrollable.ensureVisible(tester.element(offlineSync), alignment: 0.5);
     await tester.pump();
     expect(tester.widget<OmiSettingsRow>(offlineSync.hitTestable()).onTap, isNotNull);
+  });
+
+  testWidgets('Device Settings shows a dash until the first-charge check returns a reading', (tester) async {
+    final device = await pumpDevice(tester, batteryLevel: 3, firstChargePending: true);
+    final battery = find.byKey(const Key('device_stat_battery'));
+    final dash = find.descendant(of: battery, matching: find.text('—'));
+    final semantics = tester.ensureSemantics();
+    try {
+      expect(dash, findsOneWidget);
+      expect(tester.getSemantics(battery).label, startsWith('Battery, Unknown'));
+      expect(find.text('3%'), findsNothing);
+      expect(find.text('Try Again'), findsNothing);
+      await writeFrame(tester, '003-mobile-ios-battery-checking');
+      device.publishBatteryLevel(0);
+      await tester.pump();
+      expect(dash, findsNothing);
+      expect(find.text('0%'), findsOneWidget);
+      expect(find.text('Try Again'), findsNothing);
+    } finally {
+      semantics.dispose();
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('Device Settings hides a stuck near-empty reading and suggests a restart', (tester) async {
+    final device = await pumpDevice(tester, batteryLevel: 1);
+    device
+      ..batteryReadingStuck = true
+      ..settingsBatteryLevel = -1;
+    device.notifyListeners();
+    await tester.pump();
+    final en = lookupAppLocalizations(const Locale('en'));
+    final battery = find.byKey(const Key('device_stat_battery'));
+    try {
+      expect(find.descendant(of: battery, matching: find.text('—')), findsOneWidget);
+      expect(find.descendant(of: battery, matching: find.text(en.batteryRestartToRefresh)), findsOneWidget);
+      expect(find.text('1%'), findsNothing);
+      await writeFrame(tester, '004-mobile-ios-battery-stuck');
+      device
+        ..batteryReadingStuck = false
+        ..publishBatteryLevel(96);
+      await tester.pump();
+      expect(find.text('96%'), findsOneWidget);
+      expect(find.text(en.batteryRestartToRefresh), findsNothing);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('Forget Device also removes the pendant from the saved devices list', (tester) async {
+    final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    final unmanaged = <Object?>[];
+    for (final method in ['configureSavedReconnect', 'unmanageDevice']) {
+      final channel = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.$method';
+      messenger.setMockMessageHandler(channel, (message) async {
+        final args = BleHostApi.pigeonChannelCodec.decodeMessage(message) as List<Object?>;
+        if (method == 'unmanageDevice') unmanaged.add(args.first);
+        return BleHostApi.pigeonChannelCodec.encodeMessage(<Object?>[null]);
+      });
+      addTearDown(() => messenger.setMockMessageHandler(channel, null));
+    }
+    ConnectivityPlatform.instance = _TestConnectivityPlatform();
+    try {
+      await ServiceManager.init();
+    } catch (_) {}
+    final other = BtDevice(id: 'omi-other', name: 'Omi', type: DeviceType.omi, rssi: -50);
+    await SharedPreferencesUtil().btDeviceSet(other);
+    await SharedPreferencesUtil()
+        .btDeviceSet(BtDevice(id: 'omi-evidence', name: 'Omi', type: DeviceType.omi, rssi: -40));
+
+    await pumpDevice(tester);
+    final en = lookupAppLocalizations(const Locale('en'));
+    try {
+      final forget = find.byKey(const Key('forget_device_button'));
+      await tester.scrollUntilVisible(forget, 200);
+      await Scrollable.ensureVisible(tester.element(forget), alignment: 0.5);
+      await tester.pump();
+      await tester.tap(forget);
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.tap(
+        find.descendant(of: find.byType(OmiAlertDialog), matching: find.text(en.forgetDevice)),
+      );
+      for (var i = 0; i < 10; i++) {
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+
+      expect(SharedPreferencesUtil().btDevice.id, isEmpty);
+      expect(SharedPreferencesUtil().btDevices.map((d) => d.id), ['omi-other'],
+          reason: 'the pairing screen lists every saved device, so a forgotten one must leave the list');
+      expect(unmanaged, contains('omi-evidence'));
+      // Let the confirmation toast finish.
+      await tester.pump(const Duration(seconds: 6));
+    } finally {
+      // Stops the connectivity service's periodic reachability probe before the pending-timer check.
+      ConnectivityService().dispose();
+      debugDefaultTargetPlatformOverride = null;
+    }
   });
 }

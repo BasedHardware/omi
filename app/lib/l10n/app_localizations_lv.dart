@@ -561,11 +561,11 @@ class AppLocalizationsLv extends AppLocalizations {
   String get hardwareSection => 'Aparatūra';
 
   @override
-  String get v2Undetected => 'V2 nav atklāts';
+  String get v2Undetected => 'Bezsaistes sinhronizācija nav pieejama';
 
   @override
   String get v2UndetectedMessage =>
-      'Redzam, ka jums ir V1 ierīce vai jūsu ierīce nav savienota. SD kartes funkcionalitāte ir pieejama tikai V2 ierīcēm.';
+      'Bezsaistes sinhronizācijai ir nepieciešama pievienota Omi ierīce ar SD kartes krātuvi. Jūsu pašreizējā ierīce to neatbalsta.';
 
   @override
   String get endConversation => 'Beigt sarunu';
@@ -7073,6 +7073,26 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get authUnexpectedError => 'Neparedzēta kļūda pierakstīšanās laikā, lūdzu, mēģiniet vēlreiz';
+
+  @override
+  String get accountSignInMethods => 'Pierakstīšanās veidi';
+
+  @override
+  String get accountAddSignInMethod => 'Pievienot pierakstīšanās veidu';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Pievienojiet jaunu pierakstīšanās veidu šim Omi kontam. Jūsu plāns, ieraksti un integrācijas paliks šajā kontā.';
+
+  @override
+  String get accountSignInConflictTitle => 'Šis pierakstīšanās veids ir saistīts ar citu kontu';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Jūs joprojām esat pierakstījies šajā kontā. Katrs Omi konts saglabā savu plānu, ierakstus un integrācijas.';
+
+  @override
+  String get accountSignInMethodAdded => 'Pierakstīšanās veids pievienots';
 
   @override
   String get authFailedToLinkGoogle => 'Neizdevās savienot ar Google, lūdzu, mēģiniet vēlreiz.';
@@ -14393,6 +14413,9 @@ class AppLocalizationsLv extends AppLocalizations {
   String get processingProgress => 'Notiek gaidošo ierakstu apstrāde…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Gaida pieejamu transkripcijas kvotu';
+
+  @override
   String get processingDeferred => 'Gaida apstrādi';
 
   @override
@@ -15348,9 +15371,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get stopThese => 'Apturēt šos';
 
   @override
-  String get meetingActionItemsTitle => 'Veicamie darbi';
-
-  @override
   String get addToTasks => 'Pievienot uzdevumiem';
 
   @override
@@ -15757,10 +15777,107 @@ class AppLocalizationsLv extends AppLocalizations {
   String get stillWorkingOnIt => 'Vēl tiek pie tā strādāts.';
 
   @override
+  String get deviceReadyToUse => 'Gatavs lietošanai';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Jūsu ierīces aparātprogrammatūra ir pārāk veca šim atjauninājumam. Sazinieties ar atbalsta dienestu, lai saņemtu palīdzību ierīces atjaunināšanā.';
 
   @override
   String get firmwareUpdateAppRequired =>
       'Šim aparātprogrammatūras atjauninājumam nepieciešama jaunāka Omi lietotnes versija. Atjauniniet lietotni savā lietotņu veikalā un pēc tam pārbaudiet vēlreiz.';
+
+  @override
+  String get quietPayerTitle => '5 dienas nav ierakstu';
+
+  @override
+  String get quietPayerMessage => 'Pārbaudiet savu Omi.';
+
+  @override
+  String get quietPayerCheck => 'Pārbaudīt';
+
+  @override
+  String get playManageSubscription => 'Pārvaldīt abonementu';
+
+  @override
+  String get playBilledByGoogle => 'Norēķini caur Google Play';
+
+  @override
+  String get playPurchasePending => 'Maksājums gaida. Omi Pro sāksies, tiklīdz Google Play to apstiprinās.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Šis Google Play pirkums pieder citam Omi kontam.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Pirkumu vēl neizdevās apstiprināt. Mēģināsim vēlreiz automātiski.';
+
+  @override
+  String get playRenewalTerms =>
+      'Automātiski atjaunojas par norādīto cenu, līdz atcelsiet. Pārvaldiet vai atceliet jebkurā laikā Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Nav pieejams Android';
+
+  @override
+  String get pageNotAvailableInApp => 'Šī lapa lietotnē nav pieejama.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Pasūtījums veikts. Apstiprinājumu meklējiet e-pastā.';
+
+  @override
+  String get prepaidCodeEntry => 'Vai jums ir kods?';
+
+  @override
+  String get prepaidCodeTitle => 'Izmantot kodu';
+
+  @override
+  String get prepaidCodeFieldHint => 'Ievadiet savu kodu';
+
+  @override
+  String get prepaidCodeRedeem => 'Izmantot';
+
+  @override
+  String get prepaidCodeRedeemed => 'Kods izmantots';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Šis kods nav derīgs. Pārbaudiet to un mēģiniet vēlreiz.',
+        'used': 'Šis kods jau ir izmantots.',
+        'expired': 'Šī koda derīgums ir beidzies.',
+        'hasPlan': 'Jums jau ir plāns. Jūsu kods netika izmantots. Izmantojiet to, kad jūsu plāns beigsies.',
+        'notPrepaid': 'Šo kodu šeit nevar izmantot. Izmantojiet to, izvēloties plānu.',
+        'notEligible': 'Šo kodu nevar izmantot šajā kontā.',
+        'rateLimited': 'Pārāk daudz mēģinājumu. Mēģiniet vēlāk.',
+        'other': 'Kaut kas nogāja greizi. Lūdzu, mēģiniet vēlreiz.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playStripeBilledOnWeb => 'Rēķins tiek izrakstīts caur omi.me. Atceliet šeit jebkurā laikā.';
+
+  @override
+  String get playStripeBilledOnWebShort => 'Rēķins tiek izrakstīts caur omi.me.';
+
+  @override
+  String playStripePlanPaused(String plan) {
+    return 'Jūsu $plan plāns ir apturēts.';
+  }
+
+  @override
+  String get firmwareNewestSupportedForDevice => 'Jūsu ierīcē jau ir jaunākā atbalstītā aparatprogrammatūras versija';
+
+  @override
+  String get firmwareSyncRecordingsFirstTitle => 'Vispirms sinhronizējiet savus ierakstus';
+
+  @override
+  String get firmwareSyncRecordingsFirstMessage =>
+      'Daži ieraksti vēl atrodas jūsu ierīcē. Ļaujiet tiem pabeigt sinhronizēšanu ar tālruni, pēc tam sāciet atjaunināšanu.';
+
+  @override
+  String get batteryRestartToRefresh => 'Restartējiet Omi, lai atsvaidzinātu';
 }

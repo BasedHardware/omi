@@ -578,7 +578,10 @@ def test_secret_reaches_only_the_evidence_and_migrate_steps_via_env():
     assert text.count("secrets.LISTEN_PRIVATE_VALUES_YAML") == 2
     evidence = _step("Produce private-overlay effect receipt without mutation")
     assert evidence["if"] == "${{ inputs.mode == 'evidence' }}"
-    assert evidence["env"]["LISTEN_PRIVATE_VALUES_YAML"] == "${{ secrets.LISTEN_PRIVATE_VALUES_YAML }}"
+    assert evidence["env"]["LISTEN_PRIVATE_VALUES_YAML"] == (
+        "${{ fromJSON(inputs.evidence_request).overlay_state != 'references' "
+        "&& secrets.LISTEN_PRIVATE_VALUES_YAML || '' }}"
+    )
     assert "secrets." not in evidence["run"]
     step = _step(MIGRATE)
     # Never on the deploy path: a code deploy renders references only.

@@ -54,3 +54,17 @@ def test_worker_registry_can_carry_every_allowance_collector():
 def test_batch_worker_health_server_registers_allowance_collectors():
     source = (BACKEND / 'diarizer' / 'batch_pipeline_runtime.py').read_text(encoding='utf-8')
     assert 'ALLOWANCE_WATCH_COLLECTORS' in source.split('def health_server', 1)[1]
+
+
+@pytest.mark.parametrize(
+    'profile', ('cloud_run_gmp_sidecar.yaml', 'cloud_run_gmp_sync.yaml', 'cloud_run_gmp_projection_pump.yaml')
+)
+def test_month_shadow_survives_cloud_run_keep_rules(profile):
+    assert re.fullmatch(_keep_regex(profile), 'omi_usage_month_total_shadow_total')
+
+
+@pytest.mark.parametrize('service,file_name', [('backend-listen', 'backend_listen'), ('pusher', 'pusher')])
+def test_month_shadow_survives_gke_keep_rules(service, file_name):
+    chart = BACKEND / 'charts' / service / f'prod_omi_{file_name}_values.yaml'
+    fast = yaml.safe_load(chart.read_text())['podMonitoring']['fastMetrics']
+    assert re.fullmatch(fast, 'omi_usage_month_total_shadow_total')
