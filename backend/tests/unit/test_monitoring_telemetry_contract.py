@@ -886,6 +886,32 @@ def test_record_dead_letter_alert_metrics_survive_each_ingestion_allowlist(path,
                 assert not matched, (profile, name)
 
 
+def test_batch_privacy_dead_letter_stock_and_timestamp_share_gmp_scrape_paths():
+    from database.batch_privacy_dead_letter_stock import DEAD_LETTER_OBSERVED_AT, DEAD_LETTER_UNITS
+    from scripts.alert_backtest import metric_names
+
+    rules = json.loads((MONITORING / 'alerts' / 'batch-privacy-erasure.json').read_text())
+    gauges = {
+        sample.name for gauge in (DEAD_LETTER_UNITS, DEAD_LETTER_OBSERVED_AT) for sample in gauge.collect()[0].samples
+    }
+    for rule in rules[1:]:
+        query = rule['data'][0]
+        assert query['datasourceUid'] == 'gmp-cloud-run'
+        assert metric_names(query['model']['expr']) == gauges
+        assert rule['labels']['tier'] == rule['labels']['audience'] == 'agent'
+
+    listen = REPO / 'backend/charts/backend-listen/prod_omi_backend_listen_values.yaml'
+    fast = yaml.safe_load(listen.read_text())['podMonitoring']['fastMetrics']
+    assert all(re.fullmatch(fast, name) for name in gauges)
+    for profile in ('cloud_run_gmp_sidecar.yaml', 'cloud_run_gmp_sync.yaml'):
+        config = yaml.safe_load((REPO / 'backend/deploy' / profile).read_text())
+        relabels = config['spec']['endpoints'][0]['metricRelabeling']
+        keep = next(
+            rule['regex'] for rule in relabels if rule['action'] == 'keep' and rule['sourceLabels'] == ['__name__']
+        )
+        assert all(re.fullmatch(keep, name) for name in gauges)
+
+
 BACKLOG_ALERTS = MONITORING / 'alerts' / 'backlog-state-machine.json'
 
 

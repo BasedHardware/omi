@@ -56,8 +56,8 @@
       "dashboard_url": "https://monitor.omi.me/d/omi-batch-stuck-census",
       "summary": "A delayed batch erasure intent or receipt exhausted its bounded recovery attempts.",
       "user_impact": "An artifact affected by a privacy change may remain stored until the erasure obligation is resolved.",
-      "scope": "Production batch privacy dead letters, including proof failures while execution is paused.",
-      "verification": "In Grafana Explore, use gmp-cloud-run to group the dead-letter counter increases by error. Inspect the matching durable dead-letter row through the authorized recovery path.",
+      "scope": "Production delayed batch privacy intent and receipt failures, including proof failures while execution is paused. Human page on new dead letters.",
+      "verification": "In Grafana Explore, use gmp-cloud-run to group aggregate dead-letter counter increases by error.",
       "safe_next_action": "Hold activation and verify the original policy commit, scope and storage identity before requeueing. Preserve legal-hold fences.",
       "runbook": "backend/docs/listen_pusher_pipeline/changes/2026-11-24-batch-privacy-window.md"
     },
@@ -81,6 +81,178 @@
       "group_interval": "1h",
       "repeat_interval": "24h",
       "mute_time_intervals": []
+    }
+  },
+  {
+    "uid": "omi-batch-privacy-erasure-dead-stock",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Batch privacy erasure",
+    "title": "Unresolved batch privacy erasure dead letters",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "max(omi_batch_pipeline_privacy_post_window_dead_letter_units{project_id=\"based-hardware\"} and (time() - omi_batch_pipeline_privacy_post_window_dead_letter_observed_at_seconds{project_id=\"based-hardware\"} < 900)) or vector(0)",
+          "instant": true,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "refId": "B",
+          "type": "threshold",
+          "expression": "A",
+          "conditions": [
+            {
+              "evaluator": {
+                "type": "gt",
+                "params": [
+                  0
+                ]
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "0s",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-batch-stuck-census",
+      "summary": "At least one delayed batch erasure intent or receipt has an unresolved dead letter.",
+      "user_impact": "An artifact affected by a privacy change may remain stored until the erasure obligation is resolved.",
+      "scope": "Agent tier. Production aggregate of retained intent and receipt dead letters. Each replica must have a sample younger than 15 minutes before its stock enters the fleet maximum.",
+      "verification": "In Grafana Explore, compare aggregate stock and observation age on gmp-cloud-run.",
+      "safe_next_action": "Hold activation. Route recovery to Omi Pipeline and preserve legal-hold fences.",
+      "runbook": "backend/docs/listen_pusher_pipeline/changes/2026-11-24-batch-privacy-window.md"
+    },
+    "labels": {
+      "alert_identity": "omi-batch-privacy-erasure-dead-stock",
+      "component": "batch-pipeline",
+      "impact": "product",
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "omi-pipeline"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    }
+  },
+  {
+    "uid": "omi-batch-privacy-erasure-stock-stale",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Batch privacy erasure",
+    "title": "Batch privacy erasure dead-letter stock is stale",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "((time() - max(omi_batch_pipeline_privacy_post_window_dead_letter_observed_at_seconds{project_id=\"based-hardware\"} and omi_batch_pipeline_privacy_post_window_dead_letter_units{project_id=\"based-hardware\"})) >= bool 900) or vector(1)",
+          "instant": true,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "refId": "B",
+          "type": "threshold",
+          "expression": "A",
+          "conditions": [
+            {
+              "evaluator": {
+                "type": "gt",
+                "params": [
+                  0
+                ]
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-batch-stuck-census",
+      "summary": "For five minutes, no paired dead-letter stock observation has been younger than 15 minutes.",
+      "user_impact": "Operators cannot verify whether delayed batch erasure has unresolved failures.",
+      "scope": "Agent tier. Production aggregate observation freshness across publishing replicas.",
+      "verification": "In Grafana Explore, check aggregate stock and observation age on gmp-cloud-run.",
+      "safe_next_action": "Hold activation until a fresh observation is available. Check the sampler and metrics ingestion.",
+      "runbook": "backend/docs/listen_pusher_pipeline/changes/2026-11-24-batch-privacy-window.md"
+    },
+    "labels": {
+      "alert_identity": "omi-batch-privacy-erasure-stock-stale",
+      "component": "batch-pipeline",
+      "impact": "product",
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "omi-pipeline"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     }
   }
 ]
