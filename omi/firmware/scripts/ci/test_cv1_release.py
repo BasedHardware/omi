@@ -18,6 +18,7 @@ from unittest.mock import patch
 import zipfile
 
 import cv1_bootloader as boot
+import cv1_g0_report as g0
 import cv1_release as release
 from cv1_bootloader import write_hex, read_hex, inspect_hex, POLICY
 
@@ -619,6 +620,38 @@ class ReleaseTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     release.main()
                 gh.assert_not_called()
+
+    def test_cv1_publish_requires_minimum_firmware_for_update_offer(self):
+        workflow = (g0.REPO / g0.WORKFLOW).read_text()
+        blank = g0.replay_offer(workflow, g0.REPO, self.root / 'blank', '')
+        self.assertEqual(blank['exit_code'], 1)
+        self.assertTrue(blank['required_minimum_error'])
+        self.assertFalse(blank['body_written'])
+        self.assertFalse(blank['output_written'])
+
+        # The stock app requires the resulting min_version to show a newer release.
+        explicit = g0.replay_offer(workflow, g0.REPO, self.root / 'explicit', '3.0.6')
+        self.assertEqual(explicit['exit_code'], 0)
+        self.assertTrue(explicit['version_emitted'])
+        self.assertTrue(explicit['output_written'])
+        self.assertEqual(explicit['minimums'], ['3.0.6'])
+
+    def test_g0_simulator_requires_exact_clean_source_and_40_seeds(self):
+        path = self.root / 'g0-simulator.json'
+        sha = 'a' * 40
+        version = '3.0.24'
+        report = sim_report(sha, version, fuzz={'verdict': 'pass', 'seeds': 40})
+        path.write_text(json.dumps(report))
+        with patch.object(g0, 'sim_catalog', return_value=CATALOG):
+            self.assertEqual(g0.simulator_receipt(path, sha, False, version)['fuzz_seeds'], 40)
+            with self.assertRaisesRegex(ValueError, 'source SHA mismatch'):
+                g0.simulator_receipt(path, 'b' * 40, False, version)
+            with self.assertRaisesRegex(ValueError, 'clean firmware'):
+                g0.simulator_receipt(path, sha, True, version)
+            report['fuzz']['seeds'] = 39
+            path.write_text(json.dumps(report))
+            with self.assertRaisesRegex(ValueError, 'at least 40'):
+                g0.simulator_receipt(path, sha, False, version)
 
     def test_body_writes_policy_without_affecting_other_families(self):
         body = self.root / 'body.md'
