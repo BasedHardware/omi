@@ -10,9 +10,106 @@ import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[3]
+WORKFLOW = ROOT / '.github/workflows/gcp_backend.yml'
 
 
 PROD_BRANCH = re.compile(r"^\$\{\{ inputs\.runtime_env == 'prod' && '([^']*)' \|\| '([^']*)' \}\}$")
+
+
+def dispatch_boundary(tmp_path, service, **inputs):
+    workflow = yaml.safe_load(WORKFLOW.read_text())['jobs']
+    boundary = workflow['validate-production-boundary']
+    step = boundary['steps'][0]
+    assert step['env']['SELECTED_ROLLBACK_REVISION'] == '${{ inputs.selected_rollback_revision }}'
+    script = step['run'].replace('${{ github.event.inputs.deploy_gateway }}', 'false')
+    assert '${{' not in script
+    output = tmp_path / 'boundary-output'
+    env = dict(
+        os.environ,
+        DEPLOY_ENVIRONMENT='prod',
+        WORKFLOW_MODE='deploy',
+        DEPLOY_TARGETS='cloud-run-only',
+        CLOUD_RUN_SERVICE=service,
+        SERVICE_IMAGES='',
+        REQUESTED_BY='selection:' + 'a' * 32,
+        RELEASE_SHA='b' * 40,
+        SKIP_ELIGIBILITY='false',
+        BREAK_GLASS_LOCK='false',
+        GITHUB_OUTPUT=str(output),
+    )
+    env.pop('SELECTED_ROLLBACK_REVISION', None)
+    env.update(inputs)
+    result = subprocess.run(['bash', '-c', script], env=env, capture_output=True, text=True, timeout=10)
+    if result.returncode:
+        assert not output.exists()
+        return result, {}
+
+    deploy = next(
+        step for step in workflow['deploy']['steps'] if step.get('uses') == './.github/actions/deploy-backend-stack'
+    )
+    assert 'validate-production-boundary' in workflow['deploy']['needs']
+    for key, composite_input in (
+        ('rollback_revision', 'rollback_revision'),
+        ('registered_max_instances', 'selected_registered_max_instances'),
+    ):
+        assert boundary['outputs'][key] == f'${{{{ steps.{step["id"]}.outputs.{key} }}}}'
+        assert deploy['with'][composite_input] == f'${{{{ needs.validate-production-boundary.outputs.{key} }}}}'
+    return result, dict(line.split('=', 1) for line in output.read_text().splitlines())
+
+
+def test_backend_workflow_stays_within_dispatch_input_limit():
+    inputs = yaml.load(WORKFLOW.read_text(), Loader=yaml.BaseLoader)['on']['workflow_dispatch']['inputs']
+    assert len(inputs) <= 25
+    assert 'selected_rollback_revision' in inputs
+    assert 'selected_registered_max_instances' not in inputs
+
+
+def test_dispatch_omitting_rollback_input_keeps_legacy_default(tmp_path):
+    result, outputs = dispatch_boundary(tmp_path, 'all')
+    assert result.returncode == 0, result.stderr
+    assert outputs['rollback_revision'] == 'backend-integration-provfix-off1114'
+    assert outputs['registered_max_instances'] == ''
+
+
+@pytest.mark.parametrize(
+    'wire',
+    [
+        'backend-sync-old other=50',
+        'backend-sync-old max=',
+        'backend-sync-old max=0',
+        'backend-sync-old max=050',
+        'backend-sync-old max=501',
+        'backend-sync-old max=1000',
+        'backend-sync-old max=50 third',
+        'backend-sync-old\nmax=50',
+        'backend-sync-old max=50\n',
+        'backend-sync-old max=50\r',
+        'backend-sync-old\tmax=50',
+        'backend-integration-old max=50',
+    ],
+)
+def test_dispatch_refuses_invalid_registered_token_before_outputs(tmp_path, wire):
+    result, _ = dispatch_boundary(tmp_path, 'backend-sync', SELECTED_ROLLBACK_REVISION=wire)
+    assert result.returncode != 0
+
+
+@pytest.mark.parametrize(
+    'service,extra',
+    [
+        ('backend', {}),
+        ('backend-sync-backfill', {}),
+        ('all', {}),
+        ('backend-integration', {'RELEASE_SHA': '0714c5198be8f0183c8fd7dd3810d53c91af17a4'}),
+        (
+            'backend-integration',
+            {'SERVICE_IMAGES': 'integration-canary=gcr.io/based-hardware/backend@sha256:' + 'a' * 64},
+        ),
+    ],
+    ids=['backend', 'backfill', 'all', 'canary', 'integration-only'],
+)
+def test_dispatch_refuses_cap_outside_standard_named_integration_or_sync(tmp_path, service, extra):
+    result, _ = dispatch_boundary(tmp_path, service, SELECTED_ROLLBACK_REVISION=f'{service}-old max=50', **extra)
+    assert result.returncode != 0
 
 
 @pytest.fixture(
@@ -34,10 +131,11 @@ def action(request):
     assert resolver['env']['CLOUD_RUN_PROJECT'] == '${{ inputs.project_id }}'
     assert resolver['env']['CLOUD_RUN_REGION'] == '${{ inputs.region }}'
     assert f'--max-instances=${{{{ steps.{step_id}.outputs.max_scale }}}}' in deploy['with']['flags']
-    if suffix == 'integration':
-        # The resolver runs exactly when the deploy it feeds runs; a skipped resolver would
-        # hand the deploy an empty cap.
+    if suffix in ('integration', 'sync'):
+        assert resolver['env']['REGISTERED_MAX_SCALE'] == '${{ inputs.selected_registered_max_instances }}'
+        # A skipped resolver would hand the corresponding deploy an empty cap.
         assert resolver['if'] == deploy['if']
+    if suffix == 'integration':
         prod, dev = PROD_BRANCH.match(resolver['env']['DEFAULT_MAX_SCALE']).groups()
         assert (prod, dev) == ('35', '50')
     if suffix == 'sync-backfill':
@@ -65,6 +163,7 @@ def resolve(
     revisions=None,
     revision_exit=0,
     branch='prod',
+    registered_cap='',
 ):
     resolver, service, _fallback = action
     serving = action[1].endswith('-integration')
@@ -117,13 +216,16 @@ def resolve(
         CLOUD_RUN_PROJECT='test-project',
         CLOUD_RUN_REGION='us-central1',
         GITHUB_OUTPUT=str(output),
+        REGISTERED_MAX_SCALE=registered_cap,
         CAP_TEST_DIR=str(tmp_path),
         CAP_TEST_EXIT=str(exit_code),
         CAP_TEST_REVISION_EXIT=str(revision_exit),
     )
     result = subprocess.run(['bash', '-c', resolver['run']], env=env, capture_output=True, text=True)
     args = (tmp_path / 'list-args').read_text().splitlines()
-    assert (tmp_path / 'calls').read_text().splitlines()[0].startswith('run services list ')
+    calls = (tmp_path / 'calls').read_text().splitlines()
+    assert calls[0].startswith('run services list ')
+    assert all(call.startswith('run revisions describe ') for call in calls[1:])
     assert args[:3] == ['run', 'services', 'list']
     assert '--project=test-project' in args
     assert '--region=us-central1' in args
@@ -327,3 +429,74 @@ def test_integration_service_and_revision_caps_take_the_minimum(tmp_path, action
     )
     assert result.returncode == 0, result.stderr
     assert output.splitlines()[0] == f'max_scale={expected}'
+
+
+@pytest.mark.parametrize(
+    'live,registered',
+    [('66', '45'), ('55', '45'), ('45', '45'), ('60', '50'), ('50', '50'), ('45', '55'), ('500', '500')],
+)
+def test_registered_cap_cannot_change_live_capacity(tmp_path, action, live, registered):
+    if action[1].endswith('-sync-backfill'):
+        pytest.skip('registered dispatch covers integration and sync only')
+    service = action[1].replace('custom-', 'backend-')
+    prior = f'{service}-old'
+    result, outputs = dispatch_boundary(tmp_path, service, SELECTED_ROLLBACK_REVISION=f'{prior} max={registered}')
+    assert result.returncode == 0, result.stderr
+    assert outputs['rollback_revision'] == prior
+    assert outputs['registered_max_instances'] == registered
+    result, output = resolve(tmp_path, action, revision_cap=live, registered_cap=outputs['registered_max_instances'])
+    if live == registered:
+        assert result.returncode == 0, result.stderr
+        assert output == f'max_scale={registered}\n'
+    else:
+        assert result.returncode != 0
+        assert 'differs from live' in result.stderr
+        assert not output
+
+
+@pytest.mark.parametrize(
+    'live,error',
+    [
+        (None, 'Missing live Cloud Run maxScale'),
+        ('999', 'Invalid live Cloud Run maxScale'),
+        ('bad', 'Invalid Cloud Run maxScale'),
+    ],
+)
+def test_registered_dispatch_refuses_live_cap_fallback(tmp_path, action, live, error):
+    if action[1].endswith('-sync-backfill'):
+        pytest.skip('registered dispatch covers integration and sync only')
+    service = action[1].replace('custom-', 'backend-')
+    result, outputs = dispatch_boundary(tmp_path, service, SELECTED_ROLLBACK_REVISION=f'{service}-old max={action[2]}')
+    assert result.returncode == 0, result.stderr
+    result, output = resolve(tmp_path, action, service_cap=live, registered_cap=outputs['registered_max_instances'])
+    assert result.returncode != 0
+    assert error in result.stderr
+    assert not output
+
+
+@pytest.mark.parametrize('service', ['backend-integration', 'backend-sync'])
+def test_traffic_snapshot_receives_only_the_validated_rollback_revision(tmp_path, service):
+    prior = f'{service}-old'
+    result, outputs = dispatch_boundary(tmp_path, service, SELECTED_ROLLBACK_REVISION=f'{prior} max=50')
+    assert result.returncode == 0, result.stderr
+    steps = yaml.safe_load((ROOT / '.github/actions/deploy-backend-stack/action.yml').read_text())['runs']['steps']
+    snapshot = next(step for step in steps if step.get('id') == 'cloud-run-traffic-snapshot')
+    assert snapshot['env']['ROLLBACK_REVISION'] == '${{ inputs.rollback_revision }}'
+    script = re.sub(r'\$\{\{.*?\}\}', 'fixture', snapshot['run'].replace('${{ inputs.deploy_profile }}', 'manual'))
+    result = subprocess.run(
+        ['bash', '-c', 'python3() { printf "%s\\n" "$@"; }\n' + script],
+        env=dict(
+            os.environ,
+            CLOUD_RUN_SERVICE=service,
+            SELECTED_CLOUD_RUN_SERVICES=service,
+            ROLLBACK_REVISION=outputs['rollback_revision'],
+            HOLDBACK_BINDING='',
+            DEPLOY_CONTROL_SCRIPTS='/fixture',
+        ),
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+    args = result.stdout.splitlines()
+    assert args[args.index('--expected-serving-revision') + 1] == prior

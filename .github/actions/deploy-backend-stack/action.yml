@@ -4,6 +4,10 @@ description: >-
   surfaces, and shared release-vector evidence for manual and auto-dev deploys.
 
 inputs:
+  selected_registered_max_instances:
+    description: 'Release-admitted max instances for a named production integration or sync deploy'
+    required: false
+    default: ''
   rollback_revision:
     description: 'Exact admitted predecessor for a named deploy or integration canary'
     required: false
@@ -191,10 +195,19 @@ runs:
         CLOUD_RUN_SERVICE: ${{ inputs.cloud_run_service }}
         SERVICE_IMAGES: ${{ inputs.service_images }}
         ROLLBACK_REVISION: ${{ inputs.rollback_revision }}
+        REGISTERED_MAX_SCALE: ${{ inputs.selected_registered_max_instances }}
       run: |
         set -euo pipefail
         CLOUD_RUN_SERVICE="${CLOUD_RUN_SERVICE:-all}"
         case "$CLOUD_RUN_SERVICE" in all|backend|backend-sync|backend-sync-backfill|backend-integration) ;; *) exit 1 ;; esac
+        if [[ -n "${REGISTERED_MAX_SCALE:-}" ]]; then
+          [[ "$REGISTERED_MAX_SCALE" =~ ^[1-9][0-9]{0,2}$ && "$REGISTERED_MAX_SCALE" -le 500 &&
+             ( "$CLOUD_RUN_SERVICE" == backend-integration || "$CLOUD_RUN_SERVICE" == backend-sync ) &&
+             "${{ inputs.integration_canary }}" == false && "${{ inputs.integration_only }}" == false ]] || {
+            echo 'Registered max instances requires a standard named integration or sync deploy.' >&2
+            exit 1
+          }
+        fi
         if [[ "$CLOUD_RUN_SERVICE" != all ]]; then
           [[ "${{ inputs.deploy_profile }}" == manual && "${{ inputs.environment }}" == prod &&
              "${{ inputs.deploy_targets }}" == cloud-run-only && "${{ inputs.deploy_gateway }}" == false &&
@@ -1103,6 +1116,7 @@ runs:
         CLOUD_RUN_SERVICE: ${{ inputs.service }}-sync
         CLOUD_RUN_PROJECT: ${{ inputs.project_id }}
         CLOUD_RUN_REGION: ${{ inputs.region }}
+        REGISTERED_MAX_SCALE: ${{ inputs.selected_registered_max_instances }}
         DEFAULT_MAX_SCALE: '50'
       run: |
         set -euo pipefail
@@ -1112,17 +1126,28 @@ runs:
           --project="$CLOUD_RUN_PROJECT" --region="$CLOUD_RUN_REGION" \
           --filter="metadata.name=$CLOUD_RUN_SERVICE" \
           --format='json(metadata.name,metadata.annotations,spec.template.metadata.annotations)' \
-          | jq -er --arg service "$CLOUD_RUN_SERVICE" --arg default "$DEFAULT_MAX_SCALE" '
+          | jq -er --arg service "$CLOUD_RUN_SERVICE" --arg default "$DEFAULT_MAX_SCALE" \
+            --arg registered "${REGISTERED_MAX_SCALE:-}" '
             [.[] | select(.metadata.name == $service)]
             | if length > 1 then error("Duplicate Cloud Run service") else
                 (.[0].metadata.annotations["run.googleapis.com/maxScale"]
                  // .[0].spec.template.metadata.annotations["autoscaling.knative.dev/maxScale"]
-                 // $default) end
+                 // (if $registered == "" then $default else error("Missing live Cloud Run maxScale") end)) end
             | if type == "string" and test("^[1-9][0-9]*$") then .
               else error("Invalid Cloud Run maxScale") end
             # Bound digits before shell arithmetic; oversized annotations use the fresh-service default.
-            | if length > 3 then $default
-              elif tonumber > 500 then $default else . end')"
+            | if length > 3 or tonumber > 500 then
+                if $registered == "" then $default else error("Invalid live Cloud Run maxScale") end
+              else . end')"
+        # A deploy may carry the admitted cap forward. Capacity changes use
+        # the separate guarded operation and must already be readable here.
+        if [[ -n "${REGISTERED_MAX_SCALE:-}" ]]; then
+          if [[ "$REGISTERED_MAX_SCALE" != "$MAX_SCALE" ]]; then
+            echo "Registered max instances ($REGISTERED_MAX_SCALE) differs from live ($MAX_SCALE)." >&2
+            exit 1
+          fi
+          MAX_SCALE="$REGISTERED_MAX_SCALE"
+        fi
         echo "max_scale=$MAX_SCALE" >> "$GITHUB_OUTPUT"
 
     - name: Deploy ${{ inputs.service }}-sync to Cloud Run
@@ -1289,6 +1314,7 @@ runs:
         CLOUD_RUN_SERVICE: ${{ inputs.service }}-integration
         CLOUD_RUN_PROJECT: ${{ inputs.project_id }}
         CLOUD_RUN_REGION: ${{ inputs.region }}
+        REGISTERED_MAX_SCALE: ${{ inputs.selected_registered_max_instances }}
         DEFAULT_MAX_SCALE: ${{ inputs.runtime_env == 'prod' && '35' || '50' }}
       run: |
         set -euo pipefail
@@ -1321,15 +1347,29 @@ runs:
             --project="$CLOUD_RUN_PROJECT" --region="$CLOUD_RUN_REGION" \
             --format='json(metadata.annotations)')"
           CAPS="$(jq -ec --argjson revision "$ANNOTATIONS" --arg default "$DEFAULT_MAX_SCALE" \
-            '. + [$revision.metadata.annotations["autoscaling.knative.dev/maxScale"] // $default]' <<< "$CAPS")"
+            --arg registered "${REGISTERED_MAX_SCALE:-}" '. + [$revision.metadata.annotations["autoscaling.knative.dev/maxScale"] //
+              (if $registered == "" then $default else error("Missing live revision maxScale") end)]' <<< "$CAPS")"
         done <<< "$REVISIONS"
-        MAX_SCALE="$(jq -er --arg default "$DEFAULT_MAX_SCALE" '
-          if length == 0 then [$default] else . end
+        MAX_SCALE="$(jq -er --arg default "$DEFAULT_MAX_SCALE" --arg registered "${REGISTERED_MAX_SCALE:-}" '
+          if length == 0 then
+            if $registered == "" then [$default] else error("Missing live Cloud Run maxScale") end
+          else . end
           | if all(.[]; type == "string" and test("\\A[1-9][0-9]*\\z")) then .
             else error("Invalid Cloud Run maxScale") end
           # Bound digits before shell arithmetic; oversized caps use the fresh-service default.
-          | map(if length > 3 then $default elif tonumber > 500 then $default else . end)
+          | map(if length > 3 or tonumber > 500 then
+              if $registered == "" then $default else error("Invalid live Cloud Run maxScale") end
+            else . end)
           | min_by(tonumber)' <<< "$CAPS")"
+        # A deploy may carry the admitted cap forward. Capacity changes use
+        # the separate guarded operation and must already be readable here.
+        if [[ -n "${REGISTERED_MAX_SCALE:-}" ]]; then
+          if [[ "$REGISTERED_MAX_SCALE" != "$MAX_SCALE" ]]; then
+            echo "Registered max instances ($REGISTERED_MAX_SCALE) differs from live ($MAX_SCALE)." >&2
+            exit 1
+          fi
+          MAX_SCALE="$REGISTERED_MAX_SCALE"
+        fi
         echo "max_scale=$MAX_SCALE" >> "$GITHUB_OUTPUT"
 
     - name: Deploy ${{ inputs.service }}-integration to Cloud Run
