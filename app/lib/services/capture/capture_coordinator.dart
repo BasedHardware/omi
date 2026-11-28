@@ -785,12 +785,14 @@ class AppForegrounded extends CaptureEvent {
 
 /// Socket listener callbacks.
 class SocketClosed extends CaptureEvent {
-  const SocketClosed({this.closeCode});
+  const SocketClosed({this.closeCode, this.generation});
   final int? closeCode;
+  final int? generation;
 }
 
 class SocketConnected extends CaptureEvent {
-  const SocketConnected();
+  const SocketConnected({this.generation});
+  final int? generation;
 }
 
 class SocketError extends CaptureEvent {
@@ -1096,12 +1098,14 @@ class ProcessConversationStage extends CaptureStage {
 }
 
 class SocketClosedStage extends CaptureStage {
-  const SocketClosedStage({this.closeCode});
+  const SocketClosedStage({this.closeCode, this.generation});
   final int? closeCode;
+  final int? generation;
 }
 
 class SocketConnectedStage extends CaptureStage {
-  const SocketConnectedStage();
+  const SocketConnectedStage({this.generation});
+  final int? generation;
 }
 
 class SocketErrorStage extends CaptureStage {
@@ -1940,8 +1944,9 @@ CaptureTransition _transitionCapture(CaptureCoordinatorState state, CaptureEvent
       NativeMicStalled() => _reduceMicStalled(state),
       CaptureLivenessFailure() => _reduceLivenessFailure(state, event, env),
       AppForegrounded() => _reduceAppForegrounded(state),
-      SocketClosed() => CaptureTransition(state, [RunStage(SocketClosedStage(closeCode: event.closeCode))]),
-      SocketConnected() => CaptureTransition(state, const [RunStage(SocketConnectedStage())]),
+      SocketClosed() => CaptureTransition(
+          state, [RunStage(SocketClosedStage(closeCode: event.closeCode, generation: event.generation))]),
+      SocketConnected() => CaptureTransition(state, [RunStage(SocketConnectedStage(generation: event.generation))]),
       SocketError() => CaptureTransition(state, [RunStage(SocketErrorStage(event.error))]),
       KeepAliveTick() => _reduceKeepAlive(state, event, env),
       BatchModeSetRequested() => _reduceBatchMode(state, event, env),

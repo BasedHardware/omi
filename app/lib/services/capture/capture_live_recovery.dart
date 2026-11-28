@@ -12,6 +12,8 @@ class _LiveRecoveryState {
   bool deviceStoppedByCaller = false;
 
   Timer? kickTimer;
+  bool kickDueWhileReconnectInFlight = false;
+  CaptureSessionToken? kickDueToken;
   final List<DateTime> kicks = [];
 
   BleDeviceSource? orphanSource;
@@ -120,7 +122,14 @@ extension _CaptureLiveRecovery on CaptureController {
     _liveRecovery.kickTimer = null;
     if (_captureControllerDisposed || !_captureSessionIsCurrent(token)) return;
     if (!_shouldReconnectTranscriptionSocket || _transcriptServiceReady || !recordingDeviceServiceReady) return;
-    if (!_auth.isSignedIn() || _keepAliveReconnectInFlight) return;
+    if (!_auth.isSignedIn()) return;
+    if (_keepAliveReconnectInFlight) {
+      // The timer's backoff has elapsed. Preserve this retry until the active
+      // connect settles instead of dropping it at the in-flight guard.
+      _liveRecovery.kickDueWhileReconnectInFlight = true;
+      _liveRecovery.kickDueToken = token;
+      return;
+    }
     if (_reconnectCooldownRemaining() > Duration.zero) {
       _kickLiveRecovery('reconnect_rate_limited');
       return;
@@ -134,6 +143,18 @@ extension _CaptureLiveRecovery on CaptureController {
       Logger.debug('[Capture] kicked reconnect failed: $error');
     } finally {
       _keepAliveReconnectInFlight = false;
+    }
+    final retryDue = _liveRecovery.kickDueWhileReconnectInFlight;
+    final retryToken = _liveRecovery.kickDueToken;
+    _liveRecovery.kickDueWhileReconnectInFlight = false;
+    _liveRecovery.kickDueToken = null;
+    if (retryDue &&
+        !_captureControllerDisposed &&
+        _captureSessionIsCurrent(retryToken) &&
+        !_transcriptServiceReady &&
+        _shouldReconnectTranscriptionSocket) {
+      await _runKickedReconnect(retryToken);
+      return;
     }
     if (!_transcriptServiceReady && _shouldReconnectTranscriptionSocket) {
       _kickLiveRecovery('reconnect_failed');

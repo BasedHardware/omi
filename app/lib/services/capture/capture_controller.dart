@@ -133,6 +133,49 @@ part 'capture_conversation_custody.dart';
 
 enum _VoiceCommandTrigger { toggle, legacyLongPress }
 
+class _CaptureSocketEventListener implements ITransctiptSegmentSocketServiceListener, ListenCustodyReceiptListener {
+  const _CaptureSocketEventListener({required this.controller, required this.socket, required this.generation});
+
+  final CaptureController controller;
+  final TranscriptSegmentSocketService socket;
+  final int generation;
+
+  bool get _isCurrent => controller._isCurrentSocketListener(socket, generation);
+
+  @override
+  void onMessageEventReceived(MessageEvent event) {
+    if (_isCurrent) controller.onMessageEventReceived(event);
+  }
+
+  @override
+  void onSegmentReceived(List<TranscriptSegment> segments) {
+    if (_isCurrent) controller.onSegmentReceived(segments);
+  }
+
+  @override
+  void onError(Object err) {
+    if (_isCurrent) controller.onError(err);
+  }
+
+  @override
+  void onConnected() => controller._onSocketConnected(socket, generation);
+
+  @override
+  void onClosed([int? closeCode]) => controller._onSocketClosed(socket, generation, closeCode);
+
+  @override
+  void onCustodyReceipt(
+    TranscriptSegmentSocketService socket,
+    MessageEvent event, {
+    required String owner,
+    String? recordingSessionId,
+  }) {
+    if (_isCurrent) {
+      controller.onCustodyReceipt(socket, event, owner: owner, recordingSessionId: recordingSessionId);
+    }
+  }
+}
+
 class CaptureController extends ChangeNotifier
     with MessageNotifierMixin, CaptureSpeakerAssignment
     implements ITransctiptSegmentSocketServiceListener, ListenCustodyReceiptListener, LiveWordsCapture {
@@ -298,6 +341,7 @@ class CaptureController extends ChangeNotifier
   Future<void>? _peopleRefreshFuture;
 
   TranscriptSegmentSocketService? _socket;
+  int _socketEventGeneration = 0;
   static const _silencePausedKey = 'uplinkSilencePaused';
   bool get silencePaused => _preferences.getBool(_silencePausedKey);
   late final _uplinkSilence = UplinkSilenceTimer(
@@ -2059,19 +2103,24 @@ class CaptureController extends ChangeNotifier
     // synchronous readiness flag. Reuse has no new onConnected event, so every
     // successful publication must restore readiness.
     _transcriptServiceReady = true;
+    final socketEventGeneration = ++_socketEventGeneration;
     if (!identical(_socket, socket)) {
       _socket?.unsubscribe(this);
       _socket = socket;
       _liveSocketIdentity = (uid: _preferences.uid, recordingId: activeRecordingId, token: sessionToken);
       _lastPublishedSocketCustomStt = socket.customSttMode;
       _localPreview.socketPublished(declared: socket.localPreview, send: _sendPendantToSocket);
-      _socket?.subscribe(this, this);
       _beginWedgeSession(socket);
       if (_sessionStartSeconds == 0) {
         liveHeldAudio.reset();
         _sessionStartSeconds = _now().millisecondsSinceEpoch ~/ 1000;
       }
     }
+    _socket?.unsubscribe(this);
+    _socket?.subscribe(
+      this,
+      _CaptureSocketEventListener(controller: this, socket: socket, generation: socketEventGeneration),
+    );
 
     // Notify the device connection that the socket reconnected after a network
     // outage so it can re-enable streaming if needed (e.g. Limitless pendant).
@@ -3746,15 +3795,39 @@ class CaptureController extends ChangeNotifier
 
   @override
   void onClosed([int? closeCode]) {
+    _handleSocketClosed(_socket, _socketEventGeneration, closeCode);
+  }
+
+  bool _isCurrentSocketListener(TranscriptSegmentSocketService socket, int generation) =>
+      !_captureControllerDisposed && generation == _socketEventGeneration && identical(_socket, socket);
+
+  void _onSocketConnected(TranscriptSegmentSocketService socket, int generation) {
+    if (!_isCurrentSocketListener(socket, generation)) return;
+    unawaited(_dispatchLogged(SocketConnected(generation: generation)));
+  }
+
+  void _onSocketClosed(TranscriptSegmentSocketService socket, int generation, int? closeCode) {
+    if (!_isCurrentSocketListener(socket, generation)) return;
+    _handleSocketClosed(socket, generation, closeCode);
+  }
+
+  void _handleSocketClosed(TranscriptSegmentSocketService? socket, int generation, int? closeCode) {
+    if (generation != _socketEventGeneration || (socket != null && !identical(_socket, socket))) return;
+    final closedGeneration = ++_socketEventGeneration;
     _mobileStandardBatchAllowed = false;
     _mobileStandardBatch?.authorize(false);
     _localPreview.revoke();
     _socketCloseQueued = true;
     _transcriptServiceReady = false;
-    unawaited(_dispatchLogged(SocketClosed(closeCode: closeCode)));
+    // Schedule recovery as soon as the transport closes. The serialized
+    // capture queue may still be draining the connection that just ended.
+    _startKeepAliveServices();
+    _kickLiveRecoveryAfterClose(closeCode);
+    unawaited(_dispatchLogged(SocketClosed(closeCode: closeCode, generation: closedGeneration)));
   }
 
-  Future<void> _socketClosedBody(int? closeCode) async {
+  Future<void> _socketClosedBody(int? closeCode, int? generation) async {
+    if (generation != null && generation != _socketEventGeneration) return;
     _socketCloseQueued = false;
     liveHeldAudio.reset();
     _transcriptionServiceStatuses = [];
@@ -3798,8 +3871,6 @@ class CaptureController extends ChangeNotifier
       _sessionTransportInterrupted = true;
     }
 
-    _startKeepAliveServices();
-    _kickLiveRecoveryAfterClose(closeCode);
     notifyListeners();
   }
 
@@ -3941,10 +4012,11 @@ class CaptureController extends ChangeNotifier
 
   @override
   void onConnected() {
-    unawaited(_dispatchLogged(const SocketConnected()));
+    unawaited(_dispatchLogged(SocketConnected(generation: _socketEventGeneration)));
   }
 
-  Future<Object?> _socketConnectedBody() async {
+  Future<Object?> _socketConnectedBody(int? generation) async {
+    if (generation != null && generation != _socketEventGeneration) return null;
     liveHeldAudio.reset();
     _transcriptionSocketRecovered();
     _recordingTelemetry.observeConnected();
@@ -5124,8 +5196,8 @@ class CaptureController extends ChangeNotifier
           RecordingMarkStage() => Future.sync(() => updateRecordingState(stage.state)),
           DeviceStopTelemetryStage() => _deviceStopTelemetryBody(cleanDevice: stage.cleanDevice),
           ProcessConversationStage() => _processConversationBody(stage.liveConversationId),
-          SocketClosedStage() => _socketClosedBody(stage.closeCode),
-          SocketConnectedStage() => _socketConnectedBody(),
+          SocketClosedStage() => _socketClosedBody(stage.closeCode, stage.generation),
+          SocketConnectedStage() => _socketConnectedBody(stage.generation),
           SocketErrorStage() => _socketErrorBody(stage.error),
           ReconnectDeviceStage() => _reconnectDeviceCaptureBody(testingProbe: stage.testingProbe),
           ReconnectPhoneStage() => _reconnectPhoneCaptureBody(),
