@@ -86,6 +86,9 @@ overlay:
         BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'false', category: ops_kill}
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+        # David 2026-11-28: lifecycle v2 serve ramp 1% -> 10% -> 100% by 12-12 (SCA-5312). Rollback: percent '0'.
+        LIFECYCLE_V2_MODE: {value: shadow, category: rollout}
+        LIFECYCLE_V2_MODE_SERVE_PERCENT: {value: '1', category: rollout}
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
         PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
         # Allowance watch reads the same monthly doc the Cloud Run billing gate trusts (SCA-1750).
@@ -347,6 +350,9 @@ overlay:
         SYNC_TASKS_LOCATION: {value: us-central1, category: reliability}
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+        # David 2026-11-28: lifecycle v2 serve ramp 1% -> 10% -> 100% by 12-12 (SCA-5312). Rollback: percent '0'.
+        LIFECYCLE_V2_MODE: {value: shadow, category: rollout}
+        LIFECYCLE_V2_MODE_SERVE_PERCENT: {value: '1', category: rollout}
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
         PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
         PUSHER_RECORD_SEAL_WAKE_ENABLED: {value: 'true', category: ops_kill}
@@ -685,6 +691,9 @@ overlay:
           BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED: {value: 'false', category: ops_kill}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+          # David 2026-11-28: lifecycle v2 serve ramp 1% -> 10% -> 100% by 12-12 (SCA-5312). Rollback: percent '0'.
+          LIFECYCLE_V2_MODE: {value: shadow, category: rollout}
+          LIFECYCLE_V2_MODE_SERVE_PERCENT: {value: '1', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
           PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
@@ -1101,6 +1110,9 @@ overlay:
           BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED: {value: 'true', category: ops_kill}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+          # David 2026-11-28: lifecycle v2 serve ramp 1% -> 10% -> 100% by 12-12 (SCA-5312). Rollback: percent '0'.
+          LIFECYCLE_V2_MODE: {value: shadow, category: rollout}
+          LIFECYCLE_V2_MODE_SERVE_PERCENT: {value: '1', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
           PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
@@ -1548,6 +1560,9 @@ overlay:
           BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'false', category: ops_kill}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+          # David 2026-11-28: lifecycle v2 serve ramp 1% -> 10% -> 100% by 12-12 (SCA-5312). Rollback: percent '0'.
+          LIFECYCLE_V2_MODE: {value: shadow, category: rollout}
+          LIFECYCLE_V2_MODE_SERVE_PERCENT: {value: '1', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
           PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
@@ -1969,6 +1984,9 @@ overlay:
           BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'true', category: ops_kill}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+          # David 2026-11-28: lifecycle v2 serve ramp 1% -> 10% -> 100% by 12-12 (SCA-5312). Rollback: percent '0'.
+          LIFECYCLE_V2_MODE: {value: shadow, category: rollout}
+          LIFECYCLE_V2_MODE_SERVE_PERCENT: {value: '1', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
           PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
