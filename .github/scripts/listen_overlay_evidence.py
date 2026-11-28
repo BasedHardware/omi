@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from collections import Counter
 import hashlib
+from fractions import Fraction
 import json
 import os
 from pathlib import Path
@@ -546,7 +547,7 @@ def verify_image_only(reader, environ):
     return {'ready_pods': len(pods), 'image': image}
 
 
-def serving_pods(reader, deployment, primary, image, *, check_endpoints=False):
+def serving_pods(reader, deployment, primary, image, *, check_endpoints=False, strict_owner=False):
     """Read only the selected Ready pods and bind the running image digest."""
     meta, spec, status = deployment['metadata'], deployment['spec'], deployment['status']
     replicas = spec['replicas']
@@ -577,12 +578,27 @@ def serving_pods(reader, deployment, primary, image, *, check_endpoints=False):
         owner = [row for row in pod_meta['ownerReferences']
                  if row.get('kind') == 'ReplicaSet' and row.get('controller') is True]
         require(len(owner) == 1, 'reference_pod_owner')
+        if strict_owner:
+            label = pod_meta.get('labels', {}).get('pod-template-hash')
+            require(pod_meta['namespace'] == NS and isinstance(label, str)
+                    and owner[0]['name'] == TARGET + '-' + label, 'image_only_pod_identity')
+            strict_controller(pod_meta, 'apps/v1', 'ReplicaSet', owner[0]['name'], owner[0]['uid'])
         owners.add((owner[0]['name'], owner[0]['uid']))
         versions[pod_meta['name']] = version(pod)
     require(len(owners) == 1 and len(versions) == replicas, 'reference_pod_owner')
     name, uid = owners.pop()
     require(isinstance(name, str) and NAME.fullmatch(name), 'reference_pod_owner')
-    replica_set = json_read(reader.run(['kubectl', '-n', NS, 'get', 'replicaset', name, '-o', 'json']))
+    if strict_owner:
+        replica_sets = json_read(reader.run(
+            ['kubectl', '-n', NS, 'get', 'replicasets', '--selector', selected, '-o', 'json']))['items']
+        active = [rs for rs in replica_sets if rs['spec']['replicas'] > 0 or rs['status'].get('replicas', 0) > 0]
+        require(len(active) == 1, 'image_only_replicaset_ambiguous')
+        replica_set = active[0]
+        require(replica_set.get('apiVersion') == 'apps/v1' and replica_set.get('kind') == 'ReplicaSet'
+                and replica_set['metadata']['name'] == name, 'image_only_replicaset_identity')
+        strict_controller(replica_set['metadata'], 'apps/v1', 'Deployment', TARGET, meta['uid'])
+    else:
+        replica_set = json_read(reader.run(['kubectl', '-n', NS, 'get', 'replicaset', name, '-o', 'json']))
     require(replica_set and replica_set['metadata']['uid'] == uid and any(
         owner.get('kind') == 'Deployment' and owner.get('uid') == meta['uid'] and owner.get('controller') is True
         for owner in replica_set['metadata'].get('ownerReferences', [])), 'reference_replicaset_owner')
@@ -602,7 +618,188 @@ def serving_pods(reader, deployment, primary, image, *, check_endpoints=False):
                         'image_only_endpoint_owner')
                 ready.add((ref['name'], ref['uid']))
         require(ready == {(name, meta['uid']) for name, meta in versions.items()}, 'image_only_endpoint_coverage')
-    return versions
+    return (versions, replica_set) if strict_owner else versions
+
+
+def chart_baseline(request):
+    return 'image_only' in request and 'reference_helm_revision' not in request
+
+
+def baseline_helm_args(root, reference):
+    chart = Path(root) / 'backend/charts/backend-listen'
+    repository, separator, image = reference.rpartition('@' if '@' in reference else ':')
+    pin = 'image.digest' if separator == '@' else 'image.tag'
+    return ['helm', 'template', TARGET, str(chart), '-n', NS,
+            '-f', str(chart / 'prod_omi_backend_listen_values.yaml'),
+            '--set', f'image.repository={repository}', '--set', 'gcpProjectId=based-hardware',
+            '--set', 'runtimeGcpProjectId=based-hardware', '--set-string', f'{pin}={image}']
+
+
+def quantity(value):
+    # The chart uses decimal CPU and binary memory. API serialization can
+    # change the spelling (1.5Gi -> 1536Mi) while retaining the exact value.
+    match = re.fullmatch(r'([+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+))([munkKMGTPE]i?|[eE][+-]?[0-9]{1,2})?',
+                         str(value))
+    require(match is not None, 'image_only_quantity')
+    number, suffix = match.groups()
+    if not suffix:
+        return str(Fraction(number))
+    if suffix.endswith('i'):
+        require(suffix[0] in 'KMGTPE', 'image_only_quantity')
+        multiplier = 1024 ** ('KMGTPE'.index(suffix[0]) + 1)
+    else:
+        exponents = {'n': -9, 'u': -6, 'm': -3, 'k': 3, 'M': 6, 'G': 9, 'T': 12, 'P': 15, 'E': 18}
+        exponent = int(suffix[1:]) if len(suffix) > 1 else exponents.get(suffix)
+        require(exponent is not None, 'image_only_quantity')
+        multiplier = Fraction(10) ** exponent
+    return str(Fraction(number) * multiplier)
+
+
+def normalized_template(template):
+    """Apply the apps/v1 PodTemplate defaults used by this chart, preserving all other fields."""
+    result = copy.deepcopy(template)
+    metadata = result.setdefault('metadata', {})
+    if metadata.get('creationTimestamp') is None:
+        metadata.pop('creationTimestamp', None)
+    pod = result['spec']
+    for key, value in {'dnsPolicy': 'ClusterFirst', 'restartPolicy': 'Always',
+                       'schedulerName': 'default-scheduler', 'terminationGracePeriodSeconds': 30,
+                       'securityContext': {}}.items():
+        pod.setdefault(key, value)
+    # API conversion serializes the deprecated alias alongside the canonical field.
+    if 'serviceAccount' in pod:
+        require(pod.pop('serviceAccount') == pod.get('serviceAccountName'), 'image_only_service_account')
+    for category in ('containers', 'initContainers'):
+        for container in pod.get(category, []):
+            image = container['image']
+            tag = image.rsplit('/', 1)[-1].rsplit(':', 1)
+            container.setdefault('imagePullPolicy', 'Always' if '@' not in image and
+                                 (len(tag) == 1 or tag[-1] == 'latest') else 'IfNotPresent')
+            container.setdefault('terminationMessagePath', '/dev/termination-log')
+            container.setdefault('terminationMessagePolicy', 'File')
+            for limits in container.setdefault('resources', {}).values():
+                for key, value in limits.items():
+                    limits[key] = quantity(value)
+            for port in container.get('ports', []):
+                port.setdefault('protocol', 'TCP')
+            env(container)  # Reject duplicate/invalid entries without changing list order.
+            for entry in container.get('env', []):
+                if 'valueFrom' not in entry:
+                    entry.setdefault('value', '')
+                elif 'fieldRef' in entry['valueFrom']:
+                    entry['valueFrom']['fieldRef'].setdefault('apiVersion', 'v1')
+            for key in ('livenessProbe', 'readinessProbe', 'startupProbe'):
+                if key in container:
+                    probe = container[key]
+                    for field, value in {'timeoutSeconds': 1, 'periodSeconds': 10,
+                                         'successThreshold': 1, 'failureThreshold': 3}.items():
+                        probe.setdefault(field, value)
+                    if 'httpGet' in probe:
+                        probe['httpGet'].setdefault('scheme', 'HTTP')
+                        probe['httpGet'].setdefault('path', '/')
+            for hook in container.get('lifecycle', {}).values():
+                if 'httpGet' in hook:
+                    hook['httpGet'].setdefault('scheme', 'HTTP')
+                    hook['httpGet'].setdefault('path', '/')
+    for volume in pod.get('volumes', []):
+        for key in ('configMap', 'secret', 'projected', 'downwardAPI'):
+            if key in volume:
+                volume[key].setdefault('defaultMode', 0o644)
+    return canonical(result)
+
+
+def deployment_spec(render):
+    target = ('apps/v1', 'Deployment', NS, TARGET)
+    require([key for key in render if key[1] == 'Deployment'] == [target], 'deployment_coverage')
+    return render[target]['spec']
+
+
+def strict_controller(meta, api, kind, name, uid):
+    controllers = [owner for owner in meta.get('ownerReferences', []) if owner.get('controller') is True]
+    require(len(controllers) == 1 and all(controllers[0].get(key) == value for key, value in
+            {'apiVersion': api, 'kind': kind, 'name': name, 'uid': uid}.items()), 'image_only_controller')
+
+
+def compare_live_baseline(reader, expected, inverse, count):
+    deployment = reader.obj('Deployment', TARGET, NS)
+    require(deployment is not None, 'image_only_deployment_missing')
+    meta, spec = deployment['metadata'], deployment['spec']
+    require(deployment.get('apiVersion') == 'apps/v1' and deployment.get('kind') == 'Deployment'
+            and (meta['name'], meta['namespace']) == (TARGET, NS) and not meta.get('deletionTimestamp')
+            and meta.get('labels', {}).get('app.kubernetes.io/managed-by') == 'Helm'
+            and meta.get('annotations', {}).get('meta.helm.sh/release-name') == TARGET
+            and meta.get('annotations', {}).get('meta.helm.sh/release-namespace') == NS,
+            'image_only_release_owner')
+    revision = meta['annotations'].get('deployment.kubernetes.io/revision')
+    require(isinstance(revision, str) and re.fullmatch('[1-9][0-9]*', revision), 'image_only_deployment_revision')
+    require(spec['selector'] == expected['selector'] and spec['replicas'] == count
+            and expected.get('replicas', count) == count, 'image_only_deployment_scope')
+    want = normalized_template(expected['template'])
+    require(normalized_template(spec['template']) == want, 'image_only_deployment_template')
+
+    pods, replica_set = serving_pods(reader, deployment, 'backend-listen', inverse, check_endpoints=True,
+                                     strict_owner=True)
+    rs_meta, rs_spec, rs_status = (replica_set[key] for key in ('metadata', 'spec', 'status'))
+    template = copy.deepcopy(rs_spec['template'])
+    pod_hash = template['metadata']['labels'].pop('pod-template-hash', None)
+    require(isinstance(pod_hash, str) and re.fullmatch('[a-z0-9]{1,32}', pod_hash)
+            and rs_meta['name'] == TARGET + '-' + pod_hash
+            and rs_meta.get('labels', {}).get('pod-template-hash') == pod_hash
+            and not rs_meta.get('deletionTimestamp') and rs_meta['namespace'] == NS
+            and rs_meta.get('annotations', {}).get('deployment.kubernetes.io/revision') == revision,
+            'image_only_replicaset_revision')
+    selector = {'matchLabels': dict(spec['selector']['matchLabels'], **{'pod-template-hash': pod_hash})}
+    require(rs_spec['selector'] == selector and rs_spec['replicas'] == count
+            and rs_status.get('observedGeneration') == rs_meta['generation']
+            and all(rs_status.get(key) == count for key in ('replicas', 'readyReplicas', 'availableReplicas')),
+            'image_only_replicaset_scope')
+    require(normalized_template(template) == want, 'image_only_replicaset_template')
+    return version(deployment), rs_meta['name'], version(replica_set), pods
+
+
+def produce_chart_baseline(request, reader, environ, root, private_spec, now):
+    attestation = request['image_only']
+    reference, inverse = attestation['from'], attestation['inverse']
+    require(set(attestation['baseline']) == {inverse}, 'image_only_ambiguous_digest')
+    count = attestation['baseline'][inverse]
+    require(request['helm_args'] == baseline_helm_args('<candidate>', reference), 'request_argv_mismatch')
+    if BACKEND_IMAGE_TAG.fullmatch(reference):
+        digest = reader.run(['gcloud', 'container', 'images', 'describe', reference,
+                             '--format=value(image_summary.digest)']).decode().strip()
+        require(inverse == 'gcr.io/based-hardware/backend@' + digest, 'image_only_predecessor_digest')
+    else:
+        require(reference == inverse, 'image_only_predecessor_digest')
+
+    revision = release_revision(reader)
+    rendered = deployment_spec(documents(reader.run(baseline_helm_args(root, reference)).decode()))
+    deployed = deployment_spec(documents(reader.run(
+        ['helm', '-n', NS, 'get', 'manifest', TARGET, '--revision', str(revision)]).decode()))
+    primary = rendered['template']['spec']['containers'][0]
+    require(primary['name'] == 'backend-listen' and primary['image'] == reference, 'image_only_predecessor')
+    require('STT_CAP_DISPATCH_ENFORCEMENT' in private_spec['keys'], 'required_policy_changed')
+    require_private_references(primary, private_spec['keys'], private_spec['secretName'])
+    require(deployed['selector'] == rendered['selector']
+            and normalized_template(deployed['template']) == normalized_template(rendered['template']),
+            'image_only_helm_template')
+    snapshot = compare_live_baseline(reader, rendered, inverse, count)
+    require(compare_live_baseline(reader, rendered, inverse, count) == snapshot, 'image_only_snapshot_moved')
+    require(release_revision(reader) == revision, 'release_revision_moved')
+    if BACKEND_IMAGE_TAG.fullmatch(reference):
+        digest = reader.run(['gcloud', 'container', 'images', 'describe', reference,
+                             '--format=value(image_summary.digest)']).decode().strip()
+        require(inverse == 'gcr.io/based-hardware/backend@' + digest, 'image_only_predecessor_digest')
+
+    deployment, replica_set_name, replica_set, _ = snapshot
+    receipt = {key: request[key] for key in ('schema', 'request_id', 'expires', 'candidate_sha', 'control_sha',
+                                           'target', 'namespace', 'bindings', 'dispatch_inputs', 'image')}
+    receipt.update(created=now, run_id=environ['GITHUB_RUN_ID'], run_attempt=environ['GITHUB_RUN_ATTEMPT'],
+                   request_sha256=sha(canonical(request)), helm_revision=revision,
+                   baseline={'image_digest': inverse, 'deployment_template_matches': True,
+                             'replica_set_template_matches': True, 'deployment_version': deployment,
+                             'replica_set_name': replica_set_name, 'replica_set_version': replica_set},
+                   read_count=reader.calls, read_bytes=reader.bytes)
+    require(len(canonical(receipt)) <= MAX_RECEIPT, 'receipt_bound')
+    return receipt
 
 
 def changed_paths(old, new, prefix=''):
@@ -632,7 +829,7 @@ def validate_request(request, now):
         require(type(reference_revision) is int and reference_revision > 0, 'reference_revision_unknown')
     if 'image_only' in request:
         fields.add('image_only')
-        require(reference_revision and 'image_only_from' not in request, 'image_only_attestation')
+        require('image_only_from' not in request, 'image_only_attestation')
         validate_image_only(request['image_only'], request['image'])
     if 'image_only_from' in request:
         fields.add('image_only_from')
@@ -659,7 +856,7 @@ def validate_request(request, now):
             and (request['image_tag'] == '' if 'image_only' in request
                  else re.fullmatch(r'[0-9a-f]{7,40}', request['image_tag'])), 'overlay_image_binding')
     require((request['overlay_state'] == 'references' and request['overlay_updated_at'] == '')
-            if reference_revision else
+            if reference_revision or chart_baseline(request) else
             (request['overlay_state'] in {'present', 'empty'}
              and isinstance(request['overlay_updated_at'], str) and bool(request['overlay_updated_at'])),
             'overlay_version_unknown')
@@ -739,7 +936,7 @@ def produce(request, reader, environ, root, private_file, overrides, now):
     candidate = load_values(root / 'backend/charts/backend-listen/prod_omi_backend_listen_values.yaml')
     reference_revision = request.get('reference_helm_revision')
     private_spec = candidate.get('privateSecretEnv') or {}
-    if reference_revision:
+    if reference_revision or chart_baseline(request):
         require(private_spec.get('keys') and not candidate.get('privateEnv') and '-f' not in overrides,
                 'reference_inventory')
     else:
@@ -766,16 +963,29 @@ def produce(request, reader, environ, root, private_file, overrides, now):
             and {k: v for k, v in inputs.items() if not k.startswith('evidence_') and k != 'control_sha'}
             == request['dispatch_inputs'],
             'dispatch_binding')
+    if chart_baseline(request):
+        require(json_read(inputs['evidence_request'].encode()) == request, 'dispatch_request_binding')
     raw = private_file.read_bytes()
     require(len(raw) <= MAX_BYTES, 'overlay_bound')
     # Import the trusted existing validator, not candidate code.
     from listen_helm_env_overrides import load_private_env
     private = load_private_env(private_file) if raw else {}
-    require(request['overlay_state'] == ('present' if raw else 'references' if reference_revision else 'empty'),
+    require(request['overlay_state'] == ('present' if raw else 'references' if reference_revision or chart_baseline(request) else 'empty'),
             'overlay_state_mismatch')
     image_tag = request['image_tag']
     attestation = request.get('image_only')
     if attestation is not None:
+        if chart_baseline(request):
+            require(not overrides and not raw, 'reference_overlay_injected')
+            # The installed chart may predate the forward image. Both must be
+            # on the reviewed control history, with their own exact bindings.
+            reader.run(['git', '-C', str(root), 'merge-base', '--is-ancestor',
+                        request['candidate_sha'], request['control_sha']])
+            admit_image_only_digest(reader, request['image'], attestation, request['control_sha'], root)
+            changes = reader.run(['git', '-C', str(root), 'status', '--porcelain=v1',
+                                  '--untracked-files=all', '--ignored', '--', 'backend/charts/backend-listen'])
+            require(not changes, 'image_only_chart_moved')
+            return produce_chart_baseline(request, reader, environ, root, private_spec, now)
         admit_image_only_digest(reader, request['image'], attestation, request['candidate_sha'], root)
     else:
         require(re.fullmatch(r'[0-9a-f]{7,40}', image_tag), 'image_invalid')
@@ -913,7 +1123,8 @@ def main():
         if a.mode == 'job':
             from listen_helm_env_overrides import (check_private_env_against_chart, check_translation_endpoint,
                                                  load_private_env, load_values, resolve_env_override_argv)
-            request = json_read(os.environ['EVIDENCE_REQUEST'].encode())
+            event = json_read(Path(os.environ['GITHUB_EVENT_PATH']).read_bytes())
+            request = json_read(event['inputs']['evidence_request'].encode())
             validate_request(request, int(time.time()))
             os.umask(0o077)
             private_root = Path(os.environ['RUNNER_TEMP']) / 'listen-overlay-evidence'
@@ -921,7 +1132,7 @@ def main():
             with tempfile.TemporaryDirectory(prefix='private-', dir=private_root) as tmp:
                 private_file = Path(tmp) / 'overlay.yaml'
                 overlay_text = os.environ.pop('LISTEN_PRIVATE_VALUES_YAML', '')
-                require(not request.get('reference_helm_revision') or not overlay_text, 'reference_overlay_injected')
+                require(request['overlay_state'] != 'references' or not overlay_text, 'reference_overlay_injected')
                 private_file.write_text(overlay_text)
                 values = load_values(a.root / 'backend/charts/backend-listen/prod_omi_backend_listen_values.yaml')
                 names = {'gateway_feature_mode': 'OMI_LLM_GATEWAY_FEATURE_MODE',
