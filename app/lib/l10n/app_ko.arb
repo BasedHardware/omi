@@ -4770,5 +4770,11 @@
     "homeFinishingOpensWhenReady": "준비되는 대로 열립니다",
     "quietPayerTitle": "5일 동안 녹음이 없어요",
     "quietPayerMessage": "Omi를 확인해 보세요.",
-    "quietPayerCheck": "확인"
+    "quietPayerCheck": "확인",
+    "activityOnThisPhone": "이 휴대폰에만 있음",
+    "activityOnThisPhoneSummary": "{count, plural, =1{녹음 1개, 이 휴대폰에만 저장됨} other{녹음 {count}개, 이 휴대폰에만 저장됨}}",
+    "activityTranscribeAll": "모두 텍스트 변환",
+    "homeRowCouldNotFinish": "“{title}”을(를) 완료하지 못했습니다",
+    "homeRowCouldNotFinishUntitled": "대화를 완료하지 못했습니다",
+    "homeRecordingCouldNotSend": "녹음을 전송하지 못했습니다"
 }

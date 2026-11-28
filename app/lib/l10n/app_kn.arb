@@ -12327,5 +12327,11 @@
     "homeFinishingOpensWhenReady": "ಸಿದ್ಧವಾದ ತಕ್ಷಣ ತೆರೆಯುತ್ತದೆ",
     "quietPayerTitle": "5 ದಿನಗಳಿಂದ ಯಾವುದೇ ರೆಕಾರ್ಡಿಂಗ್ ಇಲ್ಲ",
     "quietPayerMessage": "ನಿಮ್ಮ Omi ಪರಿಶೀಲಿಸಿ.",
-    "quietPayerCheck": "ಪರಿಶೀಲಿಸಿ"
+    "quietPayerCheck": "ಪರಿಶೀಲಿಸಿ",
+    "activityOnThisPhone": "ಈ ಫೋನ್‌ನಲ್ಲಿ",
+    "activityOnThisPhoneSummary": "{count, plural, =1{1 ರೆಕಾರ್ಡಿಂಗ್, ಈ ಫೋನ್‌ನಲ್ಲಿ ಮಾತ್ರ ಸಂಗ್ರಹಿಸಲಾಗಿದೆ} other{{count} ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು, ಈ ಫೋನ್‌ನಲ್ಲಿ ಮಾತ್ರ ಸಂಗ್ರಹಿಸಲಾಗಿದೆ}}",
+    "activityTranscribeAll": "ಎಲ್ಲವನ್ನೂ ಟ್ರಾನ್ಸ್‌ಕ್ರೈಬ್ ಮಾಡಿ",
+    "homeRowCouldNotFinish": "“{title}” ಪೂರ್ಣಗೊಳಿಸಲಾಗಲಿಲ್ಲ",
+    "homeRowCouldNotFinishUntitled": "ಸಂವಾದವನ್ನು ಪೂರ್ಣಗೊಳಿಸಲಾಗಲಿಲ್ಲ",
+    "homeRecordingCouldNotSend": "ರೆಕಾರ್ಡಿಂಗ್ ಅನ್ನು ಕಳುಹಿಸಲಾಗಲಿಲ್ಲ"
 }

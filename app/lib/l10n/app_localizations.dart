@@ -27812,6 +27812,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Check'**
   String get quietPayerCheck;
+
+  /// Section header in Activity listing recordings kept only on this phone: waiting to be transcribed, or ones that could not be sent. Shown in capitals like the other Activity headers.
+  ///
+  /// In en, this message translates to:
+  /// **'On this phone'**
+  String get activityOnThisPhone;
+
+  /// Line under the 'On this phone' header in Activity: how many recordings exist only on this phone (the audio has not reached Omi's servers yet). {count} is how many.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 recording, kept only on this phone} other{{count} recordings, kept only on this phone}}'**
+  String activityOnThisPhoneSummary(int count);
+
+  /// Button beside the 'On this phone' header in Activity: sends every waiting recording to be transcribed.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribe all'**
+  String get activityTranscribeAll;
+
+  /// Short toast on Home when a conversation the reader was looking at fails and moves from Home to Activity. {title} is the conversation's title. A 'View' button opens Activity.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t finish “{title}”'**
+  String homeRowCouldNotFinish(String title);
+
+  /// Short toast on Home when an untitled conversation the reader was looking at fails and moves to Activity. A 'View' button opens Activity.
+  ///
+  /// In en, this message translates to:
+  /// **'A conversation couldn\'t finish'**
+  String get homeRowCouldNotFinishUntitled;
+
+  /// Short toast on Home when a recording from this phone fails to upload and moves from Home to Activity. A 'View' button opens Activity.
+  ///
+  /// In en, this message translates to:
+  /// **'A recording couldn\'t be sent'**
+  String get homeRecordingCouldNotSend;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

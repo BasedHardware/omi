@@ -15879,4 +15879,32 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Перевірити';
+
+  @override
+  String get activityOnThisPhone => 'На цьому телефоні';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count записів, збережено лише на цьому телефоні',
+      one: '1 запис, збережено лише на цьому телефоні',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'Транскрибувати все';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return 'Не вдалося завершити «$title»';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'Не вдалося завершити розмову';
+
+  @override
+  String get homeRecordingCouldNotSend => 'Не вдалося надіслати запис';
 }

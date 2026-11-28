@@ -27,6 +27,9 @@ import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/schema/folder.dart';
 import 'package:omi/backend/schema/gen/speaker_tag_prompts_wire.g.dart';
 import 'package:omi/backend/schema/pending_work.dart';
+import 'package:omi/backend/schema/review.dart' show ReviewChangesPage;
+import 'package:omi/pages/activity/activity_page.dart';
+import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
@@ -141,6 +144,9 @@ class _StubSyncProvider extends ChangeNotifier implements SyncProvider {
 
   @override
   bool get isSyncing => true;
+
+  @override
+  List<Wal> get attentionWals => const [];
 
   @override
   List<Wal> get allWals => const [];
@@ -726,7 +732,8 @@ LocalRecording _saved(String id, DateTime at, int seconds, LocalRecordingState s
 
 /// Every Home row kind and state at once (SCA-5226): the live row, saved recordings in each state,
 /// conversations transcribing, writing, past their deadline, failed and done, a day's locked
-/// conversations as one row, and yesterday.
+/// conversations as one row, and yesterday. The failed conversation and the waiting and failed
+/// recordings are Activity's; Home shows the rest.
 void _galleryRows(_Home home) {
   ServerConversation locked(String id, DateTime at) => ServerConversation(
         id: id,
@@ -794,9 +801,9 @@ void main() {
       expect(home.liveReads, greaterThanOrEqualTo(1));
 
       expect(_rowIds(tester),
-          ['live-1', 'c-call', 'c-transcribing', 'c-writing', 'c-today', 'c-yesterday', 'c-yesterday-2', 'c-failed'],
-          reason: 'the live conversation leads Today; the hidden one is off Home, the failed one stays in place '
-              'with its Retry (David 2026-11-27, SCA-5226)');
+          ['live-1', 'c-call', 'c-transcribing', 'c-writing', 'c-today', 'c-yesterday', 'c-yesterday-2'],
+          reason: 'the live conversation leads Today; the hidden one is off Home, and the failed one is in '
+              'Activity with its Try Again (SCA-5226)');
       expect(find.byKey(const Key('conversation_tile_live')), findsOneWidget);
       expect(find.byKey(const Key('conversation_tile_writing')), findsOneWidget);
       expect(find.byKey(const Key('conversation_tile_transcribing')), findsOneWidget);
@@ -846,7 +853,8 @@ void main() {
     });
   });
 
-  testWidgets('v3: a failed live window hands the top to one Listening row and stays below it, failed', (tester) async {
+  testWidgets('v3: a failed live window hands the top to one Listening row and leaves Home for Activity',
+      (tester) async {
     await withClock(Clock.fixed(_now), () async {
       final home = await _pumpHome(tester, v3: true);
       final serverRow = find.byKey(const ValueKey('live-1'));
@@ -869,10 +877,7 @@ void main() {
       await tester.pump();
       expect(placeholder, findsOneWidget);
       expect(tester.getTopLeft(placeholder).dy, top);
-      expect(serverRow, findsOneWidget, reason: 'a failed conversation keeps its row (SCA-5226)');
-      expect(tester.getTopLeft(serverRow).dy, greaterThan(top));
-      expect(
-          find.descendant(of: serverRow, matching: find.byKey(const Key('conversation_tile_failed'))), findsOneWidget);
+      expect(serverRow, findsNothing, reason: 'a failed conversation is in Activity (SCA-5226)');
 
       await _dispose(tester, home);
     });
@@ -915,7 +920,8 @@ void main() {
     testWidgets('v3: $name widens the list and keeps the live row and saved recordings; a filter hides them',
         (tester) async {
       await withClock(Clock.fixed(_now), () async {
-        final saved = _saved('s-widen', _now.subtract(const Duration(minutes: 30)), 60, LocalRecordingState.pending);
+        final saved = _saved('s-widen', _now.subtract(const Duration(minutes: 30)), 60, LocalRecordingState.processing,
+            uploadedAt: _now.subtract(const Duration(minutes: 5)));
         final home =
             await _pumpHome(tester, v3: true, recordings: [saved], prepare: (home) => widen(home.conversations));
         expect(home.conversations.showsDefaultHome, isFalse, reason: 'the list is widened');
@@ -2536,12 +2542,9 @@ void main() {
           expect(find.byKey(const Key('home_finishing')), findsNothing);
           expect(find.byType(SnackBar), findsNothing);
           expect(find.byKey(const ValueKey('home_activity_attention_dot')), findsNothing);
-          // Failed rows stay on Home in place with their Retry (David 2026-11-27, SCA-5226): the fixture's
-          // own failed conversation, and a failed result.
-          final failedResult = caseName == 'failed summary' || caseName == 'legacy failed projection';
-          expect(find.byKey(const Key('conversation_summary_failed_indicator')), findsNWidgets(failedResult ? 2 : 1));
-          expect(
-              find.byKey(const ValueKey('live-1')), resultAfterTimeout || failedResult ? findsOneWidget : findsNothing);
+          // A failed result is in Activity, not on Home (SCA-5226); neither is the fixture's own failure.
+          expect(find.byKey(const Key('conversation_summary_failed_indicator')), findsNothing);
+          expect(find.byKey(const ValueKey('live-1')), resultAfterTimeout ? findsOneWidget : findsNothing);
           if (forcedBefore != null) {
             expect(home.conversations.forcedReads, forcedBefore + 1, reason: 'the deadline reconciles the list once');
           }
@@ -2810,7 +2813,12 @@ void main() {
           expect(_rowIds(tester).first, 'live-1', reason: 'the live row leads Today');
           expect(find.text('Taking longer than usual'), findsOneWidget);
           expect(find.text('2 recordings waiting'), findsOneWidget);
-          expect(find.byKey(const ValueKey('rec_retry_s-failed')), findsOneWidget);
+          // Anything that needs the reader is in Activity (SCA-5226).
+          expect(find.text('Vendor call'), findsNothing);
+          expect(
+              find.byWidgetPredicate((w) => w is RecordingListItem && w.recording.id != 's-processing'), findsNothing);
+          expect(find.byWidgetPredicate((w) => w is RecordingListItem && w.recording.id == 's-processing'),
+              findsOneWidget);
           // One row height for every kind, with or without an action (SCA-5226 UI sweep).
           final cards = [
             ...find.byKey(const ValueKey('conversation_card')).evaluate(),
@@ -2819,7 +2827,7 @@ void main() {
               find.descendant(of: find.byWidget(shell.widget), matching: find.byType(Material)).evaluate().first,
           ];
           final heights = {for (final e in cards) (e.size!.height * 2).round() / 2};
-          expect(cards.length, greaterThanOrEqualTo(12));
+          expect(cards.length, greaterThanOrEqualTo(9));
           expect(heights, hasLength(1), reason: 'rows differ in height: $heights');
           await shoot(
               tester, '00${brightness == Brightness.dark ? 1 : 2}-mobile-ios-home-every-row-${brightness.name}');
@@ -2828,6 +2836,59 @@ void main() {
         });
       });
     }
+
+    testWidgets('Activity holds what needs the reader: the failed conversation and recordings on this phone',
+        (tester) async {
+      await withClock(Clock.fixed(_now), () async {
+        final home = await pumpGallery(tester, Brightness.dark, size: const Size(393, 852));
+        final store = PendingWorkStore(
+          loadPending: () async => const ApiSuccess(PendingWorkSnapshot.disabled),
+          loadAttention: () async => const ApiSuccess(AttentionItemsPage.disabled),
+        );
+        unawaited(Navigator.of(tester.element(find.byType(ConversationsPage))).push(MaterialPageRoute<void>(
+            builder: (_) => ActivityPage(
+                  pendingWork: store,
+                  probeDreamReport: () async => false,
+                  loadRecaps: () async => (items: <DailySummary>[], ok: true),
+                  loadChanges: ({cursor}) async => const ApiSuccess(ReviewChangesPage(changes: [])),
+                ))));
+        for (var i = 0; i < 6; i++) {
+          await tester.pump(const Duration(milliseconds: 100));
+        }
+        expect(find.byKey(const ValueKey('activity_failed_g-failed')), findsOneWidget);
+        expect(find.byKey(const Key('activity_on_this_phone')), findsOneWidget);
+        expect(find.text('2 recordings, kept only on this phone'), findsOneWidget);
+        expect(find.byKey(const Key('activity_transcribe_all')), findsOneWidget);
+        expect(find.byKey(const ValueKey('activity_rec_s-pending')), findsOneWidget);
+        expect(find.byKey(const ValueKey('activity_rec_s-failed')), findsOneWidget);
+        expect(find.byKey(const ValueKey('activity_rec_s-processing')), findsNothing,
+            reason: 'one being processed is on Home');
+        await shoot(tester, '006-mobile-ios-activity-needs-you');
+        await _dispose(tester, home);
+        store.dispose();
+        debugDefaultTargetPlatformOverride = null;
+      });
+    });
+
+    testWidgets('a row that fails while Home is on screen says where it went', (tester) async {
+      await withClock(Clock.fixed(_now), () async {
+        final home = await pumpGallery(tester, Brightness.dark, size: const Size(393, 852));
+        expect(find.text('Hiring plan'), findsOneWidget);
+        home.conversations.upsertConversation(
+          _conversation('g-writing', DateTime(2026, 11, 16, 11, 45), 'Hiring plan',
+              v3: const ConversationV3Fields(kind: 'conversation', tileState: ConversationTileState.failed)),
+          preserveHomeStep: false,
+        );
+        await tester.pump();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(find.text('Hiring plan'), findsNothing, reason: 'it left Home for Activity');
+        expect(find.text('Couldn\'t finish “Hiring plan”'), findsOneWidget);
+        expect(find.text('View'), findsOneWidget);
+        await _dispose(tester, home);
+        debugDefaultTargetPlatformOverride = null;
+      });
+    });
 
     testWidgets('Home on a phone screen, then Finishing up after End', (tester) async {
       await withClock(Clock.fixed(_now), () async {

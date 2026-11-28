@@ -15853,4 +15853,32 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Tarkista';
+
+  @override
+  String get activityOnThisPhone => 'Tässä puhelimessa';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count nauhoitusta, jotka ovat vain tässä puhelimessa',
+      one: '1 nauhoitus, joka on vain tässä puhelimessa',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'Transkriboi kaikki';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return 'Keskustelua ”$title” ei saatu valmiiksi';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'Keskustelua ei saatu valmiiksi';
+
+  @override
+  String get homeRecordingCouldNotSend => 'Nauhoitusta ei voitu lähettää';
 }

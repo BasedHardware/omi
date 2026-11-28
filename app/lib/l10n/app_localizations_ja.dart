@@ -15615,4 +15615,32 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get quietPayerCheck => '確認';
+
+  @override
+  String get activityOnThisPhone => 'この端末のみ';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count件の録音（この端末のみに保存）',
+      one: '1件の録音（この端末のみに保存）',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'すべて文字起こし';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return '「$title」を完了できませんでした';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => '会話を完了できませんでした';
+
+  @override
+  String get homeRecordingCouldNotSend => '録音を送信できませんでした';
 }

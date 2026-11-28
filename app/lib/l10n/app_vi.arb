@@ -4770,5 +4770,11 @@
     "homeFinishingOpensWhenReady": "Sẽ mở ngay khi sẵn sàng",
     "quietPayerTitle": "Không có bản ghi nào trong 5 ngày",
     "quietPayerMessage": "Hãy kiểm tra Omi của bạn.",
-    "quietPayerCheck": "Kiểm tra"
+    "quietPayerCheck": "Kiểm tra",
+    "activityOnThisPhone": "Trên điện thoại này",
+    "activityOnThisPhoneSummary": "{count, plural, =1{1 bản ghi âm, chỉ được lưu trên điện thoại này} other{{count} bản ghi âm, chỉ được lưu trên điện thoại này}}",
+    "activityTranscribeAll": "Chép lời tất cả",
+    "homeRowCouldNotFinish": "Không thể hoàn tất “{title}”",
+    "homeRowCouldNotFinishUntitled": "Không thể hoàn tất một cuộc trò chuyện",
+    "homeRecordingCouldNotSend": "Không thể gửi một bản ghi âm"
 }

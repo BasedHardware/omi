@@ -16,14 +16,18 @@ import 'package:omi/services/on_device/on_device_transcription_controller.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
-/// A recording held on this phone for the reader, in the Home row shape every other row uses: its
+/// A recording held on this phone for the reader, in the row shape every Home row uses (on Home
+/// while it is sent or processed; in Activity's On this phone section while it waits or failed): its
 /// time and length, its state, and play (or Retry when sending failed and sending again can help). Tapping opens the recording
 /// sheet (transcribe, share, delete). Swiping deletes it after a confirm; the file may be the only
 /// copy, so there is no Undo, and a recording the server is still working on cannot be swiped.
 class RecordingListItem extends StatefulWidget {
   final LocalRecording recording;
 
-  const RecordingListItem({super.key, required this.recording});
+  /// [HomeRowShell.homeMargin] on Home; [HomeRowShell.listMargin] in Activity's padded list.
+  final EdgeInsets margin;
+
+  const RecordingListItem({super.key, required this.recording, this.margin = HomeRowShell.homeMargin});
 
   @override
   State<RecordingListItem> createState() => _RecordingListItemState();
@@ -105,6 +109,7 @@ class _RecordingListItemState extends State<RecordingListItem> {
           onDeleted: () => provider.delete(recording),
           child: HomeRowShell(
             key: ValueKey('rec_${recording.id}'),
+            margin: widget.margin,
             tile: HomeRowTile(
               child: busy
                   // The same spinner and failure mark a conversation's tile shows.

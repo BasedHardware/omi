@@ -12,8 +12,8 @@ recordings saved on this phone, held audio and pending deletes. The page turns e
 | --- | --- | --- |
 | Live | `HomeLiveRowView` | Anything is capturing. At most one, first in Today. The server's conversation in progress is drawn as its own `ConversationListItem` (live tile, "Listening" until titled, its length, no snippet); a call, Transcribe Later or a capture the server has not named yet get their own row. |
 | Finishing up… | `HomeFinishingRowView` | After End, until the server's row for it is listed or the finish settles. Follows the live row. Tapping opens the conversation once it exists, and says it will otherwise. |
-| Conversation | `ConversationListItem` | Every listed conversation in any state: done, transcribing, writing, failed. |
-| Saved recording | `RecordingListItem` | A recording held on this phone for the reader. Play, or Try Again when sending failed. |
+| Conversation | `ConversationListItem` | A listed conversation that is done, transcribing or writing. |
+| Saved recording | `RecordingListItem` | A recording from this phone while it is being sent or the server is processing it. |
 | Locked | `HomeLockedRowView` | A day's conversations and held audio over the plan's limit, as one row with their count and Unlock. |
 
 One prompt sits above the list at most: payment, then firmware, then voice profile,
@@ -26,8 +26,16 @@ quiet-payer row ("No recordings in 5 days", `QuietPayerRow`), which decides for 
 - A step that runs past its deadline says "Taking longer than usual", never "failed"
   (`HomeDeadlines`: 15 minutes for a conversation step, measured from when it finished;
   30 minutes for a saved recording the server accepted). Server work has no client timeout.
-- A failed conversation stays in place with "Summary failed" and Try Again. Activity
-  lists it too.
+- Home holds what is capturing, in progress, done or locked. Anything that needs the reader
+  is in Activity instead (`ActivityPage`):
+  - **Needs attention** lists a failed conversation with Try Again (`NeedsAttentionSection`).
+  - **On this phone** lists recordings kept only on this phone, waiting to be transcribed or
+    that could not be sent, in the same rows Home uses, with Transcribe all
+    (`OnThisPhoneSection`).
+- The bell's warning dot lights for a failed conversation until Activity has shown it, and
+  for as long as any recording is only on this phone (it may be the only copy).
+- A row that fails while Home is on screen leaves with one toast, "Couldn't finish …", whose
+  View opens Activity.
 - Live, Finishing up…, saved recordings and locked rows show only in Home's own view: no
   search, filter or selection. Showing short or discarded conversations widens the list;
   it is not a filter.

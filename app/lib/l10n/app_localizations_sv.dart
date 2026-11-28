@@ -15856,4 +15856,32 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Kolla';
+
+  @override
+  String get activityOnThisPhone => 'På den här telefonen';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count inspelningar, sparas bara på den här telefonen',
+      one: '1 inspelning, sparas bara på den här telefonen',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'Transkribera alla';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return 'Kunde inte slutföra ”$title”';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'En konversation kunde inte slutföras';
+
+  @override
+  String get homeRecordingCouldNotSend => 'En inspelning kunde inte skickas';
 }

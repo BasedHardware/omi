@@ -4770,5 +4770,11 @@
     "homeFinishingOpensWhenReady": "Отваря се веднага щом е готов",
     "quietPayerTitle": "Няма записи от 5 дни",
     "quietPayerMessage": "Проверете своя Omi.",
-    "quietPayerCheck": "Провери"
+    "quietPayerCheck": "Провери",
+    "activityOnThisPhone": "На този телефон",
+    "activityOnThisPhoneSummary": "{count, plural, =1{1 запис, запазен само на този телефон} other{{count} записа, запазени само на този телефон}}",
+    "activityTranscribeAll": "Транскрибирай всички",
+    "homeRowCouldNotFinish": "Не можа да се завърши „{title}“",
+    "homeRowCouldNotFinishUntitled": "Не можа да се завърши разговор",
+    "homeRecordingCouldNotSend": "Не можа да се изпрати запис"
 }

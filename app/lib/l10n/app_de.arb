@@ -4770,5 +4770,11 @@
     "homeFinishingOpensWhenReady": "Öffnet sich, sobald sie bereit ist",
     "quietPayerTitle": "Seit 5 Tagen keine Aufnahmen",
     "quietPayerMessage": "Prüfe dein Omi.",
-    "quietPayerCheck": "Prüfen"
+    "quietPayerCheck": "Prüfen",
+    "activityOnThisPhone": "Auf diesem Telefon",
+    "activityOnThisPhoneSummary": "{count, plural, =1{1 Aufnahme, nur auf diesem Telefon gespeichert} other{{count} Aufnahmen, nur auf diesem Telefon gespeichert}}",
+    "activityTranscribeAll": "Alle transkribieren",
+    "homeRowCouldNotFinish": "„{title}“ konnte nicht abgeschlossen werden",
+    "homeRowCouldNotFinishUntitled": "Eine Unterhaltung konnte nicht abgeschlossen werden",
+    "homeRecordingCouldNotSend": "Eine Aufnahme konnte nicht gesendet werden"
 }

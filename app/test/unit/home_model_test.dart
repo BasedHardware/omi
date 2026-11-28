@@ -60,7 +60,7 @@ void main() {
         convo('b', yesterday.add(const Duration(hours: 20))),
         convo('c', today.add(const Duration(hours: 12))),
       ],
-      saved: [saved('r', today.add(const Duration(hours: 10)))],
+      saved: [saved('r', today.add(const Duration(hours: 10)), state: LocalRecordingState.processing)],
     ));
     expect(model.days.map((d) => d.date), [today, yesterday]);
     expect(keys(model), ['c', 'saved_r', 'a', 'b']);
@@ -104,13 +104,26 @@ void main() {
     expect(keys(model), ['live']);
   });
 
-  test('failed conversations stay on Home; hidden and recording documents do not', () {
+  test('failed conversations are in Activity, not Home; neither are hidden or recording documents', () {
     final model = buildHome(HomeInputs(now: now, listed: [
       convo('failed', today, tile: ConversationTileState.failed),
+      convo('legacy-failed', today, status: ConversationStatus.failed),
       convo('hidden', today, homeHidden: true),
       convo('rec', today, recording: true),
+      convo('done', today),
     ]));
-    expect(keys(model), ['failed']);
+    expect(keys(model), ['done']);
+  });
+
+  test('a recording on this phone is on Home only while it is sent or processed', () {
+    final at = today.add(const Duration(hours: 9));
+    final model = buildHome(HomeInputs(now: now, listed: const [], saved: [
+      saved('waiting', at),
+      saved('failed', at, state: LocalRecordingState.failed),
+      saved('sending', at, state: LocalRecordingState.uploading),
+      saved('processing', at, state: LocalRecordingState.processing),
+    ]));
+    expect(keys(model), unorderedEquals(['saved_sending', 'saved_processing']));
   });
 
   test('rows pending delete are hidden', () {
@@ -150,17 +163,21 @@ void main() {
     expect((alone.rows.first as HomeLockedRow).count, 2);
   });
 
-  test('a failed live conversation keeps its place, whether v3- or legacy-shaped; a deleted one leaves', () {
+  test('a failed live conversation, v3- or legacy-shaped, does not stand for the live row and is not listed', () {
     final at = today.add(const Duration(hours: 9));
-    final legacyFailed = convo('lf', at, status: ConversationStatus.failed);
-    final model = buildHome(HomeInputs(
-      now: now,
-      listed: [convo('later', today.add(const Duration(hours: 13)))],
-      live: legacyFailed,
-      streaming: true,
-    ));
-    expect(keys(model), ['live', 'later', 'lf']);
-    expect((model.rows.first as HomeLiveRow).kind, HomeLiveKind.capture);
+    for (final failed in [
+      convo('lf', at, status: ConversationStatus.failed),
+      convo('vf', at, tile: ConversationTileState.failed),
+    ]) {
+      final model = buildHome(HomeInputs(
+        now: now,
+        listed: [failed, convo('later', today.add(const Duration(hours: 13)))],
+        live: failed,
+        streaming: true,
+      ));
+      expect(keys(model), ['live', 'later']);
+      expect((model.rows.first as HomeLiveRow).kind, HomeLiveKind.capture);
+    }
     final deleted =
         ServerConversation(id: 'del', createdAt: at, startedAt: at, structured: Structured('', ''), deleted: true);
     expect(keys(buildHome(HomeInputs(now: now, listed: const [], live: deleted))), isEmpty);

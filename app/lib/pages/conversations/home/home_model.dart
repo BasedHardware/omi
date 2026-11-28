@@ -5,7 +5,9 @@
 // Rules (SCA-5226, David 2026-11-27):
 //  - Home is v3 only. The live row is at most one row, first in Today, and Finishing… follows it.
 //  - Within a day, rows are newest first by start time.
-//  - Failed conversations stay in place with their Retry; they are not moved to Activity only.
+//  - Home holds what is capturing, in progress, done or locked. Anything that needs the reader (a
+//    failed conversation, a recording waiting on this phone or one that could not be sent) is in
+//    Activity instead, and the bell says so.
 //  - Locked conversations and held audio share one row per day.
 //  - Live, Finishing…, saved recordings and locked rows show only in the default (unfiltered) view.
 
@@ -88,7 +90,8 @@ final class HomeConversationRow extends HomeRow {
   String get key => conversation.id;
 }
 
-/// A recording held on this phone for the reader (Transcribe Later, or audio custody kept for them).
+/// A recording from this phone while it is being sent or the server is processing it. Waiting or
+/// failed recordings are in Activity.
 final class HomeSavedRow extends HomeRow {
   const HomeSavedRow(this.recording);
 
@@ -187,8 +190,13 @@ DateTime homeDay(DateTime t) {
 
 DateTime _startOf(ServerConversation c) => c.startedAt ?? c.createdAt;
 
-/// Whether the server lists [c] on Home. Failed rows stay: they carry their own Retry.
-bool listedOnHome(ServerConversation c) => c.v3?.homeHidden != true && c.v3?.recording != true;
+/// Whether the server lists [c] on Home. A failed one is in Activity, with its Try Again.
+bool listedOnHome(ServerConversation c) =>
+    c.v3?.homeHidden != true && c.v3?.recording != true && !isFailedConversation(c);
+
+/// Whether a recording on this phone is on Home: only while it is being sent or processed. One
+/// waiting to be sent, or one that could not be, is in Activity.
+bool savedOnHome(LocalRecording r) => r.isBusy;
 
 /// Whether the server's conversation in progress can stand for the live row. A failed one (v3- or
 /// legacy-shaped, [isFailedConversation]) cannot.
@@ -249,13 +257,7 @@ HomeModel buildHome(HomeInputs i) {
   final lockedByDay = <DateTime, List<ServerConversation>>{};
   var index = 0;
   final seen = <String>{};
-  // A conversation in progress that cannot stand for the live row because it failed is still a
-  // conversation: it keeps its place in the list, even before the list read brings it. A deleted or
-  // discarded one is not listed.
-  final live = i.live;
-  final strandedLive =
-      i.defaultView && live != null && liveId == null && !live.deleted && !live.discarded ? live : null;
-  for (final c in [...i.listed, if (strandedLive != null) strandedLive]) {
+  for (final c in i.listed) {
     final at = index++;
     if (!seen.add(c.id) || c.id == liveId || i.hiddenIds.contains(c.id) || !listedOnHome(c)) continue;
     final day = homeDay(_startOf(c));
@@ -267,7 +269,7 @@ HomeModel buildHome(HomeInputs i) {
   }
 
   if (i.defaultView) {
-    for (final r in i.saved) {
+    for (final r in i.saved.where(savedOnHome)) {
       add(homeDay(r.startedAt), r.startedAt, HomeSavedRow(r));
     }
     final heldByDay = <DateTime, List<HeldAudioRecording>>{};

@@ -4770,5 +4770,11 @@
     "homeFinishingOpensWhenReady": "Atsidarys, kai tik bus paruošta",
     "quietPayerTitle": "5 dienas nėra įrašų",
     "quietPayerMessage": "Patikrinkite savo Omi.",
-    "quietPayerCheck": "Patikrinti"
+    "quietPayerCheck": "Patikrinti",
+    "activityOnThisPhone": "Šiame telefone",
+    "activityOnThisPhoneSummary": "{count, plural, =1{1 įrašas, saugomas tik šiame telefone} other{{count} įrašų, saugomų tik šiame telefone}}",
+    "activityTranscribeAll": "Transkribuoti visus",
+    "homeRowCouldNotFinish": "Nepavyko užbaigti „{title}“",
+    "homeRowCouldNotFinishUntitled": "Nepavyko užbaigti pokalbio",
+    "homeRecordingCouldNotSend": "Nepavyko išsiųsti įrašo"
 }

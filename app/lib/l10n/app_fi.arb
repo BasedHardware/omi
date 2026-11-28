@@ -4770,5 +4770,11 @@
     "homeFinishingOpensWhenReady": "Aukeaa heti, kun se on valmis",
     "quietPayerTitle": "Ei tallenteita 5 päivään",
     "quietPayerMessage": "Tarkista Omisi.",
-    "quietPayerCheck": "Tarkista"
+    "quietPayerCheck": "Tarkista",
+    "activityOnThisPhone": "Tässä puhelimessa",
+    "activityOnThisPhoneSummary": "{count, plural, =1{1 nauhoitus, joka on vain tässä puhelimessa} other{{count} nauhoitusta, jotka ovat vain tässä puhelimessa}}",
+    "activityTranscribeAll": "Transkriboi kaikki",
+    "homeRowCouldNotFinish": "Keskustelua ”{title}” ei saatu valmiiksi",
+    "homeRowCouldNotFinishUntitled": "Keskustelua ei saatu valmiiksi",
+    "homeRecordingCouldNotSend": "Nauhoitusta ei voitu lähettää"
 }

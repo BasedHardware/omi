@@ -15877,4 +15877,32 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Verificar';
+
+  @override
+  String get activityOnThisPhone => 'Neste telefone';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count gravações, mantidas somente neste telefone',
+      one: '1 gravação, mantida somente neste telefone',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'Transcrever tudo';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return 'Não foi possível concluir “$title”';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'Não foi possível concluir uma conversa';
+
+  @override
+  String get homeRecordingCouldNotSend => 'Não foi possível enviar uma gravação';
 }

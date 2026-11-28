@@ -15621,4 +15621,32 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get quietPayerCheck => '확인';
+
+  @override
+  String get activityOnThisPhone => '이 휴대폰에만 있음';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '녹음 $count개, 이 휴대폰에만 저장됨',
+      one: '녹음 1개, 이 휴대폰에만 저장됨',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => '모두 텍스트 변환';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return '“$title”을(를) 완료하지 못했습니다';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => '대화를 완료하지 못했습니다';
+
+  @override
+  String get homeRecordingCouldNotSend => '녹음을 전송하지 못했습니다';
 }

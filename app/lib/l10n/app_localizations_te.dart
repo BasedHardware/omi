@@ -15912,4 +15912,32 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'తనిఖీ';
+
+  @override
+  String get activityOnThisPhone => 'ఈ ఫోన్‌లో';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count రికార్డింగ్‌లు, ఈ ఫోన్‌లో మాత్రమే ఉంచబడ్డాయి',
+      one: '1 రికార్డింగ్, ఈ ఫోన్‌లో మాత్రమే ఉంచబడింది',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'అన్నింటినీ ట్రాన్స్‌క్రైబ్ చేయండి';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return '“$title” పూర్తి కాలేదు';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'ఒక సంభాషణ పూర్తి కాలేదు';
+
+  @override
+  String get homeRecordingCouldNotSend => 'ఒక రికార్డింగ్ పంపబడలేదు';
 }

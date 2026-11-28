@@ -15913,4 +15913,32 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Verifică';
+
+  @override
+  String get activityOnThisPhone => 'Pe acest telefon';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count înregistrări, păstrate doar pe acest telefon',
+      one: '1 înregistrare, păstrată doar pe acest telefon',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'Transcrie tot';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return 'Nu s-a putut finaliza „$title”';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'Nu s-a putut finaliza o conversație';
+
+  @override
+  String get homeRecordingCouldNotSend => 'Nu s-a putut trimite o înregistrare';
 }

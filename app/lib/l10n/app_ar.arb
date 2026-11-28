@@ -4770,5 +4770,11 @@
     "homeFinishingOpensWhenReady": "ستُفتح بمجرد أن تجهز",
     "quietPayerTitle": "لا توجد تسجيلات منذ 5 أيام",
     "quietPayerMessage": "تحقّق من Omi.",
-    "quietPayerCheck": "تحقّق"
+    "quietPayerCheck": "تحقّق",
+    "activityOnThisPhone": "على هذا الهاتف",
+    "activityOnThisPhoneSummary": "{count, plural, =1{1 تسجيل، محفوظ على هذا الهاتف فقط} other{{count} تسجيلات، محفوظة على هذا الهاتف فقط}}",
+    "activityTranscribeAll": "تحويل الكل إلى نص",
+    "homeRowCouldNotFinish": "تعذّر إكمال «{title}»",
+    "homeRowCouldNotFinishUntitled": "تعذّر إكمال محادثة",
+    "homeRecordingCouldNotSend": "تعذّر إرسال تسجيل"
 }

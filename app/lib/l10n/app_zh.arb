@@ -4770,5 +4770,11 @@
     "homeFinishingOpensWhenReady": "准备好后会立即打开",
     "quietPayerTitle": "5 天没有录音",
     "quietPayerMessage": "请检查你的 Omi。",
-    "quietPayerCheck": "检查"
+    "quietPayerCheck": "检查",
+    "activityOnThisPhone": "在此手机上",
+    "activityOnThisPhoneSummary": "{count, plural, =1{1 条录音，仅保存在此手机上} other{{count} 条录音，仅保存在此手机上}}",
+    "activityTranscribeAll": "全部转写",
+    "homeRowCouldNotFinish": "“{title}”未能完成",
+    "homeRowCouldNotFinishUntitled": "一个对话未能完成",
+    "homeRecordingCouldNotSend": "一条录音未能发送"
 }

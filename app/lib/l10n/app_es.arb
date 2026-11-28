@@ -4770,5 +4770,11 @@
     "homeFinishingOpensWhenReady": "Se abre en cuanto esté lista",
     "quietPayerTitle": "Sin grabaciones en 5 días",
     "quietPayerMessage": "Revisa tu Omi.",
-    "quietPayerCheck": "Revisar"
+    "quietPayerCheck": "Revisar",
+    "activityOnThisPhone": "En este teléfono",
+    "activityOnThisPhoneSummary": "{count, plural, =1{1 grabación, conservada solo en este teléfono} other{{count} grabaciones, conservadas solo en este teléfono}}",
+    "activityTranscribeAll": "Transcribir todo",
+    "homeRowCouldNotFinish": "No se pudo completar “{title}”",
+    "homeRowCouldNotFinishUntitled": "No se pudo completar una conversación",
+    "homeRecordingCouldNotSend": "No se pudo enviar una grabación"
 }

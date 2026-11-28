@@ -4770,5 +4770,11 @@
     "homeFinishingOpensWhenReady": "Åpnes så snart den er klar",
     "quietPayerTitle": "Ingen opptak på 5 dager",
     "quietPayerMessage": "Sjekk Omi-en din.",
-    "quietPayerCheck": "Sjekk"
+    "quietPayerCheck": "Sjekk",
+    "activityOnThisPhone": "På denne telefonen",
+    "activityOnThisPhoneSummary": "{count, plural, =1{1 opptak, finnes bare på denne telefonen} other{{count} opptak, finnes bare på denne telefonen}}",
+    "activityTranscribeAll": "Transkriber alle",
+    "homeRowCouldNotFinish": "Kunne ikke fullføre «{title}»",
+    "homeRowCouldNotFinishUntitled": "En samtale kunne ikke fullføres",
+    "homeRecordingCouldNotSend": "Et opptak kunne ikke sendes"
 }

@@ -15871,4 +15871,32 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Patikrinti';
+
+  @override
+  String get activityOnThisPhone => 'Šiame telefone';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count įrašų, saugomų tik šiame telefone',
+      one: '1 įrašas, saugomas tik šiame telefone',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'Transkribuoti visus';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return 'Nepavyko užbaigti „$title“';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'Nepavyko užbaigti pokalbio';
+
+  @override
+  String get homeRecordingCouldNotSend => 'Nepavyko išsiųsti įrašo';
 }

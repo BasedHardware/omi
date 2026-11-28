@@ -4770,5 +4770,11 @@
     "homeFinishingOpensWhenReady": "Ανοίγει μόλις είναι έτοιμη",
     "quietPayerTitle": "Καμία ηχογράφηση εδώ και 5 ημέρες",
     "quietPayerMessage": "Έλεγξε το Omi σου.",
-    "quietPayerCheck": "Έλεγχος"
+    "quietPayerCheck": "Έλεγχος",
+    "activityOnThisPhone": "Σε αυτό το τηλέφωνο",
+    "activityOnThisPhoneSummary": "{count, plural, =1{1 ηχογράφηση, αποθηκευμένη μόνο σε αυτό το τηλέφωνο} other{{count} ηχογραφήσεις, αποθηκευμένες μόνο σε αυτό το τηλέφωνο}}",
+    "activityTranscribeAll": "Μεταγραφή όλων",
+    "homeRowCouldNotFinish": "Δεν ολοκληρώθηκε η «{title}»",
+    "homeRowCouldNotFinishUntitled": "Δεν ολοκληρώθηκε μια συνομιλία",
+    "homeRecordingCouldNotSend": "Δεν ήταν δυνατή η αποστολή μιας ηχογράφησης"
 }

@@ -4770,5 +4770,11 @@
     "homeFinishingOpensWhenReady": "Si aprirà appena sarà pronta",
     "quietPayerTitle": "Nessuna registrazione da 5 giorni",
     "quietPayerMessage": "Controlla il tuo Omi.",
-    "quietPayerCheck": "Controlla"
+    "quietPayerCheck": "Controlla",
+    "activityOnThisPhone": "Su questo telefono",
+    "activityOnThisPhoneSummary": "{count, plural, =1{1 registrazione, conservata solo su questo telefono} other{{count} registrazioni, conservate solo su questo telefono}}",
+    "activityTranscribeAll": "Trascrivi tutto",
+    "homeRowCouldNotFinish": "Impossibile completare «{title}»",
+    "homeRowCouldNotFinishUntitled": "Impossibile completare una conversazione",
+    "homeRecordingCouldNotSend": "Impossibile inviare una registrazione"
 }

@@ -19,7 +19,14 @@ class HomeRowShell extends StatelessWidget {
     this.semanticsHint,
     this.border,
     this.actionTrailing = false,
+    this.margin = homeMargin,
   });
+
+  /// Home's gap above a row and its sides.
+  static const EdgeInsets homeMargin = EdgeInsets.only(top: 8, left: 16, right: 16);
+
+  /// Inside a list that already has its sides (Activity): the gap above only.
+  static const EdgeInsets listMargin = EdgeInsets.only(top: 8);
 
   final Widget tile;
   final String title;
@@ -41,6 +48,9 @@ class HomeRowShell extends StatelessWidget {
   /// [trailing] is its own button (Retry, play): screen readers reach it separately. Otherwise
   /// the row reads as one button with [semanticsLabel].
   final bool actionTrailing;
+
+  /// Space around the card: [homeMargin] on Home, [listMargin] where the list has its own sides.
+  final EdgeInsets margin;
 
   /// The subtitle style of every Home row, the conversation meta line included.
   static TextStyle get subtitleStyle => OmiType.subhead.copyWith(color: OmiColors.textTertiary);
@@ -65,7 +75,7 @@ class HomeRowShell extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
               ));
     return Padding(
-      padding: const EdgeInsets.only(top: 8, left: 16, right: 16),
+      padding: margin,
       child: Semantics(
         button: onTap != null,
         label: semanticsLabel ?? [title, if (subtitle != null) subtitle].join(', '),

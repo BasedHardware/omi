@@ -15840,4 +15840,32 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Kontrolli';
+
+  @override
+  String get activityOnThisPhone => 'Selles telefonis';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count salvestist, mis on ainult selles telefonis',
+      one: '1 salvestis, mis on ainult selles telefonis',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'Transkribeeri kõik';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return 'Vestlust „$title“ ei õnnestunud lõpetada';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'Vestlust ei õnnestunud lõpetada';
+
+  @override
+  String get homeRecordingCouldNotSend => 'Salvestist ei õnnestunud saata';
 }

@@ -15906,4 +15906,32 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Megnézem';
+
+  @override
+  String get activityOnThisPhone => 'Ezen a telefonon';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count felvétel, csak ezen a telefonon tárolva',
+      one: '1 felvétel, csak ezen a telefonon tárolva',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'Összes felvétel átírása';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return 'Nem sikerült befejezni: „$title”';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'Nem sikerült befejezni egy beszélgetést';
+
+  @override
+  String get homeRecordingCouldNotSend => 'Nem sikerült elküldeni egy felvételt';
 }

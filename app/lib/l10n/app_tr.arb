@@ -4805,5 +4805,11 @@
     "homeFinishingOpensWhenReady": "Hazır olur olmaz açılır",
     "quietPayerTitle": "5 gündür kayıt yok",
     "quietPayerMessage": "Omi'ni kontrol et.",
-    "quietPayerCheck": "Kontrol Et"
+    "quietPayerCheck": "Kontrol Et",
+    "activityOnThisPhone": "Bu telefonda",
+    "activityOnThisPhoneSummary": "{count, plural, =1{1 kayıt, yalnızca bu telefonda saklanıyor} other{{count} kayıt, yalnızca bu telefonda saklanıyor}}",
+    "activityTranscribeAll": "Tümünü yazıya dök",
+    "homeRowCouldNotFinish": "“{title}” tamamlanamadı",
+    "homeRowCouldNotFinishUntitled": "Bir konuşma tamamlanamadı",
+    "homeRecordingCouldNotSend": "Bir kayıt gönderilemedi"
 }

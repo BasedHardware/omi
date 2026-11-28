@@ -12327,5 +12327,11 @@
     "homeFinishingOpensWhenReady": "Odpre se takoj, ko bo pripravljen",
     "quietPayerTitle": "Ni posnetkov že 5 dni",
     "quietPayerMessage": "Preverite svoj Omi.",
-    "quietPayerCheck": "Preveri"
+    "quietPayerCheck": "Preveri",
+    "activityOnThisPhone": "Na tem telefonu",
+    "activityOnThisPhoneSummary": "{count, plural, =1{1 posnetek, shranjen samo na tem telefonu} other{{count} posnetkov, shranjenih samo na tem telefonu}}",
+    "activityTranscribeAll": "Prepiši vse",
+    "homeRowCouldNotFinish": "Ni bilo mogoče dokončati „{title}“",
+    "homeRowCouldNotFinishUntitled": "Pogovora ni bilo mogoče dokončati",
+    "homeRecordingCouldNotSend": "Posnetka ni bilo mogoče poslati"
 }

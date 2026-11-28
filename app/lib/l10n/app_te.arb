@@ -12327,5 +12327,11 @@
     "homeFinishingOpensWhenReady": "సిద్ధమవగానే తెరుచుకుంటుంది",
     "quietPayerTitle": "5 రోజులుగా రికార్డింగ్‌లు లేవు",
     "quietPayerMessage": "మీ Omiని తనిఖీ చేయండి.",
-    "quietPayerCheck": "తనిఖీ"
+    "quietPayerCheck": "తనిఖీ",
+    "activityOnThisPhone": "ఈ ఫోన్‌లో",
+    "activityOnThisPhoneSummary": "{count, plural, =1{1 రికార్డింగ్, ఈ ఫోన్‌లో మాత్రమే ఉంచబడింది} other{{count} రికార్డింగ్‌లు, ఈ ఫోన్‌లో మాత్రమే ఉంచబడ్డాయి}}",
+    "activityTranscribeAll": "అన్నింటినీ ట్రాన్స్‌క్రైబ్ చేయండి",
+    "homeRowCouldNotFinish": "“{title}” పూర్తి కాలేదు",
+    "homeRowCouldNotFinishUntitled": "ఒక సంభాషణ పూర్తి కాలేదు",
+    "homeRecordingCouldNotSend": "ఒక రికార్డింగ్ పంపబడలేదు"
 }

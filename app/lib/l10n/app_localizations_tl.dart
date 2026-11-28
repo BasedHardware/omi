@@ -15975,4 +15975,32 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Tingnan';
+
+  @override
+  String get activityOnThisPhone => 'Sa teleponong ito';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count recording, nakaimbak lang sa teleponong ito',
+      one: '1 recording, nakaimbak lang sa teleponong ito',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'I-transcribe ang lahat';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return 'Hindi natapos ang “$title”';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'Hindi natapos ang isang pag-uusap';
+
+  @override
+  String get homeRecordingCouldNotSend => 'Hindi naipadala ang isang recording';
 }

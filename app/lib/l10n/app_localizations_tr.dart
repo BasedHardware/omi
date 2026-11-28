@@ -15859,4 +15859,32 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Kontrol Et';
+
+  @override
+  String get activityOnThisPhone => 'Bu telefonda';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kayıt, yalnızca bu telefonda saklanıyor',
+      one: '1 kayıt, yalnızca bu telefonda saklanıyor',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'Tümünü yazıya dök';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return '“$title” tamamlanamadı';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'Bir konuşma tamamlanamadı';
+
+  @override
+  String get homeRecordingCouldNotSend => 'Bir kayıt gönderilemedi';
 }

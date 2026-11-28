@@ -15887,4 +15887,32 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Semak';
+
+  @override
+  String get activityOnThisPhone => 'Pada telefon ini';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count rakaman, disimpan hanya pada telefon ini',
+      one: '1 rakaman, disimpan hanya pada telefon ini',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'Transkrip semua';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return 'Tidak dapat menyelesaikan “$title”';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'Perbualan tidak dapat diselesaikan';
+
+  @override
+  String get homeRecordingCouldNotSend => 'Rakaman tidak dapat dihantar';
 }

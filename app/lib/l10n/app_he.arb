@@ -12327,5 +12327,11 @@
     "homeFinishingOpensWhenReady": "תיפתח ברגע שתהיה מוכנה",
     "quietPayerTitle": "אין הקלטות כבר 5 ימים",
     "quietPayerMessage": "בדקו את ה-Omi שלכם.",
-    "quietPayerCheck": "בדיקה"
+    "quietPayerCheck": "בדיקה",
+    "activityOnThisPhone": "בטלפון הזה",
+    "activityOnThisPhoneSummary": "{count, plural, =1{הקלטה אחת, נשמרת בטלפון הזה בלבד} other{{count} הקלטות, נשמרות בטלפון הזה בלבד}}",
+    "activityTranscribeAll": "תמלל הכל",
+    "homeRowCouldNotFinish": "לא ניתן היה לסיים את “{title}”",
+    "homeRowCouldNotFinishUntitled": "לא ניתן היה לסיים שיחה",
+    "homeRecordingCouldNotSend": "לא ניתן היה לשלוח הקלטה"
 }

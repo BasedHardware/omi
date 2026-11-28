@@ -4805,5 +4805,11 @@
     "homeFinishingOpensWhenReady": "Otworzy się, gdy tylko będzie gotowa",
     "quietPayerTitle": "Brak nagrań od 5 dni",
     "quietPayerMessage": "Sprawdź swoje Omi.",
-    "quietPayerCheck": "Sprawdź"
+    "quietPayerCheck": "Sprawdź",
+    "activityOnThisPhone": "Na tym telefonie",
+    "activityOnThisPhoneSummary": "{count, plural, =1{1 nagranie, zapisane tylko na tym telefonie} other{{count} nagrań, zapisane tylko na tym telefonie}}",
+    "activityTranscribeAll": "Transkrybuj wszystkie",
+    "homeRowCouldNotFinish": "Nie udało się ukończyć „{title}”",
+    "homeRowCouldNotFinishUntitled": "Nie udało się ukończyć rozmowy",
+    "homeRecordingCouldNotSend": "Nie udało się wysłać nagrania"
 }

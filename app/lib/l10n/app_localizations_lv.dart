@@ -15882,4 +15882,32 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Pārbaudīt';
+
+  @override
+  String get activityOnThisPhone => 'Šajā tālrunī';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ieraksti, saglabāti tikai šajā tālrunī',
+      one: '1 ieraksts, saglabāts tikai šajā tālrunī',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'Transkribēt visus';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return 'Neizdevās pabeigt „$title“';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'Neizdevās pabeigt sarunu';
+
+  @override
+  String get homeRecordingCouldNotSend => 'Ierakstu nevarēja nosūtīt';
 }

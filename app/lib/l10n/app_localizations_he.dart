@@ -15732,4 +15732,32 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'בדיקה';
+
+  @override
+  String get activityOnThisPhone => 'בטלפון הזה';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count הקלטות, נשמרות בטלפון הזה בלבד',
+      one: 'הקלטה אחת, נשמרת בטלפון הזה בלבד',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'תמלל הכל';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return 'לא ניתן היה לסיים את “$title”';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'לא ניתן היה לסיים שיחה';
+
+  @override
+  String get homeRecordingCouldNotSend => 'לא ניתן היה לשלוח הקלטה';
 }

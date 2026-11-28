@@ -4770,5 +4770,11 @@
     "homeFinishingOpensWhenReady": "Avaneb niipea, kui see on valmis",
     "quietPayerTitle": "5 päeva pole salvestisi",
     "quietPayerMessage": "Kontrolli oma Omit.",
-    "quietPayerCheck": "Kontrolli"
+    "quietPayerCheck": "Kontrolli",
+    "activityOnThisPhone": "Selles telefonis",
+    "activityOnThisPhoneSummary": "{count, plural, =1{1 salvestis, mis on ainult selles telefonis} other{{count} salvestist, mis on ainult selles telefonis}}",
+    "activityTranscribeAll": "Transkribeeri kõik",
+    "homeRowCouldNotFinish": "Vestlust „{title}“ ei õnnestunud lõpetada",
+    "homeRowCouldNotFinishUntitled": "Vestlust ei õnnestunud lõpetada",
+    "homeRecordingCouldNotSend": "Salvestist ei õnnestunud saata"
 }

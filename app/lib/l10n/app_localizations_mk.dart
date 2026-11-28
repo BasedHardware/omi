@@ -15913,4 +15913,32 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Провери';
+
+  @override
+  String get activityOnThisPhone => 'На овој телефон';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count записи, зачувани само на овој телефон',
+      one: '1 запис, зачуван само на овој телефон',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'Транскрибирај ги сите';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return '„$title“ не можеше да се заврши';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'Разговорот не можеше да се заврши';
+
+  @override
+  String get homeRecordingCouldNotSend => 'Записот не можеше да се испрати';
 }

@@ -15,10 +15,12 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/review.dart';
 import 'package:omi/pages/activity/activity_seen.dart';
 import 'package:omi/pages/activity/needs_attention_section.dart';
+import 'package:omi/pages/activity/on_this_phone_section.dart';
 import 'package:omi/pages/activity/past_processing_section.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:omi/providers/episode_provider.dart';
+import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/pages/conversations/widgets/capture_continuity_dogfood_banner.dart';
 import 'package:omi/pages/on_device/on_device_queue_banner.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
@@ -42,7 +44,8 @@ Future<({List<DailySummary> items, bool ok})> _loadActivityRecaps() => getDailyS
 /// and only for the delight items that light Home's bell.
 ///
 /// Work that could not finish sits above the feed in a Needs attention section; showing it marks it
-/// seen on every device.
+/// seen on every device. Recordings kept only on this phone (waiting to be transcribed, or that
+/// could not be sent) follow in On this phone; Home shows neither (SCA-5226).
 class ActivityPage extends StatefulWidget {
   const ActivityPage({
     super.key,
@@ -138,6 +141,10 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
     // A daily-summary notification while Activity is on screen shows here, not only on Home.
     _arrivals = recapArrivals.listen((_) => _refresh());
     _refresh();
+    // On this phone reads the recordings ledger: make it current for this visit.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(context.read<LocalRecordingsProvider?>()?.refresh());
+    });
   }
 
   /// A recap made while the app was in the background shows here on return, not just on Home.
@@ -221,9 +228,11 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
 
   Future<void> _refreshManually() async {
     final conversations = context.read<ConversationProvider?>();
+    final recordings = context.read<LocalRecordingsProvider?>();
     await Future.wait<void>([
       _refresh(),
       if (conversations != null) conversations.forceRefreshConversations(reconcileHeldRecordings: true),
+      if (recordings != null) recordings.refresh(),
     ]);
   }
 
@@ -302,7 +311,8 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
       attentionIds: _pendingWork.attentionConversationIds,
     );
     final hasAttention = processing.isNotEmpty ||
-        NeedsAttentionSection.hasContent(_pendingWork, context.watch<SyncProvider?>(), _captureMonitor, failures);
+        NeedsAttentionSection.hasContent(_pendingWork, context.watch<SyncProvider?>(), _captureMonitor, failures) ||
+        OnThisPhoneSection.hasContent(context.watch<LocalRecordingsProvider?>());
     final Widget body;
     if (_loading) {
       body = const OmiLoadingState();
@@ -372,6 +382,7 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
                 child: OmiPartialNotice(message: l.activityLoadFailed, onRetry: _refreshManually),
               ),
             attention,
+            const OnThisPhoneSection(),
             PastProcessingSection(conversations: processing),
             for (final (header, items) in groups) ...[
               _DayHeader(label: header),

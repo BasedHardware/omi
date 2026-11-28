@@ -4805,5 +4805,11 @@
     "homeFinishingOpensWhenReady": "Terbuka begitu siap",
     "quietPayerTitle": "Tidak ada rekaman dalam 5 hari",
     "quietPayerMessage": "Periksa Omi Anda.",
-    "quietPayerCheck": "Periksa"
+    "quietPayerCheck": "Periksa",
+    "activityOnThisPhone": "Di ponsel ini",
+    "activityOnThisPhoneSummary": "{count, plural, =1{1 rekaman, hanya disimpan di ponsel ini} other{{count} rekaman, hanya disimpan di ponsel ini}}",
+    "activityTranscribeAll": "Transkripsikan Semua",
+    "homeRowCouldNotFinish": "Tidak dapat menyelesaikan “{title}”",
+    "homeRowCouldNotFinishUntitled": "Percakapan tidak dapat diselesaikan",
+    "homeRecordingCouldNotSend": "Rekaman tidak dapat dikirim"
 }

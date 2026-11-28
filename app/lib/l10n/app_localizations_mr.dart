@@ -15856,4 +15856,32 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'तपासा';
+
+  @override
+  String get activityOnThisPhone => 'या फोनवर';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count रेकॉर्डिंग, फक्त या फोनवर साठवले आहेत',
+      one: '1 रेकॉर्डिंग, फक्त या फोनवर साठवले आहे',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'सर्व रेकॉर्डिंग ट्रान्सक्राइब करा';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return '“$title” पूर्ण होऊ शकले नाही';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'संभाषण पूर्ण होऊ शकले नाही';
+
+  @override
+  String get homeRecordingCouldNotSend => 'रेकॉर्डिंग पाठवले जाऊ शकले नाही';
 }

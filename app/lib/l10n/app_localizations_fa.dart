@@ -15842,4 +15842,32 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'بررسی';
+
+  @override
+  String get activityOnThisPhone => 'روی این گوشی';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ضبط، فقط روی این گوشی ذخیره شده‌اند',
+      one: '1 ضبط، فقط روی این گوشی ذخیره شده',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'همه را رونویسی کنید';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return '«$title» کامل نشد';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'یک گفتگو کامل نشد';
+
+  @override
+  String get homeRecordingCouldNotSend => 'یک ضبط ارسال نشد';
 }

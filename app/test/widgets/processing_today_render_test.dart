@@ -574,8 +574,8 @@ void main() {
       await tester.pumpWidget(RepaintBoundary(
           key: boundary, child: await buildTypedConversationScreen(provider, pendingWork: store, theme: _theme())));
       await _capture(tester, boundary, '${after ? '012' : '011'}-mobile-ios-home-failed-${after ? 'after' : 'before'}');
-      // A failed row stays on Home with its Retry (David 2026-11-27, SCA-5226), whatever Activity shows.
-      expect(find.byWidgetPredicate((w) => w is ConversationListItem && w.conversation.id == 'failed'), findsOneWidget);
+      // A failed conversation is in Activity, with its Try Again, not on Home (SCA-5226).
+      expect(find.byWidgetPredicate((w) => w is ConversationListItem && w.conversation.id == 'failed'), findsNothing);
       expect(find.text('Coffee with Maya'), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
       debugDefaultTargetPlatformOverride = null;

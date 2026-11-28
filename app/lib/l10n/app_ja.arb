@@ -4770,5 +4770,11 @@
     "homeFinishingOpensWhenReady": "準備ができ次第開きます",
     "quietPayerTitle": "5日間録音がありません",
     "quietPayerMessage": "Omiを確認してください。",
-    "quietPayerCheck": "確認"
+    "quietPayerCheck": "確認",
+    "activityOnThisPhone": "この端末のみ",
+    "activityOnThisPhoneSummary": "{count, plural, =1{1件の録音（この端末のみに保存）} other{{count}件の録音（この端末のみに保存）}}",
+    "activityTranscribeAll": "すべて文字起こし",
+    "homeRowCouldNotFinish": "「{title}」を完了できませんでした",
+    "homeRowCouldNotFinishUntitled": "会話を完了できませんでした",
+    "homeRecordingCouldNotSend": "録音を送信できませんでした"
 }

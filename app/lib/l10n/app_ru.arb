@@ -4805,5 +4805,11 @@
     "homeFinishingOpensWhenReady": "Откроется, как только будет готов",
     "quietPayerTitle": "Нет записей 5 дней",
     "quietPayerMessage": "Проверьте свой Omi.",
-    "quietPayerCheck": "Проверить"
+    "quietPayerCheck": "Проверить",
+    "activityOnThisPhone": "На этом телефоне",
+    "activityOnThisPhoneSummary": "{count, plural, =1{1 запись, хранится только на этом телефоне} other{{count} записей, хранятся только на этом телефоне}}",
+    "activityTranscribeAll": "Транскрибировать все",
+    "homeRowCouldNotFinish": "Не удалось завершить «{title}»",
+    "homeRowCouldNotFinishUntitled": "Не удалось завершить разговор",
+    "homeRecordingCouldNotSend": "Не удалось отправить запись"
 }

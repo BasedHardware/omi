@@ -15900,4 +15900,32 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'ಪರಿಶೀಲಿಸಿ';
+
+  @override
+  String get activityOnThisPhone => 'ಈ ಫೋನ್‌ನಲ್ಲಿ';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು, ಈ ಫೋನ್‌ನಲ್ಲಿ ಮಾತ್ರ ಸಂಗ್ರಹಿಸಲಾಗಿದೆ',
+      one: '1 ರೆಕಾರ್ಡಿಂಗ್, ಈ ಫೋನ್‌ನಲ್ಲಿ ಮಾತ್ರ ಸಂಗ್ರಹಿಸಲಾಗಿದೆ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'ಎಲ್ಲವನ್ನೂ ಟ್ರಾನ್ಸ್‌ಕ್ರೈಬ್ ಮಾಡಿ';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return '“$title” ಪೂರ್ಣಗೊಳಿಸಲಾಗಲಿಲ್ಲ';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'ಸಂವಾದವನ್ನು ಪೂರ್ಣಗೊಳಿಸಲಾಗಲಿಲ್ಲ';
+
+  @override
+  String get homeRecordingCouldNotSend => 'ರೆಕಾರ್ಡಿಂಗ್ ಅನ್ನು ಕಳುಹಿಸಲಾಗಲಿಲ್ಲ';
 }

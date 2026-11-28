@@ -15953,4 +15953,32 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Έλεγχος';
+
+  @override
+  String get activityOnThisPhone => 'Σε αυτό το τηλέφωνο';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ηχογραφήσεις, αποθηκευμένες μόνο σε αυτό το τηλέφωνο',
+      one: '1 ηχογράφηση, αποθηκευμένη μόνο σε αυτό το τηλέφωνο',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'Μεταγραφή όλων';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return 'Δεν ολοκληρώθηκε η «$title»';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'Δεν ολοκληρώθηκε μια συνομιλία';
+
+  @override
+  String get homeRecordingCouldNotSend => 'Δεν ήταν δυνατή η αποστολή μιας ηχογράφησης';
 }

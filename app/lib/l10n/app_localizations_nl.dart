@@ -15889,4 +15889,32 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Controleren';
+
+  @override
+  String get activityOnThisPhone => 'Op deze telefoon';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count opnames, alleen op deze telefoon bewaard',
+      one: '1 opname, alleen op deze telefoon bewaard',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'Alles transcriberen';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return 'Kon ‘$title’ niet voltooien';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'Een gesprek kon niet worden voltooid';
+
+  @override
+  String get homeRecordingCouldNotSend => 'Een opname kon niet worden verzonden';
 }

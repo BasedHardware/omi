@@ -15860,4 +15860,32 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'چیک کریں';
+
+  @override
+  String get activityOnThisPhone => 'اس فون پر';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ریکارڈنگز، صرف اس فون پر محفوظ ہیں',
+      one: '1 ریکارڈنگ، صرف اس فون پر محفوظ ہے',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'سب ٹرانسکرائب کریں';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return '“$title” مکمل نہیں ہو سکی';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'ایک بات چیت مکمل نہیں ہو سکی';
+
+  @override
+  String get homeRecordingCouldNotSend => 'ایک ریکارڈنگ بھیجی نہیں جا سکی';
 }

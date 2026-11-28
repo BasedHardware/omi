@@ -4770,5 +4770,11 @@
     "homeFinishingOpensWhenReady": "Se deschide imediat ce este gata",
     "quietPayerTitle": "Nicio înregistrare de 5 zile",
     "quietPayerMessage": "Verifică-ți Omi.",
-    "quietPayerCheck": "Verifică"
+    "quietPayerCheck": "Verifică",
+    "activityOnThisPhone": "Pe acest telefon",
+    "activityOnThisPhoneSummary": "{count, plural, =1{1 înregistrare, păstrată doar pe acest telefon} other{{count} înregistrări, păstrate doar pe acest telefon}}",
+    "activityTranscribeAll": "Transcrie tot",
+    "homeRowCouldNotFinish": "Nu s-a putut finaliza „{title}”",
+    "homeRowCouldNotFinishUntitled": "Nu s-a putut finaliza o conversație",
+    "homeRecordingCouldNotSend": "Nu s-a putut trimite o înregistrare"
 }

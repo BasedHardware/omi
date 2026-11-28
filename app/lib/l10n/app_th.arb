@@ -4770,5 +4770,11 @@
     "homeFinishingOpensWhenReady": "จะเปิดทันทีที่พร้อม",
     "quietPayerTitle": "ไม่มีการบันทึกมา 5 วัน",
     "quietPayerMessage": "ตรวจสอบ Omi ของคุณ",
-    "quietPayerCheck": "ตรวจสอบ"
+    "quietPayerCheck": "ตรวจสอบ",
+    "activityOnThisPhone": "ในเครื่องนี้",
+    "activityOnThisPhoneSummary": "{count, plural, =1{1 การบันทึก, เก็บไว้ในเครื่องนี้เท่านั้น} other{{count} การบันทึก, เก็บไว้ในเครื่องนี้เท่านั้น}}",
+    "activityTranscribeAll": "ถอดเสียงทั้งหมด",
+    "homeRowCouldNotFinish": "“{title}” ประมวลผลไม่สำเร็จ",
+    "homeRowCouldNotFinishUntitled": "บทสนทนาประมวลผลไม่สำเร็จ",
+    "homeRecordingCouldNotSend": "ส่งการบันทึกไม่สำเร็จ"
 }

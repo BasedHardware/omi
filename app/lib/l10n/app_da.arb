@@ -4812,5 +4812,11 @@
     "homeFinishingOpensWhenReady": "Åbner, så snart den er klar",
     "quietPayerTitle": "Ingen optagelser i 5 dage",
     "quietPayerMessage": "Tjek din Omi.",
-    "quietPayerCheck": "Tjek"
+    "quietPayerCheck": "Tjek",
+    "activityOnThisPhone": "På denne telefon",
+    "activityOnThisPhoneSummary": "{count, plural, =1{1 optagelse, som kun er gemt på denne telefon} other{{count} optagelser, som kun er gemt på denne telefon}}",
+    "activityTranscribeAll": "Transskriber alle",
+    "homeRowCouldNotFinish": "Kunne ikke fuldføre ”{title}”",
+    "homeRowCouldNotFinishUntitled": "En samtale kunne ikke fuldføres",
+    "homeRecordingCouldNotSend": "En optagelse kunne ikke sendes"
 }

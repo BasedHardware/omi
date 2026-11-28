@@ -4866,5 +4866,11 @@
     "homeFinishingOpensWhenReady": "Megnyílik, amint elkészül",
     "quietPayerTitle": "5 napja nincs felvétel",
     "quietPayerMessage": "Nézd meg az Omidat.",
-    "quietPayerCheck": "Megnézem"
+    "quietPayerCheck": "Megnézem",
+    "activityOnThisPhone": "Ezen a telefonon",
+    "activityOnThisPhoneSummary": "{count, plural, =1{1 felvétel, csak ezen a telefonon tárolva} other{{count} felvétel, csak ezen a telefonon tárolva}}",
+    "activityTranscribeAll": "Összes felvétel átírása",
+    "homeRowCouldNotFinish": "Nem sikerült befejezni: „{title}”",
+    "homeRowCouldNotFinishUntitled": "Nem sikerült befejezni egy beszélgetést",
+    "homeRecordingCouldNotSend": "Nem sikerült elküldeni egy felvételt"
 }

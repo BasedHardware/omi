@@ -12327,5 +12327,11 @@
     "homeFinishingOpensWhenReady": "Отвориће се чим буде спреман",
     "quietPayerTitle": "Нема снимака 5 дана",
     "quietPayerMessage": "Проверите свој Omi.",
-    "quietPayerCheck": "Провери"
+    "quietPayerCheck": "Провери",
+    "activityOnThisPhone": "На овом телефону",
+    "activityOnThisPhoneSummary": "{count, plural, =1{1 снимак, сачуван само на овом телефону} other{{count} снимака, сачуваних само на овом телефону}}",
+    "activityTranscribeAll": "Транскрибуј све",
+    "homeRowCouldNotFinish": "Није било могуће завршити „{title}“",
+    "homeRowCouldNotFinishUntitled": "Није било могуће завршити разговор",
+    "homeRecordingCouldNotSend": "Није било могуће послати снимак"
 }

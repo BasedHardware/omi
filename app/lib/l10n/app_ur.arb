@@ -12327,5 +12327,11 @@
     "homeFinishingOpensWhenReady": "تیار ہوتے ہی کھل جائے گی",
     "quietPayerTitle": "5 دن سے کوئی ریکارڈنگ نہیں",
     "quietPayerMessage": "اپنا Omi چیک کریں۔",
-    "quietPayerCheck": "چیک کریں"
+    "quietPayerCheck": "چیک کریں",
+    "activityOnThisPhone": "اس فون پر",
+    "activityOnThisPhoneSummary": "{count, plural, =1{1 ریکارڈنگ، صرف اس فون پر محفوظ ہے} other{{count} ریکارڈنگز، صرف اس فون پر محفوظ ہیں}}",
+    "activityTranscribeAll": "سب ٹرانسکرائب کریں",
+    "homeRowCouldNotFinish": "“{title}” مکمل نہیں ہو سکی",
+    "homeRowCouldNotFinishUntitled": "ایک بات چیت مکمل نہیں ہو سکی",
+    "homeRecordingCouldNotSend": "ایک ریکارڈنگ بھیجی نہیں جا سکی"
 }

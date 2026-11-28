@@ -15591,4 +15591,32 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get quietPayerCheck => '检查';
+
+  @override
+  String get activityOnThisPhone => '在此手机上';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 条录音，仅保存在此手机上',
+      one: '1 条录音，仅保存在此手机上',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => '全部转写';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return '“$title”未能完成';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => '一个对话未能完成';
+
+  @override
+  String get homeRecordingCouldNotSend => '一条录音未能发送';
 }

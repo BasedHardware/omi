@@ -12327,5 +12327,11 @@
     "homeFinishingOpensWhenReady": "Bubuksan agad kapag handa na",
     "quietPayerTitle": "Walang recording sa loob ng 5 araw",
     "quietPayerMessage": "Tingnan ang iyong Omi.",
-    "quietPayerCheck": "Tingnan"
+    "quietPayerCheck": "Tingnan",
+    "activityOnThisPhone": "Sa teleponong ito",
+    "activityOnThisPhoneSummary": "{count, plural, =1{1 recording, nakaimbak lang sa teleponong ito} other{{count} recording, nakaimbak lang sa teleponong ito}}",
+    "activityTranscribeAll": "I-transcribe ang lahat",
+    "homeRowCouldNotFinish": "Hindi natapos ang “{title}”",
+    "homeRowCouldNotFinishUntitled": "Hindi natapos ang isang pag-uusap",
+    "homeRecordingCouldNotSend": "Hindi naipadala ang isang recording"
 }

@@ -15774,4 +15774,32 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'ตรวจสอบ';
+
+  @override
+  String get activityOnThisPhone => 'ในเครื่องนี้';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count การบันทึก, เก็บไว้ในเครื่องนี้เท่านั้น',
+      one: '1 การบันทึก, เก็บไว้ในเครื่องนี้เท่านั้น',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'ถอดเสียงทั้งหมด';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return '“$title” ประมวลผลไม่สำเร็จ';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'บทสนทนาประมวลผลไม่สำเร็จ';
+
+  @override
+  String get homeRecordingCouldNotSend => 'ส่งการบันทึกไม่สำเร็จ';
 }

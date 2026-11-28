@@ -4770,5 +4770,11 @@
     "homeFinishingOpensWhenReady": "S'obrirà tan bon punt estigui a punt",
     "quietPayerTitle": "Cap gravació en 5 dies",
     "quietPayerMessage": "Comprova el teu Omi.",
-    "quietPayerCheck": "Comprova"
+    "quietPayerCheck": "Comprova",
+    "activityOnThisPhone": "En aquest telèfon",
+    "activityOnThisPhoneSummary": "{count, plural, =1{1 enregistrament, desat només en aquest telèfon} other{{count} enregistraments, desats només en aquest telèfon}}",
+    "activityTranscribeAll": "Transcriure-ho tot",
+    "homeRowCouldNotFinish": "No s'ha pogut completar «{title}»",
+    "homeRowCouldNotFinishUntitled": "No s'ha pogut completar una conversa",
+    "homeRecordingCouldNotSend": "No s'ha pogut enviar un enregistrament"
 }

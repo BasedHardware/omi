@@ -15900,4 +15900,32 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Провери';
+
+  @override
+  String get activityOnThisPhone => 'На този телефон';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count записа, запазени само на този телефон',
+      one: '1 запис, запазен само на този телефон',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'Транскрибирай всички';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return 'Не можа да се завърши „$title“';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'Не можа да се завърши разговор';
+
+  @override
+  String get homeRecordingCouldNotSend => 'Не можа да се изпрати запис';
 }

@@ -132,7 +132,7 @@ void main() {
     PlatformManager.initializeForLocalHarness();
   });
 
-  group('X5: a failed conversation stays on Home, is listed in Activity, and does not light the bell', () {
+  group('X5: a failed conversation leaves Home for Activity and lights the bell until Activity shows it', () {
     test('one predicate reads the tile state first, then the legacy fields', () {
       expect(isFailedConversation(_decoded('failed')), isTrue, reason: 'status completed, tile failed');
       expect(isFailedConversation(_decoded('done', status: 'failed')), isFalse, reason: 'the tile wins');
@@ -146,7 +146,7 @@ void main() {
       ('transcribing', true, false),
       ('writing', true, false),
       ('done', true, false),
-      ('failed', true, true),
+      ('failed', false, true),
     ];
 
     test('Home and Activity, per tile state', () {
@@ -158,8 +158,8 @@ void main() {
       }
     });
 
-    testWidgets('summary tile states do not light the bell', (tester) async {
-      for (final (tile, _, _) in table) {
+    testWidgets('only a failed tile lights the bell, and only until Activity has shown it', (tester) async {
+      for (final (tile, _, activity) in table) {
         final conversations = ConversationProvider(isSignedIn: () => false)..conversations = [_decoded(tile)];
         final store = _store();
         await tester.pumpWidget(_app(
@@ -169,7 +169,11 @@ void main() {
             ChangeNotifierProvider<ConversationsV3Provider>.value(value: _v3(true)),
           ],
         ));
-        expect(find.byKey(const ValueKey('home_activity_attention_dot')), findsNothing, reason: '$tile dot');
+        expect(find.byKey(const ValueKey('home_activity_attention_dot')), activity ? findsOneWidget : findsNothing,
+            reason: '$tile dot');
+        store.markFailedConversationsSeen(['c1']);
+        await tester.pump();
+        expect(find.byKey(const ValueKey('home_activity_attention_dot')), findsNothing, reason: '$tile seen');
         await tester.pumpWidget(const SizedBox());
         conversations.dispose();
       }

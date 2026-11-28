@@ -15850,4 +15850,32 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Kiểm tra';
+
+  @override
+  String get activityOnThisPhone => 'Trên điện thoại này';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count bản ghi âm, chỉ được lưu trên điện thoại này',
+      one: '1 bản ghi âm, chỉ được lưu trên điện thoại này',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'Chép lời tất cả';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return 'Không thể hoàn tất “$title”';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'Không thể hoàn tất một cuộc trò chuyện';
+
+  @override
+  String get homeRecordingCouldNotSend => 'Không thể gửi một bản ghi âm';
 }

@@ -21,10 +21,13 @@ import 'package:omi/backend/http/api_presentation.dart';
 import 'package:omi/backend/http/conversation_api_contract.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/phone_call.dart';
+import 'package:omi/models/local_recording.dart';
 import 'package:omi/models/subscription.dart';
+import 'package:omi/pages/activity/activity_page.dart';
 import 'package:omi/pages/conversations/home/home_live_rows.dart';
 import 'package:omi/pages/conversations/home/home_locked_row.dart';
 import 'package:omi/pages/conversations/home/home_model.dart';
+import 'package:omi/pages/conversations/home_rows.dart' show isFailedConversation;
 import 'package:omi/pages/conversations/home/home_prompt_slot.dart';
 import 'package:omi/pages/conversations/home_rows_health.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
@@ -51,6 +54,7 @@ import 'package:omi/services/live_preview/speech_after_end.dart';
 import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/local_day_rollover.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/reliability_experiments.dart';
@@ -651,6 +655,52 @@ class _ConversationsPageState extends State<ConversationsPage>
     );
   }
 
+  /// The conversations and recordings Home drew last build, so a row that leaves because it failed
+  /// can say where it went.
+  Set<String> _shownConversationIds = const {};
+  Set<String> _shownSavedIds = const {};
+
+  /// A row the reader could see failed and moved to Activity (SCA-5226): one short toast with View,
+  /// only while Home is the page on screen. A row that leaves for any other reason (deleted, done,
+  /// filtered out) says nothing.
+  void _announceRowsLeaving(HomeModel model, Iterable<ServerConversation> known, List<LocalRecording> recordings) {
+    final conversations = <String>{
+      for (final row in model.rows)
+        if (row is HomeConversationRow)
+          row.conversation.id
+        else if (row is HomeLiveRow && row.conversation != null)
+          row.conversation!.id,
+    };
+    final saved = <String>{
+      for (final row in model.rows)
+        if (row is HomeSavedRow) row.recording.id,
+    };
+    final previousConversations = _shownConversationIds;
+    final previousSaved = _shownSavedIds;
+    _shownConversationIds = conversations;
+    _shownSavedIds = saved;
+    final failed = <ServerConversation>[
+      for (final c in known)
+        if (previousConversations.contains(c.id) && !conversations.contains(c.id) && isFailedConversation(c)) c,
+    ];
+    final recordingFailed = recordings
+        .any((r) => previousSaved.contains(r.id) && !saved.contains(r.id) && r.state == LocalRecordingState.failed);
+    if (failed.isEmpty && !recordingFailed) return;
+    if (!(ModalRoute.of(context)?.isCurrent ?? true) || !TickerMode.valuesOf(context).enabled) return;
+    final l10n = context.l10n;
+    final title = failed.length == 1 ? failed.single.structured.title.trim() : '';
+    final message = failed.isEmpty
+        ? l10n.homeRecordingCouldNotSend
+        : title.isEmpty
+            ? l10n.homeRowCouldNotFinishUntitled
+            : l10n.homeRowCouldNotFinish(title);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      OmiFeedback.error(context, message,
+          actionLabel: l10n.view, onAction: () => routeToPage(context, const ActivityPage()));
+    });
+  }
+
   Widget _buildHome(BuildContext context) {
     final convoProvider = context.read<ConversationProvider>();
     final recordings = context.read<LocalRecordingsProvider>();
@@ -733,6 +783,9 @@ class _ConversationsPageState extends State<ConversationsPage>
       heldMore: heldMore > 0 ? heldMore : 0,
       hiddenIds: convoProvider.memoriesToDelete.keys.toSet(),
     ));
+
+    _announceRowsLeaving(
+        model, [...convoProvider.conversations, ...convoProvider.processingConversations], recordings.recordings);
 
     // Polling: until the server shows the capture as a conversation, re-read it quickly.
     final processingSignature =

@@ -15956,4 +15956,32 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'சரிபார்';
+
+  @override
+  String get activityOnThisPhone => 'இந்த ஃபோனில்';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count பதிவுகள், இந்த ஃபோனில் மட்டும் சேமிக்கப்பட்டுள்ளன',
+      one: '1 பதிவு, இந்த ஃபோனில் மட்டும் சேமிக்கப்பட்டுள்ளது',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'அனைத்தையும் டிரான்ஸ்கிரைப் செய்யவும்';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return '“$title” முடிக்க முடியவில்லை';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'ஒரு உரையாடலை முடிக்க முடியவில்லை';
+
+  @override
+  String get homeRecordingCouldNotSend => 'ஒரு பதிவை அனுப்ப முடியவில்லை';
 }

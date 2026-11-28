@@ -12327,5 +12327,11 @@
     "homeFinishingOpensWhenReady": "तयार झाल्यावर लगेच उघडेल",
     "quietPayerTitle": "5 दिवसांत एकही रेकॉर्डिंग नाही",
     "quietPayerMessage": "तुमचा Omi तपासा.",
-    "quietPayerCheck": "तपासा"
+    "quietPayerCheck": "तपासा",
+    "activityOnThisPhone": "या फोनवर",
+    "activityOnThisPhoneSummary": "{count, plural, =1{1 रेकॉर्डिंग, फक्त या फोनवर साठवले आहे} other{{count} रेकॉर्डिंग, फक्त या फोनवर साठवले आहेत}}",
+    "activityTranscribeAll": "सर्व रेकॉर्डिंग ट्रान्सक्राइब करा",
+    "homeRowCouldNotFinish": "“{title}” पूर्ण होऊ शकले नाही",
+    "homeRowCouldNotFinishUntitled": "संभाषण पूर्ण होऊ शकले नाही",
+    "homeRecordingCouldNotSend": "रेकॉर्डिंग पाठवले जाऊ शकले नाही"
 }

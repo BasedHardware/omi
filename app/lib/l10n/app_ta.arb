@@ -12327,5 +12327,11 @@
     "homeFinishingOpensWhenReady": "தயாரானதும் உடனே திறக்கும்",
     "quietPayerTitle": "5 நாட்களாக பதிவுகள் இல்லை",
     "quietPayerMessage": "உங்கள் Omi-ஐ சரிபார்க்கவும்.",
-    "quietPayerCheck": "சரிபார்"
+    "quietPayerCheck": "சரிபார்",
+    "activityOnThisPhone": "இந்த ஃபோனில்",
+    "activityOnThisPhoneSummary": "{count, plural, =1{1 பதிவு, இந்த ஃபோனில் மட்டும் சேமிக்கப்பட்டுள்ளது} other{{count} பதிவுகள், இந்த ஃபோனில் மட்டும் சேமிக்கப்பட்டுள்ளன}}",
+    "activityTranscribeAll": "அனைத்தையும் டிரான்ஸ்கிரைப் செய்யவும்",
+    "homeRowCouldNotFinish": "“{title}” முடிக்க முடியவில்லை",
+    "homeRowCouldNotFinishUntitled": "ஒரு உரையாடலை முடிக்க முடியவில்லை",
+    "homeRecordingCouldNotSend": "ஒரு பதிவை அனுப்ப முடியவில்லை"
 }

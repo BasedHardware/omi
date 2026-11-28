@@ -15841,4 +15841,32 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Skontrolovať';
+
+  @override
+  String get activityOnThisPhone => 'V tomto telefóne';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count nahrávok, uložených len v tomto telefóne',
+      one: '1 nahrávka, uložená len v tomto telefóne',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'Transkribovať všetko';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return 'Nepodarilo sa dokončiť „$title“';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'Nepodarilo sa dokončiť konverzáciu';
+
+  @override
+  String get homeRecordingCouldNotSend => 'Nepodarilo sa odoslať nahrávku';
 }

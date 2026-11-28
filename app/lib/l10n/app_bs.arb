@@ -12327,5 +12327,11 @@
     "homeFinishingOpensWhenReady": "Otvoriće se čim bude spreman",
     "quietPayerTitle": "Nema snimaka 5 dana",
     "quietPayerMessage": "Provjerite svoj Omi.",
-    "quietPayerCheck": "Provjeri"
+    "quietPayerCheck": "Provjeri",
+    "activityOnThisPhone": "Na ovom telefonu",
+    "activityOnThisPhoneSummary": "{count, plural, =1{1 snimak, sačuvan samo na ovom telefonu} other{{count} snimaka, sačuvanih samo na ovom telefonu}}",
+    "activityTranscribeAll": "Transkribuj sve",
+    "homeRowCouldNotFinish": "Nije moguće završiti „{title}“",
+    "homeRowCouldNotFinishUntitled": "Nije moguće završiti razgovor",
+    "homeRecordingCouldNotSend": "Nije moguće poslati snimak"
 }

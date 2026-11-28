@@ -4770,5 +4770,11 @@
     "homeFinishingOpensWhenReady": "Wordt geopend zodra het klaar is",
     "quietPayerTitle": "Al 5 dagen geen opnames",
     "quietPayerMessage": "Controleer je Omi.",
-    "quietPayerCheck": "Controleren"
+    "quietPayerCheck": "Controleren",
+    "activityOnThisPhone": "Op deze telefoon",
+    "activityOnThisPhoneSummary": "{count, plural, =1{1 opname, alleen op deze telefoon bewaard} other{{count} opnames, alleen op deze telefoon bewaard}}",
+    "activityTranscribeAll": "Alles transcriberen",
+    "homeRowCouldNotFinish": "Kon ‘{title}’ niet voltooien",
+    "homeRowCouldNotFinishUntitled": "Een gesprek kon niet worden voltooid",
+    "homeRecordingCouldNotSend": "Een opname kon niet worden verzonden"
 }

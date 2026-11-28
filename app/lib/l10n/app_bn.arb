@@ -12327,5 +12327,11 @@
     "homeFinishingOpensWhenReady": "প্রস্তুত হওয়ামাত্রই খুলে যাবে",
     "quietPayerTitle": "৫ দিন ধরে কোনো রেকর্ডিং নেই",
     "quietPayerMessage": "আপনার Omi দেখে নিন।",
-    "quietPayerCheck": "দেখুন"
+    "quietPayerCheck": "দেখুন",
+    "activityOnThisPhone": "এই ফোনে",
+    "activityOnThisPhoneSummary": "{count, plural, =1{1 টি রেকর্ডিং, শুধুমাত্র এই ফোনে সংরক্ষিত} other{{count} টি রেকর্ডিং, শুধুমাত্র এই ফোনে সংরক্ষিত}}",
+    "activityTranscribeAll": "সব ট্রান্সক্রাইব করুন",
+    "homeRowCouldNotFinish": "“{title}” শেষ করা যায়নি",
+    "homeRowCouldNotFinishUntitled": "একটি কথোপকথন শেষ করা যায়নি",
+    "homeRecordingCouldNotSend": "একটি রেকর্ডিং পাঠানো যায়নি"
 }

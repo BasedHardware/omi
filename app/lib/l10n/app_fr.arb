@@ -4805,5 +4805,11 @@
     "homeFinishingOpensWhenReady": "S'ouvre dès qu'elle est prête",
     "quietPayerTitle": "Aucun enregistrement depuis 5 jours",
     "quietPayerMessage": "Vérifiez votre Omi.",
-    "quietPayerCheck": "Vérifier"
+    "quietPayerCheck": "Vérifier",
+    "activityOnThisPhone": "Sur ce téléphone",
+    "activityOnThisPhoneSummary": "{count, plural, =1{1 enregistrement, conservé uniquement sur ce téléphone} other{{count} enregistrements, conservés uniquement sur ce téléphone}}",
+    "activityTranscribeAll": "Tout transcrire",
+    "homeRowCouldNotFinish": "Impossible de terminer « {title} »",
+    "homeRowCouldNotFinishUntitled": "Impossible de terminer une conversation",
+    "homeRecordingCouldNotSend": "Impossible d'envoyer un enregistrement"
 }

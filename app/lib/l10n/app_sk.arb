@@ -4770,5 +4770,11 @@
     "homeFinishingOpensWhenReady": "Otvorí sa hneď, ako bude hotová",
     "quietPayerTitle": "Žiadne nahrávky za 5 dní",
     "quietPayerMessage": "Skontrolujte svoj Omi.",
-    "quietPayerCheck": "Skontrolovať"
+    "quietPayerCheck": "Skontrolovať",
+    "activityOnThisPhone": "V tomto telefóne",
+    "activityOnThisPhoneSummary": "{count, plural, =1{1 nahrávka, uložená len v tomto telefóne} other{{count} nahrávok, uložených len v tomto telefóne}}",
+    "activityTranscribeAll": "Transkribovať všetko",
+    "homeRowCouldNotFinish": "Nepodarilo sa dokončiť „{title}“",
+    "homeRowCouldNotFinishUntitled": "Nepodarilo sa dokončiť konverzáciu",
+    "homeRecordingCouldNotSend": "Nepodarilo sa odoslať nahrávku"
 }

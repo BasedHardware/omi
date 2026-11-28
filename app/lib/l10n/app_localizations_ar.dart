@@ -15757,4 +15757,32 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'تحقّق';
+
+  @override
+  String get activityOnThisPhone => 'على هذا الهاتف';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count تسجيلات، محفوظة على هذا الهاتف فقط',
+      one: '1 تسجيل، محفوظ على هذا الهاتف فقط',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'تحويل الكل إلى نص';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return 'تعذّر إكمال «$title»';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'تعذّر إكمال محادثة';
+
+  @override
+  String get homeRecordingCouldNotSend => 'تعذّر إرسال تسجيل';
 }

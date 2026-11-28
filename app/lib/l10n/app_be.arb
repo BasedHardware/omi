@@ -12327,5 +12327,11 @@
     "homeFinishingOpensWhenReady": "Адкрыецца, як толькі будзе гатовая",
     "quietPayerTitle": "Няма запісаў 5 дзён",
     "quietPayerMessage": "Праверце свой Omi.",
-    "quietPayerCheck": "Праверыць"
+    "quietPayerCheck": "Праверыць",
+    "activityOnThisPhone": "На гэтым тэлефоне",
+    "activityOnThisPhoneSummary": "{count, plural, =1{1 запіс, захоўваецца толькі на гэтым тэлефоне} other{{count} запісаў, захоўваюцца толькі на гэтым тэлефоне}}",
+    "activityTranscribeAll": "Транскрыбаваць усе",
+    "homeRowCouldNotFinish": "Не ўдалося завяршыць «{title}»",
+    "homeRowCouldNotFinishUntitled": "Не ўдалося завяршыць размову",
+    "homeRecordingCouldNotSend": "Не ўдалося адправіць запіс"
 }

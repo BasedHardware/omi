@@ -4770,5 +4770,11 @@
     "homeFinishingOpensWhenReady": "Akan dibuka sebaik sahaja siap",
     "quietPayerTitle": "Tiada rakaman dalam 5 hari",
     "quietPayerMessage": "Semak Omi anda.",
-    "quietPayerCheck": "Semak"
+    "quietPayerCheck": "Semak",
+    "activityOnThisPhone": "Pada telefon ini",
+    "activityOnThisPhoneSummary": "{count, plural, =1{1 rakaman, disimpan hanya pada telefon ini} other{{count} rakaman, disimpan hanya pada telefon ini}}",
+    "activityTranscribeAll": "Transkrip semua",
+    "homeRowCouldNotFinish": "Tidak dapat menyelesaikan “{title}”",
+    "homeRowCouldNotFinishUntitled": "Perbualan tidak dapat diselesaikan",
+    "homeRecordingCouldNotSend": "Rakaman tidak dapat dihantar"
 }

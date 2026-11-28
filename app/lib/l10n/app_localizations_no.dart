@@ -15853,4 +15853,32 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Sjekk';
+
+  @override
+  String get activityOnThisPhone => 'På denne telefonen';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count opptak, finnes bare på denne telefonen',
+      one: '1 opptak, finnes bare på denne telefonen',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'Transkriber alle';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return 'Kunne ikke fullføre «$title»';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'En samtale kunne ikke fullføres';
+
+  @override
+  String get homeRecordingCouldNotSend => 'Et opptak kunne ikke sendes';
 }

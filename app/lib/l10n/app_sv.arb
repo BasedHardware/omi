@@ -4770,5 +4770,11 @@
     "homeFinishingOpensWhenReady": "Öppnas så snart den är klar",
     "quietPayerTitle": "Inga inspelningar på 5 dagar",
     "quietPayerMessage": "Kolla din Omi.",
-    "quietPayerCheck": "Kolla"
+    "quietPayerCheck": "Kolla",
+    "activityOnThisPhone": "På den här telefonen",
+    "activityOnThisPhoneSummary": "{count, plural, =1{1 inspelning, sparas bara på den här telefonen} other{{count} inspelningar, sparas bara på den här telefonen}}",
+    "activityTranscribeAll": "Transkribera alla",
+    "homeRowCouldNotFinish": "Kunde inte slutföra ”{title}”",
+    "homeRowCouldNotFinishUntitled": "En konversation kunde inte slutföras",
+    "homeRecordingCouldNotSend": "En inspelning kunde inte skickas"
 }

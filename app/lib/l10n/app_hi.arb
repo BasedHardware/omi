@@ -4770,5 +4770,11 @@
     "homeFinishingOpensWhenReady": "तैयार होते ही खुल जाएगी",
     "quietPayerTitle": "5 दिनों से कोई रिकॉर्डिंग नहीं",
     "quietPayerMessage": "अपना Omi जांचें।",
-    "quietPayerCheck": "जांचें"
+    "quietPayerCheck": "जांचें",
+    "activityOnThisPhone": "इस फ़ोन पर",
+    "activityOnThisPhoneSummary": "{count, plural, =1{1 रिकॉर्डिंग, केवल इस फ़ोन पर सहेजी गई} other{{count} रिकॉर्डिंग, केवल इस फ़ोन पर सहेजी गईं}}",
+    "activityTranscribeAll": "सभी ट्रांसक्राइब करें",
+    "homeRowCouldNotFinish": "“{title}” पूरा नहीं हो सका",
+    "homeRowCouldNotFinishUntitled": "एक बातचीत पूरी नहीं हो सकी",
+    "homeRecordingCouldNotSend": "एक रिकॉर्डिंग नहीं भेजी जा सकी"
 }

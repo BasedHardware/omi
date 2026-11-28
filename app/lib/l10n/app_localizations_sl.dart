@@ -15874,4 +15874,32 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Preveri';
+
+  @override
+  String get activityOnThisPhone => 'Na tem telefonu';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count posnetkov, shranjenih samo na tem telefonu',
+      one: '1 posnetek, shranjen samo na tem telefonu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'Prepiši vse';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return 'Ni bilo mogoče dokončati „$title“';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'Pogovora ni bilo mogoče dokončati';
+
+  @override
+  String get homeRecordingCouldNotSend => 'Posnetka ni bilo mogoče poslati';
 }
