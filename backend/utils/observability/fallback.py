@@ -221,6 +221,7 @@ ALLOWED_COMPONENTS = frozenset(
         'daily_summary',
         'mcp_daily_rollup',
         'feature_flags',
+        'play_billing',
         'conversations_v3',
         'other',
     }

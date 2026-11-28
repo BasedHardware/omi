@@ -23,10 +23,11 @@ play_billing_double_charge uid=<uid> purchase=<first 12 hex of the purchase docu
 severity>=ERROR AND (textPayload:"play_billing_double_charge" OR jsonPayload.message:"play_billing_double_charge")
 ```
 
-The purchase id is the SHA-256 of the token, never the token. The line is only logged when Stripe itself lists
-a recurring `sub_` subscription for the user that is `active` or `trialing`. A one-time `pi_` grant, a stale
-local row, an ended or an `incomplete` Stripe subscription logs only
-`play_billing Stripe overlap not confirmed as a paid subscription` at WARNING and needs no action.
+The purchase id is the SHA-256 of the token, never the token. If Stripe listing fails before it
+finds a qualifying billable subscription and the local row still grants paid access from a recurring, non-prepaid
+Stripe subscription, the backend raises the same alert and notice and also stamps
+`stripe_conflict_listing_failed_at` the first time this happens. Confirm the current provider state before acting. A successful
+listing without a qualifying Stripe subscription still produces no double-charge alert.
 
 ## Confirm it is real
 
