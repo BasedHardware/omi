@@ -112,6 +112,7 @@ class DeviceService {
   final DeviceConnectionBuilder _connectionBuilder;
 
   DeviceServiceStatus _status = DeviceServiceStatus.init;
+  Timer? _watchdogTimer;
   List<BtDevice> _devices = [];
   // Ids the last scan saw. _devices also holds stored devices added for reconnect, which pickers must not list.
   final Set<String> _scannedIds = {};
@@ -319,10 +320,18 @@ class DeviceService {
   void start() {
     _status = DeviceServiceStatus.ready;
 
-    // TODO: Start watchdog to discover automatically, re-connect automatically
+    // TODO(#1): Start watchdog to discover automatically, re-connect automatically
+    _watchdogTimer?.cancel();
+    _watchdogTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      if (_status != DeviceServiceStatus.scanning) {
+        discover();
+      }
+    });
   }
 
   Future<void> stop() async {
+    _watchdogTimer?.cancel();
+    _watchdogTimer = null;
     savedReconnect.stop();
     for (final id in _savedReconnectDevices.toList()) {
       await _configureSavedReconnect(id, false);
