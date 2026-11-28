@@ -200,7 +200,7 @@ class StorageSyncImpl implements StorageSync {
         .where((w) =>
             w.status == WalStatus.miss &&
             w.storage == WalStorage.sdcard &&
-            (!inventoryAttempted || deviceId == null || w.device == deviceId))
+            (!inventoryAttempted || w.device == deviceId))
         .toList();
   }
 
