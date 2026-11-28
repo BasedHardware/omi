@@ -14,6 +14,7 @@ import 'package:omi/services/billing/play_billing.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/utils/analytics/registry/typed_events.dart';
+import 'package:omi/utils/analytics/purchase_exposure.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/billing_price.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -85,7 +86,7 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
     if (_locked) return;
     setState(() => _busy = true);
     try {
-      final outcome = await context.read<UsageProvider>().restorePurchases();
+      final outcome = await observePurchaseRestore(context.read<UsageProvider>(), widget.source);
       if (!mounted || _dismissed) return;
       final l10n = context.l10n;
       switch (outcome) {
@@ -182,7 +183,9 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
         usage.subscription == null ||
         usage.subscription!.subscription.plan.isPaid ||
         !usage.subscription!.trialEligible ||
-        !usage.showSubscriptionUI) return;
+        !usage.showSubscriptionUI) {
+      return;
+    }
     final trial = usage.subscription?.trialEligible == true;
     const TypedEvents().emit(PaywallMonthlyFallbackShown(trial: trial));
     final accepted = await showOmiSurfaceSheet<bool>(
@@ -191,7 +194,11 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
       builder: (_) => OmiSheetScaffold(
         showCloseButton: false,
         padding: EdgeInsets.zero,
-        child: _MonthlyOffer(price: monthly, trialDays: trialDays),
+        child: PaywallViewedOnce(
+            source: widget.source,
+            surface: PaywallViewedSurface.monthlyFallback,
+            catalogTier: offer.tierId,
+            child: _MonthlyOffer(price: monthly, trialDays: trialDays)),
       ),
     );
     if (accepted != true) {
@@ -534,6 +541,11 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
           ),
         ),
       ),
+    ).withPurchaseExposure(
+      source: widget.source,
+      surface: PaywallViewedSurface.trialPaywall,
+      currentPlan: context.read<UsageProvider>().subscription?.subscription.plan.wireName ?? 'unknown',
+      catalogTier: widget.offer?.tierId ?? 'unknown',
     );
   }
 

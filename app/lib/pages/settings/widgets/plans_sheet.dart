@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:omi/utils/analytics/purchase_exposure.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -92,6 +94,27 @@ class _PlansSheetState extends State<PlansSheet> {
   bool _storefrontLoading = false;
   bool _storefrontFailed = false;
   PlanStorefront? _storefront;
+  bool _budgetCapObserved = false;
+  bool _mcpCapObserved = false;
+  bool _budgetCap(PlanStorefront? data) =>
+      data?.showSubscriptionUi == true &&
+      data?.current?.legacy == false &&
+      data?.usage?.kind == 'usage_budget' &&
+      (data?.usage?.percent ?? 0) >= 100;
+  void _observeStorefrontAllowance(PlanStorefront data) {
+    final budget = _budgetCap(data);
+    final mcp = data.showSubscriptionUi && data.usage?.mcpCapReached == true;
+    if (budget && !_budgetCapObserved) {
+      PlatformManager.instance.analytics
+          .allowanceReached(kind: 'usage_budget', surface: 'storefront', reason: 'budget_exhausted');
+    }
+    if (mcp && !_mcpCapObserved) {
+      PlatformManager.instance.analytics
+          .allowanceReached(kind: 'mcp_daily_cap', surface: 'storefront', reason: 'mcp_cap_reached');
+    }
+    _budgetCapObserved = budget;
+    _mcpCapObserved = mcp;
+  }
 
   String selectedPlan = 'yearly'; // 'yearly' or 'monthly'  (billing period)
   String? selectedTierId; // backend plan_id, e.g. 'unlimited_v2'
@@ -119,6 +142,7 @@ class _PlansSheetState extends State<PlansSheet> {
       _storefrontLoading = enabled && _storefront == null;
     });
     if (!enabled) return;
+    if (_storefront != null) _observeStorefrontAllowance(_storefront!);
     if (_storefront == null) await _loadStorefront();
   }
 
@@ -132,6 +156,7 @@ class _PlansSheetState extends State<PlansSheet> {
     final result = await (widget.storefrontApi ?? PlanStorefrontApi())
         .load(source: widget.analyticsSource, trigger: widget.storefrontTrigger, locale: context.l10n.localeName);
     if (!mounted) return;
+    if (result is ApiSuccess<PlanStorefront>) _observeStorefrontAllowance(result.data);
     setState(() {
       _storefrontLoading = false;
       _storefrontFailed = result is! ApiSuccess<PlanStorefront>;
@@ -620,7 +645,15 @@ class _PlansSheetState extends State<PlansSheet> {
           }
           // Otherwise, this is a new subscription requiring checkout
           else if (sessionData.containsKey('url') && sessionData['url'] != null && !provider.buysThroughPlay) {
-            final checkoutResult = await routeToPage(context, PaymentWebViewPage(checkoutUrl: sessionData['url']!));
+            final checkoutResult = await routeToPage(
+                context,
+                PaymentWebViewPage(
+                  checkoutUrl: sessionData['url']!,
+                  onCheckoutOpened: () => PlatformManager.instance.analytics.checkoutOpened(
+                      plan: targetPlan, billingInterval: billingInterval, source: widget.analyticsSource, inApp: true),
+                  onCheckoutCompleted: () => PlatformManager.instance.analytics.checkoutCompleted(
+                      plan: targetPlan, billingInterval: billingInterval, source: widget.analyticsSource, inApp: true),
+                ));
 
             if (checkoutResult == true) {
               // Checkout completion is not local entitlement proof; refresh the backend-owned state.
@@ -839,7 +872,8 @@ class _PlansSheetState extends State<PlansSheet> {
     if (usageProvider.isLoadingPlans) {
       return const Column(children: [PlanOptionShimmer(), SizedBox(height: 18), PlanOptionShimmer()]);
     }
-    if (usageProvider.availablePlans != null) {
+    final plans = usageProvider.availablePlans?['plans'];
+    if (plans is List && plans.isNotEmpty) {
       return _buildTierPlanCards(availablePlans: usageProvider.availablePlans!);
     }
     return OmiErrorState(
@@ -888,6 +922,7 @@ class _PlansSheetState extends State<PlansSheet> {
         if (_storefrontEnabled && !provider.buysThroughPlay) {
           return StorefrontPlansContent(
             storefront: _storefront,
+            purchaseExposureSource: widget.analyticsSource,
             loading: _storefrontLoading,
             failed: _storefrontFailed,
             busy: _isUpgrading,
@@ -896,7 +931,19 @@ class _PlansSheetState extends State<PlansSheet> {
             onRetry: _loadStorefront,
             onSelect: _selectStorefrontPrice,
             onManage: _openPaymentPortal,
-          );
+          )
+              .withAllowanceBlock(
+                  kind: 'usage_budget',
+                  surface: 'storefront',
+                  reason: 'budget_exhausted',
+                  shown: _budgetCap(_storefront) && widget.storefrontTrigger == 'usage_budget')
+              .withAllowanceBlock(
+                  kind: 'mcp_daily_cap',
+                  surface: 'storefront',
+                  reason: 'mcp_cap_reached',
+                  shown: _storefront?.showSubscriptionUi == true &&
+                      _storefront?.usage?.mcpCapReached == true &&
+                      widget.storefrontTrigger == 'mcp_daily_cap');
         }
 
         final l10n = context.l10n;
@@ -906,6 +953,8 @@ class _PlansSheetState extends State<PlansSheet> {
         final isCancelled = sub?.cancelAtPeriodEnd ?? false;
         final hasScheduledUpgrade = _hasScheduledUpgrade();
         final plansLoaded = !provider.isLoadingPlans && provider.availablePlans != null;
+        final isOnAnnualPlan = _getCurrentPlanDetails()?['interval'] == 'year';
+        final rendersPlanOptions = !isUnlimited || isCancelled || (!hasScheduledUpgrade && !isOnAnnualPlan);
 
         String renewalDate = '—';
         final periodEnd = sub?.currentPeriodEnd;
@@ -1063,7 +1112,7 @@ class _PlansSheetState extends State<PlansSheet> {
                                 message: l10n.annualPlanStartsAutomatically,
                               );
                             }
-                            if (_getCurrentPlanDetails()?['interval'] == 'year') {
+                            if (isOnAnnualPlan) {
                               // Already on the annual plan - only the cancel option applies.
                               return PlanStatusCard(
                                 icon: Icons.check_circle_outline,
@@ -1096,21 +1145,37 @@ class _PlansSheetState extends State<PlansSheet> {
 
                       // Continue/Upgrade — hidden for same-tier annual (nothing to change) and for
                       // desktop-plan → mobile-tier switches.
-                      if (shouldShowPlanContinueButton(
-                        isOnAnnualPlan: _getCurrentPlanDetails()?['interval'] == 'year',
-                        hasScheduledUpgrade: hasScheduledUpgrade,
-                        isCancelled: isCancelled,
-                        plansLoaded: plansLoaded,
-                        selectedTierId: selectedTierId,
-                        currentTierId: sub?.plan.wireName,
-                        currentGrantsDesktop: sub?.plan.grantsDesktop ?? false,
-                        selectedPriceIsCurrent: _selectedPriceIsCurrent(provider.availablePlans),
-                      ))
-                        // For basic users, show "Upgrade". For paid users upgrading, show "Continue".
-                        _primaryAction(
-                          key: const ValueKey('plans_sheet_upgrade_button'),
-                          label: isUnlimited ? l10n.continueText : l10n.upgrade,
-                        ),
+                      Builder(
+                        builder: (context) {
+                          // Read after the plan-card Builder normalizes the selected tier.
+                          // Use the checkout handler's resolver, without changing selection or billing policy.
+                          final rawPlans = provider.availablePlans?['plans'];
+                          final selectedPrice = !plansLoaded || rawPlans is! List
+                              ? null
+                              : planForCheckout(
+                                  rawPlans.cast<Map<String, dynamic>>(),
+                                  interval: selectedPlan == 'yearly' ? 'year' : 'month',
+                                  selectedTierId: selectedTierId,
+                                );
+                          if (selectedPrice == null ||
+                              !shouldShowPlanContinueButton(
+                                isOnAnnualPlan: isOnAnnualPlan,
+                                hasScheduledUpgrade: hasScheduledUpgrade,
+                                isCancelled: isCancelled,
+                                plansLoaded: plansLoaded,
+                                selectedTierId: selectedTierId,
+                                currentTierId: sub?.plan.wireName,
+                                currentGrantsDesktop: sub?.plan.grantsDesktop ?? false,
+                                selectedPriceIsCurrent: _selectedPriceIsCurrent(provider.availablePlans),
+                              )) {
+                            return const SizedBox.shrink();
+                          }
+                          return _primaryAction(
+                            key: const ValueKey('plans_sheet_upgrade_button'),
+                            label: isUnlimited ? l10n.continueText : l10n.upgrade,
+                          );
+                        },
+                      ),
 
                       // Freemium limitations and the downgrade option - basic users only
                       if (!isUnlimited) ...[
@@ -1209,6 +1274,11 @@ class _PlansSheetState extends State<PlansSheet> {
               ],
             ),
           ),
+        ).withPurchaseExposure(
+          enabled: _storefrontGateResolved && rendersPlanOptions && _hasRenderedLegacyOptions(provider),
+          source: widget.analyticsSource,
+          surface: PaywallViewedSurface.plansSheet,
+          currentPlan: sub?.plan.wireName ?? 'unknown',
         );
       },
     );
@@ -1293,17 +1363,36 @@ class _PlansSheetState extends State<PlansSheet> {
     );
   }
 
+  Map<String, List<Map<String, dynamic>>> _groupLegacyPlans(List<Map<String, dynamic>> plans) {
+    final grouped = <String, List<Map<String, dynamic>>>{};
+    for (final plan in plans) {
+      final planId = plan['plan_id'] as String? ?? '';
+      grouped.putIfAbsent(planId, () => []).add(plan);
+    }
+    return grouped;
+  }
+
+  Map<String, dynamic>? _legacyPriceForInterval(List<Map<String, dynamic>> plans, String interval) =>
+      plans.firstWhereOrNull((plan) => plan['interval'] == interval);
+
+  /// Mirrors the rendered cards, including the single-tier interval fallback.
+  /// Unknown plan identities are not a new billing gate: their rendered cards still count.
+  bool _hasRenderedLegacyOptions(UsageProvider provider) {
+    if (provider.isLoadingPlans) return false;
+    final raw = provider.availablePlans?['plans'];
+    if (raw is! List || raw.isEmpty) return false;
+    final groups = _groupLegacyPlans(raw.cast<Map<String, dynamic>>());
+    if (groups.length <= 1) return true;
+    final interval = selectedPlan == 'yearly' ? 'year' : 'month';
+    return groups.values.any((plans) => _legacyPriceForInterval(plans, interval) != null);
+  }
+
   /// Groups available plans by plan_id and shows one card per tier.
   Widget _buildTierPlanCards({required Map<String, dynamic> availablePlans}) {
     final plans = (availablePlans['plans'] as List).cast<Map<String, dynamic>>();
     _keepCurrentPriceSelected(plans);
 
-    // Group plans by plan_id
-    final Map<String, List<Map<String, dynamic>>> grouped = {};
-    for (final plan in plans) {
-      final planId = plan['plan_id'] as String? ?? '';
-      grouped.putIfAbsent(planId, () => []).add(plan);
-    }
+    final grouped = _groupLegacyPlans(plans);
 
     // If only 1 tier, fallback to old behavior (monthly/yearly cards)
     if (grouped.length <= 1) {
@@ -1325,7 +1414,8 @@ class _PlansSheetState extends State<PlansSheet> {
 
     // A tier with no price for this billing period renders no card, so it cannot stay selected.
     // Select the current plan's tier, or the first tier, among those shown for this period.
-    final visibleTierIds = sortedTierIds.where((tid) => grouped[tid]!.any((p) => p['interval'] == interval)).toList();
+    final visibleTierIds =
+        sortedTierIds.where((tid) => _legacyPriceForInterval(grouped[tid]!, interval) != null).toList();
     if (visibleTierIds.isNotEmpty && !visibleTierIds.contains(selectedTierId)) {
       final activeTier = visibleTierIds.firstWhereOrNull((tid) => grouped[tid]!.any((p) => p['is_active'] == true));
       selectedTierId = activeTier ?? visibleTierIds.first;
@@ -1345,7 +1435,7 @@ class _PlansSheetState extends State<PlansSheet> {
         const SizedBox(height: 18),
         ...sortedTierIds.map((tierId) {
           final tierPlans = grouped[tierId]!;
-          final planForPeriod = tierPlans.firstWhereOrNull((p) => p['interval'] == (isYearly ? 'year' : 'month'));
+          final planForPeriod = _legacyPriceForInterval(tierPlans, interval);
           if (planForPeriod == null) return const SizedBox.shrink();
 
           // The tier's display name comes from the backend (subscription available_plans).

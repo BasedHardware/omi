@@ -12,6 +12,9 @@ import Foundation
 final class TrialBannerService {
   static let shared = TrialBannerService()
 
+  private let purchaseObservation = PurchaseObservation(sink: { event, properties in
+    AnalyticsManager.shared.purchaseEvent(event, properties)
+  })
   private var cancellable: AnyCancellable?
   enum NudgeKind: String {
     case twentyFourHours = "24h"
@@ -60,6 +63,7 @@ final class TrialBannerService {
   }
 
   func stop() {
+    purchaseObservation.allowance(false, kind: "trial", surface: "capture", reason: "trial_expired")
     cancellable?.cancel()
     cancellable = nil
     activeOwnerID = nil
@@ -79,6 +83,9 @@ final class TrialBannerService {
     presenter: NotificationPresenter
   ) {
     guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
+    purchaseObservation.allowance(
+      metadata.trialStartedAt != nil && metadata.trialExpired,
+      kind: "trial", surface: "capture", reason: "trial_expired")
     guard metadata.trialStartedAt != nil else { return }
 
     if metadata.trialExpired {

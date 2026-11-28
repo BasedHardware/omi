@@ -129,6 +129,8 @@ class UsageProvider with ChangeNotifier {
 
   UserSubscriptionResponse? _subscription;
   UserSubscriptionResponse? get subscription => _subscription;
+  String? _reportedTranscriptionAllowance;
+  String? _reportedChatAllowance;
 
   /// Defaults to true when the subscription response hasn't loaded yet, so a
   /// network blip doesn't silently hide paid surfaces from real users.
@@ -331,6 +333,44 @@ class UsageProvider with ChangeNotifier {
     return true;
   }
 
+  /// Emits only for newly observed authoritative limit states. Recovery rearms
+  /// the latch; repeated subscription snapshots and widget rebuilds do not.
+  void _recordAllowanceReached() {
+    final allowance = _subscription?.transcriptionAllowance;
+    final exhausted = allowance == null
+        ? isOutOfCredits
+        : allowance.reason == 'plan_allowance_exhausted' || allowance.reason == 'usage_budget_exhausted';
+    final transcriptionReason = !exhausted
+        ? null
+        : allowance?.reason == 'usage_budget_exhausted'
+            ? 'budget_exhausted'
+            : 'plan_allowance_exhausted';
+    if (transcriptionReason == null) {
+      _reportedTranscriptionAllowance = null;
+    } else if (_reportedTranscriptionAllowance != transcriptionReason) {
+      _reportedTranscriptionAllowance = transcriptionReason;
+      PlatformManager.instance.analytics.allowanceReached(
+        kind: transcriptionReason == 'budget_exhausted' ? 'usage_budget' : 'transcription',
+        surface: 'capture',
+        reason: transcriptionReason,
+      );
+    }
+
+    // The subscription's capture answer identifies a shared-budget refusal.
+    // That same budget must not also be reported as an independent chat cap.
+    final chatReached = !chatQuotaAllowed && allowance?.reason != 'usage_budget_exhausted';
+    if (!chatReached) {
+      _reportedChatAllowance = null;
+    } else if (_reportedChatAllowance != 'chat_quota_exhausted') {
+      _reportedChatAllowance = 'chat_quota_exhausted';
+      PlatformManager.instance.analytics.allowanceReached(
+        kind: 'chat',
+        surface: 'chat',
+        reason: 'chat_quota_exhausted',
+      );
+    }
+  }
+
   /// Gets the on-device speech model ready before the cloud minutes run out (S17 flag on only),
   /// and finishes an Android "On Wi-Fi later" choice once its model lands.
   Future<void> _prepareOnDeviceNearCap(TranscriptionAllowanceSnapshot? allowance) async {
@@ -394,6 +434,7 @@ class UsageProvider with ChangeNotifier {
   void debugSetSubscription(UserSubscriptionResponse? value) {
     _subscription = value;
     TranscriptionAllowanceCache.replace(value?.transcriptionAllowance);
+    _recordAllowanceReached();
     notifyListeners();
   }
 
@@ -444,6 +485,8 @@ class UsageProvider with ChangeNotifier {
     _isProcessingBacklog = false;
     TranscriptionAllowanceCache.clear();
     _subscription = null;
+    _reportedTranscriptionAllowance = null;
+    _reportedChatAllowance = null;
     _todayUsage = null;
     _todayCacheKey = null;
     _monthlyUsage = null;
@@ -587,6 +630,7 @@ class UsageProvider with ChangeNotifier {
       _subscription = subscription;
       _afterSubscriptionLoaded();
       TranscriptionAllowanceCache.replace(subscription.transcriptionAllowance);
+      _recordAllowanceReached();
       unawaited(_prepareOnDeviceNearCap(subscription.transcriptionAllowance));
       PlatformManager.instance.analytics.setSubscriptionTier(subscription.subscription.plan.name);
     } catch (e) {

@@ -1,3 +1,4 @@
+import { PurchaseObservation } from '../../../lib/purchaseContract.generated'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
 import { useSearchableRow } from '../searchContext'
@@ -10,6 +11,8 @@ import { TrialCard } from '../billing/TrialCard'
 import { PlanGrid } from '../billing/PlanGrid'
 import { canonicalPlanId } from '../../../lib/billingPlans'
 import {
+  trackPurchaseEvent,
+  openSubscriptionCheckout,
   trackPaywallOpened,
   trackUpgradeCancelled,
   trackUpgradePlanSelected,
@@ -66,6 +69,7 @@ export function PlanUsageTab(): React.JSX.Element {
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null)
   const plansRef = useRef<HTMLDivElement | null>(null)
   const paywallTracked = useRef(false)
+  const exposure = useRef(new PurchaseObservation(trackPurchaseEvent))
 
   useEffect(() => {
     if (paywallTracked.current || !sub?.subscription) return
@@ -117,6 +121,19 @@ export function PlanUsageTab(): React.JSX.Element {
     [subscription, sub?.available_plans]
   )
 
+  useEffect(() => {
+    // Preserve the legacy settings impression separately. The new event requires
+    // the actual catalog render branch, not merely a loaded subscription.
+    if (loading || !subscription || sub?.show_subscription_ui === false || catalog.length === 0)
+      return
+    exposure.current.view({
+      source: 'windows_settings_view',
+      current_plan: canonicalPlanId(subscription.plan) ?? 'unknown',
+      surface: 'settings_plans',
+      catalog_tier: 'not_applicable'
+    })
+  }, [loading, subscription, sub?.show_subscription_ui, catalog.length])
+
   const onManage = async (): Promise<void> => {
     setPortalBusy(true)
     try {
@@ -143,7 +160,15 @@ export function PlanUsageTab(): React.JSX.Element {
         {
           createCheckoutSession,
           upgradeSubscription,
-          openCheckout: (url) => window.omi.openCheckout(url),
+          openCheckout: (url) =>
+            openSubscriptionCheckout(
+              (address, onOpened, onCompleted) =>
+                window.omi.openCheckout(address, onOpened, onCompleted),
+              url,
+              tier,
+              priceTitle,
+              'windows_settings_view'
+            ),
           fetchSubscription,
           wait
         }

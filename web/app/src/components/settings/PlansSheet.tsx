@@ -1,6 +1,7 @@
 'use client';
+import { usePurchaseExposure } from '@/lib/analytics/usePurchaseExposure';
 
-import { CHECKOUT_POPUP_BLOCKED, openCheckoutWindow } from '@/lib/checkoutWindow';
+import { CHECKOUT_POPUP_BLOCKED } from '@/lib/checkoutWindow';
 
 import * as Dialog from '@radix-ui/react-dialog';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -32,6 +33,7 @@ import {
   yourPlanWillRenewOn,
 } from '@/lib/cancelPending';
 import {
+  openPurchaseCheckout,
   trackPaywallOpened,
   trackUpgradePlanSelected,
   trackUpgradeSucceeded,
@@ -59,6 +61,7 @@ export function PlansSheet({
   const [selectedPriceId, setSelectedPriceId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingPlans, setIsLoadingPlans] = useState(true);
+  const [plansLoadSucceeded, setPlansLoadSucceeded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [isCanceling, setIsCanceling] = useState(false);
@@ -74,6 +77,19 @@ export function PlansSheet({
     : 'Plan unavailable';
   const isUnknownPlan = planIdentity?.kind === 'unknown';
   const isCanceling_ = subscription?.cancel_at_period_end;
+
+  usePurchaseExposure(
+    open &&
+      !isLoadingPlans &&
+      plansLoadSucceeded &&
+      planIdentity?.kind === 'known' &&
+      pricingOptions.length > 0,
+    'web_plans',
+    subscription?.plan ?? 'unknown',
+    'plans_sheet',
+    'not_applicable',
+    open,
+  );
 
   useEffect(() => {
     if (open && !paywallWasOpen.current) {
@@ -106,6 +122,7 @@ export function PlansSheet({
       if (cachedPlans && cachedPlans.length > 0) {
         if (cancelled) return;
         setPricingOptions(cachedPlans);
+        setPlansLoadSucceeded(true);
         const activePlan = cachedPlans.find(
           (p) => p.is_active || p.id === subscription?.current_price_id,
         );
@@ -126,12 +143,14 @@ export function PlansSheet({
 
   const loadPlans = async (cancelled = false) => {
     setIsLoadingPlans(true);
+    setPlansLoadSucceeded(false);
     setError(null);
     try {
       const response = await getAvailablePlans();
       if (cancelled) return;
       if (response && response.plans) {
         setPricingOptions(response.plans);
+        setPlansLoadSucceeded(true);
         // Pre-select current active plan or first plan
         const activePlan = response.plans.find(
           (p) => p.is_active || p.id === subscription?.current_price_id,
@@ -201,7 +220,7 @@ export function PlansSheet({
           // Stripe Checkout opens in a new tab. The parent page never sees the
           // cancel URL Stripe returns to, so Upgrade Cancelled is not emitted
           // here. trackUpgradeCancelled exists for a client that can observe it.
-          if (!openCheckoutWindow(result.url)) {
+          if (!openPurchaseCheckout(result.url, tier, interval, 'web_plans')) {
             setError(CHECKOUT_POPUP_BLOCKED);
             return;
           }

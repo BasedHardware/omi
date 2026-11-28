@@ -115,11 +115,11 @@ export function ChatBridgeHost(): null {
   // and the TTS voice — so a blocked VOICE turn is answered aloud with the same
   // line the bar shows inline, rather than dying in silence.
   useEffect(() => {
-    return window.omi?.onBarUsageLimit?.(({ message, spoken, popup }) => {
+    return window.omi?.onBarUsageLimit?.(({ message, spoken, popup, authoritative }) => {
       // popup defaults to true; the blocked-voice send path sets it false because
       // the pre-capture PTT veto already raised the modal at the gesture (macOS
       // parity — a refused voice turn speaks, but never double-pops the popup).
-      if (popup !== false) showUsageLimit('chat')
+      if (popup !== false) showUsageLimit('chat', authoritative === true)
       if (spoken) void speakText(message).catch(() => {})
     })
   }, [])

@@ -1,3 +1,5 @@
+import 'package:omi/utils/analytics/purchase_exposure.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -134,6 +136,10 @@ class TrialUpsellContentState extends State<TrialUpsellContent> {
           ),
         ],
       ),
+    ).withPurchaseExposure(
+      source: widget.source,
+      surface: PaywallViewedSurface.trialUpsell,
+      catalogTier: widget.offer.tierId,
     );
   }
 }

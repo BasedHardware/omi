@@ -172,9 +172,23 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
   // Chat quota exceeded — set transiently when backend returns 402
   bool _chatQuotaExceeded = false;
   bool get isChatQuotaExceeded => _chatQuotaExceeded;
+  void _markChatQuotaReached() {
+    if (!_chatQuotaExceeded) {
+      PlatformManager.instance.analytics.allowanceReached(
+          kind: _chatAtCap != null ? 'usage_budget' : 'chat',
+          surface: 'chat',
+          reason: _chatAtCap != null ? 'budget_exhausted' : 'chat_quota_exhausted');
+    }
+    _chatQuotaExceeded = true;
+  }
+
   ChatAtCap? _chatAtCap;
   ChatAtCap? get chatAtCap => _chatAtCap?.active == true ? _chatAtCap : null;
   void applyChatAtCap(ChatAtCap? state) {
+    if (state != null && _chatAtCap == null) {
+      PlatformManager.instance.analytics
+          .allowanceReached(kind: 'usage_budget', surface: 'chat', reason: 'budget_exhausted');
+    }
     _chatAtCap = state;
     notifyListeners();
   }
@@ -874,7 +888,7 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
             return const VoiceQuestionResult.failed(VoiceQuestionFailure.noSpeech);
           }
           if (_tryParseQuotaError(chunk.text) || chunk.errorCode == 'quota_exceeded') {
-            _chatQuotaExceeded = true;
+            _markChatQuotaReached();
             final l10n = globalNavigatorKey.currentContext?.l10n;
             message.text = chatAtCap?.title ??
                 l10n?.chatQuotaExceededReply ??
@@ -1059,7 +1073,7 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
           if (chunk.type == MessageChunkType.error) {
             if (_tryParseQuotaError(chunk.text) || chunk.errorCode == 'quota_exceeded') {
               // Keep the user's message visible; replace AI placeholder with quota message
-              _chatQuotaExceeded = true;
+              _markChatQuotaReached();
               final l10n = globalNavigatorKey.currentContext?.l10n;
               message.text = chatAtCap?.title ??
                   l10n?.chatQuotaExceededReply ??
@@ -1171,13 +1185,13 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
       var detail = json['detail'] is Map ? json['detail'] as Map<String, dynamic> : json;
       if (detail['chat_at_cap'] is Map) {
         _chatAtCap = ChatAtCap.fromJson(Map<String, dynamic>.from(detail['chat_at_cap'] as Map));
-        _chatQuotaExceeded = true;
+        _markChatQuotaReached();
         notifyListeners();
         return true;
       }
       if (detail['error'] == 'quota_exceeded') {
         detail['allowed'] = false;
-        _chatQuotaExceeded = true;
+        _markChatQuotaReached();
         notifyListeners();
         return true;
       }

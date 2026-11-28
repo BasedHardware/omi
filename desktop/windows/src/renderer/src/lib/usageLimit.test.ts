@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+vi.mock('./analytics', () => ({ trackPurchaseEvent: vi.fn() }))
 
 // Mock the renderer BYOK cache so we can drive the "BYOK active" branch. Default
 // inactive, matching a free (non-BYOK) user; individual tests flip it on.

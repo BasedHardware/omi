@@ -1,6 +1,10 @@
 'use client';
+import {
+  usePurchaseExposure,
+  useAllowanceObservation,
+} from '@/lib/analytics/usePurchaseExposure';
 
-import { CHECKOUT_POPUP_BLOCKED, openCheckoutWindow } from '@/lib/checkoutWindow';
+import { CHECKOUT_POPUP_BLOCKED } from '@/lib/checkoutWindow';
 
 import * as Dialog from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
@@ -23,6 +27,7 @@ import {
 } from '@/lib/planStorefront';
 import { PlanStorefrontGate } from '@/lib/planStorefrontGate';
 import {
+  openPurchaseCheckout,
   trackPaywallOpened,
   trackUpgradePlanSelected,
   trackUpgradeSucceeded,
@@ -69,6 +74,12 @@ export function useStorefront(
     };
   }, [enabled, initial, reload]);
 
+  useAllowanceObservation(
+    enabled && !!data?.showSubscriptionUi && !!data && budgetExhausted(data),
+    'usage_budget',
+    'storefront',
+    'budget_exhausted',
+  );
   return { data, loading, failed, reload };
 }
 
@@ -100,7 +111,8 @@ async function purchase(
   }
   const result = await createCheckoutSession(price.id);
   if (result?.url) {
-    if (!openCheckoutWindow(result.url)) return CHECKOUT_POPUP_BLOCKED;
+    if (!openPurchaseCheckout(result.url, tier.planId, price.interval, source))
+      return CHECKOUT_POPUP_BLOCKED;
     const handleFocus = () => {
       onSubscriptionUpdate();
       window.removeEventListener('focus', handleFocus);
@@ -136,6 +148,22 @@ export function StorefrontPanel({
   const [busyPriceId, setBusyPriceId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const opened = useRef(false);
+  const recordPurchaseView = usePurchaseExposure(
+    false,
+    source,
+    data?.current?.planId ?? 'unknown',
+    'storefront',
+  );
+  useAllowanceObservation(
+    false,
+    'usage_budget',
+    'storefront',
+    'budget_exhausted',
+    !!data?.showSubscriptionUi &&
+      !!data &&
+      budgetExhausted(data) &&
+      trigger === 'usage_budget',
+  );
   const [confirmation, setConfirmation] = useState<{
     tier: PlanStorefrontTier;
     price: PlanStorefrontPrice;
@@ -197,6 +225,7 @@ export function StorefrontPanel({
     <>
       <StorefrontPlans
         data={data}
+        onPurchaseOptionsRendered={recordPurchaseView}
         loading={loading}
         failed={failed}
         busyPriceId={busyPriceId}
@@ -337,6 +366,13 @@ export function BudgetUpsellBanner({
   }, [readGate]);
 
   const { data } = useStorefront('web_plans', 'usage_budget', enabled);
+  useAllowanceObservation(
+    false,
+    'usage_budget',
+    'settings',
+    'budget_exhausted',
+    enabled && !!data?.showSubscriptionUi && !!data && budgetExhausted(data),
+  );
   if (
     !enabled ||
     !data ||

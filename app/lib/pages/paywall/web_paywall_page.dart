@@ -14,6 +14,7 @@ import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/utils/analytics/registry/typed_events.dart';
+import 'package:omi/utils/analytics/purchase_exposure.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -219,7 +220,7 @@ class _WebPaywallPageState extends State<WebPaywallPage> {
   }
 
   Future<void> _restore() async {
-    final outcome = await context.read<UsageProvider>().restorePurchases();
+    final outcome = await observePurchaseRestore(context.read<UsageProvider>(), widget.source);
     if (!mounted) return;
     switch (outcome) {
       case RestoreOutcome.paid:
@@ -294,6 +295,12 @@ class _WebPaywallPageState extends State<WebPaywallPage> {
           ],
         ),
       ),
+    ).withPurchaseExposure(
+      enabled: _ready,
+      source: widget.source,
+      surface: PaywallViewedSurface.webPaywall,
+      currentPlan: context.read<UsageProvider>().subscription?.subscription.plan.wireName ?? 'unknown',
+      catalogTier: _offer?.tierId ?? 'unknown',
     );
   }
 }

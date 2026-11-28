@@ -1,3 +1,5 @@
+import { purchasePayload, type PurchaseEventId } from './purchaseContract.generated';
+import { openCheckoutWindow } from '@/lib/checkoutWindow';
 import { PostHogManager } from '@/lib/analytics/posthog';
 
 const PLANS = new Set([
@@ -70,6 +72,11 @@ export function trackUpgradePlanSelected(
   billingInterval: string,
   source: string,
 ): void {
+  trackPurchaseEvent('upgradeTapped', {
+    plan: subscriptionPlanWire(plan),
+    billing_interval: subscriptionIntervalWire(billingInterval),
+    source,
+  });
   PostHogManager.track('Upgrade Plan Selected', {
     plan: subscriptionPlanWire(plan),
     billing_interval: subscriptionIntervalWire(billingInterval),
@@ -88,4 +95,34 @@ export function trackUpgradeSucceeded(plan: string, billingInterval: string): vo
 
 export function trackUpgradeCancelled(): void {
   PostHogManager.track('Upgrade Cancelled');
+}
+
+export function trackPurchaseEvent(
+  id: PurchaseEventId,
+  raw: Record<string, unknown>,
+): void {
+  const { name, properties } = purchasePayload(id, raw);
+  try {
+    PostHogManager.track(name, properties);
+  } catch {
+    /* Telemetry never changes purchase behavior. */
+  }
+}
+
+// Web checkout completion is tracked separately in SCA-4433.
+export function openPurchaseCheckout(
+  url: string,
+  plan: string,
+  interval: string,
+  source: string,
+): boolean {
+  if (!openCheckoutWindow(url)) return false;
+  trackPurchaseEvent('checkoutOpened', {
+    plan: subscriptionPlanWire(plan),
+    billing_interval: subscriptionIntervalWire(interval),
+    source,
+    stage: 'hosted_checkout',
+    result: 'opened',
+  });
+  return true;
 }

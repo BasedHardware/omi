@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
+vi.mock('../../../lib/analytics', () => ({ trackPurchaseEvent: vi.fn() }))
 import { ClaudeAuthSheet } from './ClaudeAuthSheet'
 import { beginClaudeSignIn, __resetClaudeSignIn } from '../../../lib/claudeSignIn'
 

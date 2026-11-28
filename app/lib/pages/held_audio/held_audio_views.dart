@@ -11,6 +11,7 @@ import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/on_device/on_device_transcription_controller.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 
 /// Same eligibility as the on-device overflow offer: this phone can run the engine.
 bool heldAudioPhoneEligible(OnDeviceTranscriptionController controller) {
@@ -57,6 +58,12 @@ class HeldRecordingLockedRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final started = DateTime.fromMillisecondsSinceEpoch(recording.startedAt * 1000);
+    void unlock() {
+      PlatformManager.instance.analytics
+          .upgradeTapped(plan: 'unknown', billingInterval: 'unknown', source: 'held_audio');
+      (onPressed ?? () => openHeldAudioPlans(context))();
+    }
+
     return Padding(
       padding: const EdgeInsets.only(top: 8, left: 16, right: 16),
       child: Column(
@@ -68,7 +75,7 @@ class HeldRecordingLockedRow extends StatelessWidget {
             child: InkWell(
               key: Key('held_recording_locked_${recording.id}'),
               borderRadius: OmiRadius.lgAll,
-              onTap: onPressed ?? () => openHeldAudioPlans(context),
+              onTap: unlock,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.sm),
                 child: Row(
@@ -92,7 +99,7 @@ class HeldRecordingLockedRow extends StatelessWidget {
                       key: Key('held_recording_unlock_${recording.id}'),
                       label: l10n.unlock,
                       size: OmiButtonSize.compact,
-                      onPressed: onPressed ?? () => openHeldAudioPlans(context),
+                      onPressed: unlock,
                     ),
                   ],
                 ),

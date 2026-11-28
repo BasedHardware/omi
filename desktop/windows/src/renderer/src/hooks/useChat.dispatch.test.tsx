@@ -28,6 +28,16 @@ const prefMocks = vi.hoisted(() => ({
 vi.mock('../lib/firebase', () => ({
   auth: { currentUser: { getIdToken: async () => 'test-token' } }
 }))
+vi.mock('../lib/billing', () => ({
+  fetchChatQuota: vi.fn().mockResolvedValue({
+    allowed: true,
+    plan: 'basic',
+    plan_type: 'free',
+    unit: 'questions',
+    used: 0,
+    limit: 1000
+  })
+}))
 vi.mock('../lib/pageCache', () => ({ invalidateConversationsCache: vi.fn() }))
 vi.mock('../lib/localAgent', () => ({ gatherLocalContext: async () => '' }))
 vi.mock('../lib/screenContext', () => ({ readCurrentScreen: async () => '' }))

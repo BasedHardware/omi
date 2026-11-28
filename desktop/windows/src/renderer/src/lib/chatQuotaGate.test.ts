@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
+vi.mock('./analytics', () => ({ trackPurchaseEvent: vi.fn() }))
 import type { ChatUsageQuota } from './omiApi.generated'
 import {
   createChatQuotaGate,

@@ -19,6 +19,9 @@ struct StorefrontPlansSection: View {
   @State private var loading = false
   @State private var failed = false
   @State private var reported = false
+  @State private var purchaseObservation = PurchaseObservation(sink: { event, properties in
+    AnalyticsManager.shared.purchaseEvent(event, properties)
+  })
   @State private var confirmation: Selection?
   @State private var showsConfirmation = false
 
@@ -83,8 +86,26 @@ struct StorefrontPlansSection: View {
   }
 
   private func report(_ shown: PlanStorefront?) {
+    if let shown, shown.showSubscriptionUi {
+      purchaseObservation.allowance(
+        shown.budgetExhausted, kind: "usage_budget", surface: "storefront", reason: "budget_exhausted")
+      purchaseObservation.allowance(
+        shown.budgetExhausted && trigger == .usageBudget, kind: "usage_budget", surface: "storefront",
+        reason: "budget_exhausted", block: true)
+      purchaseObservation.allowance(
+        shown.usage.mcpCapReached, kind: "mcp_daily_cap", surface: "storefront", reason: "mcp_cap_reached")
+      purchaseObservation.allowance(
+        shown.usage.mcpCapReached && trigger == .mcpDailyCap, kind: "mcp_daily_cap", surface: "storefront",
+        reason: "mcp_cap_reached", block: true)
+    }
     guard !reported, let shown, shown.showSubscriptionUi else { return }
     reported = true
+    AnalyticsManager.shared.purchaseEvent(
+      .paywallViewed,
+      [
+        "source": source, "current_plan": shown.current?.planId ?? "unknown", "surface": "storefront",
+        "catalog_tier": "not_applicable",
+      ])
     AnalyticsManager.shared.paywallOpened(source: source, currentPlan: shown.current?.planId ?? "unknown")
   }
 }
@@ -97,11 +118,14 @@ struct StorefrontBudgetEntry: View {
   var busyPriceId: String?
   var error: String?
   var reloadKey: String = ""
-  let onPurchase: (PlanStorefront.Tier, PlanStorefront.Price) -> Void
+  let onPurchase: (PlanStorefront.Tier, PlanStorefront.Price, String) -> Void
   let onManage: () -> Void
 
   @State private var data: PlanStorefront?
   @State private var showingSheet = false
+  @State private var allowanceObservation = PurchaseObservation(sink: { event, properties in
+    AnalyticsManager.shared.purchaseEvent(event, properties)
+  })
   @AppStorage("storefront.budgetNudgeDismissedPeriod") private var dismissedPeriod = ""
 
   var body: some View {
@@ -109,12 +133,25 @@ struct StorefrontBudgetEntry: View {
       if let data, data.budgetExhausted || (data.showsBudgetNudge && data.usage.periodId != dismissedPeriod) {
         StorefrontBudgetBanner(
           data: data, onOpen: { showingSheet = true },
-          onDismiss: { dismissedPeriod = data.usage.periodId ?? "" })
+          onDismiss: { dismissedPeriod = data.usage.periodId ?? "" }
+        )
+        .onAppear {
+          allowanceObservation.allowance(
+            data.budgetExhausted, kind: "usage_budget", surface: "settings", reason: "budget_exhausted", block: true)
+        }
+        .onChange(of: data.budgetExhausted) { _, reached in
+          allowanceObservation.allowance(
+            reached, kind: "usage_budget", surface: "settings", reason: "budget_exhausted", block: true)
+        }
       }
     }
     .task(id: reloadKey) {
       guard PlanStorefrontGate.contextualEnabled else { return }
       data = try? await APIClient.shared.getStorefront(source: "macos_usage_limit", trigger: .usageBudget)
+      if let data {
+        allowanceObservation.allowance(
+          data.budgetExhausted, kind: "usage_budget", surface: "settings", reason: "budget_exhausted")
+      }
     }
     .sheet(isPresented: $showingSheet) {
       ScrollView {
@@ -123,7 +160,7 @@ struct StorefrontBudgetEntry: View {
           busyPriceId: busyPriceId, error: error, reloadKey: reloadKey,
           onPurchase: { tier, price in
             showingSheet = false
-            onPurchase(tier, price)
+            onPurchase(tier, price, "macos_usage_limit")
           },
           onManage: onManage
         )
@@ -144,10 +181,13 @@ struct StorefrontBudgetEntry: View {
 struct StorefrontFeatureEntry: View {
   let trigger: PlanStorefront.Trigger
   var livePlanId: String?
-  let onPurchase: (PlanStorefront.Tier, PlanStorefront.Price) -> Void
+  let onPurchase: (PlanStorefront.Tier, PlanStorefront.Price, String) -> Void
   let onManage: () -> Void
   @State private var data: PlanStorefront?
   @State private var showing = false
+  @State private var allowanceObservation = PurchaseObservation(sink: { event, properties in
+    AnalyticsManager.shared.purchaseEvent(event, properties)
+  })
 
   private var eligible: Bool {
     guard let data, data.showSubscriptionUi, data.current?.legacy == false else { return false }
@@ -158,12 +198,23 @@ struct StorefrontFeatureEntry: View {
       if eligible, let data {
         Button(data.header ?? "Plans") { showing = true }
           .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+          .onAppear {
+            if trigger == .mcpDailyCap {
+              allowanceObservation.allowance(
+                data.usage.mcpCapReached, kind: "mcp_daily_cap", surface: "settings", reason: "mcp_cap_reached",
+                block: true)
+            }
+          }
       }
     }
     .task(id: livePlanId) {
       data = nil
       guard PlanStorefrontGate.contextualEnabled else { return }
       data = try? await APIClient.shared.getStorefront(source: "macos_" + trigger.rawValue, trigger: trigger)
+      if let data, trigger == .mcpDailyCap {
+        allowanceObservation.allowance(
+          data.usage.mcpCapReached, kind: "mcp_daily_cap", surface: "settings", reason: "mcp_cap_reached")
+      }
     }
     .sheet(isPresented: $showing) {
       ScrollView {
@@ -172,7 +223,7 @@ struct StorefrontFeatureEntry: View {
           livePlanId: livePlanId,
           onPurchase: { tier, price in
             showing = false
-            onPurchase(tier, price)
+            onPurchase(tier, price, "macos_" + trigger.rawValue)
           }, onManage: onManage
         )
         .padding(OmiSpacing.xxl)

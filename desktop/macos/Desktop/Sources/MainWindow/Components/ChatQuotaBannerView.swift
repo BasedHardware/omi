@@ -105,6 +105,11 @@ struct ChatQuotaBannerView: View {
     .accessibilityElement(children: .contain)
     .accessibilityLabel("\(banner.title). \(banner.message)")
     .accessibilityIdentifier("chat-quota-banner")
+    .purchaseExposure(source: "macos_chat_quota_banner", surface: "chat_quota_banner")
+    .purchaseChatAllowanceBlock(
+      shown: banner.threshold >= 100 && !banner.isBillingOverage,
+      authoritative: FloatingBarUsageLimiter.shared.serverQuota?.allowed == false
+    )
     .onAppear {
       AnalyticsManager.shared.paywallOpened(
         source: "macos_chat_quota_banner",
