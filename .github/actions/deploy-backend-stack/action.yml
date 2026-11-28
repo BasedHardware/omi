@@ -1821,6 +1821,13 @@ runs:
             backend-integration) candidate="$INTEGRATION" ;;
             *) exit 1 ;;
           esac
+          # The published floor must cover every inverse target before the
+          # executor moves traffic and again before a failed guard restores it.
+          history_args=()
+          if [[ "$(git rev-parse --is-shallow-repository)" == true ]]; then
+            history_args=(--unshallow)
+          fi
+          git fetch --no-tags "${history_args[@]}" origin +refs/heads/main:refs/remotes/origin/main
           # Verify the recovery snapshot before the executor changes traffic.
           python3 -I - "$DEPLOY_CONTROL_SCRIPTS" <<'PYTHON'
         import json, os, sys
@@ -1841,6 +1848,8 @@ runs:
             --source "$ADMITTED_SOURCE" --control "$WORKFLOW_CONTROL" \
             --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT" \
             --promotion-receipt "$RUNNER_TEMP/backend-holdback-promotion.json" \
+            --release-floor-check "$DEPLOY_WORKFLOW_ROOT/.github/scripts/verify_backend_release_floor.py" \
+            --refresh-floor \
             --guard-command python3 -I "$DEPLOY_CONTROL_SCRIPTS/cloud_run_split_canary.py" workflow-guard)" || {
               rc=$?
               if ((rc == 75)); then
