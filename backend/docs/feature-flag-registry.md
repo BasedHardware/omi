@@ -1719,7 +1719,7 @@ reason:
 | Key | Reason | owner | decision | review_by | notes |
 | --- | --- | --- | --- | --- | --- |
 | `RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT` | Inert since SCA-3748: the lease serves every account and no code reads the cohort. Deploy plumbing still binds and validates it; it leaves with the deploy vector. | — | — | — | — |
-| `RECORD_TOKEN_LEASE_SECONDS` | Lease timing parameter, default 3600 seconds; bounded to 1800-7200; mode owns rollback | — | — | — | — |
+| `RECORD_TOKEN_LEASE_SECONDS` | Lease timing parameter, default 3600 seconds; bounded to 1800-7200; rollback is a revert, and the mode is only the kill switch | — | — | — | — |
 | `RECORD_TOKEN_LEASE_DEPLOYED_AT` | Shared serve-enable epoch for bounded stock-token seed; missing epoch preserves the legacy producer fence | — | — | — | — |
 | `K_REVISION` | Cloud Run revision identity for process-local discovery phase, not a behavior flag | — | — | — | — |
 | `DD_TRACE_ENABLED` | Datadog telemetry instrumentation switch, not a product behavior flag | — | — | — | — |

@@ -896,7 +896,7 @@ flags:
   - {"key":"PREPAID_CODE_REDEEM","aliases":[],"kind":"env","lifecycle":"config_switch","surfaces":["backend"],"summary":"off (default: nobody, no read), cohort (members of the prepaid-code-redeem rollout cohort) or on (everyone): redeem a fully prepaid single-use Omi Pro code with no card","fail":"closed","owner":"billing","created":"2026-11-23","terminal":"keep","decision":"keep"}
 ignore:
   - {"key": "RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT", "kind": "env", "reason": "Inert since SCA-3748: the lease serves every account and no code reads the cohort. Deploy plumbing still binds and validates it; it leaves with the deploy vector."}
-  - {"key": "RECORD_TOKEN_LEASE_SECONDS", "kind": "env", "reason": "Lease timing parameter, default 3600 seconds; bounded to 1800-7200; mode owns rollback"}
+  - {"key": "RECORD_TOKEN_LEASE_SECONDS", "kind": "env", "reason": "Lease timing parameter, default 3600 seconds; bounded to 1800-7200; rollback is a revert, and the mode is only the kill switch"}
   - {"key": "RECORD_TOKEN_LEASE_DEPLOYED_AT", "kind": "env", "reason": "Shared serve-enable epoch for bounded stock-token seed; missing epoch preserves the legacy producer fence"}
   - {"key":"K_REVISION","reason":"Cloud Run revision identity for process-local discovery phase, not a behavior flag"}
   - {"key":"DD_TRACE_ENABLED","reason":"Datadog telemetry instrumentation switch, not a product behavior flag"}

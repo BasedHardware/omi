@@ -1322,13 +1322,14 @@ class WorkflowTests(unittest.TestCase):
     # sha256 of its exact script. A new or moved step, or any edit to one of these scripts, fails here until it
     # is reviewed for writes (fail closed), whatever it calls. SCA-3748 r2 inserted the worker lease binding
     # before the Helm upgrade; it is excluded from dry-run, so only later positions moved (digests unchanged).
+    # SCA-3748 r3 moved that binding to step 0, ahead of the image push; the earlier steps moved down by one.
     DRY_RUN_REACHABLE_RUN_STEPS = {
-        ("deploy", 0, "Validate Environment Input"): "72be50fd7a2df45c8ed4d49faf9b1afba93ef11ea22ce103e2997db61ae78e3b",
-        ("deploy", 1, "Delete huge unnecessary tools folder"): "5a5faacb04df5aab268eb9209ca091013f37c875222610c5a0ddd92bbd270e8a",
-        ("deploy", 3, "Select merged production source and image tag"): "22f8a15c2be33be8006fc5a2a8d85f4365193ad0d5f53bcd858cb7567dae70a5",
-        ("deploy", 7, "Resolve deployment target"): "70e03ebe8dfbbf768522c6bc295b2c93c160c8e9346d29e3946a3afe55df14b5",
-        ("deploy", 11, None): "37e80faecb6c46539e3d79a02169716302de6d9ec0e83e2b7ad178fbf2a580ad",  # gcloud auth configure-docker
-        ("deploy", 13, "Verify promoted worker digest"): "b785655ffe66200fcb07ff9ae3cb1b59712edc7ff104cc875077996818b43f65",
+        ("deploy", 1, "Validate Environment Input"): "72be50fd7a2df45c8ed4d49faf9b1afba93ef11ea22ce103e2997db61ae78e3b",
+        ("deploy", 2, "Delete huge unnecessary tools folder"): "5a5faacb04df5aab268eb9209ca091013f37c875222610c5a0ddd92bbd270e8a",
+        ("deploy", 4, "Select merged production source and image tag"): "22f8a15c2be33be8006fc5a2a8d85f4365193ad0d5f53bcd858cb7567dae70a5",
+        ("deploy", 8, "Resolve deployment target"): "70e03ebe8dfbbf768522c6bc295b2c93c160c8e9346d29e3946a3afe55df14b5",
+        ("deploy", 12, None): "37e80faecb6c46539e3d79a02169716302de6d9ec0e83e2b7ad178fbf2a580ad",  # gcloud auth configure-docker
+        ("deploy", 14, "Verify promoted worker digest"): "b785655ffe66200fcb07ff9ae3cb1b59712edc7ff104cc875077996818b43f65",
         ("deploy", 19, "Dry-run worker image preserving live runtime"): "344ade981770f2dbfb00d02bca7c30a8cf24000b144de5410256f0ac44f5a40e",
     }
 
@@ -1364,14 +1365,14 @@ class WorkflowTests(unittest.TestCase):
     # Every uses: step reachable in dry-run mode, pinned by position and the sha256 of its uses, with, env, if
     # and id, so an input edit (a checkout ref, credentials target) fails here until reviewed.
     DRY_RUN_REACHABLE_USES_STEPS = {
-        ("deploy", 2, "actions/checkout@v7"): "4fb614bb7e46760136a1991dd31d5e0934afebee07489e943bb30fa4bb1a189f",
-        ("deploy", 4, "actions/checkout@v7"): "283f9e569234e2552922cc61ee534f04186e382ef036b83d200b7cd66723c841",
-        ("deploy", 5, "actions/checkout@v7"): "2ca758dd5cfcfcf1b84411b8cc51d64b964159ef2cb7ad2d53888b9b96121769",
-        ("deploy", 6, "./.github/firestore-workflow/.github/actions/firestore-readiness"): "0d1f2c04c68ed64fe3aa9f9ad52cdf069fcb263c393cfe52480db951d2a1a6a0",
-        ("deploy", 8, "google-github-actions/auth@v3"): "3286efbdc0d1bd5adf1bf9c3afe2c88d539cd036e9aa5a42b0edb88fd9a62f40",
-        ("deploy", 9, "google-github-actions/auth@v3"): "6fc980f3f5bfc28ac2316bf7d0b0a8d3742dcb06f095984d3b19f5db6849f6b4",
-        ("deploy", 10, "google-github-actions/setup-gcloud@v3"): "81788bbf5c63a19208a6c40180026073562ec37f254843f07dfeae9348f616c9",
-        ("deploy", 14, "google-github-actions/get-gke-credentials@v3"): "45f3c39c6de870255d441dea6ea993c5cceb60a5c0b034d9d3563ec03f331090",
+        ("deploy", 3, "actions/checkout@v7"): "4fb614bb7e46760136a1991dd31d5e0934afebee07489e943bb30fa4bb1a189f",
+        ("deploy", 5, "actions/checkout@v7"): "283f9e569234e2552922cc61ee534f04186e382ef036b83d200b7cd66723c841",
+        ("deploy", 6, "actions/checkout@v7"): "2ca758dd5cfcfcf1b84411b8cc51d64b964159ef2cb7ad2d53888b9b96121769",
+        ("deploy", 7, "./.github/firestore-workflow/.github/actions/firestore-readiness"): "0d1f2c04c68ed64fe3aa9f9ad52cdf069fcb263c393cfe52480db951d2a1a6a0",
+        ("deploy", 9, "google-github-actions/auth@v3"): "3286efbdc0d1bd5adf1bf9c3afe2c88d539cd036e9aa5a42b0edb88fd9a62f40",
+        ("deploy", 10, "google-github-actions/auth@v3"): "6fc980f3f5bfc28ac2316bf7d0b0a8d3742dcb06f095984d3b19f5db6849f6b4",
+        ("deploy", 11, "google-github-actions/setup-gcloud@v3"): "81788bbf5c63a19208a6c40180026073562ec37f254843f07dfeae9348f616c9",
+        ("deploy", 15, "google-github-actions/get-gke-credentials@v3"): "45f3c39c6de870255d441dea6ea993c5cceb60a5c0b034d9d3563ec03f331090",
         ("deploy", 23, "BasedHardware/omi/.github/actions/deployment-summary@979b573718fd74b31edab3530adf2ed6082622dc"): "c257060cea729ac65883e35ee3b6903cac984e060e3fdc1dbf89194ad3e89c76",
         ("deploy", 24, "BasedHardware/omi/.github/actions/deployment-notifier@979b573718fd74b31edab3530adf2ed6082622dc"): "06ded6f4ab1d55dfa518648cb4d7bb066492375329d6b87b320750b4f8fa8276",
     }
@@ -1407,7 +1408,7 @@ class WorkflowTests(unittest.TestCase):
         }
         digests = {key: self.step_digest(step) for key, step in reachable.items()}
         self.assertEqual(digests, self.DRY_RUN_REACHABLE_RUN_STEPS)
-        self.assertEqual(reachable[("deploy", 11, None)]["run"].strip(), "gcloud auth configure-docker")
+        self.assertEqual(reachable[("deploy", 12, None)]["run"].strip(), "gcloud auth configure-docker")
         for key, step in reachable.items():
             with self.subTest(step=key):
                 self.assertFalse(self.writes(step["run"]))

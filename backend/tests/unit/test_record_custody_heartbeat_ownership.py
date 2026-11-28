@@ -41,7 +41,9 @@ async def test_archive_renews_only_owned_session_and_preserves_read_only_late_ob
 ):
     store, clock = world
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', mode)
-    state = {'uid': 'synthetic', 'cid': 'record'}
+    # custody_upload starts every request unbound; a preset target means admission
+    # already bound it (and begin found no fence to acquire, i.e. not owned).
+    state = {} if acquire else {'uid': 'synthetic', 'cid': 'record'}
     context = request._upload.set(state)
     before = deepcopy(store.rows[PATH]['record_upload_sessions'])
     try:

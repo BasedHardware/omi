@@ -511,7 +511,7 @@ only `recording_session_id` resolves its user-scoped conversation through the sa
 resolver as record admission and fences that target. If the session does not
 resolve, the original archive/admission response remains unchanged and there is
 no custody append for an unknown target. Captured native input pins
-`record_input_upload_revision` on its jobs while lease observation is enabled.
+`record_input_upload_revision` on its jobs in every lease mode.
 A newer append schedules partial continuation regardless of conversation status;
 uncaptured admission reads the current revision and CAS-validates it after staging.
 Separate continuation jobs enter `record_recovery_waiting` until the original
@@ -522,10 +522,14 @@ worker returns. Original work and projection bindings are not rewritten.
 Frame late-append counting follows successful durable window/object commit.
 Producer Helm env bindings use the shared runtime ConfigMap; Cloud Run and that
 ConfigMap render the same protected-environment `RECORD_TOKEN_LEASE_*` input
-vector. An unset input renders `serve`, percent 100, at the shared serve-enable
-epoch `1795662310` (composite defaults, workflow fallbacks, runtime manifest and
-worker chart), so an unset variable never renders the kill. `off` is an upload
-pause, not a rollback. The first serve-enable epoch stays pinned.
+vector. Every prod writer (the backend stack and projection pump composites,
+Listen, Pusher and the worker Helm upgrade) binds the four Actions variables
+verbatim as its first step; a missing, empty or invalid variable fails the run
+before any registry, GitHub, Secret Manager, ConfigMap, Helm or Cloud Run write.
+Prod has no fallback and the prod worker chart refuses to render without the
+vector. Only development fills `serve`, percent 100, 3600 seconds and the shared
+serve-enable epoch `1795662310`. `off` is an upload pause, not a rollback. The
+first serve-enable epoch stays pinned.
 Custody late-append accounting observes the post-storage renewal/finish transaction
 for owned and unowned archives, including throttled renewals. Each
 request retains every durable-file observation through transaction retries and
@@ -535,8 +539,8 @@ This includes a new pusher session's first durable frame when an older token on
 the still-open row has lapsed; registration alone never increments the counter.
 The active repair CronJob exports the sampled oldest-unsealed age and child
 probe counters on `/metrics`, scraped every 15s, without enabling the idle worker.
-Memoized waits do no token IO; observed append heartbeats coalesce to lease/2. Serve-only frames
-after complete seal re-open the row and use the existing partial continuation
+Memoized waits do no token IO; observed append heartbeats coalesce to lease/2. Frames
+after complete seal re-open the row in every mode and use the existing partial continuation
 for interior gaps. Late WAL holes are retained create-only for that same worker;
 raw audio stays retained. See the [review fixes](listen_pusher_pipeline/changes/2026-11-09-token-lease-review-fixes.md).
 See [rollout and rollback](listen_pusher_pipeline/changes/2026-11-09-record-token-lease.md).

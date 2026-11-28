@@ -320,7 +320,7 @@ custody obligation. The kill is an upload pause, never a behavior rollback; roll
 back by reverting the change or restoring the prior image.
 Memoized waits do no token IO. Custody heartbeats renew at most once per lease/2
 per conversation, only on observed manifests or completed archive file appends.
-Serve-only frames revise and reopen the row. If original input has already been
+Frames revise and reopen the row in every mode. If original input has already been
 captured, both frames and accepted custody schedule the existing partial
 continuation, regardless of conversation status, preserving original immutable
 work. Uncaptured admission reads the current revision and validates it again
@@ -331,7 +331,11 @@ original response, without a fence, revision bump or recovery job.
 Late WAL holes are retained create-only against actual sample coverage, so
 partial rows and interior gaps are processed without the tail-only gap-fill
 ramp. Partial results retain their partial marker; no completeness is invented.
-Off keeps old writes/decisions, and post-seal shadow frames only count.
+The kill (`off`, or any value other than unset or `serve`) changes two decisions
+only: Sync refuses new custody before any write, and a lapsed lease grants no
+seal or partial-finish authority. Registration, frame and custody renewal,
+post-seal reopening and recovery keep running in every mode, so lifting the
+kill cannot mass-expire tokens.
 Raw audio is never deleted. The kill keeps frame-token pod and abandonment seal
 authority and accepted-byte recovery, and withholds every lease-expiry exit,
 including that of existing podless custody tokens.

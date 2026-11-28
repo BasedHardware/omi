@@ -1,7 +1,9 @@
 """Real custody metadata transactions around accepted/refused storage requests."""
 
+import asyncio
 from copy import deepcopy
 import hashlib
+import threading
 from unittest.mock import Mock
 
 import pytest
@@ -474,6 +476,64 @@ async def test_routing_cannot_rebind_an_admitted_upload_to_another_target(monkey
     # The admitted fence is released as an unaccepted upload.
     assert 'custody:rebind' not in client.rows[PATH]['record_upload_sessions']
     assert client.rows[PATH]['record_upload_revision'] == 7
+
+
+@pytest.mark.parametrize('acquired', [True, False])
+@pytest.mark.parametrize('first_bind', ['admission', 'routing'])
+async def test_cancel_during_late_fence_acquisition_cannot_strand_the_token(monkeypatch, first_bind, acquired):
+    # SCA-3748 r3 finding 3: cancellation ran the wrapper's finish while the begin
+    # thread was still committing, so finish saw no token and begin then left it.
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    tokens: dict[str, dict[str, str]] = {}
+    begin_started, release_begin, begin_done, finish_called = (threading.Event() for _ in range(4))
+    finishes: list[bool] = []
+
+    def begin(uid, cid, session):
+        begin_started.set()
+        assert release_begin.wait(5)
+        if acquired:
+            tokens[session] = {'signal_source': 'custody_append'}
+        begin_done.set()
+        return acquired
+
+    def finish(uid, cid, session, *, accepted, late_observed=False):
+        # Records whether the token was already committed when cleanup ran.
+        finishes.append(session in tokens)
+        tokens.pop(session, None)
+        finish_called.set()
+        return False
+
+    monkeypatch.setattr(database, 'begin', begin)
+    monkeypatch.setattr(database, 'finish', finish)
+    archive = Mock(return_value=['object'])
+
+    @request.custody_upload
+    async def upload():
+        if first_bind == 'admission':
+            await request.begin_upload('synthetic', 'record', 'cancelled')
+        else:
+            # The session resolves only in routing, which binds the fence late.
+            await request.begin_upload('synthetic', None, 'cancelled')
+            await request.bind_upload_target('synthetic', 'record')
+        await request.archive(archive, 'synthetic', ['local'], {})
+        return JSONResponse(status_code=202, content={'status': 'queued'})
+
+    loop = asyncio.get_running_loop()
+    task = asyncio.ensure_future(upload())
+    assert await loop.run_in_executor(None, begin_started.wait, 5)
+    task.cancel()
+    # Give an unowned cleanup every chance to run before begin commits.
+    await loop.run_in_executor(None, finish_called.wait, 0.3)
+    release_begin.set()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert await loop.run_in_executor(None, begin_done.wait, 5)
+    archive.assert_not_called()
+    # Cleanup waited for the in-flight acquisition, then cleared its token; a
+    # refused acquisition (sync opt-out) leaves nothing to finish.
+    assert finishes == ([True] if acquired else [])
+    assert tokens == {}
+    assert request._upload.get() is None
 
 
 @pytest.mark.parametrize('late', [False, True])

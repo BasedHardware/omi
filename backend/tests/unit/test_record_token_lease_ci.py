@@ -22,6 +22,25 @@ JOB_ENVIRONMENT = "${{ github.event.inputs.environment == 'prod' && 'prod' || 'd
 # added here and bind the same step, or the discovery test below fails.
 STANDALONE_WRITERS = ('gcp_backend_pusher.yml', 'gcp_backend_listen_helm.yml', 'gcp_diarizer.yml')
 STACK_CALLERS = ('gcp_backend.yml', 'gcp_backend_auto_dev.yml')
+# Composite actions that render the lease keys into a workload, and their callers.
+LEASE_COMPOSITES = {
+    'deploy-backend-stack': {('gcp_backend.yml', 'deploy'), ('gcp_backend_auto_dev.yml', 'deploy')},
+    'deploy-projection-pump': {('gcp_backend.yml', 'deploy-projection-pump')},
+}
+# Prod manifest surfaces that carry the lease keys, and the writer that renders them.
+LEASE_SURFACES = {
+    ('cloud_run', 'backend'): 'deploy-backend-stack',
+    ('cloud_run', 'backend-sync'): 'deploy-backend-stack',
+    ('cloud_run', 'backend-sync-backfill'): 'deploy-backend-stack',
+    ('cloud_run', 'backend-integration'): 'deploy-backend-stack',
+    ('cloud_run', 'backend-projection-pump'): 'deploy-projection-pump',
+    ('gke', 'backend-listen'): 'gcp_backend_listen_helm.yml',
+    ('gke', 'pusher'): 'gcp_backend_pusher.yml',
+    ('gke', 'config_map'): 'deploy-backend-stack',
+}
+# gcp_backend.yml jobs that write externally before or beside the stack composite on
+# a deploy run (audit issue, Cloud Run). firestore_readiness must bind before them.
+GCP_BACKEND_DEPLOY_WRITERS = ('record_break_glass', 'deploy', 'deploy-projection-pump')
 
 
 def test_transaction_and_lifecycle_proofs_are_in_the_emulator_ci_lane():
@@ -65,12 +84,13 @@ def test_real_promql_proof_is_required_in_local_and_ci_manifests():
     assert 'runpy.run_path' in script and 'tests/promql/record_token_lease.py' in script
 
 
-def _action():
-    return yaml.safe_load((ROOT / '.github/actions/deploy-backend-stack/action.yml').read_text())
+@lru_cache(maxsize=None)
+def _action(name='deploy-backend-stack'):
+    return yaml.safe_load((ROOT / '.github/actions' / name / 'action.yml').read_text())
 
 
-def _action_binding():
-    return next(step for step in _action()['runs']['steps'] if step.get('name') == BINDING)
+def _action_binding(name='deploy-backend-stack'):
+    return next(step for step in _action(name)['runs']['steps'] if step.get('name') == BINDING)
 
 
 def _job_bindings(workflow):
@@ -102,16 +122,20 @@ def _run_binding(monkeypatch, tmp_path, environment, values):
 
 
 def test_every_prod_lease_writer_binds_all_four_from_vars_with_no_fallback():
-    action = _action()
     binding = _action_binding()
     assert 'GITHUB_ENV' in binding['run']
-    assert binding['env']['RECORD_TOKEN_LEASE_ENVIRONMENT'] == '${{ inputs.environment }}'
-    for key in KEYS:
-        name = key.lower()
-        assert binding['env'][key] == '${{ inputs.' + name + ' }}'
-        # An omitted input must reach the binding empty, so prod fails instead of defaulting.
-        assert action['inputs'][name]['default'] == ''
-    for workflow in STANDALONE_WRITERS:
+    for composite in LEASE_COMPOSITES:
+        action = _action(composite)
+        step = _action_binding(composite)
+        # One binding text everywhere: the executed tests below cover every writer.
+        assert step['run'] == binding['run'], composite
+        assert step['env']['RECORD_TOKEN_LEASE_ENVIRONMENT'] == '${{ inputs.environment }}', composite
+        for key in KEYS:
+            name = key.lower()
+            assert step['env'][key] == '${{ inputs.' + name + ' }}', composite
+            # An omitted input must reach the binding empty, so prod fails instead of defaulting.
+            assert action['inputs'][name]['default'] == '', composite
+    for workflow in (*STANDALONE_WRITERS, 'gcp_backend.yml'):
         config = _workflow(workflow)
         # Protected environment variables become available after the runner
         # declares the environment. Workflow-scope defaults can mask the ramp.
@@ -142,6 +166,120 @@ def test_standalone_writers_bind_before_their_runtime_config_writer():
         assert writers, f'{workflow} no longer exercises the runtime ConfigMap writer'
 
 
+# Step markers for external writes: registry, GitHub, Secret Manager, ConfigMap, Helm, Cloud Run.
+WRITE_MARKERS = (
+    'docker push',
+    'helm ',
+    'gh issue create',
+    'gh label create',
+    'kubectl apply',
+    'deploy-backend-config.sh',
+    'gcloud run',
+    'gcloud secrets',
+    'deploy-cloudrun',
+    'deploy-backend-stack',
+    'deploy-projection-pump',
+)
+
+
+def _writes(step):
+    text = f"{step.get('uses', '')}\n{step.get('run', '')}"
+    return any(marker in text for marker in WRITE_MARKERS)
+
+
+def _read_only_prefix(steps):
+    # Steps allowed ahead of the binding: local checkouts and run steps that
+    # write nothing external (input validation, exact-control guards).
+    for step in steps:
+        uses = step.get('uses', '')
+        assert not _writes(step), step.get('name') or uses
+        assert not uses or uses.startswith('actions/checkout@'), step.get('name') or uses
+
+
+def test_every_lease_writer_binds_before_any_write():
+    # SCA-3748 r3 finding 1: the worker pushed its image, and the backend opened its
+    # break-glass issue, before a missing prod vector failed the run. The binding
+    # now precedes every external write in each job and composite that writes the
+    # lease env: first in the worker, Pusher, firestore_readiness and both
+    # composites; Listen keeps its pinned validate/checkout/exact-control prefix.
+    first = {'gcp_diarizer.yml', 'gcp_backend_pusher.yml', 'gcp_backend.yml'}
+    for workflow in (*STANDALONE_WRITERS, 'gcp_backend.yml'):
+        bindings = _job_bindings(workflow)
+        assert bindings, workflow
+        for job_name, job, index, _ in bindings:
+            where = f'{workflow}:{job_name}'
+            if workflow in first:
+                assert index == 0, where
+            _read_only_prefix(job['steps'][:index])
+            # The classifier must still see this job's writes, all after the binding.
+            assert any(_writes(step) for step in job['steps'][index + 1 :]) or job_name == 'firestore_readiness', where
+    for composite, callers in LEASE_COMPOSITES.items():
+        steps = _action(composite)['runs']['steps']
+        assert steps[0].get('name') == BINDING, composite
+        assert any(_writes(step) for step in steps[1:]), composite
+        for workflow, job_name in callers:
+            caller_steps = _workflow(workflow)['jobs'][job_name]['steps']
+            index = next(i for i, s in enumerate(caller_steps) if f'actions/{composite}' in s.get('uses', ''))
+            # Only local checkouts may precede the composite's own first-step binding.
+            _read_only_prefix(caller_steps[:index])
+            assert all(s.get('uses', '').startswith('actions/checkout@') for s in caller_steps[:index])
+
+
+def test_backend_deploy_run_validates_the_vector_before_the_break_glass_audit_issue():
+    jobs = _workflow('gcp_backend.yml')['jobs']
+    ((job_name, job, index, step),) = _job_bindings('gcp_backend.yml')
+    assert (job_name, index) == ('firestore_readiness', 0)
+    # Deploy mode only: build-only and workerd runs write no lease env.
+    assert step['if'] == "github.event.inputs.mode == 'deploy'"
+    assert 'deploy' in job['if']
+    for writer in GCP_BACKEND_DEPLOY_WRITERS:
+        needs = jobs[writer]['needs']
+        assert 'firestore_readiness' in ([needs] if isinstance(needs, str) else needs), writer
+    # Every deploy-mode writer requires firestore_readiness to have succeeded.
+    for writer in ('deploy', 'deploy-projection-pump'):
+        assert "needs.firestore_readiness.result == 'success'" in jobs[writer]['if'], writer
+    assert jobs['record_break_glass']['if'] == "${{ needs.firestore_readiness.outputs.break_glass == 'true' }}"
+
+
+def test_projection_pump_caller_passes_the_raw_lease_vars():
+    # SCA-3748 r3 finding 2: the pump rendered the inherited lease keys from manifest
+    # defaults without ever reading the four variables.
+    step = next(
+        s
+        for s in _workflow('gcp_backend.yml')['jobs']['deploy-projection-pump']['steps']
+        if s.get('uses') == './.github/actions/deploy-projection-pump'
+    )
+    assert _workflow('gcp_backend.yml')['jobs']['deploy-projection-pump']['environment'] == 'prod'
+    for key in KEYS:
+        assert step['with'][key.lower()] == '${{ vars.' + key + ' }}'
+    assert step['with']['environment'] == '${{ github.event.inputs.environment }}'
+
+
+def test_every_manifest_surface_with_lease_keys_has_a_bound_writer():
+    # A service or job that inherits the lease keys must be rendered by a writer
+    # that binds the four variables; otherwise it would deploy manifest defaults.
+    loader = getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
+    manifest = yaml.load((ROOT / 'backend/deploy/runtime_env.yaml').read_text(), Loader=loader)
+    prod = manifest['environments']['prod']
+    found = set()
+    for name, service in (prod['cloud_run'].get('services') or {}).items():
+        if 'RECORD_TOKEN_LEASE_MODE' in (service.get('env') or {}):
+            found.add(('cloud_run', name))
+    for name, job in (prod['cloud_run'].get('jobs') or {}).items():
+        assert not set(KEYS).intersection(job.get('env') or {}), f'Cloud Run job {name} has no lease binding'
+    for name, workload in prod['gke'].items():
+        entries = workload.get('env') or workload.get('entries') or {}
+        if 'RECORD_TOKEN_LEASE_MODE' in entries:
+            found.add(('gke', name))
+    assert not set(KEYS).intersection(prod.get('desktop_backend', {}).get('env') or {})
+    assert found == set(LEASE_SURFACES)
+    for writer in set(LEASE_SURFACES.values()):
+        if writer.endswith('.yml'):
+            assert _job_bindings(writer), writer
+        else:
+            assert _action(writer)['runs']['steps'][0].get('name') == BINDING, writer
+
+
 def test_worker_helm_upgrade_passes_the_bound_vector_for_seal_worker_and_repair():
     # SCA-3748 r2 finding 1: the worker Helm upgrade wrote record-seal-worker and
     # record-seal-repair lease env from a literal in prod values.
@@ -168,6 +306,11 @@ def test_no_other_workflow_writes_lease_env_or_upgrades_the_worker_chart():
         # The worker chart renders the seal readers' lease env; only the bound path may install it.
         if 'charts/batch-pipeline-worker' in text:
             assert path.name == 'gcp_diarizer.yml', f'{path.name} installs the worker chart outside the binding'
+    for path in sorted((ROOT / '.github/actions').glob('*/action.y*ml')):
+        text = path.read_text()
+        # A composite that renders the backend runtime manifest renders the lease keys.
+        if 'RECORD_TOKEN_LEASE_' in text or 'render_backend_runtime_env.py' in text:
+            assert path.parent.name in LEASE_COMPOSITES, f'{path.parent.name} renders lease env outside the binding'
 
 
 @pytest.mark.parametrize('environment', ['prod', None, '', 'staging-typo'])

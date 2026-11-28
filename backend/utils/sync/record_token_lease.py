@@ -1,5 +1,6 @@
 """Request-scoped custody fences; no upload state survives in a process cache."""
 
+import asyncio
 from contextvars import ContextVar
 from functools import wraps
 import json
@@ -25,6 +26,9 @@ class UploadState(TypedDict, total=False):
     durable: bool
     no_append: bool
     late_observed: bool
+    # The in-flight fence acquisition. It runs on a worker thread that a
+    # cancelled request cannot stop, so cleanup waits for it before finish.
+    acquisition: 'asyncio.Task[bool]'
 
 
 P = ParamSpec('P')
@@ -53,6 +57,16 @@ def custody_upload(fn: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R]]:
             return result
         finally:
             try:
+                acquisition = state.get('acquisition')
+                if acquisition is not None:
+                    # A cancellation can land while begin is still committing the
+                    # token. Finishing first would see no token and return, and the
+                    # commit would then strand it. Wait for the outcome; its error,
+                    # if any, is handled as an uncertain commit below.
+                    await asyncio.wait({acquisition})
+                    if not acquisition.cancelled() and acquisition.exception() is None and not acquisition.result():
+                        # Not acquired (sync opt-out): there is no token to finish.
+                        state.pop('session', None)
                 accepted = bool(state.get('durable') and accepted_response(response))
                 session = state.get('session')
                 if session:
@@ -146,8 +160,13 @@ async def bind_upload_target(uid: str, cid: str) -> None:
         raise HTTPException(status_code=503, detail='Retain local audio and retry custody admission')
     # Retain the exact candidate even if the commit response is lost.
     state['session'] = 'custody:' + job_id
+    # custody_upload owns this task: cancelling the request must not cancel the
+    # acquisition out from under its cleanup (see custody_upload's finally).
+    state['acquisition'] = asyncio.ensure_future(
+        run_blocking(db_executor, record_custody_append.begin, uid, cid, state['session'])
+    )
     try:
-        acquired = await run_blocking(db_executor, record_custody_append.begin, uid, cid, state['session'])
+        acquired = await asyncio.shield(state['acquisition'])
     except Exception as error:
         raise HTTPException(status_code=503, detail='Retain local audio and retry custody admission') from error
     if not acquired:
