@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-android-live-page-flag-off.png",
+      "platform": "mobile-android",
+      "description": "Live page on a conversations v3 account before the server has made the conversation, flag off (today's layout): Listening, the transcript, Pause and Finish. Widget-test render; the test engine draws the transcript text as blocks.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-android-live-page-flag-on.png",
+      "platform": "mobile-android",
+      "description": "The same state with mobile-live-conversation-page on: the conversation page's layout, with Summary and Transcript tabs, Pause and End Conversation. Widget-test render.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

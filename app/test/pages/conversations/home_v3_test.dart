@@ -89,6 +89,8 @@ import 'package:omi/widgets/conversation_bottom_bar.dart' show ConversationTab;
 
 import '../../helpers/sfpro_font_fixtures.dart';
 
+import '../../support/surface_render.dart';
+
 // v3 Home (recordings and conversations), on the hermetic fixture of perf/scroll_home_notify_test.dart.
 
 class _StubDeviceProvider extends ChangeNotifier implements DeviceProvider {
@@ -1634,6 +1636,7 @@ void main() {
       (tester) async {
     LiveConversationPageGate.debugOverride = true;
     addTearDown(() => LiveConversationPageGate.debugOverride = null);
+    await loadSurfaceRenderFonts();
     await withClock(Clock.fixed(_now), () async {
       final home = await _pumpHome(tester, v3: true);
       home.liveOpen = false;
@@ -1645,6 +1648,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
       expect(find.byKey(const Key('live_conversation_shell')), findsOneWidget);
       expect(find.byType(ConversationDetailPage), findsNothing);
+      await writeSurfaceRender(tester, 'live-page-before-server-conversation');
       final title = find.byKey(const Key('live_page_v3_title'));
       expect(find.descendant(of: title, matching: find.text('Listening')), findsOneWidget);
       // Summary and Transcript, opened on Transcript; Summary says when it comes.

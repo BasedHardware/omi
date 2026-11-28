@@ -386,6 +386,9 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
         automaticallyImplyLeading: false,
         leading: const Center(child: OmiBackButton.circled()),
         titleSpacing: 0,
+        backgroundColor: OmiColors.surface0,
+        surfaceTintColor: Colors.transparent,
+        scrolledUnderElevation: 0,
       ),
       body: Stack(
         children: [
