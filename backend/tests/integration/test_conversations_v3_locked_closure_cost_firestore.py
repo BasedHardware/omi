@@ -39,6 +39,9 @@ def owner(monkeypatch):
     monkeypatch.setenv('CONVERSATIONS_V3_SKIP_UNCHANGED_WRITES', 'on')
     monkeypatch.setenv('CONVERSATIONS_V3_LOCKED_CLOSURE_OWNERS', '*')
     monkeypatch.setenv('CONVERSATIONS_V3_TASKS_URL', 'https://tasks.example.test')
+    # These proofs isolate V3 closure cost; production keeps the first-week
+    # guarantee explicitly off until its activation gates are met.
+    monkeypatch.setenv('FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED', 'false')
     client = _client.get_firestore_client()
     user = client.collection('users').document('test-' + uuid4().hex)
     try:

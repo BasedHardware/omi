@@ -42,6 +42,7 @@ SUMMARY = SimpleNamespace(structured={'overview': 'Synthetic committed summary'}
 @pytest.fixture
 def rows(state, monkeypatch):  # noqa: F811
     monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'false')
+    monkeypatch.setenv('FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED', 'false')
     monkeypatch.setattr(custody, 'discard_blocked', lambda _row_id: False)
     from database import conversations as conversations_db
 
@@ -821,7 +822,11 @@ def test_priority_lookup_reads_only_conversation_clocks(state, monkeypatch, fini
     monkeypatch.setenv('ENRICHMENT_ROUTE', 'enrichment_queue')
     monkeypatch.setenv('ENRICHMENT_FRESH_TASKS_QUEUE', 'enrichment-fresh')
     assert outbox._recent_conversation('u', 'c', 10_000)
-    document.get.assert_called_once_with(field_paths=['finished_at', 'created_at'], timeout=2, retry=None)
+    document.get.assert_called_once_with(
+        field_paths=['finished_at', 'created_at', 'started_at', 'first_week_summary', 'processing_tier'],
+        timeout=2,
+        retry=None,
+    )
 
 
 def test_priority_metadata_failure_leaves_new_work_on_existing_queue(split_binding, monkeypatch):

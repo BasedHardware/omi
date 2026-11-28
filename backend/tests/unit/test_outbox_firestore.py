@@ -8,6 +8,7 @@ from unittest.mock import Mock
 
 import pytest
 
+import database.outbox_firestore as outbox_firestore_module
 from database.outbox import Claim, Outcome
 from database.outbox_firestore import ENRICHMENT_OUTBOX as outbox, firestore_outbox
 from database.outbox import OutboxKind
@@ -22,6 +23,7 @@ PAYLOAD = {'conversation_id': 'c', 'language': 'en'}
 @pytest.fixture
 def rows(state, monkeypatch):  # noqa: F811
     monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'false')
+    monkeypatch.setenv('FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED', 'false')
     monkeypatch.setattr(custody, 'discard_blocked', lambda _row_id: False)
     return state
 
@@ -34,6 +36,44 @@ def _claim(rows, *, now=1000.0, lease=120.0):
     claimed = outbox.claim_key(KEY, rows[0][KEY]['task_token'], lease, now=now)
     assert isinstance(claimed, Claim), claimed
     return claimed
+
+
+def test_first_week_stamp_is_part_of_the_claim_payload_contract():
+    assert 'first_week_summary' in outbox_firestore_module._PAYLOAD_FIELDS
+
+
+def test_new_producer_rows_reuse_the_conversation_window(monkeypatch):
+    stamp = {'policy_id': 'first_week_summary.v1', 'paid_since': 10, 'window_end_at': 20, 'interval': 'unknown'}
+
+    class Snapshot:
+        exists = True
+
+        def to_dict(self):
+            return {'created_at': 11, 'first_week_summary': stamp}
+
+    class Ref:
+        def get(self, **kwargs):
+            assert kwargs['field_paths'] == ['created_at', 'started_at', 'first_week_summary', 'processing_tier']
+            return Snapshot()
+
+    class Conversations:
+        def document(self, _conversation_id):
+            return Ref()
+
+    class User:
+        def collection(self, _name):
+            return Conversations()
+
+    class Users:
+        def document(self, _uid):
+            return User()
+
+    class Client:
+        def collection(self, _name):
+            return Users()
+
+    monkeypatch.setattr(outbox_firestore_module.users_db, 'first_week_stamp_for', lambda *_args: None)
+    assert outbox_firestore_module._first_week_for_enqueue(Client(), 'u', 'c') == stamp
 
 
 def test_enqueue_writes_a_mark_compatible_row_and_wakes_after_commit(rows):

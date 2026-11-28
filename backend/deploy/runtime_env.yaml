@@ -3935,6 +3935,9 @@ environments:
             source: environment
           SYNC_TASKS_INVOKER_SA:
             source: environment
+          FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
+            source: literal
+            value: 'false'
           CONVERSATIONS_V3:
             source: literal
             value: 'on'
@@ -4028,6 +4031,9 @@ environments:
         OMI_CUSTOMER_DATA_PROJECT:
           value: based-hardware
           category: service_discovery
+        FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
+          value: 'false'
+          category: ops_kill
         POSTHOG_HOST:
           value: https://us.posthog.com
           category: telemetry
@@ -4581,6 +4587,15 @@ environments:
             ENRICHMENT_FRESH_TASKS_QUEUE:
               value: enrichment-fresh
               category: reliability
+            ENRICHMENT_FIRST_WEEK_TASKS_QUEUE:
+              value: enrichment-first-week
+              category: reliability
+            FIRST_WEEK_SUMMARY_DEADLINE_HOURS:
+              value: '168'
+              category: config
+            FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
+              value: 'false'
+              category: ops_kill
             ENRICHMENT_TASKS_HANDLER_URL:
               value: https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run
               category: reliability
@@ -5173,6 +5188,15 @@ environments:
             ENRICHMENT_FRESH_TASKS_QUEUE:
               value: enrichment-fresh
               category: reliability
+            ENRICHMENT_FIRST_WEEK_TASKS_QUEUE:
+              value: enrichment-first-week
+              category: reliability
+            FIRST_WEEK_SUMMARY_DEADLINE_HOURS:
+              value: '168'
+              category: config
+            FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
+              value: 'false'
+              category: ops_kill
             ENRICHMENT_TASKS_HANDLER_URL:
               value: https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run
               category: reliability
@@ -5753,6 +5777,15 @@ environments:
             ENRICHMENT_FRESH_TASKS_QUEUE:
               value: enrichment-fresh
               category: reliability
+            ENRICHMENT_FIRST_WEEK_TASKS_QUEUE:
+              value: enrichment-first-week
+              category: reliability
+            FIRST_WEEK_SUMMARY_DEADLINE_HOURS:
+              value: '168'
+              category: config
+            FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
+              value: 'false'
+              category: ops_kill
             ENRICHMENT_TASKS_HANDLER_URL:
               value: https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run
               category: reliability
@@ -6294,6 +6327,15 @@ environments:
             ENRICHMENT_FRESH_TASKS_QUEUE:
               value: enrichment-fresh
               category: reliability
+            ENRICHMENT_FIRST_WEEK_TASKS_QUEUE:
+              value: enrichment-first-week
+              category: reliability
+            FIRST_WEEK_SUMMARY_DEADLINE_HOURS:
+              value: '168'
+              category: config
+            FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
+              value: 'false'
+              category: ops_kill
             ENRICHMENT_TASKS_HANDLER_URL:
               value: https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run
               category: reliability
@@ -6820,6 +6862,15 @@ environments:
             ENRICHMENT_FRESH_TASKS_QUEUE:
               value: enrichment-fresh
               category: reliability
+            ENRICHMENT_FIRST_WEEK_TASKS_QUEUE:
+              value: enrichment-first-week
+              category: reliability
+            FIRST_WEEK_SUMMARY_DEADLINE_HOURS:
+              value: '168'
+              category: config
+            FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
+              value: 'false'
+              category: ops_kill
             ENRICHMENT_TASKS_HANDLER_URL:
               value: https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run
               category: reliability
@@ -6999,6 +7050,9 @@ environments:
             DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
+            FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
+              value: 'false'
+              category: ops_kill
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             CONVERSATIONS_V3:
@@ -7070,6 +7124,9 @@ environments:
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
+            FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
+              value: 'false'
+              category: ops_kill
             REDIS_DB_HOST:
               value: redis-13151.c1.us-central1-2.gce.redns.redis-cloud.com
             REDIS_DB_PORT:
@@ -7124,6 +7181,9 @@ environments:
               default: prod-omi-frame-requests-temporary
               provisional: false
               category: storage_retention
+            FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
+              value: 'false'
+              category: ops_kill
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             GOOGLE_CLOUD_PROJECT:
@@ -7185,6 +7245,9 @@ environments:
             DAY3_REENGAGEMENT_EMAIL_KILL_SWITCH:
               value: 'false'
               category: lifecycle_email
+            FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
+              value: 'false'
+              category: ops_kill
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             BASE_API_URL:

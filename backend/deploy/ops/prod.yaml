@@ -205,6 +205,16 @@ cloud_tasks:
     max_attempts: -1
     min_backoff: 10s
     max_backoff: 300s
+  enrichment-first-week:
+    # SCA-4790: reserved capacity for a new payer's open first-week summary. This is
+    # additional to enrichment-fresh (30) and the primary queue (300), never a
+    # re-partition of either; unset ENRICHMENT_FIRST_WEEK_TASKS_QUEUE keeps the fresh
+    # binding and leaves this queue idle.
+    max_concurrent_dispatches: 4
+    max_dispatches_per_second: 2
+    max_attempts: -1
+    min_backoff: 10s
+    max_backoff: 300s
   provider-stt:
     # Plan C8: provider-STT wakes for BYOK and non-Parakeet units, served by backend-integration. Idle while
     # legacy_sync=on (the provider route needs draining/dark); it must exist before draining
