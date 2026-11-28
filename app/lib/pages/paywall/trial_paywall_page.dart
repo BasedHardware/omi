@@ -524,7 +524,16 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
                         ),
                         if (!notesScroll) ...[const SizedBox(height: 10), ...notes],
                         // Like the plan cards: nothing on the page reacts while a checkout or restore runs.
-                        IgnorePointer(ignoring: _locked, child: const _LegalLinks()),
+                        IgnorePointer(
+                          ignoring: _locked,
+                          child: OmiLegalLinks(
+                            color: _Paper.textSecondary,
+                            termsKey: const Key('trial_paywall_terms'),
+                            privacyKey: const Key('trial_paywall_privacy'),
+                            onTerms: () => context.read<AuthenticationProvider>().openTermsOfService(),
+                            onPrivacy: () => context.read<AuthenticationProvider>().openPrivacyPolicy(),
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -680,46 +689,6 @@ class _Header extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-/// Terms of Use and Privacy Policy beside the trial button (App Store 3.1.2), each a 44pt target.
-class _LegalLinks extends StatelessWidget {
-  const _LegalLinks();
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = context.l10n;
-    final style = OmiType.caption.copyWith(color: _Paper.textSecondary);
-    Widget link(Key key, String label, void Function(AuthenticationProvider auth) open) => Semantics(
-          link: true,
-          child: InkWell(
-            key: key,
-            onTap: () => open(context.read<AuthenticationProvider>()),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xxs),
-                child: Center(
-                  widthFactor: 1,
-                  child: Text(label,
-                      textAlign: TextAlign.center,
-                      style:
-                          style.copyWith(decoration: TextDecoration.underline, decorationColor: _Paper.textSecondary)),
-                ),
-              ),
-            ),
-          ),
-        );
-    return Wrap(
-      alignment: WrapAlignment.center,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        link(const Key('trial_paywall_terms'), l10n.termsOfUse, (auth) => auth.openTermsOfService()),
-        ExcludeSemantics(child: Text(' · ', style: style)),
-        link(const Key('trial_paywall_privacy'), l10n.privacyPolicy, (auth) => auth.openPrivacyPolicy()),
-      ],
     );
   }
 }
