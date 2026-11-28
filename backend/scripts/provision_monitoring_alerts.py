@@ -845,6 +845,11 @@ def main() -> int:
                 print('Prepared the version-bound Soniox alert preimage; no Grafana write occurred')
             else:
                 snapshot = load_soniox_snapshot(args.backup_file, args.source_sha, args.source_run_id)
+                print(
+                    'WARNING: Grafana resourceVersion preconditions are advisory on legacy alert-rule '
+                    'storage; the pre-write drift check and post-write read-back do not close the '
+                    'concurrent-edit window.'
+                )
                 apply_soniox_snapshot(api, snapshot, rules[SONIOX_DAILY_HOURS_UID])
                 print('Applied and verified the Soniox alert with its captured resource version')
             return 0

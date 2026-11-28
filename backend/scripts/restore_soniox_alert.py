@@ -154,6 +154,12 @@ def main() -> int:
         if not token:
             raise ValueError(f'{args.token_env} is empty')
         api = Grafana(args.grafana_url, token)
+        if args.apply:
+            print(
+                'WARNING: Grafana resourceVersion preconditions are advisory on legacy alert-rule '
+                'storage; the pre-write drift check and post-write read-back do not close the '
+                'concurrent-edit window.'
+            )
         print(restore_soniox_alert(api, snapshot, apply=args.apply))
         return 0
     except (OSError, ValueError, json.JSONDecodeError):
