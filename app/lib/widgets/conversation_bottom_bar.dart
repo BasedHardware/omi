@@ -955,18 +955,22 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
               capture != null &&
               LiveConversationEndButton.phoneCaptures(widget.conversation!, capture,
                   currentLiveId: currentLiveId, liveCaptureDeviceId: liveDevice));
+      // On the tray the three are the package's glass at 92% frost.
+      final trayStyle = tray ? FooterGlassStyle.glass : FooterGlassStyle.blur;
       // End is on both tabs: beside Ask Omi, or beside the player's round Ask button.
       final row = Row(children: [
         // Experimental design: Pause opposite End, Ask Omi between them.
-        if (exp) LiveConversationPauseButton(conversation: widget.conversation!, trailingGap: tray ? 6 : 10),
+        if (exp)
+          LiveConversationPauseButton(conversation: widget.conversation!, trailingGap: tray ? 6 : 10, style: trayStyle),
         if (showPlayer) ...[
           Expanded(child: KeyedSubtree(key: const ValueKey('detail_audio_player'), child: _buildPlayer())),
           SizedBox(width: tray ? 6 : 10),
-          _buildAskButton(context),
+          _buildAskButton(context, style: trayStyle),
         ] else
-          Expanded(child: _buildAskBar(context)),
+          Expanded(child: _buildAskBar(context, style: trayStyle)),
         LiveConversationEndButton(
             conversation: widget.conversation!,
+            style: trayStyle,
             leadingGap: tray ? 6 : 10,
             onEndSuppressionChanged: widget.onLiveEndSuppressionChanged),
       ]);
@@ -1016,7 +1020,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
   }
 
   /// "Ask Omi", centred in a full-width 56 pt capsule.
-  Widget _buildAskBar(BuildContext context) {
+  Widget _buildAskBar(BuildContext context, {FooterGlassStyle style = FooterGlassStyle.blur}) {
     final label = context.l10n.askOmi;
     return Semantics(
       button: true,
@@ -1030,7 +1034,11 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
                 borderRadius: OmiRadius.pillAll,
                 onTap: _askOmi,
                 child: FooterGlassSurface(
-                    height: 56, raised: true, onTap: _askOmi, child: Text(label, style: OmiType.headline)),
+                    height: 56,
+                    raised: true,
+                    style: style,
+                    onTap: _askOmi,
+                    child: Text(label, style: OmiType.headline)),
               )
             : Ink(
                 height: 56,
@@ -1046,7 +1054,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
   }
 
   /// The round Ask button beside the player: a 56 pt circle in the primary ink, as tall as the bar.
-  Widget _buildAskButton(BuildContext context) {
+  Widget _buildAskButton(BuildContext context, {FooterGlassStyle style = FooterGlassStyle.blur}) {
     final label = context.l10n.askOmi;
     return Tooltip(
       message: label,
@@ -1068,6 +1076,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
                     height: 56,
                     circle: true,
                     raised: true,
+                    style: style,
                     onTap: _askOmi,
                     child: FaIcon(kAskOmiGlyph, size: 20, color: OmiColors.textPrimary),
                   )

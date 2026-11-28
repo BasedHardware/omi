@@ -5,6 +5,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart' show GlassButton;
 import 'package:omi/services/experiments/experimental_design.dart';
 import 'package:omi/widgets/footer_glass.dart';
 import 'package:flutter/rendering.dart';
@@ -1654,6 +1655,8 @@ void main() {
       expect(tester.getRect(pause).right, lessThan(tester.getRect(ask).left));
       expect(tester.getRect(ask).right, lessThan(tester.getRect(end).left));
       expect(tester.getSize(ask).width, greaterThan(100), reason: 'Ask Omi keeps the middle');
+      // On the tray the three are the glass package's buttons.
+      expect(find.byType(GlassButton), findsNWidgets(3));
       // One tray holds the three, 6pt larger on every side.
       final tray = find.byKey(const ValueKey('detail_live_tray'));
       expect(tester.getSize(tray).height, 68);

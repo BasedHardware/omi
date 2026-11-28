@@ -214,6 +214,8 @@ PODS:
   - just_audio (0.0.1):
     - Flutter
     - FlutterMacOS
+  - liquid_glass_widgets (0.0.1):
+    - Flutter
   - map_launcher (0.0.1):
     - Flutter
   - mcumgr_flutter (0.0.2):
@@ -316,6 +318,7 @@ DEPENDENCIES:
   - integration_test (from `.symlinks/plugins/integration_test/ios`)
   - intercom_flutter (from `.symlinks/plugins/intercom_flutter/ios`)
   - just_audio (from `.symlinks/plugins/just_audio/darwin`)
+  - liquid_glass_widgets (from `.symlinks/plugins/liquid_glass_widgets/ios`)
   - map_launcher (from `.symlinks/plugins/map_launcher/ios`)
   - mcumgr_flutter (from `.symlinks/plugins/mcumgr_flutter/ios`)
   - nordic_dfu (from `.symlinks/plugins/nordic_dfu/ios`)
@@ -436,6 +439,8 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/intercom_flutter/ios"
   just_audio:
     :path: ".symlinks/plugins/just_audio/darwin"
+  liquid_glass_widgets:
+    :path: ".symlinks/plugins/liquid_glass_widgets/ios"
   map_launcher:
     :path: ".symlinks/plugins/map_launcher/ios"
   mcumgr_flutter:
@@ -532,6 +537,7 @@ SPEC CHECKSUMS:
   iOSDFULibrary: 198c36ebe5a31bf2ca04ee8fb40837176a423e85
   iOSMcuManagerLibrary: 4102a4595be1c69e5286d7f1520a733c82c30b0a
   just_audio: 4e391f57b79cad2b0674030a00453ca5ce817eed
+  liquid_glass_widgets: b18ae3ebb4ddb3c58b0b8552566362fcc9791e22
   map_launcher: fe43bda6720bb73c12fcc1bdd86123ff49a4d4d6
   mcumgr_flutter: 8c4a598cb1b4d10a9adbc0f13288334297185506
   nanopb: fad817b59e0457d11a5dfbde799381cd727c1275

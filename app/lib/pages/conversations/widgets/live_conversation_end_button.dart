@@ -31,7 +31,14 @@ import 'package:omi/widgets/footer_glass.dart';
 /// second finalize, as the pendant's double-tap gate does.
 class LiveConversationEndButton extends StatefulWidget {
   const LiveConversationEndButton(
-      {super.key, required this.conversation, this.leadingGap = 10, this.onEndSuppressionChanged});
+      {super.key,
+      required this.conversation,
+      this.leadingGap = 10,
+      this.onEndSuppressionChanged,
+      this.style = FooterGlassStyle.blur});
+
+  /// Experimental design: how the button is drawn.
+  final FooterGlassStyle style;
 
   final ServerConversation conversation;
   final double leadingGap;
@@ -209,6 +216,7 @@ class _LiveConversationEndButtonState extends State<LiveConversationEndButton> {
                         child: FooterGlassSurface(
                             height: 56,
                             raised: true,
+                            style: widget.style,
                             padding: const EdgeInsets.symmetric(horizontal: 22),
                             onTap: end,
                             child: text),
