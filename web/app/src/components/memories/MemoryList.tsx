@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { Brain, Loader2 } from 'lucide-react';
+import { AlertTriangle, Brain, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { MemoryCard } from './MemoryCard';
 import type { Memory, MemoryVisibility } from '@/types/conversation';
@@ -11,6 +11,8 @@ interface MemoryListProps {
   memories: Memory[];
   loading: boolean;
   hasMore: boolean;
+  /** The last read stopped early, so the rows shown may not be the whole history. */
+  truncated?: boolean;
   onLoadMore: () => Promise<void>;
   onEdit: (id: string, content: string) => Promise<boolean>;
   onDelete: (id: string) => Promise<boolean>;
@@ -28,6 +30,7 @@ export function MemoryList({
   memories,
   loading,
   hasMore,
+  truncated = false,
   onLoadMore,
   onEdit,
   onDelete,
@@ -89,8 +92,28 @@ export function MemoryList({
     }
   }, [highlightedMemoryId, memories, virtualizer]);
 
-  // Empty state
+  // Empty state. An unfinished read is not an empty account: the server gave
+  // up before reaching the history, so say that instead of "No memories yet".
   if (!loading && !hasMore && memories.length === 0) {
+    if (truncated) {
+      return (
+        <div
+          className="flex flex-col items-center justify-center py-16 text-center"
+          data-testid="memory-list-unfinished"
+        >
+          <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-warning/10">
+            <AlertTriangle className="h-8 w-8 text-warning" />
+          </div>
+          <h3 className="mb-2 text-lg font-medium text-text-primary">
+            Memories didn&apos;t finish loading
+          </h3>
+          <p className="max-w-sm text-sm text-text-tertiary">
+            The server stopped before it reached your history. This does not mean you have
+            none. Use Retry above to load them again.
+          </p>
+        </div>
+      );
+    }
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
         <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-bg-tertiary">
@@ -168,7 +191,9 @@ export function MemoryList({
       {/* End of list indicator */}
       {!loading && !loadingMore && !hasMore && memories.length > 0 && (
         <p className="py-4 text-center text-sm text-text-quaternary">
-          You&apos;ve reached the end
+          {truncated
+            ? 'Some memories were not loaded. This is not the complete history.'
+            : "You've reached the end"}
         </p>
       )}
     </div>

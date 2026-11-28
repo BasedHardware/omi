@@ -634,6 +634,7 @@ export function MemoriesPage() {
                           memories={filteredMemories}
                           loading={loading}
                           hasMore={hasMore && !searchQuery && !selectedTag}
+                          truncated={truncated}
                           onLoadMore={loadMore}
                           onEdit={editMemory}
                           onDelete={removeMemory}
@@ -704,13 +705,20 @@ export function MemoriesPage() {
                       Insights
                     </h3>
 
-                    {/* Total memories */}
+                    {/* Total memories. A truncated read only knows what it
+                        managed to load, so it is never presented as the total. */}
                     <div className="mb-3">
                       <div className="text-2xl font-bold text-white">
-                        {memories.length}
+                        {truncated
+                          ? memories.length > 0
+                            ? `${memories.length}+`
+                            : '—'
+                          : memories.length}
                       </div>
-                      <div className="text-sm text-text-secondary">Total Memories</div>
-                      {recentMemoriesCount > 0 && (
+                      <div className="text-sm text-text-secondary">
+                        {truncated ? 'Loaded Memories (partial)' : 'Total Memories'}
+                      </div>
+                      {!truncated && recentMemoriesCount > 0 && (
                         <div className="mt-1 text-xs text-green-400">
                           +{recentMemoriesCount} this week
                         </div>
