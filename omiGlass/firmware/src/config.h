@@ -76,6 +76,8 @@ typedef enum {
 // BLE CONFIGURATION - Power optimized for extended battery life
 // =============================================================================
 #define BLE_MTU_SIZE 517            // Maximum MTU for efficiency
+#define BLE_MIN_MTU_SIZE 23         // Standard minimum ATT MTU per Bluetooth Core specification
+#define BLE_ATT_HEADER_SIZE 3       // ATT notification overhead: 1-byte opcode (0x1B) + 2-byte attribute handle
 #define BLE_CHUNK_SIZE 500          // Safe chunk size for photo transfer
 #define BLE_PHOTO_TRANSFER_DELAY 3  // Fast transfer for connection stability
 #define BLE_TX_POWER ESP_PWR_LVL_N0 // Low power for 6+ hour battery life
@@ -134,16 +136,16 @@ typedef enum {
 // =============================================================================
 // OPUS CODEC CONFIGURATION
 // =============================================================================
-#define AUDIO_CODEC_ID 21              // Opus codec ID (matches Omi protocol)
-#define OPUS_FRAME_SAMPLES 320         // 20ms frame @ 16kHz
-#define OPUS_OUTPUT_MAX_BYTES 160      // Max encoded frame size
-#define OPUS_BITRATE 32000             // 32kbps
-#define OPUS_COMPLEXITY 3              // Encoding complexity (1-10)
-#define OPUS_VBR 1                     // Variable bitrate enabled
+#define AUDIO_CODEC_ID 21         // Opus codec ID (matches Omi protocol)
+#define OPUS_FRAME_SAMPLES 320    // 20ms frame @ 16kHz
+#define OPUS_OUTPUT_MAX_BYTES 160 // Max encoded frame size
+#define OPUS_BITRATE 32000        // 32kbps
+#define OPUS_COMPLEXITY 3         // Encoding complexity (1-10)
+#define OPUS_VBR 1                // Variable bitrate enabled
 
 // Audio BLE packet configuration
-#define AUDIO_PACKET_HEADER_SIZE 3     // 2 bytes index + 1 byte sub-index
-#define AUDIO_TX_RING_BUFFER_SIZE 16   // Number of encoded frames to buffer
+#define AUDIO_PACKET_HEADER_SIZE 3   // 2 bytes index + 1 byte sub-index
+#define AUDIO_TX_RING_BUFFER_SIZE 16 // Number of encoded frames to buffer
 
 // =============================================================================
 // BLE UUID DEFINITIONS - OMI Protocol
@@ -160,32 +162,32 @@ typedef enum {
 
 // OTA Service UUIDs
 #define OTA_SERVICE_UUID "19B10010-E8F2-537E-4F6C-D104768A1214"
-#define OTA_CONTROL_UUID "19B10011-E8F2-537E-4F6C-D104768A1214"  // Write commands, read status
-#define OTA_DATA_UUID "19B10012-E8F2-537E-4F6C-D104768A1214"     // Notifications for progress
+#define OTA_CONTROL_UUID "19B10011-E8F2-537E-4F6C-D104768A1214" // Write commands, read status
+#define OTA_DATA_UUID "19B10012-E8F2-537E-4F6C-D104768A1214"    // Notifications for progress
 
 // OTA Commands (written to OTA_CONTROL_UUID)
-#define OTA_CMD_SET_WIFI 0x01       // Set WiFi credentials: [cmd, ssid_len, ssid..., pass_len, pass...]
-#define OTA_CMD_START_OTA 0x02      // Start OTA update: [cmd, url_len, url...]
-#define OTA_CMD_CANCEL_OTA 0x03     // Cancel ongoing OTA
-#define OTA_CMD_GET_STATUS 0x04     // Request current status
-#define OTA_CMD_SET_URL 0x05        // Set firmware URL: [cmd, url_len, url...]
+#define OTA_CMD_SET_WIFI 0x01   // Set WiFi credentials: [cmd, ssid_len, ssid..., pass_len, pass...]
+#define OTA_CMD_START_OTA 0x02  // Start OTA update: [cmd, url_len, url...]
+#define OTA_CMD_CANCEL_OTA 0x03 // Cancel ongoing OTA
+#define OTA_CMD_GET_STATUS 0x04 // Request current status
+#define OTA_CMD_SET_URL 0x05    // Set firmware URL: [cmd, url_len, url...]
 
 // OTA Status codes (notified via OTA_DATA_UUID)
 #define OTA_STATUS_IDLE 0x00
 #define OTA_STATUS_WIFI_CONNECTING 0x10
 #define OTA_STATUS_WIFI_CONNECTED 0x11
 #define OTA_STATUS_WIFI_FAILED 0x12
-#define OTA_STATUS_DOWNLOADING 0x20      // Followed by progress byte (0-100)
+#define OTA_STATUS_DOWNLOADING 0x20 // Followed by progress byte (0-100)
 #define OTA_STATUS_DOWNLOAD_COMPLETE 0x21
 #define OTA_STATUS_DOWNLOAD_FAILED 0x22
-#define OTA_STATUS_INSTALLING 0x30       // Followed by progress byte (0-100)
+#define OTA_STATUS_INSTALLING 0x30 // Followed by progress byte (0-100)
 #define OTA_STATUS_INSTALL_COMPLETE 0x31
 #define OTA_STATUS_INSTALL_FAILED 0x32
 #define OTA_STATUS_REBOOTING 0x40
 #define OTA_STATUS_ERROR 0xFF
 
 // WiFi Configuration
-#define WIFI_CONNECT_TIMEOUT_MS 15000    // 15 seconds to connect
+#define WIFI_CONNECT_TIMEOUT_MS 15000 // 15 seconds to connect
 #define WIFI_MAX_SSID_LEN 32
 #define WIFI_MAX_PASS_LEN 64
 #define OTA_MAX_URL_LEN 256

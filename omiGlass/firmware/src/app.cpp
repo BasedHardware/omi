@@ -71,6 +71,7 @@ BLECharacteristic *otaDataCharacteristic;
 bool audioEnabled = true;
 volatile bool audioSubscribed = false;
 uint16_t audioPacketIndex = 0;
+static uint16_t current_negotiated_mtu = BLE_MIN_MTU_SIZE;
 
 // State
 bool connected = false;
@@ -360,21 +361,41 @@ void onOpusEncoded(uint8_t *data, size_t len)
 
 void broadcastAudioPacket(uint8_t *data, size_t len)
 {
-    if (!connected || !audioSubscribed || audioDataCharacteristic == nullptr) {
+    if (!connected || !audioSubscribed || audioDataCharacteristic == nullptr || len == 0) {
         return;
     }
 
-    // Build packet: 2 bytes index + 1 byte sub-index + data
-    audio_packet_buffer[0] = audioPacketIndex & 0xFF;
-    audio_packet_buffer[1] = (audioPacketIndex >> 8) & 0xFF;
-    audio_packet_buffer[2] = 0; // Sub-index (for fragmentation if needed)
+    uint16_t mtu = current_negotiated_mtu;
+    if (mtu < BLE_MIN_MTU_SIZE) {
+        mtu = BLE_MIN_MTU_SIZE;
+    }
 
-    memcpy(audio_packet_buffer + AUDIO_PACKET_HEADER_SIZE, data, len);
+    size_t header_overhead = BLE_ATT_HEADER_SIZE + AUDIO_PACKET_HEADER_SIZE;
+    size_t max_payload = (mtu > header_overhead) ? (mtu - header_overhead) : 1;
 
-    audioDataCharacteristic->setValue(audio_packet_buffer, len + AUDIO_PACKET_HEADER_SIZE);
-    audioDataCharacteristic->notify();
+    size_t offset = 0;
+    uint8_t sub_index = 0;
 
-    audioPacketIndex++;
+    while (offset < len) {
+        size_t chunk_size = len - offset;
+        if (chunk_size > max_payload) {
+            chunk_size = max_payload;
+        }
+
+        // Build packet: 2 bytes packet index + 1 byte sub-index + audio data
+        audio_packet_buffer[0] = audioPacketIndex & 0xFF;
+        audio_packet_buffer[1] = (audioPacketIndex >> 8) & 0xFF;
+        audio_packet_buffer[2] = sub_index;
+
+        memcpy(audio_packet_buffer + AUDIO_PACKET_HEADER_SIZE, data + offset, chunk_size);
+
+        audioDataCharacteristic->setValue(audio_packet_buffer, chunk_size + AUDIO_PACKET_HEADER_SIZE);
+        audioDataCharacteristic->notify();
+
+        audioPacketIndex++; // Monotonically advance packet index per notification (matches Omi protocol)
+        offset += chunk_size;
+        sub_index++;
+    }
 }
 
 void processAudioTx()
@@ -434,8 +455,14 @@ class ServerHandler : public BLEServerCallbacks
     {
         connected = false;
         audioSubscribed = false;
+        current_negotiated_mtu = BLE_MIN_MTU_SIZE;
         Serial.println("<<< BLE Client disconnected. Restarting advertising.");
         BLEDevice::startAdvertising();
+    }
+    void onMTUChange(uint16_t MTU, ble_gap_conn_desc *desc) override
+    {
+        current_negotiated_mtu = MTU;
+        Serial.printf(">>> BLE MTU negotiated: %u bytes\n", MTU);
     }
 };
 
@@ -588,6 +615,7 @@ void configure_ble()
 {
     Serial.println("Initializing BLE...");
     BLEDevice::init(BLE_DEVICE_NAME);
+    BLEDevice::setMTU(BLE_MTU_SIZE);
     BLEServer *server = BLEDevice::createServer();
     server->setCallbacks(new ServerHandler());
 
