@@ -57,8 +57,13 @@ export function getUserVocabulary(): string[] {
  *  Warmed at sign-in (App.tsx). THIS session uses whatever is cached; the next
  *  hold gets the fresh list — a slightly stale vocabulary is acceptable, a slow
  *  key-down is not. */
-export function refreshUserVocabulary(): void {
+export function refreshUserVocabulary(options?: { force?: boolean }): void {
   const uid = auth.currentUser?.uid ?? ''
+  if (options?.force && inFlight && inFlightUid === uid) {
+    generation++
+    inFlight = null
+    inFlightUid = ''
+  }
   // Dedupe only against a fetch for the SAME account — an account switch must be
   // able to start its own fetch even while the previous one is still in flight.
   if (inFlight && inFlightUid === uid) return

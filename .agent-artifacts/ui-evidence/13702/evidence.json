@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-desktop-windows-vocabulary-edited.png",
+      "platform": "desktop-windows",
+      "description": "Actual VocabularyEditor component after add/dedupe/remove actions in a headless Chrome fixture on macOS, with mocked API and PTT refresh; not a native Windows sign-off.",
+      "captured_by": "agent",
+      "source": "playwright-e2e"
+    },
+    {
+      "file": "002-desktop-windows-vocabulary-narrow.png",
+      "platform": "desktop-windows",
+      "description": "The same production component fixture at 640px width; no horizontal overflow.",
+      "captured_by": "agent",
+      "source": "playwright-e2e"
+    }
+  ]
+}

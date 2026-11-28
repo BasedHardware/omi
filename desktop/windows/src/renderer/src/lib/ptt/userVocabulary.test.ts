@@ -52,6 +52,18 @@ describe('getUserVocabulary / refreshUserVocabulary — cache', () => {
     expect(get).toHaveBeenCalledTimes(1)
   })
 
+  it('force refresh starts a new fetch even when one is in flight for the same account', async () => {
+    let releaseFirst: (v: unknown) => void = () => {}
+    get.mockImplementationOnce(() => new Promise((r) => (releaseFirst = r)))
+    get.mockResolvedValueOnce({ data: { vocabulary: ['after-save'] } })
+    refreshUserVocabulary()
+    refreshUserVocabulary({ force: true })
+    releaseFirst({ data: { vocabulary: ['stale-sign-in'] } })
+    await whenUserVocabularySettled()
+    expect(get).toHaveBeenCalledTimes(2)
+    expect(getUserVocabulary()).toEqual(['after-save'])
+  })
+
   it('does not serve another account’s cached vocabulary', async () => {
     get.mockResolvedValue({ data: { vocabulary: ['Figma'] } })
     refreshUserVocabulary()
