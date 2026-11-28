@@ -41,9 +41,9 @@ fully disconnected day still carries the cause of the gap the device is in.
 
 | Field | Meaning |
 |---|---|
-| `connected_seconds`, `disconnected_seconds` | The day split by link state (local day). |
+| `connected_seconds`, `disconnected_seconds` | The day split by link state (local day). The open link counts from `connected_at` only once it is established: a packet or an RSSI read at or after the stamp. Android stamps `connected_at` when a GATT attempt starts, so a pending attempt is disconnected time, not connected time. A measured disconnect row is established by definition. `connected_time_fraction` (schema 2) is unchanged and still bills the stamp. |
 | `short_sessions` | Links that dropped within 30 s of connecting ("keeps disconnecting seconds after connecting"). A put-down pendant does not reconnect at all. |
-| `connected_no_audio_seconds`, `connected_no_audio_sessions` | Time and count of link sessions of at least 60 s that delivered zero audio packets, and whose day bucket saw no packet inside the session (a restarted counter is not silence). Only reported for a device that has delivered audio in retained history. Capture being off is not recorded, so treat it as zero-packet time, not proof of a broken mic. |
+| `connected_no_audio_seconds`, `connected_no_audio_sessions` | Time and count of link sessions of at least 60 s that delivered zero audio packets, and whose day bucket saw no packet inside the session (a restarted counter is not silence). An open link counts once established (a packet or RSSI read on it), so an established silent session is counted even before any audio arrives; a pending Android GATT attempt with neither is not a session. Only reported for a device that has delivered audio in retained history. Capture being off is not recorded, so treat it as zero-packet time, not proof of a broken mic. |
 | `audio_packets_per_connected_minute` | Audio packets received per connected minute; null under one connected minute. A mic that stops mid-session lowers it. |
 | `long_gaps`, `long_gaps_by_cause` | Gaps that started this day, and their causes. |
 | `gap_cause` | See above. |

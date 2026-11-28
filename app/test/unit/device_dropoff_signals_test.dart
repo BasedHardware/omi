@@ -183,6 +183,60 @@ void main() {
     expect(live['long_gaps'], 0);
   });
 
+  test('a pending Android GATT attempt contributes zero schema 3 connected seconds', () {
+    final attemptAt = start + 20 * _hour;
+    final diagnostics = {
+      'observed_at': nextDay,
+      // connectGatt started, so Android stamped connected_at, but GATT never
+      // came up: no packet and no RSSI read belongs to this link. The previous
+      // session's counter is still set.
+      'connected_at': attemptAt,
+      'audio_packets_received': 5400,
+      'audio_packet_days': [
+        {'ts': start, 'received': 5400, 'expected': 5400, 'last_at': start + 3 * _hour},
+      ],
+      'rssi_samples': [
+        {'ts': start + 3 * _hour - 5000, 'rssi': -60},
+      ],
+      'disconnect_history_v2': [
+        disconnect(start + 3 * _hour, durationMs: 2 * _hour, packets: 5400),
+      ],
+    };
+    final result = DeviceHealthTelemetry.rollup(diagnostics, day);
+    expect(result['connected_seconds'], 2 * 3600);
+    expect(result['disconnected_seconds'], 22 * 3600);
+    expect(result['audio_packets_per_connected_minute'], 45);
+    expect(result['connected_no_audio_seconds'], 0);
+    // The legacy schema 2 fraction still bills the open stamp, unchanged.
+    expect(result['connected_time_fraction'], closeTo(6 / 24, 0.00001));
+  });
+
+  test('an established active iOS session with zero audio counts as connected without audio', () {
+    final linkAt = start + 21 * _hour;
+    final diagnostics = {
+      'observed_at': nextDay,
+      // iOS stamps connected_at in didConnect, and the RSSI read proves the
+      // link is up, even though this link has delivered no audio.
+      'connected_at': linkAt,
+      'audio_packets_received': 0,
+      'audio_packet_days': [
+        {'ts': start, 'received': 5400, 'expected': 5400, 'last_at': start + 3 * _hour},
+      ],
+      'rssi_samples': [
+        {'ts': linkAt + 10000, 'rssi': -60},
+      ],
+      'disconnect_history_v2': [
+        disconnect(start + 3 * _hour, durationMs: 2 * _hour, packets: 5400),
+      ],
+    };
+    final signals = DeviceDropoffSignals.rollup(diagnostics, day);
+    expect(signals['connected_no_audio_seconds'], 3 * 3600);
+    expect(signals['connected_no_audio_sessions'], 1);
+    final daily = DeviceHealthTelemetry.rollup(diagnostics, day);
+    expect(daily['connected_seconds'], 5 * 3600);
+    expect(daily['disconnected_seconds'], 19 * 3600);
+  });
+
   test('malformed rows are skipped, not thrown', () {
     final result = DeviceDropoffSignals.rollup({
       'observed_at': nextDay + _hour,

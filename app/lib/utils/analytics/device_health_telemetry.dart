@@ -249,6 +249,10 @@ class DeviceHealthTelemetry {
     final resets = <String, int>{};
     var connectedMs = 0;
     var connectedBeforeHorizonMs = 0;
+    // Schema 3 connected time. Same disconnect rows, but the open link counts
+    // only once it is established (see DeviceDropoffSignals.linkEstablished).
+    var establishedMs = 0;
+    var establishedBeforeHorizonMs = 0;
     double? lostAudioSeconds;
     final resolved = (diagnostics['outage_resolved_days'] as Map?)?[start.toString()] as num?;
     if (resolved != null) lostAudioSeconds = resolved.toDouble();
@@ -277,11 +281,16 @@ class DeviceHealthTelemetry {
       // truncate into a shifted connected-window inside the lost-audio cap.
       final ts = event['timestamp'] is int ? event['timestamp'] as int : 0;
       final duration = event['connectionDurationMs'] is int ? event['connectionDurationMs'] as int : 0;
-      connectedMs += (ts.clamp(start, end) - (ts - duration).clamp(start, end)).clamp(0, end - start);
+      final sessionMs = (ts.clamp(start, end) - (ts - duration).clamp(start, end)).clamp(0, end - start);
+      // A measured session start/end is established-link evidence.
+      connectedMs += sessionMs;
+      establishedMs += sessionMs;
       if (retentionHorizon > start) {
         final prefixEnd = retentionHorizon < end ? retentionHorizon : end;
-        connectedBeforeHorizonMs +=
+        final prefixMs =
             (ts.clamp(start, prefixEnd) - (ts - duration).clamp(start, prefixEnd)).clamp(0, prefixEnd - start);
+        connectedBeforeHorizonMs += prefixMs;
+        establishedBeforeHorizonMs += prefixMs;
       }
       if (ts < start || ts >= end) continue;
       final reason = event['reason']?.toString() ?? 'unknown';
@@ -314,6 +323,17 @@ class DeviceHealthTelemetry {
     final activeSince = diagnostics['connected_at'] is int ? diagnostics['connected_at'] as int : 0;
     if (activeSince > 0 && activeSince < exposureEnd) {
       connectedMs += exposureEnd - activeSince.clamp(start, exposureEnd);
+      // The legacy fraction keeps billing the open stamp. Schema 3 counts it
+      // only when the link is established: Android stamps connected_at when a
+      // GATT attempt starts, so a pending attempt is not connected time.
+      if (DeviceDropoffSignals.linkEstablished(diagnostics)) {
+        establishedMs += exposureEnd - activeSince.clamp(start, exposureEnd);
+        if (retentionHorizon > start) {
+          final prefixEnd = retentionHorizon < end ? retentionHorizon : end;
+          establishedBeforeHorizonMs +=
+              (exposureEnd.clamp(start, prefixEnd) - activeSince.clamp(start, prefixEnd)).clamp(0, prefixEnd - start);
+        }
+      }
       if (retentionHorizon > start) {
         final prefixEnd = retentionHorizon < end ? retentionHorizon : end;
         connectedBeforeHorizonMs +=
@@ -336,14 +356,19 @@ class DeviceHealthTelemetry {
     // Exclude it from the disconnected budget whether or not a packet row
     // survived; packets are not a precondition for the correction.
     var disconnectedMs = (end - start) - connectedMs.clamp(0, end - start);
+    // Schema 3 splits the same day against established linked time.
+    var establishedDisconnectedMs = (end - start) - establishedMs.clamp(0, end - start);
     var connectionHistoryIncomplete = false;
     if (start < retentionHorizon) {
       final prefixMs = retentionHorizon.clamp(start, end) - start;
       final unknownPrefix = (prefixMs - connectedBeforeHorizonMs.clamp(0, prefixMs)).clamp(0, prefixMs);
       disconnectedMs -= unknownPrefix;
+      final establishedUnknownPrefix = (prefixMs - establishedBeforeHorizonMs.clamp(0, prefixMs)).clamp(0, prefixMs);
+      establishedDisconnectedMs -= establishedUnknownPrefix;
       connectionHistoryIncomplete = true;
     }
     if (disconnectedMs < 0) disconnectedMs = 0;
+    if (establishedDisconnectedMs < 0) establishedDisconnectedMs = 0;
     final disconnectedSeconds = disconnectedMs / 1000;
     if (unresolved != null && unresolved > disconnectedSeconds) {
       lostAudioSeconds = (lostAudioSeconds ?? 0) - (unresolved - disconnectedSeconds);
@@ -454,9 +479,11 @@ class DeviceHealthTelemetry {
       'device_resets_by_reason': resets,
       if (dropoff) ...{
         // Explicit split: lost_audio_seconds stays "time without a link".
-        'connected_seconds': connectedMs.clamp(0, end - start) ~/ 1000,
-        'disconnected_seconds': disconnectedMs ~/ 1000,
-        'audio_packets_per_connected_minute': connectedMs < 60000 ? null : received * 60000 ~/ connectedMs,
+        // Both sides use established-link evidence, so a pending Android GATT
+        // attempt is disconnected time, not a connected day.
+        'connected_seconds': establishedMs.clamp(0, end - start) ~/ 1000,
+        'disconnected_seconds': establishedDisconnectedMs ~/ 1000,
+        'audio_packets_per_connected_minute': establishedMs < 60000 ? null : received * 60000 ~/ establishedMs,
         ...DeviceDropoffSignals.rollup(diagnostics, day),
       },
     };

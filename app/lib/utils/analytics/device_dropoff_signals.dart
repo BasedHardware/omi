@@ -45,6 +45,27 @@ abstract final class DeviceDropoffSignals {
   static const _phoneReasons = {'bluetooth_off', 'app_closed'};
   static const _trends = {'fading', 'sudden', 'gap', 'unknown'};
 
+  /// True when the open `connected_at` stamp names an established link.
+  ///
+  /// iOS stamps it in `didConnect`. Android stamps it when a GATT attempt
+  /// starts, before the link is established, so the stamp alone is not proof.
+  /// A packet, or an RSSI read, at or after the stamp is a GATT operation that
+  /// cannot happen before the link is up, so either proves establishment on
+  /// both platforms. A pending attempt has neither, and a sample from the
+  /// previous session predates the new stamp because the history is cleared
+  /// when the link comes up.
+  static bool linkEstablished(Map<String, dynamic> diagnostics) {
+    final connectedAt = diagnostics['connected_at'] is int ? diagnostics['connected_at'] as int : 0;
+    if (connectedAt <= 0) return false;
+    final packetOnLink = (diagnostics['audio_packet_days'] as List? ?? [])
+        .whereType<Map>()
+        .any((point) => point['last_at'] is int && (point['last_at'] as int) >= connectedAt);
+    if (packetOnLink) return true;
+    return (diagnostics['rssi_samples'] as List? ?? [])
+        .whereType<Map>()
+        .any((sample) => sample['ts'] is int && (sample['ts'] as int) >= connectedAt);
+  }
+
   static Map<String, dynamic> rollup(Map<String, dynamic> diagnostics, DateTime day) {
     final start = DateTime(day.year, day.month, day.day).millisecondsSinceEpoch;
     final end = DateTime(day.year, day.month, day.day + 1).millisecondsSinceEpoch;
@@ -62,12 +83,7 @@ abstract final class DeviceDropoffSignals {
         if (row['eventType'] == 'fail_to_connect') row['timestamp'] as int
     ];
     final connectedAt = diagnostics['connected_at'] is int ? diagnostics['connected_at'] as int : 0;
-    // Android stamps connected_at when a GATT attempt starts, before it is
-    // established; only a packet on this link proves the link is live.
-    final linkProven = connectedAt > 0 &&
-        (diagnostics['audio_packet_days'] as List? ?? [])
-            .whereType<Map>()
-            .any((point) => point['last_at'] is int && (point['last_at'] as int) >= connectedAt);
+    final linkProven = linkEstablished(diagnostics);
     final sessions = <({int start, int end, int? packets})>[
       for (final row in disconnects)
         if (row['connectionDurationMs'] is int && (row['connectionDurationMs'] as int) > 0)
