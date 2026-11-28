@@ -85,14 +85,14 @@ def _held(client: Any, uid: str, namespace: str) -> dict[str, Any]:
     each unit's duration. The store refuses a namespace that does not match
     ``OMI_ENV_STAGE``, so run it with ``OMI_ENV_STAGE=prod`` against production.
     """
-    from database.batch_pipeline_store import FirestoreStore
-    from utils.batch_pipeline.scheduler import owner_key
-
     stage = os.getenv('OMI_ENV_STAGE', '').strip().lower()
     if namespace != f'batch_pipeline_{stage}':
         raise CreditCommandError(
             f'reading {namespace} needs OMI_ENV_STAGE={namespace.removeprefix("batch_pipeline_")} (now {stage or "unset"})'
         )
+    from database.batch_pipeline_store import FirestoreStore
+    from utils.batch_pipeline.scheduler import owner_key
+
     store = FirestoreStore(namespace, firestore_client=client)
     jobs = client.collection(f'{namespace}_jobs')
     key = owner_key(uid)
