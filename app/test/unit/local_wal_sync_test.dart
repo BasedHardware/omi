@@ -3651,7 +3651,8 @@ void main() {
       expect(bounds.last.$3, (timerStart + 1).toDouble());
     });
 
-    test('a claimable filename collision inserts the discriminator before the timestamp token', () async {
+    test('a claimable filename collision keeps the managed write discriminator before the terminal timestamp',
+        () async {
       const timerStart = 1735689600;
       SharedPreferencesUtil().unlimitedLocalStorageEnabled = true;
       final uploaded = <(List<String>, String?)>[];
@@ -3701,11 +3702,13 @@ void main() {
       final wal = local.testWals.last;
       expect(
         wal.filePath,
-        matches(RegExp(r'_u\d+_\d+\.bin$')),
-        reason: 'the _u<seq> discriminator stays ahead of the terminal timestamp token',
+        matches(RegExp(r'_wr[a-f0-9]{32}_\d+(?:\.\d+)?\.bin$')),
+        reason: 'the managed write ID stays ahead of the terminal timestamp token',
       );
       await local.syncAll();
       final names = uploaded.expand((upload) => upload.$1).toList();
+      expect(names, hasLength(2));
+      expect(names.toSet(), hasLength(2), reason: 'same-second claimable runs keep distinct managed filenames');
       expect(names, contains(wal.filePath));
       final parsed = jsonDecode(uploaded.single.$2!) as Map<String, dynamic>;
       expect(

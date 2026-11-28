@@ -8,6 +8,7 @@ import Speech
 import WidgetKit
 import BackgroundTasks
 import flutter_background_service_ios
+import Darwin
 
 extension FlutterError: Error {}
 // MARK: - Quick Actions Icon Patcher
@@ -224,6 +225,36 @@ final class QuickActionsIconPatcher: NSObject {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     let messenger = engineBridge.applicationRegistrar.messenger()
     OmiPostHogSetup.register(messenger: messenger)
+    FlutterMethodChannel(name: "com.omi/live_wal_receipt_durability", binaryMessenger: messenger)
+      .setMethodCallHandler { call, result in
+        guard call.method == "syncDirectory" else {
+          result(FlutterMethodNotImplemented)
+          return
+        }
+        guard let arguments = call.arguments as? [String: Any], let rawPath = arguments["path"] as? String else {
+          result(FlutterError(code: "invalid_path", message: "directory path is required", details: nil))
+          return
+        }
+        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        DispatchQueue.global(qos: .utility).async {
+          do {
+            try LiveWalReceiptDurability.syncDirectory(rawPath, documentsURL: documentsURL)
+            DispatchQueue.main.async { result(nil) }
+          } catch LiveWalReceiptDurabilityError.invalidPath {
+            DispatchQueue.main.async {
+              result(FlutterError(code: "invalid_path", message: "directory is outside app documents", details: nil))
+            }
+          } catch let LiveWalReceiptDurabilityError.syncFailed(message) {
+            DispatchQueue.main.async {
+              result(FlutterError(code: "directory_sync_failed", message: message, details: nil))
+            }
+          } catch {
+            DispatchQueue.main.async {
+              result(FlutterError(code: "directory_sync_failed", message: error.localizedDescription, details: nil))
+            }
+          }
+        }
+      }
     FlutterMethodChannel(name: "com.omi/device_health_policy", binaryMessenger: messenger).setMethodCallHandler { call, result in
       guard call.method == "setPolicy", let args = call.arguments as? [String: Any], let epoch = args["epoch"] as? NSNumber else {
         result(FlutterMethodNotImplemented); return

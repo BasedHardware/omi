@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as path;
 import 'package:uuid/uuid.dart';
 
@@ -15,26 +16,89 @@ import 'wal.dart';
 
 typedef LiveWalBinding = ({String id, String owner, String digest});
 typedef LiveWalIndexEntry = ({LiveWalBinding binding, Object row});
+typedef LiveWalReceiptPurgeResult = ({int removed, bool referenceScanIncomplete});
+
+class LiveWalDirectorySyncException extends FileSystemException {
+  LiveWalDirectorySyncException(this.cause, {required this.circuitOpened, required this.reportFailure})
+      : super('live WAL directory sync failed');
+  final Object cause;
+  final bool circuitOpened;
+  final bool reportFailure;
+
+  @override
+  String toString() => 'LiveWalDirectorySyncException(circuitOpened: $circuitOpened, cause: $cause)';
+}
+
+class LiveWalReceiptPublicationException extends FileSystemException {
+  LiveWalReceiptPublicationException(this.cause, this.directorySyncFailure)
+      : super('live WAL receipt publication failed during cleanup');
+  final Object cause;
+  final LiveWalDirectorySyncException directorySyncFailure;
+
+  @override
+  String toString() => 'LiveWalReceiptPublicationException(cause: $cause, directorySyncFailure: $directorySyncFailure)';
+}
+
+class LiveWalPurgeSnapshot {
+  LiveWalPurgeSnapshot(this.basenames, this.revision, this.documentsPath);
+  Set<String> basenames;
+  int revision;
+  final String documentsPath;
+  bool refreshFailed = false;
+}
+
+class _LiveWalMemoryProof {
+  const _LiveWalMemoryProof(this.basename, this.length, this.binding);
+  final String basename;
+  final int length;
+  final LiveWalBinding binding;
+}
 
 enum LiveWalWithheld { invalid, deletedOwner, missingAudio, contentMismatch }
 
 typedef LiveWalReplay = ({List<Wal> rows, Map<LiveWalWithheld, int> withheld, bool budgetExhausted, String? nextAfter});
 
 class LiveWalReceipt {
+  static const MethodChannel _durabilityChannel = MethodChannel('com.omi/live_wal_receipt_durability');
+  static const _directorySyncFailureLimit = 3;
+  static const _initialDirectorySyncBackoffSeconds = 30;
+  static const _maxDirectorySyncBackoffSeconds = 1800;
+  static int _consecutiveDirectorySyncFailures = 0;
+  static int _directorySyncBackoffSeconds = _initialDirectorySyncBackoffSeconds;
+  static bool _directorySyncCircuitOpen = false;
+  static bool _directorySyncCircuitTripUnreported = false;
+  static final Stopwatch _directorySyncClock = Stopwatch()..start();
+  static Duration? _directorySyncRetryAfter;
+  static Duration Function()? directorySyncElapsedForTesting;
+  static Future<void> Function(Directory directory)? syncDirectoryForTesting;
   static const directoryName = '.wal-live-receipts';
   static const writeEnabled = !bool.fromEnvironment('OMI_LIVE_WAL_RECEIPT_OFF');
   static const purgeEnabled = !bool.fromEnvironment('OMI_LIVE_WAL_RECEIPT_PURGE_OFF');
+  static Future<void> Function(File file, String body)? writeReceiptForTesting;
+  static Future<void> Function(File file, List<int> bytes)? writeAudioForTesting;
   static const _pending = '.json';
   static const _stagingDirectory = 'staging';
   static const _retiredDirectory = 'retired';
   static const _maxEntries = 128;
+  static const maxUnindexedPurgeBatchEntries = _maxEntries;
+  static const maxInventorySourceEntries = _maxEntries;
   static const _maxReceiptBytes = 16 * 1024;
+  static const maxInventoryReceiptBytes = _maxReceiptBytes;
   static const _maxReplayBytes = 32 * 1024 * 1024;
+  // A known affected Documents directory contained about 164k leaked audio
+  // files. Keep the enumeration finite while allowing that supported scale.
+  static const _maxIndexDirectoryEntries = 262144;
+  static const _maxQuarantineIndexes = 4096;
+  // Large, valid indexes and several quarantine generations can exceed 32 MiB.
+  // Keep the reference scan bounded while allowing ordinary repair history.
+  static const _maxPurgeIndexBytes = 128 * 1024 * 1024;
   static final _idPattern = RegExp(r'^[a-f0-9]{32}$');
   static final _managedNamePattern =
       RegExp(r'_wr([a-f0-9]{32})(?:_clke[0-9a-z]{1,32})?_[^_]+\.bin$', caseSensitive: false);
   static final _clockSuffix = RegExp(r'_clke[0-9a-z]{1,32}$');
   static final _digestPattern = RegExp(r'^[a-f0-9]{64}$');
+  static final Set<String> _confirmedDirectoryParents = <String>{};
+  static final Expando<_LiveWalMemoryProof> _writerProofs = Expando<_LiveWalMemoryProof>('live_wal_writer_proof');
 
   static Directory directory(Directory documents) => Directory(path.join(documents.path, directoryName));
 
@@ -44,6 +108,8 @@ class LiveWalReceipt {
   /// A receipt-managed filename must never fall through to heuristic owner
   /// inference, even if the directory or both indexes disappear.
   static bool isManagedBasename(String name) => _managedNamePattern.hasMatch(name);
+
+  static String? managedId(String name) => _managedNamePattern.firstMatch(name)?.group(1)?.toLowerCase();
 
   /// Staging files and retired receipts never count toward replay work.
   static String? _receiptBasename(String entryPath) {
@@ -73,11 +139,211 @@ class LiveWalReceipt {
 
   static File _receipt(Directory documents, String name) => File(path.join(directory(documents).path, name + _pending));
 
+  static Duration _directorySyncElapsed() => directorySyncElapsedForTesting?.call() ?? _directorySyncClock.elapsed;
+
+  static bool get _directorySyncBackoffActive {
+    final retryAfter = _directorySyncRetryAfter;
+    return _directorySyncCircuitOpen && retryAfter != null && _directorySyncElapsed() < retryAfter;
+  }
+
+  static Future<void> _invokeDirectorySync(Directory directory) async {
+    final override = syncDirectoryForTesting;
+    if (override != null) {
+      await override(directory);
+    } else {
+      await _durabilityChannel.invokeMethod<void>('syncDirectory', {'path': directory.path});
+    }
+  }
+
+  static void _scheduleDirectorySyncRetry() {
+    _directorySyncRetryAfter = _directorySyncElapsed() + Duration(seconds: _directorySyncBackoffSeconds);
+    _directorySyncBackoffSeconds = (_directorySyncBackoffSeconds * 2)
+        .clamp(
+          _initialDirectorySyncBackoffSeconds,
+          _maxDirectorySyncBackoffSeconds,
+        )
+        .toInt();
+  }
+
+  static void _resetDirectorySyncCircuit() {
+    _consecutiveDirectorySyncFailures = 0;
+    _directorySyncBackoffSeconds = _initialDirectorySyncBackoffSeconds;
+    _directorySyncCircuitOpen = false;
+    _directorySyncCircuitTripUnreported = false;
+    _directorySyncRetryAfter = null;
+  }
+
+  static Future<void> _syncDirectory(Directory directory) async {
+    if (_directorySyncBackoffActive) {
+      throw LiveWalDirectorySyncException(StateError('directory sync circuit is open'),
+          circuitOpened: false, reportFailure: false);
+    }
+    if (_directorySyncCircuitOpen) {
+      try {
+        await _invokeDirectorySync(directory);
+        _resetDirectorySyncCircuit();
+        return;
+      } catch (error, stackTrace) {
+        _scheduleDirectorySyncRetry();
+        Error.throwWithStackTrace(
+            LiveWalDirectorySyncException(error, circuitOpened: false, reportFailure: true), stackTrace);
+      }
+    }
+    try {
+      await _invokeDirectorySync(directory);
+      _consecutiveDirectorySyncFailures = 0;
+    } catch (error, stackTrace) {
+      _consecutiveDirectorySyncFailures++;
+      final circuitOpened = _consecutiveDirectorySyncFailures >= _directorySyncFailureLimit;
+      if (circuitOpened) {
+        _directorySyncCircuitOpen = true;
+        _directorySyncCircuitTripUnreported = true;
+        _scheduleDirectorySyncRetry();
+      }
+      Error.throwWithStackTrace(
+          LiveWalDirectorySyncException(error, circuitOpened: circuitOpened, reportFailure: true), stackTrace);
+    }
+  }
+
+  static bool get directorySyncCircuitOpenForTesting => _directorySyncCircuitOpen;
+  static Duration? get directorySyncRetryAfterForTesting => _directorySyncRetryAfter;
+
+  static bool consumeDirectorySyncCircuitTrip() {
+    final pending = _directorySyncCircuitTripUnreported;
+    _directorySyncCircuitTripUnreported = false;
+    return pending;
+  }
+
+  static void resetDirectorySyncCircuitForTesting() {
+    _resetDirectorySyncCircuit();
+    directorySyncElapsedForTesting = null;
+  }
+
+  static Future<void> _syncConfirmedDirectory(Directory directory) async {
+    await _syncDirectory(directory);
+    _confirmedDirectoryParents.add(directory.path);
+  }
+
+  static Future<void> syncAudioParentDirectory(File audio) => _syncDirectory(audio.parent);
+
+  static Future<void> writeAudio(File audio, List<int> bytes) async {
+    final override = writeAudioForTesting;
+    if (override != null) {
+      await override(audio, bytes);
+      return;
+    }
+    await audio.writeAsBytes(bytes, flush: true);
+  }
+
+  /// Receiptless files have no replay journal to fence an incomplete write.
+  /// Persist their directory entry before index admission. Remove partial or
+  /// empty reservations, but keep completed bytes when only the parent barrier
+  /// fails so the live WAL can retry that barrier without losing audio.
+  static Future<void> writeReceiptlessAudio(File audio, List<int> bytes) async {
+    var audioWriteStarted = false;
+    var audioWriteCompleted = false;
+    try {
+      // After an open circuit's retry deadline expires, prove this directory
+      // can sync before creating receiptless audio. If the probe fails, there
+      // is no new directory entry that cleanup would also be unable to sync.
+      if (_directorySyncCircuitOpen) await _syncDirectory(audio.parent);
+      if (_directorySyncBackoffActive) {
+        throw LiveWalDirectorySyncException(StateError('directory sync circuit is open'),
+            circuitOpened: false, reportFailure: false);
+      }
+      audioWriteStarted = true;
+      await writeAudio(audio, bytes);
+      audioWriteCompleted = true;
+      await syncAudioParentDirectory(audio);
+    } catch (error, stackTrace) {
+      Object? cleanupError;
+      StackTrace? cleanupStackTrace;
+      if (!audioWriteCompleted) {
+        var removeReservation = audioWriteStarted;
+        if (!removeReservation) {
+          // A retry circuit can fail before writing. Remove the caller's empty
+          // exclusive reservation, but never remove an older completed file.
+          try {
+            removeReservation = await audio.length() == 0;
+          } on FileSystemException {
+            removeReservation = false;
+          }
+        }
+        if (removeReservation) {
+          try {
+            await discardReceiptlessAudio(audio);
+          } catch (failure, failureStackTrace) {
+            // Keep the WAL in memory; a later recovery scan remains conservative.
+            cleanupError = failure;
+            cleanupStackTrace = failureStackTrace;
+          }
+        }
+      }
+      if (cleanupError is LiveWalDirectorySyncException) {
+        Error.throwWithStackTrace(cleanupError, cleanupStackTrace!);
+      }
+      Error.throwWithStackTrace(error, stackTrace);
+    }
+  }
+
+  static Future<void> discardReceiptlessAudio(File audio) async {
+    final type = await FileSystemEntity.type(audio.path, followLinks: false);
+    if (type == FileSystemEntityType.file) {
+      await audio.delete();
+    } else if (type == FileSystemEntityType.notFound) {
+      return;
+    } else {
+      throw const FileSystemException('invalid receiptless WAL audio path');
+    }
+    await _syncDirectory(audio.parent);
+  }
+
+  static Future<bool> matchesPublishedAudio(File audio, int length, String digest) =>
+      _matchesPurgeAudio(audio, length, digest);
+
+  static Future<void> flushAudio(File audio) async {
+    final handle = await audio.open(mode: FileMode.append);
+    try {
+      await handle.flush();
+    } finally {
+      await handle.close();
+    }
+  }
+
+  /// Retire a partial post-publication write before its WAL is retried from RAM.
+  /// Both directory entries must be durable before the receipt stops reserving
+  /// the failed audio transaction.
+  static Future<void> retireIncompleteAudioWrite(File audio, LiveWalBinding expected) async {
+    final type = await FileSystemEntity.type(audio.path, followLinks: false);
+    if (type == FileSystemEntityType.file) {
+      await audio.delete();
+    } else if (type != FileSystemEntityType.notFound) {
+      throw const FileSystemException('invalid failed live WAL audio path');
+    }
+    await _syncDirectory(audio.parent);
+
+    final name = path.basename(audio.path);
+    final pending = _receipt(audio.parent, name);
+    if ((await _read(pending, name))?.binding != expected) return;
+    await pending.delete();
+    await _syncDirectory(pending.parent);
+  }
+
+  static Future<bool> hasPendingReceipt(File audio) => _receipt(audio.parent, path.basename(audio.path)).exists();
+
+  static Future<void> _writeTemporaryReceipt(File file, String body) async {
+    final override = writeReceiptForTesting;
+    if (override != null) return override(file, body);
+    await file.writeAsString(body, flush: true);
+  }
+
   static Future<Directory> _checkedDirectory(Directory directory) async {
+    final existed = await FileSystemEntity.type(directory.path, followLinks: false) == FileSystemEntityType.directory;
     await directory.create(recursive: true);
     if (await FileSystemEntity.type(directory.path, followLinks: false) != FileSystemEntityType.directory) {
       throw const FileSystemException('invalid live WAL receipt directory');
     }
+    if (!existed) await _syncConfirmedDirectory(directory.parent);
     return directory;
   }
 
@@ -90,6 +356,13 @@ class LiveWalReceipt {
     final pending = _receipt(audio.parent, name);
     await _checkedDirectory(pending.parent);
     final staging = await _checkedDirectory(Directory(path.join(pending.parent.path, _stagingDirectory)));
+    // A new reserved audio entry is created for each flush, so persist its
+    // parent before receipt publication. Cache the stable receipt directory
+    // only after a successful barrier; retries still sync an unconfirmed dir.
+    await _syncDirectory(audio.parent);
+    if (!_confirmedDirectoryParents.contains(pending.parent.path)) {
+      await _syncConfirmedDirectory(pending.parent);
+    }
     final temporary = File(path.join(staging.path, name + _pending));
     // Freeze the policy after the digest finishes. Any pending live file is
     // replayed held because later policy tightening may have been interrupted.
@@ -102,8 +375,38 @@ class LiveWalReceipt {
     final body = jsonEncode({'version': 1, 'length': bytes.length, 'wal': fields});
     if (utf8.encode(body).length > _maxReceiptBytes) throw const FormatException('live WAL receipt too large');
     if (await pending.exists()) throw const FileSystemException('live WAL receipt already exists');
-    await temporary.writeAsString(body, flush: true);
-    await temporary.rename(pending.path);
+    try {
+      await _writeTemporaryReceipt(temporary, body);
+      await temporary.rename(pending.path);
+      // The rename crosses directories, so persist both the removed staging name
+      // and the newly published pending name before audio bytes can be written.
+      await _syncDirectory(staging);
+      await _syncConfirmedDirectory(pending.parent);
+    } catch (error, stackTrace) {
+      LiveWalDirectorySyncException? cleanupSyncFailure;
+      // A partial staging write is not scanned or replayed. Retire it and sync
+      // its directory so retries cannot accumulate abandoned receipt blobs.
+      try {
+        if (await temporary.exists()) await temporary.delete();
+        await _syncDirectory(staging);
+      } catch (cleanupError) {
+        if (cleanupError is LiveWalDirectorySyncException) cleanupSyncFailure ??= cleanupError;
+        // Preserve the original publication error; staging is never authority.
+      }
+      // Audio has not been written yet. Best-effort retirement prevents a
+      // failed durability barrier from leaving a receipt that blocks reuse.
+      try {
+        if (await pending.exists()) await pending.delete();
+        await _syncDirectory(pending.parent);
+      } catch (cleanupError) {
+        if (cleanupError is LiveWalDirectorySyncException) cleanupSyncFailure ??= cleanupError;
+        // Any surviving final sidecar is still content-checked and fail-closed.
+      }
+      if (cleanupSyncFailure != null) {
+        Error.throwWithStackTrace(LiveWalReceiptPublicationException(error, cleanupSyncFailure), stackTrace);
+      }
+      Error.throwWithStackTrace(error, stackTrace);
+    }
     return digest;
   }
 
@@ -171,6 +474,11 @@ class LiveWalReceipt {
     return (wal: decodeWalIndexRow(fields), length: length, binding: binding);
   }
 
+  static Future<bool> isValidPendingReceipt(File entry) async {
+    final name = _receiptBasename(entry.path);
+    return name != null && await _read(entry, name) != null;
+  }
+
   static Future<bool> _matchesAudio(File audio, int length, String expectedDigest) async {
     final handle = await audio.open();
     final List<int> bytes;
@@ -193,44 +501,96 @@ class LiveWalReceipt {
         await FileSystemEntity.type(audio.path, followLinks: false) == FileSystemEntityType.file;
   }
 
-  /// A failed index commit can leave a disk WAL in memory. A memory row does
-  /// not waive the receipt proof needed to purge that still-unindexed file.
-  static Future<bool> matchesPendingPurge(File audio, Wal wal, File primary, File backup) async {
-    if (!purgeEnabled || audio.parent.path != primary.parent.path) return false;
+  /// Validates an unindexed purge against a writer-owned snapshot and, when a
+  /// receipt has since disappeared, this process's exact write proof.
+  static Future<LiveWalPurgeSnapshot> capturePurgeSnapshot(File primary, File backup, int revision) async =>
+      LiveWalPurgeSnapshot(await _indexedBasenames(primary, backup), revision, primary.parent.path);
+
+  static Future<bool> hasPendingReceiptEntries(Directory documents) async {
+    final pending = directory(documents);
+    final type = await FileSystemEntity.type(pending.path, followLinks: false);
+    if (type == FileSystemEntityType.notFound) return false;
+    if (type != FileSystemEntityType.directory) {
+      throw const FileSystemException('invalid live WAL receipt directory');
+    }
+    await for (final entry in pending.list(followLinks: false)) {
+      if (entry is File && _receiptBasename(entry.path) != null) return true;
+    }
+    return false;
+  }
+
+  static Future<bool> matchesPendingPurgeInSnapshot(File audio, Wal wal, LiveWalPurgeSnapshot snapshot) async {
     final name = path.basename(audio.path);
-    final expected = _binding(name, wal.toJson());
-    if (expected == null) return false;
-    final pending = _receipt(audio.parent, name);
-    if (await FileSystemEntity.type(pending.parent.path, followLinks: false) != FileSystemEntityType.directory) {
+    if (!purgeEnabled ||
+        !isManagedBasename(name) ||
+        audio.parent.path != snapshot.documentsPath ||
+        wal.storage != WalStorage.disk ||
+        wal.filePath != name) {
       return false;
     }
-    final record = await _read(pending, name);
-    return record != null &&
-        record.binding == expected &&
-        !(await _indexedBasenames(primary, backup)).contains(name.toLowerCase()) &&
-        await _matchesPurgeAudio(audio, record.length, record.binding.digest);
+    final expected = _binding(name, wal.toJson());
+    if (snapshot.basenames.contains(name.toLowerCase())) return false;
+    final pending = _receipt(audio.parent, name);
+    int? length;
+    try {
+      if (await FileSystemEntity.type(pending.parent.path, followLinks: false) == FileSystemEntityType.directory) {
+        final record = await _read(pending, name);
+        if (record != null && record.binding == expected) length = record.length;
+      }
+    } catch (_) {
+      // The exact write proof below is limited to this in-memory WAL object.
+    }
+    final memoryProof = _writerProofs[wal];
+    final proofMatches = memoryProof?.basename == name &&
+        memoryProof?.binding.owner == wal.ownerUid &&
+        memoryProof?.binding.id == (expected?.id ?? managedId(name)) &&
+        (expected == null || memoryProof?.binding == expected);
+    if (length == null && proofMatches) {
+      length = memoryProof!.length;
+    }
+    final digest = expected?.digest ?? (proofMatches ? memoryProof?.binding.digest : null);
+    if (length == null || digest == null) return false;
+    return await _matchesPurgeAudio(audio, length, digest);
+  }
+
+  static void rememberWriterProof(Wal wal, String basename, int length, LiveWalBinding binding) {
+    _writerProofs[wal] = _LiveWalMemoryProof(basename, length, binding);
   }
 
   static Future<Set<String>> _indexedBasenames(File primary, File backup) async {
     final names = <String>{};
-    final indexes = [primary, backup];
+    final indexes = [primary, backup, File('${primary.path}.tmp'), File('${backup.path}.tmp')];
     // Index repair can discard a malformed row while retaining its file
     // reference in the quarantine copy. Missing canonical files alone do
     // not establish that the basename was unreferenced.
     final quarantinePrefixes = indexes.map((index) => walIndexQuarantinePrefix(index.path)).toList();
+    var directoryEntries = 0;
+    var quarantineCount = 0;
     await for (final entry in primary.parent.list(followLinks: false)) {
+      if (++directoryEntries > _maxIndexDirectoryEntries) {
+        throw const FileSystemException('WAL index reference scan exceeded directory entry limit');
+      }
       if (quarantinePrefixes.any((prefix) => entry.path.startsWith(prefix))) {
         if (entry is! File) throw const FileSystemException('invalid quarantined WAL index path');
+        if (++quarantineCount > _maxQuarantineIndexes) {
+          throw const FileSystemException('WAL index reference scan exceeded quarantine limit');
+        }
         indexes.add(entry);
       }
     }
+    var bytesRemaining = _maxPurgeIndexBytes;
     for (final index in indexes) {
       final type = await FileSystemEntity.type(index.path, followLinks: false);
-      if (type == FileSystemEntityType.notFound && (index == primary || index == backup)) continue;
+      if (type == FileSystemEntityType.notFound) continue;
       if (type != FileSystemEntityType.file) throw const FileSystemException('invalid WAL index path');
+      final length = await index.length();
+      if (length > bytesRemaining) throw const FileSystemException('WAL index reference scan exceeded byte limit');
+      bytesRemaining -= length;
       final content = await index.readAsString();
       names.addAll(await offUiIsolate(() {
-        final rows = (jsonDecode(content) as Map)['wals'] as List;
+        final decoded = jsonDecode(content);
+        if (decoded is! Map || decoded['wals'] is! List) throw const FormatException('invalid WAL index schema');
+        final rows = decoded['wals'] as List;
         final basenames = <String>[];
         for (final row in rows) {
           final filePath = (row as Map)['file_path'];
@@ -244,23 +604,25 @@ class LiveWalReceipt {
 
   /// Delete only pending receipt audio that has no live or durable index
   /// reference. The caller holds the index writer lock during validation.
-  static Future<int> purgeUnindexed(
-    File primary,
-    File backup, {
+  static Future<LiveWalReceiptPurgeResult> purgeUnindexed(
+    File primary, {
     required Set<String> owners,
+    required Set<String> indexedNames,
     required Set<String> reservedNames,
     required bool Function(String) mayDelete,
+    required List<File> entries,
+    Set<String> protectedNames = const <String>{},
   }) async {
-    if (!purgeEnabled || owners.isEmpty) return 0;
+    if (!purgeEnabled || owners.isEmpty) return (removed: 0, referenceScanIncomplete: false);
     final documents = primary.parent;
-    final pending = directory(documents);
     var removed = 0;
+    var scanComplete = true;
     try {
-      if (await FileSystemEntity.type(pending.path, followLinks: false) != FileSystemEntityType.directory) return 0;
-      Set<String>? indexedNames;
-      await for (final entry in pending.list(followLinks: false)) {
+      for (final entry in entries) {
         final name = _receiptBasename(entry.path);
-        if (entry is! File || name == null || reservedNames.contains(name.toLowerCase())) continue;
+        if (name == null || reservedNames.contains(name.toLowerCase()) || protectedNames.contains(name.toLowerCase())) {
+          continue;
+        }
         final ({Wal wal, int length, LiveWalBinding binding})? record;
         try {
           record = await _read(entry, name);
@@ -268,7 +630,6 @@ class LiveWalReceipt {
           continue;
         }
         if (record == null || !owners.contains(record.binding.owner) || !mayDelete(name)) continue;
-        indexedNames ??= await _indexedBasenames(primary, backup);
         if (indexedNames.contains(name.toLowerCase())) continue;
         try {
           final audio = File(path.join(documents.path, name));
@@ -278,8 +639,32 @@ class LiveWalReceipt {
           await retireAfterFileDeletion(audio, record.wal);
         } catch (_) {/* Keep uncertain files and leave failed cleanup for a later purge. */}
       }
-    } catch (_) {/* An unreadable index or receipt directory gives no deletion authority. */}
-    return removed;
+    } catch (_) {
+      scanComplete = false;
+      /* An unreadable index or receipt gives no deletion authority. */
+    }
+    return (removed: removed, referenceScanIncomplete: !scanComplete);
+  }
+
+  /// Enumerate cheap receipt paths as bounded pages. Callers process each page
+  /// under the index lock after WAL readiness, so a large archive cannot hold
+  /// startup or one index-writer critical section for the full scan.
+  static Stream<List<File>> pendingReceiptPages(Directory documents) async* {
+    final pending = directory(documents);
+    final type = await FileSystemEntity.type(pending.path, followLinks: false);
+    if (type == FileSystemEntityType.notFound) return;
+    if (type != FileSystemEntityType.directory) throw const FileSystemException('invalid live WAL receipt directory');
+
+    var page = <File>[];
+    await for (final entry in pending.list(followLinks: false)) {
+      if (entry is! File || _receiptBasename(entry.path) == null) continue;
+      page.add(entry);
+      if (page.length == maxUnindexedPurgeBatchEntries) {
+        yield List<File>.unmodifiable(page);
+        page = <File>[];
+      }
+    }
+    if (page.isNotEmpty) yield List<File>.unmodifiable(page);
   }
 
   static Future<LiveWalReplay> recover(
@@ -377,7 +762,7 @@ class LiveWalReceipt {
         size: content.length, threshold: 0, debugName: 'live_wal_receipt_index');
   }
 
-  static Future<void> _flushBackupCopy(File file) async {
+  static Future<void> _flushIndexCopy(File file) async {
     final handle = await file.open(mode: FileMode.append);
     try {
       await handle.flush();
@@ -388,15 +773,20 @@ class LiveWalReceipt {
 
   /// Run only after both restart index generations have durably committed the
   /// matching record. Best effort: a later startup can try again.
-  static Future<void> retireCommitted(File primaryFile, File backupFile) async {
+  static Future<void> retireCommitted(
+    File primaryFile,
+    File backupFile, {
+    void Function()? onDirectorySyncFailure,
+  }) async {
     try {
+      if (path.normalize(primaryFile.parent.path) != path.normalize(backupFile.parent.path)) return;
       final pending = directory(backupFile.parent);
       if (!await pending.exists() || !await primaryFile.exists() || !await backupFile.exists()) return;
       final main = await _readIndexBindings(primaryFile);
       final backup = await _readIndexBindings(backupFile);
       if (main.isEmpty || backup.isEmpty) return;
       var visited = 0;
-      var backupFlushed = false;
+      var indexesDurable = false;
       await for (final entry in pending.list(followLinks: false)) {
         final name = _receiptBasename(entry.path);
         if (entry is! File || name == null) continue;
@@ -407,14 +797,27 @@ class LiveWalReceipt {
           decodeWalIndexRow(primary.row);
           decodeWalIndexRow(previous.row);
           if ((await _read(entry, name))?.binding != primary.binding) continue;
-          if (!backupFlushed) {
-            // The existing writer copies its backup without a durability
-            // barrier. Pay a sync only when a receipt can actually retire.
-            await _flushBackupCopy(backupFile);
-            backupFlushed = true;
+          if (!indexesDurable) {
+            // A file flush alone does not make the index renames durable.
+            // Keep the receipt until both index files and their shared parent
+            // directory have crossed the native durability barrier.
+            await _flushIndexCopy(primaryFile);
+            await _flushIndexCopy(backupFile);
+            await syncAudioParentDirectory(primaryFile);
+            indexesDurable = true;
           }
           await entry.delete();
-        } catch (_) {/* Keep uncertain receipts for a later retry. */}
+        } catch (error) {
+          if (error is LiveWalDirectorySyncException) {
+            final circuitTrip = consumeDirectorySyncCircuitTrip();
+            if (error.reportFailure || circuitTrip) {
+              try {
+                onDirectorySyncFailure?.call();
+              } catch (_) {/* Telemetry never changes receipt custody. */}
+            }
+          }
+          // Keep uncertain receipts for a later retry.
+        }
       }
     } catch (_) {/* Receipt maintenance never invalidates an index commit. */}
   }

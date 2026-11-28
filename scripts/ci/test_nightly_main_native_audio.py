@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import sys
 import tempfile
 import textwrap
 import unittest
@@ -46,8 +47,7 @@ sudo() {
                 cache.mkdir(parents=True)
                 (cache / "closure.deb").touch()
             fake_sudo = binaries / "sudo"
-            fake_sudo.write_text(textwrap.dedent('''\
-                #!/usr/bin/env python3
+            fake_sudo.write_text(f"#!{sys.executable}\n" + textwrap.dedent('''\
                 import json, os, pathlib, sys
                 args = sys.argv[1:]
                 root = pathlib.Path(os.environ["HOME"])
@@ -81,7 +81,7 @@ sudo() {
             fake_sudo.chmod(0o755)
             fake_mktemp = binaries / "mktemp"
             fake_mktemp.write_text(
-                '#!/usr/bin/env python3\nimport tempfile\nprint(tempfile.mkstemp(suffix=".sources")[1])\n'
+                f'#!{sys.executable}\nimport tempfile\nprint(tempfile.mkstemp(suffix=".sources")[1])\n'
             )
             fake_mktemp.chmod(0o755)
             env = dict(os.environ, HOME=directory, TMPDIR=directory,

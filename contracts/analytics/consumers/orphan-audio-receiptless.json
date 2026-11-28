@@ -1,0 +1,13 @@
+{
+  "id": "orphan-audio-receiptless",
+  "kind": "question",
+  "owner": "mobile-custody",
+  "events": [
+    "orphanAudioReceiptless"
+  ],
+  "namespace_property": "$app_namespace",
+  "question": "Among complete, non-truncated censuses, how often do managed recordings lack receipt custody, and how many are retained by the safety fence?",
+  "zero_policy": "No events is unknown until build identity, consent and ingestion are verified.",
+  "query": "contracts/analytics/consumers/orphan-audio-receiptless.sql",
+  "posthog_query": "SELECT properties['phase'], sum(toInt(properties['receiptless_managed_count'])), sum(toInt(properties['receiptless_managed_bytes'])), sum(toInt(properties['managed_receipt_missing_skip_count'])) FROM events WHERE event = 'Orphan Audio Receiptless Custody' AND properties['$app_namespace'] = '{app_namespace}' AND coalesce(properties['app_build'], properties['build_number']) = '{build_number}' AND properties['receipt_scan_truncated'] = false AND properties['census_complete'] = true GROUP BY properties['phase']"
+}

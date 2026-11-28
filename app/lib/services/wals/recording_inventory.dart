@@ -211,9 +211,11 @@ Future<RecordingOrphanCensus> captureRecordingCensus(
   final roots =
       {path.normalize(documents), ...additionalDirectories.where((p) => p.isNotEmpty).map(path.normalize)}.toList();
   final audio = <String, _Metadata>{}, metadata = <_Metadata>[];
+  final receiptReferences = <String>{};
   final directoryErrors = <int>[];
   final sourceDirectories = <String, FileStat>{};
-  var statErrors = 0, linksSkipped = 0;
+  var statErrors = 0, linksSkipped = 0, receiptScanErrors = 0;
+  var receiptScanTruncated = false;
   for (var i = 0; i < roots.length; i++) {
     final files = <File>[];
     try {
@@ -261,6 +263,51 @@ Future<RecordingOrphanCensus> captureRecordingCensus(
       }
     }
   }
+  // A receipt can reserve only a managed basename. Scan errors therefore
+  // withhold authority for those names (classified receiptless), but cannot
+  // hide references to ordinary audio or make unrelated census work unsafe.
+  final receipts = LiveWalReceipt.directory(Directory(roots.first));
+  try {
+    final receiptType = await FileSystemEntity.type(receipts.path, followLinks: false);
+    if (receiptType == FileSystemEntityType.directory) {
+      sourceDirectories[receipts.path] = await receipts.stat();
+      var entriesSeen = 0;
+      await for (final entry in receipts.list(followLinks: false)) {
+        final name = path.basename(entry.path);
+        if (entry is Directory && const {'staging', 'retired'}.contains(name)) continue;
+        if (++entriesSeen > LiveWalReceipt.maxInventorySourceEntries) {
+          // Unscanned sidecars can only belong to managed basenames, which are
+          // classified receiptless and never adopted or reclaimed.
+          receiptScanTruncated = true;
+          break;
+        }
+        if (entry is! File) {
+          receiptScanErrors++;
+          continue;
+        }
+        final receiptName = name.endsWith('.json') ? name.substring(0, name.length - 5) : '';
+        if (!LiveWalReceipt.isManagedBasename(receiptName)) {
+          receiptScanErrors++;
+          continue;
+        }
+        try {
+          final stat = await entry.stat();
+          if (stat.type != FileSystemEntityType.file) {
+            receiptScanErrors++;
+            continue;
+          }
+          metadata.add(_Metadata(path.normalize(entry.path), 'live_receipt', stat.size,
+              stat.modified.microsecondsSinceEpoch, stat.changed.microsecondsSinceEpoch));
+        } catch (_) {
+          receiptScanErrors++;
+        }
+      }
+    } else if (receiptType != FileSystemEntityType.notFound) {
+      receiptScanErrors++;
+    }
+  } catch (_) {
+    receiptScanErrors++;
+  }
   final buckets = {for (final e in memoryBuckets.entries) e.key: List<RecordingInventoryRow>.of(e.value)};
   final indexFiles = <Map<String, Object?>>[], references = <String>{};
   final loaderEvents = <Map<String, Object?>>[];
@@ -273,9 +320,27 @@ Future<RecordingOrphanCensus> captureRecordingCensus(
       'metadata_changed_ms': meta.changedMs
     };
     _Decoded result;
+    var receiptReadError = false;
     try {
       // Bound one allocation; skipped/unreadable sources prevent certainty about orphans.
-      if (meta.bytes > 128 * 1024 * 1024) {
+      if (meta.kind == 'live_receipt') {
+        final valid = meta.bytes <= LiveWalReceipt.maxInventoryReceiptBytes &&
+            await LiveWalReceipt.isValidPendingReceipt(File(meta.filePath));
+        final after = await File(meta.filePath).stat();
+        final unchanged = after.size == meta.bytes &&
+            after.modified.microsecondsSinceEpoch == meta.modifiedUs &&
+            after.changed.microsecondsSinceEpoch == meta.changedUs;
+        if (valid && unchanged) {
+          receiptReferences
+              .add(path.normalize(path.join(roots.first, path.basename(meta.filePath).replaceFirst('.json', ''))));
+        } else {
+          // An invalid/changed sidecar grants no reference authority; its
+          // managed audio is independently classified receiptless and held.
+          receiptReadError = true;
+          receiptScanErrors++;
+        }
+        result = _Decoded([], null);
+      } else if (meta.bytes > 128 * 1024 * 1024) {
         result = _Decoded([], 'size_limit');
       } else {
         final bytes = await File(meta.filePath).readAsBytes();
@@ -286,16 +351,22 @@ Future<RecordingOrphanCensus> captureRecordingCensus(
         if (after.size != meta.bytes || after.modified.microsecondsSinceEpoch != meta.modifiedUs) changed++;
       }
     } catch (_) {
-      result = _Decoded([], 'unreadable');
+      if (meta.kind == 'live_receipt') {
+        receiptReadError = true;
+        receiptScanErrors++;
+        result = _Decoded([], null);
+      } else {
+        result = _Decoded([], 'unreadable');
+      }
     }
-    details['read_result'] = result.error ?? 'readable';
+    details['read_result'] = receiptReadError ? 'invalid_receipt' : result.error ?? 'readable';
     if (result.error != null) unreadable++;
-    details['rows'] = result.error == null ? result.rows.length : null;
+    details['rows'] = result.error == null && !receiptReadError ? result.rows.length : null;
     details['invalid_minimum_schema_rows'] = result.invalidRows;
     invalidRows += result.invalidRows;
-    indexFiles.add(details);
+    if (meta.kind != 'live_receipt') indexFiles.add(details);
     loaderEvents.addAll(result.loaderEvents);
-    buckets.putIfAbsent(meta.kind, () => []).addAll(result.rows);
+    if (meta.kind != 'live_receipt') buckets.putIfAbsent(meta.kind, () => []).addAll(result.rows);
     if (meta.kind == 'capture_committed') {
       final expected = 'capture_committed_${sha256.convert(utf8.encode(currentOwner))}';
       final name = path.basename(meta.filePath).replaceFirst(RegExp(r'\.tmp$'), '');
@@ -308,6 +379,7 @@ Future<RecordingOrphanCensus> captureRecordingCensus(
           owner: name == '$expected.json' || name == '$expected.jsonl' ? currentOwner : 'unknown-journal-owner'));
     }
   }
+  references.addAll(receiptReferences);
   final legacy = <RecordingInventoryRow>[
     for (final file in legacyFiles)
       RecordingInventoryRow(
@@ -432,6 +504,8 @@ Future<RecordingOrphanCensus> captureRecordingCensus(
       'audio_file_scope': 'audio_prefix_bin_part_torn_and_wav',
       'local_only_history': buckets.values.expand((rows) => rows).any((r) => r.onDeviceOnly || r.holdForUser),
       'legacy_preferences_complete': legacyPreferencesComplete,
+      'receipt_scan_errors': receiptScanErrors,
+      'receipt_scan_truncated': receiptScanTruncated,
       'orphan_census_complete': legacyPreferencesComplete &&
           unreadable == 0 &&
           invalidRows == 0 &&
@@ -456,6 +530,7 @@ Future<RecordingOrphanCensus> captureRecordingCensus(
   // Keep local identities separate from the aggregate export. Isolate closures
   // receive immutable snapshots, never the ledger or its capture queue.
   final allReferences = <String>{
+    ...receiptReferences,
     for (final entry in buckets.entries)
       if (entry.key != 'boot_journal' && entry.key != 'capture_committed')
         for (final row in entry.value)
@@ -485,7 +560,6 @@ Future<RecordingOrphanCensus> captureRecordingCensus(
   final candidates = audio.values
       .where((m) =>
           _audio(path.basename(m.filePath)) &&
-          !LiveWalReceipt.isManagedBasename(path.basename(m.filePath)) &&
           !allReferences.contains(m.filePath) &&
           !referencedNames.contains(path.basename(m.filePath).toLowerCase()))
       .toList();
@@ -495,7 +569,12 @@ Future<RecordingOrphanCensus> captureRecordingCensus(
       threshold: 0,
       debugName: 'orphan_audio_classifier');
   summary['orphan_classification'] = {
-    ...orphanClassificationSummary(classified.files, phoneSeconds),
+    ...orphanClassificationSummary(
+      classified.files,
+      phoneSeconds,
+      receiptlessManagedCount: classified.receiptlessManagedCount,
+      receiptlessManagedBytes: classified.receiptlessManagedBytes,
+    ),
     'frame_files_read': classified.reads,
     'frame_cache_hits': classified.hits,
   };

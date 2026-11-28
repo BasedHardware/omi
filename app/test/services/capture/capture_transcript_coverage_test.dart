@@ -217,12 +217,17 @@ void main() {
   /// Runs one recovery pass and asserts exactly [expected]'s files were uploaded once each, that the
   /// uploads cleared their markers in the durable index, that a second pass finds nothing, and that
   /// every file present before the pass — covered or repaired — is still on disk.
+  String withoutManagedWriterSuffix(String name) => name.replaceFirst(
+        RegExp(r'_wr[a-f0-9]{32}(?:_clke[0-9a-z]{1,32})?_[^_]+(?=\.bin$)', caseSensitive: false),
+        '',
+      );
+
   Future<void> expectRecoveryUploads(String convId, Iterable<Wal> expected) async {
     final expectedNames = expected.map((wal) => wal.getFileName()).toList();
     final filesBefore = audioFilesOnDisk();
     await recoveryPass();
     expect(
-      world.uploads.attempts.expand((attempt) => attempt.fileNames),
+      world.uploads.attempts.expand((attempt) => attempt.fileNames).map(withoutManagedWriterSuffix),
       unorderedEquals(expectedNames),
       reason: 'recovery uploads exactly the uncovered copies, once each',
     );
@@ -459,7 +464,7 @@ void main() {
     expect(
       retainedNames,
       unorderedEquals([
-        for (final wal in [...covered, ...hole]) wal.getFileName(),
+        for (final wal in [...covered, ...hole]) wal.filePath!,
       ]),
       reason: 'every covered copy is retained in synced retention under its own name, not deleted',
     );

@@ -1176,6 +1176,12 @@ class CaptureController extends ChangeNotifier
 
   StreamSubscription? _bleBytesStream;
   StreamSubscription? _blePhotoStream;
+  bool _pendantStorageBackpressureActive = false;
+  bool _pendantStorageBackpressureOwnsPause = false;
+  String? _pendantStorageBackpressureDeviceId;
+  int _pendantStorageBackpressureEpoch = 0;
+  LocalWalSyncImpl? _pendantStorageSync;
+  void Function(bool active)? _pendantStorageBackpressureHandler;
 
   get bleBytesStream => _bleBytesStream;
 
@@ -2526,8 +2532,79 @@ class CaptureController extends ChangeNotifier
     if (subscription == null) return false;
     _startMetricsTracking();
     _bleBytesStream = lifetime.takeSubscription(_bleBytesStream, subscription);
+    final phoneSync = _wal.getSyncs().phone;
+    if (phoneSync is LocalWalSyncImpl) {
+      void handler(bool active) => _onPendantStorageBackpressureChanged(active, phoneSync, deviceId);
+      _pendantStorageSync = phoneSync;
+      _pendantStorageBackpressureHandler = handler;
+      phoneSync.onPendantStorageBackpressureChanged = handler;
+      _onPendantStorageBackpressureChanged(phoneSync.pendantStorageBackpressureActive, phoneSync, deviceId);
+    }
     notifyListeners();
     return true;
+  }
+
+  void _onPendantStorageBackpressureChanged(bool active, LocalWalSyncImpl sync, String deviceId) {
+    _pendantStorageBackpressureActive = active;
+    final epoch = ++_pendantStorageBackpressureEpoch;
+    if (active) {
+      if (_captureControllerDisposed ||
+          _omiCallActive ||
+          _recordingDevice?.id != deviceId ||
+          isPaused ||
+          !_capture.stagedReadModel.pendantOwns) {
+        return;
+      }
+      _pendantStorageBackpressureOwnsPause = true;
+      _pendantStorageBackpressureDeviceId = deviceId;
+      unawaited(_pausePendantForStorageBackpressure(epoch, sync, deviceId));
+      return;
+    }
+
+    if (!_pendantStorageBackpressureOwnsPause || !isPaused) return;
+    final ownedDeviceId = _pendantStorageBackpressureDeviceId;
+    _pendantStorageBackpressureOwnsPause = false;
+    _pendantStorageBackpressureDeviceId = null;
+    if (_captureControllerDisposed ||
+        _omiCallActive ||
+        ownedDeviceId != deviceId ||
+        _recordingDevice?.id != deviceId ||
+        _preferences.uid.isEmpty) {
+      return;
+    }
+    unawaited(_resumePendantAfterStorageBackpressure(epoch, deviceId));
+  }
+
+  Future<void> _pausePendantForStorageBackpressure(int epoch, LocalWalSyncImpl sync, String deviceId) async {
+    try {
+      final outcome = await _capture.dispatch(const DevicePauseRequested());
+      outcome.throwIfFailed();
+    } catch (error) {
+      Logger.debug('[CaptureProvider] storage backpressure pause failed: $error');
+      return;
+    }
+    if (epoch != _pendantStorageBackpressureEpoch &&
+        !_pendantStorageBackpressureActive &&
+        _pendantStorageBackpressureOwnsPause &&
+        isPaused &&
+        _pendantStorageBackpressureDeviceId == deviceId) {
+      _onPendantStorageBackpressureChanged(false, sync, deviceId);
+    }
+  }
+
+  Future<void> _resumePendantAfterStorageBackpressure(int epoch, String deviceId) async {
+    if (epoch != _pendantStorageBackpressureEpoch ||
+        _pendantStorageBackpressureActive ||
+        _captureControllerDisposed ||
+        _recordingDevice?.id != deviceId) {
+      return;
+    }
+    try {
+      final outcome = await _capture.dispatch(const DeviceResumeRequested());
+      outcome.throwIfFailed();
+    } catch (error) {
+      Logger.debug('[CaptureProvider] storage backpressure resume failed: $error');
+    }
   }
 
   LocalPreviewClientRefusal? _localPreviewRefusal(BleAudioCodec codec, {required bool customStt}) =>
@@ -3178,6 +3255,13 @@ class CaptureController extends ChangeNotifier
     _clearIngressByteObserver();
     _uplinkSilence.cancel();
     _captureControllerDisposed = true;
+    final phoneSync = _pendantStorageSync;
+    if (phoneSync is LocalWalSyncImpl &&
+        identical(phoneSync.onPendantStorageBackpressureChanged, _pendantStorageBackpressureHandler)) {
+      phoneSync.onPendantStorageBackpressureChanged = null;
+    }
+    _pendantStorageSync = null;
+    _pendantStorageBackpressureHandler = null;
     _retireConversationClosures(accountChanged: false);
     _reconnectGraceTimer?.cancel();
     _reconnectGraceTimer = null;
@@ -4992,11 +5076,20 @@ class CaptureController extends ChangeNotifier
   }
 
   Future<void> pauseDeviceRecording() async {
+    _pendantStorageBackpressureOwnsPause = false;
+    _pendantStorageBackpressureDeviceId = null;
+    _pendantStorageBackpressureEpoch++;
     final outcome = await _capture.dispatch(const DevicePauseRequested());
     outcome.throwIfFailed();
   }
 
-  Future<void> resumeDeviceRecording() => _resumeStartingIdlePendant(const DeviceResumeRequested());
+  Future<void> resumeDeviceRecording() {
+    if (_pendantStorageBackpressureActive && _pendantStorageBackpressureOwnsPause) return Future.value();
+    _pendantStorageBackpressureOwnsPause = false;
+    _pendantStorageBackpressureDeviceId = null;
+    _pendantStorageBackpressureEpoch++;
+    return _resumeStartingIdlePendant(const DeviceResumeRequested());
+  }
 
   // -- Capture coordinator wiring -------------------------------------------------------------
 

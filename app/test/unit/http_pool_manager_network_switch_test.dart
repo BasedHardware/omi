@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 
 import 'package:omi/backend/http/http_pool_manager.dart';
+import '../test_helpers/loopback_http_overrides_scope.dart';
 
 /// Pooled keep-alive sockets outlive a Wi-Fi/cellular switch: uploads a few
 /// seconds apart never let one idle out, and iOS then fails the reused socket
@@ -12,6 +13,10 @@ import 'package:omi/backend/http/http_pool_manager.dart';
 /// dart:io pool against loopback servers and record which client socket
 /// carried each request.
 void main() {
+  final loopbackHttp = LoopbackHttpOverridesScope();
+  setUpAll(loopbackHttp.enable);
+  tearDownAll(loopbackHttp.restore);
+
   late HttpServer server;
   late Uri baseUri;
   late List<int> sourcePorts;

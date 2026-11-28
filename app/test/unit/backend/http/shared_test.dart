@@ -157,9 +157,12 @@ void main() {
 
   group('streaming clock-skew detection', () {
     late HttpServer server;
+    late HttpOverrides? previousHttpOverrides;
     var requestCount = 0;
 
     setUp(() async {
+      previousHttpOverrides = HttpOverrides.current;
+      HttpOverrides.global = null;
       requestCount = 0;
       server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       env.routeNextRequestTo('http://${server.address.host}:${server.port}/');
@@ -181,6 +184,7 @@ void main() {
 
     tearDown(() async {
       await server.close(force: true);
+      HttpOverrides.global = previousHttpOverrides;
     });
 
     Future<ClockSkewEvent> nextClockSkewEvent() {

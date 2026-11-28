@@ -11,9 +11,11 @@ import 'package:omi/env/env.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+import '../test_helpers/loopback_http_overrides_scope.dart';
 
 void main() {
   final env = _TestEnvFields();
+  final loopbackHttp = LoopbackHttpOverridesScope();
 
   setUpAll(() async {
     Env.init(env);
@@ -32,6 +34,9 @@ void main() {
 
   group('expensive read retry policy', () {
     late HttpServer server;
+
+    setUpAll(loopbackHttp.enable);
+    tearDownAll(loopbackHttp.restore);
 
     setUp(() async {
       server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);

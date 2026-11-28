@@ -40,12 +40,14 @@ void main() {
   late Directory directory;
   setUp(() async {
     directory = await Directory.systemTemp.createTemp('omi-overflow-test-');
+    LiveWalReceipt.syncDirectoryForTesting = (_) async {};
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(const MethodChannel('plugins.flutter.io/path_provider'), (_) async => directory.path);
   });
   tearDown(() async {
+    LiveWalReceipt.syncDirectoryForTesting = null;
     AnalyticsManager.resetForTesting();
     await directory.delete(recursive: true);
   });
@@ -549,5 +551,11 @@ void main() {
     expect(indexed.filePath, basename);
     expect(indexed.holdForUser, isTrue);
     expect(indexed.onDeviceConversation, isNull);
+    final receipt = File('${LiveWalReceipt.directory(directory).path}/$basename.json');
+    expect(await receipt.exists(), isTrue);
+    expect(await WalFileManager.saveWals([indexed]), isTrue);
+    await WalFileManager.retireCommittedLiveWalReceipts();
+    expect(await receipt.exists(), isFalse, reason: 'receipt retires only after both restart indexes cover this row');
+    expect(await audio.length(), bytes.length);
   });
 }

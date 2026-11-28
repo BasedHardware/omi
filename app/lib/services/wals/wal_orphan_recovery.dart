@@ -408,6 +408,14 @@ extension LocalOrphanRecovery on LocalWalSyncImpl {
             .firstWhere((v) => v.wireName == result, orElse: () => OrphanAudioRecoveryResult.failed),
         censusComplete: census?.complete ?? false,
       ));
+      const TypedEvents().emit(OrphanAudioReceiptless(
+        phase: OrphanAudioReceiptlessPhase.recovery,
+        receiptlessManagedCount: count('classes', 'receiptless_managed', 'count'),
+        receiptlessManagedBytes: count('classes', 'receiptless_managed', 'bytes'),
+        managedReceiptMissingSkipCount: count('classes', 'receiptless_managed', 'count'),
+        receiptScanTruncated: census?.summary['receipt_scan_truncated'] == true,
+        censusComplete: census?.complete ?? false,
+      ));
     } catch (_) {/* Diagnostics never affect custody. */}
   }
 }

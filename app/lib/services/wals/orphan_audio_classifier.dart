@@ -28,8 +28,13 @@ class _CachedAudioFrames {
 
 /// Device-local data only. Export [summary], never this object or its candidates.
 class RecordingOrphanCensus {
+  static const _maxFenceSources = 512 + LiveWalReceipt.maxInventorySourceEntries;
+  static const _maxFenceDirectories = 5;
+
   RecordingOrphanCensus(this.summary, this.orphans, this._directories, this._sources, this.owner, this.frameCache);
   final Map<String, Object?> summary;
+
+  /// Actionable per-file candidates. Receiptless managed audio is summary-only.
   final List<OrphanAudioFile> orphans;
   final Map<String, FileStat> _directories;
   final List<_Metadata> _sources;
@@ -52,10 +57,10 @@ class RecordingOrphanCensus {
   bool sourcesUnchanged() {
     // An unusually large receipt archive remains classified but is deferred
     // rather than doing unbounded synchronous work on the capture queue.
-    if (_sources.length > 512 || _directories.length > 4) return false;
+    if (_sources.length > _maxFenceSources || _directories.length > _maxFenceDirectories) return false;
     try {
       for (final e in _directories.entries) {
-        // omi-perf-allow: sync-file-io -- At most four directory stamps; no traversal, and no await between final fence and publication.
+        // omi-perf-allow: sync-file-io -- At most five directory stamps; no traversal, and no await between final fence and publication.
         final stat = FileStat.statSync(e.key);
         if (stat.type != FileSystemEntityType.directory ||
             stat.modified != e.value.modified ||
@@ -64,7 +69,7 @@ class RecordingOrphanCensus {
         }
       }
       for (final source in _sources) {
-        // omi-perf-allow: sync-file-io -- At most 512 metadata stamps; larger archives defer, and audio/frame reads stay off the queue.
+        // omi-perf-allow: sync-file-io -- At most 640 metadata stamps, including the 128-entry receipt budget; larger archives defer.
         final stat = FileStat.statSync(source.filePath);
         if (stat.type != FileSystemEntityType.file ||
             stat.size != source.bytes ||
@@ -92,6 +97,7 @@ class OrphanAudioFile {
   /// Independent of the adoption owner class: multiple accounts may reclaim.
   String? reclaimSkipReason(DateTime now) {
     if (classification == 'working') return 'working';
+    if (classification == 'receiptless_managed') return 'managed_receipt_missing';
     // Legacy Limitless wrote random + milliseconds without the later sequence
     // field. Its capture clock is known even though it is not adoptable by the
     // strict current producer/framing classifier. Do not loosen adoption.
@@ -146,14 +152,29 @@ const orphanReclaimMarginSeconds = 7 * 86400;
 /// Reclaim deletes an unreferenced orphan only when both its capture time and mtime are strictly
 /// older than this (67 days): never audio the server would still admit or recovery could adopt.
 const orphanReclaimAgeSeconds = serverSyncLookbackSeconds + orphanReclaimMarginSeconds;
-const orphanAudioClasses = ['working', 'unparseable', 'recoverable', 'expired', 'owner_unknown'];
+const orphanAudioClasses = ['working', 'unparseable', 'recoverable', 'expired', 'owner_unknown', 'receiptless_managed'];
 
-({List<OrphanAudioFile> files, OrphanAudioFrameCache cache, int reads, int hits}) _classifyOrphans(
-    List<_Metadata> candidates, int phoneSeconds, bool owned, OrphanAudioFrameCache frameCache) {
+({
+  List<OrphanAudioFile> files,
+  OrphanAudioFrameCache cache,
+  int reads,
+  int hits,
+  int receiptlessManagedCount,
+  int receiptlessManagedBytes
+}) _classifyOrphans(List<_Metadata> candidates, int phoneSeconds, bool owned, OrphanAudioFrameCache frameCache) {
   final entries = <String, _CachedAudioFrames>{};
+  final files = <OrphanAudioFile>[];
   var reads = 0, hits = 0;
-  final files = candidates.map((file) {
+  var receiptlessManagedCount = 0, receiptlessManagedBytes = 0;
+  for (final file in candidates) {
     final name = path.basename(file.filePath);
+    if (LiveWalReceipt.isManagedBasename(name)) {
+      // These files can never be adopted or reclaimed. Keep aggregate
+      // visibility without allocating a second per-file object for archives.
+      receiptlessManagedCount++;
+      receiptlessManagedBytes += file.bytes;
+      continue;
+    }
     final working = name.endsWith('.part') ||
         name.endsWith('.torn') ||
         name.startsWith('audio_omibatch') ||
@@ -212,8 +233,9 @@ const orphanAudioClasses = ['working', 'unparseable', 'recoverable', 'expired', 
         }
       }
       if (classification == 'owner_unknown' || classification == 'expired') {
-        return OrphanAudioFile(
-            file.filePath, file.bytes, file.modifiedUs, file.changedUs, classification, info, frames, clockRun);
+        files.add(OrphanAudioFile(
+            file.filePath, file.bytes, file.modifiedUs, file.changedUs, classification, info, frames, clockRun));
+        continue;
       }
       classification = frames <= 0
           ? 'unparseable'
@@ -223,10 +245,17 @@ const orphanAudioClasses = ['working', 'unparseable', 'recoverable', 'expired', 
                   ? 'expired'
                   : 'recoverable';
     }
-    return OrphanAudioFile(
-        file.filePath, file.bytes, file.modifiedUs, file.changedUs, classification, info, frames, clockRun);
-  }).toList();
-  return (files: files, cache: OrphanAudioFrameCache._(entries), reads: reads, hits: hits);
+    files.add(OrphanAudioFile(
+        file.filePath, file.bytes, file.modifiedUs, file.changedUs, classification, info, frames, clockRun));
+  }
+  return (
+    files: files,
+    cache: OrphanAudioFrameCache._(entries),
+    reads: reads,
+    hits: hits,
+    receiptlessManagedCount: receiptlessManagedCount,
+    receiptlessManagedBytes: receiptlessManagedBytes,
+  );
 }
 
 /// Streaming strict framing, off the UI isolate. Unlike native crash recovery,
@@ -267,10 +296,17 @@ int _strictFrameCount(String path, int expectedBytes) {
   }
 }
 
-Map<String, Object?> orphanClassificationSummary(List<OrphanAudioFile> files, int phoneSeconds) {
+Map<String, Object?> orphanClassificationSummary(
+  List<OrphanAudioFile> files,
+  int phoneSeconds, {
+  int receiptlessManagedCount = 0,
+  int receiptlessManagedBytes = 0,
+}) {
   final classes = {
     for (final c in orphanAudioClasses) c: <String, int>{'count': 0, 'bytes': 0}
   };
+  classes['receiptless_managed']!['count'] = receiptlessManagedCount;
+  classes['receiptless_managed']!['bytes'] = receiptlessManagedBytes;
   final ages = {
     for (final age in ['0_7', '8_14', '15_28', '29_45', 'over_45', 'unknown'])
       age: <String, int>{'count': 0, 'bytes': 0}
@@ -278,6 +314,11 @@ Map<String, Object?> orphanClassificationSummary(List<OrphanAudioFile> files, in
   for (final file in files) {
     classes[file.classification]!['count'] = classes[file.classification]!['count']! + 1;
     classes[file.classification]!['bytes'] = classes[file.classification]!['bytes']! + file.bytes;
+    // Receiptless managed files are visible and counted by class, but have no
+    // trusted capture/ownership metadata for age buckets. Keeping them out of
+    // those totals prevents the age census from exceeding the classified
+    // recoverable/retained corpus.
+    if (file.classification == 'receiptless_managed') continue;
     final time = file.info?.timerStart ?? _filenameTime(file.filePath);
     final age = time == null || time < 1704067200 || time > phoneSeconds ? null : phoneSeconds - time;
     final bucket = age == null

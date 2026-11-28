@@ -55,7 +55,8 @@
             "budget_exhausted",
             "scan_unavailable",
             "index_unavailable",
-            "publish_failed"
+            "publish_failed",
+            "directory_sync_failed"
           ]
         },
         "recovered": {
@@ -5752,6 +5753,48 @@
       },
       "consumers": [
         "orphan-audio-reclaim"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "orphanAudioReceiptless",
+      "wire_name": "Orphan Audio Receiptless Custody",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "phase": {
+          "type": "enum",
+          "wire_name": "phase",
+          "values": [
+            "recovery",
+            "reclaim"
+          ]
+        },
+        "receiptlessManagedCount": {
+          "type": "int",
+          "wire_name": "receiptless_managed_count"
+        },
+        "receiptlessManagedBytes": {
+          "type": "int",
+          "wire_name": "receiptless_managed_bytes"
+        },
+        "managedReceiptMissingSkipCount": {
+          "type": "int",
+          "wire_name": "managed_receipt_missing_skip_count"
+        },
+        "receiptScanTruncated": {
+          "type": "bool",
+          "wire_name": "receipt_scan_truncated"
+        },
+        "censusComplete": {
+          "type": "bool",
+          "wire_name": "census_complete"
+        }
+      },
+      "consumers": [
+        "orphan-audio-receiptless"
       ],
       "correlation": null
     },

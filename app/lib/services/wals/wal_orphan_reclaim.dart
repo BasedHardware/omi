@@ -128,6 +128,11 @@ extension LocalOrphanReclaim on LocalWalSyncImpl {
         return;
       }
       _orphanFrameCache = snapshot.frameCache;
+      final classification = snapshot.summary['orphan_classification'] as Map?;
+      final classes = classification?['classes'] as Map?;
+      final receiptless = classes?['receiptless_managed'] as Map?;
+      final receiptlessCount = receiptless?['count'] as int? ?? 0;
+      if (receiptlessCount > 0) skips['managed_receipt_missing'] = receiptlessCount;
       final candidates = <OrphanAudioFile>[];
       for (final file in snapshot.orphans) {
         final reason = !snapshot.isDocumentsFile(file) ? 'outside_documents' : file.reclaimSkipReason(_now());
@@ -271,6 +276,17 @@ extension LocalOrphanReclaim on LocalWalSyncImpl {
               result: OrphanAudioReclaimResult.values
                   .firstWhere((v) => v.wireName == result, orElse: () => OrphanAudioReclaimResult.failed),
               censusComplete: census?.complete ?? false));
+          final classification = census?.summary['orphan_classification'] as Map?;
+          final classes = classification?['classes'] as Map?;
+          final receiptless = classes?['receiptless_managed'] as Map?;
+          const TypedEvents().emit(OrphanAudioReceiptless(
+            phase: OrphanAudioReceiptlessPhase.reclaim,
+            receiptlessManagedCount: receiptless?['count'] as int? ?? 0,
+            receiptlessManagedBytes: receiptless?['bytes'] as int? ?? 0,
+            managedReceiptMissingSkipCount: receiptless?['count'] as int? ?? 0,
+            receiptScanTruncated: census?.summary['receipt_scan_truncated'] == true,
+            censusComplete: census?.complete ?? false,
+          ));
         }
       } catch (_) {/* Aggregate diagnostics never grant or revoke deletion authority. */}
     }

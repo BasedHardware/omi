@@ -316,9 +316,46 @@ its census walks every Documents file on the UI isolate (`orphanRecoveryDue`); i
 still runs, and the delay only defers adoption, never audio retention. The shared read-only
 inventory census runs outside the capture queue and includes active, retired,
 foreign, main, backup, temporary and quarantined rows, batch journals, native
-owner receipts, legacy jobs/preferences, ring checkpoint/download refs and
-capture-committed journals (including temporary files). Unreadable, invalid,
-changed or unresolved census sources prevent adoption. Wrong-typed or quarantined
+owner receipts, `.wal-live-receipts` sidecars, legacy jobs/preferences, ring
+checkpoint/download refs and capture-committed journals (including temporary
+files). A sidecar reserves only its managed basename; missing or unreadable
+sidecars leave that audio visible as receiptless, never eligible for adoption
+or reclaim. Receiptless live writes, including ownerless capture and the
+receipt-issuance kill switch, also use managed basenames. If index publication
+is interrupted, a later account therefore cannot adopt those bytes through
+legacy filename heuristics; the census retains them as aggregate-only managed
+audio. The directory scan examines at most 128 ordinary entries, skips
+`staging` and `retired` before the budget, and reports truncation separately.
+Unscanned managed names remain receiptless. Unexpected or invalid sidecar
+entries are diagnostic and do not invalidate unrelated census results; a sidecar
+reserves its basename only after validation and an unchanged-file check.
+Receipt publication syncs its containing directories before audio bytes are
+written; every audio file is flushed before index admission, and receiptless
+audio also syncs the documents directory. A failed barrier leaves that WAL in
+memory and emits `WAL Write Receipt` with `directory_sync_failed`. If a
+receiptless audio write completed but its directory barrier failed, the file is
+removed and the WAL remains unindexed: without a durable owner-bound receipt,
+that file cannot be safely retained or admitted. Storage-blocked pendant intake
+is bounded at 2,000 buffered frames and reports subsequent drops. After three
+consecutive native directory-sync failures, the process opens a fail-fast
+circuit. Later custody writes stay in memory while native barrier probes retry
+with exponential backoff from 30 seconds up to 30 minutes; disk admission
+resumes only after a probe succeeds. Native directory sync runs off the UI
+thread. Receiptless retries probe the open directory circuit before creating
+audio, keeping the WAL in memory if that probe fails. A receipt remains until
+both restart-index files have been flushed and
+their shared Documents directory has crossed the native durability barrier;
+failure retains replay proof for the next startup and emits the generation-
+fenced `directory_sync_failed` receipt event. When pending receipts
+exist, deleted-account cleanup captures persisted main, backup, temporary and
+quarantine index references before account-purge index rewrites, then reuses
+that snapshot after WAL readiness. It reads at most 128 receipt entries per
+batch and releases the index-writer lock between batches. Pages refresh the
+snapshot under the lock only after an index revision change, retaining earlier
+references across refreshes; incomplete reference checks retain the audio and
+are reported. Empty receipt directories do not trigger an index-reference scan.
+Unreadable, invalid, changed or unresolved index, journal, preference or consent
+sources prevent adoption. Wrong-typed or quarantined
 legacy preference inputs also make the census incomplete; recovery and support
 export share one raw, read-only preference snapshot. That snapshot is compared
 again at admission. Consent reads never repair unknown types to cloud defaults:
@@ -330,7 +367,9 @@ local files; capture receipts are read for owner history, never inferred as a
 file-bound server receipt for a rowless orphan.
 
 The local-only classifier assigns working (`.part`, `.torn`, `omibatch*`,
-`omimobilebatch*`), unparseable, owner_unknown, expired or recoverable. A complete
+`omimobilebatch*`), receiptless_managed, unparseable, owner_unknown, expired or
+recoverable. Receiptless managed audio is retained and excluded from recovery
+and reclaim. A complete
 mono filename and strict complete length-prefixed frames establish capture time
 and duration. Automatic recovery requires a plausible capture time within 58
 days (`orphanRecoveryWindowSeconds`), leaving two days inside the server's 60-day
@@ -409,8 +448,9 @@ Support exports reuse the opaque ledger framing snapshot when available, while
 still refreshing reference, owner, stat and age evidence. Only aggregate results
 are serialized; the cache never enters diagnostics or telemetry.
 Cold scans after a restart still read the corpus; no device-scale timing or memory claim is made. Commit metadata
-checks are bounded to 512 sources and four directories; larger source sets
-retain everything for a later supported pass. The automatic drain excludes
+checks are bounded to 512 other sources plus the 128-entry receipt budget (640
+total) and five directories; larger source sets retain everything for a later
+supported pass. The automatic drain excludes
 held pending rows; a clean-phone plain `miss` follows the existing automatic
 drain. Normal server confirmation and retention govern uploaded copies.
 
@@ -424,6 +464,11 @@ one typed aggregate event per pass: class/age counts and bytes, adopted count,
 cap/change/reference, commit-time expiry and outside-Documents skips, and a bounded fence result. The diagnostics export's
 `local_recording_inventory.orphan_classification` uses the same summary and
 never exports paths, basenames, account IDs or per-file entries.
+`Orphan Audio Receiptless Custody` separately aggregates receiptless managed
+count/bytes, managed-receipt-missing skips, phase, scan truncation and census
+completeness for recovery and reclaim; receiptless files count as managed-receipt
+skips in both phases and are excluded from age buckets because their capture
+metadata is not trusted. It exports no paths, basenames or owners.
 
 Guard: `test/unit/wal_orphan_recovery_test.dart`; startup admission's existing
 no-orphan-discovery contract remains separately guarded by
@@ -438,7 +483,8 @@ or held rows still preserve phone-wide history regardless of preference pruning.
 
 Unreadable index quarantine is custody evidence, not disposable diagnostics.
 It intentionally prevents adoption until repaired; do not prune it merely to
-make a census complete. More than 512 sources also defers the bounded commit.
+make a census complete. More than 640 sources or five directories defers the
+bounded commit.
 Unknown-owner files are retained, not assigned to the current account or
 surfaced as its held rows; `owner_unknown` remains an aggregate diagnostic.
 
@@ -452,8 +498,9 @@ after admission. Existing paced recovery wakes invoke reclaim after recovery set
 there is no startup census, separate timer, uploader or UI.
 
 A complete #25573 census reserves every file named by every current/backup/tmp/quarantined
-index generation, live/retired/foreign/held memory row, ring checkpoint/download receipt,
-batch journal, native owner receipt and legacy file/job preference. Working `.part`,
+index generation, live/retired/foreign/held memory row, live receipt sidecar, ring
+checkpoint/download receipt, batch journal, native owner receipt and legacy file/job
+preference. Working `.part`,
 `.torn`, `omibatch` and `omimobilebatch` files stay intact. The filename capture time
 and mtime must both be strictly older than 67 days: the 60-day server lookback plus the
 7-day `margin_days` of `backend/deploy/storage-lifecycle/retention_contract.json`, so reclaim
@@ -472,7 +519,7 @@ UID/generation, admission, headless/foreground state, raw legacy preferences, ev
 source/directory stamp, fresh memory references and file type/size/mtime/ctime.
 Legacy pending-file basenames remain reserved across directory/container aliases,
 so path-string differences cannot grant deletion. More
-than 512 sources/four directories defers. Sources remain immutable; only the Documents
+than 640 sources/five directories defers. Sources remain immutable; only the Documents
 directory stamp is advanced synchronously after our own unlinks. One batch intent is flushed asynchronously before entering the capture queue;
 a fresh final revalidation has no await through unlink. Completion
 is flushed asynchronously after leaving the queue.
@@ -499,6 +546,9 @@ the deleted count and missing-recording reports do not rise. Setting true stops 
 reclaim; deleted bytes cannot be restored. This PR does not create or enable the flag.
 
 `Orphan Audio Reclaim` emits aggregate files/bytes deleted, bounded skip reasons and
-pass result; no filenames, paths, owners or tombstones. Missing events are unknown,
+pass result; no filenames, paths, owners or tombstones. The account-deletion
+`wal_orphan_purge` event sets `reference_scan_incomplete` when a bounded index scan
+or purge-snapshot refresh cannot establish complete references, while retaining
+uncertain audio. Missing events are unknown,
 not zero deletions. Device timing, actual reclaimed space and ramp outcomes require
 physical-device acceptance. Guard: `test/unit/wal_orphan_reclaim_test.dart`.

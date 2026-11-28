@@ -21,7 +21,11 @@ extension _LiveWalReceiptReplay on LocalWalSyncImpl {
       final documents = await getApplicationDocumentsDirectory();
       if (!await LiveWalReceipt.directory(documents).exists() || !_isCurrent(generation)) return;
       final knownBasenames = _liveWalReservedNames();
-      if (knownBasenames.isNotEmpty) await WalFileManager.retireCommittedLiveWalReceipts();
+      if (knownBasenames.isNotEmpty) {
+        await WalFileManager.retireCommittedLiveWalReceipts(onDirectorySyncFailure: () {
+          if (_isCurrent(generation)) _emitLiveWalReceipt(WalWriteReceiptResult.directorySyncFailed);
+        });
+      }
       if (!_isCurrent(generation)) return;
       try {
         prefs = await SharedPreferences.getInstance();
@@ -75,17 +79,23 @@ extension _LiveWalReceiptReplay on LocalWalSyncImpl {
     } catch (_) {
       // Preserve receipts and bytes if we cannot commit ownership.
     }
-    if (_isCurrent(generation)) {
-      for (final entry in staged) {
-        entry.bucket.remove(entry.wal);
-      }
+    if (!_isCurrent(generation)) return;
+    for (final entry in staged) {
+      entry.bucket.remove(entry.wal);
     }
+    if (!_isCurrent(generation)) return;
     _emitLiveWalReceipt(WalWriteReceiptResult.indexUnavailable, withheld: staged.length);
   }
 
   void _emitLiveWalReceipt(WalWriteReceiptResult result, {int recovered = 0, int withheld = 0}) {
     try {
-      const TypedEvents().emit(WalWriteReceipt(result: result, recovered: recovered, withheld: withheld));
+      final event = WalWriteReceipt(result: result, recovered: recovered, withheld: withheld);
+      final override = _liveWalReceiptTelemetry;
+      if (override != null) {
+        override(event);
+      } else {
+        const TypedEvents().emit(event);
+      }
     } catch (_) {/* Diagnostics never affect custody. */}
   }
 }

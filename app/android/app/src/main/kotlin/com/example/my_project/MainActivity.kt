@@ -38,6 +38,7 @@ class MainActivity: FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         OmiPostHogSetup.register(this, flutterEngine.dartExecutor.binaryMessenger)
         com.friend.ios.ondevice.OnDeviceBackgroundWorker.attach(this, flutterEngine)
+        LiveWalReceiptDurabilityChannel.register(applicationContext, flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.omi/device_health_policy").setMethodCallHandler { call, result ->
             if (call.method != "setPolicy") { result.notImplemented() } else {
                 com.friend.ios.ble.DeviceHealthPersistence.setPolicy(applicationContext,

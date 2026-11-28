@@ -52,32 +52,159 @@ class WalFileManager {
 
   /// Only a startup read can retire receipts that both restart indexes
   /// already cover. Use the index lock so neither file can change mid-proof.
-  static Future<void> retireCommittedLiveWalReceipts() => _saveLock.withResource(() async {
-        final primary = _walFile;
-        final backup = _walBackupFile;
-        if (primary != null && backup != null) {
-          await LiveWalReceipt.retireCommitted(primary, backup);
-        }
-      });
-
-  static Future<int> purgeUnindexedLiveWalReceipts({
-    required Set<String> owners,
-    required Set<String> reservedNames,
-    required bool Function(String) mayDelete,
-  }) =>
+  static Future<void> retireCommittedLiveWalReceipts({void Function()? onDirectorySyncFailure}) =>
       _saveLock.withResource(() async {
         final primary = _walFile;
         final backup = _walBackupFile;
-        if (primary == null || backup == null) return 0;
-        return LiveWalReceipt.purgeUnindexed(primary, backup,
-            owners: owners, reservedNames: reservedNames, mayDelete: mayDelete);
+        if (primary != null && backup != null) {
+          await LiveWalReceipt.retireCommitted(primary, backup, onDirectorySyncFailure: onDirectorySyncFailure);
+        }
       });
 
-  static Future<bool> matchesPendingLiveWalPurge(File audio, Wal wal) => _saveLock.withResource(() async {
+  static Future<LiveWalReceiptPurgeResult> purgeUnindexedLiveWalReceipts({
+    required Set<String> owners,
+    required Set<String> reservedNames,
+    required bool Function(String) mayDelete,
+    LiveWalPurgeSnapshot? initialReferenceSnapshot,
+    bool initialReferenceScanComplete = true,
+    bool Function()? shouldContinue,
+  }) async {
+    if (owners.isEmpty) return (removed: 0, referenceScanIncomplete: false);
+    if (!initialReferenceScanComplete) return (removed: 0, referenceScanIncomplete: true);
+    File? primary;
+    File? backup;
+    await _saveLock.withResource(() async {
+      primary = _walFile;
+      backup = _walBackupFile;
+    });
+    if (primary == null || backup == null) return (removed: 0, referenceScanIncomplete: true);
+
+    LiveWalPurgeSnapshot? referenceSnapshot = initialReferenceSnapshot;
+    var snapshotAttempted = referenceSnapshot != null;
+    var protectedNames = referenceSnapshot?.basenames ?? <String>{};
+    if (referenceSnapshot != null && referenceSnapshot.documentsPath != primary!.parent.path) {
+      return (removed: 0, referenceScanIncomplete: true);
+    }
+    var removed = 0;
+    var referenceScanIncomplete = false;
+    try {
+      await for (final page in LiveWalReceipt.pendingReceiptPages(primary!.parent)) {
+        if (shouldContinue != null && !shouldContinue()) {
+          referenceScanIncomplete = true;
+          break;
+        }
+        if (!snapshotAttempted) {
+          snapshotAttempted = true;
+          await _saveLock.withResource(() async {
+            try {
+              referenceSnapshot = await LiveWalReceipt.capturePurgeSnapshot(primary!, backup!, _indexRevision);
+            } catch (_) {
+              referenceSnapshot = null;
+            }
+          });
+          if (referenceSnapshot == null || referenceSnapshot!.documentsPath != primary!.parent.path) {
+            referenceScanIncomplete = true;
+            break;
+          }
+          protectedNames = referenceSnapshot!.basenames;
+        }
+        final result = await _saveLock.withResource(() async {
+          final snapshot = referenceSnapshot!;
+          if (snapshot.refreshFailed) return (removed: 0, referenceScanIncomplete: true);
+          if (snapshot.revision != _indexRevision) {
+            try {
+              final refreshed = await LiveWalReceipt.capturePurgeSnapshot(primary!, backup!, _indexRevision);
+              if (refreshed.revision != _indexRevision || refreshed.documentsPath != snapshot.documentsPath) {
+                throw const FileSystemException('WAL purge reference refresh changed identity');
+              }
+              snapshot
+                ..basenames = refreshed.basenames
+                ..revision = refreshed.revision;
+            } catch (_) {
+              snapshot.refreshFailed = true;
+              return (removed: 0, referenceScanIncomplete: true);
+            }
+          }
+          return LiveWalReceipt.purgeUnindexed(
+            primary!,
+            owners: owners,
+            indexedNames: snapshot.basenames,
+            reservedNames: reservedNames,
+            mayDelete: mayDelete,
+            entries: page,
+            protectedNames: protectedNames,
+          );
+        });
+        removed += result.removed;
+        referenceScanIncomplete = referenceScanIncomplete || result.referenceScanIncomplete;
+        if (result.referenceScanIncomplete) break;
+        // Yield between small batches so WAL admission, capture and foreground
+        // work continue while a large deleted-owner archive is drained.
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+    } catch (_) {
+      referenceScanIncomplete = true;
+    }
+    return (removed: removed, referenceScanIncomplete: referenceScanIncomplete);
+  }
+
+  static Future<LiveWalPurgeSnapshot?> captureLiveWalPurgeSnapshot() => _saveLock.withResource(() async {
         final primary = _walFile;
         final backup = _walBackupFile;
-        if (primary == null || backup == null) return false;
-        return LiveWalReceipt.matchesPendingPurge(audio, wal, primary, backup);
+        if (primary == null || backup == null) return null;
+        try {
+          return await LiveWalReceipt.capturePurgeSnapshot(primary, backup, _indexRevision);
+        } catch (_) {
+          return null;
+        }
+      });
+
+  static Future<
+      ({
+        LiveWalPurgeSnapshot? snapshot,
+        bool referenceScanIncomplete,
+      })> captureLiveWalPurgeSnapshotForPendingReceipts() => _saveLock.withResource(() async {
+        final primary = _walFile;
+        final backup = _walBackupFile;
+        if (primary == null || backup == null) {
+          return (snapshot: null, referenceScanIncomplete: true);
+        }
+        try {
+          if (!await LiveWalReceipt.hasPendingReceiptEntries(primary.parent)) {
+            return (snapshot: null, referenceScanIncomplete: false);
+          }
+          return (
+            snapshot: await LiveWalReceipt.capturePurgeSnapshot(primary, backup, _indexRevision),
+            referenceScanIncomplete: false,
+          );
+        } catch (_) {
+          return (snapshot: null, referenceScanIncomplete: true);
+        }
+      });
+
+  static Future<bool> matchesPendingLiveWalPurge(File audio, Wal wal, LiveWalPurgeSnapshot snapshot) =>
+      _saveLock.withResource(() async {
+        final primary = _walFile;
+        final backup = _walBackupFile;
+        if (primary == null || backup == null || snapshot.documentsPath != primary.parent.path) {
+          return false;
+        }
+        if (snapshot.refreshFailed) return false;
+        if (snapshot.revision != _indexRevision) {
+          try {
+            final refreshed = await LiveWalReceipt.capturePurgeSnapshot(primary, backup, _indexRevision);
+            if (refreshed.revision != _indexRevision || refreshed.documentsPath != snapshot.documentsPath) return false;
+            snapshot
+              ..basenames = refreshed.basenames
+              ..revision = refreshed.revision;
+          } catch (_) {
+            // A stale snapshot grants no deletion authority if refresh is incomplete.
+            snapshot.refreshFailed = true;
+            return false;
+          }
+        }
+        if (snapshot.revision != _indexRevision) return false;
+        return LiveWalReceipt.matchesPendingPurgeInSnapshot(audio, wal, snapshot);
       });
 
   static Future<List<Wal>> _loadWals() async {

@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 
 import 'package:omi/backend/http/http_pool_manager.dart';
+import '../test_helpers/loopback_http_overrides_scope.dart';
 
 /// Tests that HttpPoolManager.stampRequestTime() refreshes
 /// X-Request-Start-Time on each call, ensuring retries, pool-queued
@@ -77,8 +78,12 @@ void main() {
   });
 
   group('HttpPoolManager send/sendStreaming wiring', () {
+    final loopbackHttp = LoopbackHttpOverridesScope();
     late HttpServer server;
     late String baseUrl;
+
+    setUpAll(loopbackHttp.enable);
+    tearDownAll(loopbackHttp.restore);
 
     setUp(() async {
       server = await HttpServer.bind('127.0.0.1', 0);

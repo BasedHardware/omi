@@ -3,8 +3,13 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import '../test_helpers/loopback_http_overrides_scope.dart';
 
 void main() {
+  final loopbackHttp = LoopbackHttpOverridesScope();
+  setUpAll(loopbackHttp.enable);
+  tearDownAll(loopbackHttp.restore);
+
   test('authenticated exit RPC refuses unfinished tests then exits only its child process', () async {
     final directory = await Directory.systemTemp.createTemp('heavy-exit-test-');
     final complete = File('${directory.path}/completed.txt');

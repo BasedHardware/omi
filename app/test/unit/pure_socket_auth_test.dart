@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
+import '../test_helpers/loopback_http_overrides_scope.dart';
 
 void main() {
   test('unavailable auth blocks a socket before opening the network', () async {
@@ -21,6 +22,8 @@ void main() {
   });
 
   test('merges extra headers with a custom provider', () async {
+    final loopbackHttp = LoopbackHttpOverridesScope()..enable();
+    addTearDown(loopbackHttp.restore);
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     final headersSeen = Completer<Map<String, String>>();
     server.listen((request) async {
