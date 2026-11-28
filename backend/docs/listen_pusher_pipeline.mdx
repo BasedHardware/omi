@@ -488,10 +488,19 @@ disabled archives do not advance the revision or schedule recovery; any already
 acquired fence is cleared. A podless custody fence exits by its upload's finish
 or its own lease; the kill switch withholds that lease exit even after expiry.
 Accepted bytes still schedule recovery after the kill switch engages mid-request.
+The fence's steps (begin, each file's archive commit, finish) run on worker
+threads, and the thread that settles the last step runs finish with the true
+outcome. A cancelled request, or a shut-down event loop, only abandons its waits:
+the fence stays held until an in-flight archive commits, then finishes accepted
+when it did. A begin retry that finds this request's exact token reports it held,
+so finish clears it; an owner who opted out meanwhile gets only that token removed.
 Every deploy writer of the vector (Sync and the backend stack, Listen, Pusher,
 and the worker Helm upgrade for record-seal-worker and record-seal-repair) binds
 all four `vars.RECORD_TOKEN_LEASE_*`; a prod deploy fails when any is missing or
-empty, and the prod worker chart refuses to render without them.
+empty, and the prod worker chart refuses to render without them. Image-only
+paths keep the live env, so the Listen and Pusher image-only operations and the
+worker preserve-live roll first read the target's live lease env and refuse
+unless it is `serve` at 100% with a positive epoch (rollbacks are not gated).
 An accepted durable append whose exact fence was lost records a revision bump
 and partial continuation transactionally, with an idempotent per-request receipt
 under the conversation's `record_custody_recoveries` subcollection. Privacy gates
@@ -547,7 +556,10 @@ Memoized waits do no token IO; observed append heartbeats coalesce to lease/2. F
 after complete seal re-open the row in every mode and use the existing partial continuation
 for interior gaps. Late WAL holes are retained create-only for that same worker;
 raw audio stays retained. See the [review fixes](listen_pusher_pipeline/changes/2026-11-09-token-lease-review-fixes.md).
-See [rollout and rollback](listen_pusher_pipeline/changes/2026-11-09-record-token-lease.md).
+Rollback after SCA-3748 is an image rollback; `RECORD_TOKEN_LEASE_MODE=off` is now
+the kill switch that pauses Sync custody, not a return to unfenced uploads. For
+history only, see the [original rollout plan, superseded by SCA-3748](listen_pusher_pipeline/changes/2026-11-09-record-token-lease.md);
+its shadow/off rollback no longer applies.
 
 Only the independent repair job opts into retrying `record_upload_failed` rows.
 `RECORD_SEAL_UPLOAD_FAILED_REPAIR_ENABLED=false` disables that rule. After full

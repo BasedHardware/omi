@@ -347,6 +347,19 @@ jobs:
           location: ${{ env.REGION }}
           project_id: ${{ vars.GCP_PROJECT_ID }}
 
+      # SCA-3748: image-only keeps the live env and swaps only the image. Before the
+      # image write, read the live Listen lease env and refuse unless it serves; new
+      # code over a live off/shadow vector would engage the kill. A rollback restores
+      # the attested prior image and is not gated.
+      - name: Refuse an image-only roll over a non-serving live lease env
+        if: ${{ inputs.mode != 'evidence' && inputs.mode == 'image-only' && fromJSON(inputs.evidence_request).operation == 'deploy' }}
+        run: |
+          set -euo pipefail
+          export LD_LIBRARY_PATH="$RUNNER_TEMP/listen-runtime/python/lib"
+          unset LD_PRELOAD PYTHONHOME PYTHONPATH
+          "$RUNNER_TEMP/listen-runtime/python/bin/python3.12" -I -B .github/scripts/record_token_lease_live_guard.py \
+            --namespace prod-omi-backend --require deployment/prod-omi-backend-listen
+
       - name: Authenticate digest inspection for the protected Listen route
         if: ${{ inputs.mode == 'image-only' || (inputs.mode == 'evidence' && fromJSON(inputs.evidence_request).image_only != null) }}
         run: gcloud auth configure-docker gcr.io --quiet

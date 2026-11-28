@@ -23,6 +23,7 @@ EXPECTED = [
     'Google Auth',
     'Set up gcloud',
     'Get GKE credentials',
+    'Refuse an image-only roll over a non-serving live lease env',
     'Authenticate digest inspection for the protected Listen route',
     'Produce private-overlay effect receipt without mutation',
     'Upload only the sanitized overlay receipt',

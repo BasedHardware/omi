@@ -11,7 +11,7 @@ from database._client import get_firestore_client, run_transactional
 from database import record_token_lease_metrics as metrics
 from database.record_audio import RecordUploadCapacityExceeded
 from database.batch_pipeline_record_lease_recovery import prepare_recovery
-from database.batch_pipeline_privacy import assert_batch_write_allowed
+from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed
 from database.record_custody_receipts import expires_at
 
 
@@ -46,18 +46,30 @@ def _receipt(ref, session):
 def begin(uid, cid, session, *, firestore_client=None):
     client = firestore_client if firestore_client is not None else get_firestore_client()
     ref = client.collection('users').document(uid).collection('conversations').document(cid)
+    attempts = 0
 
     @firestore.transactional
     def commit(tx):
+        nonlocal attempts
+        attempts += 1
         owner = client.collection('users').document(uid).get(transaction=tx).to_dict() or {}
+        opted_out = owner.get('private_cloud_sync_enabled', True) is False
         # Sync opt-out keeps its no-custody path, but never bypasses erasure.
         # Actual custody enrolls the same conversation checks as finish/recovery.
-        assert_batch_write_allowed(
-            client, tx, uid, conversation_ids=() if owner.get('private_cloud_sync_enabled', True) is False else (cid,)
-        )
-        if owner.get('private_cloud_sync_enabled', True) is False:
+        assert_batch_write_allowed(client, tx, uid, conversation_ids=() if opted_out else (cid,))
+        if opted_out and attempts == 1:
             return False
         snapshot = ref.get(transaction=tx)
+        if attempts > 1 and snapshot.exists:
+            # A retry may follow a commit that landed but lost its reply. The
+            # session is this request's own job identity, so its exact token
+            # means this call acquired it: report it held, or the caller would
+            # skip finish and strand the token past an opt-out or owner change.
+            token = ((snapshot.to_dict() or {}).get('record_upload_sessions') or {}).get(session)
+            if isinstance(token, dict) and token.get('signal_source') == 'custody_append':
+                return True
+        if opted_out:
+            return False
         if not snapshot.exists:
             raise RecordCustodyFenceLost('custody target no longer exists; retain local audio')
         row = snapshot.to_dict() or {}
@@ -159,10 +171,41 @@ def finish(uid, cid, session, *, accepted, late_observed: bool = False, firestor
         )
         return accepted and late and eligible, True
 
-    late, own_attempt = run_transactional(client, commit, transient=True)
+    try:
+        late, own_attempt = run_transactional(client, commit, transient=True)
+    except BatchPrivacyBlocked:
+        if accepted or not _clear_opted_out(client, uid, ref, session):
+            raise
+        return False
     if late and own_attempt:
         metrics.LATE_APPEND.inc()
     return late
+
+
+def _clear_opted_out(client, uid, ref, session):
+    """Remove an unaccepted token after its owner opted out of sync.
+
+    The conversation checks refuse every write once the owner opts out, which
+    would strand this request's own token until its lease lapses. Begin's
+    opt-out rule applies instead: owner-level erasure still refuses, and the
+    only write removes the exact token begin created. No receipt, revision or
+    recovery is written. Returns False when the owner has not opted out.
+    """
+
+    @firestore.transactional
+    def commit(tx):
+        owner = client.collection('users').document(uid).get(transaction=tx).to_dict() or {}
+        if owner.get('private_cloud_sync_enabled', True) is not False:
+            return False
+        assert_batch_write_allowed(client, tx, uid, conversation_ids=())
+        sessions = dict((ref.get(transaction=tx).to_dict() or {}).get('record_upload_sessions') or {})
+        token = sessions.get(session)
+        if isinstance(token, dict) and token.get('signal_source') == 'custody_append':
+            sessions.pop(session)
+            tx.update(ref, {'record_upload_sessions': sessions})
+        return True
+
+    return run_transactional(client, commit, transient=True)
 
 
 def recover_committed(uid, cid, session, *, firestore_client=None):

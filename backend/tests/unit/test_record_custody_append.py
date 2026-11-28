@@ -1,6 +1,7 @@
 """Real custody metadata transactions around accepted/refused storage requests."""
 
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 import hashlib
 import threading
@@ -627,6 +628,229 @@ async def test_anyio_scope_cancel_after_acquisition_still_finishes_the_owned_tok
     assert await _thread_wait(held.finished, 5)
     assert held.finishes == [True]
     assert held.tokens == {}
+
+
+class _RecordedFinish:
+    """finish double recording each outcome and whether the archive had committed."""
+
+    def __init__(self, monkeypatch, held: _HeldBegin, committed: threading.Event):
+        self.calls: list[tuple[bool, bool]] = []
+        self.finished = threading.Event()
+        self._held, self._committed = held, committed
+        monkeypatch.setattr(database, 'finish', self.finish)
+
+    def finish(self, uid, cid, session, *, accepted, late_observed=False):
+        self.calls.append((accepted, self._committed.is_set()))
+        self._held.tokens.pop(session, None)
+        self.finished.set()
+        return False
+
+
+@pytest.mark.parametrize('cancel', ['single', 'double', 'anyio_scope'])
+async def test_cancel_during_archive_holds_the_fence_until_the_commit_then_finishes_accepted(monkeypatch, cancel):
+    # SCA-3748 r5: cancellation cleared the fence while the archive write was
+    # still running, so a Pusher drain could seal with the old revision. The
+    # fence must stay held until the archive commits, then finish accepted.
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    held = _HeldBegin(monkeypatch, True)
+    held.release.set()
+    entered, release_archive, committed = threading.Event(), threading.Event(), threading.Event()
+    finish = _RecordedFinish(monkeypatch, held, committed)
+    renewals = []
+    monkeypatch.setattr(
+        request.record_audio, 'renew_record_token_lease', lambda *args, **kwargs: renewals.append(kwargs) or True
+    )
+
+    def archive(uid, paths, metadata):
+        entered.set()
+        assert release_archive.wait(5)
+        committed.set()
+        return ['object']
+
+    @request.custody_upload
+    async def upload():
+        await request.begin_upload('synthetic', 'record', 'archiving')
+        archived = await request.archive(archive, 'synthetic', ['local'], {})
+        request.stored(['local'], archived)
+        return JSONResponse(status_code=202, content={'status': 'queued'})
+
+    scopes: list[anyio.CancelScope] = []
+
+    async def handler():
+        if cancel != 'anyio_scope':
+            return await upload()
+        with anyio.CancelScope() as scope:
+            scopes.append(scope)
+            return await upload()
+
+    task = asyncio.ensure_future(handler())
+    try:
+        assert await _thread_wait(entered, 5)
+        if cancel == 'anyio_scope':
+            scopes[0].cancel()
+        else:
+            task.cancel()
+            if cancel == 'double':
+                for _ in range(3):
+                    await asyncio.sleep(0)
+                task.cancel()
+        # The handler exits at once; the archive is still writing on its thread.
+        done, _ = await asyncio.wait({task}, timeout=2)
+        assert done == {task}
+        # The fence is still held: nothing finished it while the write runs.
+        assert not await _thread_wait(finish.finished, 0.2)
+        assert finish.calls == []
+        assert 'custody:archiving' in held.tokens
+    finally:
+        release_archive.set()
+    assert await _thread_wait(finish.finished, 5)
+    # Finished once, after the commit, with the true (accepted) outcome.
+    assert finish.calls == [(True, True)]
+    assert held.tokens == {}
+    assert [call['session'] for call in renewals] == ['custody:archiving']
+    assert request._upload.get() is None
+
+
+def test_loop_shutdown_with_a_queued_finish_still_finishes_the_token(monkeypatch):
+    # SCA-3748 r5: a detached completion task queued its finish behind a busy
+    # DB pool; shutting the event loop down cancelled that task, which also
+    # cancelled the queued finish and stranded the token. Finish must belong to
+    # the pool, not to a loop task.
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    held = _HeldBegin(monkeypatch, True)
+    held.release.set()
+    pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix='test-custody-db')
+    monkeypatch.setattr(request, 'db_executor', pool)
+    busy, release_pool = threading.Event(), threading.Event()
+    signals: dict[str, asyncio.Event] = {}
+
+    @request.custody_upload
+    async def upload():
+        await request.begin_upload('synthetic', 'record', 'shutdown')
+        signals['acquired'].set()
+        await asyncio.Event().wait()
+
+    async def main():
+        signals['acquired'] = asyncio.Event()
+        task = asyncio.ensure_future(upload())
+        await asyncio.wait_for(signals['acquired'].wait(), 5)
+        # Occupy the only DB worker so the finish has to queue.
+        pool.submit(lambda: busy.set() or release_pool.wait(10))
+        assert busy.wait(5)
+        task.cancel()
+        for _ in range(3):
+            await asyncio.sleep(0)
+        task.cancel()  # Interrupt whatever cleanup awaits, detaching it.
+        await asyncio.wait({task}, timeout=2)
+        assert task.done()
+        # Returning shuts the loop down and cancels every remaining task.
+
+    try:
+        asyncio.run(main())
+        assert held.finishes == []
+        release_pool.set()
+        assert held.finished.wait(5)
+        assert held.finishes == [True]
+        assert held.tokens == {}
+    finally:
+        release_pool.set()
+        pool.shutdown(wait=True)
+
+
+async def test_ambiguous_begin_commit_with_opt_out_on_retry_still_clears_the_token(monkeypatch):
+    # SCA-3748 r5: begin's commit landed but its reply was lost, and the owner
+    # opted out of sync before the retry. The retry returned False, so the
+    # request skipped finish and stranded its token. The retry must recognize
+    # its own exact token and report it held, so finish clears it.
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setattr(database.time, 'time', lambda: NOW)
+    client = custody_client({PATH: {**ROW, 'record_upload_sessions': {}}})
+    monkeypatch.setattr(database, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(record_audio, 'get_firestore_client', lambda: client)
+    session = 'custody:ambiguous-opt-out'
+    original_commit = StrictFirestoreTransaction._commit
+    lost = []
+
+    def commit_then_lose_reply(tx):
+        original_commit(tx)
+        if not lost and any(session in (patch.get('record_upload_sessions') or {}) for _, patch in tx.updates):
+            lost.append(True)
+            client.rows['users', 'synthetic']['private_cloud_sync_enabled'] = False
+            raise ServiceUnavailable('synthetic begin response lost after commit')
+
+    monkeypatch.setattr(StrictFirestoreTransaction, '_commit', commit_then_lose_reply)
+
+    @request.custody_upload
+    async def upload():
+        await request.begin_upload('synthetic', 'record', 'ambiguous-opt-out')
+        assert request.owns_upload('synthetic', 'record')
+        # Opted out: the route stores nothing and refuses.
+        return JSONResponse(status_code=409, content={'code': 'synthetic_refusal'})
+
+    assert (await upload()).status_code == 409
+    assert lost == [True]
+    assert session not in client.rows[PATH]['record_upload_sessions']
+    assert client.rows[PATH]['record_upload_revision'] == 7
+    assert request._upload.get() is None
+
+
+def test_begin_retry_without_its_own_token_still_honors_opt_out(monkeypatch):
+    # The retry check is exact: another request's token is not this one's.
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    client = custody_client(
+        {PATH: {**ROW, 'record_upload_sessions': {'custody:other': {'signal_source': 'custody_append'}}}}
+    )
+    allowed = database.assert_batch_write_allowed
+    failed = []
+
+    def fail_once_before_any_write(*args, **kwargs):
+        if not failed:
+            failed.append(True)
+            client.rows['users', 'synthetic']['private_cloud_sync_enabled'] = False
+            raise ServiceUnavailable('synthetic transient failure before any write')
+        return allowed(*args, **kwargs)
+
+    monkeypatch.setattr(database, 'assert_batch_write_allowed', fail_once_before_any_write)
+    before = deepcopy(client.rows)
+    before['users', 'synthetic']['private_cloud_sync_enabled'] = False
+    assert not database.begin('synthetic', 'record', 'custody:mine', firestore_client=client)
+    assert failed == [True]
+    assert client.rows == before
+    assert not any(tx.has_written for tx in client.transactions)
+
+
+@pytest.mark.parametrize('owner', ['opted_out', 'opted_out_and_purging', 'conversation_declined'])
+def test_unaccepted_finish_after_owner_opt_out_clears_only_its_own_token(owner):
+    # An owner's opt-out refuses every conversation write, which stranded the
+    # request's own token. Begin's opt-out rule clears exactly that token, and
+    # still refuses on erasure or a conversation-level privacy decline.
+    client = custody_client(
+        {PATH: {**ROW, 'record_upload_sessions': {'custody:other': {'signal_source': 'custody_append'}}}}
+    )
+    session = 'custody:opted-out'
+    assert database.begin('synthetic', 'record', session, firestore_client=client)
+    if owner == 'conversation_declined':
+        client.rows[PATH]['private_cloud_sync_enabled'] = False
+    else:
+        client.rows['users', 'synthetic']['private_cloud_sync_enabled'] = False
+    if owner == 'opted_out_and_purging':
+        client.rows['batch_pipeline_privacy', privacy_owner_key('synthetic')] = {'generation': 1, 'purging': True}
+    before = deepcopy(client.rows)
+    if owner != 'opted_out':
+        with pytest.raises(BatchPrivacyBlocked):
+            database.finish('synthetic', 'record', session, accepted=False, firestore_client=client)
+        assert client.rows == before
+        return
+    with pytest.raises(BatchPrivacyBlocked):
+        # Accepted bytes never bypass the conversation checks.
+        database.finish('synthetic', 'record', session, accepted=True, firestore_client=client)
+    assert client.rows == before
+    assert database.finish('synthetic', 'record', session, accepted=False, firestore_client=client) is False
+    expected = deepcopy(before)
+    expected[PATH]['record_upload_sessions'].pop(session)
+    assert client.rows == expected
+    assert not any(path[-2] == 'record_custody_recoveries' for path in client.rows)
 
 
 @pytest.mark.parametrize('late', [False, True])
