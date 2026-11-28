@@ -15940,6 +15940,19 @@ class AppLocalizationsFr extends AppLocalizations {
   String get batteryRestartToRefresh => 'Redémarrez Omi pour actualiser';
 
   @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Seront traités le $date au renouvellement de vos minutes';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Ou traitez-les tout de suite en passant à un forfait supérieur';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Traitement le $date';
+  }
+
+  @override
   String get storageUploadedTitle => 'Déjà envoyé';
 
   @override

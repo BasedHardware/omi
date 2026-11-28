@@ -15819,6 +15819,19 @@ class AppLocalizationsTr extends AppLocalizations {
   String get batteryRestartToRefresh => 'Yenilemek için Omi\'yi yeniden başlatın';
 
   @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Dakikalarınız yenilendiğinde $date tarihinde işlenecek';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Ya da plan yükseltmesiyle bunları hemen işleme alın';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return '$date tarihinde işlenecek';
+  }
+
+  @override
   String get storageUploadedTitle => 'Zaten yüklendi';
 
   @override

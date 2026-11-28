@@ -4,6 +4,7 @@ import copy
 import importlib.util
 import json
 from pathlib import Path
+import re
 import sys
 from unittest.mock import patch
 import subprocess
@@ -867,7 +868,7 @@ def test_evidence_bootstrap_refuses_added_script_before_python(tmp_path):
     git('add', '.')
     git('-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'reviewed')
     reviewed = git('rev-parse', 'HEAD:.github/scripts')
-    command = guard['run'].replace('c9cc79160418038884fc99286730784297d61793', reviewed)
+    command = re.sub(r'(?<=reviewed_scripts_tree=)[0-9a-f]{40}', reviewed, guard['run'])
     assert command != guard['run']
 
     def run_guard():
@@ -886,3 +887,280 @@ def test_evidence_bootstrap_refuses_added_script_before_python(tmp_path):
     git('add', '.')
     git('-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'added module')
     assert run_guard() != 0
+
+
+@pytest.mark.parametrize(
+    'replicas,fault',
+    [
+        (1, None),
+        (35, None),
+        (2, 'helm'),
+        (2, 'helm-revision'),
+        (2, 'deployment'),
+        (2, 'replicaset'),
+        (2, 'extra-active'),
+        (2, 'owner'),
+        (2, 'revision'),
+        (2, 'hash'),
+        (2, 'digest'),
+        (2, 'tag-moved'),
+        (2, 'scope'),
+        (2, 'snapshot'),
+        (2, 'annotation'),
+        (2, 'env-order'),
+    ],
+)
+def test_r27_proof_is_read_only_and_checks_full_owner_templates(replicas, fault):
+    old = 'gcr.io/based-hardware/backend:96f0631'
+    inverse = 'gcr.io/based-hardware/backend@sha256:' + '1' * 64
+    rendered = deployment('a-private-sentinel')
+    expected = rendered['spec']
+    expected.pop('replicas')  # Let the HPA choose the opening scope.
+    expected['selector'] = {'matchLabels': {'app': 'listen'}}
+    template = expected['template']
+    template['metadata'] = {'labels': {'app': 'listen'}}
+    primary = template['spec']['containers'][0]
+    primary.update(
+        name='backend-listen',
+        image=old,
+        resources={'requests': {'cpu': 1, 'memory': '1.5Gi'}},
+        readinessProbe={'httpGet': {'path': '/health', 'port': 8080}},
+        ports=[{'containerPort': 8080}],
+    )
+    primary['env'] = [
+        {'name': 'EMPTY', 'value': ''},
+        {'name': 'PRIVATE_TOKEN', 'value': 'a-private-sentinel'},
+        {'name': 'HASH', 'valueFrom': {'fieldRef': {'fieldPath': "metadata.labels['pod-template-hash']"}}},
+        {
+            'name': 'STT_CAP_DISPATCH_ENFORCEMENT',
+            'valueFrom': {
+                'secretKeyRef': {'name': 'private-secret', 'key': 'STT_CAP_DISPATCH_ENFORCEMENT', 'optional': False}
+            },
+        },
+    ]
+    template['spec']['initContainers'][0]['image'] = 'example.com/init:v1'
+    template['spec']['serviceAccountName'] = 'listen'
+    live = copy.deepcopy(rendered)
+    live['metadata'].update(
+        labels={'app.kubernetes.io/managed-by': 'Helm'},
+        annotations={
+            'meta.helm.sh/release-name': evidence.TARGET,
+            'meta.helm.sh/release-namespace': evidence.NS,
+            'deployment.kubernetes.io/revision': '52',
+        },
+    )
+    live['spec']['replicas'] = replicas
+    live['status'] = {
+        'observedGeneration': 3,
+        **dict.fromkeys(('replicas', 'updatedReplicas', 'readyReplicas', 'availableReplicas'), replicas),
+    }
+    live_template = live['spec']['template']
+    live_template['metadata']['creationTimestamp'] = None
+    pod_spec = live_template['spec']
+    pod_spec.update(
+        serviceAccount='listen',
+        restartPolicy='Always',
+        dnsPolicy='ClusterFirst',
+        securityContext={},
+        terminationGracePeriodSeconds=30,
+        schedulerName='default-scheduler',
+    )
+    live_primary = pod_spec['containers'][0]
+    live_primary.update(
+        imagePullPolicy='IfNotPresent', terminationMessagePath='/dev/termination-log', terminationMessagePolicy='File'
+    )
+    live_primary['resources']['requests'] = {'cpu': '1000m', 'memory': '1536Mi'}
+    live_primary['ports'][0]['protocol'] = 'TCP'
+    live_primary['env'][0].pop('value')
+    live_primary['env'][2]['valueFrom']['fieldRef']['apiVersion'] = 'v1'
+    live_primary['readinessProbe'].update(timeoutSeconds=1, periodSeconds=10, successThreshold=1, failureThreshold=3)
+    live_primary['readinessProbe']['httpGet']['scheme'] = 'HTTP'
+
+    rs_name = evidence.TARGET + '-aa123'
+    rs_template = copy.deepcopy(live_template)
+    rs_template['metadata']['labels']['pod-template-hash'] = 'aa123'
+    rs = {
+        'apiVersion': 'apps/v1',
+        'kind': 'ReplicaSet',
+        'metadata': {
+            'name': rs_name,
+            'namespace': evidence.NS,
+            'uid': 'rs-uid',
+            'generation': 4,
+            'resourceVersion': '12',
+            'labels': {'pod-template-hash': 'aa123'},
+            'annotations': {'deployment.kubernetes.io/revision': '52'},
+            'ownerReferences': [
+                {
+                    'apiVersion': 'apps/v1',
+                    'kind': 'Deployment',
+                    'name': evidence.TARGET,
+                    'uid': 'uid',
+                    'controller': True,
+                }
+            ],
+        },
+        'spec': {
+            'replicas': replicas,
+            'selector': {'matchLabels': {'app': 'listen', 'pod-template-hash': 'aa123'}},
+            'template': rs_template,
+        },
+        'status': {
+            'observedGeneration': 4,
+            **dict.fromkeys(('replicas', 'readyReplicas', 'availableReplicas'), replicas),
+        },
+    }
+    rs_items = [rs]
+    pods, endpoints = [], []
+    for i in range(replicas):
+        name = 'pod-' + str(i)
+        pods.append(
+            {
+                'metadata': {
+                    'name': name,
+                    'namespace': evidence.NS,
+                    'uid': name,
+                    'resourceVersion': '17',
+                    'labels': {'pod-template-hash': 'aa123'},
+                    'ownerReferences': [
+                        {
+                            'kind': 'ReplicaSet',
+                            'name': rs_name,
+                            'uid': 'rs-uid',
+                            'apiVersion': 'apps/v1',
+                            'controller': True,
+                        }
+                    ],
+                },
+                'status': {
+                    'conditions': [{'type': 'Ready', 'status': 'True'}],
+                    'containerStatuses': [{'name': 'backend-listen', 'ready': True, 'imageID': inverse}],
+                },
+            }
+        )
+        endpoints.append(
+            {
+                'conditions': {'ready': True},
+                'targetRef': {'kind': 'Pod', 'namespace': evidence.NS, 'name': name, 'uid': name},
+            }
+        )
+
+    installed = copy.deepcopy(rendered)
+    if fault == 'helm':
+        installed['spec']['template']['spec']['containers'][0]['command'] = ['changed']
+    if fault == 'deployment':
+        live_primary['readinessProbe']['httpGet']['scheme'] = 'HTTPS'
+    if fault == 'replicaset':
+        rs_template['spec']['terminationGracePeriodSeconds'] = 60
+    if fault == 'extra-active':
+        rs_items.append(copy.deepcopy(rs))
+    if fault == 'owner':
+        rs['metadata']['ownerReferences'].append({'controller': True, 'uid': 'another'})
+    if fault == 'revision':
+        rs['metadata']['annotations']['deployment.kubernetes.io/revision'] = '51'
+    if fault == 'hash':
+        rs_template['metadata']['labels']['pod-template-hash'] = 'injected'
+    if fault == 'digest':
+        pods[0]['status']['containerStatuses'][0]['imageID'] = inverse.replace('1', '2')
+    if fault == 'scope':
+        live['spec']['replicas'] += 1
+    if fault == 'annotation':
+        rs_template['metadata']['annotations'] = {'unexpected': 'changed'}
+    if fault == 'env-order':
+        live_primary['env'].reverse()
+
+    request = dict.fromkeys(
+        (
+            'schema',
+            'request_id',
+            'expires',
+            'candidate_sha',
+            'control_sha',
+            'target',
+            'namespace',
+            'bindings',
+            'dispatch_inputs',
+            'image',
+        )
+    )
+    request['image_only'] = {'from': old, 'inverse': inverse, 'baseline': {inverse: replicas}}
+    request['helm_args'] = evidence.baseline_helm_args('<candidate>', old)
+    root = Path('/reviewed')
+    history = ['helm', '-n', evidence.NS, 'history', evidence.TARGET, '--max', '1', '--output', 'json']
+    allowed = {
+        tuple(evidence.baseline_helm_args(root, old)): yaml.safe_dump(rendered).encode(),
+        ('helm', '-n', evidence.NS, 'get', 'manifest', evidence.TARGET, '--revision', '73'): yaml.safe_dump(
+            installed
+        ).encode(),
+        (
+            'kubectl',
+            'get',
+            'Deployment',
+            evidence.TARGET,
+            '--ignore-not-found=true',
+            '-o',
+            'json',
+            '-n',
+            evidence.NS,
+        ): evidence.canonical(live),
+        ('kubectl', '-n', evidence.NS, 'get', 'pods', '--selector', 'app=listen', '-o', 'json'): evidence.canonical(
+            {'items': pods}
+        ),
+        (
+            'kubectl',
+            '-n',
+            evidence.NS,
+            'get',
+            'replicasets',
+            '--selector',
+            'app=listen',
+            '-o',
+            'json',
+        ): evidence.canonical({'items': rs_items}),
+        (
+            'kubectl',
+            '-n',
+            evidence.NS,
+            'get',
+            'endpointslices',
+            '-l',
+            'kubernetes.io/service-name=' + evidence.TARGET,
+            '-o',
+            'json',
+        ): evidence.canonical({'items': [{'endpoints': endpoints}]}),
+        ('gcloud', 'container', 'images', 'describe', old, '--format=value(image_summary.digest)'): inverse.split('@')[
+            1
+        ].encode(),
+    }
+    calls = []
+
+    def run(argv):
+        calls.append(tuple(argv))
+        if argv == history:
+            revision = 74 if fault == 'helm-revision' and calls.count(tuple(argv)) > 1 else 73
+            return evidence.canonical([{'status': 'deployed', 'revision': revision}])
+        assert tuple(argv) in allowed, f'unexpected command: {argv}'
+        if calls.count(tuple(argv)) > 1:
+            if fault == 'snapshot' and argv[:3] == ['kubectl', 'get', 'Deployment']:
+                changed = copy.deepcopy(live)
+                changed['metadata']['resourceVersion'] = '99'
+                return evidence.canonical(changed)
+            if fault == 'tag-moved' and argv[0] == 'gcloud':
+                return b'sha256:' + b'2' * 64
+        return allowed[tuple(argv)]
+
+    env = {'GITHUB_RUN_ID': '123', 'GITHUB_RUN_ATTEMPT': '1'}
+    spec = {'keys': ['STT_CAP_DISPATCH_ENFORCEMENT'], 'secretName': 'private-secret'}
+    reader = evidence.Reader()
+    with patch.object(reader, 'run', side_effect=run):
+        if fault:
+            with pytest.raises(evidence.Refused):
+                evidence.produce_chart_baseline(request, reader, env, root, spec, 100)
+            return
+        receipt = evidence.produce_chart_baseline(request, reader, env, root, spec, 100)
+    assert receipt['helm_revision'] == 73
+    assert receipt['baseline']['image_digest'] == inverse
+    assert receipt['baseline']['deployment_template_matches'] is True
+    assert receipt['baseline']['replica_set_template_matches'] is True
+    for private in (b'a-private-sentinel', b'private-secret', b'readinessProbe', b'96f0631'):
+        assert private not in evidence.canonical(receipt)

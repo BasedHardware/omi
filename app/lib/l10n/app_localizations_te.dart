@@ -15873,6 +15873,19 @@ class AppLocalizationsTe extends AppLocalizations {
   String get batteryRestartToRefresh => 'రిఫ్రెష్ చేయడానికి Omi ను రీస్టార్ట్ చేయండి';
 
   @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'మీ నిమిషాలు రిన్యూ అయ్యే $dateన ప్రాసెస్ అవుతుంది';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'లేదా ప్లాన్ అప్‌గ్రేడ్‌తో వెంటనే ప్రాసెస్ చేయించండి';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return '$dateన ప్రాసెస్ అవుతుంది';
+  }
+
+  @override
   String get storageUploadedTitle => 'ఇప్పటికే అప్‌లోడ్ చేయబడింది';
 
   @override

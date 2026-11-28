@@ -15810,6 +15810,19 @@ class AppLocalizationsVi extends AppLocalizations {
   String get batteryRestartToRefresh => 'Khởi động lại Omi để làm mới';
 
   @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Sẽ xử lý vào $date khi số phút của bạn được gia hạn';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Hoặc xử lý ngay bằng cách nâng cấp gói';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Xử lý vào $date';
+  }
+
+  @override
   String get storageUploadedTitle => 'Đã tải lên';
 
   @override

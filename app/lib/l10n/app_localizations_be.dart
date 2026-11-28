@@ -15844,6 +15844,19 @@ class AppLocalizationsBe extends AppLocalizations {
   String get batteryRestartToRefresh => 'Перазагрузіце Omi, каб абнавіць паказанне';
 
   @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Будуць апрацаваны $date, калі абновяцца вашыя хвіліны';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Або апрацуйце іх адразу з абнаўленнем плана';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Будуць апрацаваны $date';
+  }
+
+  @override
   String get storageUploadedTitle => 'Ужо запампавана';
 
   @override

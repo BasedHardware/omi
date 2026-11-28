@@ -118,17 +118,26 @@ class MixedWrite(ValueError):
         super().__init__('RAMP_PREFLIGHT REFUSE mixed_write: run the narrowing change alone first, then the raise')
 
 
+def _can_expose(rule: dict) -> bool:
+    return rule.get('active') is True and (
+        float(rule.get('rollout_percentage') or 0) > 0 or bool(rule.get('allow_uids'))
+    )
+
+
 def widens_exposure(current: dict | None, change: dict | None) -> bool:
     """Classify a flag rule or _ramp patch before any liveness IO. Reject mixed writes.
 
     Omitted fields are unchanged. Deleting an Omi rule returns control to
     PostHog and can widen exposure unless it is active at 100% with no denied
-    UIDs. A new rule starts inactive at zero percent with empty allow/deny sets.
+    UIDs or platform restrictions. A new rule starts inactive at zero percent with empty allow/deny sets.
     """
     before = current or {}
     if change is None:
         return not (
-            before.get('active') is True and before.get('rollout_percentage') == 100 and not before.get('deny_uids')
+            before.get('active') is True
+            and before.get('rollout_percentage') == 100
+            and not before.get('deny_uids')
+            and not before.get('platforms')
         )
     pairs = [
         (float((before.get('percents') or {}).get(name, 0)), float(percent))
@@ -146,6 +155,16 @@ def widens_exposure(current: dict | None, change: dict | None) -> bool:
         added, removed = bool(new - old), bool(old - new)
         widening |= added if additions_widen else removed
         narrowing |= removed if additions_widen else added
+    if 'platforms' in change:
+        old_platforms = set(before.get('platforms') or ())
+        new_platforms = set(change['platforms'] or ())
+        # Empty admits every header, including missing and unknown values.
+        widening |= bool(old_platforms and (not new_platforms or new_platforms - old_platforms)) and _can_expose(
+            {**before, **change}
+        )
+        narrowing |= bool(new_platforms and (not old_platforms or old_platforms - new_platforms)) and _can_expose(
+            before
+        )
     if widening and narrowing:
         raise MixedWrite()
     return widening

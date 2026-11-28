@@ -15814,6 +15814,19 @@ class AppLocalizationsFi extends AppLocalizations {
   String get batteryRestartToRefresh => 'Käynnistä Omi uudelleen päivittämiseksi';
 
   @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Käsitellään $date, kun minuittisi uudistuvat';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Tai käsittele ne heti tilauksen päivityksellä';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Käsitellään $date';
+  }
+
+  @override
   String get storageUploadedTitle => 'Jo ladattu';
 
   @override

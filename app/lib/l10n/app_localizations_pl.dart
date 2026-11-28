@@ -15854,6 +15854,19 @@ class AppLocalizationsPl extends AppLocalizations {
   String get batteryRestartToRefresh => 'Uruchom ponownie Omi, aby odświeżyć odczyt';
 
   @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Zostaną przetworzone $date, gdy odnowią się Twoje minuty';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Albo przetwórz je od razu, ulepszając plan';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Zostaną przetworzone $date';
+  }
+
+  @override
   String get storageUploadedTitle => 'Już przesłane';
 
   @override

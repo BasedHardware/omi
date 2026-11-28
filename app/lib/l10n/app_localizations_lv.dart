@@ -15844,6 +15844,19 @@ class AppLocalizationsLv extends AppLocalizations {
   String get batteryRestartToRefresh => 'Restartējiet Omi, lai atsvaidzinātu';
 
   @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Tiks apstrādāti $date, kad atjaunosies jūsu minūtes';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Vai jauniniet plānu, lai tos apstrādātu uzreiz';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Apstrādās $date';
+  }
+
+  @override
   String get storageUploadedTitle => 'Jau augšupielādēts';
 
   @override

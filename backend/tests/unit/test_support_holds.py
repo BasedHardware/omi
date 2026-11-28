@@ -323,7 +323,7 @@ def test_released_hold_is_never_review_overdue(client):
 def test_operator_cli_wires_every_group_and_audits_the_run(client, capsys, monkeypatch):
     parser = ops.build_parser()
     groups = {action.dest: action for action in parser._actions}["group"].choices
-    assert set(groups) == {"hold", "retention", "dsar", "account"}
+    assert set(groups) == {"hold", "retention", "dsar", "account", "transcription-credit"}
     with pytest.raises(SystemExit):
         parser.parse_args(["hold", "list"])  # --ticket/--actor/--reason are required
 

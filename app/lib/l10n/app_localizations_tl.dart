@@ -15936,6 +15936,19 @@ class AppLocalizationsTl extends AppLocalizations {
   String get batteryRestartToRefresh => 'I-restart ang Omi upang i-refresh';
 
   @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Ipo-proseso sa $date kapag mag-renew na ang iyong mga minuto';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'O mag-plan upgrade para maiproseso agad ang mga ito';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Maiiproseso sa $date';
+  }
+
+  @override
   String get storageUploadedTitle => 'Na-upload na';
 
   @override

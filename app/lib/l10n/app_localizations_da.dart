@@ -15799,6 +15799,19 @@ class AppLocalizationsDa extends AppLocalizations {
   String get batteryRestartToRefresh => 'Genstart Omi for at opdatere værdien';
 
   @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Behandles $date, når dine minutter fornyes';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Eller behandl dem med det samme med en opgradering af din plan';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Behandles $date';
+  }
+
+  @override
   String get storageUploadedTitle => 'Allerede uploadet';
 
   @override

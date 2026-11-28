@@ -707,3 +707,37 @@ async def test_reupload_of_held_batch_upload_keeps_original_owner_and_custody(co
     assert response is not None and response.status_code == 202
     body = json.loads(response.body)
     assert body['status'] == 'processing' and body['job_id'] == 'bp_first' and body['poll_after_ms'] == 300000
+
+
+def allowance_upload(store, sibling_state='allowance_held'):
+    works, binding = proposal()
+    sibling = replace(works[0], segment_id='sibling', capture_at=works[0].capture_at + 30)
+    submit(store, [works[0], sibling], replace(binding, segment_ids=('segment', 'sibling')))
+    store.rows['jobs', 'segment'].update(state='allowance_held')
+    store.rows['jobs', 'sibling'].update(state=sibling_state)
+
+
+@pytest.mark.parametrize('sibling_state', ['allowance_held', 'committed'])
+def test_an_upload_parked_on_the_allowance_says_when_without_writes(cohort, monkeypatch, sibling_state):
+    from utils.sync import held_audio_summary
+
+    store = MemoryStore()
+    allowance_upload(store, sibling_state)
+    before = dict(store.rows)
+    from utils.batch_pipeline import intake as intake_module
+
+    monkeypatch.setattr(intake_module.time, 'time', lambda: 1_764_400_000)
+    monkeypatch.setattr(held_audio_summary, 'next_utc_month_start', lambda now=None: 1_764_547_200)
+    status = durable_status(store, 'synthetic-owner', 'bp_first')
+    assert status['status'] == ('queued' if sibling_state == 'allowance_held' else 'processing')
+    assert status['reason_code'] == 'allowance_held'
+    assert status['retry_after'] == 147_200 and status['poll_after_ms'] == 300000
+    assert store.rows == before
+
+
+@pytest.mark.parametrize('sibling_state', ['ready', 'retry'])
+def test_an_upload_with_other_waiting_work_keeps_the_plain_queued_answer(cohort, sibling_state):
+    store = MemoryStore()
+    allowance_upload(store, sibling_state)
+    status = durable_status(store, 'synthetic-owner', 'bp_first')
+    assert status['status'] == 'queued' and 'reason_code' not in status and status['poll_after_ms'] == 3000

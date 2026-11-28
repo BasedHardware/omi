@@ -15803,6 +15803,19 @@ class AppLocalizationsBn extends AppLocalizations {
   String get batteryRestartToRefresh => 'রিফ্রেশ করতে Omi পুনরায় চালু করুন';
 
   @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'আপনার মিনিট নবায়ন হলে $date তারিখে প্রসেস হবে';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'অথবা প্ল্যান আপগ্রেড করে সেগুলো এখনই প্রসেস করুন';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return '$date তারিখে প্রসেস হবে';
+  }
+
+  @override
   String get storageUploadedTitle => 'ইতিমধ্যে আপলোড হয়েছে';
 
   @override

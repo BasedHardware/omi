@@ -161,7 +161,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     double? barFraction;
 
     Future<void> startSync() async {
-      if (await confirmSyncForCustomStt(context) && context.mounted) p.syncWals();
+      if (await confirmSyncForCustomStt(context) && context.mounted) p.syncWalsAfterConfirmation();
     }
 
     if (isActive && step != null && step.step != SyncStep.transcribe) {

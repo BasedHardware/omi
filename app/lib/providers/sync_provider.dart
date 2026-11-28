@@ -506,7 +506,12 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       ..onRingWake = independentDrainAllowed ? syncs.wakeRingDrain : null
       ..onManualRingWake = independentDrainAllowed ? syncs.wakeManualRingDrain : null;
     syncs.configureRingDrain(
-      () => !_isDisposed && !SharedPreferencesUtil().useCustomStt && SharedPreferencesUtil().autoSyncOfflineRecordings,
+      // On-device STT drains too: its chunks are stamped phone-only at persist time and go to
+      // the on-device runner, never to upload (autoUploadEnabled below stays off for custom STT).
+      () =>
+          !_isDisposed &&
+          SharedPreferencesUtil().autoSyncOfflineRecordings &&
+          (!SharedPreferencesUtil().useCustomStt || SharedPreferencesUtil().onDeviceSttSelected),
       independentDrainAllowed: independentDrainAllowed,
       onDurableChunk: coordinator.wakeForRingChunk,
     );
@@ -1032,6 +1037,20 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
   StorageClearOutcome _abandonedClear(DateTime started) => verifyStorageClear(
       targets: const [], current: const [], elapsed: DateTime.now().difference(started), failed: true);
+
+  /// A manual Sync the user confirmed (after every warning): drained pendant audio waiting for
+  /// on-device transcription, and audio this Sync drains, go to the cloud. A failed release
+  /// never blocks the Sync.
+  Future<void> syncWalsAfterConfirmation() async {
+    DrainedAudioCustody.confirmCloudSync();
+    // A failed release is logged, not shown: the Sync below still runs and reports its own errors.
+    await _walService
+        .getSyncs()
+        .phone
+        .releaseDrainedDeviceAudioForUpload()
+        .then<void>((_) {}, onError: (Object e) => Logger.debug('SyncProvider: drained audio release failed: $e'));
+    await syncWals();
+  }
 
   Future<void> syncWals({WakeTrigger trigger = WakeTrigger.userRetry}) async {
     if (_deviceSyncs?.transfersHeldForClear == true) return;

@@ -1104,6 +1104,7 @@ class RingStorageSyncImpl implements RingStorageSync {
                     downloadRingId: indexedRing,
                     downloadSeqStart: indexedRing != null ? chunkSeqs.first : null,
                     downloadSeqEnd: indexedRing != null ? chunkSeqs.last + 1 : null,
+                    phoneOnly: DrainedAudioCustody.phoneOnlyAtPersist(),
                     nextCollisionSequence: () => _storageFileSeq++);
             if (ringDrainRecoveryEnabled && ringId != null) {
               readValidator = await _custody.createReadValidator();
