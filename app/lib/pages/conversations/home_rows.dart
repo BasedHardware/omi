@@ -104,8 +104,9 @@ class HomeEpisodeLayout {
 /// The one answer to "did this conversation fail?" (X5), for Home, Activity, the bell and the
 /// conversation page. A v3 conversation's tile state wins: the server sets it for Home, and a v3
 /// conversation can be `completed` with a failed tile. Without one, failed status and the server's
-/// failed Home projection decide. A failed conversation stays on Home with its Retry and is listed
-/// on Activity too (SCA-5226).
+/// failed Home projection decide. A failed conversation leaves Home for Activity's Needs attention,
+/// with Try Again, and lights the bell until Activity shows it (SCA-5226); its row with Retry still
+/// draws on the day page and other conversation lists.
 bool isFailedConversation(ServerConversation c) {
   if (c.isAdmittedForTranscription) return false;
   final tile = c.v3?.tileState;

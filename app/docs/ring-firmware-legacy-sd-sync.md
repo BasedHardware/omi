@@ -60,8 +60,8 @@ Home/conversation capture-card path:
   into Today instead of showing a duplicate standalone capture card.
 - The Home header's `BatteryInfoWidget` is mounted independently of these
   capture-card conditions.
-- The separate daily-recaps row is opt-in via `HomeDailyRecapsSetting`; when
-  disabled it is not mounted or fetched, independently of ring/SD state.
+- Home has no daily-recaps row any more (SCA-5226); recaps are on Activity,
+  independently of ring/SD state.
 
 The reported card was not identified precisely enough to establish a separate
 UI defect. No UI visibility behavior was changed. A device-level reproduction

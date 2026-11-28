@@ -764,7 +764,7 @@ class _ConversationsPageState extends State<ConversationsPage>
     final usage = context.watch<UsageProvider?>()?.subscription;
     final held =
         defaultView ? lockedHeldRecordings(usage?.heldAudio, usage?.processingBacklog) : const <HeldAudioRecording>[];
-    final heldMore = (usage?.heldAudio?.count ?? 0) - held.length;
+    final heldMore = defaultView ? lockedHeldMore(usage?.heldAudio, usage?.processingBacklog) : 0;
 
     final now = clock.now();
     final model = buildHome(HomeInputs(
@@ -780,7 +780,7 @@ class _ConversationsPageState extends State<ConversationsPage>
       finishing: showFinish ? manualFinish : null,
       saved: recordings.recordings,
       held: held,
-      heldMore: heldMore > 0 ? heldMore : 0,
+      heldMore: heldMore,
       hiddenIds: convoProvider.memoriesToDelete.keys.toSet(),
     ));
 

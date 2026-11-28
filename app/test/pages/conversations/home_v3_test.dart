@@ -564,7 +564,7 @@ class _Home {
       _conversation('c-yesterday', DateTime(2026, 11, 15, 15, 0), 'Design review', v3: _done),
       _conversation('c-yesterday-2', DateTime(2026, 11, 15, 11, 10), 'Lunch with Sam',
           v3: const ConversationV3Fields(kind: 'conversation', tileState: ConversationTileState.done)),
-      // Its summary failed for good: it stays on Home in place, with its Retry (SCA-5226).
+      // Its summary failed for good: it is in Activity with its Try Again, not on Home (SCA-5226).
       _conversation('c-failed', DateTime(2026, 11, 15, 9, 30), 'Vendor call',
           v3: const ConversationV3Fields(kind: 'conversation', tileState: ConversationTileState.failed)),
     ]
@@ -666,6 +666,8 @@ Future<void> _dispose(WidgetTester tester, _Home home) async {
 
 class _Conversations extends ConversationProvider {
   _Conversations() : super(isSignedIn: () => false);
+
+  void ping() => notifyListeners();
 
   int listReads = 0;
   int forcedReads = 0;
@@ -2885,6 +2887,34 @@ void main() {
         expect(find.text('Hiring plan'), findsNothing, reason: 'it left Home for Activity');
         expect(find.text('Couldn\'t finish “Hiring plan”'), findsOneWidget);
         expect(find.text('View'), findsOneWidget);
+        await _dispose(tester, home);
+        debugDefaultTargetPlatformOverride = null;
+      });
+    });
+
+    testWidgets('Finishing up opens its conversation when only the processing rows know it yet', (tester) async {
+      await withClock(Clock.fixed(_now), () async {
+        final home = await pumpGallery(tester, Brightness.dark, size: const Size(393, 852));
+        final v3 = home.conversationsV3;
+        final pending = OptimisticProcessingPlaceholder.conversation(targetConversationId: 'p-1');
+        v3.startManualFinish(pending, 'rec-9', liveConversationId: 'p-1', captureId: home.capture.activeRecordingId);
+        home.liveOpen = false;
+        await v3.refresh();
+        home.conversations.processingConversations = [
+          _conversation('p-1', home.liveStart, 'Launch checklist',
+              status: ConversationStatus.processing,
+              v3: const ConversationV3Fields(kind: 'conversation', tileState: ConversationTileState.transcribing)),
+        ];
+        home.conversations.ping();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        final finishing = find.byKey(const Key('home_finishing'));
+        expect(finishing, findsOneWidget);
+        final navigator = Navigator.of(tester.element(finishing));
+        await tester.tap(finishing);
+        await tester.pump();
+        expect(find.text('Opens as soon as it\'s ready'), findsNothing);
+        expect(navigator.canPop(), isTrue, reason: 'it opened the conversation the processing rows hold');
         await _dispose(tester, home);
         debugDefaultTargetPlatformOverride = null;
       });

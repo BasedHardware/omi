@@ -39,11 +39,13 @@ quiet-payer row ("No recordings in 5 days", `QuietPayerRow`), which decides for 
 - Live, Finishing up…, saved recordings and locked rows show only in Home's own view: no
   search, filter or selection. Showing short or discarded conversations widens the list;
   it is not a filter.
-- Every row is a `HomeRowShell`: one card, one 36 pt tile, title, one subtitle line in one
-  style, and an optional trailing action (`HomeRowAction`). No row carries a chevron. The
-  one exception is Transcribe Later's live card, which keeps its Pause, New recording and
-  Stop controls (`ConversationCaptureWidget`). Search and discarded views add a snippet
-  line under a conversation.
+- Every row has one geometry: one card, one 36 pt tile, title, one subtitle line in one
+  style, and an optional trailing action (`HomeRowAction`). Most rows are a `HomeRowShell`;
+  conversation rows (`ConversationListItem`) draw the same geometry themselves. No row
+  carries a chevron. Exceptions that add height: Transcribe Later's live card keeps its
+  Pause, New recording and Stop controls (`ConversationCaptureWidget`); a conversation adds
+  a line for a search or discarded snippet, an on-device provenance chip, a deferred marker
+  or a pending-transcription note.
 - Every row deletes with one swipe (`HomeSwipeDelete`): a conversation confirms and offers
   Undo; a recording on this phone confirms and cannot be undone, and cannot be swiped while
   the server is working on it.

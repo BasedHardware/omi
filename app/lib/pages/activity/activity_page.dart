@@ -287,9 +287,13 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
       attentionIds: _pendingWork.attentionConversationIds,
       includeFailures: _pendingWork.homeProcessingToday || v3,
     );
-    if (failures.isNotEmpty) {
+    // Seen once a frame has drawn their rows: not under the loading spinner, which would clear the
+    // bell's dot for failures the reader never saw.
+    if (failures.isNotEmpty && !_loading) {
       final ids = [for (final c in failures) c.id];
-      WidgetsBinding.instance.addPostFrameCallback((_) => _pendingWork.markFailedConversationsSeen(ids));
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && (ModalRoute.of(context)?.isCurrent ?? true)) _pendingWork.markFailedConversationsSeen(ids);
+      });
     }
     final attention = NeedsAttentionSection(
         store: _pendingWork,

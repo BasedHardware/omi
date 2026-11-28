@@ -22,6 +22,7 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:omi/providers/phone_call_provider.dart';
+import 'package:omi/services/capture/optimistic_processing.dart';
 import 'package:omi/services/live_preview/live_preview_controller.dart';
 import 'package:omi/ui/components/local_stt_recovery_notice.dart';
 import 'package:omi/ui/ui.dart';
@@ -217,8 +218,13 @@ class HomeFinishingRowView extends StatelessWidget {
     final parts = [if (seconds > 0) OmiDuration.compact(seconds, l10n), l10n.writingSummaryStatus];
 
     void open() {
-      final target =
-          id == null ? null : context.read<ConversationProvider>().conversations.where((c) => c.id == id).firstOrNull;
+      // Wherever Home found its row: the list, or the processing rows the list has not caught up with.
+      final list = context.read<ConversationProvider>();
+      final target = id == null
+          ? null
+          : [...list.conversations, ...list.processingConversations]
+              .where((c) => c.id == id && c.id != OptimisticProcessingPlaceholder.id)
+              .firstOrNull;
       if (target != null) {
         routeToPage(context, ConversationDetailPage(conversation: target));
         return;
