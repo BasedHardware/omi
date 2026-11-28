@@ -48,12 +48,11 @@ final class TaskAssistantPromptTests: XCTestCase {
   func testDefaultPromptSkipsPublicChannelRequestsNotDirectedAtUser() {
     let prompt = TaskAssistantSettings.defaultAnalysisPrompt
 
-    XCTAssertTrue(prompt.contains("CRITICAL FOR PUBLIC/GROUP CHANNELS"))
+    XCTAssertTrue(prompt.contains("PUBLIC/GROUP CHANNELS"))
     XCTAssertTrue(prompt.contains("visible evidence shows the user is directly involved"))
-    XCTAssertTrue(prompt.contains("merely observing a public channel"))
-    XCTAssertTrue(prompt.contains("cannot tell whether the request is directed at them"))
-    XCTAssertTrue(prompt.contains("otherwise clearly addressed to the user"))
-    XCTAssertTrue(prompt.contains("questions posted to the community at large"))
+    XCTAssertTrue(prompt.contains("If they are only observing, or you cannot tell, call no_task_found"))
+    XCTAssertTrue(prompt.contains("Do not extract broad community bug reports or feature requests"))
+    XCTAssertTrue(prompt.contains("clearly addressed to them"))
     XCTAssertFalse(prompt.contains("It is a direct message (DM) thread, not a public or community channel"))
   }
 }
