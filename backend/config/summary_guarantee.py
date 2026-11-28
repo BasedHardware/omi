@@ -101,6 +101,52 @@ def first_week_enabled(*, environ: Mapping[str, str] | None = None) -> bool:
     return rollout_default_on(FIRST_WEEK_ENABLED_ENV, legacy_enabled, environ=environ)
 
 
+# --- Forced first-week attempt at close (SCA-4806) ------------------------
+# The one part of the guarantee that overrides a deliberate cost policy: a row
+# refused or parked for a capacity reason gets exactly one admitted attempt
+# before its stored window closes. Ships off; activation is a separate decision.
+FIRST_WEEK_FORCED_CLOSE_ENV = 'FIRST_WEEK_FORCED_CLOSE_ENABLED'
+FIRST_WEEK_FORCED_POLICY_FIELD = 'first_week_forced_policy'
+FIRST_WEEK_FORCED_POLICY_ID = 'first_week_forced_close.v1'
+FIRST_WEEK_CLOSE_RESERVE_ENV = 'FIRST_WEEK_CLOSE_RESERVE_HOURS'
+FIRST_WEEK_FORCED_LIMIT_ENV = 'FIRST_WEEK_REPAIR_ADMISSION_LIMIT'
+FIRST_WEEK_DEFAULT_RESERVE_HOURS = 24
+FIRST_WEEK_DEFAULT_FORCED_LIMIT = 4
+
+
+def first_week_forced_close_enabled(*, environ: Mapping[str, str] | None = None) -> bool:
+    """Opt-in spend override. Off unless explicitly enabled; off is also the rollback."""
+    values = os.environ if environ is None else environ
+    return rollout_default_off(
+        FIRST_WEEK_FORCED_CLOSE_ENV,
+        values.get(FIRST_WEEK_FORCED_CLOSE_ENV, 'false').strip().lower() == 'true',
+        environ=environ,
+    )
+
+
+def first_week_close_reserve_seconds(*, environ: Mapping[str, str] | None = None) -> int:
+    """How long before the window end a forced attempt may be admitted; 0 disables."""
+    raw = (os.environ if environ is None else environ).get(FIRST_WEEK_CLOSE_RESERVE_ENV, '').strip()
+    if not raw:
+        return FIRST_WEEK_DEFAULT_RESERVE_HOURS * 3600
+    try:
+        hours = float(raw)
+    except ValueError:
+        return FIRST_WEEK_DEFAULT_RESERVE_HOURS * 3600
+    if not math.isfinite(hours) or hours < 0:
+        return FIRST_WEEK_DEFAULT_RESERVE_HOURS * 3600
+    return int(min(hours, 72) * 3600)
+
+
+def first_week_forced_admission_limit(*, environ: Mapping[str, str] | None = None) -> int:
+    """Forced admissions per close-out tick; never shared with the repair budget."""
+    raw = (os.environ if environ is None else environ).get(FIRST_WEEK_FORCED_LIMIT_ENV, '').strip()
+    try:
+        return max(1, min(60, int(raw or FIRST_WEEK_DEFAULT_FORCED_LIMIT)))
+    except ValueError:
+        return FIRST_WEEK_DEFAULT_FORCED_LIMIT
+
+
 def first_week_window_seconds(*, environ: Mapping[str, str] | None = None) -> int:
     raw = (os.environ if environ is None else environ).get(FIRST_WEEK_WINDOW_ENV, '').strip()
     if not raw:

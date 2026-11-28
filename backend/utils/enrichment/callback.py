@@ -60,7 +60,9 @@ _LINEAGE_RETRY_LANGUAGE = '__stored_conversation_language__'
 
 
 @observe_sync_failures
-def enrich_conversation(uid: str, conversation_id: str, language: str, *, user_selected: bool = False):
+def enrich_conversation(
+    uid: str, conversation_id: str, language: str, *, user_selected: bool = False, first_week_forced: bool = False
+):
     """Reassess relevance and regenerate notes after sync appends."""
     from models.finalization_owner import REFUSAL as FINALIZATION_OWNER_REFUSAL
     from models.finalization_owner import FinalizationOwnedElsewhere, python_owns_finalization
@@ -236,6 +238,11 @@ def enrich_conversation(uid: str, conversation_id: str, language: str, *, user_s
         language = conversation.language or 'en'
 
     silent_redrive = is_silent_redrive(conversation_data)
+    processing_trigger = (
+        ProcessingTrigger.FIRST_WEEK_FORCED_CLOSE
+        if first_week_forced
+        else ProcessingTrigger.BACKLOG_CHOICE if user_selected else ProcessingTrigger.SYNC_UPDATE
+    )
     was_discarded = conversation.discarded
     prior_decision = conversation_data.get('relevance_decision')
     # process_conversation persists relevance_decision.trigger == 'sync_update'.
@@ -244,6 +251,7 @@ def enrich_conversation(uid: str, conversation_id: str, language: str, *, user_s
     already_sync_processed = isinstance(prior_decision, dict) and prior_decision.get('trigger') in {
         ProcessingTrigger.SYNC_UPDATE.value,
         ProcessingTrigger.BACKLOG_CHOICE.value,
+        ProcessingTrigger.FIRST_WEEK_FORCED_CLOSE.value,
     }
     # Visible rows must not accept again. A prior discard is not a visible
     # finalization, so discarded -> visible still accepts once.
@@ -254,8 +262,9 @@ def enrich_conversation(uid: str, conversation_id: str, language: str, *, user_s
             uid=uid,
             language_code=language or 'en',
             conversation=conversation,
-            trigger=ProcessingTrigger.BACKLOG_CHOICE if user_selected else ProcessingTrigger.SYNC_UPDATE,
-            defer_derived_effects=silent_redrive,
+            trigger=processing_trigger,
+            defer_derived_effects=silent_redrive or first_week_forced,
+            first_party_only=first_week_forced,
             user_kept=is_user_curated(conversation_data) or REPAIR_CONTEXT.get() is not None,
             persistence_observer=_require_current_conversation_persistence,
             # Deserialize drops relevance_decision. The raw row still has it:

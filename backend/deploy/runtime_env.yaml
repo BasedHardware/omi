@@ -4602,6 +4602,15 @@ environments:
             FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
               value: 'false'
               category: ops_kill
+            FIRST_WEEK_FORCED_CLOSE_ENABLED:
+              value: 'false'
+              category: ops_kill
+            FIRST_WEEK_CLOSE_RESERVE_HOURS:
+              value: '24'
+              category: config
+            FIRST_WEEK_REPAIR_ADMISSION_LIMIT:
+              value: '4'
+              category: config
             ENRICHMENT_TASKS_HANDLER_URL:
               value: https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run
               category: reliability
@@ -5205,6 +5214,15 @@ environments:
             FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
               value: 'false'
               category: ops_kill
+            FIRST_WEEK_FORCED_CLOSE_ENABLED:
+              value: 'false'
+              category: ops_kill
+            FIRST_WEEK_CLOSE_RESERVE_HOURS:
+              value: '24'
+              category: config
+            FIRST_WEEK_REPAIR_ADMISSION_LIMIT:
+              value: '4'
+              category: config
             ENRICHMENT_TASKS_HANDLER_URL:
               value: https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run
               category: reliability
@@ -5796,6 +5814,15 @@ environments:
             FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
               value: 'false'
               category: ops_kill
+            FIRST_WEEK_FORCED_CLOSE_ENABLED:
+              value: 'false'
+              category: ops_kill
+            FIRST_WEEK_CLOSE_RESERVE_HOURS:
+              value: '24'
+              category: config
+            FIRST_WEEK_REPAIR_ADMISSION_LIMIT:
+              value: '4'
+              category: config
             ENRICHMENT_TASKS_HANDLER_URL:
               value: https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run
               category: reliability
@@ -6348,6 +6375,15 @@ environments:
             FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
               value: 'false'
               category: ops_kill
+            FIRST_WEEK_FORCED_CLOSE_ENABLED:
+              value: 'false'
+              category: ops_kill
+            FIRST_WEEK_CLOSE_RESERVE_HOURS:
+              value: '24'
+              category: config
+            FIRST_WEEK_REPAIR_ADMISSION_LIMIT:
+              value: '4'
+              category: config
             ENRICHMENT_TASKS_HANDLER_URL:
               value: https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run
               category: reliability
@@ -6885,6 +6921,15 @@ environments:
             FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED:
               value: 'false'
               category: ops_kill
+            FIRST_WEEK_FORCED_CLOSE_ENABLED:
+              value: 'false'
+              category: ops_kill
+            FIRST_WEEK_CLOSE_RESERVE_HOURS:
+              value: '24'
+              category: config
+            FIRST_WEEK_REPAIR_ADMISSION_LIMIT:
+              value: '4'
+              category: config
             ENRICHMENT_TASKS_HANDLER_URL:
               value: https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run
               category: reliability

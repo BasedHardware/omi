@@ -37,7 +37,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from config.summary_guarantee import first_week_enabled, repair_enabled as summary_repair_enabled
-from services import first_week_summary_closeout, summary_debt_repair
+from services import first_week_forced_close, first_week_summary_closeout, summary_debt_repair
 from config.policy import resolve_batch_policy
 from config.reliability_experiments import enabled as experiment, warm as warm_experiments
 from config.policy.ramp import audio_span
@@ -2443,6 +2443,17 @@ async def sweep_sync_backfill_sequencer(_retry_count: int = Depends(verify_cloud
             outcomes['first_week_closed'] = first_week['closed']
             outcomes['first_week_errors'] = first_week['errors']
             outcomes['first_week_lease_busy'] = first_week.get('lease_busy', 0)
+            # SCA-4806: forced attempt for a capacity-refused row, before its
+            # window closes. Its own admission cap; ships off.
+            try:
+                forced = await run_blocking(db_executor, first_week_forced_close.tick)
+            except Exception as error:
+                logger.error('event=first_week_forced_close outcome=error exception_type=%s', type(error).__name__)
+                forced = {'forced': 0, 'skipped': 0, 'errors': 1, 'disabled': 0}
+            outcomes['first_week_forced'] = forced['forced']
+            outcomes['first_week_force_skipped'] = forced['skipped']
+            outcomes['first_week_force_errors'] = forced['errors']
+            outcomes['first_week_force_disabled'] = forced.get('disabled', 0)
     return JSONResponse(status_code=500 if outcomes.get('error') else 200, content={'outcomes': outcomes})
 
 

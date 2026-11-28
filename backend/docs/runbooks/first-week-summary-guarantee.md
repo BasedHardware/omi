@@ -36,6 +36,9 @@ never stamp a window; the read is the commercial subscription.
 | `FIRST_WEEK_SUMMARY_GUARANTEE_ENABLED` | on | Kill switch for the deadline, lane and counter; production manifests explicitly keep it off until activation |
 | `FIRST_WEEK_SUMMARY_DEADLINE_HOURS` | `168` | Stored window length; `0` disables stamping |
 | `ENRICHMENT_FIRST_WEEK_TASKS_QUEUE` | `enrichment-first-week` | Reserved lane; empty falls back to `enrichment-fresh` |
+| `FIRST_WEEK_FORCED_CLOSE_ENABLED` | **off** | Forced attempt for a capacity-refused row before its window closes (SCA-4806) |
+| `FIRST_WEEK_CLOSE_RESERVE_HOURS` | `24` | How long before the window end a forced attempt may be admitted; `0` disables |
+| `FIRST_WEEK_REPAIR_ADMISSION_LIMIT` | `4` | Forced admissions per close-out tick; own cap, never the repair 8/tick |
 
 Readers: `config/summary_guarantee.py` (window and stamp),
 `utils/conversations/summary_delivery.py` (stamp, deadline, projection age gate),
@@ -87,6 +90,50 @@ failure classification uses the durable `first_week_attempts` and
 `first_week_last_class` receipts written with the consumer's lease outcome,
 not inferred from the summary-empty counter.
 
+## Forced close (SCA-4806, off)
+
+The only part of the guarantee that overrides a deliberate cost policy. In the
+last `FIRST_WEEK_CLOSE_RESERVE_HOURS` (24) of a stored window, the forced phase
+revives **one** capacity-refused row and admits one attempt from
+`enrichment-first-week`, at most `FIRST_WEEK_REPAIR_ADMISSION_LIMIT` (4) per
+tick. Its admission cap is its own; the repair tick's 8/tick is untouched.
+
+Forced classes, both keyed on stored evidence:
+
+- budget waiting: conversation `processing_deferred=true` **and**
+  `terminal_no_derived_effects=true`, `deferred=false`, no `client_processing`,
+  `processing_state != local_pending`;
+- 72 h age-gate park: outbox `age_gate_parked=true` (or
+  `deferred_reason='age_gate_72h'`) and `dormant=true`.
+
+Never forced, and counted `no_attempt` at close: privacy
+(`data_protection_level` outside standard/enhanced), user-chosen local-only
+(`processing_state='local_pending'`), on-device `client_processing`, lifecycle
+(`deleted`, `discarded`, `status != completed`), manual edits, empty-output
+exhaustion, short clips, batch/Go-owned generation, desktop capture deferral,
+and a row with no obligation row at all. An **open row without a stored budget
+refusal** is the late-delivery class (it already has a generation coming) and is
+never touched; a leased row is in flight and is never touched either.
+
+The reserve page is a keyset rotation, not a fixed prefix. The cursor document
+`maintenance/first_week_forced_close_v1` stores the last examined
+`(window_end_at, conversation path)`; each tick resumes after it and wraps to
+the start when the page is exhausted. An already-forced, non-forceable, leased
+or already-counted row is therefore examined at most once per rotation and
+cannot pin the first page, so a forceable row behind it is still reached before
+its window closes. A lost cursor write may repeat a page, never skip custody.
+
+Each revived row carries `first_week_forced_at` and
+`first_week_forced_policy='first_week_forced_close.v1'`, so a re-park cannot
+force it twice. A wake failure leaves `due_at=now` and a valid binding, so the
+normal sweep re-wakes it; no obligation is lost.
+
+Off is the rollback: the close-out keeps counting `no_attempt` and no row is
+revived. Activation after PR1 serves is a separate, recorded decision that
+first reads the post-PR1 `no_attempt` composition; the census-sized workload is
+≈26 new summaries/day upper bound across all starts (≈21 of it budget/age-gate)
+and ≤0.2M added reads/day.
+
 A summary that lands after the close is not counted retroactively. The counter
 documents are the mechanism number; `infra/metrics/churn/first_month.py` remains
 the acceptance number. Read at least 14 days after activation (the first
@@ -124,8 +171,9 @@ census-backed expected extra summaries/day and reads/day, including:
   feature is enabled, to distinguish a first paid transition from a renewal;
   this read is skipped while the production flag is false, and the campaign-on
   writer already reads the user in its transaction;
-- the census-derived eligible conversation count and forced-attempt split owned
-  by the separate child issue.
+- the census-derived forced-attempt split recorded on SCA-4806 (Option A:
+  budget/age-gate rows only; ≈26 new summaries/day upper bound across all
+  starts, ≈21 of it budget/age-gate, ≈363 close-out firings/day).
 
 If the estimate exceeds 10M additional Firestore reads/day, stop for the margin
 owner. Do not turn the production flag on until the numeric estimate and the
@@ -149,5 +197,7 @@ fresh promotion/demotion keys (30 minutes) and `ENRICHMENT_MAX_AGE_HOURS=72`.
 - `services/summary_debt_repair` still discovers conversations only inside the
   72 h window. Older first-week rows are re-woken by the enrichment sweep; a
   first-week phase for that repair is a follow-up.
-- The forced attempt for a row that never reaches a lane (desktop capture
-  deferral, budget waiting) is the split child issue, not this change.
+- Desktop capture deferral and a conversation with no obligation row are out of
+  scope for the forced close: the capture may not be available yet, and there is
+  no custody row to force from. The counter makes both visible; a follow-up needs
+  its own number at or above the publication floor.

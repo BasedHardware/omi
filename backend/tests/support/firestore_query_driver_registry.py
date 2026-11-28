@@ -4355,6 +4355,26 @@ _add(
 
 _add(
     DriverEntry(
+        # SCA-4806 forced close: the same sparse index, bounded to uncounted
+        # first-week conversations whose window closes inside the reserve, and
+        # walked with a keyset bookmark so the page rotates.
+        'database.first_week_queries.approaching_first_week_conversations',
+        neutrals={
+            'now': (T0.timestamp(), 'timestamp operand only'),
+            'until': ((T0 + timedelta(hours=24)).timestamp(), 'bounded reserve end'),
+            'limit': (25, 'per-query ceiling; the per-tick admission cap bounds the pass'),
+        },
+        domains={
+            'after': [
+                None,
+                {'window_end': T0.timestamp(), 'path': 'users/synthetic/conversations/c'},
+            ],
+        },
+    )
+)
+
+_add(
+    DriverEntry(
         'database.summary_debt_queries.due_conversations',
         neutrals={
             'now': (T0.timestamp(), 'timestamp operand only'),

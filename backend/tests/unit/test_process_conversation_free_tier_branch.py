@@ -1005,6 +1005,97 @@ def test_successful_explicit_enrichment_clears_retired_terminal_marker_without_o
     assert store.rows[path]['client_processing'] == projection
 
 
+def test_first_week_forced_summary_clears_budget_hold_without_derived_effects(monkeypatch, pc):
+    from contextlib import nullcontext
+    from google.cloud.firestore_v1.transforms import Increment
+
+    from database import processing_backlog
+
+    monkeypatch.setattr(pc.funded_processing, 'enabled', lambda uid, lane=None: True)
+    monkeypatch.setattr(pc.funded_processing, 'allowance', lambda _uid: SimpleNamespace(managed=True))
+    monkeypatch.setattr(pc.funded_processing, 'processing_usage_scope', lambda _uid: nullcontext())
+    spies = _spy_managed_effects(monkeypatch, pc)
+    spies['get_structured'].return_value = (Structured(title='Forced summary', overview='Summary body'), False)
+    payloads = _capture_all_persists(monkeypatch, pc)
+    conversation = _existing_desktop('forced-budget-row')
+    conversation.processing_deferred = True
+
+    with pc.funded_processing.backlog_consent('paid-uid', pc.funded_processing.period_id()):
+        result = pc.process_conversation(
+            'paid-uid',
+            'en',
+            conversation,
+            trigger=pc.ProcessingTrigger.FIRST_WEEK_FORCED_CLOSE,
+            first_party_only=True,
+            defer_derived_effects=True,
+        )
+
+    assert result.processing_deferred is False
+    assert payloads[-1]['processing_deferred'] is False
+    assert payloads[-1][pc.TERMINAL_NO_DERIVED_EFFECTS_FIELD] is None
+    spies['extract_memories'].assert_not_called()
+    spies['extract_memories_inner'].assert_not_called()
+    assert spies['get_structured'].call_args.kwargs['summary_app_selected'] is True
+    spies['trigger_apps'].assert_not_called()
+
+    class Ref:
+        def __init__(self, client, path):
+            self.client, self.path = client, path
+
+        def collection(self, name):
+            return Collection(self.client, f'{self.path}/{name}')
+
+        def get(self, transaction=None):
+            row = self.client.rows.get(self.path)
+            return SimpleNamespace(to_dict=lambda: dict(row or {}))
+
+    class Collection:
+        def __init__(self, client, path):
+            self.client, self.path = client, path
+
+        def document(self, doc_id):
+            return Ref(self.client, f'{self.path}/{doc_id}')
+
+    class Client:
+        def __init__(self, rows):
+            self.rows = rows
+
+        def collection(self, name):
+            return Collection(self, name)
+
+    class Transaction:
+        def __init__(self, client):
+            self.client = client
+
+        def set(self, ref, updates, merge=False):
+            row = dict(self.client.rows.get(ref.path, {})) if merge else {}
+            for key, value in updates.items():
+                row[key] = row.get(key, 0) + value.value if isinstance(value, Increment) else value
+            self.client.rows[ref.path] = row
+
+        def delete(self, ref):
+            self.client.rows.pop(ref.path, None)
+
+    item_path = f'users/paid-uid/processing_backlog_items/{conversation.id}'
+    summary_path = 'users/paid-uid/processing_backlog/current'
+    backlog_client = Client(
+        {
+            item_path: {'seconds': 60, 'units': 12},
+            summary_path: {'count': 1, 'seconds': 60, 'units': 12},
+        }
+    )
+    assert processing_backlog.stage_transition(
+        Transaction(backlog_client),
+        'paid-uid',
+        conversation.id,
+        {'processing_deferred': True},
+        payloads[-1],
+        firestore_client=backlog_client,
+    )
+    assert item_path not in backlog_client.rows
+    assert backlog_client.rows[summary_path] == {'count': 0, 'seconds': 0, 'units': 0}
+
+
 @pytest.mark.parametrize('defer', [False, True])
 def test_silent_backfill_persists_summary_and_never_schedules_derived_work(monkeypatch, pc, defer):
     monkeypatch.setattr(pc.funded_processing, 'enabled', lambda *_: False)
