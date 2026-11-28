@@ -19,6 +19,7 @@ import 'package:visibility_detector/visibility_detector.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
+import 'package:omi/pages/conversation_detail/conversation_live_guard.dart';
 import 'package:omi/pages/held_audio/held_audio_views.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/pages/conversations/widgets/v3_live_placeholder_row.dart';
@@ -1100,13 +1101,12 @@ class _ConversationsPageState extends State<ConversationsPage>
           };
         }
         if (v3Home) {
-          // The server lists Home-visible conversations; the in-progress one comes from the live read
-          // and leads its day.
+          // Only the live read supplies a live row. Day lists can still carry stale live copies.
           conversationsByDate = {
             for (final entry in conversationsByDate.entries)
               entry.key: [
                 for (final c in entry.value)
-                  if (c.id != v3Live?.id && shownOnV3Home(c)) c,
+                  if (c.id != v3Live?.id && !conversationIsLive(c, v3: true) && shownOnV3Home(c)) c,
               ],
           };
           if (liveServerRow != null) {
