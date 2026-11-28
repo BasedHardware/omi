@@ -36,6 +36,7 @@ from . import (
     prod_parity,
     prod_snapshot,
     safety,
+    voice_embedding,
 )
 
 # Production service -> harness process name. "backend" stays the name of whatever
@@ -56,6 +57,7 @@ SERVICE_PORT_OFFSETS = {
     "backend-integration": 14,
 }
 BATCH_WORKER_PORT_OFFSET = 15
+VOICE_EMBEDDING_PORT_OFFSET = 9
 LOCAL_MEMORY_CURSOR_SECRET = "omi-local-dev-harness-memory-cursor-secret"
 LOCAL_METRICS_SECRET = "omi-local-dev-harness-metrics-secret"
 LOCAL_ENCRYPTION_SECRET = "omi_local_dev_harness_32_byte_test_secret_not_prod"
@@ -110,6 +112,7 @@ def topology(cfg: config.HarnessConfig) -> prod_parity.Topology:
         llm_gateway_url=cfg.llm_gateway_url,
         redis_host=cfg.redis_host,
         redis_port=cfg.redis_port,
+        voice_embedding_url=voice_embedding_url(cfg) if voice_embedding_unavailable(cfg) is None else "",
     )
 
 
@@ -306,6 +309,29 @@ def batch_worker_env(cfg: config.HarnessConfig, index: int = 0) -> dict[str, str
     return _child_env(cfg, env)
 
 
+def voice_embedding_unavailable(cfg: config.HarnessConfig) -> str | None:
+    """Why the speaker-embedding service cannot start here, or None when it can. It shares the batch worker's
+    model runtime and model access token."""
+    return batch_worker_unavailable(cfg)
+
+
+def voice_embedding_url(cfg: config.HarnessConfig) -> str:
+    return f"http://127.0.0.1:{cfg.backend_port + VOICE_EMBEDDING_PORT_OFFSET}"
+
+
+def voice_embedding_env(cfg: config.HarnessConfig) -> dict[str, str]:
+    return _child_env(
+        cfg,
+        {
+            voice_embedding.PORT_ENV: str(cfg.backend_port + VOICE_EMBEDDING_PORT_OFFSET),
+            voice_embedding.WORK_DIR_ENV: str(cfg.layout.services_dir / "voice-embedding"),
+            # Clips are a few seconds long; leave the cores to the batch workers.
+            voice_embedding.THREADS_ENV: "2",
+            config.MODEL_ACCESS_TOKEN_ENV: model_access_token(cfg),
+        },
+    )
+
+
 def record_seal_worker_enabled() -> bool:
     """Production runs a CPU worker that seals finished recordings. Its settings are
     in no tracked file the harness can compose from, so it starts only when a
@@ -480,6 +506,17 @@ def processes(cfg: config.HarnessConfig) -> list[Process]:
                     backend_import=True,
                 )
             )
+    if voice_embedding_unavailable(cfg) is None:
+        result.append(
+            Process(
+                "voice-embedding",
+                [str(batch_worker_python(cfg)), "-m", "dev_harness.voice_embedding"],
+                backend_dir,
+                cfg.backend_port + VOICE_EMBEDDING_PORT_OFFSET,
+                voice_embedding_env(cfg),
+                backend_import=True,
+            )
+        )
     if record_seal_worker_enabled():
         result.append(
             Process(
@@ -508,7 +545,9 @@ def processes(cfg: config.HarnessConfig) -> list[Process]:
 
 def is_process(name: str) -> bool:
     """A process only this profile starts and that has no HTTP health route of its own."""
-    return name in ("task-queue", "scheduler", "record-seal-worker") or name.startswith("batch-worker")
+    return name in ("task-queue", "scheduler", "record-seal-worker", "voice-embedding") or name.startswith(
+        "batch-worker"
+    )
 
 
 def health_checks(cfg: config.HarnessConfig) -> dict[str, tuple[str | None, dict[str, str] | None]]:
@@ -541,6 +580,10 @@ def start_notes(cfg: config.HarnessConfig) -> list[str]:
     if reason is not None:
         notes.append(
             f"batch-worker: not started ({reason}). Phone and pendant recordings stay 'Transcribing' until it runs."
+        )
+        notes.append(
+            "voice-embedding: not started (same reason). Speakers are numbered per recorded unit and never "
+            "joined across a conversation or matched to a named person."
         )
     return notes
 
