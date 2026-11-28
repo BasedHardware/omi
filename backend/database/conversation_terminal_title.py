@@ -22,10 +22,14 @@ outside the default list with a shrinking failed-status write when the mandatory
 
 from __future__ import annotations
 
+import json
+import sys
 import zlib
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import Any, Callable, Mapping
+
+from prometheus_client import Counter
 
 from database import conversations as conversations_db
 from models.finalization_owner import python_owns_finalization
@@ -39,6 +43,25 @@ from utils.conversations.relevance_rules import RULES_VERSION
 from utils.conversations.terminal_relevance import terminal_decision, valid_decision, stamp_terminal_decision
 from utils.conversations.terminal_calendar import calendar_retains
 from utils.metrics import record_conversation_relevance
+
+# Kept-visible terminal paths that close rows through fit_document_limit;
+# 'other' buckets any future path until it joins the closed set.
+TERMINAL_TITLE_PATHS = frozenset({'dead_letter', 'orphan_terminal', 'byok_abandoned', 'oversized_terminal', 'other'})
+TERMINAL_TITLE_DROPPED_TOTAL = Counter(
+    'omi_conversation_terminal_title_dropped_total',
+    (
+        'Kept-visible terminals that committed without the deterministic title because the document is at '
+        'the Firestore size ceiling, by terminal path. The title is optional growth; the terminal survives, '
+        'and the row then renders untitled. A matching terminal_title JSON event is emitted for '
+        'revision-attributed counting.'
+    ),
+    ['path'],
+)
+
+# Zero-initialize the closed path set so an idle process exports every
+# series, distinguishing no dropped titles yet from a missing scrape target.
+for _terminal_path in TERMINAL_TITLE_PATHS:
+    TERMINAL_TITLE_DROPPED_TOTAL.labels(path=_terminal_path)
 
 # Terminal failure codes after which a user reprocess can still succeed: the
 # retry budget ran out on a provider, parser or worker failure. Deliberately
@@ -155,7 +178,7 @@ def kept_row_terminal_update(
     base_update = with_terminal_relevance(
         uid, conversation, base_update, texts, _decoded, path, conversation_ref, transaction
     )
-    return fit_document_limit(conversation, conversation_ref, base_update, extras)
+    return fit_document_limit(conversation, conversation_ref, base_update, extras, terminal_path=path)
 
 
 def _settled(uid: str, conversation: Mapping[str, Any], base: Mapping[str, Any], extras: dict) -> dict:
@@ -216,7 +239,7 @@ def dead_letter_conversation_updates(
         transaction,
         calendar_probe=calendar_probe,
     )
-    return fit_document_limit(conversation, conversation_ref, base, extras)
+    return fit_document_limit(conversation, conversation_ref, base, extras, terminal_path='dead_letter')
 
 
 def prepare_calendar_probe(uid: str, conversation: Mapping[str, Any]) -> Callable[[Mapping[str, Any]], bool | None]:
@@ -325,13 +348,17 @@ def fit_document_limit(
     conversation_ref: Any,
     base_update: Mapping[str, Any],
     extras: Mapping[str, Any],
+    *,
+    terminal_path: str,
 ) -> dict[str, Any]:
     """``base_update`` with ``extras`` merged in, unless that could exceed 1 MiB.
 
     ``base_update`` is the terminal's own status write, which the caller has
     always committed. ``extras`` (title, retry marker) are optional growth: an
     oversized update aborts the whole transaction and would strand the row on
-    ``processing``, so they are dropped rather than risk that.
+    ``processing``, so they are dropped rather than risk that. A drop is
+    counted and logged (never silent): the row still terminalizes kept and
+    visible, so it now renders untitled.
     """
     # A decision is mandatory. At the actual ceiling, fail outside the default
     # processing/completed list rather than expose an undecided keep or trim content.
@@ -357,6 +384,31 @@ def fit_document_limit(
     path = getattr(conversation_ref, 'path', None)
     estimated = estimate_firestore_document_bytes(after, path if isinstance(path, str) else None)
     if estimated + TERMINAL_SIZE_HEADROOM_BYTES > FIRESTORE_MAX_DOCUMENT_BYTES:
+        TERMINAL_TITLE_DROPPED_TOTAL.labels(
+            path=terminal_path if terminal_path in TERMINAL_TITLE_PATHS else 'other'
+        ).inc()
+        sys.stdout.write(
+            json.dumps(
+                {
+                    'event': 'terminal_title',
+                    'outcome': 'dropped',
+                    'path': terminal_path,
+                    'conversation_id': getattr(conversation_ref, 'id', '') or '',
+                },
+                default=str,
+            )
+            + '\n'
+        )
+        sys.stdout.flush()
+        from utils.observability.fallback import record_fallback
+
+        record_fallback(
+            component='conversation_relevance',
+            from_mode='deterministic_title',
+            to_mode='none',
+            reason='other',
+            outcome='degraded',
+        )
         return dict(base_update)
     return combined
 
