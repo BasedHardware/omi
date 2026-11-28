@@ -120,7 +120,9 @@ scenario assumes much wider proven sink coverage and GPU connectivity.
    production Firestore history window and SDK path, measure queued intents
    and their age, budget the second owner-wide discovery scan, and confirm
    that the dead-letter alert has been provisioned and sees its source before
-   enabling execution.
+   enabling execution. The full privacy review must also clear reservation
+   retirement in coalescing completion, missing-input reupload restore and
+   alias result attachment before activation.
 4. When execution is verified, set `bpp_tokenless_write_shadow=0` on the
    scoped integration canary and enable the approved
    `bpp_tokenless_write_cache` cohort with `bpp_tokenless_write_audit=100`.

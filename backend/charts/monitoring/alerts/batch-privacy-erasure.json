@@ -57,7 +57,7 @@
       "summary": "A delayed batch erasure intent or receipt exhausted its bounded recovery attempts.",
       "user_impact": "An artifact affected by a privacy change may remain stored until the erasure obligation is resolved.",
       "scope": "Production batch privacy dead letters, including proof failures while execution is paused.",
-      "verification": "Check the increase by error and inspect the matching durable dead-letter row through the authorized recovery path.",
+      "verification": "In Grafana Explore, use gmp-cloud-run to group the dead-letter counter increases by error. Inspect the matching durable dead-letter row through the authorized recovery path.",
       "safe_next_action": "Hold activation and verify the original policy commit, scope and storage identity before requeueing. Preserve legal-hold fences.",
       "runbook": "backend/docs/listen_pusher_pipeline/changes/2026-11-24-batch-privacy-window.md"
     },
