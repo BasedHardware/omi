@@ -146,7 +146,6 @@ def test_recovery_guard_enabled_reports_its_real_skip_branches():
             {
                 'LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED': 'true',
                 'NOTES_SHORT_CLIP_FLOOR': 'false',
-                'NOTES_PACKET_V2_MODE': 'off',
             },
         ):
             return await TitlingDriver().run(case, environment)

@@ -25,12 +25,10 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
-from config.refactor_modes import serving_for, shadow_or_serve
 import database.action_items as action_items_db
 import database.open_loops as open_loops_db
 from utils.notifications import sync_action_item_reminder
 from utils.open_loops import store
-from utils.other import daily_recap
 
 logger = logging.getLogger(__name__)
 
@@ -64,18 +62,9 @@ def recap_completed_day(tz: Optional[str], now: Optional[datetime] = None) -> st
 
 
 def cards_display_day(uid: Optional[str], tz: Optional[str], now: Optional[datetime] = None) -> str:
-    """The local day the daily pass most recently dated cards to — the producer's
-    rule, not the reader's: ``daily_recap.scheduled_date`` over the noon-split
-    legacy date. Uids serving ``CALLS_RECAP_MODE`` date every run to
-    ``completed_day`` (always yesterday, no noon split — the pass runs ~01:00
-    local), everyone else to the noon-split day. The branch mirrors
-    ``scheduled_date`` instead of calling it so a Review read never moves the
-    producer's recap-timing shadow counters."""
-    moment = now or store.now_utc()
-    legacy = recap_completed_day(tz, moment)
-    if not shadow_or_serve(daily_recap.FLAG) or not serving_for(daily_recap.FLAG, uid):
-        return legacy
-    return daily_recap.completed_day(tz, moment).isoformat()
+    """The local day the daily pass most recently dated cards to: the recap
+    job's noon-split day (:func:`recap_completed_day`)."""
+    return recap_completed_day(tz, now or store.now_utc())
 
 
 def _local_date_str(uid: str, tz: Optional[str], now: Optional[datetime], date_str: Optional[str]) -> str:

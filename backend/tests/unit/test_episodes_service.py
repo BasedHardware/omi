@@ -1945,10 +1945,7 @@ def test_synced_attach_retries_two_version_conflicts_and_preserves_other_members
     assert len(attempts) == 3 and len(set(attempts)) == 3
 
 
-@pytest.mark.parametrize('notes_mode', ['off', 'serve'])
-def test_large_recovered_member_does_not_receipt_words_truncated_from_the_prompt(monkeypatch, notes_mode):
-    monkeypatch.setenv('NOTES_PACKET_V2_MODE', notes_mode)
-    monkeypatch.setattr(service.incremental, 'get_evidence', lambda *a, **k: None)
+def test_large_recovered_member_does_not_receipt_words_truncated_from_the_prompt(monkeypatch):
     monkeypatch.setattr(service.incremental, 'resolve_output_language', lambda *a, **k: 'English')
     store = StrictFirestore()
     model = FakeModel()

@@ -18,7 +18,6 @@ import pytest
 from utils.conversations import process_conversation as processing
 from utils.conversations.duration import conversation_duration_seconds
 from utils.conversations.relevance import decide_relevance
-from utils.llm import notes_packet as packet
 from utils.llm import notes_short_clip
 from utils.llm.notes_short_clip import SHORT_CLIP_MAX_SPEECH_SECONDS, below_short_clip_floor, speech_seconds
 
@@ -27,10 +26,6 @@ START = datetime(2026, 10, 25, 6, 35, tzinfo=timezone.utc)
 
 @pytest.fixture(autouse=True)
 def isolated_flags(monkeypatch):
-    for flag in ('NOTES_PACKET_V2_MODE',):
-        monkeypatch.delenv(flag, raising=False)
-        monkeypatch.delenv(flag + '_SERVE_PERCENT', raising=False)
-        monkeypatch.delenv(flag + '_SERVE_UID_SHA256S', raising=False)
     from database import users as users_db
 
     monkeypatch.setattr(users_db, 'get_user_language_preference', lambda *_args: 'en')
@@ -75,14 +70,14 @@ def test_speech_seconds_skips_empty_text_and_unusable_spans():
 
 
 def test_quiet_minimum_takes_a_brief_speech_clip_with_many_words(monkeypatch):
-    monkeypatch.setenv(packet.FLAG, 'serve')
+    monkeypatch.delenv('NOTES_SHORT_CLIP_FLOOR', raising=False)
     conversation = SimpleNamespace(transcript_segments=_segments(25, start=0.0, end=2.0), photos=[])
     minimum = notes_short_clip.quiet_minimum('synthetic-account', conversation, tz='UTC')
     assert minimum is not None and minimum.title_provenance == 'server_minimum'
 
 
 def test_quiet_minimum_leaves_real_speech_to_the_notes_model(monkeypatch):
-    monkeypatch.setenv(packet.FLAG, 'serve')
+    monkeypatch.delenv('NOTES_SHORT_CLIP_FLOOR', raising=False)
     conversation = SimpleNamespace(transcript_segments=_segments(25, start=0.0, end=60.0), photos=[])
     assert notes_short_clip.quiet_minimum('synthetic-account', conversation, tz='UTC') is None
 
@@ -171,7 +166,7 @@ def test_user_authority_still_outranks_the_floor():
 
 
 def test_a_two_second_clip_never_reaches_a_model_title_or_the_relevance_tiers(monkeypatch):
-    monkeypatch.setenv(packet.FLAG, 'serve')
+    monkeypatch.delenv('NOTES_SHORT_CLIP_FLOOR', raising=False)
     monkeypatch.setattr(processing.notification_db, 'get_user_time_zone', lambda *_args: 'UTC')
     monkeypatch.setattr(processing, 'get_conversation_notes', lambda *_args, **_kwargs: pytest.fail('paid notes'))
     monkeypatch.setattr(
@@ -210,7 +205,7 @@ def _short_clip(text, seconds=1.0):
 
 
 def _structure(monkeypatch, conversation, *, trigger=None, calendar=False):
-    monkeypatch.setenv(packet.FLAG, 'serve')
+    monkeypatch.delenv('NOTES_SHORT_CLIP_FLOOR', raising=False)
     monkeypatch.setattr(processing.notification_db, 'get_user_time_zone', lambda *_args: 'UTC')
     monkeypatch.setattr(processing, 'get_conversation_notes', lambda *_args, **_kwargs: pytest.fail('paid notes'))
     monkeypatch.setattr(processing, '_calendar_overlap_retains_conversation', lambda *_args, **_kwargs: calendar)

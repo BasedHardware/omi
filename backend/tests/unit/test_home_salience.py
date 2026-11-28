@@ -169,9 +169,7 @@ def test_served_content_kind_uses_same_absence_requirement(kind):
     assert not minimum_is_background(capture, minimum(), evidence(rows))
 
 
-@pytest.mark.parametrize('mode', ['off', 'shadow', 'serve'])
-def test_final_boundary_runs_for_minimum_and_cached_notes_without_rollout_dependency(monkeypatch, mode):
-    monkeypatch.setenv('NOTES_PACKET_V2_MODE', mode)
+def test_final_boundary_runs_for_minimum_and_cached_notes_without_rollout_dependency(monkeypatch):
     rows = segments(owner=True, turns=6)
     monkeypatch.setattr(contract, 'get_evidence', lambda *_: None)
     capture = conversation(rows)

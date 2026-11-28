@@ -86,7 +86,7 @@ def test_real_soniox_config_shadow_serve_and_off_preserve_language(monkeypatch, 
 
 
 def test_invalid_flags_keep_shadow(monkeypatch):
-    for name in ('CALLS_RECAP_MODE', 'ACTION_ITEMS_V2_MODE', 'STT_VOCAB_MODE'):
+    for name in ('ACTION_ITEMS_V2_MODE', 'STT_VOCAB_MODE'):
         monkeypatch.setenv(name, 'srve')
         assert refactor_modes.mode(name) == 'shadow'
         assert not refactor_modes.serving_for(name, 'synthetic-owner')

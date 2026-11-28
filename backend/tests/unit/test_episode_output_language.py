@@ -156,11 +156,8 @@ def test_run_incremental_update_pins_the_resolved_language_by_default(monkeypatc
     assert 'Keep names and quoted words verbatim.' in seen[0][0][1]
 
 
-def test_the_kill_switch_restores_the_cohort_gated_prompt(monkeypatch):
+def test_the_kill_switch_restores_the_unpinned_prompt(monkeypatch):
     monkeypatch.setenv(episodes_config.EPISODE_OUTPUT_LANGUAGE_PIN_ENV, 'off')
-    monkeypatch.delenv('NOTES_PACKET_V2_MODE', raising=False)
-    monkeypatch.delenv('NOTES_PACKET_V2_MODE_SERVE_PERCENT', raising=False)
-    monkeypatch.delenv('NOTES_PACKET_V2_MODE_SERVE_UID_SHA256S', raising=False)
     seen = []
 
     def invoke(uid, messages):
@@ -171,11 +168,6 @@ def test_the_kill_switch_restores_the_cohort_gated_prompt(monkeypatch):
         'uid-lang', '{}', 'Owner: x', known_item_ids=[], now=NOW, tz_name='UTC', invoke=invoke
     )
     assert seen[0][0] == ('system', incremental.PROMPT_PREFIX)
-    monkeypatch.setenv('NOTES_PACKET_V2_MODE', 'serve')
-    incremental.run_incremental_update(
-        'uid-lang', '{}', 'Owner: x', known_item_ids=[], now=NOW, tz_name='UTC', invoke=invoke
-    )
-    assert seen[1][0] == ('system', incremental._moment_prompt('en'))
 
 
 def test_build_messages_carries_the_repair_line_in_the_volatile_block():

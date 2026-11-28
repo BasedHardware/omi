@@ -177,7 +177,6 @@ def test_create_existing_corruption_does_not_rewrite_or_generate(
     assert ref.get().to_dict() == record
 
 
-@pytest.mark.parametrize('recap_mode', ['off', 'serve'], ids=['legacy', 'v4'])
 @pytest.mark.parametrize('invalid_kind', ['schema', 'json', 'root'])
 def test_create_invalid_candidate_is_not_saved_and_real_storage_retry_generates(
     client,
@@ -188,14 +187,11 @@ def test_create_invalid_candidate_is_not_saved_and_real_storage_retry_generates(
     monkeypatch,
     conversation_fixture,
     live_user,
-    recap_mode,
     invalid_kind,
 ):
     import utils.other.notifications as notifications
     from database.redis_db import get_generic_cache
 
-    monkeypatch.setenv('CALLS_RECAP_MODE', recap_mode)
-    monkeypatch.setenv('NOTES_PACKET_V2_MODE', 'off')
     monkeypatch.setenv('MEDIA_NOISE_MODE', 'off')
     monkeypatch.setattr(notifications, 'require_generated_compute', lambda *a, **k: None)
     monkeypatch.setattr(notifications, 'generated_compute_allowed', lambda *a, **k: True)
@@ -254,7 +250,6 @@ def test_pending_creation_with_an_active_day_lock_returns_conflict_without_overw
     pending = _summary('pending', status='pending')
     ref = _seed(fake_firestore, pending)
     fake_redis.set('users:123:daily_summary_lock:2026-10-01', 'another-writer', ex=60)
-    monkeypatch.setenv('CALLS_RECAP_MODE', 'serve')
     monkeypatch.setattr(notifications, 'require_generated_compute', lambda *a, **k: None)
     monkeypatch.setattr(notifications, 'generated_compute_allowed', lambda *a, **k: True)
 
@@ -266,52 +261,6 @@ def test_pending_creation_with_an_active_day_lock_returns_conflict_without_overw
     assert response.status_code == 409, response.text
     assert ref.get().to_dict() == pending
     assert fake_redis.get('users:123:daily_summary_lock:2026-10-01') == b'another-writer'
-
-
-@pytest.mark.parametrize('recap_mode', ['off', 'serve'], ids=['legacy', 'v4'])
-def test_refresh_rejects_invalid_candidate_before_replacing_previous_content_and_retry_succeeds(
-    client, auth_headers, fake_firestore, generation_seams, monkeypatch, conversation_fixture, live_user, recap_mode
-):
-    import utils.other.notifications as notifications
-    from database.daily_summaries import get_daily_summary_by_date
-    from utils.daily_summary_validation import DailySummaryUnavailable
-
-    monkeypatch.setenv('CALLS_RECAP_MODE', recap_mode)
-    monkeypatch.setenv('NOTES_PACKET_V2_MODE', 'off')
-    monkeypatch.setenv('MEDIA_NOISE_MODE', 'off')
-    monkeypatch.setattr(notifications, 'require_generated_compute', lambda *a, **k: None)
-    monkeypatch.setattr(notifications, 'generated_compute_allowed', lambda *a, **k: True)
-    monkeypatch.setattr(notifications, 'memories_learned_payload', lambda *a, **k: [])
-    source_ref = _seed_source_day(fake_firestore, conversation_fixture)
-    outputs = iter([_summary('original'), _corrupt(day='2026-10-01'), _summary('new-model-id', headline='Updated')])
-    monkeypatch.setattr(notifications, 'generate_comprehensive_daily_summary', lambda *a, **k: next(outputs))
-    created = client.post('/v1/users/daily-summaries', json={'date': '2026-10-01'}, headers=auth_headers)
-    assert created.status_code == 200, created.text
-    record_id = created.json()['id']
-    ref = fake_firestore.collection('users').document('123').collection('daily_summaries').document(record_id)
-    ref.update({'visibility': 'shared', 'notification_delivery_completed': True})
-    previous = ref.get().to_dict()
-    source_ref.update({'structured.overview': 'Revised project decision adds new information.'})
-    # Legacy success deliberately retains its lease. Model the next admitted tick
-    # after expiry without changing the actual lock implementation or sleeping.
-    notifications.release_daily_summary_lock('123', '2026-10-01')
-    # Admit an explicit revision in both writers; the model and persistence stay real.
-    monkeypatch.setenv('NOTES_PACKET_V2_MODE', 'serve')
-    start, end = notifications.local_day_bounds_utc(datetime(2026, 10, 1).date(), 'UTC')
-    with pytest.raises(DailySummaryUnavailable):
-        notifications._generate_and_store_daily_summary('123', '2026-10-01', start, end, user_initiated=True)
-    failed = ref.get().to_dict()
-    assert failed['headline'] == previous['headline']
-    assert failed.get('memories_learned') == previous.get('memories_learned')
-    assert failed['visibility'] == 'shared'
-    assert failed['notification_delivery_completed'] is True
-    retried, created, reason = notifications._generate_and_store_daily_summary(
-        '123', '2026-10-01', start, end, user_initiated=True
-    )
-    assert created is True and reason is None
-    assert retried['id'] == record_id
-    assert retried['headline'] == 'Updated'
-    assert get_daily_summary_by_date('123', '2026-10-01')['id'] == record_id
 
 
 def test_manual_notification_preview_rejects_invalid_candidate_without_storage_or_delivery(

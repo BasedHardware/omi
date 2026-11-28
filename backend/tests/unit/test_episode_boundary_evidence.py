@@ -183,16 +183,9 @@ def test_saved_context_cannot_rewind_an_authoritative_calendar_reschedule(store)
     'uid,stored',
     [('fixture-owner-39', True), ('fixture-owner-0', False)],
 )
-def test_shared_call_and_relevance_inputs_keep_the_production_sample(store, monkeypatch, uid, stored):
-    from utils.conversations import call_metadata, relevance_media
+def test_shared_relevance_input_keeps_the_production_sample(store, monkeypatch, uid, stored):
+    from utils.conversations import relevance_media
 
     evidence = signal(ended_at=NOW + timedelta(minutes=20), meeting_link='https://meet.google.com/abc-defg-hij')
     assert boundary_store.record(uid, [evidence], firestore_client=store) == int(stored)
     assert relevance_media._boundaries(uid) == ([evidence] if stored else [])
-
-    monkeypatch.setenv(call_metadata.FLAG, 'serve')
-    conversation = SimpleNamespace(started_at=NOW, finished_at=NOW + timedelta(minutes=10), is_call=None)
-    call_metadata.apply_call_metadata(uid, conversation)
-    assert conversation.is_call is (True if stored else None)
-    if stored:
-        assert conversation.calendar_event_id == evidence.external_id

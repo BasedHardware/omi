@@ -1404,8 +1404,6 @@ tests/unit/test_non_active_route_report.py	2.7
 tests/unit/test_non_active_routes.py	2.7
 tests/unit/test_normative_foundations.py	2.7
 tests/unit/test_notes_agent.py	9.7
-tests/unit/test_notes_packet_v2.py	11.7
-tests/unit/test_notes_recap_fingerprint.py	2.7
 tests/unit/test_notes_speaker_identity_contract.py	3.7
 tests/unit/test_notes_tier_escalation.py	8.7
 tests/unit/test_notification_account_deletion_fence.py	6.7
@@ -2204,7 +2202,6 @@ tests/unit/test_wake_word_adjudication_failsafe.py	7.7
 tests/unit/test_wal_audio_coverage.py	3.7
 tests/unit/test_wal_audio_coverage_pipeline.py	45.7
 tests/unit/test_wave2_action_items.py	2.7
-tests/unit/test_wave2_call_metadata.py	3.7
 tests/unit/test_wave2_composition.py	8.7
 tests/unit/test_wave2_daily_recap.py	8.7
 tests/unit/test_wave2_daily_summary_contract.py	2.7

@@ -1185,7 +1185,6 @@ def test_agent_serving_receives_the_screen_binding_that_its_identity_repair_acce
     monkeypatch.setattr(serving, 'has_byok_keys', lambda: False)
     monkeypatch.setattr(serving, 'owner_profile', lambda uid: '')
     monkeypatch.setattr(serving, 'build_packet', lambda **kwargs: ({}, set()))
-    monkeypatch.setattr(serving, 'select_notes_packet', lambda packet, **kwargs: packet)
     monkeypatch.setattr(serving, 'langchain_complete', lambda *args, **kwargs: None)
 
     @asynccontextmanager

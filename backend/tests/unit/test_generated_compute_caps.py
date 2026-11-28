@@ -88,9 +88,9 @@ def _entrypoint(path, name, namespace, *, legacy=False):
     return namespace[name]
 
 
-# Keep cold compilation of the large legacy entrypoint outside the fast-unit
+# Keep cold compilation of the large recap entrypoint outside the fast-unit
 # call-phase guard; each assertion still executes its real function body.
-_entrypoint('utils/other/notifications.py', '_legacy_generate_and_store_daily_summary', {})
+_entrypoint('utils/other/notifications.py', '_generate_and_store_daily_summary', {})
 
 
 @pytest.mark.parametrize(
@@ -229,9 +229,8 @@ def test_new_feature_get_llm_cannot_bypass_uid_or_budget(gate, monkeypatch):
     [
         (
             'utils/other/notifications.py',
-            # The wrapper delegates to the cohort producer; this is the retained
-            # legacy budget entrypoint, isolated from all database dependencies.
-            '_legacy_generate_and_store_daily_summary',
+            # The recap budget entrypoint, isolated from all database dependencies.
+            '_generate_and_store_daily_summary',
             ('user', 'date', None, None),
             (None, False, 'usage_budget_exhausted'),
         ),
@@ -247,7 +246,7 @@ def test_background_denial_skips_before_any_other_dependency(gate, monkeypatch, 
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
     # No database, lock, progress writer, app mutation or provider exists in this namespace.
     namespace = {'generated_compute_allowed': module.generated_compute_allowed}
-    if path == 'utils/app_integrations.py':
+    if path in ('utils/app_integrations.py', 'utils/other/notifications.py'):
         # The deletion fence is the first admission guard in production; keep
         # this isolated cap-denial test hermetic while allowing the cap check
         # itself to prove it stops all later dependencies.

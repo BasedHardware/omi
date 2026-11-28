@@ -32,11 +32,9 @@ from testing.owner_lab import replay_bench
 from testing.owner_lab.store import Snapshot, parse_time, score, terms
 
 LANE = 'omi:auto:conv-structure'
-# Packet-v2 and action-items-v2 pinned to the unset production default: shadow,
-# zero serve percent — verified equal to the unset parser in qualify().
+# Action-items-v2 pinned to the unset production default: shadow, zero serve
+# percent — verified equal to the unset parser in qualify().
 PINNED_DEFAULTS = {
-    'NOTES_PACKET_V2_MODE': 'shadow',
-    'NOTES_PACKET_V2_MODE_SERVE_PERCENT': '0',
     'ACTION_ITEMS_V2_MODE': 'shadow',
     'ACTION_ITEMS_V2_MODE_SERVE_PERCENT': '0',
 }
@@ -113,10 +111,9 @@ class NotesAdapter(replay_bench.ReplayAdapter):
         from utils.llm import notes_agent_policy as policy
         from utils.llm import notes_agent_prompt as prompt
         from utils.llm import notes_agent_serving as serving
-        from utils.llm import notes_packet as packet
 
         self.agent, self.policy, self.prompt = agent, policy, prompt
-        self.tools, self.serving, self.packet = tools, serving, packet
+        self.tools, self.serving = tools, serving
         tools.load_people_documents = lambda _: self.snap.people[:100]
         tools.get_ai_user_profile = lambda _: self.snap.profile.get('ai_user_profile') or {}
         tools.calendar_db.get_meetings_in_time_range = self.calendar
@@ -125,15 +122,6 @@ class NotesAdapter(replay_bench.ReplayAdapter):
         tools.action_items_db.get_action_items = self.tasks
         pack.conversations_db.get_conversations_without_photos = self.conversations
         pack.load_people_documents = tools.load_people_documents
-        packet.get_evidence = lambda *_: None  # no speaker evidence bundle in the snapshot
-        packet.notes_people = lambda *_: self.snap.people[:100]
-
-        class _FrozenDateTime(datetime):
-            @classmethod
-            def now(cls, tz: Any = None) -> Any:
-                return FIXED_NOW.astimezone(tz) if tz else FIXED_NOW.replace(tzinfo=None)
-
-        packet.datetime = _FrozenDateTime
         outer = self
 
         class _LocalSearch:
@@ -167,13 +155,13 @@ class NotesAdapter(replay_bench.ReplayAdapter):
                 raise
 
         serving.run_notes_agent = _run
-        original_select = serving.select_notes_packet
+        original_build = serving.build_packet
 
-        def _select(*args: Any, **kwargs: Any) -> Any:
-            outer.packet_seen = original_select(*args, **kwargs)
+        def _build(*args: Any, **kwargs: Any) -> Any:
+            outer.packet_seen = original_build(*args, **kwargs)
             return outer.packet_seen
 
-        serving.select_notes_packet = _select
+        serving.build_packet = _build
 
     # ---- snapshot seam implementations (aggregates; no identifiers logged) ----
 
@@ -363,9 +351,7 @@ class NotesAdapter(replay_bench.ReplayAdapter):
         cid: str,
         gateway: Any = None,
         qualify: bool = False,
-        mode: str = 'shadow',
     ) -> dict[str, Any] | None:
-        os.environ['NOTES_PACKET_V2_MODE'] = mode
         prefix, capture, words, frames, kwargs = self.inputs(self.snap.conversations[cid])
         self.result, self.error, self.invocation, self.packet_seen, self.raw_calls = None, None, None, None, []
         outer = self
@@ -424,9 +410,9 @@ class NotesAdapter(replay_bench.ReplayAdapter):
             if not self.invocation or not isinstance(self.error, replay_bench.ControlledStop):
                 raise RuntimeError('qualification transport not reached')
             assert self.invocation['identity'].speaker_names == prefix.speaker_names
-            assert self.invocation['contract_v2'] == (mode == 'serve')
+            assert 'contract_v2' not in self.invocation
             assert self.invocation['transcript_segment_ids'] == prefix.transcript_segment_ids
-            assert self.packet_seen.get('version') == (2 if mode == 'serve' else None)
+            assert self.packet_seen.get('version') is None
             values = {
                 'packet': self.packet_seen,
                 'seed': self.invocation['seed'],
@@ -579,14 +565,13 @@ class NotesAdapter(replay_bench.ReplayAdapter):
     def qualify(self) -> None:
         from config.refactor_modes import mode as mode_of, serving_for
 
-        pinned = 'NOTES_PACKET_V2_MODE'
+        pinned = 'ACTION_ITEMS_V2_MODE'
         assert mode_of(pinned, environ={}) == mode_of(pinned, environ=dict(PINNED_DEFAULTS)) == 'shadow'
         unset = serving_for(pinned, 'bench-owner', environ={})
         pinned_serving = serving_for(pinned, 'bench-owner', environ=dict(PINNED_DEFAULTS))
         assert unset is False and pinned_serving is False
         selection = replay_bench.read_json(Path(os.environ[replay_bench.SELECTION_ENV]), {})
         records = [self.invoke(cid, qualify=True) for cid in selection['ids']]
-        self.invoke(selection['ids'][0], qualify=True, mode='serve')
         cid = selection['ids'][0]
         prefix, _, _, frames, kwargs = self.inputs(self.snap.conversations[cid])
         box = self.tools.NotesToolbox(

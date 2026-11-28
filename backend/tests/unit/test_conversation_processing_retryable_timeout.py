@@ -307,9 +307,6 @@ def structuring_seam(monkeypatch):
     from utils.conversations import process_conversation as processing
 
     monkeypatch.setenv('NOTES_SHORT_CLIP_FLOOR', 'false')
-    monkeypatch.setenv('NOTES_PACKET_V2_MODE', 'off')
-    monkeypatch.delenv('NOTES_PACKET_V2_MODE_SERVE_PERCENT', raising=False)
-    monkeypatch.delenv('NOTES_PACKET_V2_MODE_SERVE_UID_SHA256S', raising=False)
     monkeypatch.setenv('CONVERSATION_OCCASION_RELEVANCE_ENABLED', 'false')
     monkeypatch.setenv('CONVERSATION_LLM_INPUT_DEDUPE_ENABLED', 'false')
 

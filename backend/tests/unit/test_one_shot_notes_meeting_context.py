@@ -107,12 +107,10 @@ def test_empty_meeting_context_means_no_key(monkeypatch):
     assert 'meeting_context' not in packet
 
 
-@pytest.mark.parametrize('packet_mode', ['off', 'serve'])
 @pytest.mark.parametrize('agent_path', ['disabled', 'fallback', 'enriched_fallback'])
-def test_one_shot_receives_explicit_screen_binding(monkeypatch, packet_mode, agent_path):
+def test_one_shot_receives_explicit_screen_binding(monkeypatch, agent_path):
     from utils.llm import conversation_processing
 
-    monkeypatch.setenv('NOTES_PACKET_V2_MODE', packet_mode)
     if agent_path == 'disabled':
         monkeypatch.setenv('CONVERSATION_NOTES_AGENT_ENABLED', 'false')
     else:

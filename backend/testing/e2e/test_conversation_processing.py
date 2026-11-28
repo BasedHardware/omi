@@ -164,7 +164,6 @@ def test_short_recording_minimum_survives_api_readback_without_paid_intelligence
     app_boundary = process_module.trigger_conversation_apps
     _patch_process_conversation_boundaries(monkeypatch)
     monkeypatch.setattr(process_module, 'trigger_conversation_apps', app_boundary)
-    monkeypatch.setenv('NOTES_PACKET_V2_MODE', 'off')
     monkeypatch.setenv('NOTES_SHORT_CLIP_FLOOR', 'on')
     paid = Mock(side_effect=AssertionError('minimum attempted paid intelligence'))
     monkeypatch.setattr(process_module, 'get_conversation_notes', paid)
@@ -242,7 +241,6 @@ def test_existing_short_row_notes_survive_user_reprocess(client, auth_headers, m
     notes = Mock(wraps=process_module.get_conversation_notes)
     monkeypatch.setattr(process_module, 'get_conversation_notes', notes)
     monkeypatch.setenv('NOTES_SHORT_CLIP_FLOOR', 'on')
-    monkeypatch.setenv('NOTES_PACKET_V2_MODE', 'off')
     seed_conversation(
         '123',
         {

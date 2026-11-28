@@ -549,7 +549,6 @@
         "tests/unit/test_short_clip_authority.py",
         "tests/unit/test_short_clip_summary_debt.py",
         "tests/unit/test_summary_delivery.py",
-        "tests/unit/test_notes_packet_v2.py",
         "tests/unit/test_structured_emoji_never_defaults_to_brain.py",
         "tests/unit/test_finalization_decision.py",
         "tests/unit/test_check_conversation_lifecycle_writes.py",

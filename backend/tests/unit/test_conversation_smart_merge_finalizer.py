@@ -58,7 +58,6 @@ def harness(monkeypatch):
     monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'false')
     # The live-episode hook runs after fanout completion; its own tests cover it.
     monkeypatch.setenv('EPISODES_ENABLED', 'off')
-    monkeypatch.setenv('CALLS_RECAP_MODE', 'off')
     # This row has no live episode; retain the enabled notes-scheduling prelude.
     monkeypatch.delenv('HOME_LIVE_MEMBER_NOTES_DEFERRED_ENABLED', raising=False)
     monkeypatch.setattr(finalizer.member_notes, 'waits', lambda *args: False)
@@ -69,8 +68,6 @@ def harness(monkeypatch):
             return row
         if function is finalizer.reserve_recording:
             # Exercise the real default-off gate; it must not claim a route or touch Firestore.
-            return function(*args, **kwargs)
-        if function is finalizer.apply_call_metadata:
             return function(*args, **kwargs)
         if function is finalizer.member_notes.waits:
             return function(*args, **kwargs)

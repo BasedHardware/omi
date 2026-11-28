@@ -7,7 +7,6 @@ from collections.abc import Mapping
 from typing import Any
 
 from config.notes_short_clip import floor_serving
-from config.refactor_modes import shadow_or_serve
 from utils.conversations.deterministic_minimum import build_deterministic_minimum_structured
 from utils.conversations.recovery import recovery_transcript_word_count
 from utils.conversations.relevance_rules import (
@@ -93,9 +92,8 @@ def quiet_minimum(
     The emoji is the minimum's deterministic category emoji (💬): a blank value
     does not render blank in the app, it renders the client's random fallback.
     """
-    serving = floor_serving(uid)
     if (
-        (not serving and not shadow_or_serve('NOTES_PACKET_V2_MODE'))
+        not floor_serving()
         or user_kept
         or getattr(conversation, 'sync_relevance_user_kept', False)
         or getattr(conversation, 'user_title', None)
@@ -129,7 +127,7 @@ def quiet_minimum(
         use_word_floor=english_word_floor(conversation, normalize_relevance_text(text)),
     )
     shadow('short_clip', 'disagree' if eligible else 'agree', words=words)
-    if not eligible or not serving:
+    if not eligible:
         return None
     minimum = build_deterministic_minimum_structured(view, uid=uid, tz_name_provider=lambda: tz)
     minimum.title_provenance = 'server_minimum'

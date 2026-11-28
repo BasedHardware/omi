@@ -9317,16 +9317,16 @@ Phone transports, matching calendar meeting links and explicit joined controls
 can establish call metadata; media playback and an open chat window cannot.
 Conversation locations remain owner locations, with remote participants explicit.
 
-V4's boundary publication is serve-only under `CALLS_RECAP_MODE`; shadow
-projects phone/calendar evidence locally and never adds it to the wave-1
-boundary authority for non-cohort users. Soniox initial, reconnect and managed
+V4's finalization-time call projection (`CALLS_RECAP_MODE`) was retired on
+2026-11-28 without ever serving: finalization no longer reads the boundary store
+or adds phone/calendar evidence to the wave-1 boundary authority. Soniox initial, reconnect and managed
 legs pass the authenticated request uid explicitly to vocabulary admission;
 no ambient BYOK identity is consulted. Social tasks with a named counterpart
 and a specific place/time survive the owner-alias guard.
 
-Scheduled recaps retain the completed-day grace period. An explicit on-demand
-request bypasses that grace to summarize the partial day, while keeping locks,
-compute admission, content guards and durable state handling.
+Scheduled recaps use the legacy noon-split local day. An explicit on-demand
+request summarizes the requested day through the same locks, compute admission
+and content guards.
 
 V4's completed-local-day recap producer shares `status` and `generated_at` with
 M's read adapter. Pending, failed, empty and not-generated rows keep a null

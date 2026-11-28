@@ -147,9 +147,7 @@ def test_prefix_keeps_original_voice_authority_separate_from_roster_inference():
     assert not notes_identity(prefix, {'roster': roster}).supported(NAME)
 
 
-@pytest.mark.parametrize('mode', ['off', 'shadow', 'serve'])
-def test_final_persisted_contract_enforces_identity_independently_of_packet_rollout(monkeypatch, mode):
-    monkeypatch.setenv('NOTES_PACKET_V2_MODE', mode)
+def test_final_persisted_contract_enforces_identity_independently_of_packet_rollout(monkeypatch):
     payload = submission()
     # Persisted Participant omits the model's speaker key; final context still rejects the name.
     payload['participants'] = [{'name': NAME, 'source': 'roster', 'evidence': 'People match'}]
@@ -218,7 +216,6 @@ def test_unverified_possessive_name_does_not_leave_a_possessive_shell_in_title()
 
 
 def test_identity_repair_preserves_absent_optional_wire_fields(monkeypatch):
-    monkeypatch.setenv('NOTES_PACKET_V2_MODE', 'off')
     output = Structured(title=f'{NAME}: agents', overview=f'{NAME} proposed agents.')
     original_fields = set(output.model_dump(mode='json'))
     prefix = SimpleNamespace(transcript_segment_ids=set(), title_people=())
@@ -230,10 +227,8 @@ def test_identity_repair_preserves_absent_optional_wire_fields(monkeypatch):
 
 
 @pytest.mark.parametrize('transcript_name', ['sara chen', 'Sarah Chen'])
-@pytest.mark.parametrize('mode', ['off', 'shadow', 'serve'])
-def test_sarah_chen_contact_mentions_keep_people_spelling_on_every_notes_path(monkeypatch, transcript_name, mode):
+def test_sarah_chen_contact_mentions_keep_people_spelling_on_every_notes_path(monkeypatch, transcript_name):
     monkeypatch.delenv('SPEAKER_IDENTITY_REPAIR_ENABLED', raising=False)
-    monkeypatch.setenv('NOTES_PACKET_V2_MODE', mode)
     prefix = SimpleNamespace(
         transcript_segment_ids={'s1'},
         title_people=(),
@@ -298,10 +293,8 @@ def test_blocked_david_contact_does_not_scrub_owner_first_name_or_full_name():
 
 
 @pytest.mark.parametrize('off', ['off', 'false', '0', 'no'])
-@pytest.mark.parametrize('mode', ['off', 'shadow', 'serve'])
-def test_identity_kill_switch_restores_unrepaired_notes_on_all_paths(monkeypatch, off, mode):
+def test_identity_kill_switch_restores_unrepaired_notes_on_all_paths(monkeypatch, off):
     monkeypatch.setenv('SPEAKER_IDENTITY_REPAIR_ENABLED', off)
-    monkeypatch.setenv('NOTES_PACKET_V2_MODE', mode)
     payload = submission()
     payload['participants'][0]['source'] = 'roster'
     assert repair_identity(payload, source()) == (payload, [])

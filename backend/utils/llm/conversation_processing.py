@@ -69,17 +69,14 @@ from utils.llm.meeting_notes_validation import (
     attach_notes_identity_context,
     validate_structured_source_segment_ids,
 )
-from config.refactor_modes import serving_for
 from config.open_loops import open_loops_enabled
-from utils.llm.notes_packet import PACKET_RULES, select_notes_packet, _local_started_at_iso
-from utils.llm.notes_output_contract import finish_notes_contract, OUTPUT_RULES
+from utils.llm.notes_output_contract import finish_notes_contract
 from utils.other.request_deadline import (
     RequestDeadlineExceeded,
     capped_deadline_seconds,
     request_deadline_exceeded,
 )
 from utils.llm.notes_identity import notes_identity, screen_speaker_bindings
-from utils.llm.notes_output import NotesOutput, OpenLoopNotesOutput
 from utils.llm.notes_observability import current_run, notes_observation, observe_notes_output
 from utils.conversations.processing_steps import AsyncStep, Steps, run_inline
 from utils.llm.notes_effort import bind_notes_effort
@@ -466,16 +463,13 @@ def _bounded_notes_mount(mount: Mount) -> Mount:
 
 
 def _notes_output_schema(uid: Optional[str], *, agent: bool = False) -> type[Any]:
-    """The one-shot parser target: v2/legacy arm, plus open-loop fields when enabled.
+    """The one-shot parser target, plus open-loop fields when enabled.
 
     Open-loop extraction rides a flag-gated subclass so the switch-off prompt
     bytes (format instructions render this schema) and the agentic submit tool
     stay byte-identical to the pre-feature contract.
     """
-    v2 = serving_for('NOTES_PACKET_V2_MODE', uid)
     open_loops = open_loops_enabled()
-    if v2:
-        return OpenLoopNotesOutput if open_loops else NotesOutput
     if agent:
         return OpenLoopAgentNotesSubmission if open_loops else AgentNotesSubmission
     return OpenLoopStructuredExtraction if open_loops else StructuredExtraction
@@ -571,13 +565,7 @@ def _shaped_conversation_notes_steps(
         legacy_packet.update(density=conversation_note_density(words, rich_mode), LENGTH=length_guide(words))
         evidence[0]['content'] = json.dumps(legacy_packet, ensure_ascii=False)
 
-    packet = select_notes_packet(
-        legacy_packet, prefix=prefix, uid=uid, capture_evidence=context, words=words, inputs=kwargs
-    )
-    kwargs['notes_identity'] = notes_identity(prefix, kwargs, packet)
-    if serving_for('NOTES_PACKET_V2_MODE', uid):
-        evidence[0]['content'] = json.dumps(packet, ensure_ascii=False, default=str)
-        mount = replace(mount, instructions=mount.instructions + '\n\n' + PACKET_RULES + '\n\n' + OUTPUT_RULES)
+    kwargs['notes_identity'] = notes_identity(prefix, kwargs, dict(legacy_packet))
     if frames:
         evidence.append(screen_frames_message(frames))
     # The notes lane can be Anthropic (main default); it rejects both
@@ -620,13 +608,13 @@ def _shaped_conversation_notes_steps(
         # fallback now would hold the request past the client's own deadline, so
         # answer the retryable 503 instead of buying a second stalled call.
         raise RequestDeadlineExceeded('notes fallback started after the request budget was spent')
-    one_shot_packet = packet if serving_for('NOTES_PACKET_V2_MODE', uid) else legacy_packet
+    one_shot_packet = legacy_packet
     one_shot_packet['screen_speaker_bindings'] = screen_speaker_bindings(kwargs['notes_identity'])
     evidence[0]['content'] = json.dumps(one_shot_packet, ensure_ascii=False, default=str)
     extraction_parser = PydanticOutputParser(pydantic_object=_notes_output_schema(uid))
     format_instructions = extraction_parser.get_format_instructions()
     static_instructions = mount.instructions + '\n\n' + format_instructions
-    if not rich_mode and not serving_for('NOTES_PACKET_V2_MODE', uid):
+    if not rich_mode:
         static_instructions = general_title_static_instructions(mount.instructions, format_instructions)
     mount = Mount(
         instructions=static_instructions,

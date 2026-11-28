@@ -360,29 +360,19 @@ def test_empty_notes_checkpoint_is_not_first_summary_success(monkeypatch):
     assert output.overview == rich.overview
 
 
-def test_effective_packet_cohort_and_version_invalidate_notes_checkpoint(enabled, monkeypatch):
-    from utils.llm import notes_packet
-    from config.refactor_modes import uid_digest
+def test_notes_checkpoint_keeps_the_legacy_packet_identity(enabled, monkeypatch):
+    # The retired packet-v2 arm keyed reuse on this pair; every account carried
+    # the legacy value, so existing notes fingerprints must keep matching.
+    seen = []
+    real = dedupe.fingerprint
 
-    owner = 'synthetic-packet-account'
-    monkeypatch.setenv('NOTES_PACKET_V2_MODE', 'shadow')
-    monkeypatch.delenv('NOTES_PACKET_V2_MODE_SERVE_UID_SHA256S', raising=False)
-    monkeypatch.delenv('NOTES_PACKET_V2_MODE_SERVE_PERCENT', raising=False)
-    generate = Mock(return_value='synthetic output')
+    def capture(feature, inputs):
+        seen.append(inputs)
+        return real(feature, inputs)
 
-    def digest():
-        hashes = {}
-        dedupe.notes(owner, enabled, 'synthetic prefix', generate, hashes)
-        return hashes[dedupe.NOTES_HASH]
-
-    legacy = digest()
-    monkeypatch.setenv('NOTES_PACKET_V2_MODE_SERVE_UID_SHA256S', uid_digest(owner))
-    serving = digest()
-    assert serving != legacy
-    monkeypatch.setattr(notes_packet, 'PACKET_VERSION', notes_packet.PACKET_VERSION + 1)
-    assert digest() != serving
-    monkeypatch.setenv('NOTES_PACKET_V2_MODE', 'off')
-    assert digest() == legacy
+    monkeypatch.setattr(dedupe, 'fingerprint', capture)
+    dedupe.notes('synthetic-packet-account', enabled, 'synthetic prefix', Mock(return_value='out'), {})
+    assert seen and seen[0]['notes_packet'] == {'mode': 'legacy', 'version': 1}
 
 
 def test_implementation_digest_is_the_explicit_prompt_version():
