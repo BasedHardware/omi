@@ -605,6 +605,21 @@ jobs:
             echo "Carried $key"
           done
 
+      # SCA-4463 operating rule: a Pusher-only lease override is none before any
+      # reader enters serve. Refuse a serving shared vector (ConfigMap and Listen)
+      # while the live Pusher still carries one; a non-serving vector reads nothing.
+      - name: Refuse a shared lease serve write while a Pusher override is live
+        if: ${{ inputs.mode != 'evidence' && ((github.event.inputs.mode || 'deploy') == 'deploy') }}
+        run: |
+          set -euo pipefail
+          # Immutable workflow-control copy: a dev branch that predates it cannot skip it.
+          guard="$RUNNER_TEMP/record_token_lease_serve_guard.py"
+          git show "$GITHUB_WORKFLOW_SHA:backend/scripts/record_token_lease_serve_guard.py" > "$guard"
+          python3 "$guard" shared-serve \
+            --environment "${{ vars.ENV }}" \
+            --vector "shared ${{ vars.ENV }}-omi-backend-config and backend-listen" \
+            "$RECORD_TOKEN_LEASE_MODE" "$RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT"
+
       - name: Apply non-secret backend runtime config
         if: ${{ inputs.mode != 'evidence' && ((github.event.inputs.mode || 'deploy') == 'deploy') }}
         env:

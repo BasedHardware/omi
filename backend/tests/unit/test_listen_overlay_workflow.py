@@ -41,6 +41,7 @@ EXPECTED = [
     'Apply the listen private-env ExternalSecret (no roll)',
     'Force-sync and verify private listen env against live (no roll)',
     'Carry forward config this workflow does not own',
+    'Refuse a shared lease serve write while a Pusher override is live',
     'Apply non-secret backend runtime config',
     'Ensure dev parity-pack bucket (development only)',
     'Resolve optional listen env overrides',

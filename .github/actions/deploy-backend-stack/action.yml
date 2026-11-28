@@ -366,6 +366,26 @@ runs:
     - name: Set up gcloud
       uses: google-github-actions/setup-gcloud@v3
 
+    # SCA-4463 operating rule: a Pusher-only lease override is none before any
+    # reader enters serve. Before this stack writes a serving vector to Sync or the
+    # shared ConfigMap, the live Pusher must read the shared vector (no override).
+    - name: Get GKE credentials for the record token lease serve guard
+      if: ${{ env.RECORD_TOKEN_LEASE_MODE == 'serve' || env.RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT != '0' }}
+      uses: google-github-actions/get-gke-credentials@v3
+      with:
+        cluster_name: ${{ env.GKE_CLUSTER }}
+        location: ${{ inputs.region }}
+        project_id: ${{ inputs.project_id }}
+
+    - name: Refuse a shared lease serve write while a Pusher override is live
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$DEPLOY_CONTROL_SCRIPTS/record_token_lease_serve_guard.py" shared-serve \
+          --environment "${{ inputs.runtime_env }}" \
+          --vector "shared ${{ inputs.runtime_env }}-omi-backend-config and Sync" \
+          "$RECORD_TOKEN_LEASE_MODE" "$RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT"
+
     - name: Verify serving sync ledger fence mode before deploy
       shell: bash
       env:
