@@ -148,6 +148,7 @@ from utils.conversations.relevance_jev import jev_discard_probability, jev_tier_
 from utils.open_loops.extraction import OPEN_LOOP_EXTRACTIONS_FIELD
 from utils.conversations.reprocess_contract import (
     DERIVED_EFFECTS_TRANSCRIPT_FIELD,
+    EmptyAppResult,
     derived_effects_transcript_digest,
 )
 from config.jev_decisions import relevance_arm, relevance_experiment_active
@@ -370,12 +371,15 @@ class ExplicitAppSelectionFailedError(RuntimeError):
     """A reprocess that named one summarization app ended without its result.
 
     Raised by `trigger_conversation_apps` when an explicit `app_id` selection leaves no
-    non-empty result for that app — the execution failed (the executor loop
-    already logged the exception) or the model returned empty content.
+    non-empty result for that app.
     First-party notes are a display fallback, not a substitute for the
     selection the user made, so the reprocess boundary must surface a real
     error instead of returning success with empty `apps_results` (SCA-359).
     """
+
+    def __init__(self, message: str, *, empty_result: EmptyAppResult | None = None):
+        super().__init__(message)
+        self.empty_result = empty_result
 
 
 def _stored_meeting_lookup_enabled() -> bool:
@@ -1031,6 +1035,7 @@ def trigger_conversation_apps(
     if not preserve_existing_results and not (replace_mode and filtered_apps):
         conversation.apps_results = []
     produced_results: Dict[str, str] = {}
+    empty_results: dict[str, EmptyAppResult] = {}
 
     def execute_app(app: App) -> None:
         if resumable_effect_authorizer is not None:
@@ -1060,13 +1065,20 @@ def trigger_conversation_apps(
                     roster=app_roster,
                     desktop_meeting_capture=app_desktop_capture,
                 )
-            result = get_app_result(
+            app_result = get_app_result(
                 transcript,
                 conversation.photos,
                 app,
                 language_code=language_code,
                 prompt_prefix=prompt_prefix,
-            ).strip()
+            )
+        if isinstance(app_result, EmptyAppResult):
+            empty_results[app.id] = app_result
+            result = ''
+        else:
+            result = app_result.strip()
+            if not result:
+                empty_results[app.id] = EmptyAppResult.MODEL_OUTPUT
         if replace_mode:
             # An empty answer must not evict the app's previous result.
             if result:
@@ -1092,6 +1104,8 @@ def trigger_conversation_apps(
             )
             if not persisted:
                 raise RuntimeError('conversation disappeared while persisting app result')
+        if not result and app.id == app_id:
+            return
         if app.id != 'omi-default-summary' and usage_attribution in {
             AppUsageAttribution.AUTOMATIC_PROCESSING,
             AppUsageAttribution.EXPLICIT_SELECTION,
@@ -1105,16 +1119,30 @@ def trigger_conversation_apps(
             if not recorded:
                 raise RuntimeError('first-open authority lost while recording app usage')
 
-    futures = [submit_with_context(llm_executor, execute_app, app) for app in filtered_apps]
-    succeeded = True
-    for future in futures:
+    def run_app(app: App) -> Exception | None:
         try:
-            future.result()
-        except Exception as e:
-            succeeded = False
-            logger.error(f"Error executing app: {e}")
+            execute_app(app)
+        except Exception as error:
+            # The caller awaits this outcome and owns its logging. Returning it
+            # keeps the executor's background exception logger off this path.
+            return error
+        return None
+
+    futures = {app.id: submit_with_context(llm_executor, run_app, app) for app in filtered_apps}
+    failures: dict[str, Exception] = {}
+    for executed_app_id, future in futures.items():
+        try:
+            error = future.result()
+        except Exception as future_error:
+            error = future_error
+        if error is not None:
+            failures[executed_app_id] = error
+            if executed_app_id != app_id:
+                logger.error('Error executing app: %s', type(error).__name__)
 
     if app_id:
+        if cause := failures.get(app_id):
+            raise ExplicitAppSelectionFailedError('Selected app execution failed') from cause
         # Explicit selection is fail-closed: the client asked for THIS app's summary, so a
         # missing result (execution failed above) or empty content must not masquerade as
         # success while first-party notes shadow the selection the user made (SCA-359).
@@ -1126,9 +1154,12 @@ def trigger_conversation_apps(
             selected_result = next((r for r in conversation.apps_results if r.app_id == app_id), None)
             selected_content = selected_result.content if selected_result is not None else ''
         if not selected_content.strip():
-            raise ExplicitAppSelectionFailedError(f'Selected app {app_id} produced no summary content')
+            raise ExplicitAppSelectionFailedError(
+                'Selected app produced no summary content',
+                empty_result=empty_results.get(app_id),
+            )
 
-    return succeeded
+    return not failures
 
 
 def update_goal_progress(
@@ -3240,8 +3271,11 @@ def _process_conversation_steps(
 
     from utils.conversations.demand_processing import lazy_enrichment_enabled
 
+    user_reprocess = trigger is ProcessingTrigger.USER_REPROCESS
+    explicit_reprocess = user_reprocess and bool(app_id)
     lazy_effects = lazy_enrichment_enabled(uid) and not discarded and not is_server_minimum(conversation)
-    if lazy_effects and not defer_derived_effects:
+
+    def mark_lazy_effects() -> None:
         from utils.sync.reprocess import mark_effects
 
         mark_effects(
@@ -3251,13 +3285,15 @@ def _process_conversation_steps(
             immediate=trigger in {ProcessingTrigger.USER_REPROCESS, ProcessingTrigger.FIRST_OPEN},
         )
 
+    if lazy_effects and not defer_derived_effects and not explicit_reprocess:
+        mark_lazy_effects()
+
     if relevance is not None:
         emit_recorded_decision(uid, conversation.id, relevance)
 
     # The finalizer defers effects until its ownership claim (#10468 r5). Explicit
     # app failures propagate after the bundle; automatic selection is fail-open.
     explicit_selection_failures: list[ExplicitAppSelectionFailedError] = []
-    user_reprocess = trigger is ProcessingTrigger.USER_REPROCESS
     effect_kwargs = {}
     if trigger in {ProcessingTrigger.SYNC_UPDATE, ProcessingTrigger.BACKLOG_CHOICE}:
         effect_kwargs['effect_source'] = ConversationEffectSource(
@@ -3318,7 +3354,7 @@ def _process_conversation_steps(
                         if len(sentence.split()) > 5:
                             insights_gained += 1
 
-            if insights_gained > 0:
+            if insights_gained > 0 and not explicit_reprocess:
                 record_usage(uid, insights_gained=insights_gained)
 
             yield
@@ -3338,10 +3374,8 @@ def _process_conversation_steps(
             except ExplicitAppSelectionFailedError as error:
                 # Fail closed without stranding the bundle: the write-back below still
                 # persists apps_results exactly as it does today (opt-in clears a stale
-                # selection) and the remaining derived effects still run; the error is
-                # re-raised after the bundle so the reprocess boundary returns a real
+                # selection). The error is re-raised after the bundle so the boundary returns a real
                 # failure instead of success-with-notes (SCA-359).
-                logger.error('Explicit app selection failed: %s', error)
                 explicit_selection_failures.append(error)
             yield
             # Persist app output after the canonical conversation write.
@@ -3350,6 +3384,15 @@ def _process_conversation_steps(
                 'suggested_summarization_apps': conversation.suggested_summarization_apps,
             }
             conversations_db.update_conversation(uid, conversation.id, app_updates)
+            if explicit_reprocess:
+                if explicit_selection_failures:
+                    # A typed provider failure can replay the request. Leave the
+                    # derived effects for the attempt that actually gets a summary.
+                    return
+                if insights_gained > 0:
+                    record_usage(uid, insights_gained=insights_gained)
+                if lazy_effects and not defer_derived_effects:
+                    mark_lazy_effects()
             # Durable finalization owns indexing for deferred work and replays.
             if (
                 not lazy_effects
@@ -3459,7 +3502,12 @@ def _process_conversation_steps(
         # processing step is a real error, never a 200 whose payload quietly
         # substitutes first-party notes for the selected app's summary (SCA-359).
         failure = explicit_selection_failures[0]
-        raise conversation_processing_http_exception(failure, route='conversation_processing/app_result') from failure
+        raise conversation_processing_http_exception(
+            failure.__cause__ or failure,
+            route='conversation_processing/app_result',
+            empty_app_result=failure.empty_result,
+            conversation_id=conversation.id,
+        ) from failure
     complete_explicit(uid, conversation, trigger)
     logger.info(f'process_conversation completed conversation.id= {conversation.id}')
     return conversation

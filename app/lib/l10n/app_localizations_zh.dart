@@ -13772,6 +13772,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get summaryFailedTitle => '无法生成摘要';
 
   @override
+  String get summaryProviderQuota => '请为您的 AI 服务商账户充值，或查看使用配额。';
+
+  @override
+  String get summaryProviderRateLimit => '您的 AI 服务商正在限制请求频率。请稍后重试。';
+
+  @override
+  String get summaryProviderInvalidKey => '请在设置中更新 AI 服务商的 API 密钥。';
+
+  @override
   String get summaryFailedBody => '总结此对话时出了点问题。';
 
   @override

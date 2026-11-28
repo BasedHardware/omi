@@ -11701,6 +11701,9 @@
     "summaryLimitTitle": "Dosegnuto je ograničenje sažetaka",
     "summaryLimitBody": "U posljednjih sat vremena više ste puta ponovno generirali sažetke. Pokušajte ponovno kasnije.",
     "summaryFailedTitle": "Sažimanje nije uspjelo",
+    "summaryProviderQuota": "Nadoplatite račun kod svojeg pružatelja AI usluge ili provjerite kvotu.",
+    "summaryProviderRateLimit": "Vaš pružatelj AI usluge ograničava učestalost zahtjeva. Pokušajte ponovno kasnije.",
+    "summaryProviderInvalidKey": "Ažurirajte API ključ svojeg pružatelja AI usluge u postavkama.",
     "summaryFailedBody": "Došlo je do pogreške pri sažimanju ovog razgovora.",
     "noContentToDisplay": "Nema sadržaja za prikaz",
     "@noContentToDisplay": {

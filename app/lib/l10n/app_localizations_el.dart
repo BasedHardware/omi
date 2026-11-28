@@ -14081,6 +14081,15 @@ class AppLocalizationsEl extends AppLocalizations {
   String get summaryFailedTitle => 'Δεν ήταν δυνατή η σύνοψη';
 
   @override
+  String get summaryProviderQuota => 'Προσθέστε υπόλοιπο στον λογαριασμό του παρόχου AI ή ελέγξτε το όριο χρήσης.';
+
+  @override
+  String get summaryProviderRateLimit => 'Ο πάροχος AI περιορίζει τη συχνότητα των αιτημάτων. Δοκιμάστε ξανά αργότερα.';
+
+  @override
+  String get summaryProviderInvalidKey => 'Ενημερώστε το κλειδί API του παρόχου AI στις ρυθμίσεις.';
+
+  @override
   String get summaryFailedBody => 'Παρουσιάστηκε πρόβλημα κατά τη σύνοψη αυτής της συνομιλίας.';
 
   @override

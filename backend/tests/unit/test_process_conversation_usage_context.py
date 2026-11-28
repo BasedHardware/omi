@@ -1424,8 +1424,8 @@ def test_changed_transcript_reprocess_rederives_and_records_the_transcript(monke
     assert {process_conversation.DERIVED_EFFECTS_TRANSCRIPT_FIELD: _unchanged_digest()} in update_calls
 
 
-def test_failed_selected_app_never_rewrites_tasks_or_goal_progress(monkeypatch):
-    """summary-v2 F4: the task delete/replace must not follow a failed template."""
+def test_failed_selected_app_never_runs_reprocess_derived_effects(monkeypatch):
+    """A failed template leaves derived effects to a successful retry."""
 
     def _failing_trigger_apps(uid, conversation, **kwargs):
         raise process_conversation.ExplicitAppSelectionFailedError('selected-app produced no summary content')
@@ -1434,6 +1434,7 @@ def test_failed_selected_app_never_rewrites_tasks_or_goal_progress(monkeypatch):
     with pytest.raises(HTTPException):
         _run_explicit_selection_flow(monkeypatch, _failing_trigger_apps, update_calls)
 
+    process_conversation._extract_memories.assert_not_called()
     process_conversation._save_action_items.assert_not_called()
     assert _goal_submissions() == []
     assert not any(process_conversation.DERIVED_EFFECTS_TRANSCRIPT_FIELD in call for call in update_calls)

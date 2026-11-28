@@ -14089,6 +14089,17 @@ class AppLocalizationsTa extends AppLocalizations {
   String get summaryFailedTitle => 'சுருக்க முடியவில்லை';
 
   @override
+  String get summaryProviderQuota =>
+      'உங்கள் AI வழங்குநர் கணக்கில் இருப்பைச் சேர்க்கவும் அல்லது பயன்பாட்டு வரம்பைச் சரிபார்க்கவும்.';
+
+  @override
+  String get summaryProviderRateLimit =>
+      'உங்கள் AI வழங்குநர் கோரிக்கைகளின் வீதத்தைக் கட்டுப்படுத்துகிறார். பிறகு மீண்டும் முயலவும்.';
+
+  @override
+  String get summaryProviderInvalidKey => 'அமைப்புகளில் உங்கள் AI வழங்குநரின் API விசையைப் புதுப்பிக்கவும்.';
+
+  @override
   String get summaryFailedBody => 'இந்த உரையாடலைச் சுருக்கும்போது ஏதோ தவறு நடந்தது.';
 
   @override

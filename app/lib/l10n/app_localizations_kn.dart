@@ -14032,6 +14032,16 @@ class AppLocalizationsKn extends AppLocalizations {
   String get summaryFailedTitle => 'ಸಾರಾಂಶ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ';
 
   @override
+  String get summaryProviderQuota => 'ನಿಮ್ಮ AI ಪೂರೈಕೆದಾರರ ಖಾತೆಗೆ ಹಣ ಸೇರಿಸಿ ಅಥವಾ ಬಳಕೆಯ ಮಿತಿಯನ್ನು ಪರಿಶೀಲಿಸಿ.';
+
+  @override
+  String get summaryProviderRateLimit =>
+      'ನಿಮ್ಮ AI ಪೂರೈಕೆದಾರರು ವಿನಂತಿಗಳ ದರವನ್ನು ಮಿತಿಗೊಳಿಸುತ್ತಿದ್ದಾರೆ. ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+
+  @override
+  String get summaryProviderInvalidKey => 'ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ನಿಮ್ಮ AI ಪೂರೈಕೆದಾರರ API ಕೀಲಿಯನ್ನು ನವೀಕರಿಸಿ.';
+
+  @override
   String get summaryFailedBody => 'ಈ ಸಂಭಾಷಣೆಯ ಸಾರಾಂಶ ಮಾಡುವಾಗ ಏನೋ ತಪ್ಪಾಗಿದೆ.';
 
   @override

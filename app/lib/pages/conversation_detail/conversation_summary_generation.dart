@@ -9,6 +9,7 @@ import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversation_detail/conversation_summary_selection.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/logger.dart';
@@ -39,6 +40,9 @@ enum SummaryFailureKind {
   /// The hourly regenerate limit (HTTP 429).
   rateLimited,
 
+  /// The configured provider account needs attention (HTTP 429 with a BYOK code).
+  providerAccount,
+
   /// The audio is still awaiting transcription (HTTP 409 `transcription_pending`): nothing to retry.
   transcriptionPending,
 
@@ -49,13 +53,28 @@ enum SummaryFailureKind {
 /// The last failed summary request, scoped to the conversation it was for.
 @immutable
 class SummaryFailure {
-  const SummaryFailure({required this.conversationId, required this.kind, this.appId});
+  const SummaryFailure({
+    required this.conversationId,
+    required this.kind,
+    this.appId,
+    this.providerAccountCode,
+    this.providerAccountGatewayMessage,
+  });
 
   final String conversationId;
   final SummaryFailureKind kind;
 
   /// The template that was asked for; null for Omi's own summary.
   final String? appId;
+  final ReprocessProviderAccountCode? providerAccountCode;
+  final String? providerAccountGatewayMessage;
+
+  String providerAccountMessage(AppLocalizations l10n) => switch (providerAccountCode) {
+        ReprocessProviderAccountCode.quota => l10n.summaryProviderQuota,
+        ReprocessProviderAccountCode.rateLimit => l10n.summaryProviderRateLimit,
+        ReprocessProviderAccountCode.invalidKey => l10n.summaryProviderInvalidKey,
+        null => providerAccountGatewayMessage ?? l10n.summaryFailedBody,
+      };
 }
 
 /// Whether [conversation] carries the summary a reprocess asked for: the template's non-empty

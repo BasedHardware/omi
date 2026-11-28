@@ -11701,6 +11701,9 @@
     "summaryLimitTitle": "خلاصے کی حد پوری ہو گئی",
     "summaryLimitBody": "آپ نے پچھلے ایک گھنٹے میں کئی خلاصے دوبارہ بنائے ہیں۔ بعد میں دوبارہ کوشش کریں۔",
     "summaryFailedTitle": "خلاصہ نہیں ہو سکا",
+    "summaryProviderQuota": "اپنے اے آئی فراہم کنندہ کے اکاؤنٹ میں رقم ڈالیں یا اس کا کوٹا دیکھیں۔",
+    "summaryProviderRateLimit": "آپ کا اے آئی فراہم کنندہ درخواستوں کی شرح محدود کر رہا ہے۔ بعد میں دوبارہ کوشش کریں۔",
+    "summaryProviderInvalidKey": "سیٹنگز میں اپنے اے آئی فراہم کنندہ کی API کلید اپ ڈیٹ کریں۔",
     "summaryFailedBody": "اس گفتگو کا خلاصہ کرتے وقت کچھ غلط ہو گیا۔",
     "noContentToDisplay": "دکھانے کے لیے کوئی مواد نہیں",
     "@noContentToDisplay": {

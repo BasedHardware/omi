@@ -14020,6 +14020,15 @@ class AppLocalizationsUk extends AppLocalizations {
   String get summaryFailedTitle => 'Не вдалося підсумувати';
 
   @override
+  String get summaryProviderQuota => 'Поповніть баланс облікового запису в постачальника ШІ або перевірте квоту.';
+
+  @override
+  String get summaryProviderRateLimit => 'Ваш постачальник ШІ обмежує частоту запитів. Спробуйте пізніше.';
+
+  @override
+  String get summaryProviderInvalidKey => 'Оновіть ключ API постачальника ШІ в налаштуваннях.';
+
+  @override
   String get summaryFailedBody => 'Під час підсумовування цієї розмови сталася помилка.';
 
   @override

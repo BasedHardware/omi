@@ -13992,6 +13992,16 @@ class AppLocalizationsNo extends AppLocalizations {
   String get summaryFailedTitle => 'Kunne ikke oppsummere';
 
   @override
+  String get summaryProviderQuota => 'Fyll på saldoen hos AI-leverandøren din eller sjekk kvoten.';
+
+  @override
+  String get summaryProviderRateLimit =>
+      'AI-leverandøren din begrenser hvor ofte du kan sende forespørsler. Prøv igjen senere.';
+
+  @override
+  String get summaryProviderInvalidKey => 'Oppdater API-nøkkelen til AI-leverandøren din i innstillingene.';
+
+  @override
   String get summaryFailedBody => 'Noe gikk galt under oppsummeringen av denne samtalen.';
 
   @override

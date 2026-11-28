@@ -13889,6 +13889,15 @@ class AppLocalizationsHe extends AppLocalizations {
   String get summaryFailedTitle => 'לא ניתן היה לסכם';
 
   @override
+  String get summaryProviderQuota => 'יש להוסיף יתרה לחשבון אצל ספק ה-AI או לבדוק את המכסה.';
+
+  @override
+  String get summaryProviderRateLimit => 'ספק ה-AI מגביל את קצב הבקשות. כדאי לנסות שוב מאוחר יותר.';
+
+  @override
+  String get summaryProviderInvalidKey => 'יש לעדכן את מפתח ה-API של ספק ה-AI בהגדרות.';
+
+  @override
   String get summaryFailedBody => 'משהו השתבש בעת סיכום השיחה הזו.';
 
   @override

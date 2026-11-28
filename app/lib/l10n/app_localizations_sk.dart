@@ -13985,6 +13985,16 @@ class AppLocalizationsSk extends AppLocalizations {
   String get summaryFailedTitle => 'Zhrnutie sa nepodarilo';
 
   @override
+  String get summaryProviderQuota => 'Dobite si kredit u svojho poskytovateľa AI alebo skontrolujte kvótu.';
+
+  @override
+  String get summaryProviderRateLimit =>
+      'Váš poskytovateľ AI obmedzuje frekvenciu požiadaviek. Skúste to znova neskôr.';
+
+  @override
+  String get summaryProviderInvalidKey => 'Aktualizujte kľúč API svojho poskytovateľa AI v nastaveniach.';
+
+  @override
   String get summaryFailedBody => 'Pri zhrnutí tohto rozhovoru sa niečo pokazilo.';
 
   @override

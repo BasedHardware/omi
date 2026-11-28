@@ -14031,6 +14031,16 @@ class AppLocalizationsEs extends AppLocalizations {
   String get summaryFailedTitle => 'No se pudo resumir';
 
   @override
+  String get summaryProviderQuota => 'Recarga tu cuenta con el proveedor de IA o revisa tu cuota.';
+
+  @override
+  String get summaryProviderRateLimit =>
+      'Tu proveedor de IA está limitando la frecuencia de las solicitudes. Inténtalo más tarde.';
+
+  @override
+  String get summaryProviderInvalidKey => 'Actualiza la clave de API de tu proveedor de IA en Ajustes.';
+
+  @override
   String get summaryFailedBody => 'Algo salió mal al resumir esta conversación.';
 
   @override

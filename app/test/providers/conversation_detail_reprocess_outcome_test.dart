@@ -9,10 +9,12 @@ import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/transcription_pending_conversations.dart';
 
+import '../helpers/home_fixture_env.dart';
 import '../helpers/summary_fixtures.dart';
 
 /// A provider whose crash reporter itself fails.
@@ -32,6 +34,7 @@ http.Response _json(int status, Object body, {Map<String, String> headers = cons
     http.Response(jsonEncode(body), status, headers: {'content-type': 'application/json', ...headers});
 
 void main() {
+  setUpAll(() => Env.init(HomeFixtureEnv()));
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
@@ -101,15 +104,68 @@ void main() {
       expect((result as ReprocessRateLimited).retryAfter, const Duration(minutes: 2));
     });
 
+    for (final (wireCode, code) in [
+      ('byok_quota', ReprocessProviderAccountCode.quota),
+      ('byok_rate_limit', ReprocessProviderAccountCode.rateLimit),
+      ('byok_invalid_key', ReprocessProviderAccountCode.invalidKey),
+    ]) {
+      test('429 $wireCode preserves the provider account code without a message', () {
+        final result = reprocessResultFromResponse(_json(429, {
+          'detail': {'code': wireCode},
+        }));
+        expect(result, isA<ReprocessProviderAccountFailure>().having((result) => result.code, 'code', code));
+      });
+    }
+
     test('502 app_result_failed and 500 are failures', () {
       expect(
         reprocessResultFromResponse(_json(502, {
-          'detail': {'code': 'app_result_failed', 'message': 'no content'},
+          'detail': {'code': 'app_result_failed', 'message': 'no content', 'failure_class': 'empty_model_output'},
         })),
         isA<ReprocessFailed>(),
       );
       expect(reprocessResultFromResponse(http.Response('', 500)), isA<ReprocessFailed>());
     });
+  });
+
+  test('reprocess repeats a typed 503 once using Retry-After and the same template', () async {
+    final urls = <String>[];
+    final delays = <Duration>[];
+    final result = await reProcessConversationServer(
+      'conv-summary',
+      appId: 'pg',
+      send: (url) async {
+        urls.add(url);
+        return _json(503, {
+          'detail': {'code': 'conversation_processing_retryable'},
+        }, headers: {
+          'retry-after': '4'
+        });
+      },
+      waitBeforeRetry: (delay) async => delays.add(delay),
+    );
+    expect(urls, hasLength(2));
+    expect(urls.first, endsWith('/conv-summary/reprocess?app_id=pg'));
+    expect(urls.last, urls.first);
+    expect(delays, [const Duration(seconds: 4)]);
+    expect(result, isA<ReprocessFailed>().having((result) => result.statusCode, 'statusCode', 503));
+  });
+
+  test('reprocess does not automatically repeat an untyped 503 or a 502', () async {
+    for (final status in [502, 503]) {
+      var sends = 0;
+      final result = await reProcessConversationServer(
+        'conv-summary',
+        appId: 'pg',
+        send: (_) async {
+          sends++;
+          return http.Response('', status);
+        },
+        waitBeforeRetry: (_) async => fail('Only a typed processing 503 can be repeated'),
+      );
+      expect(sends, 1);
+      expect(result, isA<ReprocessFailed>().having((result) => result.statusCode, 'statusCode', status));
+    }
   });
 
   group('reprocessConversation outcome', () {

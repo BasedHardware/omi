@@ -1128,11 +1128,23 @@ if current == 1 or ttl < 0 then
     redis.call('EXPIRE', key, window)
     ttl = window
 end
+if ARGV[3] then
+    local now = redis.call('TIME')
+    local expires_at = now[1] * 1000 + math.floor(now[2] / 1000) + redis.call('PTTL', key)
+    return {1, current, ttl, expires_at}
+end
 return {1, current, ttl}
 """)
 
 _RATE_LIMIT_RELEASE_LUA_SOURCE = """
 local key = KEYS[1]
+if ARGV[1] then
+    local ttl = redis.call('PTTL', key)
+    local now = redis.call('TIME')
+    if ttl < 0 or now[1] * 1000 + math.floor(now[2] / 1000) + ttl ~= tonumber(ARGV[1]) then
+        return 0
+    end
+end
 local current = tonumber(redis.call('GET', key) or '0') or 0
 if current <= 1 then
     redis.call('DEL', key)
@@ -1187,10 +1199,21 @@ def reserve_rate_limit(
     return allowed, remaining, reset_seconds
 
 
-def release_rate_limit(key: str, policy: str) -> None:
+def reserve_rate_limit_slot(key: str, policy: str, max_requests: int, window: int) -> tuple[bool, int, int | None]:
+    """Reserve a slot and capture its bucket expiry for a guarded refund."""
+    result = _RATE_LIMIT_RESERVE_LUA(
+        keys=[f'rl:{policy}:{key}'], args=[window, max_requests, 1], client=request_deadline_redis_client()
+    )
+    return bool(result[0]), max(0, int(result[2])), int(result[3]) if result[0] else None
+
+
+def release_rate_limit(key: str, policy: str, *, expires_at_ms: int | None = None) -> None:
     """Release one previously admitted reversible rate-limit slot."""
     redis_key = f'rl:{policy}:{key}'
-    _RATE_LIMIT_RELEASE_LUA(keys=[redis_key], args=[])
+    if expires_at_ms is None:
+        _RATE_LIMIT_RELEASE_LUA(keys=[redis_key], args=[])
+    else:
+        _RATE_LIMIT_RELEASE_LUA(keys=[redis_key], args=[expires_at_ms], client=request_deadline_redis_client())
 
 
 # Atomic TTS rate-limit: burst (sliding-window ZSET) + daily char counter.

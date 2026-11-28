@@ -14003,6 +14003,16 @@ class AppLocalizationsUr extends AppLocalizations {
   String get summaryFailedTitle => 'خلاصہ نہیں ہو سکا';
 
   @override
+  String get summaryProviderQuota => 'اپنے اے آئی فراہم کنندہ کے اکاؤنٹ میں رقم ڈالیں یا اس کا کوٹا دیکھیں۔';
+
+  @override
+  String get summaryProviderRateLimit =>
+      'آپ کا اے آئی فراہم کنندہ درخواستوں کی شرح محدود کر رہا ہے۔ بعد میں دوبارہ کوشش کریں۔';
+
+  @override
+  String get summaryProviderInvalidKey => 'سیٹنگز میں اپنے اے آئی فراہم کنندہ کی API کلید اپ ڈیٹ کریں۔';
+
+  @override
   String get summaryFailedBody => 'اس گفتگو کا خلاصہ کرتے وقت کچھ غلط ہو گیا۔';
 
   @override

@@ -13,6 +13,7 @@ from fastapi import HTTPException
 from utils.byok import get_byok_key, has_validated_byok_keys
 from utils.conversations.processing_metrics import record_retryable_processing_response
 from utils.conversations.processing_retry import retryable_provider_failure_class
+from utils.conversations.reprocess_contract import EmptyAppResult
 from utils.other.raise_site import raise_site_of, tag_raise_site
 from utils.other.request_deadline import RequestDeadlineExceeded
 
@@ -70,6 +71,10 @@ _BYOK_ACCOUNT_STATE_FAILURE_CLASSES = frozenset(
     {BYOK_RATE_LIMIT_FAILURE_CLASS, BYOK_QUOTA_FAILURE_CLASS, BYOK_INVALID_KEY_FAILURE_CLASS}
 )
 GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL = 'Error processing conversation, please try again later'
+APP_RESULT_FAILED_ERROR_DETAIL = {
+    'code': 'app_result_failed',
+    'message': 'The selected app produced no summary content.',
+}
 # A provider/transport fault another attempt can clear is not a server fault and
 # not a terminal answer: the conversation is preserved and the caller can retry.
 # Answering the explicit retryable contract (503 + Retry-After) instead of the
@@ -189,21 +194,16 @@ def classify_byok_provider_failure(error: BaseException) -> ByokProviderFailure 
     status_code = getattr(error, 'status_code', None)
     body = getattr(error, 'body', None)
     gateway_error = body.get('error', body) if isinstance(body, Mapping) else None
-    if status_code == 429 and isinstance(gateway_error, Mapping):
-        if (
-            _string_value(gateway_error.get('code')) == GATEWAY_CREDENTIAL_FAILURE_CODE
-            and _string_value(gateway_error.get('failure_class')) == BYOK_RATE_LIMIT_FAILURE_CLASS
-        ):
+    if (
+        isinstance(gateway_error, Mapping)
+        and _string_value(gateway_error.get('code')) == GATEWAY_CREDENTIAL_FAILURE_CODE
+    ):
+        failure_class = _string_value(gateway_error.get('failure_class'))
+        if status_code == 429 and failure_class == BYOK_RATE_LIMIT_FAILURE_CLASS:
             return ByokProviderFailure(BYOK_RATE_LIMIT_FAILURE_CLASS, 'gateway')
-        if (
-            _string_value(gateway_error.get('code')) == GATEWAY_CREDENTIAL_FAILURE_CODE
-            and _string_value(gateway_error.get('failure_class')) == BYOK_QUOTA_FAILURE_CLASS
-        ):
+        if status_code == 429 and failure_class == BYOK_QUOTA_FAILURE_CLASS:
             return ByokProviderFailure(BYOK_QUOTA_FAILURE_CLASS, 'gateway')
-        if (
-            _string_value(gateway_error.get('code')) == GATEWAY_CREDENTIAL_FAILURE_CODE
-            and _string_value(gateway_error.get('failure_class')) == 'byok_auth'
-        ):
+        if status_code in (401, 429) and failure_class == 'byok_auth':
             return ByokProviderFailure(BYOK_INVALID_KEY_FAILURE_CLASS, 'gateway')
 
     error_module = type(error).__module__
@@ -419,7 +419,11 @@ def retryable_processing_response_failure_class(error: HTTPException) -> str | N
 
 
 def conversation_processing_http_exception(
-    error: BaseException, *, route: str = 'conversation_processing'
+    error: BaseException,
+    *,
+    route: str = 'conversation_processing',
+    empty_app_result: EmptyAppResult | None = None,
+    conversation_id: str | None = None,
 ) -> HTTPException:
     """Map a processing failure to the existing safe HTTP contract.
 
@@ -431,6 +435,7 @@ def conversation_processing_http_exception(
     answers the explicit retryable contract (503 + Retry-After) and logs one
     bounded WARNING: the conversation is preserved and the caller retries, so
     the timeout class never surfaces as an unhandled processing 500.
+    An app result with known empty input or output answers 502.
     Every other exception retains the existing generic response and a
     privacy-safe log entry.
     """
@@ -445,5 +450,14 @@ def conversation_processing_http_exception(
     retryable = retryable_provider_failure_http_exception(error, route=route)
     if retryable is not None:
         return retryable
+    if empty_app_result is not None:
+        failure_class = empty_app_result.value
+        logger.warning(
+            'selected app produced no summary: failure_class=%s route=%s conversation_id=%s',
+            failure_class,
+            route,
+            conversation_id,
+        )
+        return HTTPException(status_code=502, detail={**APP_RESULT_FAILED_ERROR_DETAIL, 'failure_class': failure_class})
     logger.error('Conversation processing failed: %s', type(error).__name__)
     return HTTPException(status_code=500, detail=GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL)

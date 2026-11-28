@@ -751,26 +751,34 @@ def rate_limit_dependency(
     return rate_limit
 
 
-def _enforce_rate_limit(key: str, policy_name: str, *, fail_closed: bool = False) -> None:
+def _enforce_rate_limit(
+    key: str, policy_name: str, *, fail_closed: bool = False, refundable: bool = False
+) -> int | None:
     """Shared rate limit enforcement. Raises HTTPException(429) or logs in shadow mode.
 
     One Redis round-trip per call (Lua script). Fail-open on Redis errors.
     """
     max_requests, window = get_effective_limit(policy_name)
+    expires_at_ms = None
     try:
-        allowed, _remaining, retry_after = check_rate_limit(key, policy_name, max_requests, window)
+        if refundable:
+            from database.redis_db import reserve_rate_limit_slot
+
+            allowed, retry_after, expires_at_ms = reserve_rate_limit_slot(key, policy_name, max_requests, window)
+        else:
+            allowed, _remaining, retry_after = check_rate_limit(key, policy_name, max_requests, window)
     except redis_pkg.exceptions.RedisError as e:  # type: ignore[reportAttributeAccessIssue]  # redis pkg exposes exceptions at runtime
         logger.error(f"Rate limit Redis error policy={policy_name} key={key}: {e}")
         if fail_closed:
             raise tag_raise_site(
                 HTTPException(status_code=503, detail="Rate limiter unavailable"), 'rate_limiter_unavailable'
             )
-        return
+        return None
 
     if not allowed:
         if RATE_LIMIT_SHADOW:
             logger.warning(f"[shadow] rate_limit_exceeded policy={policy_name} key={key} retry_after={retry_after}")
-            return
+            return None
         raise HTTPException(
             status_code=429,
             detail=f"Rate limit exceeded. Try again in {retry_after}s.",
@@ -780,6 +788,7 @@ def _enforce_rate_limit(key: str, policy_name: str, *, fail_closed: bool = False
                 "Retry-After": str(retry_after),
             },
         )
+    return expires_at_ms
 
 
 def rate_limit_key_for_context(auth_context: Any) -> str:
@@ -877,6 +886,11 @@ def check_rate_limit_inline(key: str, policy_name: str) -> None:
     Use when auth is not a standard Depends() pattern (e.g., MCP, integration).
     """
     _enforce_rate_limit(key, policy_name)
+
+
+def reserve_rate_limit_inline(key: str, policy_name: str) -> int | None:
+    """Return a refundable bucket expiry only when a slot was reserved."""
+    return _enforce_rate_limit(key, policy_name, refundable=True)
 
 
 F = TypeVar("F", bound=Callable[..., Any])

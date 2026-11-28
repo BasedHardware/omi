@@ -13998,6 +13998,16 @@ class AppLocalizationsSr extends AppLocalizations {
   String get summaryFailedTitle => 'Сажимање није успело';
 
   @override
+  String get summaryProviderQuota => 'Допуните стање на налогу код свог пружаоца AI услуге или проверите квоту.';
+
+  @override
+  String get summaryProviderRateLimit =>
+      'Ваш пружалац AI услуге ограничава учесталост захтева. Покушајте поново касније.';
+
+  @override
+  String get summaryProviderInvalidKey => 'Ажурирајте API кључ свог пружаоца AI услуге у подешавањима.';
+
+  @override
   String get summaryFailedBody => 'Дошло је до грешке приликом сажимања овог разговора.';
 
   @override

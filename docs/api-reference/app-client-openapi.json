@@ -55669,7 +55669,7 @@
             "description": "Conversation processing failed"
           },
           "502": {
-            "description": "The selected app produced no summary (detail code app_result_failed)"
+            "description": "The selected app produced no summary (detail code app_result_failed with failure_class empty_context or empty_model_output)"
           },
           "503": {
             "content": {

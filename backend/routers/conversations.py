@@ -1012,6 +1012,24 @@ def get_conversation_finalization_status(
     return status
 
 
+_REPROCESS_RATE_POLICY = 'conversations:reprocess'
+
+
+def _reserve_reprocess_slot(uid: str = Depends(auth.get_current_user_uid)) -> int | None:
+    return auth.reserve_rate_limit_inline(uid, _REPROCESS_RATE_POLICY)
+
+
+def _release_retryable_reprocess_slot(uid: str, expires_at_ms: int, error: BaseException) -> None:
+    from redis.exceptions import RedisError
+    from utils.llm.gateway_error_contract import is_retryable_processing_http_exception
+
+    if is_retryable_processing_http_exception(error):
+        try:
+            redis_db.release_rate_limit(uid, _REPROCESS_RATE_POLICY, expires_at_ms=expires_at_ms)
+        except RedisError:
+            logger.warning('Rate limit release failed policy=%s', _REPROCESS_RATE_POLICY)
+
+
 @router.post(
     '/v1/conversations/{conversation_id}/reprocess',
     response_model=Conversation,
@@ -1035,7 +1053,10 @@ def get_conversation_finalization_status(
                 }
             },
         },
-        502: {'description': 'The selected app produced no summary (detail code app_result_failed)'},
+        502: {
+            'description': 'The selected app produced no summary (detail code app_result_failed with failure_class '
+            'empty_context or empty_model_output)'
+        },
         503: {
             'description': 'Transient provider failure; the in-progress conversation is recoverable and may be retried',
             'content': {
@@ -1065,9 +1086,10 @@ def reprocess_conversation(
     language_code: Optional[str] = None,
     app_id: Optional[str] = None,
     source: Optional[Literal['omi']] = None,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:reprocess")),
+    uid: str = Depends(auth.get_current_user_uid),
     response: Response = None,  # type: ignore[assignment]
     background_tasks: BackgroundTasks = None,
+    rate_limit_expiry: int | None = Depends(_reserve_reprocess_slot),
 ):
     """
     Whenever a user wants to reprocess a conversation, or wants to force process a discarded one
@@ -1155,8 +1177,10 @@ def reprocess_conversation(
             detail={'code': 'recording_restore_retry_required', 'message': 'Recording restore needs a retry'},
             headers={'Retry-After': '1'},
         ) from error
-    except Exception:
+    except Exception as error:
         attention_db.finish(uid, operation, 'failed')
+        if isinstance(rate_limit_expiry, int):
+            _release_retryable_reprocess_slot(uid, rate_limit_expiry, error)
         raise
     attention_db.finish(uid, operation, 'succeeded' if _reprocess_succeeded(result, app_id) else 'failed')
     return result

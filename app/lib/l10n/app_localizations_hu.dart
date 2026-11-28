@@ -14045,6 +14045,15 @@ class AppLocalizationsHu extends AppLocalizations {
   String get summaryFailedTitle => 'Nem sikerült összefoglalni';
 
   @override
+  String get summaryProviderQuota => 'Töltsd fel az egyenlegedet az AI-szolgáltatódnál, vagy ellenőrizd a kvótádat.';
+
+  @override
+  String get summaryProviderRateLimit => 'Az AI-szolgáltatód korlátozza a kérések gyakoriságát. Próbáld meg később.';
+
+  @override
+  String get summaryProviderInvalidKey => 'Frissítsd az AI-szolgáltatód API-kulcsát a beállításokban.';
+
+  @override
   String get summaryFailedBody => 'Hiba történt a beszélgetés összefoglalása közben.';
 
   @override

@@ -13987,6 +13987,15 @@ class AppLocalizationsBn extends AppLocalizations {
   String get summaryFailedTitle => 'সারসংক্ষেপ করা যায়নি';
 
   @override
+  String get summaryProviderQuota => 'আপনার এআই প্রদানকারীর অ্যাকাউন্টে ব্যালান্স যোগ করুন বা কোটা দেখুন।';
+
+  @override
+  String get summaryProviderRateLimit => 'আপনার এআই প্রদানকারী অনুরোধের হার সীমিত করছে। পরে আবার চেষ্টা করুন।';
+
+  @override
+  String get summaryProviderInvalidKey => 'সেটিংসে আপনার এআই প্রদানকারীর API কী আপডেট করুন।';
+
+  @override
   String get summaryFailedBody => 'এই কথোপকথনের সারসংক্ষেপ করার সময় কিছু ভুল হয়েছে।';
 
   @override

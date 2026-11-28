@@ -13974,6 +13974,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get summaryFailedTitle => 'Couldn\'t summarize';
 
   @override
+  String get summaryProviderQuota => 'Top up your AI provider account or check its quota.';
+
+  @override
+  String get summaryProviderRateLimit => 'Your AI provider is rate limiting requests. Try again later.';
+
+  @override
+  String get summaryProviderInvalidKey => 'Update your AI provider’s API key in Settings.';
+
+  @override
   String get summaryFailedBody => 'Something went wrong while summarizing this conversation.';
 
   @override

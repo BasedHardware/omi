@@ -14096,6 +14096,16 @@ class AppLocalizationsDe extends AppLocalizations {
   String get summaryFailedTitle => 'Zusammenfassung fehlgeschlagen';
 
   @override
+  String get summaryProviderQuota => 'Lade dein Guthaben beim KI-Anbieter auf oder prüfe dein Kontingent.';
+
+  @override
+  String get summaryProviderRateLimit =>
+      'Dein KI-Anbieter begrenzt die Anzahl der Anfragen pro Zeitraum. Versuche es später erneut.';
+
+  @override
+  String get summaryProviderInvalidKey => 'Aktualisiere den API-Schlüssel deines KI-Anbieters in den Einstellungen.';
+
+  @override
   String get summaryFailedBody => 'Beim Zusammenfassen dieses Gesprächs ist ein Fehler aufgetreten.';
 
   @override

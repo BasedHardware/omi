@@ -14036,6 +14036,15 @@ class AppLocalizationsBg extends AppLocalizations {
   String get summaryFailedTitle => 'Неуспешно обобщаване';
 
   @override
+  String get summaryProviderQuota => 'Заредете сметката си при доставчика на ИИ или проверете квотата.';
+
+  @override
+  String get summaryProviderRateLimit => 'Доставчикът ви на ИИ ограничава честотата на заявките. Опитайте по-късно.';
+
+  @override
+  String get summaryProviderInvalidKey => 'Актуализирайте API ключа на доставчика на ИИ в настройките.';
+
+  @override
   String get summaryFailedBody => 'Нещо се обърка при обобщаването на този разговор.';
 
   @override

@@ -13990,6 +13990,15 @@ class AppLocalizationsVi extends AppLocalizations {
   String get summaryFailedTitle => 'Không thể tóm tắt';
 
   @override
+  String get summaryProviderQuota => 'Nạp thêm tiền vào tài khoản của nhà cung cấp AI hoặc kiểm tra hạn mức.';
+
+  @override
+  String get summaryProviderRateLimit => 'Nhà cung cấp AI của bạn đang giới hạn tần suất yêu cầu. Hãy thử lại sau.';
+
+  @override
+  String get summaryProviderInvalidKey => 'Cập nhật khóa API của nhà cung cấp AI trong phần Cài đặt.';
+
+  @override
   String get summaryFailedBody => 'Đã xảy ra lỗi khi tóm tắt cuộc trò chuyện này.';
 
   @override

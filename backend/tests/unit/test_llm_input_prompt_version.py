@@ -78,7 +78,8 @@ PINNED: dict[str, dict[str, str]] = {
         'notes-9': 'd150f39c05377979d9f7f42055f44b7abc9f1b548c06f12229d2e9482d25d135',
         'notes-10': 'f30e589568d4f2050e800e032e2edff2d9c9117d48a2138db22bd48721d37450',
         # The async notes runner changes scheduling while keeping the same prompt inputs and output schema.
-        'notes-11': '43bdbc97e42c08cb75a8e472a8dd6e61cb47d244dd61d75fb820f385ade608ef',
+        # Explicit-template empty-result handling also lives in the hashed module.
+        'notes-11': '74fb851a24677f790ceab70c1ccdd7000bc8e43ca06b9bae0a59a473289b7d7c',
     },
     'l1': {'l1-1': '0ad51076315481003b05af2a90ce18797539846e35f4970680dff906c00b7d70'},
 }

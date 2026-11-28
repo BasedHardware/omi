@@ -13990,6 +13990,16 @@ class AppLocalizationsCs extends AppLocalizations {
   String get summaryFailedTitle => 'Shrnutí se nezdařilo';
 
   @override
+  String get summaryProviderQuota => 'Dobijte kredit u svého poskytovatele AI nebo zkontrolujte kvótu.';
+
+  @override
+  String get summaryProviderRateLimit =>
+      'Váš poskytovatel AI omezuje počet požadavků za určitou dobu. Zkuste to později.';
+
+  @override
+  String get summaryProviderInvalidKey => 'Aktualizujte klíč API svého poskytovatele AI v nastavení.';
+
+  @override
   String get summaryFailedBody => 'Při shrnování této konverzace se něco pokazilo.';
 
   @override

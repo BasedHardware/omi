@@ -14063,6 +14063,16 @@ class AppLocalizationsIt extends AppLocalizations {
   String get summaryFailedTitle => 'Impossibile riassumere';
 
   @override
+  String get summaryProviderQuota => 'Ricarica il saldo del tuo account presso il provider di IA o controlla la quota.';
+
+  @override
+  String get summaryProviderRateLimit =>
+      'Il tuo provider di IA limita la frequenza delle richieste. Riprova più tardi.';
+
+  @override
+  String get summaryProviderInvalidKey => 'Aggiorna la chiave API del tuo provider di IA nelle impostazioni.';
+
+  @override
   String get summaryFailedBody => 'Si è verificato un problema durante il riassunto di questa conversazione.';
 
   @override

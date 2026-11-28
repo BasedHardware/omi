@@ -14044,6 +14044,16 @@ class AppLocalizationsTe extends AppLocalizations {
   String get summaryFailedTitle => 'సారాంశం చేయలేకపోయాము';
 
   @override
+  String get summaryProviderQuota => 'మీ AI ప్రొవైడర్ ఖాతాలో బ్యాలెన్స్ జోడించండి లేదా కోటాను తనిఖీ చేయండి.';
+
+  @override
+  String get summaryProviderRateLimit =>
+      'మీ AI ప్రొవైడర్ అభ్యర్థనల రేటును పరిమితం చేస్తున్నారు. తర్వాత మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get summaryProviderInvalidKey => 'సెట్టింగ్‌లలో మీ AI ప్రొవైడర్ API కీని అప్‌డేట్ చేయండి.';
+
+  @override
   String get summaryFailedBody => 'ఈ సంభాషణను సారాంశం చేస్తున్నప్పుడు ఏదో తప్పు జరిగింది.';
 
   @override

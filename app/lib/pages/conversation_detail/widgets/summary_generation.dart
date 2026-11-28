@@ -324,6 +324,14 @@ class SummaryFailureCard extends StatelessWidget {
           null,
           null,
         ),
+      SummaryFailureKind.providerAccount => (
+          l10n.summaryFailedTitle,
+          failure.providerAccountMessage(l10n),
+          l10n.ok,
+          () async => provider.dismissSummaryFailure(),
+          null,
+          null,
+        ),
       SummaryFailureKind.transcriptionPending => (
           l10n.summaryTranscriptionPendingTitle,
           l10n.summaryTranscriptionPendingBody,
@@ -344,6 +352,7 @@ class SummaryFailureCard extends StatelessWidget {
     // Retrying is pointless while another reprocess runs; acknowledging never is.
     final blocked = busy &&
         failure.kind != SummaryFailureKind.rateLimited &&
+        failure.kind != SummaryFailureKind.providerAccount &&
         failure.kind != SummaryFailureKind.transcriptionPending;
 
     return Padding(

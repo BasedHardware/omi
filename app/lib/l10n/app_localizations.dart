@@ -24873,6 +24873,24 @@ abstract class AppLocalizations {
   /// **'Couldn\'t summarize'**
   String get summaryFailedTitle;
 
+  /// Reprocess summary failure when the configured AI provider account is out of credit or quota.
+  ///
+  /// In en, this message translates to:
+  /// **'Top up your AI provider account or check its quota.'**
+  String get summaryProviderQuota;
+
+  /// Reprocess summary failure when the AI provider is rate limiting requests.
+  ///
+  /// In en, this message translates to:
+  /// **'Your AI provider is rate limiting requests. Try again later.'**
+  String get summaryProviderRateLimit;
+
+  /// Reprocess summary failure when the AI provider rejected the API key.
+  ///
+  /// In en, this message translates to:
+  /// **'Update your AI provider’s API key in Settings.'**
+  String get summaryProviderInvalidKey;
+
   /// Body when summarizing the conversation failed for an unknown reason.
   ///
   /// In en, this message translates to:

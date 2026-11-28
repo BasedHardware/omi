@@ -14050,6 +14050,16 @@ class AppLocalizationsRo extends AppLocalizations {
   String get summaryFailedTitle => 'Nu s-a putut rezuma';
 
   @override
+  String get summaryProviderQuota => 'Alimentează contul la furnizorul tău de IA sau verifică limita de utilizare.';
+
+  @override
+  String get summaryProviderRateLimit =>
+      'Furnizorul tău de IA limitează frecvența solicitărilor. Încearcă din nou mai târziu.';
+
+  @override
+  String get summaryProviderInvalidKey => 'Actualizează cheia API a furnizorului tău de IA din setări.';
+
+  @override
   String get summaryFailedBody => 'A apărut o problemă la rezumarea acestei conversații.';
 
   @override

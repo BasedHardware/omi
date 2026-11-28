@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
@@ -397,6 +398,23 @@ void main() {
       final l10n = summaryL10n(tester);
       expect(find.text(l10n.summaryLimitTitle), findsOneWidget);
       expect(find.text(l10n.summaryLimitBody), findsOneWidget);
+      await tester.tap(find.text(l10n.ok));
+      await tester.pump();
+      expect(provider.summaryFailure, isNull);
+    });
+
+    testWidgets('BYOK quota shows local guidance and can be acknowledged', (tester) async {
+      const message = 'Raw gateway text';
+      final result = reprocessResultFromResponse(http.Response(
+        '{"detail":{"code":"byok_quota","message":"$message"}}',
+        429,
+      ));
+      final provider = await fail(tester, result, appId: 'pg');
+      final l10n = summaryL10n(tester);
+      expect(find.text(l10n.summaryProviderQuota), findsOneWidget);
+      expect(find.text(message), findsNothing);
+      expect(find.text(l10n.summaryLimitTitle), findsNothing);
+      expect(find.text(l10n.tryAgain), findsNothing);
       await tester.tap(find.text(l10n.ok));
       await tester.pump();
       expect(provider.summaryFailure, isNull);

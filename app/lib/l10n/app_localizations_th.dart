@@ -13921,6 +13921,15 @@ class AppLocalizationsTh extends AppLocalizations {
   String get summaryFailedTitle => 'สรุปไม่ได้';
 
   @override
+  String get summaryProviderQuota => 'เติมเงินในบัญชีผู้ให้บริการ AI ของคุณหรือตรวจสอบโควตา';
+
+  @override
+  String get summaryProviderRateLimit => 'ผู้ให้บริการ AI ของคุณกำลังจำกัดความถี่ของคำขอ โปรดลองอีกครั้งในภายหลัง';
+
+  @override
+  String get summaryProviderInvalidKey => 'อัปเดตคีย์ API ของผู้ให้บริการ AI ในการตั้งค่า';
+
+  @override
   String get summaryFailedBody => 'เกิดข้อผิดพลาดขณะสรุปบทสนทนานี้';
 
   @override

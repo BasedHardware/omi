@@ -4,12 +4,16 @@ The real router, real processor and real restore run against the strict store. O
 the external model and app boundaries are controlled.
 """
 
+import logging
 from copy import deepcopy
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import httpx
 import pytest
-from fastapi import BackgroundTasks, HTTPException, Response
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Response
+from fastapi.testclient import TestClient
+from openai import APITimeoutError, AuthenticationError, RateLimitError
 
 import routers.conversations as conv_router
 from database import apps as apps_db
@@ -22,6 +26,9 @@ from tests.unit.test_restore_recording_obligation import CID, JOB_PATH, ROW_PATH
 from utils import apps as utils_apps
 from utils.batch_pipeline import live
 from utils.conversations import process_conversation as processor
+from utils.llm import conversation_processing as llm_processing
+from utils.llm.clients import _LLMErrorCallback
+from utils.llm.gateway_error_contract import GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL
 
 APP_ID = 'summary-app'
 
@@ -55,7 +62,15 @@ def reprocess(restore_store, monkeypatch):
     monkeypatch.setattr(processor, 'save_structured_vector', MagicMock(), raising=False)
     # The selected app is validated against the app store and the user's enablement; the
     # app model call returns the summary. The processor's real explicit-selection check runs on it.
-    app = SimpleNamespace(id=APP_ID, disabled=False, enabled=True, works_with_memories=lambda: True)
+    app = SimpleNamespace(
+        id=APP_ID,
+        name='Synthetic app',
+        description='Synthetic description',
+        memory_prompt='Summarize this',
+        disabled=False,
+        enabled=True,
+        works_with_memories=lambda: True,
+    )
     monkeypatch.setattr(apps_db, 'get_app_by_id_db', lambda app_id: {'id': app_id})
     monkeypatch.setattr(utils_apps, 'get_available_app_model_by_id', lambda *a, **k: app)
     monkeypatch.setattr(utils_apps, 'is_user_app_enabled', lambda *a, **k: True)
@@ -64,6 +79,7 @@ def reprocess(restore_store, monkeypatch):
     # before the model boundary, which would look like an empty summary.
     monkeypatch.setattr(notification_db, 'get_user_time_zone', lambda uid: '')
     monkeypatch.setattr(processor, 'get_app_result', lambda *a, **k: 'Synthetic app summary.')
+    monkeypatch.setattr(processor, 'record_app_usage', MagicMock())
     # Dream dirty marking is out of scope; its marker needs a document update StrictFirestore omits.
     monkeypatch.setattr(dream_dirty, 'mode', lambda: 'off')
     # The app-output write goes through update(), which StrictFirestore omits; merge into the row instead.
@@ -105,18 +121,137 @@ def test_successful_reprocess_restores_with_exactly_one_obligation(reprocess, mo
     assert reprocess.rows[ROW_PATH]['discarded'] is False
     assert processed.discarded is False
     assert reprocess.rows[JOB_PATH]['state'] == 'record_pending'
+    processor.record_app_usage.assert_called_once()
 
 
-def test_failed_selected_app_leaves_the_row_hidden_without_visibility(reprocess, monkeypatch):
+def test_reprocess_retryable_failure_refunds_only_its_hourly_slot(reprocess, monkeypatch):
+    usage = 9
+    bucket_expiry = 123456789
+    # The strict store captures encrypted writes. Supply the decrypted row that
+    # the production conversation reader would return on each request.
+    initial_row = deepcopy(reprocess.rows[ROW_PATH])
+    monkeypatch.setattr(conv_router, '_get_valid_conversation_by_id', lambda uid, cid: deepcopy(initial_row))
+
+    def reserve(uid, policy, limit, window):
+        nonlocal usage
+        assert (uid, policy, limit, window) == (UID, 'conversations:reprocess', 10, 3600)
+        if usage == limit:
+            return False, 60, None
+        usage += 1
+        return True, 60, bucket_expiry
+
+    def release(uid, policy, *, expires_at_ms):
+        nonlocal usage
+        assert (uid, policy, expires_at_ms) == (UID, 'conversations:reprocess', bucket_expiry)
+        usage -= 1
+
+    monkeypatch.setattr(conv_router.redis_db, 'reserve_rate_limit_slot', reserve)
+    monkeypatch.setattr(conv_router.redis_db, 'release_rate_limit', release)
+    monkeypatch.setattr(conv_router.auth, 'RATE_LIMIT_SHADOW', False)
+    monkeypatch.setenv('CONVERSATION_PROCESSING_RETRYABLE_PROVIDER_FAILURE_ENABLED', '1')
+    app_result = MagicMock(
+        side_effect=[APITimeoutError(request=httpx.Request('POST', 'https://example.invalid')), 'Synthetic summary']
+    )
+    monkeypatch.setattr(processor, 'get_app_result', app_result)
+    app = FastAPI()
+    app.include_router(conv_router.router)
+    app.dependency_overrides[conv_router.auth.get_current_user_uid] = lambda: UID
+    url = f'/v1/conversations/{CID}/reprocess?app_id={APP_ID}'
+    with TestClient(app) as client:
+        first = client.post(url)
+        assert first.status_code == 503
+        assert first.json()['detail']['code'] == 'conversation_processing_retryable'
+        assert usage == 9
+
+        retry = client.post(url)
+        assert retry.status_code == 200
+        assert usage == 10
+
+        exhausted = client.post(url)
+        assert exhausted.status_code == 429
+        assert exhausted.json() == {'detail': 'Rate limit exceeded. Try again in 60s.'}
+        assert exhausted.headers['Retry-After'] == '60'
+        assert usage == 10
+    assert app_result.call_count == 2
+    processor.record_app_usage.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    ('outcome', 'status', 'code', 'logged_class'),
+    [
+        ('quota', 429, 'byok_quota', 'byok_quota'),
+        ('rate_limit', 429, 'byok_rate_limit', 'byok_rate_limit'),
+        ('rejected_key', 429, 'byok_invalid_key', 'byok_invalid_key'),
+        ('timeout', 503, 'conversation_processing_retryable', 'timeout'),
+        ('timeout_switch_off', 500, None, 'APITimeoutError'),
+        ('empty_model_output', 502, 'app_result_failed', 'empty_model_output'),
+        ('empty_context', 502, 'app_result_failed', 'empty_context'),
+        ('bug', 500, None, 'RuntimeError'),
+    ],
+)
+def test_reprocess_app_result_failure_keeps_the_row_hidden(
+    reprocess, monkeypatch, caplog, outcome, status, code, logged_class
+):
     registrations = _count_restore_registrations(monkeypatch)
-    # The selected app returns no summary: the processor's explicit-selection branch raises.
-    monkeypatch.setattr(processor, 'get_app_result', lambda *a, **k: '')
+    monkeypatch.setattr(processor, 'get_app_result', llm_processing.get_app_result)
+    transcript = '' if outcome == 'empty_context' else 'Synthetic transcript.'
+    monkeypatch.setattr(processor, 'conversation_transcript_for_llm', lambda *a, **k: transcript)
+    monkeypatch.setenv(
+        'CONVERSATION_PROCESSING_RETRYABLE_PROVIDER_FAILURE_ENABLED', '0' if outcome.endswith('_off') else '1'
+    )
+    request = httpx.Request('POST', 'https://example.invalid')
+    private_message = 'raw provider message'
+    provider_classes = {'quota': 'byok_quota', 'rate_limit': 'byok_rate_limit', 'rejected_key': 'byok_auth'}
+    original = None
+    if outcome in provider_classes:
+        sdk_status = 401 if outcome == 'rejected_key' else 429
+        error_type = AuthenticationError if sdk_status == 401 else RateLimitError
+        original = error_type(
+            private_message,
+            response=httpx.Response(sdk_status, request=request),
+            body={'error': {'code': 'credential_failure', 'failure_class': provider_classes[outcome]}},
+        )
+    elif outcome.startswith('timeout'):
+        original = APITimeoutError(request=request)
+    elif outcome == 'bug':
+        original = RuntimeError(private_message)
+
+    def invoke(_messages):
+        if original is not None:
+            _LLMErrorCallback('openai', feature='conv_app_result').on_llm_error(original)
+            raise original
+        return SimpleNamespace(content=' ``` ``` ')
+
+    model = MagicMock()
+    model.invoke.side_effect = invoke
+    monkeypatch.setattr(llm_processing, 'get_llm', lambda *a, **k: model)
 
     with pytest.raises(HTTPException) as error:
         _call()
 
-    # The HTTP error is chained to the processor's explicit-selection failure, not a generic one.
+    assert error.value.status_code == status
+    if code:
+        assert error.value.detail['code'] == code
+    else:
+        assert error.value.detail == GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL
+    assert (error.value.headers or {}).get('Retry-After') == ('2' if status == 503 else None)
     assert isinstance(error.value.__cause__, processor.ExplicitAppSelectionFailedError)
+    assert error.value.__cause__.__cause__ is original
+    assert model.invoke.call_count == (0 if outcome == 'empty_context' else 1)
+    gateway_logs = [record for record in caplog.records if record.name.endswith('gateway_error_contract')]
+    assert len(gateway_logs) == 1
+    record = gateway_logs[0]
+    assert logged_class in record.getMessage()
+    if code:
+        assert 'route=conversation_processing/app_result' in record.getMessage()
+    if status == 502:
+        assert error.value.detail['failure_class'] == logged_class
+        assert 'conversation_id' not in error.value.detail
+        assert record.levelno == logging.WARNING
+        assert record.getMessage().endswith(f'conversation_id={CID}')
+        processor.record_app_usage.assert_not_called()
+    assert private_message not in caplog.text
+    assert private_message not in str(error.value.detail)
     assert registrations == []
     assert reprocess.rows[ROW_PATH]['discarded'] is True
     assert JOB_PATH not in reprocess.rows
