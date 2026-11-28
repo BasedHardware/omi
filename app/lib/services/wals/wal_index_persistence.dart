@@ -23,11 +23,27 @@ extension _WalIndexPersistence on LocalWalSyncImpl {
     _forceIndexWrite = false;
     // Capture keys at admission, never from mutable rows after an await.
     final confirmedKeys = delta.disk.map(_durableKey).toList();
+    // Snapshot the held rows admitted by this write. Keep pending marks on
+    // failure so whichever save commits the rows can count them once.
+    final emitHeldTailCount = _lifecycleHeldTailCount;
+    final lifecycleHeldTails = emitHeldTailCount == null
+        ? const <Wal>[]
+        : delta.disk.where((wal) => wal.holdForUser && _pendingLifecycleHeldTails[wal] == true).toList();
     final write = _writeIndexDelta(delta);
     _indexWriteInFlight = write;
     try {
       await write;
       _confirmedDurableWalKeys.addAll(confirmedKeys);
+      if (lifecycleHeldTails.isNotEmpty) {
+        for (final wal in lifecycleHeldTails) {
+          _pendingLifecycleHeldTails[wal] = null;
+        }
+        try {
+          emitHeldTailCount!(lifecycleHeldTails.length);
+        } catch (_) {
+          Logger.debug('Lifecycle held pendant tail count unavailable');
+        }
+      }
       return true;
     } catch (_) {
       _indexInventory.retry(delta);
