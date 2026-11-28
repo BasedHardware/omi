@@ -4,7 +4,7 @@
     {
       "file": "001-mobile-ios-free-plans-before-after.png",
       "platform": "mobile-ios",
-      "description": "Free Plans & Billing sheet first screen, light: main has no button or legal links above the fold; this change pins US$269.91/year, Upgrade and Terms of Use / Privacy Policy.",
+      "description": "Free Plans & Billing first screen, light: main has no button or legal links above the fold; this change pins US$269.91/year, Upgrade, the renewal terms and Terms of Use / Privacy Policy.",
       "captured_by": "agent",
       "source": "screencapture"
     },
@@ -18,14 +18,21 @@
     {
       "file": "003-mobile-ios-free-plans-largest-text.png",
       "platform": "mobile-ios",
-      "description": "Largest accessibility text: first screen unchanged (footer not pinned), and scrolled, the charge line and Upgrade sit inline after Promo code.",
+      "description": "Largest accessibility text: first screen, the inline footer scrolled into view with both links, and Privacy Policy opened from it.",
       "captured_by": "agent",
       "source": "screencapture"
     },
     {
-      "file": "004-mobile-ios-free-plans-code-checkout.png",
+      "file": "004-mobile-ios-free-plans-keyboard-promo.png",
       "platform": "mobile-ios",
-      "description": "Main scrolled, then this change with a promo code typed and Upgrade opening the offline Stripe Checkout stub at US$269.91/year.",
+      "description": "System keyboard up on the promo field: the footer moves into the list; with a code typed the amount reads before discounts; Upgrade opens the offline Checkout stub.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "005-mobile-ios-free-plans-locales.png",
+      "platform": "mobile-ios",
+      "description": "German, Japanese and Portuguese (pt-BR uses pt) first screens with the localized charge, renewal terms and legal links.",
       "captured_by": "agent",
       "source": "screencapture"
     }
