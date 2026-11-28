@@ -18,8 +18,15 @@ from config.batch_paid_attempt import attempted, renewed, retryable
 from utils.batch_pipeline.correctness_metrics import record as record_correctness, record_recovery_settlement
 from utils.batch_pipeline.contracts import WorkResult, held_vad_census, held_silence_allowed, held_result_allowed
 from utils.batch_pipeline.scheduler import Scheduler, owner_key
-from utils.batch_pipeline.input_retention import held_input_leg, staged_at, staged_enqueue, TERMINAL_SECONDS
+from utils.batch_pipeline.input_retention import (
+    held_input_leg,
+    input_expiring,
+    staged_at,
+    staged_enqueue,
+    TERMINAL_SECONDS,
+)
 from utils.batch_pipeline.held_terminal import RETAINED_DIGEST_CHANGED, retained_digest_changed_held
+from database.batch_pipeline_allowance_hold import OWNERS as ALLOWANCE_OWNERS, STATE as ALLOWANCE_HELD
 from config.batch_pipeline import batch_held_dead_letter_enabled, HELD_DEAD_LETTER_SECONDS
 
 # A receipt proves words existed, but deliberately contains no transcript.
@@ -41,6 +48,54 @@ def has_words_receipt(marker):
         for provider, receipt in receipts.items()
         if provider in {'modulate', 'soniox'}
     )
+
+
+def _entitled_for_allowance_release(owner_id: str) -> bool:
+    """Live batch-lane entitlement verification; transient or invalid usage fails closed."""
+    from utils.stt_cap_dispatch import funded_allowance
+    from utils.subscription import TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS
+
+    try:
+        allowance = funded_allowance(owner_id, lane='batch')
+    except Exception:
+        return False
+    if allowance.reason in TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS:
+        return False
+    return bool(allowance.managed)
+
+
+def _active_operator_intent(job: dict) -> bool:
+    return any(
+        isinstance(job.get(key), dict) and job[key].get('state') not in {'completed', 'failed_held'}
+        for key in ('silence_disposition', 'terminal_disposition', 'speech_redrive')
+    )
+
+
+def _allowance_staging_fences_ok(job: dict, existing: dict, now: float, *, allow_dead: bool) -> bool:
+    allowance_dead = allow_dead and input_expiring(job) and job.get('input_expiring_leg') == 'allowance'
+    if held_input_leg(job) != 'allowance' and not allowance_dead:
+        return False
+    if allow_dead and job.get('state') != 'dead' and held_input_leg(job) != 'allowance':
+        return False
+    if staged_enqueue(job) is None or job.get('result') or existing:
+        return False
+    if job.get('source_alias_of') or job.get('source_alias') or job.get('token'):
+        return False
+    lease = job.get('lease_until', 0)
+    if type(lease) not in (int, float) or not math.isfinite(lease) or lease > now:
+        return False
+    route = job.get('stt_route')
+    if route is not None and (not isinstance(route, dict) or route.get('stt_route') == 'provider'):
+        return False
+    return not _active_operator_intent(job)
+
+
+def _decrement_allowance_hold(tx: Any, hold: dict[str, Any] | None, owner_key_value: str) -> None:
+    if not hold:
+        return
+    hold['held_count'] = max(0, hold.get('held_count', 0) - 1)
+    hold['active'] = hold['held_count'] > 0
+    tx.put(ALLOWANCE_OWNERS, owner_key_value, hold)
 
 
 class RecoveryStore(RecoveryFence):
@@ -94,6 +149,44 @@ class RecoveryStore(RecoveryFence):
 
             record_transition('held_redrive_budget_spent')
         return outcome is not None
+
+    def release_allowance_input(self, segment_id, now, *, expected_job=None, entitled=None):
+        """Release an allowance staging hold (pre-expiry or input_expiring terminal) only when entitled."""
+        if expected_job is not None:
+            candidate_uid = expected_job.get('owner_id')
+            if not isinstance(candidate_uid, str) or not candidate_uid:
+                return False
+        else:
+            _, binding = self.store.run(lambda tx: self.checked(tx, segment_id))
+            candidate_uid = binding.owner_id
+        allowed = (
+            bool(entitled(candidate_uid))
+            if callable(entitled)
+            else (bool(entitled) if entitled is not None else _entitled_for_allowance_release(candidate_uid))
+        )
+        if not allowed:
+            return False
+
+        def commit(tx):
+            job, binding = self.checked(tx, segment_id)
+            if expected_job is not None and job != expected_job:
+                return False
+            if binding.owner_id != candidate_uid:
+                return False
+            existing = tx.get('results', segment_id)
+            if not _allowance_staging_fences_ok(job, existing, now, allow_dead=True):
+                return False
+            previous_state = job.get('state')
+            hold = tx.get(ALLOWANCE_OWNERS, job['owner_key']) if previous_state == ALLOWANCE_HELD else None
+            if hold is not None:
+                _decrement_allowance_hold(tx, hold, job['owner_key'])
+            if previous_state == 'dead':
+                for key in ('dead_letter_reason', 'input_expiring_at', 'input_expiring_leg'):
+                    job.pop(key, None)
+            Scheduler.release_allowance_in_transaction(tx, job, now)
+            return True
+
+        return bool(self.store.run(commit))
 
     def prepare(self, segment_id, owner_id, now):
         load_stage_policy(self.store, segment_id, 'recovery', server_flags=self.server_flags)
@@ -611,10 +704,11 @@ def expire_input_in_transaction(tx, job, now):
         or lease > now
     ):
         return False
+    hold = None
     if leg == 'gpu':
         if not Scheduler.held_requeue_eligible(tx, job, now, allow_dead=False):
             return False
-    else:
+    elif leg == 'assignment':
         entry = tx.get('results', job['segment_id'])
         receipts = [entry.get('projection') or {}, *(entry.get('projection_parts') or {}).values()]
         if (
@@ -630,6 +724,16 @@ def expire_input_in_transaction(tx, job, now):
             )
         ):
             return False
+    elif leg == 'allowance':
+        existing = tx.get('results', job['segment_id'])
+        if not _allowance_staging_fences_ok(job, existing, now, allow_dead=False):
+            return False
+        if job.get('state') == ALLOWANCE_HELD:
+            hold = tx.get(ALLOWANCE_OWNERS, job['owner_key'])
+    else:
+        return False
+    if leg == 'allowance' and hold:
+        _decrement_allowance_hold(tx, hold, job['owner_key'])
     if leg == 'gpu':
         binding = normalized_binding(job['projection_binding'])
         if not (binding.native_record or binding.record_origin or binding.partial_record):
@@ -726,7 +830,7 @@ def held_candidates(client, namespace: str, limit: int = 32, *, after_id: str | 
 
 @read_origin('job:batch_pipeline_quarantine_recovery:input_expiring_candidates')
 def input_expiring_candidates(client, namespace, now, *, after=None):
-    """Two indexed clock streams, each at most 128 snapshots; no legacy backfill.
+    """Bounded indexed clock streams (128 snapshots each) across held/allowance staging inputs.
 
     Legacy enqueue rows and stamped replacements have different expiry anchors.
     Advance independent age cursors even over filtered/fenced rows: fresh
@@ -734,16 +838,45 @@ def input_expiring_candidates(client, namespace, now, *, after=None):
     """
     collection = client.collection(f'{namespace}_jobs')
     cutoff = now - TERMINAL_SECONDS
-    candidates, cursors = [], {}
-    for field in ('enqueued_at', 'audio_staged_at'):
-        query = (
-            collection.where('state', 'in', ['quarantined', 'committed'])
-            .where('recovery_state', 'in', ['held', 'failed_held'])
-            .where(field, '<=', cutoff)
-            .order_by(field)
-            .order_by('__name__')
-        )
-        cursor = (after or {}).get(field)
+    streams = (
+        (
+            'enqueued_at',
+            'enqueued_at',
+            (('state', 'in', ['quarantined', 'committed']), ('recovery_state', 'in', ['held', 'failed_held'])),
+        ),
+        (
+            'audio_staged_at',
+            'audio_staged_at',
+            (('state', 'in', ['quarantined', 'committed']), ('recovery_state', 'in', ['held', 'failed_held'])),
+        ),
+        ('allowance_held_enqueued_at', 'enqueued_at', (('state', '==', ALLOWANCE_HELD),)),
+        ('allowance_held_audio_staged_at', 'audio_staged_at', (('state', '==', ALLOWANCE_HELD),)),
+        (
+            'allowance_retry_enqueued_at',
+            'enqueued_at',
+            (
+                ('state', '==', 'retry'),
+                ('compute_decision.outcome', '==', 'held'),
+                ('compute_decision.reason', '==', 'allowance_exhausted'),
+            ),
+        ),
+        (
+            'allowance_retry_audio_staged_at',
+            'audio_staged_at',
+            (
+                ('state', '==', 'retry'),
+                ('compute_decision.outcome', '==', 'held'),
+                ('compute_decision.reason', '==', 'allowance_exhausted'),
+            ),
+        ),
+    )
+    candidates, cursors, seen = [], {}, set()
+    for cursor_key, field, filters in streams:
+        query = collection
+        for filter_field, op, value in filters:
+            query = query.where(filter_field, op, value)
+        query = query.where(field, '<=', cutoff).order_by(field).order_by('__name__')
+        cursor = (after or {}).get(cursor_key)
         if cursor:
             query = query.start_after({field: cursor['at'], '__name__': collection.document(cursor['id'])})
         docs = list(query.limit(128).stream())
@@ -760,9 +893,10 @@ def input_expiring_candidates(client, namespace, now, *, after=None):
                 stamp, leg = staged_enqueue(job), held_input_leg(job)
             except (TypeError, AttributeError):
                 continue  # Malformed eligibility metadata cannot pin the age cursor.
-            if stamp is not None and stamp <= cutoff and leg:
+            if stamp is not None and stamp <= cutoff and leg and doc.id not in seen:
+                seen.add(doc.id)
                 candidates.append((doc.id, job))
-        cursors[field] = {'at': docs[-1].to_dict()[field], 'id': docs[-1].id} if len(docs) == 128 else None
+        cursors[cursor_key] = {'at': docs[-1].to_dict()[field], 'id': docs[-1].id} if len(docs) == 128 else None
     return sorted(candidates, key=lambda pair: (staged_enqueue(pair[1]), pair[0])), cursors
 
 

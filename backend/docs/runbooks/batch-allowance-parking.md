@@ -71,11 +71,16 @@ Changed query membership:
 Deliberately unchanged: projection assignment/finish/follow-up and privacy
 projection walks query **result receipts**, which an allowance-held job has
 never produced; no held job enters those indexes. Quarantine/dead-letter,
-provider/vendor, record-pending, input-retention and artifact-cleanup sweeps
-retain their own state predicates. Explicit privacy erasure still visits all
-an owner's recordings, including policy holds; parking never hides data from
-deletion requested by the user. No fresh-picker or metered-provider-release
-branch is changed.
+provider/vendor, record-pending, and artifact-cleanup sweeps retain their own
+state predicates. Staging-input source-age monitoring (`timeliness_sample`),
+pre-expiry operator recovery (`redrive_staging_inputs.py --scope allowance`), and
+day-59 terminal disposition (`input_expiring` with `input_expiring_leg=allowance`,
+decrementing `allowance_holds.held_count`) cover both `allowance_held` and
+exhausted-allowance `retry` staging inputs so source expiry is detected before
+day-60 bucket deletion while preserving privacy and entitlement fences. Explicit
+privacy erasure still visits all an owner's recordings, including policy holds;
+parking never hides data from deletion requested by the user. No fresh-picker or
+metered-provider-release branch is changed.
 
 ## Migration and mixed versions
 

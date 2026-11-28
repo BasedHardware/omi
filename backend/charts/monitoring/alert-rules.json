@@ -32651,7 +32651,7 @@
       "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
       "summary": "A held input in batch staging is older than 51 days; deletion remains at day 60.",
       "user_impact": "The only server input may expire before transcription or assignment recovers.",
-      "scope": "GPU-quarantined and assignment-held jobs whose audio_uri is in gs://based-hardware-batch-pipeline-staging. All epochs; audio_staged_at tracks the current replacement object, else enqueued_at proxies creation at admission. No GCS metadata read.",
+      "scope": "GPU-quarantined, assignment-held, allowance-held, and exhausted-allowance retry jobs whose audio_uri is in gs://based-hardware-batch-pipeline-staging. All epochs; audio_staged_at tracks the current replacement object, else enqueued_at proxies creation at admission. No GCS metadata read.",
       "verification": "Require a fresh timeliness sample. Compare job audio_staged_at when present, else enqueued_at; quarantine/commit/deadline timestamps do not reset object age. Missing or stale data is unknown; use the existing sampler-stale alert.",
       "safe_next_action": "Run the manual digest-approved held-input redrive dry-run, review aggregate results, and obtain scoped apply authorization. No lifecycle changes or automatic repair.",
       "runbook": "backend/docs/runbooks/held-staging-inputs.md",

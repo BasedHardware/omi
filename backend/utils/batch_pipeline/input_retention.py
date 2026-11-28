@@ -47,15 +47,43 @@ def invalid_staged_clock(job: dict) -> bool:
     )
 
 
+def allowance_exhausted_retry(job: dict) -> bool:
+    """Only explicit current allowance_exhausted policy holds in retry count as allowance stock."""
+    if job.get('state') != 'retry':
+        return False
+    decision = job.get('compute_decision')
+    return (
+        isinstance(decision, dict)
+        and decision.get('outcome') == 'held'
+        and decision.get('reason') == 'allowance_exhausted'
+    )
+
+
+def _non_provider_route(job: dict) -> bool:
+    route = job.get('stt_route')
+    if route is None:
+        return True
+    if not isinstance(route, dict):
+        return False
+    return route.get('stt_route') != 'provider'
+
+
 def held_input_leg(job: dict) -> str | None:
-    if job.get('recovery_state') not in {'held', 'failed_held'}:
+    recovery_state = job.get('recovery_state')
+    if recovery_state in {'held', 'failed_held'}:
+        if job.get('state') == 'committed' and recovery_state == 'held':
+            return 'assignment'
+        if (
+            job.get('state') == 'quarantined'
+            and job.get('quarantine_reason') == 'worker_failed'
+            and _non_provider_route(job)
+        ):
+            return 'gpu'
         return None
-    if job.get('state') == 'committed' and job.get('recovery_state') == 'held':
-        return 'assignment'
-    if (
-        job.get('state') == 'quarantined'
-        and job.get('quarantine_reason') == 'worker_failed'
-        and (job.get('stt_route') or {}).get('stt_route') != 'provider'
-    ):
-        return 'gpu'
+    if recovery_state not in (None, ''):
+        return None
+    if job.get('result') or job.get('source_alias_of') or job.get('source_alias'):
+        return None
+    if (job.get('state') == 'allowance_held' or allowance_exhausted_retry(job)) and _non_provider_route(job):
+        return 'allowance'
     return None

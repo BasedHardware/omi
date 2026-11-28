@@ -362,4 +362,45 @@ BATCH_PIPELINE_INDEX_REQUIREMENTS = (
         'COLLECTION_GROUP',
         (_asc('stage'), _asc('admitted_at'), _asc('__name__')),
     ),
+    # Allowance-held and exhausted-allowance retry staging-input age streams.
+    *(
+        FirestoreIndexRequirement(
+            f'{stage}_batch_staged_allowance_audio_age',
+            f'batch_pipeline_{stage}_jobs',
+            'COLLECTION',
+            (_asc('state'), _asc('audio_staged_at'), _asc('__name__')),
+        )
+        for stage in ('prod', 'dev')
+    ),
+    *(
+        FirestoreIndexRequirement(
+            f'{stage}_batch_staged_allowance_retry_{clock}',
+            f'batch_pipeline_{stage}_jobs',
+            'COLLECTION',
+            (
+                _asc('compute_decision.outcome'),
+                _asc('compute_decision.reason'),
+                _asc('state'),
+                _asc(field),
+                _asc('__name__'),
+            ),
+        )
+        for stage in ('prod', 'dev')
+        for clock, field in (('enqueue', 'enqueued_at'), ('audio', 'audio_staged_at'))
+    ),
+    *(
+        FirestoreIndexRequirement(
+            f'{stage}_batch_staged_allowance_dead_enqueue',
+            f'batch_pipeline_{stage}_jobs',
+            'COLLECTION',
+            (
+                _asc('dead_letter_reason'),
+                _asc('input_expiring_leg'),
+                _asc('state'),
+                _asc('enqueued_at'),
+                _asc('__name__'),
+            ),
+        )
+        for stage in ('prod', 'dev')
+    ),
 )

@@ -1351,14 +1351,24 @@ def timeliness_sample(
         quarantined_oldest = kept[0] if kept else docs[-1]['enqueued_at'] if over_sla['quarantined'] and docs else None
     else:
         quarantined_oldest = first(quarantined.where('enqueued_at', '>=', epoch), 'enqueued_at')
+    staged_queries = (
+        *(
+            jobs.where('state', '==', state).where('recovery_state', 'in', ['held', 'failed_held'])
+            for state in ('quarantined', 'committed')
+        ),
+        jobs.where('state', '==', 'allowance_held'),
+        jobs.where('state', '==', 'retry')
+        .where('compute_decision.outcome', '==', 'held')
+        .where('compute_decision.reason', '==', 'allowance_exhausted'),
+    )
     staged = [
         first_valid_clock(
-            jobs.where('state', '==', state).where('recovery_state', 'in', ['held', 'failed_held']),
+            query,
             'enqueued_at',
             lambda job: held_input_leg(job) is not None and staged_enqueue(job) is not None,
             clock=staged_enqueue,
         )
-        for state in ('quarantined', 'committed')
+        for query in staged_queries
     ]
     sample: dict[str, Any] = {
         # Bounded-prefix observations, not a distinct-row fleet census.

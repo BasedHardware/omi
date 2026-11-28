@@ -790,7 +790,7 @@ STATES = (
             metric='omi_batch_held_expired_units',
             alert=Alert('omi-batch-held-expired-volume', 'agent'),
             alert_required=True,
-            note='Reason held_expired is retained stock, never TTL/deletion; nightly UTC and private OIDC requeue. Reason input_expiring is retained at audio_staged_at (else legacy enqueued_at) + 29d for staging GPU/assignment holds under BATCH_INPUT_EXPIRING_ENABLED (default on); no nightly/poll exit. Only checked operator GPU requeue, target-restorable assignment release, or exact-bundle GPU re-upload exits it; the preterminal staged_input age warning fires above 21d. Record reason record_barrier_aged retains merge_pending=false, record_dead_letter_deadline_at and record_dead_letter_at; omi_batch_record_dead_letter_units and omi-batch-record-dead-letter-volume (agent); private OIDC requeue-record only.',
+            note='Reason held_expired is retained stock, never TTL/deletion; nightly UTC and private OIDC requeue. Reason input_expiring is retained at audio_staged_at (else legacy enqueued_at) + 59d for staging GPU, assignment, and allowance holds (including exhausted-allowance retry) under BATCH_INPUT_EXPIRING_ENABLED (default on); no nightly/poll exit. Only checked operator GPU requeue, target-restorable assignment release, entitlement-checked allowance release, or exact-bundle GPU re-upload exits it; the preterminal staged_input age warning fires above 51d. Record reason record_barrier_aged retains merge_pending=false, record_dead_letter_deadline_at and record_dead_letter_at; omi_batch_record_dead_letter_units and omi-batch-record-dead-letter-volume (agent); private OIDC requeue-record only.',
         ),
     )
     + tuple(
