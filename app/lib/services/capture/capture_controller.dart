@@ -1180,6 +1180,7 @@ class CaptureController extends ChangeNotifier
   bool _pendantStorageBackpressureOwnsPause = false;
   String? _pendantStorageBackpressureDeviceId;
   int _pendantStorageBackpressureEpoch = 0;
+  LocalWalSyncImpl? _pendantStorageSync;
   void Function(bool active)? _pendantStorageBackpressureHandler;
 
   get bleBytesStream => _bleBytesStream;
@@ -2534,6 +2535,7 @@ class CaptureController extends ChangeNotifier
     final phoneSync = _wal.getSyncs().phone;
     if (phoneSync is LocalWalSyncImpl) {
       void handler(bool active) => _onPendantStorageBackpressureChanged(active, phoneSync, deviceId);
+      _pendantStorageSync = phoneSync;
       _pendantStorageBackpressureHandler = handler;
       phoneSync.onPendantStorageBackpressureChanged = handler;
       _onPendantStorageBackpressureChanged(phoneSync.pendantStorageBackpressureActive, phoneSync, deviceId);
@@ -3253,11 +3255,13 @@ class CaptureController extends ChangeNotifier
     _clearIngressByteObserver();
     _uplinkSilence.cancel();
     _captureControllerDisposed = true;
-    final phoneSync = _wal.getSyncs().phone;
+    final phoneSync = _pendantStorageSync;
     if (phoneSync is LocalWalSyncImpl &&
         identical(phoneSync.onPendantStorageBackpressureChanged, _pendantStorageBackpressureHandler)) {
       phoneSync.onPendantStorageBackpressureChanged = null;
     }
+    _pendantStorageSync = null;
+    _pendantStorageBackpressureHandler = null;
     _retireConversationClosures(accountChanged: false);
     _reconnectGraceTimer?.cancel();
     _reconnectGraceTimer = null;
