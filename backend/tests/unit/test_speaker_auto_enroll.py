@@ -514,7 +514,9 @@ def test_sync_rechecks_revocation_after_io(store, monkeypatch, timing, speaker_i
         id='race', start=0, end=10, text='Synthetic speech.', speaker_id=speaker_id, is_user=False
     )
     other = TranscriptSegment(id='other', start=20, end=30, text='Other speech.', speaker_id=1, is_user=False)
-    speaker_identity.identify_speakers_for_segments([segment, other], b'audio', cache, UID, dependencies=deps)
+    speaker_identity.identify_speakers_for_segments(
+        [segment, other], b'audio', cache, UID, allow_shadow_text_identity=timing == 'text', dependencies=deps
+    )
     assert segment.person_id is None and other.person_id is None
 
 

@@ -128,7 +128,12 @@ def test_sync_empty_paid_cache_keeps_text_permission_without_rereading(monkeypat
     for paid in [False, True]:
         segment = TranscriptSegment(id='s', text='My name is Synthetic', speaker_id=1, start=0, end=2, is_user=False)
         speaker_identity.identify_speakers_for_segments(
-            [segment], None, speaker_identity.PersonEmbeddingsCache(paid), 'u', dependencies=deps
+            [segment],
+            None,
+            speaker_identity.PersonEmbeddingsCache(paid),
+            'u',
+            allow_shadow_text_identity=True,
+            dependencies=deps,
         )
         assert segment.person_id == ('p' if paid else None)
     assert detect.call_count == lookup.call_count == 1

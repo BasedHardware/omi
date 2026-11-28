@@ -47,32 +47,16 @@ def test_build_person_embeddings_cache_missing_or_none_name():
         assert cache['p2']['name'] == 'Unknown'
 
 
-def test_identify_speakers_for_segments_person_missing_name_or_id():
-    uid = 'user-123'
+def test_sync_does_not_lookup_or_assign_a_text_match():
     seg = MagicMock()
     seg.id = 'seg-1'
-    seg.text = 'Hey Bob, how are you?'
+    seg.text = 'My name is Bob.'
     seg.speaker_id = 1
-    transcript_segments = [seg]
 
-    # Person found by name has id but missing name key
-    person_doc = {'id': 'person-bob'}
-
-    with patch('utils.sync.pipeline.detect_speaker_from_text', return_value='Bob'), patch(
-        'database.users.get_person_by_name', return_value=person_doc
-    ), patch('utils.sync.pipeline.build_person_embeddings_cache', return_value={}), patch(
-        'utils.sync.pipeline.process_speaker_assigned_segments'
-    ) as mock_process:
-        pipeline.identify_speakers_for_segments(
-            transcript_segments,
-            None,
-            {},
-            uid,
-            language='en',
-        )
-        assert mock_process.called
-        # Check speaker_to_person_map passed to process_speaker_assigned_segments
-        args, kwargs = mock_process.call_args
-        speaker_map = args[2]
-        assert 1 in speaker_map
-        assert speaker_map[1] == ('person-bob', 'Bob')
+    with patch('utils.sync.pipeline.detect_speaker_from_text', return_value='Bob') as detect, patch(
+        'database.users.get_person_by_name', return_value={'id': 'person-bob'}
+    ) as lookup, patch('utils.sync.pipeline.process_speaker_assigned_segments') as assign:
+        pipeline.identify_speakers_for_segments([seg], None, {}, 'user-123', language='en')
+        detect.assert_not_called()
+        lookup.assert_not_called()
+        assign.assert_not_called()

@@ -59,7 +59,7 @@ USER_SELF_PERSON_ID = 'user'
 
 
 class PersonEmbeddingsCache(dict):
-    """Batch-scoped candidate snapshot, including permission for text introductions."""
+    """Batch-scoped candidate snapshot, including permission for contact voiceprints."""
 
     def __init__(self, named_allowed: bool):
         super().__init__()
@@ -141,9 +141,10 @@ def identify_speakers_for_segments(
     language: Optional[str] = None,
     *,
     owner_reserved: bool = False,
+    allow_shadow_text_identity: bool = False,
     dependencies: SpeakerIdentityDependencies = _DEFAULT_DEPS,
 ) -> None:
-    """Identify speakers in transcript segments using voice embeddings and text detection.
+    """Identify speakers in transcript segments using voice embeddings.
 
     Modifies segments in-place by assigning person_id and is_user fields.
 
@@ -152,7 +153,7 @@ def identify_speakers_for_segments(
        HOSTED_SPEAKER_EMBEDDING_API_URL):
        For each speaker, pool distinct audio into bounded clips, average their
        embeddings, and match against person_embeddings_cache.
-    2. Text-based detection ("I am X") runs independently for all unmatched speakers.
+    2. Only the transcription shadow may run its existing text fallback.
     3. Apply assignments via process_speaker_assigned_segments.
     """
     named_allowed = getattr(person_embeddings_cache, 'named_allowed', None)
@@ -360,37 +361,36 @@ def identify_speakers_for_segments(
                     (segment, person_id) for segment in segments if not segment.is_user and not segment.person_id
                 )
 
-    # Text-based detection runs independently for all unmatched speakers.
-    # For speaker_id > 0 (diarized): update both speaker_to_person_map and per-segment map.
-    # For speaker_id <= 0 (undiarized): only assign per-segment (avoid mapping all speaker_id=0
-    # segments to one person when diarization is inactive).
-    for speaker_id, segments in speaker_segments.items():
-        if not named_allowed:
-            break
-        if speaker_id in speaker_to_person_map:
-            continue
-        for seg in segments:
-            detected_name = detect_speaker_from_text(seg.text, language=language)
-            if detected_name:
-                # refactor: superseded by utils.speakers.context when SPEAKER_EVIDENCE_MODE=serve
-                if not name_only_allowed(uid):
-                    continue
-                person = users_db.get_person_by_name(uid, detected_name)
-                if person and person.get('id'):
-                    text_assignments.extend(
-                        (target, person['id'])
-                        for target in (segments if speaker_id > 0 else [seg])
-                        if not target.is_user and not target.person_id
-                    )
-                    # Per-segment assignment always applies
-                    if seg.id is not None:
-                        segment_person_assignment_map[seg.id] = person['id']
-                    # Update speaker map only when diarization is active
-                    if speaker_id > 0:
-                        speaker_to_person_map[speaker_id] = (person['id'], person.get('name') or detected_name)
-                    logger.info('speaker_id_decision surface=sync speaker=%s source=text accepted=True', speaker_id)
-                    if speaker_id > 0:
-                        break  # One match per diarized speaker is enough
+    if allow_shadow_text_identity and named_allowed:
+        # Text-based detection runs independently for all unmatched speakers.
+        # For speaker_id > 0 (diarized): update both speaker_to_person_map and per-segment map.
+        # For speaker_id <= 0 (undiarized): only assign per-segment (avoid mapping all speaker_id=0
+        # segments to one person when diarization is inactive).
+        for speaker_id, segments in speaker_segments.items():
+            if speaker_id in speaker_to_person_map:
+                continue
+            for seg in segments:
+                detected_name = detect_speaker_from_text(seg.text, language=language)
+                if detected_name:
+                    # refactor: superseded by utils.speakers.context when SPEAKER_EVIDENCE_MODE=serve
+                    if not name_only_allowed(uid):
+                        continue
+                    person = users_db.get_person_by_name(uid, detected_name)
+                    if person and person.get('id'):
+                        text_assignments.extend(
+                            (target, person['id'])
+                            for target in (segments if speaker_id > 0 else [seg])
+                            if not target.is_user and not target.person_id
+                        )
+                        # Per-segment assignment always applies
+                        if seg.id is not None:
+                            segment_person_assignment_map[seg.id] = person['id']
+                        # Update speaker map only when diarization is active
+                        if speaker_id > 0:
+                            speaker_to_person_map[speaker_id] = (person['id'], person.get('name') or detected_name)
+                        logger.info('speaker_id_decision surface=sync speaker=%s source=text accepted=True', speaker_id)
+                        if speaker_id > 0:
+                            break  # One match per diarized speaker is enough
 
     # Text detection can also perform IO after voice decisions were computed.
     # Revoke only those derived decisions before applying any labels; independent

@@ -339,7 +339,12 @@ def _make_pass(
             first_word = min((float(w['timestamp'][0]) for w in words), default=0.0)
             if slice_segments:
                 identify_speakers_for_segments(
-                    slice_segments, pcm_to_wav(part), cache, uid, language=conversation.language
+                    slice_segments,
+                    pcm_to_wav(part),
+                    cache,
+                    uid,
+                    language=conversation.language,
+                    allow_shadow_text_identity=True,
                 )
             for segment in slice_segments:
                 # postprocess_words rebases to the first segment, not the blob.

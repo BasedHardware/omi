@@ -107,7 +107,9 @@ def test_sync_text_matches_are_automatic_without_changing_manual_labels():
                 id='manual', text='hello', speaker_id=speaker_id, is_user=False, person_id='p2', start=6, end=9
             ),
         ]
-        identify_speakers_for_segments(segments, None, PersonEmbeddingsCache(True), 'u', dependencies=deps)
+        identify_speakers_for_segments(
+            segments, None, PersonEmbeddingsCache(True), 'u', allow_shadow_text_identity=True, dependencies=deps
+        )
         assert segments[0].person_id == 'p1'
         assert segments[0].speaker_match_source == 'sync_text'
         assert segments[1].person_id == ('p1' if speaker_id > 0 else None)

@@ -46,7 +46,9 @@ def test_sync_names_speaker_from_postprocessed_introduction():
         users_db=SimpleNamespace(get_person_by_name=lambda uid, name: people.get(name))
     )
 
-    identify_speakers_for_segments(segments, None, PersonEmbeddingsCache(True), 'uid', dependencies=dependencies)
+    identify_speakers_for_segments(
+        segments, None, PersonEmbeddingsCache(True), 'uid', allow_shadow_text_identity=True, dependencies=dependencies
+    )
 
     assert segments[0].text == 'Hi, my name is Sarah.'
     assert segments[0].person_id == 'person-sarah'
