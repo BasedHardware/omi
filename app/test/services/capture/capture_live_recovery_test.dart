@@ -93,15 +93,37 @@ void main() {
       expect(world.socket!.status, PureSocketStatus.connected);
     });
 
-    test('repeated closes back off but never stop reconnecting', () async {
+    test('repeated closes recover while respecting the reconnect spacing', () async {
       for (var i = 0; i < 6; i++) {
         final before = world.sockets.length;
         world.socket!.emitClose(1001);
         await world.settle();
-        await world.elapse(const Duration(seconds: 16));
+        await world.elapse(const Duration(seconds: 20));
         expect(world.sockets.length, greaterThan(before), reason: 'close $i');
         expect(world.socket!.status, PureSocketStatus.connected);
       }
+    });
+
+    test('failed reconnects back off and stay below the rolling handshake budget', () async {
+      final before = world.sockets.length;
+      world.setConnected(false);
+      world.socket!.emitClose(1002);
+      await world.settle();
+      world.emitNetworkChange(); // joins the already scheduled close recovery
+      await world.settle();
+
+      await world.elapse(const Duration(seconds: 1));
+      expect(world.sockets.length, before + 1);
+      await world.elapse(const Duration(seconds: 19));
+      expect(world.sockets.length, before + 1, reason: 'retry attempts are at least 20s apart');
+
+      await world.elapse(const Duration(seconds: 1));
+      expect(world.sockets.length, before + 2);
+      await world.elapse(const Duration(seconds: 39));
+      expect(world.sockets.length, before + 2, reason: 'the next failed retry backs off further');
+
+      await world.elapse(const Duration(seconds: 1));
+      expect(world.sockets.length, before + 3);
     });
 
     test('a network handover re-arms a keep-alive that had cancelled itself', () async {

@@ -22,6 +22,35 @@ CaptureSessionOwner _owner({RecordingTransferCoordinator? coordinator}) => Captu
     );
 
 void main() {
+  test('reusing the published socket does not close its live transport', () async {
+    final owner = _owner();
+    owner.replaceSession('user-a/device-a');
+    final socket = Object();
+    var opens = 0;
+    var closes = 0;
+    Future<void> close(Object? _) async {
+      closes++;
+    }
+
+    Future<Object?> open() async {
+      opens++;
+      return socket;
+    }
+
+    expect(
+      await owner.connect(configuration: 'pcm16/16000', open: open, close: close),
+      same(socket),
+    );
+    expect(
+      await owner.connect(configuration: 'pcm16/16000', open: open, close: close),
+      same(socket),
+    );
+    expect(opens, 2);
+    expect(closes, 0, reason: 'the pool can return the already-connected socket instance');
+    await owner.close();
+    expect(closes, 1);
+  });
+
   test('keepalive joins pending connect and a generation roll closes the stale socket', () async {
     final owner = _owner();
     owner.replaceSession('user-a/device-a');

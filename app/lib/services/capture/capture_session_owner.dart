@@ -112,6 +112,11 @@ class CaptureSessionOwner implements CaptureRecoveryRequests {
         }
         final previous = _published;
         _published = null;
+        if (previous != null && identical(previous.value, result)) {
+          _published = _PublishedConnect(result, (dynamic value) => close(value as T));
+          if (!completer.isCompleted) completer.complete(result);
+          return;
+        }
         if (previous != null) {
           try {
             await previous.close(previous.value);

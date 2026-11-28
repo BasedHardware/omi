@@ -221,16 +221,13 @@ committed pendant/phone/call session the queued roll stays the only retirement �
 the revision fence alone blocks the stale continuation. Production never sets
 the depth, never probes, and never rolls synchronously: real keepalive ticks,
 transcription-settings reconnects, and call paths always require committed
-`pendantLive` plus a current generation; `onClosed` still mutates
-three flags at callback time — `_keepAliveEpoch++` invalidates any keepalive
-reconnect attempt in flight for the now-dead socket (a tick can fire between
-the close callback and the queued `SocketClosed`, so the epoch must move
-before dispatch), `_socketCloseQueued` lets `keepAliveScheduledForTesting`
-observe a queued close without pumping the event queue (existing
-reconnect-test contract), and `_transcriptServiceReady = false` drops
-readiness immediately because the keepalive tick and reconnect gates read it
-synchronously while the dead socket object may still be non-null. Everything
-else — status reset, wedge completion, interrupted-state publish, snackbar,
+`pendantLive` plus a current generation. `onClosed` sets `_socketCloseQueued`
+so `keepAliveScheduledForTesting` can observe a queued close without pumping the
+event queue, and sets `_transcriptServiceReady = false` immediately because
+reconnect gates read it synchronously while the dead socket object may still be
+non-null. An admitted reconnect remains single-flight until its dispatch
+finishes, even if the socket closes while it is running. Everything else —
+status reset, wedge completion, interrupted-state publish, snackbar,
 reconnect-pending mark, `_startKeepAliveServices` — runs inside
 `_socketClosedBody` under dispatch. `onConnected` is fully queued: the
 interrupted→record/deviceRecord restore and the mic restart live in
@@ -260,7 +257,7 @@ cannot execute reconnect effects.
 | `systemAudioRecord` keepalive lane | Read by `_shouldReconnectTranscriptionSocket`/reconnect bodies. | macOS system-audio lane shares the socket but is not coordinator-owned yet. |
 | `setBackgroundModeEnabled` | Writes native-streaming prefs directly. | Preference/config management; does not start or stop a capture owner. |
 | `recordingState` ownership reads | Reconnect gates (`_shouldReconnectTranscriptionSocket`, `_reconnectDeviceCaptureBody`) consult the legacy mirror alongside the staged phase. | Compatibility while the mirror still feeds UI; guarded by staged phase checks. |
-| `onClosed` sync flags | `_keepAliveEpoch++`, `_socketCloseQueued`, `_transcriptServiceReady = false`. | Documented above — the callback-time window a queued event cannot close. |
+| `onClosed` sync flags | `_socketCloseQueued`, `_transcriptServiceReady = false`. | Documented above — the callback-time window a queued event cannot close. |
 | Stage-internal socket/BLE/WAL | `_initiateWebsocket`, `_initiateDeviceAudioStreaming`, `finalizeCurrentSession`, `_rollCaptureSession` run inside `RunStage` bodies behind staged-ownership guards. | The defined `BleStreamStart`/`WalFinalize`/`WalSessionRoll` effects are not emitted yet; extraction continues in a later seam. |
 
 Still staged bodies (`RunStage`) in `CaptureController._runCaptureStage`:

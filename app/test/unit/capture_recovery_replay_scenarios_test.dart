@@ -131,7 +131,7 @@ void main() {
     expect(world.uploads.attempts.length, greaterThan(0),
         reason: 'only already-checkpointed safety copies drain while the live tail stays in memory');
 
-    // Restored connectivity kicks one immediate reconnect; the 15s keepalive
+    // Restored connectivity kicks one immediate reconnect; the 20s keepalive
     // remains the bounded fallback cadence.
     // Frames keep flowing throughout — a real mic does not pause for recovery.
     final createsAfterRestore = world.socketCreates;
@@ -140,7 +140,7 @@ void main() {
       await world.elapse(const Duration(seconds: 1));
     }
     expect(world.socketCreates - createsAfterRestore, lessThanOrEqualTo(2),
-        reason: 'reconnect attempts are rate-limited to the 15s keepalive cadence');
+        reason: 'reconnect attempts are rate-limited to the 20s cadence');
     await world.controller.pendingSourceSwitch; // WAL recovery finishes before native reports the fresh session.
     world.emitNativeState(PhoneMicCaptureState.running); // native engine is up on the fresh session
     await world.settle();
@@ -154,9 +154,9 @@ void main() {
     await captureSeconds(5, sessionId: session2, frameCursor: 4100);
     final reconnectedSocket = world.socket!;
     expect(reconnectedSocket, isNot(same(onlineSocket)));
-    expect(reconnectedSocket.sentBinary.length, 2000,
-        reason: 'connectivity restore reconnects within a second, not at the next 15s keepalive tick: '
-            'the last 15 restore-window seconds plus the recovered 5s stream on the new socket');
+    expect(reconnectedSocket.sentBinary.length, 1500,
+        reason: 'the reconnect waits for the 20s minimum since the failed attempt, then streams '
+            'the remaining restore window and the recovered 5s stream on the new socket');
 
     // Session ends: the whole capture (online + offline + recovered windows) lands on disk.
     await world.stopLiveCapture();

@@ -40,15 +40,16 @@ void _emitCaptureRecovery(CaptureRecoveryObservedKind kind, CaptureRecoveryObser
 /// arrives while capture holds no BLE listener.
 extension _CaptureLiveRecovery on CaptureController {
   /// Spacing of kicked reconnect attempts, indexed by attempts in the last
-  /// five minutes. The 15 s keep-alive keeps running underneath.
+  /// five minutes. The periodic timer stays idle while a retry is pending.
   static const _kickBackoff = [
     Duration(seconds: 1),
-    Duration(seconds: 2),
-    Duration(seconds: 5),
-    Duration(seconds: 10),
-    Duration(seconds: 15),
+    Duration(seconds: 20),
+    Duration(seconds: 40),
+    Duration(seconds: 80),
+    Duration(seconds: 160),
   ];
   static const _kickWindow = Duration(minutes: 5);
+  static const _minimumReconnectInterval = Duration(seconds: 20);
   static const _orphanRestartInterval = Duration(seconds: 30);
   static const _orphanEpisodeGap = Duration(seconds: 5);
   static const _codecReadTimeout = Duration(seconds: 35);
@@ -95,12 +96,18 @@ extension _CaptureLiveRecovery on CaptureController {
       }
     }
     if (!_shouldReconnectTranscriptionSocket || _transcriptServiceReady) return;
+    if (_liveRecovery.kickTimer?.isActive ?? false) {
+      return;
+    }
     if (recordingState == RecordingState.deviceRecord) _socketReconnectPending = true;
     if (!(_keepAliveTimer?.isActive ?? false)) _startKeepAliveServices();
     final now = _now();
     final kicks = _liveRecovery.kicks..removeWhere((at) => now.difference(at) > _kickWindow);
-    final delay = _kickBackoff[kicks.length.clamp(0, _kickBackoff.length - 1)];
-    kicks.add(now);
+    final backoff = _kickBackoff[kicks.length.clamp(0, _kickBackoff.length - 1)];
+    final lastAttempt = _keepAliveLastExecutedAt;
+    final untilRateLimit =
+        lastAttempt == null ? Duration.zero : lastAttempt.add(_minimumReconnectInterval).difference(now);
+    final delay = backoff > untilRateLimit ? backoff : untilRateLimit;
     Logger.debug('[Capture] live recovery ($reason) in ${delay.inSeconds}s');
     final token = _sessionOwner?.token;
     _liveRecovery.kickTimer?.cancel();
@@ -113,17 +120,37 @@ extension _CaptureLiveRecovery on CaptureController {
     _liveRecovery.kickTimer = null;
     if (_captureControllerDisposed || !_captureSessionIsCurrent(token)) return;
     if (!_shouldReconnectTranscriptionSocket || _transcriptServiceReady || !recordingDeviceServiceReady) return;
-    if (!_auth.isSignedIn() || _keepAliveReconnectEpoch == _keepAliveEpoch) return;
+    if (!_auth.isSignedIn() || _keepAliveReconnectInFlight) return;
+    if (_reconnectCooldownRemaining() > Duration.zero) {
+      _kickLiveRecovery('reconnect_rate_limited');
+      return;
+    }
+    _liveRecovery.kicks.add(_now());
     _keepAliveLastExecutedAt = _now();
-    final reconnectEpoch = _keepAliveEpoch;
-    _keepAliveReconnectEpoch = reconnectEpoch;
+    _keepAliveReconnectInFlight = true;
     try {
       await _capture.dispatch(const KeepAliveTick());
     } catch (error) {
       Logger.debug('[Capture] kicked reconnect failed: $error');
     } finally {
-      if (_keepAliveReconnectEpoch == reconnectEpoch) _keepAliveReconnectEpoch = null;
+      _keepAliveReconnectInFlight = false;
     }
+    if (!_transcriptServiceReady && _shouldReconnectTranscriptionSocket) {
+      _kickLiveRecovery('reconnect_failed');
+    }
+  }
+
+  Duration _reconnectCooldownRemaining() {
+    final lastAttempt = _keepAliveLastExecutedAt;
+    if (lastAttempt == null) return Duration.zero;
+    final remaining = lastAttempt.add(_minimumReconnectInterval).difference(_now());
+    return remaining > Duration.zero ? remaining : Duration.zero;
+  }
+
+  void _transcriptionSocketRecovered() {
+    _liveRecovery.kickTimer?.cancel();
+    _liveRecovery.kickTimer = null;
+    _liveRecovery.kicks.clear();
   }
 
   bool _orphanAudioAdmitted(String deviceId, {bool ignoreMute = false}) {

@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "id": "FC-mobile-live-listen-reconnect-storm",
+  "family": "retry-classification",
+  "violated_contract": "An app recording that loses /v4/listen must converge to one live socket without exceeding the server's per-authorization handshake budget. Close, error, connectivity, and periodic recovery signals share one attempt state and cooldown, and volatile session metadata must not churn a healthy transport.",
+  "canonical_prevention": "Centralize live-listen retries in one single-flight recovery coordinator. Coalesce signals, count attempts only when dispatched, enforce a shared minimum interval and stepped failure backoff, suppress periodic retries while a kicked retry is pending, and reset backoff only on readiness. Reuse a healthy connected socket across geolocation refreshes while preserving recording, language, STT configuration, and custody identity; do not close a published transport when the pool returns the same instance. Treat text application heartbeats separately from RFC control frames and never send fake frames through the data sink. Cover these paths with deterministic retry, ownership, and socket lifecycle tests.",
+  "canonical_prevention_artifact": [
+    "app/lib/services/capture/capture_live_recovery.dart",
+    "app/lib/services/capture/capture_controller.dart",
+    "app/lib/services/capture/capture_session_owner.dart",
+    "app/lib/services/sockets.dart",
+    "app/lib/services/sockets/pure_socket.dart",
+    "app/test/services/capture/capture_live_recovery_test.dart",
+    "app/test/services/capture/capture_session_owner_test.dart",
+    "app/test/unit/pure_socket_lifecycle_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/services/capture/**",
+    "app/lib/services/sockets.dart",
+    "app/lib/services/sockets/**",
+    "app/test/services/capture/**",
+    "app/test/unit/pure_socket_lifecycle_test.dart"
+  ],
+  "status": "open"
+}

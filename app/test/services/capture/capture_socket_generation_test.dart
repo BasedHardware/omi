@@ -289,7 +289,7 @@ void main() {
     }
   });
 
-  test('hung pendant keepalive codec read expires and a later tick retries', () async {
+  test('hung pendant keepalive codec read stays single-flight and falls back after timeout', () async {
     final dir = await Directory.systemTemp.createTemp('capture-codec-timeout-');
     final world = await CaptureReplayWorld.boot(tempDir: dir);
     try {
@@ -322,13 +322,13 @@ void main() {
       await pumpEventQueue();
       world.scheduler.elapse(const Duration(seconds: 10));
       await pumpEventQueue();
+      expect(opens, 1, reason: 'a second reconnect must not overlap the pending codec read');
       hang = false;
-      world.scheduler.elapse(const Duration(seconds: 5));
+      held.completeError(TimeoutException('codec read expired'));
       await pumpEventQueue();
-      expect(opens, 2, reason: 'expired codec I/O must release the coordinator and reconnect guard');
-      held.complete(BleAudioCodec.pcm16);
+      world.scheduler.elapse(const Duration(seconds: 20));
       await pumpEventQueue();
-      expect(opens, 2, reason: 'late codec completion must not open an extra socket');
+      expect(opens, 2, reason: 'the timed-out read releases the attempt and retries after backoff');
       p.dispose();
     } finally {
       await world.dispose();

@@ -108,9 +108,9 @@ class PureSocket implements IPureSocket {
       (message) {
         if (generation != _connectionGeneration) return;
         if (message == "ping") {
-          // Logger.debug(message);
-          // Pong frame added manually https://www.rfc-editor.org/rfc/rfc6455#section-5.5.2
-          channel.sink.add([0x8A, 0x00]);
+          // Listen's text heartbeat is an application message, not a WebSocket
+          // control ping. Control ping/pong is handled by dart:io; sending
+          // these bytes through the data sink would inject fake audio.
           return;
         }
         onMessage(message);

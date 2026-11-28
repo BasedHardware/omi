@@ -324,8 +324,7 @@ class CaptureController extends ChangeNotifier
   static const Duration _rejectedTokenRefreshInterval = Duration(seconds: 30);
   DateTime? _lastRejectedTokenRefreshAt;
   DateTime? _keepAliveLastExecutedAt;
-  int _keepAliveEpoch = 0;
-  int? _keepAliveReconnectEpoch;
+  bool _keepAliveReconnectInFlight = false;
   Timer? _inProgressConversationRefreshTimer;
   int _inProgressConversationRefreshAttempts = 0;
   bool _isRefreshingInProgressConversation = false;
@@ -1909,6 +1908,9 @@ class CaptureController extends ChangeNotifier
     if (socket == null) {
       _startKeepAliveServices();
       Logger.debug("Can not create new conversation socket");
+      if (_shouldReconnectTranscriptionSocket && !_keepAliveReconnectInFlight) {
+        _kickLiveRecovery('socket_open_failed');
+      }
       return;
     }
     if (generation != _websocketInitGeneration || _deviceIdentityStale(deviceRevision)) {
@@ -2047,6 +2049,7 @@ class CaptureController extends ChangeNotifier
       await _releaseStaleTranscriptionSocket(socket);
       return;
     }
+    _transcriptionSocketRecovered();
     if (!identical(_socket, socket)) {
       _socket?.unsubscribe(this);
       _socket = socket;
@@ -2707,8 +2710,7 @@ class CaptureController extends ChangeNotifier
     if (language != _socket?.language ||
         codec != _socket?.codec ||
         !_canReuseTranscriptionSocket ||
-        _socket?.sttConfigId != sttConfigId ||
-        _sessionGeolocationDiffersFromSocket()) {
+        _socket?.sttConfigId != sttConfigId) {
       await _initiateWebsocket(audioCodec: codec, force: true, source: _getConversationSourceFromDevice());
     }
   }
@@ -3266,16 +3268,6 @@ class CaptureController extends ChangeNotifier
     }
   }
 
-  bool _sessionGeolocationDiffersFromSocket() {
-    final socketGeo = _socket?.geolocation;
-    final sessionGeo = _sessionGeolocation;
-    if (socketGeo == null && sessionGeo == null) return false;
-    if (socketGeo == null || sessionGeo == null) return true;
-    return socketGeo.time != sessionGeo.time ||
-        socketGeo.latitude != sessionGeo.latitude ||
-        socketGeo.longitude != sessionGeo.longitude;
-  }
-
   void _clearSessionLocation() {
     _sessionGeolocationGeneration++;
     _sessionGeolocation = null;
@@ -3749,7 +3741,6 @@ class CaptureController extends ChangeNotifier
     _mobileStandardBatchAllowed = false;
     _mobileStandardBatch?.authorize(false);
     _localPreview.revoke();
-    _keepAliveEpoch++;
     _socketCloseQueued = true;
     _transcriptServiceReady = false;
     unawaited(_dispatchLogged(SocketClosed(closeCode: closeCode)));
@@ -3819,7 +3810,7 @@ class CaptureController extends ChangeNotifier
     _keepAliveTimer = null;
     if (!_shouldReconnectTranscriptionSocket) return;
     final keepAliveToken = _sessionOwner?.token;
-    _keepAliveTimer = _scheduling.periodic(const Duration(seconds: 15), (t) async {
+    _keepAliveTimer = _scheduling.periodic(const Duration(seconds: 20), (t) async {
       Logger.debug("[Provider] keep alive");
       if (!_captureSessionIsCurrent(keepAliveToken)) {
         t.cancel();
@@ -3831,15 +3822,15 @@ class CaptureController extends ChangeNotifier
         _keepAliveTimer = null;
         return;
       }
-      if (_keepAliveReconnectEpoch == _keepAliveEpoch) return;
-      // rate 1/15s
-      if (_keepAliveLastExecutedAt != null &&
-          _now().subtract(const Duration(seconds: 15)).isBefore(_keepAliveLastExecutedAt!)) {
-        Logger.debug("[Provider] keep alive - hitting rate limits 1/15s");
+      if (_liveRecovery.kickTimer?.isActive ?? false) {
+        return;
+      }
+      if (_keepAliveReconnectInFlight) return;
+      if (_reconnectCooldownRemaining() > Duration.zero) {
+        Logger.debug("[Provider] keep alive - reconnect cooldown is active");
         return;
       }
 
-      _keepAliveLastExecutedAt = _now();
       // onClosed clears readiness without necessarily dropping the socket object.
       // A still-connected transport is not "healthy transcription"; readiness is.
       if (!recordingDeviceServiceReady || _transcriptServiceReady) {
@@ -3855,12 +3846,15 @@ class CaptureController extends ChangeNotifier
         return;
       }
 
-      final reconnectEpoch = _keepAliveEpoch;
-      _keepAliveReconnectEpoch = reconnectEpoch;
+      _keepAliveLastExecutedAt = _now();
+      _keepAliveReconnectInFlight = true;
       try {
         await _capture.dispatch(const KeepAliveTick());
+        if (!_transcriptServiceReady && _shouldReconnectTranscriptionSocket) {
+          _kickLiveRecovery('keepalive_failed');
+        }
       } finally {
-        if (_keepAliveReconnectEpoch == reconnectEpoch) _keepAliveReconnectEpoch = null;
+        _keepAliveReconnectInFlight = false;
       }
     });
   }
@@ -3944,6 +3938,7 @@ class CaptureController extends ChangeNotifier
 
   Future<Object?> _socketConnectedBody() async {
     liveHeldAudio.reset();
+    _transcriptionSocketRecovered();
     _recordingTelemetry.observeConnected();
     _transcriptServiceReady = true;
     final socket = _socket;
