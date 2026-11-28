@@ -67,6 +67,7 @@ def rendered_chart_documents(
     release_name: str | None = None,
     isolated_canary: bool = False,
     config_map_name: str | None = None,
+    extra_values: Path | None = None,
 ) -> list[dict[str, Any]]:
     if environment not in {"dev", "prod"}:
         raise ReceiptError("Pusher receipt environment must be dev or prod")
@@ -118,6 +119,10 @@ def rendered_chart_documents(
                 "service.annotations={}",
             ]
         )
+    if extra_values is not None:
+        # SCA-4463: the dispatch-bound Pusher lease override values file, so the
+        # expected render is the one Helm actually applied.
+        command.extend(["-f", str(extra_values)])
     result = subprocess.run(
         command,
         check=False,
@@ -261,6 +266,7 @@ def rendered_chart_fingerprint(
     release_name: str | None = None,
     isolated_canary: bool = False,
     config_map_name: str | None = None,
+    extra_values: Path | None = None,
 ) -> str:
     return _canonical_sha256(
         rendered_chart_documents(
@@ -270,6 +276,7 @@ def rendered_chart_fingerprint(
             release_name=release_name,
             isolated_canary=isolated_canary,
             config_map_name=config_map_name,
+            extra_values=extra_values,
         )
     )
 
@@ -390,6 +397,7 @@ def record_live_receipt(
     release_name: str | None = None,
     isolated_canary: bool = False,
     config_map_name: str | None = None,
+    extra_values: Path | None = None,
 ) -> dict[str, Any]:
     if not SHA_RE.fullmatch(source_sha):
         raise ReceiptError("Pusher receipt requires a full lowercase source SHA")
@@ -415,6 +423,7 @@ def record_live_receipt(
         release_name=release,
         isolated_canary=isolated_canary,
         config_map_name=config_name,
+        extra_values=extra_values,
     )
     expected_deployments = [
         document
@@ -444,6 +453,21 @@ def record_live_receipt(
         "config_sha256": config_fingerprint(config_map, expected_name=config_name),
         "live_identity": identity,
     }
+
+
+def verify_config_matches_receipt(config_map: dict[str, Any], receipt: dict[str, Any], *, expected_name: str) -> str:
+    """SCA-4463: a lease-override deploy keeps the shared ConfigMap, so prove before
+    Helm that it is the ConfigMap the isolated canary qualified (digests only)."""
+    expected = receipt.get("config_sha256")
+    if not isinstance(expected, str) or not re.fullmatch(r"sha256:[a-f0-9]{64}", expected):
+        raise ReceiptError("canary deployment receipt carries no config_sha256")
+    actual = config_fingerprint(config_map, expected_name=expected_name)
+    if actual != expected:
+        raise ReceiptError(
+            f"live {expected_name} differs from the canary-qualified ConfigMap; a lease-override deploy does not "
+            "rewrite it, so run a standard Pusher deploy first or reconcile the shared config"
+        )
+    return actual
 
 
 def _load_optional_evidence(path: Path | None, *, kind: str) -> dict[str, Any]:
@@ -500,7 +524,12 @@ def main() -> int:
     live.add_argument("--release-name")
     live.add_argument("--isolated-canary", action="store_true")
     live.add_argument("--config-map-name")
+    live.add_argument("--extra-values", type=Path)
     live.add_argument("--output", type=Path, required=True)
+    verify_config = subparsers.add_parser("verify-config")
+    verify_config.add_argument("--namespace", required=True)
+    verify_config.add_argument("--config-map-name", required=True)
+    verify_config.add_argument("--canary-receipt", type=Path, required=True)
     qualification = subparsers.add_parser("record-qualification")
     qualification.add_argument("--deployment-receipt", type=Path, required=True)
     qualification.add_argument("--semantic-probe-evidence", type=Path)
@@ -519,7 +548,18 @@ def main() -> int:
                 release_name=args.release_name,
                 isolated_canary=args.isolated_canary,
                 config_map_name=args.config_map_name,
+                extra_values=args.extra_values,
             )
+        elif args.command == "verify-config":
+            raw = json.loads(args.canary_receipt.read_text(encoding="utf-8"))
+            if not isinstance(raw, dict):
+                raise ReceiptError("canary deployment receipt must be a JSON object")
+            config_map = _run_json(
+                ["kubectl", "-n", args.namespace, "get", "configmap", args.config_map_name, "-o", "json"]
+            )
+            digest = verify_config_matches_receipt(config_map, raw, expected_name=args.config_map_name)
+            print(f"OK: {args.namespace}/{args.config_map_name} matches the canary-qualified ConfigMap ({digest})")
+            return 0
         else:
             raw = json.loads(args.deployment_receipt.read_text(encoding="utf-8"))
             if not isinstance(raw, dict):

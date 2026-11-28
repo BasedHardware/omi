@@ -88,3 +88,53 @@ Create the name of the service account to use
   value: {{ $value | quote }}
 {{- end -}}
 {{- end -}}
+
+{{/*
+SCA-4463: a Pusher-only record token lease vector. Empty (the default) renders
+nothing and the four lease keys keep their configMapKeyRef to the shared
+runtime ConfigMap. Set, it replaces those four entries on this container with
+literal values; container env wins over envFrom, and the shared ConfigMap and
+backend-listen are untouched. Release supplies it per dispatch.
+*/}}
+{{- define "pusher.recordTokenLeaseOverrideNames" -}}
+RECORD_TOKEN_LEASE_MODE RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT RECORD_TOKEN_LEASE_SECONDS RECORD_TOKEN_LEASE_DEPLOYED_AT
+{{- end -}}
+
+{{- define "pusher.recordTokenLeaseOverrideEnv" -}}
+{{- $lease := .Values.recordTokenLeaseOverride -}}
+{{- if not (kindIs "map" $lease) -}}
+  {{- fail "recordTokenLeaseOverride must be a map" -}}
+{{- end -}}
+{{- $keys := list "mode" "servePercent" "seconds" "deployedAt" -}}
+{{- if ne (keys $lease | sortAlpha | join ",") ($keys | sortAlpha | join ",") -}}
+  {{- fail "recordTokenLeaseOverride requires exactly mode, servePercent, seconds and deployedAt" -}}
+{{- end -}}
+{{- range $key := $keys -}}
+  {{- if not (kindIs "string" (get $lease $key)) -}}
+    {{- fail (printf "recordTokenLeaseOverride.%s must be a string" $key) -}}
+  {{- end -}}
+{{- end -}}
+{{- if not (has $lease.mode (list "off" "shadow" "serve")) -}}
+  {{- fail "recordTokenLeaseOverride.mode must be off, shadow or serve" -}}
+{{- end -}}
+{{- if or (not (regexMatch "^(0|[1-9][0-9]{0,2})$" $lease.servePercent)) (gt (atoi $lease.servePercent) 100) -}}
+  {{- fail "recordTokenLeaseOverride.servePercent must be an integer from 0 to 100" -}}
+{{- end -}}
+{{- if or (not (regexMatch "^[1-9][0-9]{3}$" $lease.seconds)) (lt (atoi $lease.seconds) 1800) (gt (atoi $lease.seconds) 7200) -}}
+  {{- fail "recordTokenLeaseOverride.seconds must be an integer from 1800 to 7200" -}}
+{{- end -}}
+{{- if not (regexMatch "^(0|[1-9][0-9]{0,11})$" $lease.deployedAt) -}}
+  {{- fail "recordTokenLeaseOverride.deployedAt must be a non-negative integer epoch" -}}
+{{- end -}}
+{{- if and (ne $lease.mode "off") (eq $lease.deployedAt "0") -}}
+  {{- fail "recordTokenLeaseOverride.deployedAt must pin a shared release epoch before shadow/serve" -}}
+{{- end -}}
+- name: RECORD_TOKEN_LEASE_MODE
+  value: {{ $lease.mode | quote }}
+- name: RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT
+  value: {{ $lease.servePercent | quote }}
+- name: RECORD_TOKEN_LEASE_SECONDS
+  value: {{ $lease.seconds | quote }}
+- name: RECORD_TOKEN_LEASE_DEPLOYED_AT
+  value: {{ $lease.deployedAt | quote }}
+{{- end -}}

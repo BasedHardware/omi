@@ -84,6 +84,33 @@ on:
         required: false
         default: false
         type: boolean
+      # SCA-4463: a Pusher-only record token lease vector. none (the default)
+      # keeps the four keys on the shared ConfigMap. Set, all four are required;
+      # the canary and the Pusher release render them as container env (which
+      # wins over envFrom) and this run does not write the shared ConfigMap, so
+      # backend-listen keeps its own vector.
+      pusher_record_token_lease_override_mode:
+        description: 'Pusher only: record token lease override mode (none keeps the shared ConfigMap vector)'
+        required: false
+        default: 'none'
+        type: choice
+        options:
+          - none
+          - 'off'
+          - shadow
+          - serve
+      pusher_record_token_lease_override_serve_percent:
+        description: 'Pusher lease override only: serve percent 0-100'
+        required: false
+        default: ''
+      pusher_record_token_lease_override_seconds:
+        description: 'Pusher lease override only: lease seconds 1800-7200'
+        required: false
+        default: ''
+      pusher_record_token_lease_override_deployed_at:
+        description: 'Pusher lease override only: integer release epoch (> 0 unless mode is off)'
+        required: false
+        default: ''
 
 # The LLM Gateway path reapplies shared backend-secrets; standalone pusher only
 # mutates its own GKE release and therefore keeps a separate environment lock.
@@ -258,6 +285,23 @@ jobs:
           if [[ "${{ github.event.inputs.environment }}" == prod ]]; then
             echo "PINNED_PUSHER_RELEASE_SHA=$PINNED_PUSHER_RELEASE_SHA" >> "$GITHUB_ENV"
           fi
+
+      # SCA-4463: runs from the admitted runtime checkout, so a pinned source whose
+      # chart cannot render the override refuses here, before any cluster write.
+      - name: Bind Pusher-scoped record token lease override
+        shell: bash
+        env:
+          PUSHER_LEASE_OVERRIDE_MODE: ${{ github.event.inputs.pusher_record_token_lease_override_mode }}
+          PUSHER_LEASE_OVERRIDE_SERVE_PERCENT: ${{ github.event.inputs.pusher_record_token_lease_override_serve_percent }}
+          PUSHER_LEASE_OVERRIDE_SECONDS: ${{ github.event.inputs.pusher_record_token_lease_override_seconds }}
+          PUSHER_LEASE_OVERRIDE_DEPLOYED_AT: ${{ github.event.inputs.pusher_record_token_lease_override_deployed_at }}
+        run: |
+          set -euo pipefail
+          python3 -m pip install -q pyyaml
+          python3 backend/scripts/pusher_record_token_lease_override.py bind \
+            --environment "${{ vars.ENV }}" \
+            --service "${{ env.SERVICE }}" \
+            --output "$RUNNER_TEMP/pusher-record-token-lease-override.yaml"
 
       - name: Select development-qualified Pusher digest for production
         if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod'
@@ -695,6 +739,12 @@ jobs:
           set -euo pipefail
           python3 -m pip install -q pyyaml websockets==12.0
           test -n "$PUSHER_CANARY" -a -n "$LISTENER_CANARY" -a -n "$PUSHER_CANARY_CONFIG"
+          lease_override_values=()
+          lease_override_receipt=()
+          if [[ "${PUSHER_RECORD_TOKEN_LEASE_OVERRIDE:-}" == active ]]; then
+            lease_override_values=(-f "$PUSHER_RECORD_TOKEN_LEASE_OVERRIDE_VALUES")
+            lease_override_receipt=(--extra-values "$PUSHER_RECORD_TOKEN_LEASE_OVERRIDE_VALUES")
+          fi
           helm -n prod-omi-backend upgrade --install "$PUSHER_CANARY" ./backend/charts/pusher \
             -f ./backend/charts/pusher/prod_omi_pusher_values.yaml \
             --set-string "fullnameOverride=$PUSHER_CANARY" \
@@ -710,7 +760,8 @@ jobs:
             --set-string "image.repository=$PUSHER_IMAGE_REPOSITORY" \
             --set-string "image.digest=$PUSHER_IMAGE_DIGEST" \
             --set-string image.tag= \
-            --set-string image.pullPolicy=IfNotPresent
+            --set-string image.pullPolicy=IfNotPresent \
+            "${lease_override_values[@]}"
           # The isolated canary is exactly one replica with HPA disabled; this
           # covers the committed per-pod startup budget without inheriting the
           # fourteen-wave timeout required by the shared 40-pod release.
@@ -725,6 +776,7 @@ jobs:
             --release-name "$PUSHER_CANARY" \
             --isolated-canary \
             --config-map-name "$PUSHER_CANARY_CONFIG" \
+            "${lease_override_receipt[@]}" \
             --output pusher-prod-canary-deployment-receipt.json
           python3 backend/scripts/pusher_prod_canary.py create-listener \
             --namespace prod-omi-backend \
@@ -903,8 +955,11 @@ jobs:
           kubectl -n prod-omi-backend delete configmap "$PUSHER_CANARY_CONFIG" --ignore-not-found=true --wait=true || cleanup_failed=1
           exit "$cleanup_failed"
 
+      # SCA-4463: a lease-override run leaves the shared ConfigMap (and therefore
+      # backend-listen) untouched; the parity step below proves it is still the
+      # ConfigMap the canary qualified.
       - name: Apply non-secret pusher runtime config
-        if: env.SERVICE == 'pusher' && env.CANARY_ONLY != 'true'
+        if: env.SERVICE == 'pusher' && env.CANARY_ONLY != 'true' && env.PUSHER_RECORD_TOKEN_LEASE_OVERRIDE != 'active'
         env:
           LADDER_V1_PLUS_MONTH_PRICE_ID: ${{ vars.LADDER_V1_PLUS_MONTH_PRICE_ID }}
           LADDER_V1_PLUS_YEAR_PRICE_ID: ${{ vars.LADDER_V1_PLUS_YEAR_PRICE_ID }}
@@ -947,13 +1002,26 @@ jobs:
           python3 backend/scripts/verify_pusher_config_references.py \
             --environment ${{ vars.ENV }} --namespace ${{ vars.ENV }}-omi-backend
 
+      - name: Verify the kept shared ConfigMap is the canary-qualified ConfigMap
+        if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod' && env.CANARY_ONLY != 'true' && env.PUSHER_RECORD_TOKEN_LEASE_OVERRIDE == 'active'
+        run: |
+          python3 backend/scripts/pusher_release_receipt.py verify-config \
+            --namespace prod-omi-backend \
+            --config-map-name prod-omi-backend-config \
+            --canary-receipt pusher-prod-canary-deployment-receipt.json
+
       - name: Verify live Pusher surge capacity and digest render
         if: env.SERVICE == 'pusher' && github.event.inputs.skip_live_capacity_gate != 'true' && env.CANARY_ONLY != 'true'
         run: |
+          lease_override=()
+          if [[ "${PUSHER_RECORD_TOKEN_LEASE_OVERRIDE:-}" == active ]]; then
+            lease_override=(--extra-values "$PUSHER_RECORD_TOKEN_LEASE_OVERRIDE_VALUES")
+          fi
           python3 backend/scripts/verify_pusher_live_deployment_gate.py \
             --environment ${{ vars.ENV }} \
             --namespace ${{ vars.ENV }}-omi-backend \
-            --image "$PUSHER_IMAGE_REFERENCE"
+            --image "$PUSHER_IMAGE_REFERENCE" \
+            "${lease_override[@]}"
 
       - name: Deploy Pusher to GKE cluster using Helm
         if: env.CANARY_ONLY != 'true'
@@ -990,7 +1058,11 @@ jobs:
             fi
             python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service llm-gateway
           else
-            helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-pusher ./backend/charts/pusher -f ./backend/charts/pusher/${{ vars.ENV }}_omi_pusher_values.yaml --set-string "image.repository=${PUSHER_IMAGE_REPOSITORY}" --set-string "image.digest=${PUSHER_IMAGE_DIGEST}" --set-string image.tag= --set-string image.pullPolicy=IfNotPresent
+            lease_override_values=()
+            if [[ "${PUSHER_RECORD_TOKEN_LEASE_OVERRIDE:-}" == active ]]; then
+              lease_override_values=(-f "$PUSHER_RECORD_TOKEN_LEASE_OVERRIDE_VALUES")
+            fi
+            helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-pusher ./backend/charts/pusher -f ./backend/charts/pusher/${{ vars.ENV }}_omi_pusher_values.yaml --set-string "image.repository=${PUSHER_IMAGE_REPOSITORY}" --set-string "image.digest=${PUSHER_IMAGE_DIGEST}" --set-string image.tag= --set-string image.pullPolicy=IfNotPresent "${lease_override_values[@]}"
             # Must cover the chart-derived Pusher rollout budget (fourteen
             # availability waves at the current production HPA ceiling).
             if ! kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-pusher --timeout=9600s; then
@@ -1003,6 +1075,10 @@ jobs:
       - name: Record exact live production Pusher deployment receipt
         if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod' && env.CANARY_ONLY != 'true'
         run: |
+          lease_override=()
+          if [[ "${PUSHER_RECORD_TOKEN_LEASE_OVERRIDE:-}" == active ]]; then
+            lease_override=(--extra-values "$PUSHER_RECORD_TOKEN_LEASE_OVERRIDE_VALUES")
+          fi
           python3 backend/scripts/pusher_release_receipt.py record-live \
             --environment "${{ vars.ENV }}" \
             --namespace "${{ vars.ENV }}-omi-backend" \
@@ -1010,6 +1086,7 @@ jobs:
             --digest "$PUSHER_IMAGE_DIGEST" \
             --source-sha "$CHECKED_OUT_SHA" \
             --run-id "$GITHUB_RUN_ID" \
+            "${lease_override[@]}" \
             --output pusher-prod-deployment-receipt.json
 
       - name: Reverify live finalization alert route after production rollout

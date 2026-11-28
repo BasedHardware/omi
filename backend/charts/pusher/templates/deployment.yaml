@@ -65,18 +65,23 @@ spec:
           image: "{{ if $digest }}{{ $repository }}@{{ $digest }}{{ else }}{{ $repository }}:{{ required "image.tag is required when image.digest is absent" .Values.image.tag }}{{ end }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           {{- $v3StartupEnv := .Values.conversationsV3StartupEnv | default dict }}
+          {{- $leaseOverride := .Values.recordTokenLeaseOverride | default dict }}
+          {{- $leaseOverrideNames := list }}
+          {{- if $leaseOverride }}
+          {{- $leaseOverrideNames = splitList " " (include "pusher.recordTokenLeaseOverrideNames" .) }}
+          {{- end }}
           {{- $runtimeConfigMapName := required "runtimeConfigMapName is required" .Values.runtimeConfigMapName }}
           envFrom:
             - configMapRef:
                 name: {{ $runtimeConfigMapName | quote }}
-          {{- if or .Values.env $v3StartupEnv }}
+          {{- if or .Values.env $v3StartupEnv $leaseOverride }}
           env:
             # Immutable rollout exporter identity, including supervised GPU children.
             - name: ROLLOUT_POD_TEMPLATE_HASH
               valueFrom:
                 fieldRef: {apiVersion: v1, fieldPath: "metadata.labels['pod-template-hash']"}
             {{- range .Values.env }}
-            {{- if not (hasKey $v3StartupEnv .name) }}
+            {{- if and (not (hasKey $v3StartupEnv .name)) (not (has .name $leaseOverrideNames)) }}
             {{- $entry := deepCopy . }}
             {{- $valueFrom := get $entry "valueFrom" }}
             {{- if and (kindIs "map" $valueFrom) (hasKey $valueFrom "configMapKeyRef") }}
@@ -90,6 +95,9 @@ spec:
             {{- end }}
             {{- if $v3StartupEnv }}
             {{- include "pusher.conversationsV3StartupEnv" . | nindent 12 }}
+            {{- end }}
+            {{- if $leaseOverride }}
+            {{- include "pusher.recordTokenLeaseOverrideEnv" . | nindent 12 }}
             {{- end }}
           {{- end }}
           ports:

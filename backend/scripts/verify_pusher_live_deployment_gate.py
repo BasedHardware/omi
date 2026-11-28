@@ -436,10 +436,12 @@ def kubectl_json(arguments: list[str]) -> dict[str, Any]:
     return payload
 
 
-def render_deployment(root: Path, environment: str, image: str) -> dict[str, Any]:
+def render_deployment(root: Path, environment: str, image: str, extra_values: Path | None = None) -> dict[str, Any]:
     repository, digest = parse_image_reference(image)
     chart = root / "backend/charts/pusher"
     values = chart / f"{environment}_omi_pusher_values.yaml"
+    # SCA-4463: the dispatch-bound lease override values file, when one is bound.
+    extra = ["-f", str(extra_values)] if extra_values is not None else []
     result = subprocess.run(
         [
             "helm",
@@ -456,6 +458,7 @@ def render_deployment(root: Path, environment: str, image: str) -> dict[str, Any
             "image.tag=",
             "--set-string",
             "image.pullPolicy=IfNotPresent",
+            *extra,
         ],
         cwd=root,
         check=False,
@@ -505,10 +508,11 @@ def main() -> int:
     parser.add_argument("--namespace", required=True)
     parser.add_argument("--image", required=True, help="Exact repository@sha256 image selected for this deployment")
     parser.add_argument("--root", type=Path, default=ROOT)
+    parser.add_argument("--extra-values", type=Path, help="Optional dispatch-bound Pusher values file (lease override)")
     args = parser.parse_args()
 
     try:
-        deployment = render_deployment(args.root.resolve(), args.environment, args.image)
+        deployment = render_deployment(args.root.resolve(), args.environment, args.image, args.extra_values)
         current = kubectl_json(["-n", args.namespace, "get", "deployment", f"{args.environment}-omi-pusher"])
         nodes = kubectl_json(["get", "nodes"]).get("items")
         pods = kubectl_json(["get", "pods", "--all-namespaces"]).get("items")
