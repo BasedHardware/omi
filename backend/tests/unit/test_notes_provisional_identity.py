@@ -143,15 +143,15 @@ def fixture(existing_people=None, participant=None, receipt=None, segments=None,
     return db, transaction, data, result
 
 
-def test_provisional_person_email_alias_and_binding_never_teach():
+def test_provisional_person_email_and_alias_do_not_label_or_teach():
     db, transaction, note, segments = fixture()
     pid = person_id_for(NAME, EMAIL)
     person = db.rows[('users', UID, 'people', pid)]
     assert person['name'] == NAME and person['email'] == EMAIL and person['aliases'] == ['Mo']
     assert person['confidence'] == 'unverified' and person['speech_samples'] == []
-    assert segments[0]['person_id'] == pid
-    assert segments[0]['speaker_label_source'] == 'auto'
-    assert segments[0]['speaker_match_source'] == 'notes_inferred'
+    assert segments[0].get('person_id') is None
+    assert segments[0].get('speaker_match_source') is None
+    assert note['structured']['participants'][0]['name'] == NAME
     assert authorized_teaching_segments(note, pid) == []
     assert len(transaction.creates) == 1 and len(transaction.sets) == 1
     assert all(path[-2] != 'speaker_learning_jobs' for path in db.rows)
@@ -161,7 +161,7 @@ def test_provisional_person_email_alias_and_binding_never_teach():
 @pytest.mark.parametrize(
     'name,email,expected', [('Morgan', '', False), ('Different Name', EMAIL, True), ('Mo', '', True)]
 )
-def test_only_exact_email_or_stored_alias_attaches(name, email, expected):
+def test_only_exact_email_or_stored_alias_updates_existing_person(name, email, expected):
     people = {
         'synthetic-person': {
             'id': 'synthetic-person',
@@ -171,8 +171,10 @@ def test_only_exact_email_or_stored_alias_attaches(name, email, expected):
             'speech_samples': [],
         }
     }
-    _, _, _, segments = fixture(people, {'name': name, 'email': email, 'source': 'screen', 'speaker_bindings': [2]})
-    assert (segments[0]['person_id'] == 'synthetic-person') is expected
+    db, _, _, segments = fixture(people, {'name': name, 'email': email, 'source': 'screen', 'speaker_bindings': [2]})
+    existing = db.rows[('users', UID, 'people', 'synthetic-person')]
+    assert (CID in (existing.get('notes_identity_identifiers') or {})) is expected
+    assert segments[0].get('person_id') is None
 
 
 def test_notes_roster_does_not_first_name_merge():
@@ -464,7 +466,7 @@ def test_real_completed_write_commits_people_and_inference_with_current_receipt(
         assert segments[0]['person_id'] is None
         assert ('users', UID, 'people', pid) not in db.rows
     else:
-        assert segments[0]['person_id'] == pid and segments[0]['speaker_match_source'] == 'notes_inferred'
+        assert segments[0].get('person_id') is None and segments[0].get('speaker_match_source') is None
         assert db.rows[('users', UID, 'people', pid)]['speech_samples'] == []
     assert '_notes_identity' not in stored
 
@@ -679,6 +681,25 @@ def test_corroborated_name_is_kept_and_upserted(evidence):
     db, transaction, _, _ = fixture(structured=result)
     assert len(transaction.creates) == 1
     assert db.rows[('users', UID, 'people', person_id_for(NAME, EMAIL))]['email'] == EMAIL
+
+
+def test_notes_refresh_clears_existing_notes_label():
+    segments = [
+        {
+            'id': 'synthetic-other',
+            'speaker_id': 2,
+            'is_user': False,
+            'person_id': person_id_for(NAME, EMAIL),
+            'speaker_label_source': 'auto',
+            'speaker_match_source': 'notes_inferred',
+            'speaker_identity_status': 'not_user',
+        },
+        {'id': 'synthetic-owner', 'speaker_id': 0, 'is_user': True},
+    ]
+    _, _, _, stored = fixture(segments=segments)
+    assert stored[0]['person_id'] is None
+    assert stored[0]['speaker_match_source'] is None
+    assert stored[0]['speaker_identity_status'] == 'unknown'
 
 
 def test_any_owner_segment_fences_entire_speaker_id():
