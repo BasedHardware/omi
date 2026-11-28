@@ -8,6 +8,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import check_posthog_config as check  # noqa: E402
@@ -104,6 +105,29 @@ class CheckPostHogConfig(unittest.TestCase):
         doc = passing()
         doc['functions'][0]['events'].append('Brand New Event')
         self.assertOneError(doc, 'Brand New Event: kept at 100% without a measured est_events_per_day')
+
+    def test_new_active_event_without_config_row_fails_even_when_config_is_unchanged(self):
+        doc = passing()
+        old_event = {'wire_name': 'Legacy Event', 'status': 'active'}
+        prior_registry = {'events': [old_event]}
+        registry = {'events': [
+            old_event,
+            {'wire_name': 'Retired Event', 'status': 'deprecated'},
+            {'wire_name': 'Memory Created', 'status': 'active'},
+            {'wire_name': 'Brand New Event', 'status': 'active'},
+        ]}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = root / check.SOURCE
+            path.parent.mkdir(parents=True)
+            path.write_text(json.dumps(doc))
+            (root / check.EVENT_REGISTRY).write_text(json.dumps(registry))
+            with (patch.object(check, 'ROOT', root),
+                  patch.object(check, 'merge_base', return_value='base'),
+                  patch.object(check, 'base_doc', side_effect=[doc, prior_registry]),
+                  contextlib.redirect_stdout(io.StringIO())):
+                found = check.run(path, 'base', TODAY, enforce=False)
+        self.assertEqual(found, [f'Brand New Event: active typed event needs an events row in {check.SOURCE}'])
 
     def test_kept_event_without_reader(self):
         doc = passing()

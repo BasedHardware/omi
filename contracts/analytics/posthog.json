@@ -288,7 +288,10 @@
     "quiz_screen_viewed",
     "quiz_started",
     "MCP Daily Activity",
-    "Battery Reading Hidden"
+    "Battery Reading Hidden",
+    "Pendant Stop Question Shown",
+    "Pendant Stop Question Answered",
+    "Pendant Stop Question Dismissed"
    ],
    "note": "Listed events skip the default sample; later sample stages still apply to them. $-events (except $rageclick) and names containing the hog-source markers also pass; that rule lives in the function source, not in inputs."
   },
@@ -3453,6 +3456,31 @@
    "purpose": "product",
    "reader": [
     "contracts/analytics/consumers/battery-reading-hidden.sql"
+   ]
+  },
+  "Pendant Stop Question Shown": {
+   "est_events_per_day": 500,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/pendant-stop-question.sql"
+   ],
+   "note": "Pre-release sizing assumption of 500 eligible presentations per day. Each presentation can yield at most one answer or dismissal."
+  },
+  "Pendant Stop Question Answered": {
+   "est_events_per_day": 500,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/pendant-stop-question.sql"
+   ]
+  },
+  "Pendant Stop Question Dismissed": {
+   "est_events_per_day": 500,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/pendant-stop-question.sql"
    ]
   }
  }

@@ -3,6 +3,7 @@
 
 contracts/analytics/posthog.json is the single source of truth for PostHog
 sampling and warehouse syncs. This check fails when:
+  - an active typed event is missing a config row and was not already missing at the merge base;
   - an event the config keeps at 100% has no measured est_events_per_day or no reader;
   - a debug/ops event (by purpose or by name) is kept above 2% without an
     unexpired waiver signed by David Zhang;
@@ -26,6 +27,7 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = 'contracts/analytics/posthog.json'
+EVENT_REGISTRY = 'contracts/analytics/events.json'
 OWNED_PATHS = (SOURCE, 'scripts/check_posthog_config.py', 'scripts/test_check_posthog_config.py', 'scripts/posthog')
 SAMPLE_CEILING = 2.0
 WAIVER_SIGNER = 'David Zhang'
@@ -230,10 +232,16 @@ def merge_base(base):
     return found.stdout.strip() if found.returncode == 0 else base
 
 
-def base_doc(ref):
+def base_doc(ref, path=SOURCE):
     """The file at ref, or None when it did not exist there."""
-    shown = subprocess.run(['git', 'show', f'{ref}:{SOURCE}'], cwd=ROOT, capture_output=True, text=True)
+    shown = subprocess.run(['git', 'show', f'{ref}:{path}'], cwd=ROOT, capture_output=True, text=True)
     return json.loads(shown.stdout) if shown.returncode == 0 else None
+
+
+def missing_active_events(registry, config):
+    events = (config or {}).get('events', {})
+    return {event['wire_name'] for event in (registry or {}).get('events', [])
+            if event['status'] == 'active' and event['wire_name'] not in events}
 
 
 def owned_change(ref):
@@ -252,6 +260,11 @@ def run(path, base, today, enforce=None):
     old = estimate(prior)['total'] if prior else 0.0
     if enforce is None:
         enforce = ref is None or owned_change(ref)
+    coverage_errors = []
+    if ref:
+        registry = json.loads((ROOT / EVENT_REGISTRY).read_text())
+        missing = missing_active_events(registry, doc) - missing_active_events(base_doc(ref, EVENT_REGISTRY), prior)
+        coverage_errors = [f'{name}: active typed event needs an events row in {SOURCE}' for name in sorted(missing)]
     print(f"PostHog estimate: ${cost['total']:,.0f}/mo (base ${old:,.0f}/mo, delta ${cost['total'] - old:+,.0f})")
     print(f"  events {cost['events_per_month'] / 1e6:.2f}M/mo ${cost['events']:,.0f}; identified {cost['identified_per_month'] / 1e6:.2f}M/mo ${cost['identified']:,.0f}; "
           f"flags ${cost['flags']:,.0f}; warehouse {cost['warehouse_rows_per_month'] / 1e6:.2f}M rows ${cost['warehouse']:,.0f}; other ${cost['other']:,.0f}")
@@ -264,7 +277,9 @@ def run(path, base, today, enforce=None):
         print(f"  all planned changes: ${estimate(doc, with_planned=True)['total']:,.0f}/mo")
     for error in errors:
         print(error if enforce else f'warning (PostHog config unchanged in this diff): {error}')
-    return errors if enforce else []
+    for error in coverage_errors:
+        print(error)
+    return coverage_errors + (errors if enforce else [])
 
 
 def main(argv=None):
