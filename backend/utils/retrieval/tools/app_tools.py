@@ -136,12 +136,24 @@ def _create_pydantic_model_from_schema(tool_name: str, parameters: Dict[str, Any
     Returns:
         A Pydantic model class
     """
-    properties = parameters.get('properties', {})
-    required = set(parameters.get('required', []))
+    model_name = f"{tool_name.replace('-', '_').replace('.', '_')}Input"
+    if not isinstance(parameters, dict):
+        return create_model(model_name)
+
+    raw_props = parameters.get('properties')
+    properties = raw_props if isinstance(raw_props, dict) else {}
+    raw_req = parameters.get('required')
+    required = set(raw_req) if isinstance(raw_req, (list, tuple, set)) else set()
 
     field_definitions: Dict[str, Any] = {}
 
     for param_name, param_schema in properties.items():
+        if not isinstance(param_name, str) or not param_name:
+            continue
+        if not isinstance(param_schema, dict):
+            field_definitions[param_name] = (Optional[str], Field(default=None, description=''))
+            continue
+
         param_type = param_schema.get('type', 'string')
         param_desc = param_schema.get('description', '')
         is_required = param_name in required
@@ -167,14 +179,11 @@ def _create_pydantic_model_from_schema(tool_name: str, parameters: Dict[str, Any
             # For optional fields, wrap in Optional and provide None default
             field_definitions[param_name] = (Optional[py_type], Field(default=None, description=param_desc))
 
-    # Create a unique model name
-    model_name = f"{tool_name.replace('-', '_').replace('.', '_')}Input"
-
     # Create and return the dynamic Pydantic model
     return create_model(model_name, **field_definitions)
 
 
-def _supplied_arguments(kwargs: Dict[str, Any]) -> Dict[str, Any]:
+def _supplied_arguments(kwargs: Any) -> Dict[str, Any]:
     """Drop the optional parameters the model did not supply.
 
     Every non-required manifest parameter is typed Optional with default None, and
@@ -182,6 +191,8 @@ def _supplied_arguments(kwargs: Dict[str, Any]) -> Dict[str, Any]:
     would receive JSON null for a parameter its schema types as string or integer,
     so an omitted parameter must be omitted on the wire too.
     """
+    if not isinstance(kwargs, dict):
+        return {}
     return {name: value for name, value in kwargs.items() if value is not None}
 
 
@@ -215,7 +226,7 @@ def create_app_tool(
         _remember_tool_status(tool_name, app_tool.status_message)
 
     # Create a Pydantic model from the schema (or empty model if no parameters)
-    if app_tool.parameters and app_tool.parameters.get('properties'):
+    if isinstance(app_tool.parameters, dict) and isinstance(app_tool.parameters.get('properties'), dict):
         args_schema = _create_pydantic_model_from_schema(app_tool.name, app_tool.parameters)
     else:
         # Create an empty schema for tools with no parameters
@@ -224,9 +235,9 @@ def create_app_tool(
 
     if app_tool.is_mcp and mcp_server_url:
         _mcp_url: str = mcp_server_url
-        _mcp_tokens: Optional[Dict[str, Any]] = mcp_oauth_tokens
-        _access_token: Optional[str] = mcp_oauth_tokens.get('access_token') if mcp_oauth_tokens else None
-        _transport: str = app_tool.transport
+        _mcp_tokens: Optional[Dict[str, Any]] = mcp_oauth_tokens if isinstance(mcp_oauth_tokens, dict) else None
+        _access_token: Optional[str] = _mcp_tokens.get('access_token') if _mcp_tokens else None
+        _transport: str = (app_tool.transport or "sse").strip().lower()
 
         async def mcp_tool_function(**kwargs: Any) -> str:
             """MCP tool dynamically created from MCP server."""
@@ -319,8 +330,12 @@ async def _call_tool_endpoint(
             return f"Error: Configuration not available for {app_tool.name}"
         config = cast(RunnableConfig, ctx)
 
-    configurable: Dict[str, Any] = config.get('configurable') or {}
-    uid = configurable.get('user_id')
+    if not isinstance(config, dict):
+        return f"Error: Configuration not available for {app_tool.name}"
+
+    configurable_val = config.get('configurable')
+    configurable: Dict[str, Any] = configurable_val if isinstance(configurable_val, dict) else config
+    uid = configurable.get('user_id') or configurable.get('uid') or config.get('user_id') or config.get('uid')
     if not uid:
         return f"Error: User ID not found for {app_tool.name}"
 
@@ -362,14 +377,14 @@ async def _call_tool_endpoint(
 
     try:
         async with httpx.AsyncClient(timeout=120.0) as client:
-            method = app_tool.method.upper()
+            method = (app_tool.method or 'POST').upper().strip()
             request_kwargs: Dict[str, Any] = {
                 'headers': headers,
             }
 
             if method in ['POST', 'PUT', 'PATCH']:
                 request_kwargs['json'] = payload
-            elif method == 'GET':
+            else:
                 request_kwargs['params'] = payload
 
             response = await client.request(method=method, url=app_tool.endpoint, **request_kwargs)
