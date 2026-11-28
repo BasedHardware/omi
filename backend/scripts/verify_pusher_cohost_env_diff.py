@@ -116,6 +116,9 @@ _BATCH_PIPELINE_LISTEN_ONLY = frozenset(
         # Account protection, consent and erasure writers are mounted by the
         # API. Pusher finalizes conversations without mutating account policy.
         'BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED',
+        # Listen's batch RPCs can reach ordered merge. Pusher mounts no such
+        # RPCs and runs neither the merge worker nor the outbox scanner.
+        'BATCH_PROJECTION_OUTBOX',
         # Held expiry/requeue is owned by main.py maintenance/RPC and GPU workers;
         # pusher does not run the held maintenance loop or worker failure writer.
         'BATCH_HELD_DEAD_LETTER_ENABLED',

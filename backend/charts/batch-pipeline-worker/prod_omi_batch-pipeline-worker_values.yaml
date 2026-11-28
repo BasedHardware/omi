@@ -71,7 +71,7 @@ borrowedNodePools:
   pools: [parakeet-pool, parakeet-pool-b, parakeet-pool-v2]
 worker:
   RECORD_FRESH_MERGE_ENABLED: null
-  projectionOutbox: null
+  projectionOutbox: false
   packingSampleRate: null
   capDispatchCohort: null
   # The depth-only roll preserves each GPU Deployment's existing bindings,

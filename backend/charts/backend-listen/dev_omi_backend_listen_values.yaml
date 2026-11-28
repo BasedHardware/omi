@@ -245,6 +245,8 @@ env:
     value: "true"
   - name: BATCH_PIPELINE_SERVING_ENABLED
     value: "false"
+  - name: BATCH_PROJECTION_OUTBOX
+    value: "false"
   - name: BATCH_PIPELINE_WORKER_ENABLED
     value: "false"
   - name: BATCH_PIPELINE_API_URL

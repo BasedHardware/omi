@@ -6,6 +6,7 @@ from pathlib import Path
 
 import yaml
 import pytest
+from config.batch_pipeline import projection_outbox_enabled
 
 ROOT = Path(__file__).resolve().parents[3]
 SAFE_LOADER = getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
@@ -15,6 +16,37 @@ COMPOSER = runpy.run_path(str(ROOT / 'backend/deploy/compose_runtime_env.py'))
 def test_checked_in_manifest_matches_sources():
     manifest = yaml.load((ROOT / 'backend/deploy/runtime_env.yaml').read_text(), Loader=SAFE_LOADER)
     assert COMPOSER['compose_manifest']() == manifest
+
+
+@pytest.mark.parametrize('mode', ['off', 'serve'])
+def test_projection_outbox_unset_and_deployed_values(monkeypatch, mode):
+    flag = 'BATCH_PROJECTION_OUTBOX'
+    monkeypatch.setenv('CAPTURE_COVERAGE_MODE', mode)
+    monkeypatch.delenv(flag, raising=False)
+    assert projection_outbox_enabled() is True
+    for value, enabled in [('true', True), ('false', False)]:
+        monkeypatch.setenv(flag, value)
+        assert projection_outbox_enabled() is enabled
+
+    environments = COMPOSER['compose_manifest']()['environments']
+    environments['staging'] = COMPOSER['compose_staging'](inputs={'STAGING_REDIS_HOST': '10.0.0.1'})
+    for stage, environment in environments.items():
+        expected = {
+            'backend': 'true',
+            'backend-sync': 'true',
+            'backend-integration': 'true' if stage == 'dev' else 'false',
+            'backend-sync-backfill': 'true' if stage == 'dev' else 'false',
+        }
+        if stage == 'prod':
+            expected['backend-projection-pump'] = 'false'
+        services = environment['cloud_run']['services']
+        assert {
+            name: service['env'][flag]['value']
+            for name, service in services.items()
+            if flag in service.get('env', {})
+        } == expected
+        if stage != 'staging':
+            assert environment['gke']['backend-listen']['env'][flag]['value'] == 'false'
 
 
 def test_derived_service_forbidden_env_removes_inherited_values_and_keeps_inherited_forbidden():
