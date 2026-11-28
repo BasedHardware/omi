@@ -31,8 +31,10 @@ fixed in code by #24370 (Nik's release gate still applies).
   apply their existing caller default; they never fall back to PostHog. Deleting a
   rule restores that default. Older clients retain the per-key PostHog fallback.
 - **Clients:** `GET /v1/flags?surface=macos|mobile|web-app|windows` returns the caller's
-  resolved values for keys whose `surfaces` include that surface. The optional
-  `X-App-Platform` header is trimmed and lowercased before evaluation. macOS
+  resolved values for keys whose `surfaces` include that surface. A platform-targeted
+  rule requires exactly one `X-App-Platform` header whose raw value matches its
+  platform list. Missing, empty, unknown, mis-cased, padded, comma-separated,
+  and repeated headers resolve to disabled for targeted rules. macOS
   (`OmiFlagStore`), Flutter (`PostHogAnalyticsAdapter.omiFlags`) and web
   (`lib/omiFlags.ts`) answer only from this store. Failed refreshes retain the
   same-account snapshot on mobile/macOS; account changes clear it. Missing web

@@ -232,19 +232,47 @@ def test_client_flags_endpoint_filters_by_surface(store):
 
 
 @pytest.mark.parametrize(
-    'headers,enabled', [({'x-app-platform': ' IoS '}, True), ({'X-App-Platform': 'ANDROID'}, False), ({}, False)]
+    'platform_headers,enabled',
+    [
+        pytest.param((), False, id='missing'),
+        pytest.param(('',), False, id='empty'),
+        pytest.param(('macos',), False, id='macos'),
+        pytest.param(('fuchsia',), False, id='fuchsia'),
+        pytest.param(('iOS',), False, id='mixed-case'),
+        pytest.param(('IOS',), False, id='uppercase'),
+        pytest.param((' ios',), False, id='leading-space'),
+        pytest.param(('ios ',), False, id='trailing-space'),
+        pytest.param(('ios,android',), False, id='comma-separated'),
+        pytest.param(('ios', 'android'), False, id='repeated-different'),
+        pytest.param(('ios', 'ios'), False, id='repeated-identical'),
+        pytest.param(('ios',), True, id='ios'),
+        pytest.param(('android',), False, id='android'),
+    ],
 )
-def test_client_flags_endpoint_applies_normalized_platform(store, headers, enabled):
+def test_client_flags_endpoint_requires_one_exact_platform(store, platform_headers, enabled):
     store.docs = {'ios-only': {'active': True, 'rollout_percentage': 100, 'surfaces': ['mobile'], 'platforms': ['ios']}}
     app = FastAPI()
     app.include_router(flags_router.router)
     app.dependency_overrides[get_current_user_uid] = lambda: 'u'
+    headers = [('X-App-Platform', value) for value in platform_headers]
     response = TestClient(app).get('/v1/flags', params={'surface': 'mobile'}, headers=headers)
     assert response.status_code == 200
     assert response.json() == {
         'version': 1,
         'flags': [{'key': 'ios-only', 'enabled': enabled, 'variant': None, 'payload_json': None}],
     }
+
+
+def test_legacy_client_flags_use_percentage_without_platform_header(store):
+    legacy_rule = {'active': True, 'rollout_percentage': 50, 'surfaces': ['mobile']}
+    store.docs = {'legacy-a': legacy_rule, 'legacy-b': legacy_rule}
+    app = FastAPI()
+    app.include_router(flags_router.router)
+    app.dependency_overrides[get_current_user_uid] = lambda: 'u'
+    response = TestClient(app).get('/v1/flags', params={'surface': 'mobile'})
+    assert response.status_code == 200
+    # uid "u" buckets below 50% for legacy-a and above 50% for legacy-b.
+    assert {flag['key']: flag['enabled'] for flag in response.json()['flags']} == {'legacy-a': True, 'legacy-b': False}
 
 
 def test_legacy_client_flag_response_is_byte_identical_across_platforms(store):

@@ -32,7 +32,8 @@ def client_flags(
     uid: str = Depends(get_current_user_uid),
 ) -> ClientFlagsResponse:
     # In-memory evaluation; the snapshot refresh is bounded by the store read timeout.
-    platform = request.headers.get('X-App-Platform', '').strip().lower() or None
+    platforms = request.headers.getlist('X-App-Platform')
+    platform = platforms[0] if len(platforms) == 1 else None
     version, resolved = omi_flags.resolve_surface(uid, surface, platform)
     return ClientFlagsResponse(
         version=version,
