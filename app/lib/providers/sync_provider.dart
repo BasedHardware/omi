@@ -910,9 +910,18 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     }
   }
 
-  /// After the user confirms the custom-STT Sync warning: drained pendant audio waiting for
-  /// on-device transcription goes to the cloud instead (see releaseDrainedDeviceAudioForUpload).
-  Future<int> releaseDrainedDeviceAudioForUpload() => _walService.getSyncs().phone.releaseDrainedDeviceAudioForUpload();
+  /// A manual Sync the user confirmed (after every warning): drained pendant audio waiting for
+  /// on-device transcription, and audio this Sync drains, go to the cloud. A failed release
+  /// never blocks the Sync.
+  Future<void> syncWalsAfterConfirmation() async {
+    DrainedAudioCustody.confirmCloudSync();
+    try {
+      await _walService.getSyncs().phone.releaseDrainedDeviceAudioForUpload();
+    } catch (e) {
+      Logger.debug('SyncProvider: drained audio release failed: $e');
+    }
+    await syncWals();
+  }
 
   Future<void> syncWals({WakeTrigger trigger = WakeTrigger.userRetry}) async {
     final generation = _sessionGeneration;

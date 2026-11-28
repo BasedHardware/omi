@@ -248,8 +248,12 @@ class _OnTheWayPageState extends State<OnTheWayPage> with _PendingWorkListener {
 }
 
 /// What On the Way lists, split by whether a trustworthy day exists.
-String _heldDate(int seconds, AppLocalizations l) =>
-    DateFormat.MMMd(l.localeName).format(DateTime.fromMillisecondsSinceEpoch(seconds * 1000));
+String _heldDate(int seconds, AppLocalizations l) {
+  // The guarded resolver: an app locale without intl date symbols degrades, never throws.
+  final parts = l.localeName.split(RegExp('[_-]'));
+  final locale = OmiDateFormat.resolveIntlLocale(Locale(parts.first, parts.length > 1 ? parts[1] : null));
+  return DateFormat.MMMd(locale).format(DateTime.fromMillisecondsSinceEpoch(seconds * 1000));
+}
 
 class _PendingWork {
   _PendingWork(this.dated, this.undated);

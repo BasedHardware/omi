@@ -1326,6 +1326,7 @@ class Wal {
     h = _mixFingerprint(h, uploadedAt);
     h = _mixFingerprint(h, jobPendingConfirmedAt);
     h = _mixFingerprint(h, syncedAt);
+    h = _mixFingerprint(h, allowanceHeldUntil);
     h = _mixFingerprint(h, keptForTranscriptRecovery ? 1 : 0);
     h = _mixFingerprint(h, clockRun?.hashCode ?? 0);
     h = _mixFingerprint(h, uploadRejectionReason?.hashCode ?? 0);

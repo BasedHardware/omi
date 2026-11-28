@@ -1,5 +1,4 @@
 import 'package:omi/services/wals/local_wal_sync.dart';
-import 'package:omi/backend/preferences.dart';
 import 'dart:async';
 import 'package:omi/services/wals/ring_custody_diagnostics.dart';
 import 'dart:io';
@@ -1105,8 +1104,7 @@ class RingStorageSyncImpl implements RingStorageSync {
                     downloadRingId: indexedRing,
                     downloadSeqStart: indexedRing != null ? chunkSeqs.first : null,
                     downloadSeqEnd: indexedRing != null ? chunkSeqs.last + 1 : null,
-                    // Mode at persist time; switching modes later never rewrites custody.
-                    phoneOnly: SharedPreferencesUtil().onDeviceSttSelected,
+                    phoneOnly: DrainedAudioCustody.phoneOnlyAtPersist(),
                     nextCollisionSequence: () => _storageFileSeq++);
             if (ringDrainRecoveryEnabled && ringId != null) {
               readValidator = await _custody.createReadValidator();

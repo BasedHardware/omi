@@ -20,6 +20,7 @@ import 'package:omi/services/on_device/on_device_schedule_policy.dart';
 import 'package:omi/services/on_device/on_device_settings.dart';
 import 'package:omi/services/on_device/on_device_transcription_controller.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
+import 'package:omi/services/wals/sync_job_poller.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
@@ -33,14 +34,14 @@ class _Listener implements IWalSyncListener {
 }
 
 /// Drained pendant audio as `persistDeviceChunk(phoneOnly: true)` stamps it.
-Wal drained(String file, int timerStart) => Wal(
+Wal drained(String file, int timerStart, {int seconds = 1, String device = 'omi'}) => Wal(
     timerStart: timerStart,
     codec: BleAudioCodec.pcm16,
-    seconds: 1,
+    seconds: seconds,
     status: WalStatus.miss,
     storage: WalStorage.disk,
     filePath: file,
-    device: 'omi',
+    device: device,
     originalStorage: WalStorage.sdcard,
     onDeviceOnly: true,
     capturedOnDeviceOnly: true);
@@ -59,6 +60,8 @@ void main() {
   tearDown(() async {
     AnalyticsManager.resetForTesting();
     OnDeviceRunnerGate.debugReset();
+    DrainedAudioCustody.debugReset();
+    SyncJobPoller.instance.resetForTesting();
     await directory.delete(recursive: true);
   });
 
@@ -109,14 +112,12 @@ void main() {
     final controller = OnDeviceTranscriptionController(model: FakeOnDeviceModel(), power: FakePhonePowerSource())
       ..debugActivate(settings: const OnDeviceSettings(enabled: false));
     final order = <String>[];
-    var call = 0;
     final runner = OnDeviceRunner(
         sync: sync,
         controller: controller,
-        publish: (_) {},
+        publish: (row) => order.add(row.id),
         cloudBaseUrl: 'http://127.0.0.1:1/',
         transcribeChunk: (_, __) async {
-          order.add(call++ == 0 ? 'first' : 'second');
           return const OnDeviceBatchResult(
               engine: 'synthetic', text: 'A synthetic test.', words: [OnDeviceWord('A synthetic test.', 0, 1)]);
         },
@@ -132,11 +133,8 @@ void main() {
               200);
         });
     await runner.run(transcribeNow: true);
-    expect(order, ['first', 'second']);
-    expect(newer.onDeviceConversation?['id'], isNotNull);
-    expect(older.onDeviceConversation?['id'], isNotNull);
-    // Ordering: the newer recording's conversation was published first.
-    expect(newer.onDeviceConversation!['id'], contains(newer.id));
+    // An hour apart, so two conversations; the newer recording's is published first.
+    expect(order, ['cloud-ondevice-${newer.id}', 'cloud-ondevice-${older.id}']);
     for (final wal in [older, newer]) {
       expect(wal.status, WalStatus.synced, reason: 'server-confirmed audio enters synced retention');
       expect(wal.syncedAt, greaterThan(0));
@@ -203,16 +201,171 @@ void main() {
     expect(decide(battery: 80, foreground: false), const OnDeviceRunDecision.wait(OnDeviceRunReason.waitingForCharger));
   });
 
-  test('the runner kill switch is on when absent or unreadable and off only when set', () async {
+  test('the runner kill switch changes only on an authoritative answer and persists a kill', () async {
     final now = DateTime.utc(2026, 11, 28);
     Future<bool> reload() async => true;
-    expect(await OnDeviceRunnerGate.enabled(readFlag: (_) async => false, reloadFlags: reload, now: () => now), isTrue);
-    expect(await OnDeviceRunnerGate.enabled(readFlag: (_) async => true, reloadFlags: reload, now: () => now), isFalse);
-    // An unreadable flag keeps the last answer this phone saw (the kill stays in force offline).
+    Future<bool> read(bool? answer) =>
+        OnDeviceRunnerGate.enabled(readFlag: (_) async => answer, reloadFlags: reload, now: () => now);
+    expect(await read(false), isTrue);
+    expect(await read(true), isFalse);
+    // No settled identity, tracking off or offline: the kill this phone saw stays in force.
+    expect(await read(null), isFalse);
     expect(
         await OnDeviceRunnerGate.enabled(readFlag: (_) async => throw StateError('offline'), now: () => now), isFalse);
+    // A new process (the Android background worker) starts from the persisted kill.
     OnDeviceRunnerGate.debugReset();
-    expect(
-        await OnDeviceRunnerGate.enabled(readFlag: (_) async => throw StateError('offline'), now: () => now), isTrue);
+    expect(await read(null), isFalse);
+    expect(await read(false), isTrue);
+    OnDeviceRunnerGate.debugReset();
+    expect(await read(null), isTrue);
+  });
+
+  test('contiguous drained chunks form one conversation, split by gaps, span and device', () {
+    Wal chunk(String file, int start, {String device = 'omi'}) => drained(file, start, seconds: 60, device: device);
+    final a = chunk('a', 1000), b = chunk('b', 1060), c = chunk('c', 1150);
+    final far = chunk('d', 5000);
+    final other = chunk('e', 1210, device: 'other');
+    final phone = Wal(
+        timerStart: 900,
+        codec: BleAudioCodec.pcm16,
+        seconds: 60,
+        status: WalStatus.miss,
+        storage: WalStorage.disk,
+        device: 'phone',
+        onDeviceOnly: true);
+    final groups = groupOnDeviceWork([far, c, phone, a, other, b]);
+    expect(groups.map((g) => g.map((w) => w.filePath ?? 'phone').toList()).toList(), [
+      ['d'],
+      ['e'],
+      ['a', 'b', 'c'],
+      ['phone'],
+    ]);
+    final long = [for (var i = 0; i < 61; i++) chunk('l$i', 10000 + i * 60)];
+    expect(groupOnDeviceWork(long).map((g) => g.length).toList()..sort(), [1, 60]);
+  });
+
+  OnDeviceRunner runnerFor(LocalWalSyncImpl sync, OnDeviceTranscriptionController controller,
+          {required List<String> posts, int status = 200, Map<String, String> headers = const {}}) =>
+      OnDeviceRunner(
+          sync: sync,
+          controller: controller,
+          publish: (_) {},
+          cloudBaseUrl: 'http://127.0.0.1:1/',
+          transcribeChunk: (_, __) async => const OnDeviceBatchResult(
+              engine: 'synthetic', text: 'A synthetic test.', words: [OnDeviceWord('A synthetic test.', 0, 1)]),
+          send: (request) async {
+            if (request.method == 'POST') {
+              final body = jsonDecode(request.body) as Map<String, dynamic>;
+              posts.add(body['client_session_id'] as String);
+              if (status != 200) return http.Response('{}', status, headers: headers);
+              return http.Response(jsonEncode({'id': 'cloud-${body['client_session_id']}'}), 200);
+            }
+            final id = Uri.parse(request.url.toString()).pathSegments.last;
+            return http.Response(
+                jsonEncode(ServerConversation(id: id, createdAt: DateTime.utc(2026), structured: Structured('t', 'o'))
+                    .toJson()),
+                200);
+          });
+
+  test('a drained backlog uploads one conversation per contiguous span, saved and released together', () async {
+    await selectOnDevice();
+    final wals = [
+      for (var i = 0; i < 3; i++) drained('c$i.bin', 1700000000 + i * 60, seconds: 60),
+    ];
+    for (final wal in wals) {
+      recording(wal.filePath!);
+    }
+    var saves = 0;
+    final sync = LocalWalSyncImpl(_Listener(), persistWals: (_) async => saves++)..testWals = wals;
+    final controller = OnDeviceTranscriptionController(model: FakeOnDeviceModel(), power: FakePhonePowerSource())
+      ..debugActivate(settings: const OnDeviceSettings(enabled: false));
+    final posts = <String>[];
+    final runner = runnerFor(sync, controller, posts: posts);
+    await runner.run(transcribeNow: true);
+    expect(posts, ['ondevice-${wals.first.id}-n3']);
+    final id = wals.first.onDeviceConversation!['id'];
+    for (final wal in wals) {
+      expect(wal.onDeviceConversation!['id'], id);
+      expect(wal.status, WalStatus.synced, reason: 'transcript and retention land in one save');
+    }
+    expect(saves, 1);
+    runner.dispose();
+    controller.dispose();
+  });
+
+  test('a rate-limited upload keeps the audio and pauses the runner until Retry-After', () async {
+    await selectOnDevice();
+    recording('a.bin');
+    final wal = drained('a.bin', 1700000000);
+    final sync = LocalWalSyncImpl(_Listener(), persistWals: (_) async {})..testWals = [wal];
+    final controller = OnDeviceTranscriptionController(model: FakeOnDeviceModel(), power: FakePhonePowerSource())
+      ..debugActivate(settings: const OnDeviceSettings(enabled: false));
+    final posts = <String>[];
+    var clock = DateTime.utc(2026, 11, 28, 12);
+    final runner = runnerFor(sync, controller, posts: posts, status: 429, headers: {'retry-after': '600'})
+      ..now = () => clock;
+    await runner.run(transcribeNow: true);
+    expect(runner.lastError, 'rate_limited');
+    expect(wal.status, WalStatus.miss);
+    expect(wal.onDeviceOnly, isTrue);
+    await runner.run(transcribeNow: true);
+    expect(posts, hasLength(1), reason: 'no retry inside the window');
+    clock = clock.add(const Duration(minutes: 11));
+    await runner.run(transcribeNow: true);
+    expect(posts, hasLength(2));
+    runner.dispose();
+    controller.dispose();
+  });
+
+  test('a manual Sync never releases audio the runner has claimed', () async {
+    final claimed = drained('a.bin', 1700000000);
+    final free = drained('b.bin', 1700000100);
+    final sync = LocalWalSyncImpl(_Listener(), persistWals: (_) async {})..testWals = [claimed, free];
+    sync.claimForOnDevice([claimed]);
+    expect(await sync.releaseDrainedDeviceAudioForUpload(), 1);
+    expect(claimed.onDeviceOnly, isTrue);
+    expect(free.onDeviceOnly, isFalse);
+    sync.unclaimForOnDevice([claimed]);
+    expect(await sync.releaseDrainedDeviceAudioForUpload(), 1);
+  });
+
+  test('chunks drained soon after a confirmed cloud Sync are not phone-only', () async {
+    await selectOnDevice();
+    var clock = DateTime.utc(2026, 11, 28, 12);
+    DrainedAudioCustody.now = () => clock;
+    expect(DrainedAudioCustody.phoneOnlyAtPersist(), isTrue);
+    DrainedAudioCustody.confirmCloudSync();
+    expect(DrainedAudioCustody.phoneOnlyAtPersist(), isFalse);
+    clock = clock.add(DrainedAudioCustody.cloudSyncWindow);
+    expect(DrainedAudioCustody.phoneOnlyAtPersist(), isTrue);
+  });
+
+  test('an allowance-held reply records the renewal date and a later reply clears it', () async {
+    var now = DateTime.utc(2026, 11, 28, 12);
+    var status =
+        SyncJobStatusResponse(jobId: 'job-1', status: 'queued', reasonCode: 'allowance_held', retryAfter: 147200);
+    final sync = LocalWalSyncImpl(_Listener(),
+        now: () => now,
+        persistWals: (_) async {},
+        jobStatusFetcher: (_) async => SyncJobFetch(SyncJobFetchOutcome.ok, status));
+    recording('a.bin');
+    final wal = Wal(
+        timerStart: 1700000000,
+        codec: BleAudioCodec.pcm16,
+        seconds: 60,
+        status: WalStatus.uploaded,
+        storage: WalStorage.disk,
+        device: 'omi',
+        filePath: 'a.bin')
+      ..jobId = 'job-1';
+    sync.testWals = [wal];
+    SyncJobPoller.instance.resetForTesting(clock: () => now);
+    await sync.reconcileUploadedWals();
+    expect(wal.allowanceHeldUntil, now.millisecondsSinceEpoch ~/ 1000 + 147200);
+    status = SyncJobStatusResponse(jobId: 'job-1', status: 'processing');
+    now = now.add(const Duration(minutes: 30));
+    await sync.reconcileUploadedWals();
+    expect(wal.allowanceHeldUntil, 0);
+    await sync.stop();
   });
 }

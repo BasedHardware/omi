@@ -493,15 +493,13 @@ class _SyncPageState extends State<SyncPage> {
     // the limit. Confirm before proceeding.
     if (!await confirmSyncForCustomStt(context)) return;
     if (!context.mounted) return;
-    if (SharedPreferencesUtil().onDeviceSttSelected) await syncProvider.releaseDrainedDeviceAudioForUpload();
-    if (!context.mounted) return;
 
     final sdCardWals = syncProvider.missingWals.where((wal) => wal.storage == WalStorage.sdcard).toList();
 
     if (sdCardWals.isNotEmpty) {
       _showSdCardWarningDialog(context, syncProvider, sdCardWals.length);
     } else {
-      syncProvider.syncWals();
+      syncProvider.syncWalsAfterConfirmation();
     }
   }
 
@@ -527,7 +525,7 @@ class _SyncPageState extends State<SyncPage> {
       message: context.l10n.sdCardProcessingMessage(sdCardCount),
       confirmLabel: context.l10n.process,
     );
-    if (process) syncProvider.syncWals();
+    if (process) syncProvider.syncWalsAfterConfirmation();
   }
 
   Widget _buildProcessCard(SyncProvider syncProvider) {

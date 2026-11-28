@@ -510,18 +510,28 @@ physical-device acceptance. Guard: `test/unit/wal_orphan_reclaim_test.dart`.
 Ruling David 2026-11-27 (anx `ev-87eac038a79c0e03e470`). With on-device STT selected
 (`SharedPreferencesUtil().onDeviceSttSelected`: custom provider `onDeviceWhisper` only), the ring
 drain runs as it does in cloud mode, and each chunk is persisted phone-only at persist time
-(`onDeviceOnly` plus `capturedOnDeviceOnly`, so `repairLegacyImportedCustody` keeps it). Automatic
-upload stays off for every custom provider. A later mode switch never rewrites custody.
+(`onDeviceOnly` plus `capturedOnDeviceOnly`, so `repairLegacyImportedCustody` keeps it), decided by
+`DrainedAudioCustody.phoneOnlyAtPersist`. Automatic upload stays off for every custom provider. A
+later mode switch never rewrites custody.
 
 - The on-device runner transcribes these chunks newest first, while the app is open (above the
   battery floor) or on a charger. Choosing on-device STT is the consent; the overflow setting and
-  `shouldKeepAudioLocal` are unchanged.
+  `shouldKeepAudioLocal` are unchanged. Contiguous 60 s chunks from one device (gaps up to 2 min,
+  spans up to 1 h, `groupOnDeviceWork`) are one conversation and one `from-segments` upload. A 429
+  pauses the runner until Retry-After (1 min to 1 h); the audio stays put.
 - Rule 2 (release only on confirmation): after `from-segments` succeeds and the conversation reads
-  back by id, `releaseConfirmedOnDeviceAudio` moves the WAL to `synced` with `syncedAt`. Only the
-  existing synced-copy retention deletes its bytes. Keep-everything-on-device never posts, so it
-  never releases.
-- A warned manual cloud Sync (`confirmSyncForCustomStt`) calls
-  `releaseDrainedDeviceAudioForUpload`, which returns drained device audio that is still waiting
-  (no on-device conversation, no prepared upload) to the ordinary upload path. Phone-captured
-  on-device audio is never released there.
+  back by id, `persistOnDeviceConversation(serverConfirmed: true)` writes the conversation and moves
+  every chunk of the group to `synced` with `syncedAt` in one save, so a crash never strands audio
+  outside retention or splits a group. Only the existing synced-copy retention deletes the bytes.
+  Keep-everything-on-device never posts, so it never releases.
+- A manual Sync the user confirmed (after the custom-STT and SD-card warnings) calls
+  `SyncProvider.syncWalsAfterConfirmation`. Whatever mode is selected now, it returns drained device
+  audio that is still waiting (no on-device conversation, no prepared upload, not claimed by the
+  runner) to the ordinary upload path, and for 15 minutes chunks drained by that Sync are persisted
+  uploadable. A cancelled warning releases nothing. Phone-captured on-device audio is never
+  released there.
+- The runner claims the WALs it is transcribing (`claimForOnDevice`), and re-checks custody before
+  posting, so a manual Sync and the runner never both process the same audio.
+- The runner kill switch (`mobile-on-device-runner-disabled`) is checked on every run, in the app
+  and in the Android background worker. Killed, nothing is transcribed and custody is unchanged.
 - Other custom providers keep today's behaviour: no automatic drain or upload.

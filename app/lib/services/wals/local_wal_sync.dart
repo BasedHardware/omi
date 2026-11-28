@@ -2307,34 +2307,45 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   }
 
   /// Commit result before publishing it; stale-account work cannot rewrite the index.
-  Future<bool> persistOnDeviceConversation(Wal wal, Map<String, dynamic> conversation, int generation) async {
-    if (!_isCurrent(generation) || !_wals.contains(wal) || !wal.onDeviceOnly) return false;
-    wal.onDeviceConversation = conversation;
-    wal.onDevicePreparedUpload = null;
-    wal.conversationId = conversation['id'] as String?;
-    await _saveWalsToFile(generation);
-    _notifyUpdated(generation);
-    return true;
-  }
-
-  /// A server-confirmed on-device transcript of drained device audio. The copy enters synced
-  /// retention (CUSTODY rule 2: release only on confirmation); only the existing synced-copy
-  /// retention policy deletes its bytes. Keep-everything-on-device never reaches here.
-  Future<bool> releaseConfirmedOnDeviceAudio(Wal wal, int generation) async {
-    if (!_isCurrent(generation) || !_wals.contains(wal) || !wal.onDeviceOnly || wal.onDeviceConversation == null) {
+  /// [serverConfirmed]: the server holds this transcript (from-segments, read back by id), so
+  /// drained device audio enters synced retention in the same save (CUSTODY rule 2: release only
+  /// on confirmation; only the synced-copy retention policy deletes its bytes). [alsoFor] are the
+  /// other chunks of a grouped conversation, written in the same save so a crash never leaves
+  /// part of a group to be transcribed again.
+  Future<bool> persistOnDeviceConversation(Wal wal, Map<String, dynamic> conversation, int generation,
+      {bool serverConfirmed = false, List<Wal> alsoFor = const []}) async {
+    final members = [wal, ...alsoFor];
+    if (!_isCurrent(generation) || members.any((member) => !_wals.contains(member) || !member.onDeviceOnly)) {
       return false;
     }
-    wal.status = WalStatus.synced;
-    if (wal.syncedAt == 0) wal.syncedAt = _now().millisecondsSinceEpoch ~/ 1000;
+    final syncedAt = _now().millisecondsSinceEpoch ~/ 1000;
+    for (final member in members) {
+      member.onDeviceConversation = conversation;
+      member.onDevicePreparedUpload = null;
+      member.conversationId = conversation['id'] as String?;
+      if (serverConfirmed &&
+          (member.originalStorage == WalStorage.sdcard || member.originalStorage == WalStorage.flashPage)) {
+        member.status = WalStatus.synced;
+        if (member.syncedAt == 0) member.syncedAt = syncedAt;
+      }
+    }
     await _saveWalsToFile(generation);
     _notifyUpdated(generation);
     return true;
   }
 
-  /// The user confirmed a warned manual cloud Sync: drained device audio still waiting for
-  /// on-device transcription returns to the ordinary upload path. Only that explicit action
-  /// calls this; a transcription-mode switch never rewrites custody. Phone-captured on-device
-  /// audio (overflow, live capture) is never released here.
+  /// WALs the on-device runner is transcribing now. A manual cloud Sync never releases them.
+  final Set<String> _onDeviceClaims = {};
+
+  void claimForOnDevice(Iterable<Wal> wals) => _onDeviceClaims.addAll(wals.map((wal) => wal.id));
+
+  void unclaimForOnDevice(Iterable<Wal> wals) => _onDeviceClaims.removeAll(wals.map((wal) => wal.id));
+
+  /// The user confirmed a manual cloud Sync: drained device audio still waiting for on-device
+  /// transcription returns to the ordinary upload path, whatever mode is selected now (so audio
+  /// drained under on-device STT is never stranded after a mode change). Only that explicit
+  /// action calls this; a mode switch never rewrites custody. Phone-captured on-device audio
+  /// (overflow, live capture) and WALs the runner is transcribing are never released here.
   Future<int> releaseDrainedDeviceAudioForUpload() async {
     final generation = _sessionGeneration;
     var released = 0;
@@ -2345,7 +2356,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           wal.storage == WalStorage.disk &&
           wal.status == WalStatus.miss &&
           wal.onDeviceConversation == null &&
-          wal.onDevicePreparedUpload == null) {
+          wal.onDevicePreparedUpload == null &&
+          !_onDeviceClaims.contains(wal.id)) {
         wal.onDeviceOnly = false;
         wal.capturedOnDeviceOnly = false;
         released++;
