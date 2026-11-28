@@ -194,15 +194,7 @@ def test_pl398_bounded_watchdog_reaches_expired_debt_beyond_a_healthy_prefix(ob,
     assert ob.outbox.claim_key(row_id, token, LEASE, now=now + 1) is Outcome.STALE
 
 
-def test_pl342_long_custody_episode_slows_polling_without_retiring_debt(ob, request):
-    if ob.name in {'sim', 'postgres'}:
-        request.applymarker(
-            pytest.mark.xfail(
-                strict=True,
-                raises=AssertionError,
-                reason='https://github.com/BasedHardware/omi/issues/24556 — reason-bound custody age is not ported',
-            )
-        )
+def test_pl342_long_custody_episode_slows_polling_without_retiring_debt(ob):
     queued = put(ob)
     first = take(ob, queued)
     token = ob.outbox.defer(first, T0 + 120, 'conversation_missing', now=T0)

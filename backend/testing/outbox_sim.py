@@ -12,6 +12,7 @@ from contextlib import contextmanager
 from copy import deepcopy
 from typing import Any, Callable, Iterator, Mapping
 
+from config.outbox_custody import custody_defer_until, custody_deferred_since
 from database.outbox import Claim, EnqueueResult, OutboxKind, Outcome, SweepCounts
 
 
@@ -62,12 +63,12 @@ class SimOutbox:
         )  # fmt: skip
 
     def enqueue(self, dedupe_key, owner_id, payload, available_at, *, policy_id=None, coalesce='max', tx=None, now):
-        result = self._enqueue(dedupe_key, owner_id, payload, available_at, policy_id, coalesce)
+        result = self._enqueue(dedupe_key, owner_id, payload, available_at, policy_id, coalesce, now)
         if tx is None and result.wake_token is not None:  # invariant 4: without tx the outbox owns the wake
             self._try_wake(self.rows[int(result.row_id)])
         return result
 
-    def _enqueue(self, dedupe_key, owner_id, payload, available_at, policy_id, coalesce):
+    def _enqueue(self, dedupe_key, owner_id, payload, available_at, policy_id, coalesce, now):
         import json
 
         if len(json.dumps(payload, separators=(',', ':')).encode()) > 4096:
@@ -87,7 +88,8 @@ class SimOutbox:
         row = dict(
             id=self._next, dedupe_key=dedupe_key, owner_id=owner_id, payload=dict(payload), policy_id=policy_id,
             available_at=available_at, version=1, attempts=0, wake_token=_token(), lease_token=None, lease_until=0.0,
-            done_at=None, done_reason=None, wake_pending=True,
+            done_at=None, done_reason=None, wake_pending=True, created_at=now, deferred_reason=None,
+            deferred_since=None,
         )  # fmt: skip
         self.rows[self._next] = row
         self._next += 1
@@ -159,7 +161,18 @@ class SimOutbox:
         row = self._held(claim)
         if row is None:
             return None
+        # PL-342: same reason-bound custody episode as the Firestore outbox. The row's acceptance is its
+        # creation (a closed row never reopens; a new obligation is a new row), so no old age is inherited.
+        since = custody_deferred_since(
+            {'deferred_reason': row['deferred_reason'], 'deferred_since': row['deferred_since'],
+             'first_pending_at': row['created_at']},
+            reason,
+            now,
+        )  # fmt: skip
+        available_at = custody_defer_until({'defer_reason': reason, 'defer_until': available_at}, since, now)
         row.update(
+            deferred_reason=reason,
+            deferred_since=since,
             available_at=available_at,
             wake_token=_token(),
             wake_pending=True,

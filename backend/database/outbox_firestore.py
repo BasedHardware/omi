@@ -26,6 +26,7 @@ import dataclasses
 import functools
 import logging
 
+from config.outbox_custody import custody_defer_until, custody_deferred_since
 from database.outbox import Claim, EnqueueResult, Outbox, OutboxKind, Outcome, SweepCounts
 from config.record_latency import record_notes_eager_enabled
 from config.summary_guarantee import first_week_enabled
@@ -555,8 +556,8 @@ class FirestoreEnrichmentOutbox:
                 pending['v3_custody_defers'] = min(
                     outbox.V3_CUSTODY_MAX_DEFERS, (old.get('v3_custody_defers') or 0) + 1
                 )
-            since = outbox.custody_deferred_since(old, reason, now)
-            due = outbox.custody_defer_until({'defer_reason': reason, 'defer_until': available_at}, since, now)
+            since = custody_deferred_since(old, reason, now)
+            due = custody_defer_until({'defer_reason': reason, 'defer_until': available_at}, since, now)
             pending.update(
                 deferred_reason=reason,
                 deferred_since=since,
