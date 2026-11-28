@@ -459,6 +459,9 @@ def test_group_join_fences_on_stored_window_when_recorded_span_differs(harness, 
 def test_group_join_abstains_when_recorded_span_moved_after_discovery(harness, monkeypatch):
     moved = {'recorded_end': T0 + timedelta(seconds=605)}
     own, candidate, match = _confirmed_pair(harness, monkeypatch, other_extra=moved)
+    events = []
+    monkeypatch.setattr(policy, 'record_product_event', lambda event, **kw: events.append((event, kw.get('outcome'))))
     policy._group_confirmed_captures(UID, own, candidate, [match])
+    assert events == [('capture_group_joined', 'abstained')]
     assert not harness.rows[path('pendant')].get('capture_group')
     assert not harness.rows[path('desktop')].get('capture_group')

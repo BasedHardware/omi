@@ -189,14 +189,14 @@ def _segments_of(record: Any):
     )
 
 
-def _fresh_stored_window(uid: str, record: CaptureRecord, row: Any) -> tuple[Any, Any] | None:
+def _fresh_stored_window(record: CaptureRecord, row: Any) -> tuple[Any, Any] | None:
     """The row's stored (started_at, finished_at), only while its recorded span still equals ``record``'s.
 
     Overlap is proven on the recorded span; ``join_capture_group`` re-checks the stored lifecycle window.
     """
     if not isinstance(row, Mapping):
         return None
-    fresh = capture_record({**row, 'id': record.conversation_id}, uid)
+    fresh = capture_record({**row, 'id': record.conversation_id})
     if fresh is None or (fresh.started_at, fresh.finished_at) != (record.started_at, record.finished_at):
         return None
     start, finish = row.get('started_at'), row.get('finished_at')
@@ -217,17 +217,17 @@ def _group_confirmed_captures(uid: str, conversation: Any, candidate: CaptureRec
         _record_degraded(to_mode='separate_captures')
         return
     own_segments = _segments_of(own_row or {})
-    own_window = _fresh_stored_window(uid, candidate, own_row)
+    own_window = _fresh_stored_window(candidate, own_row)
     containment_mode = capture_group_containment_mode()
     for other in matches:
         try:
             other_row, other_fingerprint = conversations_db.get_conversation_for_capture_check(
                 uid, other.conversation_id
             )
-            other_window = _fresh_stored_window(uid, other, other_row)
+            other_window = _fresh_stored_window(other, other_row)
             if own_window is None or other_window is None:
                 # The recorded span moved since discovery (or the row is gone): abstain, never group.
-                record_product_event('capture_group_joined', outcome='none')
+                record_product_event('capture_group_joined', outcome='abstained')
                 continue
             shared = measure_shared_speech(own_segments, _segments_of(other_row or {}))
             containment = None

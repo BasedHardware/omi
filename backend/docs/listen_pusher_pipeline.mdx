@@ -2299,7 +2299,9 @@ Grouping is presentation metadata only. Transcripts, discard state
 and membership stay per capture. Clients render one row per group from
 the members they have loaded and keep every member reachable.
 `omi_product_event_total{event="capture_group_joined"}` counts the outcomes:
-`applied`, `none` (window match without shared speech) and `conflict`. A
+`applied`, `none` (window match without shared speech), `abstained` (a
+member's recorded span moved after discovery, so the pair is not grouped on
+stale evidence) and `conflict`. A
 failure records `duplicate_capture_check → separate_captures` and never blocks
 finalization.
 
