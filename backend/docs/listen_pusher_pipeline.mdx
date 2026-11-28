@@ -2285,8 +2285,9 @@ The group `id` is minted independently of any member, so the primary (the
 longest window) can move without changing the event identity. A capture joins
 an existing group through any member. Two different groups are never bridged
 by one pair. The group is capped at 12 members. Every member is re-read inside
-the transaction, so a discard, a deletion, a separation or a window change
-fences the join.
+the transaction, so a discard, a deletion, a separation or a stored-window
+change after the confirming read fences the join. A recorded span that moved
+since discovery abstains before the join (`abstained`).
 
 Processing writes (`upsert_conversation_with_lifecycle`,
 `persist_processing_result_with_lifecycle`) strip `capture_group`, so a stale

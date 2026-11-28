@@ -224,11 +224,6 @@ def _group_confirmed_captures(uid: str, conversation: Any, candidate: CaptureRec
             other_row, other_fingerprint = conversations_db.get_conversation_for_capture_check(
                 uid, other.conversation_id
             )
-            other_window = _fresh_stored_window(other, other_row)
-            if own_window is None or other_window is None:
-                # The recorded span moved since discovery (or the row is gone): abstain, never group.
-                record_product_event('capture_group_joined', outcome='abstained')
-                continue
             shared = measure_shared_speech(own_segments, _segments_of(other_row or {}))
             containment = None
             if containment_mode != 'off':
@@ -250,6 +245,12 @@ def _group_confirmed_captures(uid: str, conversation: Any, candidate: CaptureRec
                 evidence = containment.evidence()
             else:
                 record_product_event('capture_group_joined', outcome='none')
+                continue
+            other_window = _fresh_stored_window(other, other_row)
+            if own_window is None or other_window is None:
+                # Evidence confirms, but a recorded span moved since discovery (or a row is gone):
+                # abstain rather than group on stale evidence.
+                record_product_event('capture_group_joined', outcome='abstained')
                 continue
             group_id = capture_groups_db.join_capture_group(
                 uid,
