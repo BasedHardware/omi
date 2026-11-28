@@ -6,8 +6,20 @@ import 'package:marionette_flutter/marionette_flutter.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversations/widgets/empty_conversations.dart';
 import 'package:omi/pages/conversations/widgets/offline_sync_storage_sheet.dart';
+import 'package:omi/services/wals/storage_clear.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+
+// Synthetic sample: 2 h uploaded, 3 h waiting (2 h on the phone, 1 h on the pendant).
+const _sampleAmounts = StorageAmounts(
+  uploadedSeconds: 2 * 3600,
+  uploadedCount: 2,
+  phonePendingSeconds: 2 * 3600,
+  devicePendingSeconds: 3600,
+  pendingCount: 3,
+  allCount: 5,
+  allSeconds: 5 * 3600,
+);
 
 void main() {
   MarionetteBinding.ensureInitialized();
@@ -43,12 +55,10 @@ class _ContrastCaptureState extends State<_ContrastCapture> {
                       title: context.l10n.manageStorage,
                       padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, OmiSpacing.xs, OmiSpacing.xl, OmiSpacing.xl),
                       builder: (_) => OfflineSyncStorageSheet(
-                        syncedCount: _hasRecordings ? 2 : 0,
-                        pendingCount: _hasRecordings ? 3 : 0,
-                        totalCount: _hasRecordings ? 5 : 0,
-                        onClearSynced: () {},
-                        onClearPending: () {},
-                        onClearAll: () {},
+                        amounts: _hasRecordings ? _sampleAmounts : StorageAmounts.of(const []),
+                        onFreeUpSpace: () {},
+                        onDeletePending: () {},
+                        onDeleteAll: () {},
                       ),
                     ),
                   ),

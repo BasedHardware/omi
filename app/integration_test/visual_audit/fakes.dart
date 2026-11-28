@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nested/nested.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/services/wals/storage_clear.dart';
 import 'package:omi/services/wals/wal_derived_sync_views.dart';
 import 'package:omi/backend/http/api/memories.dart';
 import 'package:omi/backend/http/api/users.dart';
@@ -196,7 +197,7 @@ class InertSyncProvider extends ChangeNotifier with WalDerivedSyncViews implemen
   @override
   Future<void> discoverDeviceWals({String? firmwareVersion}) async {}
   @override
-  int get clearableWalsCount => 0;
+  StorageAmounts get storageAmounts => StorageAmounts.of(const []);
   @override
   int get missingWalsInSeconds => 0;
   @override
