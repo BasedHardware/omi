@@ -2131,7 +2131,7 @@ def _read_sync_job_status(job_id: str, uid: str, x_omi_custody_repair_protocol: 
         fence_mode is not SyncLedgerFenceMode.STANDBY
         and not (job_uses_fence and fence_mode is not SyncLedgerFenceMode.ACTIVE)
         and is_sync_job_stale(job)
-        and job.get('dispatch_mode') == 'cloud_tasks'
+        and job.get('dispatch_mode') in ('cloud_tasks', 'sequenced')
     ):
         acquire_stale_lock = try_acquire_sync_job_run_lock if job_uses_fence else try_acquire_job_run_lock
         stale_lock_token = acquire_stale_lock(job_id)
@@ -2141,7 +2141,7 @@ def _read_sync_job_status(job_id: str, uid: str, x_omi_custody_repair_protocol: 
                 if (
                     locked_job
                     and locked_job.get('uid') == uid
-                    and locked_job.get('dispatch_mode') == 'cloud_tasks'
+                    and locked_job.get('dispatch_mode') in ('cloud_tasks', 'sequenced')
                     and is_sync_job_stale(locked_job)
                 ):
                     locked_job_uses_fence = sync_job_uses_ledger_fence(locked_job)
@@ -2177,6 +2177,22 @@ def _read_sync_job_status(job_id: str, uid: str, x_omi_custody_repair_protocol: 
                                 'event=sync_stale_finalize outcome=release_slot_failed exception_type=%s',
                                 type(error).__name__,
                             )
+                        if locked_job.get('dispatch_mode') == 'sequenced':
+                            try:
+                                if uid_sequencer.production_stage():
+                                    owner = sync_backfill_sequencer.get_owner(uid)
+                                    if owner.get('active_job_id') == job_id:
+                                        epoch = owner.get('active_epoch')
+                                        if isinstance(epoch, int):
+                                            sync_backfill_sequencer.finish_job(uid, job_id, epoch, 'stale_failed')
+                                    else:
+                                        sync_backfill_sequencer.retire_expired(uid, job_id)
+                                    uid_sequencer.kick(uid)
+                            except Exception as error:
+                                logger.warning(
+                                    'event=sync_stale_finalize outcome=sequencer_release_failed exception_type=%s',
+                                    type(error).__name__,
+                                )
             except SyncJobRunLeaseLost:
                 # A newer epoch owns the durable ledger; polling must leave its
                 # retry material and Redis state untouched rather than 500.
