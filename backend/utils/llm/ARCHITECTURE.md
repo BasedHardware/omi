@@ -102,8 +102,7 @@ Tests: `tests/unit/test_agent_tool_rules.py`.
 
 ## Capture/speaker/notes refactor (L3)
 
-`notes_packet.py` holds the packet rules and the local capture-time conversion
-(#4773) shared by the notes writers. Each writer builds its own legacy packet;
+`notes_packet.py` holds the packet rules used by the notes writers. Each writer builds its own legacy packet;
 the v2 packet (`NOTES_PACKET_V2_MODE`) was retired on 2026-11-28 without serving.
 `output_language.py` resolves the account preference, then the conversation
 language, then English.

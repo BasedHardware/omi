@@ -78,7 +78,11 @@ PINNED: dict[str, dict[str, str]] = {
         'notes-9': 'd150f39c05377979d9f7f42055f44b7abc9f1b548c06f12229d2e9482d25d135',
         'notes-10': 'f30e589568d4f2050e800e032e2edff2d9c9117d48a2138db22bd48721d37450',
         # The async notes runner changes scheduling while keeping the same prompt inputs and output schema.
-        'notes-11': '43bdbc97e42c08cb75a8e472a8dd6e61cb47d244dd61d75fb820f385ade608ef',
+        # notes-11 digest refreshed in place (2026-11-28): deleting the NOTES_PACKET_V2 and
+        # CALLS_RECAP arms removes branches that never ran for any account (no mode or
+        # cohort was ever bound), so prompt inputs and output are unchanged and existing
+        # notes-11 checkpoints stay reusable. Do not bump the version for this.
+        'notes-11': '300b8d3f792b38ba269c5718bf4a8c4f457bfb22ba61b5633c2f2f3b30f889cb',
     },
     'l1': {'l1-1': '0ad51076315481003b05af2a90ce18797539846e35f4970680dff906c00b7d70'},
 }
