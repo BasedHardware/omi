@@ -262,7 +262,6 @@ def new_memories_extractor(
     content = TranscriptSegment.segments_as_string(segments, user_name=user_name, people=people)
     if not content or len(content) < 25:  # less than 5 words, probably nothing
         return []
-    # TODO: later, focus a lot on user said things, rn is hard because of speech profile accuracy
     try:
         language_instruction = _get_language_instruction(uid, language)
         parser = PydanticOutputParser(pydantic_object=HighRecallMemories if high_recall else Memories)
