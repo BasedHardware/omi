@@ -1,5 +1,8 @@
 """Real serving intake/resolver, synthetic privacy/funding/model/transport leaves."""
 
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest.mock import Mock, MagicMock
 
@@ -9,10 +12,12 @@ from config.policy import BatchUnitPolicy
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 from utils import funded_processing, stt_cap_dispatch
-from utils.batch_pipeline import intake
+from utils.batch_pipeline import cap_hold_admission, intake
 from utils.batch_pipeline.artifacts import ProtectionContext
 from utils.batch_pipeline.audio import audio_unit, read_context
-from utils.stt import batch_language
+from utils.capture import coverage
+from utils.stt import batch_language, declared_language_audit
+from utils.sync import cap_hold
 from utils.sync.legacy_dark import LegacySyncMode
 
 
@@ -25,7 +30,14 @@ def world(monkeypatch, tmp_path):
     source = tmp_path / 'retained-wal.bin'
     source.write_bytes(b'synthetic caller custody')
     state = SimpleNamespace(
-        revoked=False, language='multi', units=1, staged=[], staged_contexts=[], admissions=[], authorizations=[]
+        revoked=False,
+        language='multi',
+        user_fields={},
+        units=1,
+        staged=[],
+        staged_contexts=[],
+        admissions=[],
+        authorizations=[],
     )
 
     def authorize(store, item, *, snapshots):
@@ -37,7 +49,7 @@ def world(monkeypatch, tmp_path):
         # The probe guard asks for a decision only (snapshots=None); intake asks
         # for the row export it consumes.
         if snapshots is not None:
-            snapshots['user'] = {'language': state.language, 'transcription_preferences': {}}
+            snapshots['user'] = {'language': state.language, 'transcription_preferences': {}, **state.user_fields}
             snapshots['conversations'] = {
                 'synthetic-conversation': {'language': state.language, 'record_lane_owner': 'batch_sync_v1'}
             }
@@ -276,3 +288,39 @@ async def test_declared_language_needs_no_probe_or_probe_funding(world):
     assert len(world.authorizations) == 1
     assert not world.consent.called and not world.funding.called
     assert not world.model.called and not world.vendor.called
+
+
+@pytest.mark.parametrize(
+    ('owner_state', 'audit_submissions'),
+    [('eligible', 1), ('active_byok', 0), ('expired_byok', 1), ('custom_stt', 0)],
+)
+async def test_held_audio_audit_respects_persisted_stt_settings(
+    world, monkeypatch, tmp_path, owner_state, audit_submissions
+):
+    world.language = 'en'
+    if owner_state in {'active_byok', 'expired_byok'}:
+        heartbeat_age = timedelta(days=8) if owner_state == 'expired_byok' else timedelta()
+        world.user_fields['byok'] = {'active': True, 'last_seen_at': datetime.now(timezone.utc) - heartbeat_age}
+    if owner_state == 'custom_stt':
+        world.user_fields['transcription_preferences'] = {'uses_custom_stt': True}
+    monkeypatch.setattr(intake, 'resolve_batch_policy', lambda uid: BatchUnitPolicy(batch_enabled=True))
+    monkeypatch.setattr(intake.legacy_dark, 'current_mode', lambda uid=None: LegacySyncMode.DRAINING)
+    monkeypatch.setenv(coverage.FLAG, 'off')
+    monkeypatch.setattr(
+        cap_hold,
+        'metadata',
+        lambda uid, row: {'timestamp': 1700000000, 'source': 'omi', 'target_conversation_id': 'synthetic-conversation'},
+    )
+    monkeypatch.setattr(cap_hold, 'recovery_directory', lambda uid: TemporaryDirectory(dir=tmp_path))
+    wav = audio_unit(1700000000, b'\x01\x00' * 16000).wav
+    monkeypatch.setattr(cap_hold, 'read_audio', lambda uid, row, path: Path(path).write_bytes(wav))
+    monkeypatch.setattr(declared_language_audit, 'audit_enabled', lambda: True)
+    monkeypatch.setattr(declared_language_audit, 'sampled', lambda audio: True)
+    executor = Mock()
+    monkeypatch.setattr(declared_language_audit, 'declared_language_audit_executor', executor)
+
+    result = await cap_hold_admission.admit_held('synthetic-owner', SimpleNamespace(id='hold'), {'state': 'held'})
+
+    assert result.outcome == 'admitted'
+    assert world.staged_contexts[0]['stt_language_evidence'] == 'declared'
+    assert executor.submit.call_count == audit_submissions

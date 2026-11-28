@@ -46,6 +46,8 @@ def legacy_offline_spend_policy():
 # Legacy suites exercise the shipped episode/capture shape. V3 contracts opt
 # in explicitly and verify the per-owner stage/kill-switch matrix.
 os.environ.setdefault('CONVERSATIONS_V3', 'off')
+# The sampled declared-language audit runs background work with live authorization reads; its own suite enables it.
+os.environ.setdefault('BATCH_DECLARED_LANGUAGE_AUDIT_ENABLED', 'false')
 
 from tests.unit.memory_import_isolation import (  # noqa: F401 — re-export for test modules
     AutoMockModule as _AutoMockModule,

@@ -334,6 +334,14 @@ sync_executor = MonitoredThreadPoolExecutor(name="sync", max_workers=16, thread_
 auth_deadline_executor = MonitoredThreadPoolExecutor(
     name="auth_deadline", max_workers=16, max_queue_size=64, thread_name_prefix="auth-deadline"
 )
+# Sampled declared-language audit (utils/stt/declared_language_audit.py): fire-and-forget, a full pool skips.
+declared_language_audit_executor = MonitoredThreadPoolExecutor(
+    name="declared_language_audit",
+    max_workers=2,
+    max_queue_size=4,
+    thread_name_prefix="declared-language-audit",
+    wait_on_saturation=True,  # submit still raises immediately; a full pool is an expected skip, not a warning.
+)
 # The HTTP waiter can leave while an admitted segment upload finishes. Keep
 # those workers bounded and isolated from completed retries on the DB pool.
 from_segments_executor = MonitoredThreadPoolExecutor(
@@ -421,6 +429,7 @@ _ALL_EXECUTORS = [
     auth_deadline_executor,
     from_segments_executor,
     record_language_executor,
+    declared_language_audit_executor,
     postprocess_executor,
     cleanup_executor,
     erasure_executor,

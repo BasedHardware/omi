@@ -461,6 +461,13 @@
       "kind": "threading.Thread",
       "count": 1,
       "why": "Flag commit_wake: one daemon thread per worker posts owner ids to the serving backend. The wake is a hint held in memory; a wake lost at SIGKILL leaves the committed row where the serving sweep finds it, as without the flag."
+    },
+    {
+      "path": "utils/stt/declared_language_audit.py",
+      "function": "maybe_audit",
+      "kind": "executor.submit",
+      "count": 1,
+      "why": "a 2% sampled measurement: it never changes a route or stores state, so a sample lost at SIGKILL only drops one counter increment"
     }
   ]
 }

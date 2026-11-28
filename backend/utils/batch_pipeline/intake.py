@@ -82,6 +82,7 @@ from utils.sync.legacy_dark import LegacySyncMode
 from utils.batch_pipeline.language_metrics import record_admission_exclusion, record_route, record_sample_window
 from utils.batch_pipeline.retention import batch_artifact_authorize
 from utils.batch_pipeline.scheduler import Scheduler, owner_key
+from utils.byok_activation import byok_state_is_active
 from utils.executors import db_executor, run_blocking, storage_executor, sync_executor
 from utils.metrics import OMI_PIPELINE_RECORD_WAIT_ANSWERS_TOTAL, OMI_PIPELINE_RECORD_WAIT_MEMO_HITS_TOTAL
 from utils.observability.fallback import record_fallback
@@ -1101,6 +1102,11 @@ async def accept_upload(
         # A missing-input repair replays these exact decisions; it never probes again.
         repair_languages: dict[str, dict] = {}
         packing = IntakePacking(upload_arguments, canonical_decode=decode is None)
+        audit_custom_stt = (
+            byok_enabled
+            or bool(target.get('uses_custom_stt') or prefs.get('uses_custom_stt'))
+            or byok_state_is_active(user.get('byok') or {})
+        )
         phase = 'decode'
         while unit := (
             queue.pop(0) if queue else None if sampled else await run_blocking(sync_executor, _next_unit, iterator)
@@ -1141,7 +1147,13 @@ async def accept_upload(
                 language_decision = decisions[len(items)]
             else:
                 phase = 'language_probe'
-                probe_guard = ServingLanguageProbeGuard(store, item, authorize=batch_artifact_authorize)
+                probe_guard = ServingLanguageProbeGuard(
+                    store,
+                    item,
+                    authorize=batch_artifact_authorize,
+                    custom_stt=audit_custom_stt,
+                    provider_routed=provider,
+                )
                 # Every self/vendor classification gets fresh dispatch authority on CPU.
                 language_decision = await run_blocking(
                     sync_executor,
@@ -1358,7 +1370,12 @@ async def _sample_language_units(
         set_phase('language_probe')
         # Every probe of the upload runs here, so any refusal happens before anything is staged.
         # Authorize each as the exact unit it will replay as (index, derived conversation).
-        probe_guard = ServingLanguageProbeGuard(store, unit_item(unit, index), authorize=batch_artifact_authorize)
+        probe_guard = ServingLanguageProbeGuard(
+            store,
+            unit_item(unit, index),
+            authorize=batch_artifact_authorize,
+            custom_stt=bool(user.get('stt_byok_enabled') or (target and target.get('uses_custom_stt'))),
+        )
         decision = await run_blocking(
             sync_executor,
             resolve_language,

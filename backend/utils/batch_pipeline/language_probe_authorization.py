@@ -16,8 +16,12 @@ class LanguageProbeDenied(RuntimeError):
 
 
 class ServingLanguageProbeGuard:
-    def __init__(self, store, item, *, authorize):
+    def __init__(self, store, item, *, authorize, custom_stt=False, provider_routed=False):
         self.store, self.item, self.authorize = store, item, authorize
+        # The owner brought their own STT (BYOK or a custom provider): measurement-only probes stay off this unit.
+        self.custom_stt = bool(custom_stt)
+        # Admitted to a vendor STT route rather than Parakeet: not part of the Parakeet leak audit.
+        self.provider_routed = bool(provider_routed)
         self.decision: ProbeDecision | None = None
         self.privacy_error: BatchPrivacyBlocked | None = None
 

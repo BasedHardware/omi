@@ -55,6 +55,11 @@
       "review_by": "2026-12-06",
       "reason": "shadow readout pending; ramp or retire decision on SCA-3850"
     },
+    "BATCH_DECLARED_LANGUAGE_AUDIT_ENABLED": {
+      "owner": "Goal: Pipeline",
+      "review_by": "2026-12-11",
+      "reason": "ship-on kill switch for the sampled declared-language audit; retire or keep as a standing meter after the first readback"
+    },
     "BATCH_MULTILINGUAL_PROFILE_ROUTING_ENABLED": {
       "owner": "Goal: Pipeline",
       "review_by": "2026-12-10",
