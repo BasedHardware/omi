@@ -195,6 +195,11 @@ class RecordingTransferCoordinator {
     _manualRingSync = null;
   }
 
+  /// The pass that currently owns the transfer seam, if any, including an
+  /// abandoned one that has not exited yet. A bulk clear waits on it (bounded)
+  /// after cancelling, so it does not delete files an upload is still reading.
+  Future<void>? get activePass => _inFlight ?? _abandonedPass;
+
   /// A storage notification can reach Dart in the background while HTTP is
   /// waiting. Never enqueue this on the upload pass.
   void wakeRingFromBle(String deviceId) => onRingWake?.call(deviceId: deviceId, fromBle: true);

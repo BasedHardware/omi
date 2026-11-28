@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:omi/services/wals/storage_clear.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/sync_state.dart';
@@ -37,7 +38,7 @@ class _ThrottledSync extends ChangeNotifier with WalDerivedSyncViews implements 
   @override
   int get needsAttentionWalsCount => 0;
   @override
-  int get clearableWalsCount => 0;
+  StorageAmounts get storageAmounts => StorageAmounts.of(const []);
   @override
   bool get syncCompleted => false;
   @override

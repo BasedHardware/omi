@@ -51,6 +51,65 @@ class WalSyncs implements IWalSync {
   int get uploadCancellation => _uploadCancellation;
   int get ringCancellation => _ringGeneration;
   bool _ringPausedByUser = false;
+  int _clearHolds = 0;
+  int _clearHoldEpoch = 0;
+
+  /// True while a bulk clear owns the stores. Transfer drains report contended.
+  bool get transfersHeldForClear => _clearHolds > 0;
+
+  /// Stops every transfer and keeps new ones from starting until the returned
+  /// release runs. Used by Manage Storage so a clear never races a pendant read
+  /// or an upload: a ring clear is refused while a read is active, and a phone
+  /// file may be open for upload. Release exactly once, in a `finally`.
+  ///
+  /// The release does not restart transfers; the caller wakes them.
+  void Function() holdTransfersForClear() {
+    _clearHolds++;
+    final epoch = _clearHoldEpoch;
+    cancelSync();
+    var released = false;
+    return () {
+      if (released) return;
+      released = true;
+      // An account switch already dropped every hold; never go negative.
+      if (epoch == _clearHoldEpoch && _clearHolds > 0) _clearHolds--;
+    };
+  }
+
+  /// Drops every clear hold. A hold belongs to the session that took it.
+  void _dropClearHolds() {
+    _clearHolds = 0;
+    _clearHoldEpoch++;
+  }
+
+  /// Waits, up to [timeout], for the reads and uploads cancelled by
+  /// [holdTransfersForClear] to settle. Returns false if one is still running,
+  /// in which case its store keeps its recordings and the clear reports them.
+  Future<bool> settleTransfersForClear({
+    Duration timeout = const Duration(seconds: 20),
+    Future<void>? uploadPass,
+    Duration poll = const Duration(milliseconds: 100),
+  }) async {
+    bool busy() => _ringPass != null || ring.isSyncing || _storageSync.isSyncing || _sdcardSync.isSyncing;
+    final deadline = DateTime.now().add(timeout);
+    Future<void> bounded(Future<void> work) async {
+      final left = deadline.difference(DateTime.now());
+      if (left <= Duration.zero) return;
+      try {
+        await work.timeout(left);
+      } catch (_) {
+        // A cancelled pass may complete with an error; only settlement matters.
+      }
+    }
+
+    if (uploadPass != null) await bounded(uploadPass);
+    final ringPass = _ringPass;
+    if (ringPass != null) await bounded(ringPass);
+    while (busy() && DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(poll);
+    }
+    return !busy();
+  }
 
   bool get usesIndependentRingDrain =>
       ringDrainRecoveryEnabled &&
@@ -79,6 +138,7 @@ class WalSyncs implements IWalSync {
   }
 
   void disableRingDrain() {
+    _dropClearHolds();
     _shouldDrainRing = null;
     ring.independentDiscovery = false;
     ring.onDurableChunk = null;
@@ -110,6 +170,9 @@ class WalSyncs implements IWalSync {
     if (!usesIndependentRingDrain || _device == null || (_ringPass == null && ring.isSyncing)) {
       return Future.value(false);
     }
+    // A bulk clear owns the pendant until it releases its hold. Discovery only
+    // reads INFO, which the clear itself needs to list and verify the ring.
+    if (_clearHolds > 0 && !discoveryOnly) return Future.value(false);
     if (deviceId != null && deviceId != _device!.id) return Future.value(false);
     if (fromBle && (_ringPausedByUser || _shouldDrainRing?.call() != true)) return Future.value(false);
     if (!fromBle && !discoveryOnly) _ringPausedByUser = false;
@@ -395,25 +458,41 @@ class WalSyncs implements IWalSync {
     return wal.codec.estimatedRecordingBytes(seconds: wal.seconds, sampleRate: wal.sampleRate, channels: wal.channel);
   }
 
-  Future<void> deleteAllSyncedWals() async {
-    await _phoneSync.deleteAllSyncedWals();
+  Future<void> deleteAllSyncedWals({WalDeleteProgress? onProgress}) async {
+    await _phoneSync.deleteAllSyncedWals(onProgress: onProgress);
     await _sdcardSync.deleteAllSyncedWals();
     await _flashPageSync.deleteAllSyncedWals();
     await _storageSync.deleteAllSyncedWals();
     await _ringSync.deleteAllSyncedWals();
   }
 
-  Future<void> deleteAllPendingWals() async {
-    await _phoneSync.deleteAllPendingWals();
-    await _sdcardSync.deleteAllPendingWals();
-    await _flashPageSync.deleteAllPendingWals();
-    await _storageSync.deleteAllPendingWals();
-    await _ringSync.deleteAllPendingWals();
+  /// Every store is attempted even when one fails (a legacy store throws when
+  /// its device is unreachable), so an unreachable store cannot keep the
+  /// pendant ring from being cleared. The first failure is rethrown at the end.
+  Future<void> deleteAllPendingWals({WalDeleteProgress? onProgress, bool includeAccepted = true}) async {
+    Object? firstError;
+    StackTrace? firstStack;
+    for (final leg in <Future<void> Function()>[
+      () => _phoneSync.deleteAllPendingWals(onProgress: onProgress, includeAccepted: includeAccepted),
+      _sdcardSync.deleteAllPendingWals,
+      _flashPageSync.deleteAllPendingWals,
+      _storageSync.deleteAllPendingWals,
+      _ringSync.deleteAllPendingWals,
+    ]) {
+      try {
+        await leg();
+      } catch (error, stack) {
+        firstError ??= error;
+        firstStack ??= stack;
+      }
+    }
+    if (firstError != null) Error.throwWithStackTrace(firstError, firstStack!);
   }
 
   /// Terminal corruption is produced by the phone-local WAL owner. Device
   /// stores keep their existing pending-deletion semantics.
-  Future<void> deleteAllCorruptedWals() => _phoneSync.deleteAllCorruptedWals();
+  Future<void> deleteAllCorruptedWals({WalDeleteProgress? onProgress}) =>
+      _phoneSync.deleteAllCorruptedWals(onProgress: onProgress);
 
   /// Bounded phone-only drain used while iOS/Android grants background time.
   Future<SyncLocalFilesResponse?> syncLiveCaptureOnly({IWalSyncProgressListener? progress}) =>
@@ -440,6 +519,8 @@ class WalSyncs implements IWalSync {
 
   @override
   Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress}) async {
+    // A Manage Storage clear owns the stores; the caller retries after release.
+    if (_clearHolds > 0) return null;
     _isCancelled = false;
     var resp = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
 
@@ -601,6 +682,7 @@ class WalSyncs implements IWalSync {
 
   @override
   Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
+    if (_clearHolds > 0) throw StateError('Storage clear in progress');
     if (wal.storage == WalStorage.sdcard) {
       progress?.onWalSyncedProgress(0.0, phase: SyncPhase.downloadingFromDevice);
       if (wal.fileNum == -1) {
@@ -654,6 +736,7 @@ class WalSyncs implements IWalSync {
   }
 
   void clearUserData() {
+    _dropClearHolds();
     setDevice(null);
     _phoneSync.clearUserData();
     cancelSync();

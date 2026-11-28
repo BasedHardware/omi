@@ -1,3 +1,4 @@
+import 'package:omi/services/wals/storage_clear.dart';
 import 'package:omi/services/wals/wal_derived_sync_views.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -87,7 +88,7 @@ class _FakeSync extends ChangeNotifier with WalDerivedSyncViews implements SyncP
   @override
   bool get isLoadingWals => false;
   @override
-  int get clearableWalsCount => 0;
+  StorageAmounts get storageAmounts => StorageAmounts.of(const []);
   @override
   int get missingWalsInSeconds => wals.isEmpty ? 0 : wals.map((w) => w.seconds).reduce((a, b) => a + b);
   @override

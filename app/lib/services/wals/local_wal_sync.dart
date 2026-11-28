@@ -2354,27 +2354,37 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           ],
       };
 
+  /// Deletes [wals] one at a time, reporting progress after each. A bulk clear
+  /// of thousands of recordings otherwise gives the user nothing to watch.
+  Future<void> _deleteEach(List<Wal> wals, int generation, WalDeleteProgress? onProgress) async {
+    onProgress?.call(0, wals.length);
+    for (var i = 0; i < wals.length; i++) {
+      if (!_isCurrent(generation)) break;
+      await _deleteWal(wals[i], generation: generation);
+      onProgress?.call(i + 1, wals.length);
+    }
+  }
+
   @override
-  Future<void> deleteAllSyncedWals() async {
+  Future<void> deleteAllSyncedWals({WalDeleteProgress? onProgress}) async {
     final generation = _sessionGeneration;
     final syncedWals = _wals.where((w) => w.status == WalStatus.synced).toList();
-    for (final wal in syncedWals) {
-      if (!_isCurrent(generation)) break;
-      await _deleteWal(wal, generation: generation);
-    }
+    await _deleteEach(syncedWals, generation, onProgress);
     await _saveWalsToFile(generation);
     _notifyUpdated(generation);
   }
 
+  /// [includeAccepted] also removes uploads the server accepted but has not
+  /// settled. Manage Storage passes false: that audio is not "not uploaded",
+  /// and its row is the only handle reconciliation has on the server job.
   @override
-  Future<void> deleteAllPendingWals() async {
+  Future<void> deleteAllPendingWals({WalDeleteProgress? onProgress, bool includeAccepted = true}) async {
     final generation = _sessionGeneration;
-    final pendingWals =
-        _wals.where((w) => w.status == WalStatus.miss || (w.status == WalStatus.uploaded && w.syncedAt == 0)).toList();
-    for (final wal in pendingWals) {
-      if (!_isCurrent(generation)) break;
-      await _deleteWal(wal, generation: generation);
-    }
+    final pendingWals = _wals
+        .where(
+            (w) => w.status == WalStatus.miss || (includeAccepted && w.status == WalStatus.uploaded && w.syncedAt == 0))
+        .toList();
+    await _deleteEach(pendingWals, generation, onProgress);
     await _saveWalsToFile(generation);
     _notifyUpdated(generation);
   }
@@ -2383,7 +2393,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   /// clears all local recordings. They are intentionally excluded from the
   /// retryable Pending action.
   @override
-  Future<void> deleteAllCorruptedWals() async {
+  Future<void> deleteAllCorruptedWals({WalDeleteProgress? onProgress}) async {
     final generation = _sessionGeneration;
     final corruptedWals = _wals
         .where(
@@ -2394,10 +2404,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
               w.status == WalStatus.uploadRejected,
         )
         .toList();
-    for (final wal in corruptedWals) {
-      if (!_isCurrent(generation)) break;
-      await _deleteWal(wal, generation: generation);
-    }
+    await _deleteEach(corruptedWals, generation, onProgress);
     await _saveWalsToFile(generation);
     _notifyUpdated(generation);
   }

@@ -20,6 +20,7 @@ import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/wals/wal.dart';
+import 'package:omi/services/wals/storage_clear.dart';
 import 'package:omi/services/wals/wal_derived_sync_views.dart';
 import 'package:omi/ui/ui.dart';
 import '../helpers/sfpro_font_fixtures.dart';
@@ -63,8 +64,6 @@ class _Sync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvi
   @override
   int get needsAttentionWalsCount => wals.where((w) => w.status == WalStatus.corrupted).length;
   @override
-  int get clearableWalsCount => wals.length;
-  @override
   List<Wal> get syncedWals => wals.where((wal) => wal.status == WalStatus.synced).toList();
   @override
   List<Wal> get pendingDeletableWals => missingWals;
@@ -79,10 +78,20 @@ class _Sync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvi
   List<Wal>? discoveredWals;
 
   @override
-  Future<void> deleteAllPendingWals() async {
-    final targets = pendingDeletableWals.map((wal) => wal.id).toSet();
-    wals.removeWhere((wal) => targets.contains(wal.id) && wal.id != retainedPendingId);
+  StorageAmounts get storageAmounts => StorageAmounts.of(wals);
+  @override
+  Future<StorageClearOutcome> clearStorage(
+    StorageClearScope scope, {
+    String? firmwareVersion,
+    void Function(StorageClearProgress progress)? onProgress,
+    Duration settleTimeout = const Duration(seconds: 20),
+  }) async {
+    final targets = storageClearTargets(wals, scope);
+    final ids = targets.map((wal) => wal.id).toSet();
+    wals.removeWhere((wal) => ids.contains(wal.id) && wal.id != retainedPendingId);
+    if (targets.any(isDeviceStoredWal)) await discoverDeviceWals(firmwareVersion: firmwareVersion);
     notifyListeners();
+    return verifyStorageClear(targets: targets, current: wals, elapsed: Duration.zero, failed: false);
   }
 
   @override
@@ -220,10 +229,10 @@ Future<AppLocalizations> _clearPending(WidgetTester tester) async {
   final l = AppLocalizations.of(tester.element(find.byType(SyncPage)));
   await tester.tap(find.byTooltip(l.manageStorage));
   await tester.pumpAndSettle();
-  await tester.tap(find.text(l.clear));
+  await tester.tap(find.text(l.delete));
   await tester.pumpAndSettle();
-  expect(find.text(l.deletePendingFiles), findsOneWidget);
-  await tester.tap(find.text(l.clear));
+  expect(find.text(l.storageDeletePendingMessage), findsOneWidget);
+  await tester.tap(find.text(l.delete).last);
   await tester.pumpAndSettle();
   return l;
 }
@@ -385,7 +394,7 @@ void main() {
   });
 
   for (final retainOne in [true, false]) {
-    testWidgets('Classic Clear Pending reports the actual result (retained: $retainOne)', (tester) async {
+    testWidgets('Classic Delete not-uploaded reports the verified result (retained: $retainOne)', (tester) async {
       final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
       final pending = [
         for (final secondsAgo in [30, 60])
@@ -402,18 +411,19 @@ void main() {
       final l = await _clearPending(tester);
 
       expect(sync.allWals, retainOne ? [retained] : isEmpty);
-      expect(find.text(l.failedToDeleteSomeItems), retainOne ? findsOneWidget : findsNothing);
-      expect(find.text(l.pendingFilesDeleted), retainOne ? findsNothing : findsOneWidget);
+      expect(find.text(l.storageClearPartial('30s', '30s')), retainOne ? findsOneWidget : findsNothing);
+      expect(find.text(l.storageClearDone('1m')), retainOne ? findsNothing : findsOneWidget);
       await _capture(tester, retainOne ? '001-mobile-ios-pending-retained.png' : '002-mobile-ios-pending-cleared.png');
     });
   }
 
-  testWidgets('Classic Clear Pending reports a retained ring after its virtual row is rebuilt', (tester) async {
+  testWidgets('Classic Delete reports a retained pendant ring after its virtual row is rebuilt', (tester) async {
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    // Two minutes: more than the pendant could record during the clear itself.
     Wal ring(int start) => Wal(
           timerStart: start,
           codec: BleAudioCodec.opus,
-          seconds: 30,
+          seconds: 120,
           storage: WalStorage.sdcard,
           status: WalStatus.miss,
           device: 'synthetic-pendant',
@@ -430,8 +440,8 @@ void main() {
     final l = await _clearPending(tester);
 
     expect(sync.allWals, [rediscovered]);
-    expect(find.text(l.failedToDeleteSomeItems), findsOneWidget);
-    expect(find.text(l.pendingFilesDeleted), findsNothing);
+    expect(find.text(l.storageClearOmiUnreachable('2m')), findsOneWidget);
+    expect(find.textContaining('Deleted'), findsNothing);
   });
 }
 
