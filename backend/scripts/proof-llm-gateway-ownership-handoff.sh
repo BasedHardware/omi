@@ -291,7 +291,9 @@ expect_same "Helm release revisions (no failed revision recorded)" "$before_revi
 expect_same "ingress and BackendConfig adoption labels" "$before_adopted" "$(adopted)"
 echo "helm and kubectl calls made by the failed deploy:"
 cut -c1-200 "$WORK/failed-calls" | sed 's/^/    /'
-expect "kubectl writes attempted" "$(grep '^kubectl' "$WORK/failed-calls" | grep -vc -- '--dry-run=server' || true)" "0"
+# The deploy reads the live Deployment's managed fields to choose Helm's apply method; that read is not a write.
+expect "kubectl writes attempted" \
+  "$(grep '^kubectl' "$WORK/failed-calls" | grep -v -- '--dry-run=server' | grep -vc ' get deployment ' || true)" "0"
 expect "helm calls other than template" "$(grep '^helm' "$WORK/failed-calls" | grep -vc '^helm template' || true)" "0"
 
 echo "## 3. bounded ownership handoff"

@@ -15880,4 +15880,7 @@ class AppLocalizationsMs extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Sebahagian rakaman masih berada pada peranti anda. Biarkan ia selesai disegerakkan ke telefon anda, kemudian mulakan kemas kini.';
+
+  @override
+  String get batteryRestartToRefresh => 'Mulakan semula Omi untuk memuat semula';
 }

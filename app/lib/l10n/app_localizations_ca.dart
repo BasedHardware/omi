@@ -15922,4 +15922,7 @@ class AppLocalizationsCa extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Alguns enregistraments encara són al vostre dispositiu. Deixeu que acabin de sincronitzar-se al telèfon i, després, inicieu l\'actualització.';
+
+  @override
+  String get batteryRestartToRefresh => 'Reinicieu Omi per actualitzar el valor';
 }

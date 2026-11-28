@@ -4768,5 +4768,6 @@
     "playStripePlanPaused": "Planul tău {plan} este întrerupt.",
     "firmwareNewestSupportedForDevice": "Dispozitivul tău are deja cea mai recentă versiune de firmware acceptată",
     "firmwareSyncRecordingsFirstTitle": "Sincronizează mai întâi înregistrările",
-    "firmwareSyncRecordingsFirstMessage": "Unele înregistrări sunt încă pe dispozitivul tău. Lasă-le să termine de sincronizat cu telefonul tău, apoi pornește actualizarea."
+    "firmwareSyncRecordingsFirstMessage": "Unele înregistrări sunt încă pe dispozitivul tău. Lasă-le să termine de sincronizat cu telefonul tău, apoi pornește actualizarea.",
+    "batteryRestartToRefresh": "Repornește Omi pentru a actualiza valoarea"
 }

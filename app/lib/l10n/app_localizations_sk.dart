@@ -15837,4 +15837,7 @@ class AppLocalizationsSk extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Niektoré nahrávky sa stále nachádzajú na zariadení. Počkajte, kým sa dokončí ich synchronizácia s telefónom, a potom spustite aktualizáciu.';
+
+  @override
+  String get batteryRestartToRefresh => 'Pre obnovenie údajov reštartujte Omi';
 }

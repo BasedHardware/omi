@@ -50,7 +50,8 @@ admission (`conversations_v3_enabled`) ignores the holdout. New-intake sites ask
 - Home list: legacy read mode (offset paging, `show_held`). It still shows the owner's existing
   `v3_derived` cards, and their new legacy pieces held for notes.
 - `GET /v1/conversations/live`: an existing active v3 window is still served (`v3:true`).
-  Without one, the answer is `v3:false`.
+  Without one, the answer is `v3:false`. A window lookup capped at its read limit keeps `v3:true` and
+  counts `omi_fallback_total{component="feature_flags",from_mode="v3_holdout",reason="lookup_cap"}`.
 
 Finish, episodes and the builders keep stage admission, so existing v3 recordings drain on the
 v3 path and an active v3 capture can still be finished. While a legacy row is in progress beside an

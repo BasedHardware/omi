@@ -12325,5 +12325,6 @@
     "playStripePlanPaused": "ನಿಮ್ಮ {plan} ಯೋಜನೆಯನ್ನು ವಿರಾಮಗೊಳಿಸಲಾಗಿದೆ.",
     "firmwareNewestSupportedForDevice": "ನಿಮ್ಮ ಸಾಧನವು ಈಗಾಗಲೇ ಬೆಂಬಲಿತ ಅತ್ಯಂತ ಹೊಸ ಫಾರ್ಮ್‌ವೇರ್ ಆವೃತ್ತಿಯಲ್ಲಿದೆ",
     "firmwareSyncRecordingsFirstTitle": "ಮೊದಲು ನಿಮ್ಮ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಸಿಂಕ್ ಮಾಡಿ",
-    "firmwareSyncRecordingsFirstMessage": "ಕೆಲವು ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಇನ್ನೂ ನಿಮ್ಮ ಸಾಧನದಲ್ಲಿವೆ. ಅವುಗಳು ನಿಮ್ಮ ಫೋನ್‌ಗೆ ಸಿಂಕ್ ಆಗಲು ಬಿಡಿ, ನಂತರ ನವೀಕರಣ ಪ್ರಾರಂಭಿಸಿ."
+    "firmwareSyncRecordingsFirstMessage": "ಕೆಲವು ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಇನ್ನೂ ನಿಮ್ಮ ಸಾಧನದಲ್ಲಿವೆ. ಅವುಗಳು ನಿಮ್ಮ ಫೋನ್‌ಗೆ ಸಿಂಕ್ ಆಗಲು ಬಿಡಿ, ನಂತರ ನವೀಕರಣ ಪ್ರಾರಂಭಿಸಿ.",
+    "batteryRestartToRefresh": "ರಿಫ್ರೆಶ್ ಮಾಡಲು Omi ಅನ್ನು ಮರುಪ್ರಾರಂಭ ಮಾಡಿ"
 }

@@ -15824,4 +15824,7 @@ class AppLocalizationsHi extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'कुछ रिकॉर्डिंग अभी भी आपके डिवाइस पर हैं। उन्हें आपके फ़ोन पर सिंक होने दें, फिर अपडेट शुरू करें।';
+
+  @override
+  String get batteryRestartToRefresh => 'रीफ़्रेश करने के लिए Omi पुनः प्रारंभ करें';
 }

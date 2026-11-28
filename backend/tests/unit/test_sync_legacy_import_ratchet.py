@@ -90,6 +90,31 @@ RETIRING_MODULES: dict[str, str] = {
     'database.sync_empty_recovery': 'C11',
 }
 
+# Retiring modules are frozen (SCA-2965): each carries the RETIRING banner, and a file
+# may only shrink. Raising a ceiling is a reviewed decision to change dead code; prefer
+# fixing the batch pipeline, which serves every sync upload.
+RETIRING_LINE_CEILINGS: dict[str, int] = {
+    'utils.sync.pipeline': 4072,
+    'utils.sync.uid_sequencer': 776,
+    'database.sync_backfill_sequencer': 988,
+    'utils.sync.owner_prefetch': 60,
+    'utils.sync.staged_prefetch': 90,
+    'utils.sync.backfill_cutover': 79,
+    'utils.sync.backfill_order': 54,
+    'database.sync_redrive': 131,
+    'database.sync_dead_letters': 207,
+    'utils.sync.redrive_policy': 20,
+    'utils.sync.completed_status': 164,
+    'utils.sync.wal_audio_coverage': 586,
+    'utils.sync.wal_audio_coverage_metrics': 37,
+    'utils.sync.safety_wal_coverage': 373,
+    'utils.sync.safety_wal_metrics': 36,
+    'utils.sync.empty_recovery': 44,
+    'utils.sync.empty_recovery_intent': 29,
+    'database.sync_empty_recovery': 40,
+}
+RETIRING_BANNER = '# RETIRING: legacy sync is dark in production'
+
 EXCLUDED_TOP_DIRS = SCOPE_EXCLUDED_TOP_DIRS
 # Local environments and caches (``.venv``, ``.openapi-venv``, ...) are not first-party code.
 EXCLUDED_PARTS = SCOPE_EXCLUDED_PARTS
@@ -321,6 +346,22 @@ def test_retiring_modules_exist():
         f'retired legacy sync modules {missing} no longer exist: remove them from RETIRING_MODULES '
         'and the baseline (their importer lists must already be empty)'
     )
+
+
+def test_retiring_modules_carry_the_retiring_banner():
+    for module in RETIRING_MODULES:
+        head = (BACKEND_DIR / _module_path(module)).read_text(encoding='utf-8').splitlines()[:12]
+        assert RETIRING_BANNER in '\n'.join(head), f'{module}: add the RETIRING banner (SCA-2965)'
+
+
+def test_retiring_modules_only_shrink():
+    assert set(RETIRING_LINE_CEILINGS) == set(RETIRING_MODULES)
+    for module, ceiling in RETIRING_LINE_CEILINGS.items():
+        lines = len((BACKEND_DIR / _module_path(module)).read_text(encoding='utf-8').splitlines())
+        assert lines <= ceiling, (
+            f'{module} grew to {lines} lines (ceiling {ceiling}). Legacy sync is dark in production: '
+            'fix the batch pipeline instead, or raise the ceiling here with a reviewed reason.'
+        )
 
 
 def test_baseline_covers_exactly_the_retiring_modules():

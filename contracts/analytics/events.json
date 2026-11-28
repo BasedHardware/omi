@@ -5810,6 +5810,30 @@
         "app-foreground-time"
       ],
       "correlation": null
+    },
+    {
+      "id": "batteryReadingHidden",
+      "wire_name": "Battery Reading Hidden",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "charging_low",
+            "first_pairing",
+            "long_charge",
+            "flat"
+          ]
+        }
+      },
+      "consumers": [
+        "battery-reading-hidden"
+      ],
+      "correlation": null
     }
   ],
   "transport_dispositions": {

@@ -15849,4 +15849,7 @@ class AppLocalizationsSr extends AppLocalizations {
   @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Неки снимци се још увек налазе на вашем уређају. Сачекајте да заврше синхронизовање са телефоном, а затим покрените ажурирање.';
+
+  @override
+  String get batteryRestartToRefresh => 'Поново покрените Omi да освежите податке';
 }

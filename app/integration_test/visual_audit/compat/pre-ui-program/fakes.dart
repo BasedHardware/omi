@@ -112,6 +112,12 @@ class AuditDeviceProvider extends ChangeNotifier implements DeviceProvider {
   bool get hasRememberedDevice => device?.id.isNotEmpty ?? false;
   @override
   int get batteryLevel => battery;
+
+  @override
+  int get displayBatteryLevel => batteryLevel;
+
+  @override
+  bool get batteryReadingStuck => false;
   @override
   bool get isCharging => charging;
   @override
