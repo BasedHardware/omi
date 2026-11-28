@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-ble-callback-error-swallowed-by-detached-task",
+  "violated_contract": "A BLE listener coroutine that awaits a caller-supplied async notification callback must surface that callback's exception to the coroutine's own caller. bleak.BleakClient.start_notify detects an async callback and wraps it so every notification runs in its own detached asyncio.create_task (bleak/__init__.py), never awaited by anything the listener itself awaits. sdks/python/omi/ble.py::listen()'s `_handler` awaited `on_packet`'s result inline with no try/except, so a packet-callback exception became an unretrieved task exception logged by asyncio's default handler instead of reaching the coroutine awaiting listen()/listen_payload() -- the caller saw the listener hang, not the real failure.",
+  "canonical_prevention": "Catch exceptions raised inside the notification handler itself, store the first one, and signal a shared event the listener's poll loop also watches; once that event fires, re-raise the stored exception from the coroutine the caller is actually awaiting, instead of relying on the notification callback's own call frame to propagate it.",
+  "canonical_prevention_artifact": [
+    "sdks/python/tests/test_ble_notification_dispatch.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "sdks/python/omi/ble.py",
+    "sdks/python/omi/bluetooth.py"
+  ],
+  "status": "open"
+}

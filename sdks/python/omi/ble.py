@@ -41,18 +41,33 @@ async def listen(
     char_uuid: str = AUDIO_DATA_UUID,
     service_uuid: Optional[str] = None,
 ) -> None:
-    """Connect and notify on audio characteristic until cancelled or disconnected."""
+    """Connect and notify on audio characteristic until cancelled, disconnected, or
+    a packet callback raises.
+
+    Bleak's own ``start_notify`` detects that ``_handler`` is a coroutine function
+    and dispatches each notification via a detached ``asyncio.create_task`` (see
+    ``BleakClient.start_notify``), not by awaiting it inline. A callback exception
+    raised there never reaches this coroutine's caller on its own -- it has to be
+    caught inside ``_handler`` and forwarded through the shared ``stopped`` signal.
+    """
+
+    stopped = asyncio.Event()
+    callback_error: list[BaseException] = []
 
     async def _handler(_sender, data: bytearray) -> None:
-        raw = bytes(data)
-        result = on_packet(raw)
-        if inspect.isawaitable(result):
-            await result
-
-    disconnected = asyncio.Event()
+        if stopped.is_set():
+            return
+        try:
+            raw = bytes(data)
+            result = on_packet(raw)
+            if inspect.isawaitable(result):
+                await result
+        except Exception as error:  # noqa: BLE001 - forwarded to listen()'s caller below
+            callback_error.append(error)
+            stopped.set()
 
     def _on_disconnect(_client: BleakClient) -> None:
-        disconnected.set()
+        stopped.set()
 
     async with BleakClient(device_id, disconnected_callback=_on_disconnect) as client:
         services = getattr(client, "services", None)
@@ -66,8 +81,11 @@ async def listen(
             await client.start_notify(characteristic, _handler)
         else:
             await client.start_notify(char_uuid, _handler)
-        while not disconnected.is_set():
+        while not stopped.is_set():
             await asyncio.sleep(1)
+
+    if callback_error:
+        raise callback_error[0]
     raise ConnectionError(f"Device {device_id} disconnected")
 
 
