@@ -15835,6 +15835,9 @@ class AppLocalizationsDa extends AppLocalizations {
       'Nogle optagelser er stadig på din enhed. Lad dem blive færdige med at synkronisere til din telefon, og start derefter opdateringen.';
 
   @override
+  String get batteryRestartToRefresh => 'Genstart Omi for at opdatere værdien';
+
+  @override
   String get pendantReconnectNudgeTitle => 'Din Omi har ikke været forbundet i 3 dage';
 
   @override

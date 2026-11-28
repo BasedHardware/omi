@@ -15976,6 +15976,9 @@ class AppLocalizationsFr extends AppLocalizations {
       'Certains enregistrements sont encore sur votre appareil. Laissez-les terminer leur synchronisation vers votre téléphone, puis lancez la mise à jour.';
 
   @override
+  String get batteryRestartToRefresh => 'Redémarrez Omi pour actualiser';
+
+  @override
   String get pendantReconnectNudgeTitle => 'Ton Omi ne s’est pas connecté depuis 3 jours';
 
   @override

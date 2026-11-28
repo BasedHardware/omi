@@ -15854,6 +15854,9 @@ class AppLocalizationsTr extends AppLocalizations {
       'Bazı kayıtlar hâlâ cihazınızda. Telefonunuza senkronize edilmelerini bekleyin, ardından güncellemeyi başlatın.';
 
   @override
+  String get batteryRestartToRefresh => 'Yenilemek için Omi\'yi yeniden başlatın';
+
+  @override
   String get pendantReconnectNudgeTitle => 'Omi cihazın 3 gündür bağlanmadı';
 
   @override

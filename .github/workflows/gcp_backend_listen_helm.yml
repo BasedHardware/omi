@@ -277,6 +277,18 @@ jobs:
             .github/scripts
             .github/workflows/gcp_backend_listen_helm.yml
 
+      - name: Verify staged evidence scripts before Python
+        if: ${{ inputs.mode == 'evidence' && fromJSON(inputs.evidence_request).image_only != null }}
+        working-directory: .github/listen-evidence-control
+        shell: bash
+        run: |
+          set -euo pipefail
+          reviewed_scripts_tree=c9cc79160418038884fc99286730784297d61793
+          test "$(git rev-parse HEAD)" = "$GITHUB_WORKFLOW_SHA"
+          test "$(git rev-parse HEAD:.github/scripts)" = "$reviewed_scripts_tree"
+          changed=$(git status --porcelain=v1 --untracked-files=all --ignored -- .github/scripts)
+          test -z "$changed"
+
       - name: Reconstruct evidence runtime before credentials
         if: ${{ inputs.mode == 'evidence' }}
         run: |

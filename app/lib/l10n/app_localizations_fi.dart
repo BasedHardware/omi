@@ -15849,6 +15849,9 @@ class AppLocalizationsFi extends AppLocalizations {
       'Osaa nauhoituksista on vielä laitteella. Anna niiden synkronoitua puhelimeen loppuun ja käynnistä sitten päivitys.';
 
   @override
+  String get batteryRestartToRefresh => 'Käynnistä Omi uudelleen päivittämiseksi';
+
+  @override
   String get pendantReconnectNudgeTitle => 'Omisi ei ole muodostanut yhteyttä 3 päivään';
 
   @override

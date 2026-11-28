@@ -6,13 +6,18 @@ latency with the bounded `hold_state` label. The existing intake and content
 ledger writes carry the field. Ordinary uploads add no Firestore operations,
 and coalesced completions retain each original request's label and clock.
 
-Release verifies labeled samples before the phone flag ramps from 0 to 5,
-25, and 100 percent. During mixed backend revisions the guard selects
-explicit hold states, which use the new 360-second bucket. When the client
-provides a valid hold age on a new batch admission, sync also observes it in
-`omi_batch_pipeline_upload_hold_age_seconds`. The rollback guard adds
-phone-age p90 to server-publication p90 per state and compares the sum with
-the hold window plus 300 seconds. The age adds no Firestore field or operation.
+The rollout guard reads `omi_batch_pipeline_upload_hold_age_seconds` for
+the phone side. It uses the client's clock at multipart send and samples
+each fresh batch admission, so it pairs with the server publication metric
+without including upload transit in the phone age. The general
+`omi_sync_seal_to_accept_seconds` family continues to diagnose waits across
+all traced uploads using server receive time and the upload gate.
+
+The phone-age histogram uses the same bounded `gate` from
+`X-Omi-Upload-Trace`. A missing or malformed trace maps to `other`. Exclude
+`gate=~"offline|retries_exhausted"` on the phone side of the guard and chart
+those waits separately. The gate is the last observed blocker, so it is
+diagnostic context rather than a complete history of the wait.
 
 [Request header contract](../../listen_pusher_pipeline.mdx) ·
 [Canary measurement rules](../../runbooks/batch-upload-coalescing.md#measurements-and-first-canary)
@@ -21,6 +26,27 @@ Follow-up: `X-Omi-Upload-Recovered: 1` adds a bounded `recovered="true"`
 label to the hold-age and publication-latency histograms. Other inputs are
 `recovered="false"`. True rides on existing intake and completion metadata,
 including coalesced originals. No additional Firestore operations are required.
+
+## Pre-ramp latency receipt
+
+Keep the public flag at 0% while Release verifies the serving sync and
+publication revisions with the rollout mobile build. For each hold state
+(`fg60`, `bg300`, `fg_preview300`), exercise a synthetic fresh held WAL and
+wait for durable transcript publication. Verify that
+`X-Omi-Upload-Hold` and `X-Omi-Upload-Hold-Age-Ms` produce a positive count
+increase on `omi_batch_pipeline_upload_hold_age_seconds`, and that
+`omi_batch_pipeline_upload_to_transcript_seconds` advances under the same
+`hold_state` and `recovered="false"`. Check that the phone-age series has the
+expected `gate` label. Record the app build, serving revisions, measurement
+window, and per-state count deltas in the SCA-4508 ramp receipt. A missing
+series or one with no new samples leaves that state unverified.
+
+For the absolute latency guard, use explicit hold states, filter both
+histograms to `recovered="false"`, and select the labeled phone series with
+`gate=~".+",gate!~"offline|retries_exhausted"`. Compare the sum of phone-age
+p90 and server-publication p90 per state with the state's hold window plus
+300 seconds. The existing SCA-3891 paired seal-to-transcript p90 comparison
+against matched unheld traffic is also required before 5% public exposure.
 
 ## Independent recovery comparison canary
 

@@ -4769,6 +4769,7 @@
     "firmwareNewestSupportedForDevice": "Ваш пристрій уже працює на найновішій підтримуваній версії прошивки",
     "firmwareSyncRecordingsFirstTitle": "Спочатку синхронізуйте свої записи",
     "firmwareSyncRecordingsFirstMessage": "Деякі записи ще зберігаються на вашому пристрої. Дочекайтеся завершення синхронізації з телефоном, а потім почніть оновлення.",
+    "batteryRestartToRefresh": "Перезавантажте Omi, щоб оновити",
     "pendantReconnectNudgeTitle": "Твій Omi не підключався 3 дні",
     "pendantReconnectNudgeBody": "Одягни його знову й підключи, щоб Omi продовжував записувати.",
     "pendantReconnectNudgeAction": "Підключити знову"

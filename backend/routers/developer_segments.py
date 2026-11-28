@@ -12,7 +12,7 @@ import json
 import logging
 import math
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any, Callable, cast
+from typing import TYPE_CHECKING, Any, Callable, TypeVar, cast
 
 from fastapi import HTTPException
 from google.cloud import firestore
@@ -172,13 +172,9 @@ def stage_chunk(
     return assembled
 
 
-def continuation(
-    uid: str,
-    request: CreateConversationFromTranscriptRequest,
-    conversation_id: str,
-    ingest: Callable[[CreateConversationFromTranscriptRequest], Any],
-    response: Callable[..., Any],
-) -> Any:
+def assemble_continuation(
+    uid: str, request: CreateConversationFromTranscriptRequest, conversation_id: str
+) -> CreateConversationFromTranscriptRequest | None:
     if not serving_for(CONTINUATION_FLAG_KEY, uid):
         if shadow_or_serve(CONTINUATION_FLAG_KEY):
             observe('chunk_admission', 'disagree')
@@ -186,7 +182,7 @@ def continuation(
         raise HTTPException(status_code=409, detail='Continuation uploads are not enabled')
     payload = stage_chunk(uid, conversation_id, request)
     if payload is None:
-        return response(id=conversation_id, status='processing', discarded=False)
+        return None
     # Every constituent request passed public validation. Aggregates deliberately
     # exceed the per-request maxItems; model_copy avoids reapplying that wire cap.
     updates: dict[str, Any] = {
@@ -200,12 +196,18 @@ def continuation(
         ),
         'client_processing': payload.get('client_processing'),
     }
-    result = ingest(request.model_copy(update=updates))
+    return request.model_copy(update=updates)
+
+
+T = TypeVar('T')
+
+
+def finish_continuation(uid: str, conversation_id: str, chunk_count: int | None, result: T) -> T:
     # Successful processing has durably moved the transcript into its conversation.
     # Failed/in-progress assembly keeps the encrypted inputs for replay.
     if getattr(result, 'status', None) in {'completed', 'deleted'}:
         try:
-            purge_chunks(uid, conversation_id, request.chunk_count or 128)
+            purge_chunks(uid, conversation_id, chunk_count or 128)
         except Exception:
             observe('chunk_cleanup', 'error')
     return result

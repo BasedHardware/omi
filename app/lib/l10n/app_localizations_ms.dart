@@ -15882,6 +15882,9 @@ class AppLocalizationsMs extends AppLocalizations {
       'Sebahagian rakaman masih berada pada peranti anda. Biarkan ia selesai disegerakkan ke telefon anda, kemudian mulakan kemas kini.';
 
   @override
+  String get batteryRestartToRefresh => 'Mulakan semula Omi untuk memuat semula';
+
+  @override
   String get pendantReconnectNudgeTitle => 'Omi anda belum bersambung selama 3 hari';
 
   @override

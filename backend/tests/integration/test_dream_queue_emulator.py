@@ -35,6 +35,7 @@ def emulator_client():
 def test_hidden_capture_union_and_query_immutability(monkeypatch):
     from database.conversation_visibility_counts import count_hidden
     from google.cloud.firestore_v1 import FieldFilter
+    from utils.sync import bridge_pending
 
     assert os.environ.get('FIRESTORE_EMULATOR_HOST', '').startswith(('127.0.0.1:', 'localhost:'))
     database = emulator_client()
@@ -54,6 +55,20 @@ def test_hidden_capture_union_and_query_immutability(monkeypatch):
     assert {doc.id for doc in duplicate.stream()} == {'both', 'duplicate'}
     assert len(list(collection.stream())) == 5
     assert count_hidden(collection, include_discarded=False, sources=['omi']) == 3
+    assert count_hidden(collection, include_discarded=True, sources=['omi']) == 2
+    assert count_hidden(collection, include_discarded=False, sources=['other']) == 0
+
+    now = 1_800_000_000.0
+    monkeypatch.setattr(bridge_pending, 'current_time', lambda: now)
+    active_hold = {**base, 'sync_bridge_pending': {'expires_at': now + 60}}
+    collection.document('pending').set(active_hold)
+    assert count_hidden(collection, include_discarded=False, sources=['omi']) == 4
+
+    # The photos array is the only curation signal on this held row.
+    collection.document('pending-with-photo').set({**active_hold, 'photos': [{'id': 'synthetic-photo'}]})
+    collection.document('expired-pending').set({**base, 'sync_bridge_pending': {'expires_at': now - 60}})
+    collection.document('both').update({'sync_bridge_pending': active_hold['sync_bridge_pending']})
+    assert count_hidden(collection, include_discarded=False, sources=['omi']) == 4
     assert count_hidden(collection, include_discarded=True, sources=['omi']) == 2
     assert count_hidden(collection, include_discarded=False, sources=['other']) == 0
 

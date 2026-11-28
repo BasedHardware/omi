@@ -15949,6 +15949,9 @@ class AppLocalizationsEl extends AppLocalizations {
       'Μερικές ηχογραφήσεις βρίσκονται ακόμη στη συσκευή σας. Περιμένετε να ολοκληρωθεί ο συγχρονισμός τους στο τηλέφωνό σας και, στη συνέχεια, ξεκινήστε την ενημέρωση.';
 
   @override
+  String get batteryRestartToRefresh => 'Κάντε επανεκκίνηση του Omi για να ανανεωθεί η ένδειξη';
+
+  @override
   String get pendantReconnectNudgeTitle => 'Το Omi σου δεν έχει συνδεθεί εδώ και 3 ημέρες';
 
   @override

@@ -15879,6 +15879,9 @@ class AppLocalizationsBe extends AppLocalizations {
       'Некаторыя запісы ўсё яшчэ на вашай прыладзе. Дайце ім завяршыць сінхранізацыю на тэлефон, а потым пачніце абнаўленне.';
 
   @override
+  String get batteryRestartToRefresh => 'Перазагрузіце Omi, каб абнавіць паказанне';
+
+  @override
   String get pendantReconnectNudgeTitle => 'Ваша Omi не падключалася 3 дні';
 
   @override

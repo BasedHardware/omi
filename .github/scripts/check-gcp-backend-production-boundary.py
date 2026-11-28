@@ -19,6 +19,8 @@ PROD_ALL_REJECTION = 'if [[ "$DEPLOY_ENVIRONMENT" == "prod" && "$DEPLOY_TARGETS"
 DEV_CANDIDATE_GATE = "if: ${{ github.event.inputs.environment == 'development' }}"
 PROD_SMOKE = "Smoke promoted production serving API"
 SERVING_VERIFY = "Verify serving backend release vector"
+SNAPSHOT_RESTORE = "Restore Cloud Run traffic snapshot after failed promotion"
+BOUND_RESTORE = "Restore admitted inverse after a failed bound acceptance gate"
 ROLLBACK_CONDITION = "steps.smoke-promoted-production-serving-api.outcome == 'failure'"
 PROD_FORBIDDEN = (
     "probe-transcription-candidate-from-cloud-run.sh",
@@ -67,10 +69,16 @@ def validate(root: Path) -> list[str]:
         "umask 077",
         "firebase-production-serving-token",
         "trap 'rm -f \"$token_file\"' EXIT",
-        ROLLBACK_CONDITION,
     ):
         if required not in text:
             errors.append(f"gcp_backend.yml is missing production serving-smoke guard {required!r}")
+    restores = [SNAPSHOT_RESTORE]
+    if "inputs.selected_split_binding" in text:
+        restores.append(BOUND_RESTORE)
+    for name in restores:
+        _, marker, tail = text.rpartition(f"- name: {name}\n")
+        if not marker or ROLLBACK_CONDITION not in tail.split("\n    - name: ", 1)[0]:
+            errors.append(f"gcp_backend.yml must restore traffic after production serving smoke fails in {name}")
     if "--data '{}')" in text:
         errors.append("gcp_backend.yml must not use an invalid empty reservation body for the 401 smoke")
     smoke_text = text[text.find(PROD_SMOKE) :] if PROD_SMOKE in text else ""

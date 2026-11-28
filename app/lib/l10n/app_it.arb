@@ -4769,6 +4769,7 @@
     "firmwareNewestSupportedForDevice": "Il tuo dispositivo è già sull'ultima versione firmware supportata",
     "firmwareSyncRecordingsFirstTitle": "Sincronizza prima le tue registrazioni",
     "firmwareSyncRecordingsFirstMessage": "Alcune registrazioni sono ancora sul tuo dispositivo. Aspetta che terminino la sincronizzazione con il telefono, poi avvia l'aggiornamento.",
+    "batteryRestartToRefresh": "Riavvia Omi per aggiornare",
     "pendantReconnectNudgeTitle": "Il tuo Omi non si connette da 3 giorni",
     "pendantReconnectNudgeBody": "Indossalo di nuovo e riconnettilo perché Omi continui a registrare.",
     "pendantReconnectNudgeAction": "Riconnetti"

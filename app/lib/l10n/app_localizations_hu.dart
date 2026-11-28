@@ -15902,6 +15902,9 @@ class AppLocalizationsHu extends AppLocalizations {
       'Néhány felvétel még az eszközödön van. Várd meg, amíg a telefonodra szinkronizálásuk befejeződik, majd indítsd el a frissítést.';
 
   @override
+  String get batteryRestartToRefresh => 'Indítsa újra az Omit a frissítéshez';
+
+  @override
   String get pendantReconnectNudgeTitle => 'Az Omi 3 napja nem kapcsolódott';
 
   @override

@@ -221,6 +221,37 @@ def test_firestore_probe_is_served_by_every_child_before_parent_merge():
         assert all(s.value >= 7 for s in observed)
 
 
+def test_enforced_write_audit_metrics_are_scraped_through_the_worker_pod():
+    from prometheus_client.parser import text_string_to_metric_families
+
+    from database import batch_privacy_write_audit as audit
+
+    audit.AUDIT_BY_ROLE.labels('worker', 'disagree_beyond_window').inc()
+    audit.AUDIT.labels('lease', 'disagree_beyond_window').inc()
+    audit.INCOMPLETE.labels('lease', 'dropped').inc()
+    server = runtime.health_server(runtime.RuntimeState(), CollectorRegistry(), 0, '127.0.0.1')
+    try:
+        with urllib.request.urlopen(f'http://127.0.0.1:{server.server_port}/metrics', timeout=5) as response:
+            page = runtime.merge_metrics([(0, response.read())])
+    finally:
+        server.shutdown()
+        server.server_close()
+    samples = {
+        (sample.name, frozenset(sample.labels.items())): sample.value
+        for family in text_string_to_metric_families(page.decode())
+        for sample in family.samples
+    }
+    for name, labels in (
+        ('omi_batch_pipeline_privacy_tokenless_audit_total', {'role': 'worker', 'outcome': 'disagree_beyond_window'}),
+        (
+            'omi_batch_pipeline_privacy_tokenless_write_audit_total',
+            {'site': 'lease', 'outcome': 'disagree_beyond_window'},
+        ),
+        ('omi_batch_pipeline_privacy_tokenless_write_audit_incomplete_total', {'site': 'lease', 'outcome': 'dropped'}),
+    ):
+        assert samples[name, frozenset({**labels, 'worker_process': '0'}.items())] >= 1
+
+
 def test_packing_probe_origin_is_exposed_once_by_worker_and_default_registry():
     from prometheus_client import generate_latest
     from prometheus_client.parser import text_string_to_metric_families

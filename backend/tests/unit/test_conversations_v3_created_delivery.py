@@ -14,7 +14,7 @@ from database import conversations_v3 as store, conversations_v3_leases as lease
 from database import conversations_v3_processing as writers
 from utils.app_integrations import ExternalIntegrationFanoutError
 from utils.conversations.v3 import created, outline, planner, processing, service
-from utils.conversations.v3.live import FINISH_RECORDING_FIELD, FINISH_WINDOW_FIELD
+from utils.conversations.v3.live import FINISH_RECORDING_FIELD, FINISH_STAMP_FIELD, FINISH_WINDOW_FIELD
 from tests.unit.test_conversations_v3_review import AT, builder, source  # noqa: F401
 from tests.unit.test_conversations_v3_transactions import strict  # noqa: F401
 
@@ -142,6 +142,89 @@ def test_manual_end_visibility_counts_successful_settlements(strict, monkeypatch
     else:
         counter.labels.assert_called_once_with(*outcome)
         counter.labels.return_value.inc.assert_called_once_with()
+
+
+def _finish_latency(monkeypatch):
+    histogram = Mock()
+    monkeypatch.setattr(writers.metrics, 'FINISH_TO_VISIBLE', histogram)
+    return histogram
+
+
+@pytest.mark.parametrize('path', ['tail', 'newer', 'newer_dual'])
+def test_finish_to_visible_is_observed_once_at_the_first_visible_settlement(strict, monkeypatch, path):
+    requested = datetime.now(timezone.utc) - timedelta(seconds=42)
+    strict.rows[C] = derived(
+        manual_end=True,
+        v3_process_pending=True,
+        kind='conversation',
+        **{FINISH_WINDOW_FIELD: 'c', FINISH_STAMP_FIELD: {'at': requested, 'path': path}},
+    )
+    histogram = _finish_latency(monkeypatch)
+
+    settle(strict, notes=False)
+    # A late rewrite re-settles the same row, and a second settle finds nothing owed: neither samples again.
+    strict.rows[C].update(v3_process_pending=True, summary_covers_through=None)
+    settle(strict, notes=False)
+    settle(strict, notes=False)
+
+    histogram.labels.assert_called_once_with(path)
+    histogram.labels.return_value.observe.assert_called_once()
+    (seconds,), _ = histogram.labels.return_value.observe.call_args
+    assert 42 <= seconds < 120
+
+
+@pytest.mark.parametrize(
+    'updates',
+    [
+        {FINISH_STAMP_FIELD: {'at': datetime.now(timezone.utc) - timedelta(hours=2, minutes=1), 'path': 'tail'}},
+        {FINISH_STAMP_FIELD: {'at': datetime.now(timezone.utc), 'path': 'tail'}, 'home_hidden': True},
+        {FINISH_STAMP_FIELD: {'at': datetime.now(timezone.utc), 'path': 'unexpected'}},
+        {FINISH_STAMP_FIELD: {'path': 'tail'}},
+        {},
+    ],
+    ids=['stale', 'hidden', 'unknown_path', 'no_time', 'unstamped'],
+)
+def test_finish_to_visible_drops_stale_hidden_and_unstamped_rows(strict, monkeypatch, updates):
+    strict.rows[C] = derived(manual_end=True, v3_process_pending=True, kind='conversation', **updates)
+    histogram = _finish_latency(monkeypatch)
+    counter = Mock()
+    monkeypatch.setattr(writers.metrics, 'MANUAL_END_HOME', counter)
+
+    settle(strict, notes=False)
+
+    counter.labels.assert_called_once()  # the settlement itself still counts
+    histogram.labels.assert_not_called()
+
+
+def test_finish_to_visible_dual_card_samples_only_the_response_target(strict, monkeypatch):
+    """A's window carries the newer_dual stamp; B's own card has no stamp. Settling both samples A alone."""
+    requested = datetime.now(timezone.utc) - timedelta(seconds=30)
+    strict.rows[C] = derived(
+        manual_end=True,
+        v3_process_pending=True,
+        **{FINISH_WINDOW_FIELD: 'c', FINISH_STAMP_FIELD: {'at': requested, 'path': 'newer_dual'}},
+    )
+    b_card = ('users', 'synthetic', 'conversations', 'b-card')
+    strict.rows[b_card] = {**derived(manual_end=True, v3_process_pending=True), 'id': 'b-card'}
+    histogram = _finish_latency(monkeypatch)
+
+    settle(strict, notes=False)
+    token = leases.acquire('synthetic', 'summary-b-card', firestore_client=strict)
+    writers.settle_processing('synthetic', 'b-card', token, 1, AT, notes=False, firestore_client=strict)
+
+    histogram.labels.assert_called_once_with('newer_dual')
+    assert strict.rows[b_card]['v3_manual_end_home_counted'] is True
+
+
+def test_cloud_run_sync_scrapes_finish_to_visible():
+    profile = Path(__file__).resolve().parents[2] / 'deploy' / 'cloud_run_gmp_sync.yaml'
+    rules = yaml.safe_load(profile.read_text())['spec']['endpoints'][0]['metricRelabeling']
+    (rule,) = [r for r in rules if r['action'] == 'keep' and r['sourceLabels'] == ['__name__']]
+    names = {s.name for f in writers.metrics.FINISH_TO_VISIBLE.collect() for s in f.samples}
+    assert {n for n in names if not n.endswith('_created')} == {
+        f'omi_conversations_v3_finish_to_visible_seconds_{suffix}' for suffix in ('bucket', 'count', 'sum')
+    }
+    assert all(re.fullmatch(rule['regex'], n) for n in names if not n.endswith('_created'))
 
 
 def test_manual_end_visibility_ignores_late_rewrite_resettlement(strict, monkeypatch):

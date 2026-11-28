@@ -140,8 +140,8 @@ def test_source_deleted_during_staging_cannot_commit_recovery_jobs(source_privac
     database.rows['users', 'synthetic-uid', 'conversations', 'live'] = {'id': 'live'}
     original = intake.artifacts_for(jobs).stage_audio
 
-    def stage(item, wav):
-        uri = original(item, wav)
+    def stage(item, wav, *, record_origin):
+        uri = original(item, wav, record_origin=record_origin)
         database.rows['users', 'synthetic-uid', 'deleted_conversations', 'live'] = {}
         return uri
 

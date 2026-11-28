@@ -4769,6 +4769,7 @@
     "firmwareNewestSupportedForDevice": "Peranti anda sudah menggunakan versi firmware terbaharu yang disokong",
     "firmwareSyncRecordingsFirstTitle": "Segerakkan rakaman anda terlebih dahulu",
     "firmwareSyncRecordingsFirstMessage": "Sebahagian rakaman masih berada pada peranti anda. Biarkan ia selesai disegerakkan ke telefon anda, kemudian mulakan kemas kini.",
+    "batteryRestartToRefresh": "Mulakan semula Omi untuk memuat semula",
     "pendantReconnectNudgeTitle": "Omi anda belum bersambung selama 3 hari",
     "pendantReconnectNudgeBody": "Pakai semula dan sambungkan supaya Omi terus merakam.",
     "pendantReconnectNudgeAction": "Sambung semula"

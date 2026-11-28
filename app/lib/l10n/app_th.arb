@@ -4769,6 +4769,7 @@
     "firmwareNewestSupportedForDevice": "อุปกรณ์ของคุณใช้เฟิร์มแวร์เวอร์ชันล่าสุดที่รองรับอยู่แล้ว",
     "firmwareSyncRecordingsFirstTitle": "ซิงค์ไฟล์บันทึกเสียงของคุณก่อน",
     "firmwareSyncRecordingsFirstMessage": "ไฟล์บันทึกเสียงบางส่วนยังอยู่ในอุปกรณ์ของคุณ รอให้ซิงค์ไปยังโทรศัพท์เสร็จก่อน แล้วจึงเริ่มการอัปเดต",
+    "batteryRestartToRefresh": "รีสตาร์ท Omi เพื่อรีเฟรช",
     "pendantReconnectNudgeTitle": "Omi ของคุณไม่ได้เชื่อมต่อมา 3 วันแล้ว",
     "pendantReconnectNudgeBody": "สวมอีกครั้งแล้วเชื่อมต่อใหม่เพื่อให้ Omi บันทึกต่อได้",
     "pendantReconnectNudgeAction": "เชื่อมต่ออีกครั้ง"

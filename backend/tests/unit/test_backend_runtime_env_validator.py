@@ -267,8 +267,6 @@ def with_memory_env(payload: str) -> str:
         {"name": "BATCH_PIPELINE_SHARED_LIVE_ENABLED", "value": "false"},
         {"name": "PLAYBACK_ON_DEMAND_ENABLED", "value": "true"},
         {"name": "REPEAT_WORK_LLM_VERSION", "value": "2026-10-16-v1"},
-        {"name": "SYNC_POLL_BACKOFF_ENABLED", "value": "false"},
-        {"name": "SYNC_POLL_BACKOFF_PERCENT", "value": "0"},
         {"name": "SYNC_RECORD_COVERAGE_WAIT_MEMO", "value": "true"},
         {"name": "SYNC_RECORD_WAIT_MEMO_FIRST", "value": "true"},
         {"name": "SYNC_RECORD_DECODE_FAILURE_MEMO", "value": "true"},
@@ -544,7 +542,7 @@ def with_conversations_v3_env(payload: str) -> str:
     for service in ('backend', 'backend-sync', 'backend-integration'):
         payload = re.sub(
             rf'("{service}":\s*\{{.*?"env":\s*\[)',
-            r'\1\n        {"name": "CONVERSATIONS_V3_STAGE", "value": "beta"},'
+            r'\1\n        {"name": "CONVERSATIONS_V3_STAGE", "value": "all"},'
             r'\n        {"name": "CONVERSATIONS_V3_FIRST_APP_BUILD", "value": ""},'
             r'\n        {"name": "CONVERSATIONS_V3_TASKS_QUEUE", "value": "conversations-v3"},'
             r'\n        {"name": "CONVERSATIONS_V3_BACKFILL_QUEUE", "value": "conversations-v3-backfill"},',
@@ -3863,6 +3861,8 @@ def read_lever_sources():
 def test_generated_read_lever_manifest_is_current_and_records_unresolved_sources():
     generated = read_lever_manifest.build_manifest()
     assert json.loads(read_lever_manifest.OUTPUT.read_text()) == generated
+    assert read_lever_manifest.DEFAULT_PERCENTAGES['bpp_late_erasure_execute'] == 0
+    assert all(surface['effective']['bpp_late_erasure_execute'] == 0 for surface in generated['surfaces'].values())
     notes = '\n'.join(generated['notes'])
     assert 'RESOLVED: prod chart-vs-CR batch_timeliness_leader is 100' in notes
     assert 'UNRESOLVED: README-vs-base triple' in notes

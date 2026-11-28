@@ -26,6 +26,9 @@ stage: prod
 dataPlaneProject: ""
 bucket: ""
 secretName: ""
+# Optional existing namespace-scoped decision-cache credentials. Leave empty
+# until the worker's Redis route and scoped credentials have been verified.
+privacyDecisionRedisSecret: ""
 replicaCount: 1
 # Worker rolls replace pods in place with maxSurge 0 (no surge GPU). This is the
 # share of replicas that may be draining or starting at once; Kubernetes rounds
@@ -134,6 +137,11 @@ worker:
   shadowPercent: 0
   shadowPaidRecoveryPerHour: 200
   shadowRecoveryApiUrl: ""
+  # Omi flag store the worker reads per-owner rules from (reliability experiment
+  # commit_wake, docs/runbooks/omi-flags.md). An empty project leaves the store
+  # unconfigured: every rule reads off and the worker sends no commit wake.
+  flagStoreProject: ""
+  flagStoreDatabase: ""
   # CPU strict-VAD shadow sampling percent; 0 disables the shadow, 100
   # restores full sampling (the silence qualification reads this evidence).
   strictVadShadowPercent: 10

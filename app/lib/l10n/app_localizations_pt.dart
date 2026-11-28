@@ -15873,6 +15873,9 @@ class AppLocalizationsPt extends AppLocalizations {
       'Algumas gravações ainda estão no seu dispositivo. Deixe-as concluir a sincronização com seu telefone e, em seguida, inicie a atualização.';
 
   @override
+  String get batteryRestartToRefresh => 'Reinicie o Omi para atualizar';
+
+  @override
   String get pendantReconnectNudgeTitle => 'O teu Omi não se liga há 3 dias';
 
   @override

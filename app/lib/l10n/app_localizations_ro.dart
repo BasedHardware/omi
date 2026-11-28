@@ -15910,6 +15910,9 @@ class AppLocalizationsRo extends AppLocalizations {
       'Unele înregistrări sunt încă pe dispozitivul tău. Lasă-le să termine de sincronizat cu telefonul tău, apoi pornește actualizarea.';
 
   @override
+  String get batteryRestartToRefresh => 'Repornește Omi pentru a actualiza valoarea';
+
+  @override
   String get pendantReconnectNudgeTitle => 'Dispozitivul tău Omi nu s-a conectat de 3 zile';
 
   @override

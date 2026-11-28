@@ -15880,6 +15880,9 @@ class AppLocalizationsHr extends AppLocalizations {
       'Neke snimke još su na tvojem uređaju. Pričekaj da se sinkroniziraju na tvoj telefon, a zatim pokreni ažuriranje.';
 
   @override
+  String get batteryRestartToRefresh => 'Ponovno pokrenite Omi za osvježavanje';
+
+  @override
   String get pendantReconnectNudgeTitle => 'Tvoj Omi nije se povezao 3 dana';
 
   @override

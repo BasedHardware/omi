@@ -1,0 +1,563 @@
+"""Batch STT routing as a lab step: which engine production would send each audio recording to.
+
+Without this step the lab plays whatever cassette the scenario pins, so two arms that route differently
+(a kill switch on and off) transcribe identically. With it, each ``audio_file`` recording is routed by the
+product's own decisions, under the arm's env, and its words come from the cassette of the engine chosen:
+
+| Step | Here | Production code? |
+|---|---|---|
+| Admission language / exclusion | ``config.batch_pipeline_language.batch_admission_language`` | yes |
+| Exclusion and sampling switches | ``admission_language_exclusion_enabled``, ``admission_language_sample_enabled`` | yes |
+| Sampled upload limit | ``intake.SAMPLE_SCAN_SECONDS``: a longer upload is refused to legacy | yes |
+| Sampled units | one per recording: intake joins contiguous files into one unit up to the sampled bound | simulated; an upload with capture gaps is several units in production, each probed |
+| Sampled speech windows | ``intake._speech_windows`` (strict local VAD, 30 s windows) | yes |
+| Sampled first window | vendor audio LID, ``LanguageDecision.parakeet_safe`` and ``evidence == 'audio_lid'`` | yes; answer recorded |
+| Sampled later windows | ``language_class`` of the self gate's top-1 language | yes; answer from a local Whisper-base, recorded; production also refuses below its P(supported) floor and on an unavailable gate, so lab admissions are an upper bound (legacy audio and spend a lower bound) |
+| Engine for an admitted upload | the batch GPU worker: Parakeet (``PARAKEET_MODEL_BY_SURFACE[PRERECORDED]``) | yes (by construction) |
+| Engine for a legacy upload | per file (``resolve_file``): guard off -> ``multi``; on -> vendor LID, then ``get_prerecorded_service`` | yes; files simulated as fixed pieces with each file's selected language; the self gate's confident skip is not modelled (vendor answer used) |
+| Capacity fallback (GPU ring saturated) | not run: the batch lane is assumed unsaturated | simulated |
+| Legacy mode | assumed ``on`` (today's production) | simulated |
+| Admission exclusion off | the pinned language to Parakeet; production's resolve_route sends an unsupported pin to the provider instead, and the worker's per-window refusal is not modelled | simulated |
+
+Inputs are private: ``$OMI_PIPELINE_LAB_STT_ROUTING_INPUTS`` names a JSON file outside Git,
+``{"user": {...}, "conversations": {"<label>": {...}}, "default_conversation": {...}}``: the owner's user
+document fields routing reads (``language``, ``transcription_preferences``, ``live_stt_language_sessions``)
+and each recording's conversation fields (``language``). Enable with ``OMI_PIPELINE_LAB_STT_ROUTING=product``
+in the scenario or arm env. ``$OMI_PIPELINE_LAB_STT_ROUTE_CASSETTES`` (JSON) maps each route to the cassette
+pin that stands in for it, e.g. ``{"parakeet": {"provider": "local", "model": "..."}}``; a route without a
+mapping uses the provider and model production selected.
+"""
+
+from __future__ import annotations
+
+import contextlib
+from dataclasses import asdict, dataclass, replace
+import hashlib
+import json
+import os
+from pathlib import Path
+from typing import Any, Callable, Iterator, Mapping, Optional
+
+ROUTING_ENV = 'OMI_PIPELINE_LAB_STT_ROUTING'
+INPUTS_ENV = 'OMI_PIPELINE_LAB_STT_ROUTING_INPUTS'
+CASSETTES_ENV = 'OMI_PIPELINE_LAB_STT_ROUTE_CASSETTES'
+LID_SECRET_FILE_ENV = 'OMI_PIPELINE_LAB_LID_KEY_FILE'  # 0600 file holding the vendor LID key (record only)
+SELF_LID_PYTHON_ENV = 'OMI_PIPELINE_LAB_MLX_PYTHON'  # venv with mlx-whisper: the self gate's local stand-in
+LEGACY_FILE_SECONDS_ENV = 'OMI_PIPELINE_LAB_LEGACY_FILE_SECONDS'
+LEGACY_FILE_SECONDS = 60.0  # legacy sync probes each uploaded file; the lab cuts a recording into pieces this long
+# Product switches routing reads: one absent from the arm's env is cleared while routing, so an ambient value in
+# the lab's own process never stands in for production's default.
+ROUTING_SWITCHES = (
+    'BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED',
+    'BATCH_ADMISSION_LANGUAGE_SAMPLE_ENABLED',
+    'BATCH_MULTILINGUAL_PROFILE_ROUTING_ENABLED',
+    'STT_PRERECORDED_LANGUAGE_GUARD_ENABLED',
+    'STT_PRERECORDED_MODEL',
+    'STT_GPU_FLEET_OFF',  # get_prerecorded_service -> provider_is_enabled reads it at call time
+    'STT_PRERECORDED_SHORT_LID_GUARD_ENABLED',  # LanguageDecision.parakeet_safe's confidence floor
+)
+LAB_ENV_KEYS = (
+    ROUTING_ENV,
+    INPUTS_ENV,
+    CASSETTES_ENV,
+    LID_SECRET_FILE_ENV,
+    SELF_LID_PYTHON_ENV,
+    LEGACY_FILE_SECONDS_ENV,
+)
+
+PARAKEET = 'parakeet'
+MULTILINGUAL = 'multilingual'
+MIXED = 'mixed'  # a legacy upload whose files went to different engines
+
+
+class RoutingError(RuntimeError):
+    """Routing cannot decide a recording's engine; the message is the scenario's error (no transcript text)."""
+
+
+class ProbeFailed(RoutingError):
+    """A vendor LID probe did not return an accepted answer; ``outcome`` is batch_language's closed outcome."""
+
+    def __init__(self, outcome: str):
+        super().__init__(f'LID probe failed: {outcome}')
+        self.outcome = outcome
+
+
+# Outcomes where no request reached the vendor: nothing can have been billed, so the reservation is released.
+UNSENT_OUTCOMES = frozenset({'no_key', 'unsupported_format', 'skipped', 'breaker_open', 'no outcome'})
+
+
+@dataclass(frozen=True)
+class Route:
+    route: str  # parakeet | multilingual | mixed
+    reason: str  # admitted_pinned | sampled:admitted | sampled:<refusal> -> legacy | legacy:<reason> | exclusion_off
+    provider: str
+    model: str
+    language: str  # the cassette key language: what production sends the engine
+    admission_language: Optional[str] = None
+    lid_language: Optional[str] = None
+    lid_confidence: Optional[float] = None
+    lid_seconds: Optional[float] = None
+    self_lid_windows: Optional[int] = None
+    lid_probes: Optional[int] = None  # vendor LID probes production pays for this upload (sample and legacy files)
+    pieces: Optional[tuple[tuple[float, float, str], ...]] = None  # legacy: (start, end, route) per file
+    # (start, end, route, provider, model, language) per legacy file. Keep the
+    # selection for every file: one upload can use the same engine in different languages.
+    piece_details: Optional[tuple[tuple[float, float, str, str, str, str], ...]] = None
+
+    def summary(self) -> dict[str, Any]:
+        out = {k: v for k, v in asdict(self).items() if v is not None and k not in {'pieces', 'piece_details'}}
+        if self.pieces:
+            out['pieces'] = [[round(a, 3), round(b, 3), r] for a, b, r in self.pieces]
+        if self.piece_details:
+            out['piece_details'] = [
+                {
+                    'start_s': round(start, 3),
+                    'end_s': round(end, 3),
+                    'route': route,
+                    'provider': provider,
+                    'model': model,
+                    'language': language,
+                }
+                for start, end, route, provider, model, language in self.piece_details
+            ]
+        return out
+
+
+def enabled(env: Mapping[str, str]) -> bool:
+    return (env.get(ROUTING_ENV) or '').strip().lower() == 'product'
+
+
+@contextlib.contextmanager
+def patched_environ(env: Mapping[str, str]) -> Iterator[None]:
+    """The product's switches read ``os.environ`` at call time: route under the arm's env, then restore."""
+    product = {k: v for k, v in env.items() if k not in LAB_ENV_KEYS}
+    cleared = [k for k in ROUTING_SWITCHES if k not in product]
+    previous = {k: os.environ.get(k) for k in (*product, *cleared)}
+    os.environ.update(product)
+    for key in cleared:
+        os.environ.pop(key, None)
+    try:
+        yield
+    finally:
+        for key, value in previous.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+
+# ---- inputs ---------------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Inputs:
+    user: Mapping[str, Any]
+    conversations: Mapping[str, Mapping[str, Any]]
+    default_conversation: Mapping[str, Any]
+
+    def conversation(self, label: str) -> Mapping[str, Any]:
+        return self.conversations.get(label) or self.default_conversation
+
+    @classmethod
+    def load(cls, env: Mapping[str, str]) -> 'Inputs':
+        path = env.get(INPUTS_ENV)
+        if not path:
+            raise RoutingError(f'{ROUTING_ENV}=product needs {INPUTS_ENV}: a private JSON file of routing inputs')
+        raw = json.loads(Path(path).expanduser().read_text(encoding='utf-8'))
+        if not isinstance(raw, dict) or not isinstance(raw.get('user'), dict):
+            raise RoutingError(f'{INPUTS_ENV}: {{"user": {{...}}, "conversations": {{...}}}}')
+        return cls(raw['user'], raw.get('conversations') or {}, raw.get('default_conversation') or {})
+
+
+def route_cassettes(env: Mapping[str, str]) -> dict[str, dict[str, str]]:
+    raw = env.get(CASSETTES_ENV)
+    if not raw:
+        return {}
+    value = json.loads(raw)
+    if not isinstance(value, dict):
+        raise RoutingError(f'{CASSETTES_ENV}: {{"parakeet": {{"provider", "model"}}, "multilingual": {{...}}}}')
+    return {str(k): dict(v) for k, v in value.items()}
+
+
+# ---- LID: the sampled probe, recorded once per probe audio ----------------------------------------
+
+
+def _probe(pcm16: bytes) -> tuple[bytes, float]:
+    from testing.pipeline_lab.cassette.adapters import pcm16_to_wav
+    from utils.stt.batch_language import probe_wav
+
+    return probe_wav(pcm16_to_wav(pcm16))
+
+
+def lid_probe_usd(seconds: float) -> float:
+    """List price of one vendor LID probe, from the repo's finops card (``modulate_prices.json``)."""
+    from testing.pipeline_lab.cassette.adapters import _PRICES
+
+    micro = json.loads(Path(_PRICES).read_text(encoding='utf-8'))['lid']['micro_usd_per_hour']
+    return micro / 1_000_000 * float(seconds) / 3600
+
+
+class LidCache:
+    """``<root>/lid/<sha256 of the probe WAV>.json``: the vendor's answer for one 30 s probe (owner-only)."""
+
+    def __init__(self, root: Path, *, record: bool, secret_file: Optional[str] = None, ledger: Any = None):
+        self.directory = Path(root) / 'lid'
+        self.record = record
+        self.secret_file = secret_file
+        self.ledger = ledger  # a SpendGuard: every recorded probe reserves and settles its list price
+        self.calls = 0
+
+    def decision(self, pcm16: bytes):
+        from utils.stt.batch_language import LanguageDecision
+
+        body, seconds = _probe(pcm16)
+        digest = hashlib.sha256(body).hexdigest()
+        path = self.directory / f'{digest}.json'
+        if path.exists():
+            row = json.loads(path.read_text(encoding='utf-8'))
+        elif not self.record:
+            raise RoutingError(
+                f'no recorded LID answer for probe {digest[:12]}; record it with --stt record-vendor '
+                f'and {LID_SECRET_FILE_ENV} set (one paid 30 s probe per upload)'
+            )
+        else:
+            if self.ledger is None:
+                raise RoutingError('recording a LID answer needs --stt-budget-usd (the spend cap for probes)')
+            usd = lid_probe_usd(seconds)
+            reservation = self.ledger.reserve(usd, purpose='stt_routing:lid_probe')
+            try:
+                row = self._detect(body)
+            except ProbeFailed as error:
+                # A sent request whose answer failed may still be billed: keep it against the cap.
+                if error.outcome in UNSENT_OUTCOMES:
+                    self.ledger.release(reservation)
+                else:
+                    self.ledger.settle(reservation, usd)
+                raise
+            except BaseException:
+                self.ledger.release(reservation)
+                raise
+            self.ledger.settle(reservation, usd)
+            from testing.pipeline_lab.store import private_write_text
+
+            self.directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+            private_write_text(path, json.dumps(row))
+            self.calls += 1
+        return LanguageDecision(row['language'], float(row['confidence']), row['evidence'], seconds)
+
+    def _detect(self, body: bytes) -> dict[str, Any]:
+        from utils.stt import batch_language
+
+        if not self.secret_file:
+            raise RoutingError(f'recording a LID answer needs {LID_SECRET_FILE_ENV} (a 0600 key file)')
+        key = Path(self.secret_file).read_text(encoding='utf-8').strip()
+        previous = os.environ.get('MODULATE_API_KEY')
+        os.environ['MODULATE_API_KEY'] = key  # this process only, for this one call
+        try:
+            outcomes: list[str] = []
+            decision = batch_language.detect(body, outcome_sink=outcomes)
+        finally:
+            if previous is None:
+                os.environ.pop('MODULATE_API_KEY', None)
+            else:
+                os.environ['MODULATE_API_KEY'] = previous
+        if not outcomes or outcomes[0] != 'accepted':
+            raise ProbeFailed(outcomes[0] if outcomes else 'no outcome')
+        return {'language': decision.language, 'confidence': decision.confidence, 'evidence': decision.evidence}
+
+
+class PendingSelfLid(Exception):
+    """A record run has not classified this window yet: it is queued for one batched local pass."""
+
+
+class SelfLidCache:
+    """``<root>/self_lid/<sha256 of the window WAV>.json``: the local self-gate stand-in's top-1 language.
+
+    A record run queues misses (``pending``) and classifies them in one batched pass (:meth:`flush`), since
+    loading Whisper per window would dominate; replay refuses a miss."""
+
+    def __init__(self, root: Path, *, record: bool, python: Optional[str] = None):
+        self.directory = Path(root) / 'self_lid'
+        self.record = record
+        self.python = python
+        self.pending: dict[str, bytes] = {}
+        self.calls = 0
+
+    def language(self, wav: bytes) -> str:
+        digest = hashlib.sha256(wav).hexdigest()
+        path = self.directory / f'{digest}.json'
+        if path.exists():
+            return json.loads(path.read_text(encoding='utf-8'))['language']
+        if not self.record:
+            raise RoutingError(
+                f'no recorded self-gate answer for window {digest[:12]}; record with --stt record-vendor and '
+                f'{SELF_LID_PYTHON_ENV} (a venv with mlx-whisper)'
+            )
+        self.pending[digest] = wav
+        raise PendingSelfLid(digest)
+
+    def flush(self) -> int:
+        if not self.pending:
+            return 0
+        if not self.python:
+            raise RoutingError(f'classifying self-gate windows needs {SELF_LID_PYTHON_ENV}')
+        import subprocess
+        import tempfile
+
+        from testing.pipeline_lab.store import private_write_text
+
+        self.directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=self.directory) as work:
+            paths = {}
+            for digest, wav in self.pending.items():
+                target = Path(work) / f'{digest}.wav'
+                target.write_bytes(wav)
+                target.chmod(0o600)
+                paths[str(target)] = digest
+            listing, result = Path(work) / 'in.json', Path(work) / 'out.json'
+            listing.write_text(json.dumps(list(paths)))
+            backend = Path(__file__).resolve().parents[3]
+            try:
+                subprocess.run(
+                    [
+                        self.python,
+                        '-m',
+                        'testing.pipeline_lab.stt_routing.self_lid',
+                        '--in',
+                        str(listing),
+                        '--out',
+                        str(result),
+                    ],
+                    cwd=backend,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                rows = json.loads(result.read_text(encoding='utf-8'))
+                for row in rows:
+                    private_write_text(
+                        self.directory / f'{paths[row["path"]]}.json', json.dumps({'language': row['language']})
+                    )
+            except subprocess.CalledProcessError as error:
+                raise RoutingError(f'self-gate stand-in failed: {(error.stderr or "").strip()[-500:]}') from None
+            except (OSError, ValueError, KeyError, TypeError) as error:
+                raise RoutingError(f'self-gate stand-in returned unusable output: {error!r}') from None
+            if len(rows) != len(paths):
+                raise RoutingError(f'self-gate stand-in classified {len(rows)} of {len(paths)} windows')
+        count = len(self.pending)
+        self.calls += count
+        self.pending.clear()
+        return count
+
+
+# ---- the decision ---------------------------------------------------------------------------------
+
+
+def _batch(language: str) -> tuple[str, str, str]:
+    """An upload admitted to the batch pipeline is transcribed by its GPU worker: Parakeet, in that language."""
+    from config.stt_provider_policy import PARAKEET_MODEL_BY_SURFACE, STTServingSurface
+
+    return PARAKEET, PARAKEET_MODEL_BY_SURFACE[STTServingSurface.PRERECORDED], language
+
+
+def _service(language: str) -> tuple[str, str, str]:
+    from utils.stt.pre_recorded import get_prerecorded_service
+
+    service, provider_language, model = get_prerecorded_service(language)
+    return str(getattr(service, 'value', service)), model, provider_language or language
+
+
+def _route_of(service: str) -> str:
+    return PARAKEET if PARAKEET in service.lower() else MULTILINGUAL
+
+
+def _wav_pcm(wav: bytes) -> bytes:
+    import io
+    import wave
+
+    with wave.open(io.BytesIO(wav), 'rb') as source:
+        return source.readframes(source.getnframes())
+
+
+def _sample(pcm16: bytes, *, lid: Callable[[bytes], Any], self_lid: Optional[Callable[[bytes], str]]):
+    """Intake's ``_sample_language_units`` on one upload.
+
+    Returns (admitted, refusal reason, first-window decision, later windows the self gate classified)."""
+    from config.prerecorded_language import language_class
+    from testing.pipeline_lab.cassette.adapters import pcm16_to_wav
+    from utils.batch_pipeline.intake import SAMPLE_SCAN_SECONDS, _speech_windows
+
+    if len(pcm16) / 32000 > SAMPLE_SCAN_SECONDS:
+        return False, 'over_scan_limit', None, 0
+    windows = _speech_windows(pcm16_to_wav(pcm16))
+    if not windows:
+        return False, 'no_speech', None, 0
+    first = lid(_wav_pcm(windows[0]))
+    if not first.parakeet_safe or first.evidence != 'audio_lid':
+        return False, 'first_window_unsafe', first, 0
+    if self_lid is None:
+        raise RoutingError('the sampled path needs the self-gate stand-in for windows after the first')
+    pending = False
+    classified = 0
+    for window in windows[1:]:
+        try:
+            language = self_lid(window)
+        except PendingSelfLid:
+            pending = True
+            continue
+        classified += 1
+        if language_class(language) != 'supported':
+            return False, 'later_window_unsupported', first, classified
+    if pending:
+        raise PendingSelfLid('windows queued')
+    return True, None, first, classified
+
+
+def _legacy(
+    pcm16: bytes, reason: str, *, lid: Callable[[bytes], Any], file_seconds: float, language: str = 'multi'
+) -> 'Route':
+    """Legacy sync: ``multi`` through ``resolve_file`` for each uploaded file (simulated as fixed pieces).
+
+    ``language`` is legacy sync's request language (the single-mode preference, else ``multi``). Like
+    ``resolve_file``, a file is probed only with the prerecorded guard on and an unknown request language;
+    otherwise the selector answers for ``language`` directly."""
+    from config.prerecorded_language import language_class, language_guard_enabled
+
+    guarded = language_guard_enabled() and language_class(language) == 'unknown'
+    probes = 0
+    step = max(1, int(file_seconds * 16000)) * 2
+    pieces = []
+    piece_details = []  # (start, end, route, service, model, sent) per file, in file order
+    for offset in range(0, len(pcm16), step):
+        chunk = pcm16[offset : offset + step]
+        if len(chunk) < 32000 and pieces:  # a sub-second tail joins the previous file's engine
+            a, _, r = pieces[-1]
+            end = (offset + len(chunk)) / 32000
+            pieces[-1] = (a, end, r)
+            _, _, previous_route, previous_provider, previous_model, previous_language = piece_details[-1]
+            piece_details[-1] = (a, end, previous_route, previous_provider, previous_model, previous_language)
+            continue
+        decision = lid(chunk) if guarded else None
+        probes += int(guarded)
+        safe = decision is not None and decision.parakeet_safe
+        service, model, sent = _service(decision.language) if safe else _service(language)
+        route = _route_of(service)
+        start, end = offset / 32000, (offset + len(chunk)) / 32000
+        pieces.append((start, end, route))
+        piece_details.append((start, end, route, service, model, sent))
+    if not pieces:
+        raise RoutingError('the upload has no audio to route')
+    routes = {r for _, _, r in pieces}
+    if len(routes) == 1:
+        # Preserve the first file's top-level route while retaining later file selections below.
+        _, _, route, service, model, sent = piece_details[0]
+        return Route(
+            route,
+            f'legacy:{reason}',
+            service,
+            model,
+            sent,
+            lid_probes=probes,
+            pieces=tuple(pieces),
+            piece_details=tuple(piece_details),
+        )
+    service, model, sent = _service(language)
+    return Route(
+        MIXED,
+        f'legacy:{reason}',
+        service,
+        model,
+        sent,
+        lid_probes=probes,
+        pieces=tuple(pieces),
+        piece_details=tuple(piece_details),
+    )
+
+
+def decide(
+    user: Mapping[str, Any],
+    conversation: Mapping[str, Any],
+    pcm16: bytes,
+    *,
+    lid: Callable[[bytes], Any],
+    self_lid: Optional[Callable[[bytes], str]] = None,
+    legacy_file_seconds: float = LEGACY_FILE_SECONDS,
+) -> Route:
+    """Production's batch route for one upload (intake route selection with legacy ``on``).
+
+    Admitted (a supported pin) -> the Parakeet batch worker. ``unknown_multilingual_conversation`` with
+    sampling on -> intake's sampled classification of the whole upload; admitted -> Parakeet, refused ->
+    legacy. Any other exclusion, or a refused sample -> legacy sync, which classifies each file."""
+    from config.batch_pipeline_language import (
+        MULTILINGUAL_PROFILE,
+        admission_language_exclusion_enabled,
+        admission_language_sample_enabled,
+        batch_admission_language,
+    )
+
+    if not admission_language_exclusion_enabled():
+        language = str(conversation.get('language') or user.get('language') or 'multi')
+        service, model, sent = _batch(language)
+        return Route(PARAKEET, 'exclusion_off', service, model, sent, admission_language=language)
+    admission, reason = batch_admission_language(dict(user), dict(conversation))
+    if reason is None:
+        service, model, sent = _batch(admission)
+        return Route(PARAKEET, 'admitted_pinned', service, model, sent, admission_language=admission)
+    if reason in ('unknown_multilingual_conversation', MULTILINGUAL_PROFILE) and admission_language_sample_enabled():
+        admitted, refusal, first, windows = _sample(pcm16, lid=lid, self_lid=self_lid)
+        lid_fields = {'self_lid_windows': windows, 'lid_probes': int(first is not None)}
+        if first is not None:
+            lid_fields.update(
+                lid_language=first.language,
+                lid_confidence=round(float(first.confidence), 4),
+                lid_seconds=round(float(first.probe_seconds or 0.0), 3),
+            )
+        if admitted:
+            service, model, sent = _batch(first.language)
+            return Route(PARAKEET, 'sampled:admitted', service, model, sent, **lid_fields)
+        legacy = _legacy(
+            pcm16, f'sampled_{refusal}', lid=lid, file_seconds=legacy_file_seconds, language=_legacy_language(user)
+        )
+        lid_fields['lid_probes'] += legacy.lid_probes or 0
+        return replace(legacy, **lid_fields)
+    return _legacy(pcm16, reason, lid=lid, file_seconds=legacy_file_seconds, language=_legacy_language(user))
+
+
+def _legacy_language(user: Mapping[str, Any]) -> str:
+    """Legacy sync's request language (utils/sync/pipeline.py): the single-mode preference, else ``multi``."""
+    from config.stt_provider_policy import normalized_stt_language
+
+    single = (user.get('transcription_preferences') or {}).get('single_language_mode')
+    language = user.get('language')
+    return normalized_stt_language(language) if single and isinstance(language, str) and language else 'multi'
+
+
+def cassette_pin(
+    route: Route,
+    mapping: Mapping[str, Mapping[str, str]],
+    which: Optional[str] = None,
+    *,
+    provider: Optional[str] = None,
+    model: Optional[str] = None,
+    language: Optional[str] = None,
+) -> dict[str, str]:
+    """The cassette keys that stand in for a route (``which`` picks one engine of a mixed route).
+
+    Explicit per-piece selections fill defaults; a route mapping can replace them with a cassette stand-in.
+    Only keys that resolve are returned, so an unmapped engine of a mixed route keeps the scenario's own pin
+    (and misses loudly) instead of becoming a wildcard that matches another engine's cassette."""
+    name = which or route.route
+    pin = dict(mapping.get(name) or {})
+    if name == route.route:
+        provider = provider or route.provider
+        model = model or route.model
+        language = language or route.language
+    else:
+        language = language or ('multi' if name == MULTILINGUAL else 'en')
+    if provider:
+        pin.setdefault('provider', provider)
+    if model:
+        pin.setdefault('model', model)
+    if language:
+        pin.setdefault('language', language)
+    return {key: str(value) for key, value in pin.items() if key in ('provider', 'model', 'language') and value}

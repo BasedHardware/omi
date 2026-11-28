@@ -4769,6 +4769,7 @@
     "firmwareNewestSupportedForDevice": "Enheten din har allerede den nyeste støttede fastvareversjonen",
     "firmwareSyncRecordingsFirstTitle": "Synkroniser opptakene dine først",
     "firmwareSyncRecordingsFirstMessage": "Noen opptak ligger fortsatt på enheten din. La dem fullføre synkroniseringen til telefonen din, og start deretter oppdateringen.",
+    "batteryRestartToRefresh": "Start Omi på nytt for å oppdatere verdien",
     "pendantReconnectNudgeTitle": "Omi-en din har ikke vært tilkoblet på 3 dager",
     "pendantReconnectNudgeBody": "Ta den på igjen og koble til, så Omi kan fortsette å ta opp.",
     "pendantReconnectNudgeAction": "Koble til på nytt"

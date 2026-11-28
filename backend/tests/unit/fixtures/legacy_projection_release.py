@@ -21,7 +21,7 @@ from typing import Any
 from google.cloud import firestore
 
 from database.batch_pipeline_projection_protocol import normalized_binding
-from database.batch_pipeline_projection import assignment_held_without_recovery
+from utils.batch_pipeline.held_terminal import assignment_held_without_recovery
 from database.batch_pipeline_shadow_hook import mirror_refresh
 from utils.batch_pipeline.scheduler import owner_key
 from config.batch_pipeline import projection_hold_recovery_enabled

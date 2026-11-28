@@ -49,3 +49,21 @@ def held_without_recovery(job: dict) -> bool:
         and isinstance(raw, dict)
         and not RecoveryPolicy.from_dict(raw).recovery_enabled
     )
+
+
+def assignment_held_without_recovery(job: dict, entry: dict) -> bool:
+    """An assignment-quarantined unit that nothing automatic will change.
+
+    The quarantined receipt is replay-fenced and the job is recovery-held: no
+    sweep reassigns the row and no worker redrive is pending. Only a reviewed
+    operator redrive (for example after a discarded record is restored) can
+    move it; until then its committed result and encrypted audio stay put.
+    """
+    if (entry.get('projection') or {}).get('state') != 'quarantined':
+        return False
+    if job.get('recovery_state') != 'held':
+        return False
+    return not any(
+        isinstance(job.get(key), dict) and job[key].get('state') not in {'completed', 'failed_held'}
+        for key in OPERATOR_INTENTS
+    )

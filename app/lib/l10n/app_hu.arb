@@ -4865,6 +4865,7 @@
     "firmwareNewestSupportedForDevice": "Az eszközödön már a legújabb támogatott firmware-verzió fut",
     "firmwareSyncRecordingsFirstTitle": "Először szinkronizáld a felvételeidet",
     "firmwareSyncRecordingsFirstMessage": "Néhány felvétel még az eszközödön van. Várd meg, amíg a telefonodra szinkronizálásuk befejeződik, majd indítsd el a frissítést.",
+    "batteryRestartToRefresh": "Indítsa újra az Omit a frissítéshez",
     "pendantReconnectNudgeTitle": "Az Omi 3 napja nem kapcsolódott",
     "pendantReconnectNudgeBody": "Vedd fel újra, és csatlakoztasd, hogy az Omi folytassa a rögzítést.",
     "pendantReconnectNudgeAction": "Újracsatlakozás"

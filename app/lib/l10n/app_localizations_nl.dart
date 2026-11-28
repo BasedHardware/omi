@@ -15885,6 +15885,9 @@ class AppLocalizationsNl extends AppLocalizations {
       'Sommige opnames staan nog op je apparaat. Laat ze eerst volledig synchroniseren naar je telefoon en start daarna de update.';
 
   @override
+  String get batteryRestartToRefresh => 'Start Omi opnieuw op om te vernieuwen';
+
+  @override
   String get pendantReconnectNudgeTitle => 'Je Omi is al 3 dagen niet verbonden';
 
   @override

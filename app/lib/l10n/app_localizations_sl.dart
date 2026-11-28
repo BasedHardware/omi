@@ -15872,6 +15872,9 @@ class AppLocalizationsSl extends AppLocalizations {
       'Nekateri posnetki so še na vaši napravi. Počakajte, da se dokonča sinhroniziranje s telefonom, nato pa začnite posodobitev.';
 
   @override
+  String get batteryRestartToRefresh => 'Ponovno zaženite Omi, da osvežite podatke';
+
+  @override
   String get pendantReconnectNudgeTitle => 'Tvoj Omi se ni povezal že 3 dni';
 
   @override

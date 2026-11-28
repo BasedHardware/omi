@@ -15610,6 +15610,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get firmwareSyncRecordingsFirstMessage => '一部の録音はまだデバイスに残っています。スマートフォンへの同期が完了してから、更新を開始してください。';
 
   @override
+  String get batteryRestartToRefresh => 'Omiを再起動して更新';
+
+  @override
   String get pendantReconnectNudgeTitle => 'Omi が 3 日間接続されていません';
 
   @override

@@ -705,10 +705,12 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     );
     await _refreshWals(generation);
     if (!_isCurrent(generation)) return const RecordingTransferDrainResult.contended();
+    final heldOnly = result?.localUploadHeldOnly ?? false;
     return RecordingTransferDrainResult(
-      attempted: true,
+      attempted: !heldOnly,
       failed: (result?.localUploadFailures ?? 0) > 0,
       needsReconciliation: uploadedWals.isNotEmpty,
+      heldOnly: heldOnly,
     );
   }
 
@@ -1051,6 +1053,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
         // recording via the hardware button is what unfreezes the firmware.
         DebugLogManager.logWarning('SyncProvider: $context stalled — pendant storage is full');
         _updateSyncState(_syncState.toError(message: _pendantFullMessage()), generation);
+      } else if (result?.localUploadHeldOnly == true) {
+        _updateSyncState(_syncState.toIdle(), generation);
       } else if ((result?.localUploadFailures ?? 0) == 0) {
         DebugLogManager.logInfo('SyncProvider: $context completed with no new conversations');
         _updateSyncState(_syncState.toCompleted(conversations: []), generation);

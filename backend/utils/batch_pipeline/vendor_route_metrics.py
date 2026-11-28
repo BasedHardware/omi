@@ -38,8 +38,11 @@ GPU_BACKLOG_AGE = Gauge(
     ['priority'],
 )
 ATTEMPTS = Counter(contracts.METRIC_ATTEMPTS, 'Settled batch vendor attempts', ['provider', 'outcome'])
+# A literal name so the alert contract's emitter scan finds it; pinned equal to contracts.METRIC_ATTEMPT_AUDIO.
 ATTEMPT_AUDIO = Counter(
-    contracts.METRIC_ATTEMPT_AUDIO, 'Audio seconds sent to a vendor, by settled outcome', ['provider', 'outcome']
+    'omi_batch_pipeline_vendor_attempt_audio_seconds_total',
+    'Audio seconds sent to a vendor, by settled outcome',
+    ['provider', 'outcome'],
 )
 FAILOVERS = Counter(contracts.METRIC_FAILOVERS, 'Batch units moved to another route', ['from_route', 'to_route'])
 LATE_RESULTS = Counter(

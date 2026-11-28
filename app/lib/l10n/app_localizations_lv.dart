@@ -15879,6 +15879,9 @@ class AppLocalizationsLv extends AppLocalizations {
       'Daži ieraksti vēl atrodas jūsu ierīcē. Ļaujiet tiem pabeigt sinhronizēšanu ar tālruni, pēc tam sāciet atjaunināšanu.';
 
   @override
+  String get batteryRestartToRefresh => 'Restartējiet Omi, lai atsvaidzinātu';
+
+  @override
   String get pendantReconnectNudgeTitle => 'Tavs Omi nav pieslēdzies jau 3 dienas';
 
   @override

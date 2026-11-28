@@ -12326,6 +12326,7 @@
     "firmwareNewestSupportedForDevice": "Ваша прылада ўжо працуе на найноўшай падтрыманай версіі прашыўкі",
     "firmwareSyncRecordingsFirstTitle": "Спачатку сінхранізуйце свае запісы",
     "firmwareSyncRecordingsFirstMessage": "Некаторыя запісы ўсё яшчэ на вашай прыладзе. Дайце ім завяршыць сінхранізацыю на тэлефон, а потым пачніце абнаўленне.",
+    "batteryRestartToRefresh": "Перазагрузіце Omi, каб абнавіць паказанне",
     "pendantReconnectNudgeTitle": "Ваша Omi не падключалася 3 дні",
     "pendantReconnectNudgeBody": "Надзеньце яе зноў і падключыце, каб Omi працягвала запісваць.",
     "pendantReconnectNudgeAction": "Падключыць зноў"

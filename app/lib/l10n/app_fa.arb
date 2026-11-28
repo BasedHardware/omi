@@ -12326,6 +12326,7 @@
     "firmwareNewestSupportedForDevice": "دستگاه شما در حال حاضر روی جدیدترین نسخه فریم‌ور پشتیبانی‌شده قرار دارد",
     "firmwareSyncRecordingsFirstTitle": "ابتدا ضبط‌های خود را همگام‌سازی کنید",
     "firmwareSyncRecordingsFirstMessage": "برخی ضبط‌ها هنوز روی دستگاه شما هستند. اجازه دهید همگام‌سازی آن‌ها به گوشی شما کامل شود، سپس بروزرسانی را شروع کنید.",
+    "batteryRestartToRefresh": "برای بازخوانی، Omi را دوباره راه‌اندازی کنید",
     "pendantReconnectNudgeTitle": "دستگاه Omi شما ۳ روز است که متصل نشده",
     "pendantReconnectNudgeBody": "آن را دوباره بپوشید و وصل کنید تا Omi به ضبط ادامه دهد.",
     "pendantReconnectNudgeAction": "اتصال دوباره"

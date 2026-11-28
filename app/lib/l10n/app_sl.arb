@@ -12326,6 +12326,7 @@
     "firmwareNewestSupportedForDevice": "Vaša naprava že uporablja najnovejšo podprto različico firmwareja",
     "firmwareSyncRecordingsFirstTitle": "Najprej sinhronizirajte posnetke",
     "firmwareSyncRecordingsFirstMessage": "Nekateri posnetki so še na vaši napravi. Počakajte, da se dokonča sinhroniziranje s telefonom, nato pa začnite posodobitev.",
+    "batteryRestartToRefresh": "Ponovno zaženite Omi, da osvežite podatke",
     "pendantReconnectNudgeTitle": "Tvoj Omi se ni povezal že 3 dni",
     "pendantReconnectNudgeBody": "Znova si ga nadeni in poveži, da bo Omi še naprej snemal.",
     "pendantReconnectNudgeAction": "Znova poveži"

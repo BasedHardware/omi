@@ -15909,6 +15909,9 @@ class AppLocalizationsMk extends AppLocalizations {
       'Некои записи се уште се на вашиот уред. Оставете ги да ја завршат синхронизацијата со телефонот, а потоа започнете со ажурирањето.';
 
   @override
+  String get batteryRestartToRefresh => 'Рестартирајте го Omi за освежување';
+
+  @override
   String get pendantReconnectNudgeTitle => 'Твојот Omi не е поврзан веќе 3 дена';
 
   @override

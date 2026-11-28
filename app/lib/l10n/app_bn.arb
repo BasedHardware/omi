@@ -12326,6 +12326,7 @@
     "firmwareNewestSupportedForDevice": "আপনার ডিভাইস ইতিমধ্যেই ফার্মওয়্যারের সর্বশেষ সমর্থিত সংস্করণে রয়েছে",
     "firmwareSyncRecordingsFirstTitle": "প্রথমে আপনার রেকর্ডিং সিঙ্ক করুন",
     "firmwareSyncRecordingsFirstMessage": "কিছু রেকর্ডিং এখনও আপনার ডিভাইসে রয়েছে। সেগুলিকে আপনার ফোনে সিঙ্ক শেষ হতে দিন, তারপর আপডেট শুরু করুন।",
+    "batteryRestartToRefresh": "রিফ্রেশ করতে Omi পুনরায় চালু করুন",
     "pendantReconnectNudgeTitle": "আপনার Omi ৩ দিন ধরে সংযুক্ত হয়নি",
     "pendantReconnectNudgeBody": "এটি আবার পরে সংযোগ করুন, যাতে Omi রেকর্ডিং চালিয়ে যায়।",
     "pendantReconnectNudgeAction": "আবার সংযোগ করুন"

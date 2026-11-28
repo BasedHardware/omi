@@ -15852,6 +15852,9 @@ class AppLocalizationsMr extends AppLocalizations {
       'काही रेकॉर्डिंग अजून तुमच्या डिव्हाइसवर आहेत. त्या तुमच्या फोनवर पूर्णपणे सिंक होऊ द्या, नंतर अपडेट सुरू करा.';
 
   @override
+  String get batteryRestartToRefresh => 'रिफ्रेश करण्यासाठी Omi पुनः सुरू करा';
+
+  @override
   String get pendantReconnectNudgeTitle => 'तुमचा Omi 3 दिवसांपासून कनेक्ट झालेला नाही';
 
   @override

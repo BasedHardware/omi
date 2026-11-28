@@ -15843,6 +15843,9 @@ class AppLocalizationsCs extends AppLocalizations {
       'Některé nahrávky jsou stále ve vašem zařízení. Počkejte, až se synchronizují do telefonu, a potom spusťte aktualizaci.';
 
   @override
+  String get batteryRestartToRefresh => 'Restartujte Omi pro obnovení údaje';
+
+  @override
   String get pendantReconnectNudgeTitle => 'Tvoje Omi se už 3 dny nepřipojilo';
 
   @override

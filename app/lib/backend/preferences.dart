@@ -630,9 +630,28 @@ class SharedPreferencesUtil {
   Future<void> btDeviceAdd(BtDevice value) async {
     if (value.id.isEmpty) return;
     final devices = _upsertBtDevice(value);
-    await saveStringList('btDevices', devices.map((device) => jsonEncode(device.toJson())).toList());
+    await _saveBtDevices(devices);
     await saveString('btDevice', jsonEncode(value.toJson()));
   }
+
+  /// Forgets a device: drops [id] from the saved list and clears the active device when it is [id].
+  /// The active entry is removed, not overwritten with an empty device, which the getter would
+  /// reject as corrupt and quarantine.
+  Future<void> btDeviceForget(String id) async {
+    if (id.isEmpty) return;
+    bool matches(BtDevice device) => device.id.toUpperCase() == id.toUpperCase();
+    // Read the list first: an install from before the list existed has only the active entry.
+    final remaining = btDevices.where((device) => !matches(device)).toList();
+    if (matches(btDevice)) {
+      final removal = _preferences?.remove('btDevice');
+      _deviceChanges.add(null);
+      await removal;
+    }
+    await _saveBtDevices(remaining);
+  }
+
+  Future<void> _saveBtDevices(List<BtDevice> devices) =>
+      saveStringList('btDevices', devices.map((device) => jsonEncode(device.toJson())).toList());
 
   List<BtDevice> _upsertBtDevice(BtDevice value) {
     final devices = btDevices;

@@ -31,6 +31,10 @@
     "policy": "storage",
     "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
   },
+  "backend/database/batch_privacy_late_sweeps.py:document_path": {
+    "policy": "storage",
+    "reason": "Reads the owner-scoped recording policy fields at the policy commit to verify authorization for delayed artifact erasure."
+  },
   "backend/database/batch_ramp.py:collection": {
     "policy": "storage",
     "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
@@ -118,6 +122,10 @@
   "backend/database/conversations_v3_context.py:collection": {
     "policy": "conversations",
     "reason": "Owner-scoped bounded title projection excludes recordings, hidden, deleted, locked and absorbed rows before decoding."
+  },
+  "backend/database/conversations_v3_fence.py:collection": {
+    "policy": "storage",
+    "reason": "The native manual summary writer checks the exact source recording and its sealed upload revision inside the owner-scoped notes transaction."
   },
   "backend/database/conversations_v3_live.py:collection": {
     "policy": "conversations",

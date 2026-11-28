@@ -15769,6 +15769,9 @@ class AppLocalizationsTh extends AppLocalizations {
       'ไฟล์บันทึกเสียงบางส่วนยังอยู่ในอุปกรณ์ของคุณ รอให้ซิงค์ไปยังโทรศัพท์เสร็จก่อน แล้วจึงเริ่มการอัปเดต';
 
   @override
+  String get batteryRestartToRefresh => 'รีสตาร์ท Omi เพื่อรีเฟรช';
+
+  @override
   String get pendantReconnectNudgeTitle => 'Omi ของคุณไม่ได้เชื่อมต่อมา 3 วันแล้ว';
 
   @override

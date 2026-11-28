@@ -12326,6 +12326,7 @@
     "firmwareNewestSupportedForDevice": "آپ کا ڈیوائس پہلے ہی سپورٹ شدہ تازہ ترین فرم ویئر ورژن پر ہے",
     "firmwareSyncRecordingsFirstTitle": "پہلے اپنی ریکارڈنگز سنک کریں",
     "firmwareSyncRecordingsFirstMessage": "کچھ ریکارڈنگز ابھی آپ کے ڈیوائس پر ہیں۔ انہیں فون پر سنک ہونے دیں، پھر اپڈیٹ شروع کریں۔",
+    "batteryRestartToRefresh": "ریفریش کرنے کے لیے Omi کو دوبارہ شروع کریں",
     "pendantReconnectNudgeTitle": "آپ کا Omi 3 دن سے منسلک نہیں ہوا",
     "pendantReconnectNudgeBody": "اسے دوبارہ پہنیں اور جوڑیں تاکہ Omi ریکارڈنگ جاری رکھے۔",
     "pendantReconnectNudgeAction": "دوبارہ جوڑیں"

@@ -15908,6 +15908,9 @@ class AppLocalizationsTe extends AppLocalizations {
       'కొన్ని రికార్డింగ్‌లు ఇంకా మీ డివైస్‌లో ఉన్నాయి. అవి మీ ఫోన్‌కు పూర్తిగా సమకాలీకరించనివ్వండి, తర్వాత నవీకరణను ప్రారంభించండి.';
 
   @override
+  String get batteryRestartToRefresh => 'రిఫ్రెష్ చేయడానికి Omi ను రీస్టార్ట్ చేయండి';
+
+  @override
   String get pendantReconnectNudgeTitle => 'మీ Omi 3 రోజులుగా కనెక్ట్ కాలేదు';
 
   @override

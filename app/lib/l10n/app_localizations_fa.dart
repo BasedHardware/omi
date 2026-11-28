@@ -15837,6 +15837,9 @@ class AppLocalizationsFa extends AppLocalizations {
       'برخی ضبط‌ها هنوز روی دستگاه شما هستند. اجازه دهید همگام‌سازی آن‌ها به گوشی شما کامل شود، سپس بروزرسانی را شروع کنید.';
 
   @override
+  String get batteryRestartToRefresh => 'برای بازخوانی، Omi را دوباره راه‌اندازی کنید';
+
+  @override
   String get pendantReconnectNudgeTitle => 'دستگاه Omi شما ۳ روز است که متصل نشده';
 
   @override

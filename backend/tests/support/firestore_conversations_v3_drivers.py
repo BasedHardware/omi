@@ -80,6 +80,29 @@ def _named_finish_sources(client, combo, trial):
     }
 
 
+def _live_window_finish(client, combo, trial):
+    """A live window whose tail sealed with its last speech; the recent-source scan runs on the Finish."""
+    base = f'users/{SHAPE_UID}/conversations'
+    client.documents[f'{base}/window'] = {
+        'v3_derived': True,
+        'started_at': FROZEN_NOW,
+        'finished_at': FROZEN_NOW,
+        'status': 'in_progress',
+        'tile_state': 'live',
+        'v3_recording_ids': ['tail'],
+    }
+    client.documents[f'{base}/tail'] = {
+        'source': 'omi',
+        'recording': True,
+        'created_at': FROZEN_NOW,
+        'started_at': FROZEN_NOW,
+        'finished_at': FROZEN_NOW,
+        'status': 'completed',
+        'external_data': {'recording_session_id': 'shape-session'},
+        'claims': [{'conversation_id': 'window', 'start': FROZEN_NOW, 'end': FROZEN_NOW}],
+    }
+
+
 def _finish_clock(client):
     """The cut is fresh, so the predecessor read runs."""
 
@@ -131,6 +154,7 @@ def entries():
             neutrals={
                 'unlocked_page': (None, 'bounds indexed point reads; source and neighbor query shapes are unchanged'),
                 'unlocked_limit': (None, 'caps indexed point reads; adds no query shape'),
+                'lease_token': (None, 'names the lease the allowance charge must match; adds no query shape'),
             },
             setup=_pending_source,
             patchers=(_decode,),
@@ -210,6 +234,13 @@ def entries():
             setup=_named_finish_sources,
             patchers=(_transaction_without_rpc,),
         ),
+        DriverEntry(
+            'database.conversations_v3_live.request_finish',
+            base={'uid': SHAPE_UID, 'window_id': 'window', 'now': FROZEN_NOW},
+            domains={'newer_capture': [False, True]},
+            setup=_live_window_finish,
+            patchers=(_transaction_without_rpc,),
+        ),
         CoveredByEntry(
             'database.conversations_v3_live._live_window_or_deleting',
             covered_by=(
@@ -223,8 +254,9 @@ def entries():
             covered_by=(
                 'database.conversations_v3_live.request_recording_finish',
                 'database.conversations_v3_live.request_named_finish',
+                'database.conversations_v3_live.request_finish',
             ),
-            reason='Both recording-scoped Finish transactions scan the same bounded source query.',
+            reason='Every Finish transaction that looks past its window tail scans the same bounded source query.',
         ),
         DriverEntry(
             'database.conversations_v3.merge_donors_have_tasks',
@@ -253,6 +285,12 @@ def entries():
         # Owner-level End instants (flag end_open_conversation): single-field range reads on the cut time.
         DriverEntry('database.conversations_v3_manual_cuts.around', base={'uid': SHAPE_UID, 'at': FROZEN_NOW}),
         DriverEntry('database.conversations_v3_manual_cuts.load', base={'uid': SHAPE_UID, 'since': FROZEN_NOW}),
+        # The live tail kept with an End (flag live_words_cascade): single-field reads on the cut time.
+        DriverEntry('database.conversations_v3_manual_cuts.tail', base={'uid': SHAPE_UID, 'at': FROZEN_NOW}),
+        DriverEntry('database.conversations_v3_manual_cuts.clear_tail', base={'uid': SHAPE_UID, 'at': FROZEN_NOW}),
+        DriverEntry(
+            'database.conversations_v3_manual_cuts.clear_tails_before', base={'uid': SHAPE_UID, 'before': FROZEN_NOW}
+        ),
         DriverEntry(
             'utils.conversations.v3.service.has_pending',
             base={'uid': SHAPE_UID},

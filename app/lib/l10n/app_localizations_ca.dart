@@ -15924,6 +15924,9 @@ class AppLocalizationsCa extends AppLocalizations {
       'Alguns enregistraments encara són al vostre dispositiu. Deixeu que acabin de sincronitzar-se al telèfon i, després, inicieu l\'actualització.';
 
   @override
+  String get batteryRestartToRefresh => 'Reinicieu Omi per actualitzar el valor';
+
+  @override
   String get pendantReconnectNudgeTitle => 'El teu Omi fa 3 dies que no es connecta';
 
   @override

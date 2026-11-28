@@ -67,7 +67,6 @@ def test_image_only_reference_render_and_server_dry_run(rollback, fault):
     primary.update(name='backend-listen', image=old)
     primary['env'] += [
         {'name': 'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'value': 'false'},
-        {'name': 'SYNC_POLL_BACKOFF_ENABLED', 'value': 'false'},
     ]
     if fault == 'reconnect':
         primary['env'].append({'name': 'LISTEN_BATCH_RECONNECT_ENABLED', 'value': 'true'})
@@ -826,3 +825,64 @@ def test_chart_only_argv_keeps_backend_digest():
     argv = evidence.helm_args('chart', 'values', digest, 'based-hardware', 'based-hardware', [])
     assert f'image.digest={digest}' in argv
     assert not any(arg.startswith('image.tag=') for arg in argv)
+
+
+def test_attested_evidence_workflow_allows_only_byte_equivalent_descendant(tmp_path):
+    from unittest.mock import Mock
+
+    reader = Mock()
+    request = {'control_sha': 'a' * 40}
+    environ = {'GITHUB_WORKFLOW_SHA': 'b' * 40}
+    with pytest.raises(evidence.Refused, match='workflow_binding'):
+        evidence.verify_evidence_workflow(request, reader, environ, tmp_path)
+    reader.run.assert_not_called()
+
+    request['image_only'] = {}
+    evidence.verify_evidence_workflow(request, reader, environ, tmp_path)
+    ancestry, diff = [call.args[0] for call in reader.run.call_args_list]
+    assert ancestry[3:] == ['merge-base', '--is-ancestor', 'a' * 40, 'b' * 40]
+    assert diff[3:9] == ['diff', '--quiet', '--no-ext-diff', 'a' * 40, 'b' * 40, '--']
+    assert '.github/scripts/listen_runtime.py' in diff
+    assert '.github/actions/deploy-backend-stack/action.yml' in diff
+
+
+def test_evidence_bootstrap_refuses_added_script_before_python(tmp_path):
+    workflow = yaml.safe_load((ROOT / '.github/workflows/gcp_backend_listen_helm.yml').read_text())
+    steps = next(
+        job['steps']
+        for job in workflow['jobs'].values()
+        if any(step.get('name') == 'Verify staged evidence scripts before Python' for step in job.get('steps', []))
+    )
+    guard = next(step for step in steps if step.get('name') == 'Verify staged evidence scripts before Python')
+    reconstruct = next(step for step in steps if step.get('name') == 'Reconstruct evidence runtime before credentials')
+    assert steps.index(guard) < steps.index(reconstruct)
+
+    def git(*args):
+        return subprocess.check_output(['git', '-C', str(tmp_path), *args], text=True).strip()
+
+    git('init', '-q')
+    scripts = tmp_path / '.github/scripts'
+    scripts.mkdir(parents=True)
+    (scripts / 'listen_runtime.py').write_text('# reviewed fixture\n')
+    git('add', '.')
+    git('-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'reviewed')
+    reviewed = git('rev-parse', 'HEAD:.github/scripts')
+    command = guard['run'].replace('c9cc79160418038884fc99286730784297d61793', reviewed)
+    assert command != guard['run']
+
+    def run_guard():
+        import os
+
+        return subprocess.run(
+            ['bash', '-c', command],
+            cwd=tmp_path,
+            check=False,
+            env={**os.environ, 'GITHUB_WORKFLOW_SHA': git('rev-parse', 'HEAD')},
+        ).returncode
+
+    assert run_guard() == 0
+    (scripts / 'yaml.py').write_text('# inert importable fixture\n')
+    assert run_guard() != 0
+    git('add', '.')
+    git('-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'added module')
+    assert run_guard() != 0

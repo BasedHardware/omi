@@ -15849,6 +15849,9 @@ class AppLocalizationsNo extends AppLocalizations {
       'Noen opptak ligger fortsatt på enheten din. La dem fullføre synkroniseringen til telefonen din, og start deretter oppdateringen.';
 
   @override
+  String get batteryRestartToRefresh => 'Start Omi på nytt for å oppdatere verdien';
+
+  @override
   String get pendantReconnectNudgeTitle => 'Omi-en din har ikke vært tilkoblet på 3 dager';
 
   @override

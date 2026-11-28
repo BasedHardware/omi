@@ -15859,6 +15859,9 @@ class AppLocalizationsId extends AppLocalizations {
       'Beberapa rekaman masih berada di perangkat Anda. Biarkan rekaman tersebut selesai disinkronkan ke ponsel Anda, lalu mulai pembaruan.';
 
   @override
+  String get batteryRestartToRefresh => 'Mulai ulang Omi untuk menyegarkan';
+
+  @override
   String get pendantReconnectNudgeTitle => 'Omi kamu belum terhubung selama 3 hari';
 
   @override

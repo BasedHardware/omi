@@ -4804,6 +4804,7 @@
     "firmwareNewestSupportedForDevice": "Twoje urządzenie ma już najnowszą obsługiwaną wersję oprogramowania układowego",
     "firmwareSyncRecordingsFirstTitle": "Najpierw zsynchronizuj nagrania",
     "firmwareSyncRecordingsFirstMessage": "Niektóre nagrania wciąż znajdują się na urządzeniu. Poczekaj, aż zostaną zsynchronizowane z telefonem, a następnie rozpocznij aktualizację.",
+    "batteryRestartToRefresh": "Uruchom ponownie Omi, aby odświeżyć odczyt",
     "pendantReconnectNudgeTitle": "Twój Omi nie łączył się od 3 dni",
     "pendantReconnectNudgeBody": "Załóż go i połącz ponownie, aby Omi nadal nagrywał.",
     "pendantReconnectNudgeAction": "Połącz ponownie"

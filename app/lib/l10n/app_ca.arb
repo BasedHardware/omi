@@ -4769,6 +4769,7 @@
     "firmwareNewestSupportedForDevice": "El vostre dispositiu ja té la versió més recent de firmware compatible",
     "firmwareSyncRecordingsFirstTitle": "Primer sincronitzeu els enregistraments",
     "firmwareSyncRecordingsFirstMessage": "Alguns enregistraments encara són al vostre dispositiu. Deixeu que acabin de sincronitzar-se al telèfon i, després, inicieu l'actualització.",
+    "batteryRestartToRefresh": "Reinicieu Omi per actualitzar el valor",
     "pendantReconnectNudgeTitle": "El teu Omi fa 3 dies que no es connecta",
     "pendantReconnectNudgeBody": "Torna-te'l a posar i connecta'l perquè Omi continuï gravant.",
     "pendantReconnectNudgeAction": "Torna a connectar"

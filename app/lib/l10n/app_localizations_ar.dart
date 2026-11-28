@@ -15756,6 +15756,9 @@ class AppLocalizationsAr extends AppLocalizations {
       'لا تزال بعض التسجيلات على جهازك. دعها تكمل المزامنة إلى هاتفك، ثم ابدأ التحديث.';
 
   @override
+  String get batteryRestartToRefresh => 'أعد تشغيل Omi لتحديث القراءة';
+
+  @override
   String get pendantReconnectNudgeTitle => 'لم يتصل جهاز Omi منذ 3 أيام';
 
   @override

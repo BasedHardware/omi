@@ -15839,6 +15839,9 @@ class AppLocalizationsSk extends AppLocalizations {
       'Niektoré nahrávky sa stále nachádzajú na zariadení. Počkajte, kým sa dokončí ich synchronizácia s telefónom, a potom spustite aktualizáciu.';
 
   @override
+  String get batteryRestartToRefresh => 'Pre obnovenie údajov reštartujte Omi';
+
+  @override
   String get pendantReconnectNudgeTitle => 'Tvoje Omi sa už 3 dni nepripojilo';
 
   @override

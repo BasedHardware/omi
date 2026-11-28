@@ -15836,6 +15836,9 @@ class AppLocalizationsEt extends AppLocalizations {
       'Mõned salvestised on veel teie seadmes. Oodake, kuni need on telefonisse sünkroonitud, ja seejärel alustage uuendust.';
 
   @override
+  String get batteryRestartToRefresh => 'Taaskäivitage Omi värskendamiseks';
+
+  @override
   String get pendantReconnectNudgeTitle => 'Sinu Omi pole 3 päeva ühendust loonud';
 
   @override

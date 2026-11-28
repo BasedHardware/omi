@@ -1395,7 +1395,8 @@ async def test_outline_flex_timeout_is_terminal_but_standard_retains_failover(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    'budget,standard_ms', [(None, 120_000), (0, 120_000), (45_000, 45_000), (50, 120_000), (110_001, 120_000)]
+    'budget,standard_ms',
+    [(None, 120_000), (0, 120_000), (45_000, 45_000), (40_000, 40_000), (50, 50), (110_001, 120_000)],
 )
 async def test_scoped_flex_needs_background_intent_and_standard_reserve(monkeypatch, budget, standard_ms):
     lane = 'omi:auto:conv-structure'
@@ -1409,6 +1410,40 @@ async def test_scoped_flex_needs_background_intent_and_standard_reserve(monkeypa
     )
     assert [call.request.get('service_tier') for call in provider.calls] == [None]
     assert provider.calls[0].timeout_ms == pytest.approx(standard_ms, abs=1)
+
+
+@pytest.mark.asyncio
+async def test_sub_reserve_background_deadline_bounds_standard_provider_call(monkeypatch):
+    import asyncio
+
+    monkeypatch.setenv(executor.BACKGROUND_FLEX_SWITCH, 'on')
+    clock = _FrozenClock()
+    monkeypatch.setattr(executor, 'monotonic', clock)
+    lane = 'omi:auto:conv-structure'
+    resolved = resolve_chat_completion_route(
+        gateway_config(), {'model': lane, 'messages': [{'role': 'user', 'content': 'Synthetic prompt'}]}
+    )
+    dispatched = []
+
+    async def stall(request, **kwargs):
+        dispatched.append(request.get('service_tier'))
+        try:
+            await asyncio.Future()
+        finally:
+            clock.t += kwargs['timeout_ms'] / 1000
+
+    provider = FakeChatCompletionProvider([])
+    monkeypatch.setattr(provider, 'create_chat_completion', stall)
+    with pytest.raises(GatewayProviderFailureError) as error:
+        await asyncio.wait_for(
+            execute_chat_completion(
+                resolved, omi_credentials(), ProviderRegistry({'openai': provider}), background_flex_budget_ms=100
+            ),
+            timeout=2,
+        )
+
+    assert error.value.failure_class == FailureClass.TIMEOUT_BEFORE_OUTPUT
+    assert dispatched == [None]
 
 
 @pytest.mark.asyncio

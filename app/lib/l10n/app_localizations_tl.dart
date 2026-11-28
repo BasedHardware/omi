@@ -15971,6 +15971,9 @@ class AppLocalizationsTl extends AppLocalizations {
       'May mga recording pa na nasa iyong device. Hayaang matapos munang i-sync ang mga ito sa iyong phone, pagkatapos ay simulan ang pag-update.';
 
   @override
+  String get batteryRestartToRefresh => 'I-restart ang Omi upang i-refresh';
+
+  @override
   String get pendantReconnectNudgeTitle => 'Hindi nakakonekta ang Omi mo sa loob ng 3 araw';
 
   @override

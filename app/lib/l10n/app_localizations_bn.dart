@@ -15839,6 +15839,9 @@ class AppLocalizationsBn extends AppLocalizations {
       'কিছু রেকর্ডিং এখনও আপনার ডিভাইসে রয়েছে। সেগুলিকে আপনার ফোনে সিঙ্ক শেষ হতে দিন, তারপর আপডেট শুরু করুন।';
 
   @override
+  String get batteryRestartToRefresh => 'রিফ্রেশ করতে Omi পুনরায় চালু করুন';
+
+  @override
   String get pendantReconnectNudgeTitle => 'আপনার Omi ৩ দিন ধরে সংযুক্ত হয়নি';
 
   @override

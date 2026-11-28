@@ -15856,6 +15856,9 @@ class AppLocalizationsUr extends AppLocalizations {
       'کچھ ریکارڈنگز ابھی آپ کے ڈیوائس پر ہیں۔ انہیں فون پر سنک ہونے دیں، پھر اپڈیٹ شروع کریں۔';
 
   @override
+  String get batteryRestartToRefresh => 'ریفریش کرنے کے لیے Omi کو دوبارہ شروع کریں';
+
+  @override
   String get pendantReconnectNudgeTitle => 'آپ کا Omi 3 دن سے منسلک نہیں ہوا';
 
   @override

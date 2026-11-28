@@ -15730,6 +15730,9 @@ class AppLocalizationsHe extends AppLocalizations {
       'חלק מההקלטות עדיין נמצאות במכשיר שלך. תן להן להשלים את הסינכרון לטלפון, ואז התחל את העדכון.';
 
   @override
+  String get batteryRestartToRefresh => 'הפעל מחדש את Omi כדי לרענן';
+
+  @override
   String get pendantReconnectNudgeTitle => 'ה־Omi שלך לא התחבר כבר 3 ימים';
 
   @override
