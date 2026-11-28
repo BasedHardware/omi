@@ -160,7 +160,7 @@ class DeviceConnectionFactory {
         break;
 
       case TransportKind.metaDat:
-        transport = RayBanMetaTransport(device.id);
+        transport = RayBanMetaTransport(device.id, deviceName: device.name);
         break;
     }
 
