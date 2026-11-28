@@ -882,6 +882,58 @@ actor MemoryStorage {
     HomeKnowledgeCountInvalidation.post()
   }
 
+  /// Commit an edit receipt and retire its superseded local projection together.
+  /// The lease covers pool acquisition and the physical SQLite commit, so neither
+  /// an owner switch nor same-owner reauthentication can retarget this write.
+  func applyEditedMemory(
+    originalID: String,
+    content: String,
+    replacement: ServerMemory?,
+    authorization: LocalMutationAuthorization
+  ) async throws {
+    try authorization.require()
+    let (changed, index) = try await authorization.withCommitLeaseSuppressingSupersededResult {
+      let db = try await self.ensureInitialized()
+      return try await db.write { database -> ([String], [(Int64, String)]) in
+        try authorization.require()
+        if let replacement {
+          let result = try Self.reconcileServerMemories([replacement], in: database)
+          if replacement.id != originalID {
+            try database.execute(
+              sql: "UPDATE memories SET deleted = 1, updatedAt = ? WHERE backendId = ?",
+              arguments: [Date(), originalID])
+          }
+          try authorization.require()
+          return (result.changed, result.index)
+        }
+        let column: String
+        let value: DatabaseValueConvertible
+        switch MemoryIdentity(surfacedId: originalID) {
+        case .backend(let id):
+          column = "backendId"
+          value = id
+        case .localRow(let id):
+          column = "id"
+          value = id
+        }
+        try database.execute(
+          sql: "UPDATE memories SET content = ?, updatedAt = ? WHERE \(column) = ?",
+          arguments: [content, Date(), value])
+        let rowID = try Int64.fetchOne(
+          database, sql: "SELECT id FROM memories WHERE \(column) = ?", arguments: [value])
+        try authorization.require()
+        return ([originalID], rowID.map { [($0, content)] } ?? [])
+      }
+    }
+    try authorization.require()
+    LocalEmbeddingIndexer.scheduleMemoryIndex(items: index)
+    SiriIndexHooks.memoriesChanged(changed)
+    if let replacement, replacement.id != originalID {
+      await SiriIndexHooks.memoriesDeleted([originalID])
+    }
+    HomeKnowledgeCountInvalidation.post()
+  }
+
   /// Update content by backend ID
   func updateContentByBackendId(_ backendId: String, content: String) async throws {
     let db = try await ensureInitialized()

@@ -18,6 +18,13 @@ import { getAppSettings, setAppSettings, onAppSettingsChanged } from '../appSett
 import type { AppSettings } from '../appSettings'
 import { notifyProactive } from '../assistants/core/notify'
 import type { AssistantSettingsView, InsightPayload } from '../../shared/types'
+import {
+  getAssistantSettingsOwner,
+  isStaleOwnerWrite,
+  setAssistantSettingsOwner
+} from './assistantSettingsOwner'
+
+export { getAssistantSettingsOwner, setAssistantSettingsOwner }
 
 // The exact keys the renderer may write through this channel. Anything else in a
 // patch is dropped BEFORE it reaches setAppSettings (see filterAssistantPatch).
@@ -72,10 +79,16 @@ export function registerAssistantSettingsHandlers(): void {
 
   ipcMain.handle('assistants:getSettings', (): AssistantSettingsView => projectAssistantSettings())
 
-  ipcMain.handle('assistants:setSettings', (_e, patch: unknown): AssistantSettingsView => {
-    setAppSettings(filterAssistantPatch(patch))
-    return projectAssistantSettings()
-  })
+  ipcMain.handle(
+    'assistants:setSettings',
+    (_e, patch: unknown, expectedOwnerUid?: unknown): AssistantSettingsView => {
+      if (isStaleOwnerWrite(patch, expectedOwnerUid)) {
+        return projectAssistantSettings()
+      }
+      setAppSettings(filterAssistantPatch(patch))
+      return projectAssistantSettings()
+    }
+  )
 
   // Broadcast every settings write to all windows so a Settings row re-renders when
   // the same flag is written from the tray checkbox or a background sync. Subscribed
@@ -109,4 +122,5 @@ export function registerAssistantSettingsHandlers(): void {
 /** Test-only: drop the registration guard so a suite can re-register handlers. */
 export function _resetAssistantSettingsForTests(): void {
   registered = false
+  setAssistantSettingsOwner(null)
 }

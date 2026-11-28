@@ -64,6 +64,8 @@ vi.mock('../codingAgent/piMono', () => ({
 vi.mock('../auth/firebaseIdToken', () => ({
   verifyFirebaseIdToken: vi.fn(() => Promise.resolve(null))
 }))
+vi.mock('@electron-toolkit/utils', () => ({ is: { dev: false } }))
+vi.mock('../assistants/core/notify', () => ({ notifyProactive: vi.fn() }))
 
 import { registerPiMonoHandlers } from './pimono'
 import { verifyFirebaseIdToken } from '../auth/firebaseIdToken'
@@ -77,6 +79,12 @@ import {
   __resetPiMonoSessionForTests,
   __setByokKeyStoreForTests
 } from '../codingAgent/piMonoSession'
+import {
+  getAssistantSettingsOwner,
+  registerAssistantSettingsHandlers,
+  _resetAssistantSettingsForTests
+} from './assistantSettings'
+import type { AssistantSettingsView } from '../../shared/types'
 import type { ByokKeyStore } from '../agentKernel/byokStore'
 
 const verify = vi.mocked(verifyFirebaseIdToken)
@@ -99,12 +107,15 @@ beforeEach(() => {
   resetControlPlaneForTests()
   __resetPiMonoSessionForTests()
   __setByokKeyStoreForTests(noByok)
+  _resetAssistantSettingsForTests()
   registerPiMonoHandlers()
+  registerAssistantSettingsHandlers()
 })
 
 afterEach(() => {
   resetControlPlaneForTests()
   __resetPiMonoSessionForTests()
+  _resetAssistantSettingsForTests()
 })
 
 describe('pimono:setSession — control-plane owner wiring', () => {
@@ -141,6 +152,81 @@ describe('pimono:setSession — control-plane owner wiring', () => {
     expect(controlPlaneOwnerId()).toBe('account-B')
   })
 
+  it('does not restore an old verified owner after a newer account finishes signing in', async () => {
+    let finish = (_uid: string | null): void => {
+      throw new Error('verification not started')
+    }
+    verify.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        })
+    )
+    const old = setSession({ token: 'old-A', desktopApiBase: base })
+    verify.mockResolvedValueOnce('account-B')
+    await setSession({ token: 'new-B', desktopApiBase: base })
+    finish('account-A')
+    await old
+    expect(controlPlaneOwnerId()).toBe('account-B')
+    expect(getAssistantSettingsOwner()).toBe('account-B')
+  })
+
+  it('does not restore an owner when verification finishes after sign-out', async () => {
+    let finish = (_uid: string | null): void => {
+      throw new Error('verification not started')
+    }
+    verify.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        })
+    )
+    const old = setSession({ token: 'old-A', desktopApiBase: base })
+    await setSession(null)
+    finish('account-A')
+    await old
+    expect(hasKnownControlPlaneOwner()).toBe(false)
+    expect(getAssistantSettingsOwner()).toBeNull()
+  })
+
+  it('ignores a failed old verification after same-account reauthentication', async () => {
+    let finish = (_uid: string | null): void => {
+      throw new Error('verification not started')
+    }
+    verify.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        })
+    )
+    const old = setSession({ token: 'old-A', desktopApiBase: base })
+    verify.mockResolvedValueOnce('account-A')
+    await setSession({ token: 'fresh-A', desktopApiBase: base })
+    finish(null)
+    await old
+    expect(controlPlaneOwnerId()).toBe('account-A')
+    expect(getAssistantSettingsOwner()).toBe('account-A')
+  })
+
+  it('revokes the previous control-plane owner while a replacement credential is being verified', async () => {
+    verify.mockResolvedValueOnce('account-A')
+    await setSession({ token: 'current-A', desktopApiBase: base })
+    let finish = (_uid: string | null): void => {
+      throw new Error('verification not started')
+    }
+    verify.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        })
+    )
+    const pending = setSession({ token: 'candidate-B', desktopApiBase: base })
+    expect(hasKnownControlPlaneOwner()).toBe(false)
+    expect(getAssistantSettingsOwner()).toBeNull()
+    finish('account-B')
+    await pending
+  })
+
   it('is host-authoritative — a FORGED token the verifier rejects falls back to default, not a leaked owner', async () => {
     // A valid session SHAPE with a token the verifier rejects (bad sig / unsigned /
     // wrong alg / expired / wrong aud-iss): verify → null, so the owner stays the
@@ -160,4 +246,41 @@ describe('pimono:setSession — control-plane owner wiring', () => {
     expect(controlPlaneOwnerId()).toBe(DEFAULT_LOCAL_OWNER_ID)
   })
 
+  it('does not bind assistant settings to claims from a rejected token', async () => {
+    const token = `h.${Buffer.from(JSON.stringify({ uid: 'victim' })).toString('base64url')}.s`
+    verify.mockResolvedValue(null)
+    await setSession({ token, desktopApiBase: base })
+    expect(getAssistantSettingsOwner()).toBeNull()
+  })
+
+  it('binds assistant settings owner on session relay and protects against mismatched writes', async () => {
+    const fakeToken = `h.${Buffer.from(JSON.stringify({ user_id: 'account-A', sub: 'account-A' })).toString('base64url')}.s`
+    verify.mockResolvedValue('account-A')
+
+    await setSession({ token: fakeToken, desktopApiBase: base })
+    expect(getAssistantSettingsOwner()).toBe('account-A')
+
+    const setSettingsHandler = handlers.get('assistants:setSettings')
+    if (!setSettingsHandler) throw new Error('assistants:setSettings was not registered')
+
+    // Stale write from previous user is dropped
+    const staleResult = setSettingsHandler(
+      {},
+      { memoryEnabled: true },
+      'account-old'
+    ) as AssistantSettingsView
+    expect(staleResult.memoryEnabled).toBe(false)
+
+    // Matching owner write succeeds
+    const validResult = setSettingsHandler(
+      {},
+      { memoryEnabled: true },
+      'account-A'
+    ) as AssistantSettingsView
+    expect(validResult.memoryEnabled).toBe(true)
+
+    // Sign out clears the owner
+    await setSession(null)
+    expect(getAssistantSettingsOwner()).toBeNull()
+  })
 })

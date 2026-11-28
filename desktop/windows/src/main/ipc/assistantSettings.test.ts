@@ -29,16 +29,25 @@ vi.mock('electron', () => ({
       handlers.set(channel, fn)
     }
   },
-  BrowserWindow: { getAllWindows: (): unknown[] => [] }
+  BrowserWindow: { getAllWindows: (): unknown[] => [] },
+  webContents: { getAllWebContents: (): unknown[] => [] },
+  safeStorage: {
+    isEncryptionAvailable: (): boolean => true,
+    encryptString: (s: string): Buffer => Buffer.from(s, 'utf8'),
+    decryptString: (b: Buffer): string => b.toString('utf8')
+  }
 }))
 // is.dev true so the dev-only assistants:debugNotify hook is registered + covered.
 vi.mock('@electron-toolkit/utils', () => ({ is: { dev: true } }))
 vi.mock('../assistants/core/notify', () => ({ notifyProactive }))
 
+import { registerAuthStoreHandlers } from './authStore'
 import {
   filterAssistantPatch,
+  getAssistantSettingsOwner,
   projectAssistantSettings,
   registerAssistantSettingsHandlers,
+  setAssistantSettingsOwner,
   _resetAssistantSettingsForTests
 } from './assistantSettings'
 import { getAppSettings, _resetForTests } from '../appSettings'
@@ -129,6 +138,66 @@ describe('assistantSettings IPC', () => {
       expect(view.memoryEnabled).toBe(true)
       expect(view.notificationsEnabled).toBe(false)
       expect(getAppSettings().memoryEnabled).toBe(true)
+    })
+
+    it('fences stale-owner writes across a reauth/account switch while allowing active-owner writes', () => {
+      setAssistantSettingsOwner('user-b')
+      expect(getAssistantSettingsOwner()).toBe('user-b')
+
+      // Stale in-flight write from user-a must be dropped without mutating user-b's settings
+      const afterStale = invoke(
+        'assistants:setSettings',
+        { memoryEnabled: true, notificationFrequency: 4 },
+        'user-a'
+      ) as AssistantSettingsView
+      expect(afterStale.memoryEnabled).toBe(false)
+      expect(afterStale.notificationFrequency).toBe(0)
+
+      // Matching owner write succeeds
+      const afterValid = invoke(
+        'assistants:setSettings',
+        { memoryEnabled: true, notificationFrequency: 4 },
+        'user-b'
+      ) as AssistantSettingsView
+      expect(afterValid.memoryEnabled).toBe(true)
+      expect(afterValid.notificationFrequency).toBe(4)
+    })
+
+    it('does not let unverified persistence payloads replace the verified owner', () => {
+      registerAuthStoreHandlers()
+      setAssistantSettingsOwner('verified-user')
+      invoke(
+        'authStore:set',
+        'firebase:authUser:key:[DEFAULT]',
+        JSON.stringify({ uid: 'forged-user' })
+      )
+      expect(getAssistantSettingsOwner()).toBe('verified-user')
+      const rejected = invoke(
+        'assistants:setSettings',
+        { memoryEnabled: true },
+        'forged-user'
+      ) as AssistantSettingsView
+      expect(rejected.memoryEnabled).toBe(false)
+      invoke('authStore:remove', 'firebase:authUser:key:[DEFAULT]')
+      expect(getAssistantSettingsOwner()).toBe('verified-user')
+    })
+
+    it('rejects owner-tagged writes without an owner while keeping local untagged settings usable', () => {
+      const rejected = invoke(
+        'assistants:setSettings',
+        { memoryEnabled: true },
+        'signed-out-user'
+      ) as AssistantSettingsView
+      expect(rejected.memoryEnabled).toBe(false)
+      const embeddedOwner = invoke('assistants:setSettings', {
+        memoryEnabled: true,
+        ownerUid: 'signed-out-user'
+      }) as AssistantSettingsView
+      expect(embeddedOwner.memoryEnabled).toBe(false)
+      const local = invoke('assistants:setSettings', {
+        memoryEnabled: true
+      }) as AssistantSettingsView
+      expect(local.memoryEnabled).toBe(true)
     })
   })
 
