@@ -243,6 +243,7 @@ mixin ChatHistoryState on ChangeNotifier {
     }
     if (isFreshChat) return;
     final epoch = ++_historyEpoch;
+    final loadStarted = DateTime.now();
     final appId = appProvider?.selectedChatAppId;
     if (dropdownSelected) markPendingAppSwitch();
     isLoadingMessages = true;
@@ -260,7 +261,8 @@ mixin ChatHistoryState on ChangeNotifier {
         historyProblem = result.problem;
       } else {
         final loaded = result as ApiSuccess<List<ServerMessage>>;
-        messages = loaded.data.where((m) => !m.isAutomaticChatEntry).toList();
+        final filtered = loaded.data.where((m) => !m.isAutomaticChatEntry).toList();
+        messages = dropdownSelected ? filtered : _withSentWhileLoading(filtered, loadStarted);
         _messageOffset = loaded.data.length + loaded.rejectedRows;
         hasOlderMessages = _messageOffset == 100;
         historyProblem = loaded.rejectedRows > 0 ? const ApiProblem(ApiProblemKind.decode) : null;
@@ -272,20 +274,35 @@ mixin ChatHistoryState on ChangeNotifier {
       isLoadingMessages = false;
       _pendingAppSwitch = false;
       isSwitchingChatApp = false;
-      messages = loaded.where((m) => !m.isAutomaticChatEntry).toList();
+      var filtered = loaded.where((m) => !m.isAutomaticChatEntry).toList();
       historyProblem = null;
       // The legacy cache has no session/app key. Never use it in an explicitly selected thread.
       if ((appId ?? '').isEmpty && !dropdownSelected) {
-        if (messages.isEmpty) {
-          messages = SharedPreferencesUtil().cachedMessages.where((m) => !m.isAutomaticChatEntry).toList();
+        if (filtered.isEmpty) {
+          filtered = SharedPreferencesUtil().cachedMessages.where((m) => !m.isAutomaticChatEntry).toList();
         } else {
-          SharedPreferencesUtil().cachedMessages = messages;
+          SharedPreferencesUtil().cachedMessages = filtered;
         }
-        hasCachedMessages = messages.isNotEmpty;
+        hasCachedMessages = filtered.isNotEmpty;
       }
+      messages = dropdownSelected ? filtered : _withSentWhileLoading(filtered, loadStarted);
     }
     messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
     notifyListeners();
+  }
+
+  /// Preserves messages added locally or streamed while a history read was in flight,
+  /// deduplicating any human message the server already returned with matching text.
+  List<ServerMessage> _withSentWhileLoading(List<ServerMessage> loaded, DateTime loadStarted) {
+    final ids = loaded.map((m) => m.id).toSet();
+    final loadedHuman = loaded.where((m) => m.sender == MessageSender.human).map((m) => m.text).toSet();
+    final sentSince = messages.where(
+      (m) =>
+          !ids.contains(m.id) &&
+          !m.createdAt.isBefore(loadStarted) &&
+          !(m.sender == MessageSender.human && loadedHuman.contains(m.text)),
+    );
+    return [...loaded, ...sentSince];
   }
 
   Future<List<ServerMessage>> getMessagesFromServer({bool dropdownSelected = false}) async {
