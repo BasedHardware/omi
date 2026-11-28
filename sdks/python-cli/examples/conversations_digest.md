@@ -27,13 +27,23 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 
+def strip_surrogates(value: str) -> str:
+    """Drop unpaired surrogate code points that cannot be encoded as UTF-8.
+
+    json.loads accepts lone surrogates (e.g. "\\ud800") from a malformed export, but
+    encoding the rendered Markdown digest raises UnicodeEncodeError on them. Dropping
+    them keeps the remaining text and lets the digest export cleanly.
+    """
+    return value.encode("utf-8", "ignore").decode("utf-8")
+
+
 def text(value):
     """Render a loosely typed field as one line of text; anything non-null is coerced, not rejected."""
     if value is None:
         return ""
     if not isinstance(value, str):
         value = json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else str(value)
-    return " ".join(value.split())
+    return " ".join(strip_surrogates(value).split())
 
 
 def parse_time(value):
@@ -117,7 +127,7 @@ def digest(conversations, offset):
 
 
 def convert(sources, destination, offset):
-    payload = digest(load(sources), offset).encode("utf-8")
+    payload = strip_surrogates(digest(load(sources), offset)).encode("utf-8")
     output_path = Path(destination)
     # Exclusive creation protects an existing digest; a failed write leaves no partial file.
     try:
