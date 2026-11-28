@@ -94,6 +94,16 @@ part 'wal_orphan_recovery.dart';
 part 'wal_orphan_reclaim.dart';
 part 'conversation_wal_snapshot.dart';
 
+typedef WalWriteBytes = Future<void> Function(File file, List<int> data, {required bool flush});
+
+class _PendingLiveWalWrite {
+  const _PendingLiveWalWrite({required this.id, required this.fileName, this.digest});
+
+  final String id;
+  final String fileName;
+  final String? digest;
+}
+
 class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   MobileBatchUploadHold? mobileBatchUploadHold;
 
@@ -422,6 +432,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   DateTime? _lastStaleWalReportAt;
   final Future<int?> Function()? _freeDiskBytesOverride;
   final Future<void> Function(Duration duration)? _sleepOverride;
+  final WalWriteBytes? _writeWalBytesOverride;
   final WalBacklogTelemetry _backlogTelemetry;
   late final MobileHeldWalSignal _heldWalSignal = MobileHeldWalSignal(
     holdLabel: (wal) => mobileBatchUploadHold?.label(wal),
@@ -543,6 +554,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     void Function(WalStopDrain)? stopDrainTelemetry,
     Future<int?> Function()? freeDiskBytes,
     Future<void> Function(Duration duration)? sleep,
+    WalWriteBytes? writeWalBytes,
     PendantRingCustody? custody,
     Future<DeviceConnection?> Function(String deviceId)? connectionResolver,
   })  : _orphanCensusOverride = orphanCensus,
@@ -567,6 +579,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         _stopDrainTelemetry = stopDrainTelemetry,
         _freeDiskBytesOverride = freeDiskBytes,
         _sleepOverride = sleep,
+        _writeWalBytesOverride = writeWalBytes,
         _custody = custody ?? PendantRingCustody.shared,
         _connectionResolver = connectionResolver;
 
@@ -1461,10 +1474,12 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         // frames. Conservatively retain the whole chunk; never upload its local tail.
         // Custody was latched when these frames were captured.
         final owner = wal.ownerUid;
-        final writeId = LiveWalReceipt.writeEnabled && owner != null && owner.isNotEmpty && owner != 'legacy'
-            ? LiveWalReceipt.newId()
-            : null;
-        final fileName = await _uniqueStorageFileName(wal, writeId: writeId);
+        final pendingWrite = _pendingLiveWalWrites[wal];
+        final writeId = pendingWrite?.id ??
+            (LiveWalReceipt.writeEnabled && owner != null && owner.isNotEmpty && owner != 'legacy'
+                ? LiveWalReceipt.newId()
+                : null);
+        final fileName = pendingWrite?.fileName ?? await _uniqueStorageFileName(wal, writeId: writeId);
         String? filePath = await Wal.getFilePath(fileName);
         if (filePath == null) {
           DebugLogManager.logError('LocalWalSync flush error: Flush failed: cannot get file path', null, null, {
@@ -1488,23 +1503,33 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         try {
           String? digest;
           if (writeId != null) {
-            // Exclusive creation keeps a failed receipt from falling through
-            // to an overwrite. Use the reserved name even without a receipt:
-            // the index may still commit, and an interrupted write cannot
-            // fall through to heuristic ownership under a different account.
-            await file.create(exclusive: true);
+            if (pendingWrite == null) {
+              // Exclusive creation keeps a failed receipt from falling through
+              // to an overwrite. Retain this transaction across retries so a
+              // failed final flush cannot publish a second receipt.
+              await file.create(exclusive: true);
+              _pendingLiveWalWrites[wal] = _PendingLiveWalWrite(id: writeId, fileName: fileName);
+            }
             try {
-              digest = await LiveWalReceipt.prepare(file, wal, writeId, data);
+              digest = await LiveWalReceipt.prepare(file, wal, writeId, data, allowRetry: pendingWrite != null);
+              _pendingLiveWalWrites[wal] = _PendingLiveWalWrite(id: writeId, fileName: fileName, digest: digest);
             } catch (_) {
               _emitLiveWalReceipt(WalWriteReceiptResult.publishFailed);
+              if (pendingWrite != null) rethrow;
             }
           }
-          await file.writeAsBytes(data, flush: true);
+          final writeWalBytes = _writeWalBytesOverride;
+          if (writeWalBytes == null) {
+            await file.writeAsBytes(data, flush: true);
+          } else {
+            await writeWalBytes(file, data, flush: true);
+          }
           wal.fileSha256 = digest ?? (wal.liveRingId == null ? null : sha256.convert(data).toString());
           wal.liveFileWriteId = digest == null ? null : writeId;
           if (wal.liveRingId != null) wal.liveDeviceId = wal.device;
           wal.filePath = fileName;
           wal.storage = WalStorage.disk;
+          _pendingLiveWalWrites.remove(wal);
         } catch (e) {
           Logger.debug('LocalWalSync: flush write failed: ${e.runtimeType}');
           _releaseAdmission(data.length);
@@ -1960,7 +1985,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   Future<bool> _deleteWal(Wal wal, {required int generation, bool accountPurge = false}) async {
     if (!_isCurrent(generation) || !_isTrackedWal(wal)) return false;
-    final filePath = wal.filePath;
+    final pendingWrite = _pendingLiveWalWrites[wal];
+    final filePath = wal.filePath ?? pendingWrite?.fileName;
     if (filePath != null && filePath.isNotEmpty) {
       try {
         final fullPath = await Wal.getFilePath(filePath);
@@ -1970,25 +1996,54 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         if (!_isCurrent(generation) || !_isTrackedWal(wal)) return false;
         if (type == FileSystemEntityType.file || type == FileSystemEntityType.link) {
           final file = File(fullPath);
-          if (accountPurge &&
-              LiveWalReceipt.isManagedBasename(path.basename(fullPath)) &&
-              !_confirmedDurableWalKeys.contains(_durableKey(wal))) {
-            if (!await WalFileManager.matchesPendingLiveWalPurge(file, wal) ||
-                !_isCurrent(generation) ||
-                !_isTrackedWal(wal)) {
+          if (pendingWrite != null) {
+            if (accountPurge && type == FileSystemEntityType.file) {
+              final pendingRow = Wal.fromJson(wal.toJson()
+                ..['storage'] = WalStorage.disk.name
+                ..['file_path'] = pendingWrite.fileName
+                ..['live_file_write_id'] = pendingWrite.id
+                ..['file_sha256'] = pendingWrite.digest);
+              if (pendingWrite.digest == null ||
+                  !await WalFileManager.matchesPendingLiveWalPurge(file, pendingRow) ||
+                  !_isCurrent(generation) ||
+                  !_isTrackedWal(wal)) {
+                return false;
+              }
+            } else if (accountPurge) {
               return false;
             }
-          }
-          if (_fileReferencedByOtherWal(wal, fullPath.split('/').last)) {
-            if (wal.liveFileWriteId != null && !await LiveWalReceipt.retireForSharedDeletion(file, wal)) return false;
+            if (!_fileReferencedByOtherWal(wal, fullPath.split('/').last)) {
+              await file.delete();
+              final sidecar = File(nativeBatchGeolocationSidecarPath(fullPath));
+              if (await sidecar.exists()) await sidecar.delete();
+              if (!_isCurrent(generation)) return false;
+            }
           } else {
-            await file.delete();
-            if (wal.liveFileWriteId != null) await LiveWalReceipt.retireAfterFileDeletion(file, wal);
-            final sidecar = File(nativeBatchGeolocationSidecarPath(fullPath));
-            if (await sidecar.exists()) await sidecar.delete();
-            if (!_isCurrent(generation)) return false;
+            if (accountPurge &&
+                LiveWalReceipt.isManagedBasename(path.basename(fullPath)) &&
+                !_confirmedDurableWalKeys.contains(_durableKey(wal))) {
+              if (!await WalFileManager.matchesPendingLiveWalPurge(file, wal) ||
+                  !_isCurrent(generation) ||
+                  !_isTrackedWal(wal)) {
+                return false;
+              }
+            }
+            if (_fileReferencedByOtherWal(wal, fullPath.split('/').last)) {
+              if (wal.liveFileWriteId != null && !await LiveWalReceipt.retireForSharedDeletion(file, wal)) {
+                return false;
+              }
+            } else {
+              await file.delete();
+              if (wal.liveFileWriteId != null) await LiveWalReceipt.retireAfterFileDeletion(file, wal);
+              final sidecar = File(nativeBatchGeolocationSidecarPath(fullPath));
+              if (await sidecar.exists()) await sidecar.delete();
+              if (!_isCurrent(generation)) return false;
+            }
           }
         } else if (type != FileSystemEntityType.notFound) {
+          return false;
+        }
+        if (pendingWrite != null && !await LiveWalReceipt.retirePendingWrite(File(fullPath), wal, pendingWrite.id)) {
           return false;
         }
       } catch (e) {
@@ -1998,6 +2053,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     }
 
     final removed = _wals.remove(wal) | _retiredWals.remove(wal) | _foreignWals.remove(wal);
+    if (removed) _pendingLiveWalWrites.remove(wal);
     if (removed && wal.holdForUser && _isCurrent(generation)) heldRevision.value++;
     return removed;
   }
@@ -2557,6 +2613,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   final Set<String> _liveProofPendingWalIds = {};
   final Set<String> _liveWalWrites = {};
+  final Map<Wal, _PendingLiveWalWrite> _pendingLiveWalWrites = Map.identity();
 
   bool _isPendantWal(Wal wal) =>
       _deviceId != null && _deviceId!.isNotEmpty && _deviceId != 'phone' && wal.device == _deviceId;

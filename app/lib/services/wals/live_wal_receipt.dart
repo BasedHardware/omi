@@ -84,7 +84,7 @@ class LiveWalReceipt {
   static Future<String> _digest(List<int> bytes) => offUiIsolate(() => sha256.convert(bytes).toString(),
       size: bytes.length, threshold: 64 * 1024, debugName: 'live_wal_receipt_digest');
 
-  static Future<String> prepare(File audio, Wal wal, String id, List<int> bytes) async {
+  static Future<String> prepare(File audio, Wal wal, String id, List<int> bytes, {bool allowRetry = false}) async {
     final name = path.basename(audio.path);
     final digest = await _digest(bytes);
     final pending = _receipt(audio.parent, name);
@@ -101,7 +101,15 @@ class LiveWalReceipt {
       ..['captured_on_device_only'] = wal.capturedOnDeviceOnly ?? wal.onDeviceOnly;
     final body = jsonEncode({'version': 1, 'length': bytes.length, 'wal': fields});
     if (utf8.encode(body).length > _maxReceiptBytes) throw const FormatException('live WAL receipt too large');
-    if (await pending.exists()) throw const FileSystemException('live WAL receipt already exists');
+    if (await pending.exists()) {
+      final existing = allowRetry ? await _read(pending, name) : null;
+      if (existing == null ||
+          existing.binding.id != id ||
+          existing.binding.owner != wal.ownerUid ||
+          existing.wal.id != wal.id) {
+        throw const FileSystemException('live WAL receipt already exists');
+      }
+    }
     await temporary.writeAsString(body, flush: true);
     await temporary.rename(pending.path);
     return digest;
@@ -442,5 +450,26 @@ class LiveWalReceipt {
     try {
       if ((await _read(pending, name))?.binding == expected) await pending.delete();
     } catch (_) {/* Missing audio cannot be replayed. */}
+  }
+
+  /// Retire an unindexed in-memory transaction after its pending WAL is
+  /// discarded. The receipt must still belong to that exact WAL and write ID.
+  static Future<bool> retirePendingWrite(File audio, Wal wal, String writeId) async {
+    final name = path.basename(audio.path);
+    final pending = _receipt(audio.parent, name);
+    try {
+      if (!await pending.exists()) return true;
+      final record = await _read(pending, name);
+      if (record == null ||
+          record.binding.id != writeId ||
+          record.binding.owner != wal.ownerUid ||
+          record.wal.id != wal.id) {
+        return false;
+      }
+      await pending.delete();
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 }
