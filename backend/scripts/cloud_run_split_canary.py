@@ -264,18 +264,24 @@ def recovery_plan(receipt, run, run_id):
     return service, wire
 
 
-def promote(service, wire, candidate, transport, guard, *, sleep=time.sleep, now=None, on_promoted=None):
+def promote(service, wire, candidate, transport, guard, *, sleep=time.sleep, now=None, on_promoted=None, floor=None):
     """Guard a named candidate and return only after its final map is observed.
 
     For a split service a guarded canary first borrows up to 10 percentage
     points from the donor. At every step allocations of other revisions stay
     fixed. A failed guard or move restores the original map if this operation
     still owns the requested traffic.
+
+    Every revision in the admitted inverse is checked against the published
+    release floor before the first traffic move and again before that inverse
+    is restored, so a guard failure cannot re-serve an ineligible revision.
     """
     plan = decode_plan(service, wire)
     inverse, donor = plan['inverse'], plan['donor']
     if not valid_revision(service, candidate) or candidate in inverse:
         raise ValueError('invalid_candidate')
+    if floor is not None:
+        floor(tuple(inverse))
     initial = transport.read()
     if (
         not initial.uid
@@ -346,6 +352,10 @@ def promote(service, wire, candidate, transport, guard, *, sleep=time.sleep, now
             if current.requested != inverse:
                 if current.requested not in attempted or current.observed not in [inverse, *attempted]:
                     raise RuntimeError('rollback_traffic_ownership_lost')
+                if floor is not None:
+                    # Recheck at restore time: the published floor can move
+                    # while a multi-hour guard window is open.
+                    floor(tuple(inverse))
                 transport.replace(current, inverse)
             settled(inverse)
         raise
@@ -460,7 +470,7 @@ def main(argv=None):
             command.add_argument('--project', required=True)
             command.add_argument('--region', required=True)
             command.add_argument('--promotion-receipt', type=Path, required=True)
-        if mode == 'restore-completed':
+        if mode in ('restore-completed', 'promote'):
             command.add_argument('--release-floor-check', type=Path, required=True)
         if mode == 'promote':
             command.add_argument('--candidate', required=True)
@@ -532,7 +542,7 @@ def main(argv=None):
 
         default = [sys.executable, '-I', str(Path(__file__).with_name('guard_eval.py'))]
         guard = guard_command(args.guard_command or default, args.project, args.region)
-        result = promote(args.service, args.plan, args.candidate, transport, guard, on_promoted=record)
+        result = promote(args.service, args.plan, args.candidate, transport, guard, on_promoted=record, floor=floor)
         print(json.dumps(result, sort_keys=True))
         return 0
     except Hold as error:
