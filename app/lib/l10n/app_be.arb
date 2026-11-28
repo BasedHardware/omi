@@ -9704,49 +9704,13 @@
     "@deleteSynced": {
         "description": "Menu option to delete synced recordings"
     },
-    "deleteSyncedFiles": "Выдаліць сінхранізаваныя запісы",
-    "@deleteSyncedFiles": {
-        "description": "Dialog title for deleting synced files"
-    },
-    "deleteSyncedFilesMessage": "Гэтыя запісы ужо сінхранізаваны з вашым тэлефонам. Гэта нельга адмяніць.",
-    "@deleteSyncedFilesMessage": {
-        "description": "Confirmation message for deleting synced files"
-    },
-    "syncedFilesDeleted": "Сінхранізаваныя запісы выдаленыя",
-    "@syncedFilesDeleted": {
-        "description": "Snackbar message after synced files deleted"
-    },
     "deletePending": "Выдаліць чакаючыя",
     "@deletePending": {
         "description": "Menu option to delete pending recordings"
     },
-    "deletePendingFiles": "Выдаліць чакаючыя запісы",
-    "@deletePendingFiles": {
-        "description": "Dialog title for deleting pending files"
-    },
-    "deletePendingFilesWarning": "Гэтыя запісы НЕ сінхранізаваны з вашым тэлефонам і будуць назаўсёды страчаны. Гэта нельга адмяніць.",
-    "@deletePendingFilesWarning": {
-        "description": "Warning message for deleting pending files"
-    },
-    "pendingFilesDeleted": "Чакаючыя запісы выдаленыя",
-    "@pendingFilesDeleted": {
-        "description": "Snackbar message after pending files deleted"
-    },
-    "deleteAllFiles": "Выдаліць усе запісы",
-    "@deleteAllFiles": {
-        "description": "Dialog title for deleting all files"
-    },
     "deleteAll": "Выдаліць ўсё",
     "@deleteAll": {
         "description": "Menu option to delete all recordings"
-    },
-    "deleteAllFilesWarning": "Гэта выдаліць як сінхранізаваныя, так і чакаючыя запісы. Чакаючыя запісы НЕ сінхранізаваны і будуць назаўсёды страчаны. Гэта нельга адмяніць.",
-    "@deleteAllFilesWarning": {
-        "description": "Warning message for deleting all files"
-    },
-    "allFilesDeleted": "Усе запісы выдаленыя",
-    "@allFilesDeleted": {
-        "description": "Snackbar message after all files deleted"
     },
     "nFiles": "{count} запісаў",
     "@nFiles": {
@@ -9760,18 +9724,6 @@
     "manageStorage": "Кіраваць сховішчам",
     "@manageStorage": {
         "description": "Menu option and sheet title for managing recording storage"
-    },
-    "safelyBackedUp": "Размовы створаны",
-    "@safelyBackedUp": {
-        "description": "Description for synced files in manage storage sheet"
-    },
-    "notYetSynced": "Яшчэ не сінхранізавана на вашым тэлефоне",
-    "@notYetSynced": {
-        "description": "Description for pending files in manage storage sheet"
-    },
-    "clearAll": "Очысціць ўсё",
-    "@clearAll": {
-        "description": "Button label to clear all files"
     },
     "phoneKeypad": "Клавіятура",
     "@phoneKeypad": {
@@ -12329,5 +12281,28 @@
     "batteryRestartToRefresh": "Перазагрузіце Omi, каб абнавіць паказанне",
     "onTheWayAllowanceHeldTitle": "Будуць апрацаваны {date}, калі абновяцца вашыя хвіліны",
     "onTheWayAllowanceHeldUpgrade": "Або апрацуйце іх адразу з абнаўленнем плана",
-    "onTheWayDayProcessesOn": "Будуць апрацаваны {date}"
+    "onTheWayDayProcessesOn": "Будуць апрацаваны {date}",
+    "storageUploadedTitle": "Ужо запампавана",
+    "storageUploadedSubtitle": "Ужо расшыфравана. Выдаліўшы копію з тэлефона, вы нічога не згубіце.",
+    "storageFreeUpSpace": "Вызваліць месца",
+    "storageNotUploadedTitle": "Яшчэ не запампавана",
+    "storageOnThisPhone": "На гэтым тэлефоне",
+    "storageOnYourOmi": "На вашым Omi",
+    "storageOnPhoneAndOmi": "На гэтым тэлефоне {phone} · На вашым Omi {device}",
+    "storageNotUploadedWarning": "Выдаленне згубіць гэта аўдыё назаўжды.",
+    "storageDeleteEverything": "Выдаліць усё",
+    "storageFreeUpTitle": "Вызваліць {duration}?",
+    "storageFreeUpMessage": "Выдаляе з гэтага тэлефона копію ўжо расшыфраванага аўдыё. Вашы размовы застаюцца.",
+    "storageDeletePendingTitle": "Выдаліць {duration} аўдыё?",
+    "storageDeletePendingMessage": "Гэта аўдыё яшчэ не запампавана, таму аднавіць яго немагчыма. На час выдалення сінхранізацыя прыпыняецца.",
+    "storageDeleteAllTitle": "Выдаліць усе {duration} аўдыё?",
+    "storageDeleteAllMessage": "Уключае {duration}, якое яшчэ не запампавана і якое немагчыма аднавіць. На час выдалення сінхранізацыя прыпыняецца.",
+    "storageDeleteAllUploadedMessage": "Выдаляе ўсе запісы, захаваныя на гэтым тэлефоне. Вашы размовы застаюцца.",
+    "storageClearStopping": "Спыненне сінхранізацыі…",
+    "storageClearDeleting": "Выдаленне… {progress}",
+    "storageClearVerifying": "Праверка таго, што засталося…",
+    "storageClearDone": "Выдалена {duration}",
+    "storageClearPartial": "Выдалена {deleted}. Не атрымалася выдаліць {remaining}.",
+    "storageClearOmiUnreachable": "{duration} ўсё яшчэ на вашым Omi. Падключыце яго і паспрабуйце яшчэ раз.",
+    "storageClearFailed": "Не атрымалася выдаліць. Паспрабуйце яшчэ раз."
 }

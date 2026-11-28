@@ -9704,49 +9704,13 @@
     "@deleteSynced": {
         "description": "Menu option to delete synced recordings"
     },
-    "deleteSyncedFiles": "ಸಮನ್ವಯಿತ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಅಳಿಸಿ",
-    "@deleteSyncedFiles": {
-        "description": "Dialog title for deleting synced files"
-    },
-    "deleteSyncedFilesMessage": "ಈ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಈಗಾಗಲೇ ನಿಮ್ಮ ಫೋನಕ್ಕೆ ಸಮನ್ವಯ ಮಾಡಲಾಗಿದೆ. ಇದನ್ನು ರದ್ದುಗೊಳಿಸಲು ಸಾಧ್ಯ.",
-    "@deleteSyncedFilesMessage": {
-        "description": "Confirmation message for deleting synced files"
-    },
-    "syncedFilesDeleted": "ಸಮನ್ವಯಿತ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಅಳಿಸಿದೆ",
-    "@syncedFilesDeleted": {
-        "description": "Snackbar message after synced files deleted"
-    },
     "deletePending": "ಪಕ್ಷಾನುಮತಿ ಅಳಿಸಿ",
     "@deletePending": {
         "description": "Menu option to delete pending recordings"
     },
-    "deletePendingFiles": "ಪಕ್ಷಾನುಮತಿ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಅಳಿಸಿ",
-    "@deletePendingFiles": {
-        "description": "Dialog title for deleting pending files"
-    },
-    "deletePendingFilesWarning": "ಈ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ನಿಮ್ಮ ಫೋನಕ್ಕೆ ಸಮನ್ವಯ ಮಾಡಿಲ್ಲ ಮತ್ತು ಶಾಶ್ವತವಾಗಿ ಸೋಲಾಗುತ್ತವೆ. ಇದನ್ನು ರದ್ದುಗೊಳಿಸಲು ಸಾಧ್ಯ.",
-    "@deletePendingFilesWarning": {
-        "description": "Warning message for deleting pending files"
-    },
-    "pendingFilesDeleted": "ಪಕ್ಷಾನುಮತಿ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಅಳಿಸಿದೆ",
-    "@pendingFilesDeleted": {
-        "description": "Snackbar message after pending files deleted"
-    },
-    "deleteAllFiles": "ಎಲ್ಲ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಅಳಿಸಿ",
-    "@deleteAllFiles": {
-        "description": "Dialog title for deleting all files"
-    },
     "deleteAll": "ಎಲ್ಲವನ್ನೂ ಅಳಿಸಿ",
     "@deleteAll": {
         "description": "Menu option to delete all recordings"
-    },
-    "deleteAllFilesWarning": "ಇದು ಸಮನ್ವಯಿತ ಮತ್ತು ಪಕ್ಷಾನುಮತಿ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಅಳಿಸಿ. ಪಕ್ಷಾನುಮತಿ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಸಮನ್ವಯ ಮಾಡಿಲ್ಲ ಮತ್ತು ಶಾಶ್ವತವಾಗಿ ಸೋಲಾಗುತ್ತವೆ. ಇದನ್ನು ರದ್ದುಗೊಳಿಸಲು ಸಾಧ್ಯ.",
-    "@deleteAllFilesWarning": {
-        "description": "Warning message for deleting all files"
-    },
-    "allFilesDeleted": "ಎಲ್ಲ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಅಳಿಸಿದೆ",
-    "@allFilesDeleted": {
-        "description": "Snackbar message after all files deleted"
     },
     "nFiles": "{count} ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು",
     "@nFiles": {
@@ -9760,18 +9724,6 @@
     "manageStorage": "ಸಂಗ್ರಹಣ ನಿರ್ವಹಿಸಿ",
     "@manageStorage": {
         "description": "Menu option and sheet title for managing recording storage"
-    },
-    "safelyBackedUp": "ರಚಿಸಿದ ಸಂವಾದಗಳು",
-    "@safelyBackedUp": {
-        "description": "Description for synced files in manage storage sheet"
-    },
-    "notYetSynced": "ಇನ್ನೂ ನಿಮ್ಮ ಫೋನಕ್ಕೆ ಸಮನ್ವಯ ಮಾಡಿಲ್ಲ",
-    "@notYetSynced": {
-        "description": "Description for pending files in manage storage sheet"
-    },
-    "clearAll": "ಎಲ್ಲವನ್ನೂ ಸ್ವಚ್ಛ ಮಾಡಿ",
-    "@clearAll": {
-        "description": "Button label to clear all files"
     },
     "phoneKeypad": "ಕೀಪ್ಯಾಡ್",
     "@phoneKeypad": {
@@ -12329,5 +12281,28 @@
     "batteryRestartToRefresh": "ರಿಫ್ರೆಶ್ ಮಾಡಲು Omi ಅನ್ನು ಮರುಪ್ರಾರಂಭ ಮಾಡಿ",
     "onTheWayAllowanceHeldTitle": "ನಿಮ್ಮ ನಿಮಿಷಗಳು ನವೀಕರಣವಾಗುವ {date} ರಂದು ಪ್ರಕ್ರಿಯೆಗೊಳ್ಳುತ್ತದೆ",
     "onTheWayAllowanceHeldUpgrade": "ಅಥವಾ ಪ್ಲಾನ್ ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡುವ ಮೂಲಕ ತಕ್ಷಣ ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಿ",
-    "onTheWayDayProcessesOn": "{date} ರಂದು ಪ್ರಕ್ರಿಯೆ"
+    "onTheWayDayProcessesOn": "{date} ರಂದು ಪ್ರಕ್ರಿಯೆ",
+    "storageUploadedTitle": "ಈಗಾಗಲೇ ಅಪ್‌ಲೋಡ್ ಆಗಿದೆ",
+    "storageUploadedSubtitle": "ಪ್ರತಿಲಿಪಿ ಮಾಡಲಾಗಿದೆ. ಫೋನ್‌ನ ಪ್ರತಿಯನ್ನು ತೆಗೆದುಹಾಕಿದರೂ ಏನೂ ನಷ್ಟವಾಗುವುದಿಲ್ಲ.",
+    "storageFreeUpSpace": "ಜಾಗ ಖಾಲಿ ಮಾಡಿ",
+    "storageNotUploadedTitle": "ಇನ್ನೂ ಅಪ್‌ಲೋಡ್ ಆಗಿಲ್ಲ",
+    "storageOnThisPhone": "ಈ ಫೋನ್‌ನಲ್ಲಿ",
+    "storageOnYourOmi": "ನಿಮ್ಮ Omi ನಲ್ಲಿ",
+    "storageOnPhoneAndOmi": "ಈ ಫೋನ್‌ನಲ್ಲಿ {phone} · ನಿಮ್ಮ Omi ನಲ್ಲಿ {device}",
+    "storageNotUploadedWarning": "ಅಳಿಸಿದರೆ ಈ ಆಡಿಯೊ ಶಾಶ್ವತವಾಗಿ ನಷ್ಟವಾಗುತ್ತದೆ.",
+    "storageDeleteEverything": "ಎಲ್ಲವನ್ನೂ ಅಳಿಸಿ",
+    "storageFreeUpTitle": "{duration} ಜಾಗ ಖಾಲಿ ಮಾಡಬೇಕೆ?",
+    "storageFreeUpMessage": "ಈಗಾಗಲೇ ಪ್ರತಿಲಿಪಿ ಮಾಡಿದ ಆಡಿಯೊದ ಫೋನ್ ಪ್ರತಿಯನ್ನು ತೆಗೆದುಹಾಕುತ್ತದೆ. ನಿಮ್ಮ ಸಂವಾದಗಳು ಹಾಗೆಯೇ ಇರುತ್ತವೆ.",
+    "storageDeletePendingTitle": "{duration} ಆಡಿಯೊ ಅಳಿಸಬೇಕೆ?",
+    "storageDeletePendingMessage": "ಈ ಆಡಿಯೊ ಇನ್ನೂ ಅಪ್‌ಲೋಡ್ ಆಗಿಲ್ಲ, ಆದ್ದರಿಂದ ಅದನ್ನು ಮರಳಿ ಪಡೆಯಲು ಸಾಧ್ಯವಿಲ್ಲ. ಅಳಿಸುವ ಸಮಯದಲ್ಲಿ ಸಿಂಕ್ ತಾತ್ಕಾಲಿಕವಾಗಿ ನಿಲ್ಲುತ್ತದೆ.",
+    "storageDeleteAllTitle": "ಎಲ್ಲಾ {duration} ಆಡಿಯೊ ಅಳಿಸಬೇಕೆ?",
+    "storageDeleteAllMessage": "ಇನ್ನೂ ಅಪ್‌ಲೋಡ್ ಆಗದ ಮತ್ತು ಮರಳಿ ಪಡೆಯಲಾಗದ {duration} ಇದರಲ್ಲಿ ಸೇರಿದೆ. ಅಳಿಸುವ ಸಮಯದಲ್ಲಿ ಸಿಂಕ್ ತಾತ್ಕಾಲಿಕವಾಗಿ ನಿಲ್ಲುತ್ತದೆ.",
+    "storageDeleteAllUploadedMessage": "ಈ ಫೋನ್‌ನಲ್ಲಿ ಇರಿಸಿರುವ ಎಲ್ಲಾ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ತೆಗೆದುಹಾಕುತ್ತದೆ. ನಿಮ್ಮ ಸಂವಾದಗಳು ಹಾಗೆಯೇ ಇರುತ್ತವೆ.",
+    "storageClearStopping": "ಸಿಂಕ್ ನಿಲ್ಲಿಸಲಾಗುತ್ತಿದೆ…",
+    "storageClearDeleting": "ಅಳಿಸಲಾಗುತ್ತಿದೆ… {progress}",
+    "storageClearVerifying": "ಉಳಿದಿರುವುದನ್ನು ಪರಿಶೀಲಿಸಲಾಗುತ್ತಿದೆ…",
+    "storageClearDone": "{duration} ಅಳಿಸಲಾಗಿದೆ",
+    "storageClearPartial": "{deleted} ಅಳಿಸಲಾಗಿದೆ. {remaining} ಅಳಿಸಲು ಸಾಧ್ಯವಾಗಿಲ್ಲ.",
+    "storageClearOmiUnreachable": "{duration} ಇನ್ನೂ ನಿಮ್ಮ Omi ನಲ್ಲಿದೆ. ಸಂಪರ್ಕಿಸಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    "storageClearFailed": "ಅಳಿಸಲು ಸಾಧ್ಯವಾಗಿಲ್ಲ. ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ."
 }

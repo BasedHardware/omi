@@ -9825,49 +9825,13 @@
     "@deleteSynced": {
         "description": "Menu option to delete synced recordings"
     },
-    "deleteSyncedFiles": "Delete Synced Recordings",
-    "@deleteSyncedFiles": {
-        "description": "Dialog title for deleting synced files"
-    },
-    "deleteSyncedFilesMessage": "These recordings have already been synced to your phone. This can't be undone.",
-    "@deleteSyncedFilesMessage": {
-        "description": "Confirmation message for deleting synced files"
-    },
-    "syncedFilesDeleted": "Synced recordings deleted",
-    "@syncedFilesDeleted": {
-        "description": "Snackbar message after synced files deleted"
-    },
     "deletePending": "Delete Pending",
     "@deletePending": {
         "description": "Menu option to delete pending recordings"
     },
-    "deletePendingFiles": "Delete Pending Recordings",
-    "@deletePendingFiles": {
-        "description": "Dialog title for deleting pending files"
-    },
-    "deletePendingFilesWarning": "These recordings have NOT been synced to your phone and will be permanently lost. This can't be undone.",
-    "@deletePendingFilesWarning": {
-        "description": "Warning message for deleting pending files"
-    },
-    "pendingFilesDeleted": "Pending recordings deleted",
-    "@pendingFilesDeleted": {
-        "description": "Snackbar message after pending files deleted"
-    },
-    "deleteAllFiles": "Delete All Recordings",
-    "@deleteAllFiles": {
-        "description": "Dialog title for deleting all files"
-    },
     "deleteAll": "Delete All",
     "@deleteAll": {
         "description": "Menu option to delete all recordings"
-    },
-    "deleteAllFilesWarning": "This will delete both synced and pending recordings. Pending recordings have NOT been synced and will be permanently lost. This can't be undone.",
-    "@deleteAllFilesWarning": {
-        "description": "Warning message for deleting all files"
-    },
-    "allFilesDeleted": "All recordings deleted",
-    "@allFilesDeleted": {
-        "description": "Snackbar message after all files deleted"
     },
     "nFiles": "{count} recordings",
     "@nFiles": {
@@ -9881,18 +9845,6 @@
     "manageStorage": "Manage Storage",
     "@manageStorage": {
         "description": "Menu option and sheet title for managing recording storage"
-    },
-    "safelyBackedUp": "Conversations created",
-    "@safelyBackedUp": {
-        "description": "Description for synced files in manage storage sheet"
-    },
-    "notYetSynced": "Not yet synced to your phone",
-    "@notYetSynced": {
-        "description": "Description for pending files in manage storage sheet"
-    },
-    "clearAll": "Clear All",
-    "@clearAll": {
-        "description": "Button label to clear all files"
     },
     "phoneKeypad": "Keypad",
     "@phoneKeypad": {
@@ -19388,5 +19340,148 @@
                 "example": "Dec 1"
             }
         }
+    },
+    "storageUploadedTitle": "Already uploaded",
+    "@storageUploadedTitle": {
+        "description": "Manage Storage sheet (Offline Sync): row title for audio files kept on the phone whose upload is done and whose conversations exist."
+    },
+    "storageUploadedSubtitle": "Transcribed. Removing the phone copy loses nothing.",
+    "@storageUploadedSubtitle": {
+        "description": "Manage Storage sheet: explains under 'Already uploaded' that deleting these phone copies is safe."
+    },
+    "storageFreeUpSpace": "Free up space",
+    "@storageFreeUpSpace": {
+        "description": "Manage Storage sheet: button that deletes the phone copies of already-uploaded audio. Short button label."
+    },
+    "storageNotUploadedTitle": "Not uploaded yet",
+    "@storageNotUploadedTitle": {
+        "description": "Manage Storage sheet: row title for audio that has not been uploaded to Omi's servers yet (on the phone or still on the Omi wearable)."
+    },
+    "storageOnThisPhone": "On this phone",
+    "@storageOnThisPhone": {
+        "description": "Manage Storage sheet: where not-yet-uploaded audio is stored, when all of it is on the phone."
+    },
+    "storageOnYourOmi": "On your Omi",
+    "@storageOnYourOmi": {
+        "description": "Manage Storage sheet: where not-yet-uploaded audio is stored, when all of it is still on the Omi wearable device. 'Omi' is the product name."
+    },
+    "storageOnPhoneAndOmi": "On this phone {phone} · On your Omi {device}",
+    "@storageOnPhoneAndOmi": {
+        "description": "Manage Storage sheet: split of not-yet-uploaded audio by location. {phone} and {device} are durations like '71h' or '11h'. 'Omi' is the wearable's product name.",
+        "placeholders": {
+            "phone": {
+                "type": "String"
+            },
+            "device": {
+                "type": "String"
+            }
+        }
+    },
+    "storageNotUploadedWarning": "Deleting loses this audio for good.",
+    "@storageNotUploadedWarning": {
+        "description": "Manage Storage sheet: warning under 'Not uploaded yet' that deleting it cannot be undone and the audio is never transcribed."
+    },
+    "storageDeleteEverything": "Delete everything",
+    "@storageDeleteEverything": {
+        "description": "Manage Storage sheet: full-width destructive button that deletes every stored recording (uploaded or not)."
+    },
+    "storageFreeUpTitle": "Free up {duration}?",
+    "@storageFreeUpTitle": {
+        "description": "Confirm dialog title before deleting phone copies of already-uploaded audio. {duration} is like '440h'.",
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "storageFreeUpMessage": "Removes this phone's copy of audio that's already transcribed. Your conversations stay.",
+    "@storageFreeUpMessage": {
+        "description": "Confirm dialog body for Free up space."
+    },
+    "storageDeletePendingTitle": "Delete {duration} of audio?",
+    "@storageDeletePendingTitle": {
+        "description": "Confirm dialog title before deleting audio that has not been uploaded. {duration} is like '82h'.",
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "storageDeletePendingMessage": "This audio hasn't been uploaded, so it can't be recovered. Syncing pauses while it's deleted.",
+    "@storageDeletePendingMessage": {
+        "description": "Confirm dialog body before deleting not-yet-uploaded audio."
+    },
+    "storageDeleteAllTitle": "Delete all {duration} of audio?",
+    "@storageDeleteAllTitle": {
+        "description": "Confirm dialog title before deleting every stored recording. {duration} is like '520h'.",
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "storageDeleteAllMessage": "Includes {duration} that hasn't been uploaded and can't be recovered. Syncing pauses while it's deleted.",
+    "@storageDeleteAllMessage": {
+        "description": "Confirm dialog body for Delete everything when some audio is not uploaded yet. {duration} is like '82h'.",
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "storageDeleteAllUploadedMessage": "Removes every recording kept on this phone. Your conversations stay.",
+    "@storageDeleteAllUploadedMessage": {
+        "description": "Confirm dialog body for Delete everything when all stored audio is already uploaded."
+    },
+    "storageClearStopping": "Stopping sync…",
+    "@storageClearStopping": {
+        "description": "Progress sheet while Manage Storage stops uploads and the Omi transfer before deleting."
+    },
+    "storageClearDeleting": "Deleting… {progress}",
+    "@storageClearDeleting": {
+        "description": "Progress sheet while deleting recordings. {progress} is an already-formatted count like '1,240 / 4,937' (files deleted / total). Keep {progress} at the end.",
+        "placeholders": {
+            "progress": {
+                "type": "String"
+            }
+        }
+    },
+    "storageClearVerifying": "Checking what's left…",
+    "@storageClearVerifying": {
+        "description": "Progress sheet after deleting, while the app re-reads phone and Omi storage to confirm."
+    },
+    "storageClearDone": "Deleted {duration}",
+    "@storageClearDone": {
+        "description": "Confirmation toast after a successful delete. {duration} is like '82h'.",
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "storageClearPartial": "Deleted {deleted}. {remaining} couldn't be deleted.",
+    "@storageClearPartial": {
+        "description": "Error toast when only part of the audio was deleted. {deleted} and {remaining} are durations like '71h'.",
+        "placeholders": {
+            "deleted": {
+                "type": "String"
+            },
+            "remaining": {
+                "type": "String"
+            }
+        }
+    },
+    "storageClearOmiUnreachable": "{duration} is still on your Omi. Connect it and try again.",
+    "@storageClearOmiUnreachable": {
+        "description": "Error toast when audio on the Omi wearable could not be deleted because it was not connected or did not confirm. {duration} is like '11h'.",
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "storageClearFailed": "Couldn't delete. Try again.",
+    "@storageClearFailed": {
+        "description": "Error toast when nothing could be deleted."
     }
 }

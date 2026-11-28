@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:omi/services/wals/storage_clear.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/l10n/app_localizations.dart';
@@ -60,7 +61,7 @@ class _Sync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvi
   @override
   int get needsAttentionWalsCount => wals.where((w) => w.status == WalStatus.corrupted).length;
   @override
-  int get clearableWalsCount => 0;
+  StorageAmounts get storageAmounts => StorageAmounts.of(const []);
   @override
   bool get syncCompleted => false;
   @override

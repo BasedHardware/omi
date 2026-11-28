@@ -15231,71 +15231,17 @@ abstract class AppLocalizations {
   /// **'Delete Synced'**
   String get deleteSynced;
 
-  /// Dialog title for deleting synced files
-  ///
-  /// In en, this message translates to:
-  /// **'Delete Synced Recordings'**
-  String get deleteSyncedFiles;
-
-  /// Confirmation message for deleting synced files
-  ///
-  /// In en, this message translates to:
-  /// **'These recordings have already been synced to your phone. This can\'t be undone.'**
-  String get deleteSyncedFilesMessage;
-
-  /// Snackbar message after synced files deleted
-  ///
-  /// In en, this message translates to:
-  /// **'Synced recordings deleted'**
-  String get syncedFilesDeleted;
-
   /// Menu option to delete pending recordings
   ///
   /// In en, this message translates to:
   /// **'Delete Pending'**
   String get deletePending;
 
-  /// Dialog title for deleting pending files
-  ///
-  /// In en, this message translates to:
-  /// **'Delete Pending Recordings'**
-  String get deletePendingFiles;
-
-  /// Warning message for deleting pending files
-  ///
-  /// In en, this message translates to:
-  /// **'These recordings have NOT been synced to your phone and will be permanently lost. This can\'t be undone.'**
-  String get deletePendingFilesWarning;
-
-  /// Snackbar message after pending files deleted
-  ///
-  /// In en, this message translates to:
-  /// **'Pending recordings deleted'**
-  String get pendingFilesDeleted;
-
-  /// Dialog title for deleting all files
-  ///
-  /// In en, this message translates to:
-  /// **'Delete All Recordings'**
-  String get deleteAllFiles;
-
   /// Menu option to delete all recordings
   ///
   /// In en, this message translates to:
   /// **'Delete All'**
   String get deleteAll;
-
-  /// Warning message for deleting all files
-  ///
-  /// In en, this message translates to:
-  /// **'This will delete both synced and pending recordings. Pending recordings have NOT been synced and will be permanently lost. This can\'t be undone.'**
-  String get deleteAllFilesWarning;
-
-  /// Snackbar message after all files deleted
-  ///
-  /// In en, this message translates to:
-  /// **'All recordings deleted'**
-  String get allFilesDeleted;
 
   /// Count of files
   ///
@@ -15308,24 +15254,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Manage Storage'**
   String get manageStorage;
-
-  /// Description for synced files in manage storage sheet
-  ///
-  /// In en, this message translates to:
-  /// **'Conversations created'**
-  String get safelyBackedUp;
-
-  /// Description for pending files in manage storage sheet
-  ///
-  /// In en, this message translates to:
-  /// **'Not yet synced to your phone'**
-  String get notYetSynced;
-
-  /// Button label to clear all files
-  ///
-  /// In en, this message translates to:
-  /// **'Clear All'**
-  String get clearAll;
 
   /// Label for the keypad/dialpad button during an active phone call
   ///
@@ -27824,6 +27752,144 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Processes {date}'**
   String onTheWayDayProcessesOn(String date);
+
+  /// Manage Storage sheet (Offline Sync): row title for audio files kept on the phone whose upload is done and whose conversations exist.
+  ///
+  /// In en, this message translates to:
+  /// **'Already uploaded'**
+  String get storageUploadedTitle;
+
+  /// Manage Storage sheet: explains under 'Already uploaded' that deleting these phone copies is safe.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribed. Removing the phone copy loses nothing.'**
+  String get storageUploadedSubtitle;
+
+  /// Manage Storage sheet: button that deletes the phone copies of already-uploaded audio. Short button label.
+  ///
+  /// In en, this message translates to:
+  /// **'Free up space'**
+  String get storageFreeUpSpace;
+
+  /// Manage Storage sheet: row title for audio that has not been uploaded to Omi's servers yet (on the phone or still on the Omi wearable).
+  ///
+  /// In en, this message translates to:
+  /// **'Not uploaded yet'**
+  String get storageNotUploadedTitle;
+
+  /// Manage Storage sheet: where not-yet-uploaded audio is stored, when all of it is on the phone.
+  ///
+  /// In en, this message translates to:
+  /// **'On this phone'**
+  String get storageOnThisPhone;
+
+  /// Manage Storage sheet: where not-yet-uploaded audio is stored, when all of it is still on the Omi wearable device. 'Omi' is the product name.
+  ///
+  /// In en, this message translates to:
+  /// **'On your Omi'**
+  String get storageOnYourOmi;
+
+  /// Manage Storage sheet: split of not-yet-uploaded audio by location. {phone} and {device} are durations like '71h' or '11h'. 'Omi' is the wearable's product name.
+  ///
+  /// In en, this message translates to:
+  /// **'On this phone {phone} · On your Omi {device}'**
+  String storageOnPhoneAndOmi(String phone, String device);
+
+  /// Manage Storage sheet: warning under 'Not uploaded yet' that deleting it cannot be undone and the audio is never transcribed.
+  ///
+  /// In en, this message translates to:
+  /// **'Deleting loses this audio for good.'**
+  String get storageNotUploadedWarning;
+
+  /// Manage Storage sheet: full-width destructive button that deletes every stored recording (uploaded or not).
+  ///
+  /// In en, this message translates to:
+  /// **'Delete everything'**
+  String get storageDeleteEverything;
+
+  /// Confirm dialog title before deleting phone copies of already-uploaded audio. {duration} is like '440h'.
+  ///
+  /// In en, this message translates to:
+  /// **'Free up {duration}?'**
+  String storageFreeUpTitle(String duration);
+
+  /// Confirm dialog body for Free up space.
+  ///
+  /// In en, this message translates to:
+  /// **'Removes this phone\'s copy of audio that\'s already transcribed. Your conversations stay.'**
+  String get storageFreeUpMessage;
+
+  /// Confirm dialog title before deleting audio that has not been uploaded. {duration} is like '82h'.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete {duration} of audio?'**
+  String storageDeletePendingTitle(String duration);
+
+  /// Confirm dialog body before deleting not-yet-uploaded audio.
+  ///
+  /// In en, this message translates to:
+  /// **'This audio hasn\'t been uploaded, so it can\'t be recovered. Syncing pauses while it\'s deleted.'**
+  String get storageDeletePendingMessage;
+
+  /// Confirm dialog title before deleting every stored recording. {duration} is like '520h'.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete all {duration} of audio?'**
+  String storageDeleteAllTitle(String duration);
+
+  /// Confirm dialog body for Delete everything when some audio is not uploaded yet. {duration} is like '82h'.
+  ///
+  /// In en, this message translates to:
+  /// **'Includes {duration} that hasn\'t been uploaded and can\'t be recovered. Syncing pauses while it\'s deleted.'**
+  String storageDeleteAllMessage(String duration);
+
+  /// Confirm dialog body for Delete everything when all stored audio is already uploaded.
+  ///
+  /// In en, this message translates to:
+  /// **'Removes every recording kept on this phone. Your conversations stay.'**
+  String get storageDeleteAllUploadedMessage;
+
+  /// Progress sheet while Manage Storage stops uploads and the Omi transfer before deleting.
+  ///
+  /// In en, this message translates to:
+  /// **'Stopping sync…'**
+  String get storageClearStopping;
+
+  /// Progress sheet while deleting recordings. {progress} is an already-formatted count like '1,240 / 4,937' (files deleted / total). Keep {progress} at the end.
+  ///
+  /// In en, this message translates to:
+  /// **'Deleting… {progress}'**
+  String storageClearDeleting(String progress);
+
+  /// Progress sheet after deleting, while the app re-reads phone and Omi storage to confirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking what\'s left…'**
+  String get storageClearVerifying;
+
+  /// Confirmation toast after a successful delete. {duration} is like '82h'.
+  ///
+  /// In en, this message translates to:
+  /// **'Deleted {duration}'**
+  String storageClearDone(String duration);
+
+  /// Error toast when only part of the audio was deleted. {deleted} and {remaining} are durations like '71h'.
+  ///
+  /// In en, this message translates to:
+  /// **'Deleted {deleted}. {remaining} couldn\'t be deleted.'**
+  String storageClearPartial(String deleted, String remaining);
+
+  /// Error toast when audio on the Omi wearable could not be deleted because it was not connected or did not confirm. {duration} is like '11h'.
+  ///
+  /// In en, this message translates to:
+  /// **'{duration} is still on your Omi. Connect it and try again.'**
+  String storageClearOmiUnreachable(String duration);
+
+  /// Error toast when nothing could be deleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t delete. Try again.'**
+  String get storageClearFailed;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

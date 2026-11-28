@@ -123,6 +123,9 @@ abstract class LocalWalSync implements IWalSync {
   void releaseStorageAdmission(int bytes) {}
 }
 
+/// Bulk-delete progress: [done] of [total] recordings handled so far.
+typedef WalDeleteProgress = void Function(int done, int total);
+
 abstract class SDCardWalSync implements IWalSync {
   void setLocalSync(LocalWalSync localSync);
   void setDevice(BtDevice? device);

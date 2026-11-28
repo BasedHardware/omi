@@ -4,7 +4,30 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversations/widgets/empty_conversations.dart';
 import 'package:omi/pages/conversations/widgets/offline_sync_storage_sheet.dart';
+import 'package:omi/services/wals/storage_clear.dart';
 import 'package:omi/ui/ui.dart';
+
+const _empty = StorageAmounts(
+  uploadedSeconds: 0,
+  uploadedCount: 0,
+  phonePendingSeconds: 0,
+  devicePendingSeconds: 0,
+  pendingCount: 0,
+  allCount: 0,
+  allSeconds: 0,
+);
+
+// Shaped like the report that prompted the copy: tens of thousands of ~1 min
+// files read as conversations, with audio waiting both on the phone and the pendant.
+const _busy = StorageAmounts(
+  uploadedSeconds: 440 * 3600,
+  uploadedCount: 26589,
+  phonePendingSeconds: 71 * 3600,
+  devicePendingSeconds: 11 * 3600,
+  pendingCount: 4937,
+  allCount: 31526,
+  allSeconds: 522 * 3600,
+);
 
 double contrast(Color foreground, Color background) {
   final opaque = Color.alphaBlend(foreground, background);
@@ -25,36 +48,34 @@ void main() {
         supportedLocales: const [Locale('en')],
         home: Scaffold(
             body: OfflineSyncStorageSheet(
-          syncedCount: 0,
-          pendingCount: 0,
-          totalCount: 0,
-          onClearSynced: () => fail('zero count must not offer clearing'),
-          onClearPending: () => fail('zero count must not offer clearing'),
-          onClearAll: () => fail('zero total must not offer clearing'),
+          amounts: _empty,
+          onFreeUpSpace: () => fail('nothing uploaded must not offer freeing space'),
+          onDeletePending: () => fail('nothing pending must not offer deleting'),
+          onDeleteAll: () => fail('nothing stored must not offer deleting'),
         )),
       ));
       await tester.pumpAndSettle();
-      for (final label in ['Synced', 'Pending', 'Conversations created', 'Not yet synced to your phone']) {
+      for (final label in [
+        'Already uploaded',
+        'Not uploaded yet',
+        'Transcribed. Removing the phone copy loses nothing.'
+      ]) {
         final text = find.text(label);
         expect(text, findsOneWidget);
-        final cards = tester
-            .widgetList<Container>(find.ancestor(of: text, matching: find.byType(Container)))
-            .where((w) => w.decoration is BoxDecoration && (w.decoration! as BoxDecoration).color != null);
-        final background = (cards.first.decoration! as BoxDecoration).color!;
+        final card = text.evaluate().single.findAncestorWidgetOfExactType<Material>()!;
         final foreground = tester.widget<Text>(text).style!.color!;
-        expect(contrast(foreground, background), greaterThanOrEqualTo(4.5), reason: '$label in $brightness');
+        expect(contrast(foreground, card.color!), greaterThanOrEqualTo(4.5), reason: '$label in $brightness');
       }
-      final count = find.text('0');
-      expect(count, findsNWidgets(2));
-      for (final element in count.evaluate()) {
+      final amount = find.text('0s');
+      expect(amount, findsNWidgets(2));
+      for (final element in amount.evaluate()) {
         final text = element.widget as Text;
-        final badge = element.findAncestorWidgetOfExactType<Container>()!;
-        final fill = (badge.decoration! as BoxDecoration).color!;
-        final background = Color.alphaBlend(fill, OmiColors.surface2);
-        expect(contrast(text.style!.color!, background), greaterThanOrEqualTo(4.5));
+        final card = element.findAncestorWidgetOfExactType<Material>()!;
+        expect(contrast(text.style!.color!, card.color!), greaterThanOrEqualTo(4.5));
       }
-      expect(find.text('Clear'), findsNothing);
-      expect(find.text('Clear All'), findsNothing);
+      expect(find.text('Free up space'), findsNothing);
+      expect(find.text('Delete'), findsNothing);
+      expect(find.text('Delete everything'), findsNothing);
       expect(tester.takeException(), isNull);
     });
     testWidgets('clear actions remain readable and reachable on a narrow French sheet in $brightness', (tester) async {
@@ -79,28 +100,22 @@ void main() {
                 child: Padding(
           padding: const EdgeInsets.all(OmiSpacing.xl),
           child: OfflineSyncStorageSheet(
-            syncedCount: 2,
-            pendingCount: 3,
-            totalCount: 5,
-            onClearSynced: () {},
-            onClearPending: () {},
-            onClearAll: () {},
+            amounts: _busy,
+            onFreeUpSpace: () {},
+            onDeletePending: () {},
+            onDeleteAll: () {},
           ),
         ))),
       ));
       await tester.pumpAndSettle();
       final context = tester.element(find.byType(OfflineSyncStorageSheet));
       final l10n = AppLocalizations.of(context);
-      expect(find.text(l10n.synced), findsOneWidget);
-      expect(find.text(l10n.pending), findsOneWidget);
-      final clear = find.text(l10n.clear);
-      expect(clear, findsNWidgets(2));
-      for (final element in clear.evaluate()) {
+      expect(find.text(l10n.storageUploadedTitle), findsOneWidget);
+      expect(find.text(l10n.storageNotUploadedTitle), findsOneWidget);
+      for (final label in [l10n.storageFreeUpSpace, l10n.delete, l10n.storageDeleteEverything]) {
+        final element = find.text(label).evaluate().single;
         final text = element.widget as Text;
-        final target = element.findAncestorWidgetOfExactType<Container>()!;
-        final fill = (target.decoration! as BoxDecoration).color!;
-        expect(contrast(text.style!.color!, Color.alphaBlend(fill, OmiColors.surface2)), greaterThanOrEqualTo(4.5));
-        final finder = find.ancestor(of: find.byWidget(text), matching: find.byType(OmiButton)).first;
+        final finder = find.ancestor(of: find.byWidget(text), matching: find.byType(InkWell)).first;
         await tester.ensureVisible(finder);
         await tester.pumpAndSettle();
         final bounds = tester.getRect(finder);
@@ -128,25 +143,67 @@ void main() {
       expect(find.byIcon(Icons.forum_rounded), findsOneWidget);
     });
   }
-  testWidgets('nonzero counts retain category and clear-all callbacks', (tester) async {
+  testWidgets('rows read as hours of audio and where it waits, never as file counts', (tester) async {
     final calls = <String>[];
     await tester.pumpWidget(MaterialApp(
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: const [Locale('en')],
       home: Scaffold(
           body: OfflineSyncStorageSheet(
-        syncedCount: 2,
-        pendingCount: 3,
-        totalCount: 5,
-        onClearSynced: () => calls.add('synced'),
-        onClearPending: () => calls.add('pending'),
-        onClearAll: () => calls.add('all'),
+        amounts: _busy,
+        onFreeUpSpace: () => calls.add('uploaded'),
+        onDeletePending: () => calls.add('notUploaded'),
+        onDeleteAll: () => calls.add('all'),
       )),
     ));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Clear').first);
-    await tester.tap(find.text('Clear').last);
-    await tester.tap(find.text('Clear All'));
-    expect(calls, ['synced', 'pending', 'all']);
+    expect(find.text('440h'), findsOneWidget);
+    expect(find.text('82h'), findsOneWidget);
+    expect(find.text('On this phone 71h · On your Omi 11h'), findsOneWidget);
+    expect(find.text('Deleting loses this audio for good.'), findsOneWidget);
+    expect(find.text('26589'), findsNothing);
+    expect(find.text('4937'), findsNothing);
+    await tester.tap(find.text('Free up space'));
+    await tester.tap(find.text('Delete'));
+    await tester.tap(find.text('Delete everything'));
+    expect(calls, ['uploaded', 'notUploaded', 'all']);
+  });
+
+  testWidgets('pending audio only on the phone or only on the pendant names that place alone', (tester) async {
+    for (final (amounts, where) in [
+      (
+        const StorageAmounts(
+            uploadedSeconds: 0,
+            uploadedCount: 0,
+            phonePendingSeconds: 600,
+            devicePendingSeconds: 0,
+            pendingCount: 10,
+            allCount: 10,
+            allSeconds: 600),
+        'On this phone'
+      ),
+      (
+        const StorageAmounts(
+            uploadedSeconds: 0,
+            uploadedCount: 0,
+            phonePendingSeconds: 0,
+            devicePendingSeconds: 11 * 3600,
+            pendingCount: 1,
+            allCount: 1,
+            allSeconds: 11 * 3600),
+        'On your Omi'
+      ),
+    ]) {
+      await tester.pumpWidget(MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: const [Locale('en')],
+        home: Scaffold(
+            body: OfflineSyncStorageSheet(
+                amounts: amounts, onFreeUpSpace: () {}, onDeletePending: () {}, onDeleteAll: () {})),
+      ));
+      await tester.pumpAndSettle();
+      expect(find.text(where), findsOneWidget);
+      expect(find.text('Free up space'), findsNothing, reason: 'nothing uploaded to free');
+    }
   });
 }

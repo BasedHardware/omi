@@ -8071,38 +8071,10 @@ class AppLocalizationsHe extends AppLocalizations {
   String get deleteSynced => 'מחק מסונכרן';
 
   @override
-  String get deleteSyncedFiles => 'מחק הקלטות מסונכרנות';
-
-  @override
-  String get deleteSyncedFilesMessage => 'הקלטות אלה כבר סונכרנו לטלפון שלך. לא ניתן לבטל פעולה זו.';
-
-  @override
-  String get syncedFilesDeleted => 'הקלטות מסונכרנות נמחקו';
-
-  @override
   String get deletePending => 'מחק בהמתנה';
 
   @override
-  String get deletePendingFiles => 'מחק הקלטות בהמתנה';
-
-  @override
-  String get deletePendingFilesWarning => 'הקלטות אלה לא סונכרנו לטלפון שלך ויאבדו לצמיתות. לא ניתן לבטל פעולה זו.';
-
-  @override
-  String get pendingFilesDeleted => 'הקלטות בהמתנה נמחקו';
-
-  @override
-  String get deleteAllFiles => 'מחק את כל ההקלטות';
-
-  @override
   String get deleteAll => 'מחק הכל';
-
-  @override
-  String get deleteAllFilesWarning =>
-      'זה ימחק הן הקלטות מסונכרנות והן בהמתנה. הקלטות בהמתנה לא סונכרנו ויאבדו לצמיתות. לא ניתן לבטל פעולה זו.';
-
-  @override
-  String get allFilesDeleted => 'כל ההקלטות נמחקו';
 
   @override
   String nFiles(int count) {
@@ -8111,15 +8083,6 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get manageStorage => 'נהל אחסון';
-
-  @override
-  String get safelyBackedUp => 'שיחות נוצרו';
-
-  @override
-  String get notYetSynced => 'עדיין לא סונכרן לטלפון שלך';
-
-  @override
-  String get clearAll => 'נקה הכל';
 
   @override
   String get phoneKeypad => 'מקלדת מספרים';
@@ -15744,4 +15707,91 @@ class AppLocalizationsHe extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'ייעבדו ב-$date';
   }
+
+  @override
+  String get storageUploadedTitle => 'כבר הועלה';
+
+  @override
+  String get storageUploadedSubtitle => 'מתומלל. הסרת העותק בטלפון לא גורמת לאובדן.';
+
+  @override
+  String get storageFreeUpSpace => 'שחרור מקום';
+
+  @override
+  String get storageNotUploadedTitle => 'טרם הועלה';
+
+  @override
+  String get storageOnThisPhone => 'בטלפון הזה';
+
+  @override
+  String get storageOnYourOmi => 'ב-Omi שלך';
+
+  @override
+  String storageOnPhoneAndOmi(String phone, String device) {
+    return 'בטלפון הזה $phone · ב-Omi שלך $device';
+  }
+
+  @override
+  String get storageNotUploadedWarning => 'מחיקה תגרום לאיבוד האודיו הזה לצמיתות.';
+
+  @override
+  String get storageDeleteEverything => 'מחיקת הכול';
+
+  @override
+  String storageFreeUpTitle(String duration) {
+    return 'שחרור $duration?';
+  }
+
+  @override
+  String get storageFreeUpMessage => 'מסיר את העותק בטלפון של אודיו שכבר מתומלל. השיחות שלך נשמרות.';
+
+  @override
+  String storageDeletePendingTitle(String duration) {
+    return 'מחיקת $duration של אודיו?';
+  }
+
+  @override
+  String get storageDeletePendingMessage => 'האודיו הזה לא הועלה, ולכן לא ניתן לשחזר אותו. הסנכרון מושהה בזמן המחיקה.';
+
+  @override
+  String storageDeleteAllTitle(String duration) {
+    return 'מחיקת כל $duration של אודיו?';
+  }
+
+  @override
+  String storageDeleteAllMessage(String duration) {
+    return 'כולל $duration שלא הועלה ולא ניתן לשחזר. הסנכרון מושהה בזמן המחיקה.';
+  }
+
+  @override
+  String get storageDeleteAllUploadedMessage => 'מסיר את כל ההקלטות השמורות בטלפון הזה. השיחות שלך נשמרות.';
+
+  @override
+  String get storageClearStopping => 'עוצר סנכרון…';
+
+  @override
+  String storageClearDeleting(String progress) {
+    return 'מוחק… $progress';
+  }
+
+  @override
+  String get storageClearVerifying => 'בודק מה נשאר…';
+
+  @override
+  String storageClearDone(String duration) {
+    return 'נמחקו $duration';
+  }
+
+  @override
+  String storageClearPartial(String deleted, String remaining) {
+    return 'נמחקו $deleted. לא ניתן היה למחוק $remaining.';
+  }
+
+  @override
+  String storageClearOmiUnreachable(String duration) {
+    return '$duration עדיין נמצא ב-Omi שלך. חבר אותו ונסה שוב.';
+  }
+
+  @override
+  String get storageClearFailed => 'המחיקה נכשלה. נסה שוב.';
 }

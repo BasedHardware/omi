@@ -27,3 +27,4 @@ export 'wals/recording_transfer_coordinator.dart';
 export 'wals/sync_transfer_keep_alive.dart';
 export 'wals/sync_rate_limiter.dart';
 export 'wals/sync_upload_gate.dart';
+export 'wals/storage_clear.dart';

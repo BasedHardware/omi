@@ -8141,40 +8141,10 @@ class AppLocalizationsBn extends AppLocalizations {
   String get deleteSynced => 'সিঙ্ক করা মুছুন';
 
   @override
-  String get deleteSyncedFiles => 'সিঙ্ক করা রেকর্ডিং মুছুন';
-
-  @override
-  String get deleteSyncedFilesMessage =>
-      'এই রেকর্ডিংগুলি ইতিমধ্যে আপনার ফোনে সিঙ্ক করা হয়েছে। এটি পূর্বাবাস করা যায় না।';
-
-  @override
-  String get syncedFilesDeleted => 'সিঙ্ক করা রেকর্ডিং মুছা হয়েছে';
-
-  @override
   String get deletePending => 'মুলতুবি মুছুন';
 
   @override
-  String get deletePendingFiles => 'মুলতুবি রেকর্ডিং মুছুন';
-
-  @override
-  String get deletePendingFilesWarning =>
-      'এই রেকর্ডিংগুলি আপনার ফোনে সিঙ্ক করা হয়নি এবং চিরকালের জন্য হারিয়ে যাবে। এটি পূর্বাবাস করা যায় না।';
-
-  @override
-  String get pendingFilesDeleted => 'মুলতুবি রেকর্ডিং মুছা হয়েছে';
-
-  @override
-  String get deleteAllFiles => 'সমস্ত রেকর্ডিং মুছুন';
-
-  @override
   String get deleteAll => 'সব মুছুন';
-
-  @override
-  String get deleteAllFilesWarning =>
-      'এটি সিঙ্ক করা এবং মুলতুবি উভয় রেকর্ডিং মুছে ফেলবে। মুলতুবি রেকর্ডিংগুলি সিঙ্ক করা হয়নি এবং চিরকালের জন্য হারিয়ে যাবে। এটি পূর্বাবাস করা যায় না।';
-
-  @override
-  String get allFilesDeleted => 'সমস্ত রেকর্ডিং মুছা হয়েছে';
 
   @override
   String nFiles(int count) {
@@ -8183,15 +8153,6 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get manageStorage => 'স্টোরেজ পরিচালনা করুন';
-
-  @override
-  String get safelyBackedUp => 'কথোপকথন তৈরি হয়েছে';
-
-  @override
-  String get notYetSynced => 'এখনো আপনার ফোনে সিঙ্ক হয়নি';
-
-  @override
-  String get clearAll => 'সব পরিষ্কার করুন';
 
   @override
   String get phoneKeypad => 'কীপ্যাড';
@@ -15853,4 +15814,93 @@ class AppLocalizationsBn extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return '$date তারিখে প্রসেস হবে';
   }
+
+  @override
+  String get storageUploadedTitle => 'ইতিমধ্যে আপলোড হয়েছে';
+
+  @override
+  String get storageUploadedSubtitle => 'প্রতিলিপি তৈরি হয়েছে। ফোনের কপি মুছে ফেললে কিছুই হারাবেন না।';
+
+  @override
+  String get storageFreeUpSpace => 'জায়গা খালি করুন';
+
+  @override
+  String get storageNotUploadedTitle => 'এখনও আপলোড হয়নি';
+
+  @override
+  String get storageOnThisPhone => 'এই ফোনে';
+
+  @override
+  String get storageOnYourOmi => 'আপনার Omi-তে';
+
+  @override
+  String storageOnPhoneAndOmi(String phone, String device) {
+    return 'এই ফোনে $phone · আপনার Omi-তে $device';
+  }
+
+  @override
+  String get storageNotUploadedWarning => 'মুছে ফেললে এই অডিও চিরতরে হারিয়ে যাবে।';
+
+  @override
+  String get storageDeleteEverything => 'সব মুছে ফেলুন';
+
+  @override
+  String storageFreeUpTitle(String duration) {
+    return '$duration জায়গা খালি করবেন?';
+  }
+
+  @override
+  String get storageFreeUpMessage =>
+      'ইতিমধ্যে প্রতিলিপি হওয়া অডিওর এই ফোনের কপি মুছে ফেলা হবে। আপনার কথোপকথনগুলো থেকে যাবে।';
+
+  @override
+  String storageDeletePendingTitle(String duration) {
+    return '$duration অডিও মুছে ফেলুন?';
+  }
+
+  @override
+  String get storageDeletePendingMessage =>
+      'এই অডিও এখনও আপলোড হয়নি, তাই এটি পুনরুদ্ধার করা যাবে না। মোছার সময় সিঙ্ক থেমে যাবে।';
+
+  @override
+  String storageDeleteAllTitle(String duration) {
+    return 'মোট $duration অডিও মুছে ফেলুন?';
+  }
+
+  @override
+  String storageDeleteAllMessage(String duration) {
+    return 'এর মধ্যে $duration আছে যা এখনও আপলোড হয়নি এবং পুনরুদ্ধার করা যাবে না। মোছার সময় সিঙ্ক থেমে যাবে।';
+  }
+
+  @override
+  String get storageDeleteAllUploadedMessage => 'এই ফোনে রাখা সব রেকর্ডিং মুছে ফেলা হবে। আপনার কথোপকথনগুলো থেকে যাবে।';
+
+  @override
+  String get storageClearStopping => 'সিঙ্ক বন্ধ করা হচ্ছে…';
+
+  @override
+  String storageClearDeleting(String progress) {
+    return 'মুছে ফেলা হচ্ছে… $progress';
+  }
+
+  @override
+  String get storageClearVerifying => 'কী বাকি আছে তা পরীক্ষা করা হচ্ছে…';
+
+  @override
+  String storageClearDone(String duration) {
+    return '$duration মুছে ফেলা হয়েছে';
+  }
+
+  @override
+  String storageClearPartial(String deleted, String remaining) {
+    return '$deleted মুছে ফেলা হয়েছে। $remaining মোছা যায়নি।';
+  }
+
+  @override
+  String storageClearOmiUnreachable(String duration) {
+    return '$duration এখনও আপনার Omi-তে আছে। সংযোগ করে আবার চেষ্টা করুন।';
+  }
+
+  @override
+  String get storageClearFailed => 'মোছা যায়নি। আবার চেষ্টা করুন।';
 }

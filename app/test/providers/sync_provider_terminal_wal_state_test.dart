@@ -11,6 +11,7 @@ import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:omi/services/wals/sync_upload_gate.dart';
+import 'package:omi/services/wals/storage_clear.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/wal_file_manager.dart';
@@ -168,13 +169,13 @@ void main() {
     syncProvider.setStatusFilter(WalStatusFilter.corrupted);
     expect(syncProvider.filteredByStatusWals, [missingFile]);
 
-    await syncProvider.deleteAllPendingWals();
+    await syncProvider.clearStorage(StorageClearScope.notUploaded);
 
     expect(syncProvider.allWals, [missingFile]);
     expect(syncProvider.pendingWals, isEmpty);
     expect(syncProvider.needsAttentionWalsCount, 1);
 
-    await syncProvider.deleteAllClearableWals();
+    await syncProvider.clearStorage(StorageClearScope.all);
 
     expect(syncProvider.allWals, isEmpty);
   });
@@ -206,7 +207,7 @@ void main() {
     expect(syncProvider.needsAttentionWalsCount, 1);
     expect(syncProvider.walsForDisplayFilter(WalDisplayFilter.all), containsAll([tooOld, retryable]));
 
-    await syncProvider.deleteAllClearableWals();
+    await syncProvider.clearStorage(StorageClearScope.all);
 
     expect(syncProvider.allWals, isEmpty, reason: 'Clear All must still be able to remove it');
   });

@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-manage-storage-hours.png",
+      "platform": "mobile-ios",
+      "description": "Manage Storage (dark) as settings-style groups on the page surface: Already uploaded 440h with Free up space and Auto-Remove rows; Not uploaded yet 82h, on this phone 71h and on your Omi 11h, with a destructive Delete row; Delete everything on its own",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-delete-pending-confirm.png",
+      "platform": "mobile-ios",
+      "description": "Destructive confirm names the hours and says syncing pauses while deleting",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-clear-stopping-sync.png",
+      "platform": "mobile-ios",
+      "description": "Undismissable progress sheet while the clear stops the pendant read and uploads",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-clear-deleting-progress.png",
+      "platform": "mobile-ios",
+      "description": "Progress sheet while deleting: Deleting\u2026 1,240 / 4,937 with a bar",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-ios-manage-storage-light.png",
+      "platform": "mobile-ios",
+      "description": "The same Manage Storage groups in light mode: white cards on the grouped page background",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

@@ -8172,40 +8172,10 @@ class AppLocalizationsHu extends AppLocalizations {
   String get deleteSynced => 'Szinkronizáltak törlése';
 
   @override
-  String get deleteSyncedFiles => 'Szinkronizált felvételek törlése';
-
-  @override
-  String get deleteSyncedFilesMessage =>
-      'Ezek a felvételek már szinkronizálva vannak a telefonjával. Ez nem vonható vissza.';
-
-  @override
-  String get syncedFilesDeleted => 'Szinkronizált felvételek törölve';
-
-  @override
   String get deletePending => 'Függőben lévők törlése';
 
   @override
-  String get deletePendingFiles => 'Függő felvételek törlése';
-
-  @override
-  String get deletePendingFilesWarning =>
-      'Ezek a felvételek NINCSENEK szinkronizálva a telefonjával és véglegesen elvesznek. Ez nem vonható vissza.';
-
-  @override
-  String get pendingFilesDeleted => 'Függő felvételek törölve';
-
-  @override
-  String get deleteAllFiles => 'Összes felvétel törlése';
-
-  @override
   String get deleteAll => 'Összes törlése';
-
-  @override
-  String get deleteAllFilesWarning =>
-      'Ez törli a szinkronizált és függő felvételeket. A függő felvételek NINCSENEK szinkronizálva és véglegesen elvesznek.';
-
-  @override
-  String get allFilesDeleted => 'Összes felvétel törölve';
 
   @override
   String nFiles(int count) {
@@ -8214,15 +8184,6 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get manageStorage => 'Tárhely kezelése';
-
-  @override
-  String get safelyBackedUp => 'Beszélgetések létrehozva';
-
-  @override
-  String get notYetSynced => 'Még nincs szinkronizálva a telefonjával';
-
-  @override
-  String get clearAll => 'Összes törlése';
 
   @override
   String get phoneKeypad => 'Billentyűzet';
@@ -15916,4 +15877,94 @@ class AppLocalizationsHu extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Feldolgozás: $date';
   }
+
+  @override
+  String get storageUploadedTitle => 'Már feltöltve';
+
+  @override
+  String get storageUploadedSubtitle => 'Átírva. A telefonon lévő másolat törlésével semmi nem vész el.';
+
+  @override
+  String get storageFreeUpSpace => 'Hely felszabadítása';
+
+  @override
+  String get storageNotUploadedTitle => 'Még nincs feltöltve';
+
+  @override
+  String get storageOnThisPhone => 'Ezen a telefonon';
+
+  @override
+  String get storageOnYourOmi => 'Az Omi eszközödön';
+
+  @override
+  String storageOnPhoneAndOmi(String phone, String device) {
+    return 'Ezen a telefonon $phone · Az Omi eszközödön $device';
+  }
+
+  @override
+  String get storageNotUploadedWarning => 'A törlés véglegesen eltávolítja ezt a hanganyagot.';
+
+  @override
+  String get storageDeleteEverything => 'Összes törlése';
+
+  @override
+  String storageFreeUpTitle(String duration) {
+    return '$duration felszabadítása?';
+  }
+
+  @override
+  String get storageFreeUpMessage =>
+      'Törli a már átírt hanganyag ezen a telefonon tárolt másolatát. A beszélgetéseid megmaradnak.';
+
+  @override
+  String storageDeletePendingTitle(String duration) {
+    return '$duration hanganyag törlése?';
+  }
+
+  @override
+  String get storageDeletePendingMessage =>
+      'Ez a hanganyag nincs feltöltve, ezért nem lehet helyreállítani. A törlés alatt a szinkronizálás szünetel.';
+
+  @override
+  String storageDeleteAllTitle(String duration) {
+    return 'Teljes $duration hanganyag törlése?';
+  }
+
+  @override
+  String storageDeleteAllMessage(String duration) {
+    return 'Ebből $duration nincs feltöltve, és nem lehet helyreállítani. A törlés alatt a szinkronizálás szünetel.';
+  }
+
+  @override
+  String get storageDeleteAllUploadedMessage =>
+      'Törli az összes, ezen a telefonon tárolt felvételt. A beszélgetéseid megmaradnak.';
+
+  @override
+  String get storageClearStopping => 'Szinkronizálás leállítása…';
+
+  @override
+  String storageClearDeleting(String progress) {
+    return 'Törlés… $progress';
+  }
+
+  @override
+  String get storageClearVerifying => 'Ellenőrzés, mi maradt hátra…';
+
+  @override
+  String storageClearDone(String duration) {
+    return '$duration törölve';
+  }
+
+  @override
+  String storageClearPartial(String deleted, String remaining) {
+    return '$deleted törölve. $remaining törlése nem sikerült.';
+  }
+
+  @override
+  String storageClearOmiUnreachable(String duration) {
+    return '$duration még az Omi eszközödön van. Csatlakoztasd, és próbáld újra.';
+  }
+
+  @override
+  String get storageClearFailed => 'A törlés nem sikerült. Próbáld újra.';
 }

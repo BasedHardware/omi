@@ -1,58 +1,101 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
+import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/services/wals/storage_clear.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
-/// Offline Sync storage categories. Counts and clear actions are owned by the page.
+/// Opens Manage Storage the way Settings opens: grouped cards on the page
+/// surface, so row subtitles keep their contrast.
+Future<void> showOfflineSyncStorageSheet({required BuildContext context, required WidgetBuilder builder}) {
+  return showOmiSurfaceSheet<void>(
+    context: context,
+    surface: () => OmiColors.surface0,
+    builder: (sheetContext) => OmiSheetScaffold(
+      title: sheetContext.l10n.manageStorage,
+      padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, OmiSpacing.xl),
+      child: Builder(builder: builder),
+    ),
+  );
+}
+
+/// Manage Storage: how much audio the phone and the pendant hold, by whether it
+/// can be removed safely. Amounts are hours of audio, never file counts: each
+/// file is about a minute, so a count of 26,589 read as conversations.
 class OfflineSyncStorageSheet extends StatelessWidget {
-  final int syncedCount;
-  final int pendingCount;
-  final int totalCount;
-  final VoidCallback onClearSynced;
-  final VoidCallback onClearPending;
-  final VoidCallback onClearAll;
+  final StorageAmounts amounts;
+  final VoidCallback onFreeUpSpace;
+  final VoidCallback onDeletePending;
+  final VoidCallback onDeleteAll;
+
+  /// An extra row for the uploaded-audio group (Auto-Remove), drawn under its
+  /// action. It must paint no background of its own, like an [OmiSettingsRow].
+  final Widget? footer;
 
   const OfflineSyncStorageSheet({
     super.key,
-    required this.syncedCount,
-    required this.pendingCount,
-    required this.totalCount,
-    required this.onClearSynced,
-    required this.onClearPending,
-    required this.onClearAll,
+    required this.amounts,
+    required this.onFreeUpSpace,
+    required this.onDeletePending,
+    required this.onDeleteAll,
+    this.footer,
   });
 
   @override
   Widget build(BuildContext context) {
+    final l = context.l10n;
+    final hasPending = amounts.pendingCount > 0;
     return SingleChildScrollView(
       child: Column(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Synced row
-          _StorageRow(
-            icon: FontAwesomeIcons.circleCheck,
-            iconColor: Colors.green,
-            title: context.l10n.synced,
-            subtitle: context.l10n.safelyBackedUp,
-            count: syncedCount,
-            onClear: syncedCount > 0 ? onClearSynced : null,
-            clearLabel: context.l10n.clear,
-          ),
-          const SizedBox(height: 12),
-          // Pending row
-          _StorageRow(
-            icon: FontAwesomeIcons.clockRotateLeft,
-            iconColor: Colors.orange,
-            title: context.l10n.pending,
-            subtitle: context.l10n.notYetSynced,
-            count: pendingCount,
-            onClear: pendingCount > 0 ? onClearPending : null,
-            clearLabel: context.l10n.clear,
-          ),
-          if (totalCount > 0) ...[
-            const SizedBox(height: 20),
-            OmiButton.destructive(label: context.l10n.clearAll, expand: true, onPressed: onClearAll),
+          OmiSettingsGroup(children: [
+            OmiSettingsRow(
+              leading: FaIcon(FontAwesomeIcons.circleCheck, color: OmiColors.success),
+              title: l.storageUploadedTitle,
+              subtitle: l.storageUploadedSubtitle,
+              trailing: _Hours(OmiDuration.compact(amounts.uploadedSeconds, l)),
+            ),
+            if (amounts.uploadedCount > 0)
+              OmiSettingsRow(
+                leading: const Icon(Icons.cleaning_services_outlined),
+                title: l.storageFreeUpSpace,
+                onTap: onFreeUpSpace,
+                showChevron: false,
+              ),
+            if (footer != null) footer!,
+          ]),
+          const SizedBox(height: OmiSpacing.md),
+          OmiSettingsGroup(children: [
+            OmiSettingsRow(
+              leading: FaIcon(FontAwesomeIcons.clockRotateLeft, color: OmiColors.warning),
+              title: l.storageNotUploadedTitle,
+              subtitle: hasPending ? storageWhereLine(amounts, l) : null,
+              trailing: _Hours(OmiDuration.compact(amounts.pendingSeconds, l)),
+            ),
+            if (hasPending)
+              OmiSettingsRow(
+                leading: const Icon(Icons.delete_outline),
+                title: l.delete,
+                subtitle: l.storageNotUploadedWarning,
+                onTap: onDeletePending,
+                showChevron: false,
+                isDestructive: true,
+              ),
+          ]),
+          if (amounts.allCount > 0) ...[
+            const SizedBox(height: OmiSpacing.lg),
+            OmiSettingsGroup(children: [
+              OmiSettingsRow(
+                leading: const Icon(Icons.delete_forever_outlined),
+                title: l.storageDeleteEverything,
+                onTap: onDeleteAll,
+                showChevron: false,
+                isDestructive: true,
+              ),
+            ]),
           ],
         ],
       ),
@@ -60,91 +103,31 @@ class OfflineSyncStorageSheet extends StatelessWidget {
   }
 }
 
-class _StorageRow extends StatelessWidget {
-  final FaIconData icon;
-  final Color iconColor;
-  final String title;
-  final String subtitle;
-  final int count;
-  final VoidCallback? onClear;
-  final String clearLabel;
+/// Where audio that has not been uploaded is waiting.
+String storageWhereLine(StorageAmounts amounts, AppLocalizations l) {
+  if (amounts.devicePendingSeconds <= 0) return l.storageOnThisPhone;
+  if (amounts.phonePendingSeconds <= 0) return l.storageOnYourOmi;
+  return l.storageOnPhoneAndOmi(
+    OmiDuration.compact(amounts.phonePendingSeconds, l),
+    OmiDuration.compact(amounts.devicePendingSeconds, l),
+  );
+}
 
-  const _StorageRow({
-    required this.icon,
-    required this.iconColor,
-    required this.title,
-    required this.subtitle,
-    required this.count,
-    required this.onClear,
-    required this.clearLabel,
-  });
+/// The amount a group holds. It is the answer the sheet exists to give, so it
+/// reads in primary text rather than the faded settings value style.
+class _Hours extends StatelessWidget {
+  final String text;
+
+  const _Hours(this.text);
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.lgAll),
-      child: LayoutBuilder(builder: (context, constraints) {
-        final actionBelow = constraints.maxWidth < 280 || MediaQuery.textScalerOf(context).scale(1) > 1.3;
-        final clear = OmiButton.secondary(
-          label: clearLabel,
-          size: OmiButtonSize.compact,
-          onPressed: onClear,
-        );
-        return Column(mainAxisSize: MainAxisSize.min, children: [
-          Row(children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: iconColor.withValues(alpha: 0.15),
-                borderRadius: OmiRadius.mdAll,
-              ),
-              child: Center(child: FaIcon(icon, size: 16, color: iconColor)),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: OmiType.subhead.copyWith(fontWeight: FontWeight.w500),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: OmiColors.textPrimary.withValues(alpha: 0.08),
-                          borderRadius: OmiRadius.smAll,
-                        ),
-                        child: Text(
-                          '$count',
-                          style: OmiType.caption.copyWith(color: OmiColors.textPrimary.withValues(alpha: 0.7)),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 3),
-                  Text(subtitle, style: OmiType.caption.copyWith(color: OmiColors.textPrimary.withValues(alpha: 0.7))),
-                ],
-              ),
-            ),
-            if (onClear != null && !actionBelow) clear,
-          ]),
-          if (onClear != null && actionBelow)
-            Padding(
-              padding: const EdgeInsets.only(top: OmiSpacing.xs),
-              child: Align(alignment: AlignmentDirectional.centerEnd, child: clear),
-            ),
-        ]);
-      }),
-    );
-  }
+  Widget build(BuildContext context) => Text(
+        text,
+        maxLines: 1,
+        style: OmiType.body.copyWith(
+          color: OmiColors.textPrimary,
+          fontWeight: FontWeight.w500,
+          fontFeatures: const [FontFeature.tabularFigures()],
+        ),
+      );
 }

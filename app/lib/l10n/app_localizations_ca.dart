@@ -8181,40 +8181,10 @@ class AppLocalizationsCa extends AppLocalizations {
   String get deleteSynced => 'Eliminar sincronitzats';
 
   @override
-  String get deleteSyncedFiles => 'Eliminar enregistraments sincronitzats';
-
-  @override
-  String get deleteSyncedFilesMessage =>
-      'Aquests enregistraments ja estan sincronitzats amb el vostre telèfon. Això no es pot desfer.';
-
-  @override
-  String get syncedFilesDeleted => 'Enregistraments sincronitzats eliminats';
-
-  @override
   String get deletePending => 'Eliminar pendents';
 
   @override
-  String get deletePendingFiles => 'Eliminar enregistraments pendents';
-
-  @override
-  String get deletePendingFilesWarning =>
-      'Aquests enregistraments NO estan sincronitzats amb el vostre telèfon i es perdran permanentment. Això no es pot desfer.';
-
-  @override
-  String get pendingFilesDeleted => 'Enregistraments pendents eliminats';
-
-  @override
-  String get deleteAllFiles => 'Eliminar tots els enregistraments';
-
-  @override
   String get deleteAll => 'Eliminar tot';
-
-  @override
-  String get deleteAllFilesWarning =>
-      'Això eliminarà els enregistraments sincronitzats i pendents. Els enregistraments pendents NO estan sincronitzats i es perdran permanentment.';
-
-  @override
-  String get allFilesDeleted => 'Tots els enregistraments eliminats';
 
   @override
   String nFiles(int count) {
@@ -8223,15 +8193,6 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get manageStorage => 'Gestionar emmagatzematge';
-
-  @override
-  String get safelyBackedUp => 'Converses creades';
-
-  @override
-  String get notYetSynced => 'Encara no sincronitzat amb el vostre telèfon';
-
-  @override
-  String get clearAll => 'Esborrar tot';
 
   @override
   String get phoneKeypad => 'Teclat';
@@ -15938,4 +15899,94 @@ class AppLocalizationsCa extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Es processaran el $date';
   }
+
+  @override
+  String get storageUploadedTitle => 'Ja està pujat';
+
+  @override
+  String get storageUploadedSubtitle => 'Transcrit. En eliminar la còpia del telèfon no es perd res.';
+
+  @override
+  String get storageFreeUpSpace => 'Allibera espai';
+
+  @override
+  String get storageNotUploadedTitle => 'Encara no està pujat';
+
+  @override
+  String get storageOnThisPhone => 'En aquest telèfon';
+
+  @override
+  String get storageOnYourOmi => 'Al vostre Omi';
+
+  @override
+  String storageOnPhoneAndOmi(String phone, String device) {
+    return 'En aquest telèfon $phone · Al vostre Omi $device';
+  }
+
+  @override
+  String get storageNotUploadedWarning => 'Si s\'elimina, aquest àudio es perd per sempre.';
+
+  @override
+  String get storageDeleteEverything => 'Elimina-ho tot';
+
+  @override
+  String storageFreeUpTitle(String duration) {
+    return 'Alliberar $duration?';
+  }
+
+  @override
+  String get storageFreeUpMessage =>
+      'Elimina la còpia de l\'àudio ja transcrit que hi ha en aquest telèfon. Les converses es mantenen.';
+
+  @override
+  String storageDeletePendingTitle(String duration) {
+    return 'Eliminar $duration d\'àudio?';
+  }
+
+  @override
+  String get storageDeletePendingMessage =>
+      'Aquest àudio no s\'ha pujat, per tant no es pot recuperar. La sincronització s\'atura mentre s\'elimina.';
+
+  @override
+  String storageDeleteAllTitle(String duration) {
+    return 'Eliminar tots els $duration d\'àudio?';
+  }
+
+  @override
+  String storageDeleteAllMessage(String duration) {
+    return 'Inclou $duration que no s\'ha pujat i no es pot recuperar. La sincronització s\'atura mentre s\'elimina.';
+  }
+
+  @override
+  String get storageDeleteAllUploadedMessage =>
+      'Elimina totes les gravacions desades en aquest telèfon. Les converses es mantenen.';
+
+  @override
+  String get storageClearStopping => 'Aturant la sincronització…';
+
+  @override
+  String storageClearDeleting(String progress) {
+    return 'Eliminant… $progress';
+  }
+
+  @override
+  String get storageClearVerifying => 'Comprovant què queda…';
+
+  @override
+  String storageClearDone(String duration) {
+    return 'S\'ha eliminat $duration';
+  }
+
+  @override
+  String storageClearPartial(String deleted, String remaining) {
+    return 'S\'ha eliminat $deleted. $remaining no s\'ha pogut eliminar.';
+  }
+
+  @override
+  String storageClearOmiUnreachable(String duration) {
+    return '$duration encara és al vostre Omi. Connecteu-lo i torneu-ho a provar.';
+  }
+
+  @override
+  String get storageClearFailed => 'No s\'ha pogut eliminar. Torneu-ho a provar.';
 }

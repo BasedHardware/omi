@@ -23,6 +23,7 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/wals/wal.dart';
+import 'package:omi/services/wals/storage_clear.dart';
 import 'package:omi/services/wals/wal_derived_sync_views.dart';
 
 class _EnvFields implements EnvFields {
@@ -124,25 +125,23 @@ class _Sync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvi
   }
 
   @override
-  int get clearableWalsCount => wals.length;
-  @override
   List<Wal> get syncedWals => wals.where((w) => w.status == WalStatus.synced).toList();
   @override
   List<Wal> get pendingDeletableWals => wals.where((w) => w.status != WalStatus.synced).toList();
   @override
-  Future<void> deleteAllPendingWals() async {
-    for (final wal in List<Wal>.of(pendingDeletableWals)) {
+  StorageAmounts get storageAmounts => StorageAmounts.of(wals);
+  @override
+  Future<StorageClearOutcome> clearStorage(
+    StorageClearScope scope, {
+    String? firmwareVersion,
+    void Function(StorageClearProgress progress)? onProgress,
+    Duration settleTimeout = const Duration(seconds: 20),
+  }) async {
+    final targets = storageClearTargets(wals, scope);
+    for (final wal in targets) {
       await deleteWal(wal);
     }
-  }
-
-  @override
-  Future<void> deleteAllClearableWals() => deleteAllPendingWals();
-  @override
-  Future<void> deleteAllSyncedWals() async {
-    for (final wal in List<Wal>.of(syncedWals)) {
-      await deleteWal(wal);
-    }
+    return verifyStorageClear(targets: targets, current: wals, elapsed: Duration.zero, failed: false);
   }
 
   @override
@@ -528,19 +527,19 @@ void main() {
     });
   });
 
-  testWidgets('partial bulk Pending cleanup reports failure and keeps the skipped recording', (tester) async {
+  testWidgets('a partial Delete everything reports what is left and keeps the skipped recording', (tester) async {
     final rows = _tooOldAfternoon();
     final kept = rows.first;
     final sync = await _pump(tester, rows);
     sync.skipDeleteId = kept.id;
     await tester.tap(find.text('Manage Storage'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Clear').last);
+    await tester.tap(find.text('Delete everything').last);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Clear').last);
+    await tester.tap(find.text('Delete everything').last);
     await tester.pumpAndSettle();
     expect(sync.wals, [kept]);
-    expect(find.text('Failed to delete some items'), findsOneWidget);
-    expect(find.text('Deleted pending recordings'), findsNothing);
+    expect(find.text('Deleted 27m. 3m couldn\'t be deleted.'), findsOneWidget);
+    expect(find.textContaining('Deleted 30m'), findsNothing);
   });
 }

@@ -8015,37 +8015,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get deleteSynced => '同期済みを削除';
 
   @override
-  String get deleteSyncedFiles => '同期済み録音を削除';
-
-  @override
-  String get deleteSyncedFilesMessage => 'これらの録音はすでにスマホに同期されています。この操作は取り消せません。';
-
-  @override
-  String get syncedFilesDeleted => '同期済み録音を削除しました';
-
-  @override
   String get deletePending => '保留中を削除';
 
   @override
-  String get deletePendingFiles => '保留中の録音を削除';
-
-  @override
-  String get deletePendingFilesWarning => 'これらの録音はスマホに同期されておらず、完全に失われます。この操作は取り消せません。';
-
-  @override
-  String get pendingFilesDeleted => '保留中の録音を削除しました';
-
-  @override
-  String get deleteAllFiles => 'すべての録音を削除';
-
-  @override
   String get deleteAll => 'すべて削除';
-
-  @override
-  String get deleteAllFilesWarning => '同期済みと保留中の録音がすべて削除されます。保留中の録音は同期されておらず、完全に失われます。';
-
-  @override
-  String get allFilesDeleted => 'すべての録音を削除しました';
 
   @override
   String nFiles(int count) {
@@ -8054,15 +8027,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get manageStorage => 'ストレージを管理';
-
-  @override
-  String get safelyBackedUp => '作成された会話';
-
-  @override
-  String get notYetSynced => 'まだスマホに同期されていません';
-
-  @override
-  String get clearAll => 'すべて削除';
 
   @override
   String get phoneKeypad => 'キーパッド';
@@ -15624,4 +15588,91 @@ class AppLocalizationsJa extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return '$dateに処理予定';
   }
+
+  @override
+  String get storageUploadedTitle => 'アップロード済み';
+
+  @override
+  String get storageUploadedSubtitle => '文字起こし済みです。スマホのコピーを削除しても何も失われません。';
+
+  @override
+  String get storageFreeUpSpace => '容量を空ける';
+
+  @override
+  String get storageNotUploadedTitle => '未アップロード';
+
+  @override
+  String get storageOnThisPhone => 'このスマホ上';
+
+  @override
+  String get storageOnYourOmi => 'お使いのOmi上';
+
+  @override
+  String storageOnPhoneAndOmi(String phone, String device) {
+    return 'このスマホ上 $phone · お使いのOmi上 $device';
+  }
+
+  @override
+  String get storageNotUploadedWarning => '削除するとこの音声は完全に失われます。';
+
+  @override
+  String get storageDeleteEverything => 'すべて削除';
+
+  @override
+  String storageFreeUpTitle(String duration) {
+    return '$durationを空けますか？';
+  }
+
+  @override
+  String get storageFreeUpMessage => '文字起こし済みの音声について、スマホ上のコピーを削除します。会話はそのまま残ります。';
+
+  @override
+  String storageDeletePendingTitle(String duration) {
+    return '$durationの音声を削除しますか？';
+  }
+
+  @override
+  String get storageDeletePendingMessage => 'この音声はアップロードされていないため復元できません。削除の間、同期は一時停止します。';
+
+  @override
+  String storageDeleteAllTitle(String duration) {
+    return 'すべての音声（$duration）を削除しますか？';
+  }
+
+  @override
+  String storageDeleteAllMessage(String duration) {
+    return 'アップロードされていない$durationが含まれており、復元できません。削除の間、同期は一時停止します。';
+  }
+
+  @override
+  String get storageDeleteAllUploadedMessage => 'このスマホに保存されたすべての録音を削除します。会話は残ります。';
+
+  @override
+  String get storageClearStopping => '同期を停止しています…';
+
+  @override
+  String storageClearDeleting(String progress) {
+    return '削除しています… $progress';
+  }
+
+  @override
+  String get storageClearVerifying => '残りを確認しています…';
+
+  @override
+  String storageClearDone(String duration) {
+    return '$durationを削除しました';
+  }
+
+  @override
+  String storageClearPartial(String deleted, String remaining) {
+    return '$deletedを削除しました。$remainingは削除できませんでした。';
+  }
+
+  @override
+  String storageClearOmiUnreachable(String duration) {
+    return '$durationはまだOmi上にあります。接続してからもう一度お試しください。';
+  }
+
+  @override
+  String get storageClearFailed => '削除できませんでした。もう一度お試しください。';
 }

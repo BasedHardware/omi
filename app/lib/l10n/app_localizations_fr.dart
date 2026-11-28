@@ -8210,40 +8210,10 @@ class AppLocalizationsFr extends AppLocalizations {
   String get deleteSynced => 'Supprimer les synchronisés';
 
   @override
-  String get deleteSyncedFiles => 'Supprimer les enregistrements synchronisés';
-
-  @override
-  String get deleteSyncedFilesMessage =>
-      'Ces enregistrements ont déjà été synchronisés avec votre téléphone. Cette action est irréversible.';
-
-  @override
-  String get syncedFilesDeleted => 'Enregistrements synchronisés supprimés';
-
-  @override
   String get deletePending => 'Supprimer les en attente';
 
   @override
-  String get deletePendingFiles => 'Supprimer les enregistrements en attente';
-
-  @override
-  String get deletePendingFilesWarning =>
-      'Ces enregistrements ne sont PAS synchronisés avec votre téléphone et seront définitivement perdus. Cette action est irréversible.';
-
-  @override
-  String get pendingFilesDeleted => 'Enregistrements en attente supprimés';
-
-  @override
-  String get deleteAllFiles => 'Supprimer tous les enregistrements';
-
-  @override
   String get deleteAll => 'Tout supprimer';
-
-  @override
-  String get deleteAllFilesWarning =>
-      'Cela supprimera les enregistrements synchronisés et en attente. Les enregistrements en attente ne sont PAS synchronisés et seront définitivement perdus.';
-
-  @override
-  String get allFilesDeleted => 'Tous les enregistrements supprimés';
 
   @override
   String nFiles(int count) {
@@ -8252,15 +8222,6 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get manageStorage => 'Gérer le stockage';
-
-  @override
-  String get safelyBackedUp => 'Conversations créées';
-
-  @override
-  String get notYetSynced => 'Pas encore synchronisé avec votre téléphone';
-
-  @override
-  String get clearAll => 'Tout effacer';
 
   @override
   String get phoneKeypad => 'Clavier';
@@ -15990,4 +15951,94 @@ class AppLocalizationsFr extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Traitement le $date';
   }
+
+  @override
+  String get storageUploadedTitle => 'Déjà envoyé';
+
+  @override
+  String get storageUploadedSubtitle => 'Transcrit. Supprimer la copie du téléphone ne fait rien perdre.';
+
+  @override
+  String get storageFreeUpSpace => 'Libérer de l\'espace';
+
+  @override
+  String get storageNotUploadedTitle => 'Pas encore envoyé';
+
+  @override
+  String get storageOnThisPhone => 'Sur ce téléphone';
+
+  @override
+  String get storageOnYourOmi => 'Sur votre Omi';
+
+  @override
+  String storageOnPhoneAndOmi(String phone, String device) {
+    return 'Sur ce téléphone $phone · Sur votre Omi $device';
+  }
+
+  @override
+  String get storageNotUploadedWarning => 'La suppression de cet audio est définitive.';
+
+  @override
+  String get storageDeleteEverything => 'Tout supprimer';
+
+  @override
+  String storageFreeUpTitle(String duration) {
+    return 'Libérer $duration ?';
+  }
+
+  @override
+  String get storageFreeUpMessage =>
+      'Supprime la copie sur ce téléphone de l\'audio déjà transcrit. Vos conversations sont conservées.';
+
+  @override
+  String storageDeletePendingTitle(String duration) {
+    return 'Supprimer $duration d\'audio ?';
+  }
+
+  @override
+  String get storageDeletePendingMessage =>
+      'Cet audio n\'a pas été envoyé, il est donc irrécupérable. La synchronisation est suspendue pendant la suppression.';
+
+  @override
+  String storageDeleteAllTitle(String duration) {
+    return 'Supprimer tous les $duration d\'audio ?';
+  }
+
+  @override
+  String storageDeleteAllMessage(String duration) {
+    return 'Cela inclut $duration qui n\'a pas été envoyé et ne peut pas être récupéré. La synchronisation est suspendue pendant la suppression.';
+  }
+
+  @override
+  String get storageDeleteAllUploadedMessage =>
+      'Supprime tous les enregistrements conservés sur ce téléphone. Vos conversations restent.';
+
+  @override
+  String get storageClearStopping => 'Arrêt de la synchronisation…';
+
+  @override
+  String storageClearDeleting(String progress) {
+    return 'Suppression… $progress';
+  }
+
+  @override
+  String get storageClearVerifying => 'Vérification de ce qui reste…';
+
+  @override
+  String storageClearDone(String duration) {
+    return '$duration supprimés';
+  }
+
+  @override
+  String storageClearPartial(String deleted, String remaining) {
+    return '$deleted supprimés. $remaining n\'ont pas pu être supprimés.';
+  }
+
+  @override
+  String storageClearOmiUnreachable(String duration) {
+    return '$duration est toujours sur votre Omi. Connectez-le et réessayez.';
+  }
+
+  @override
+  String get storageClearFailed => 'Suppression impossible. Réessayez.';
 }

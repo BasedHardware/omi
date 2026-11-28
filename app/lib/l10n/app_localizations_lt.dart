@@ -8142,39 +8142,10 @@ class AppLocalizationsLt extends AppLocalizations {
   String get deleteSynced => 'Ištrinti sinchronizuotus';
 
   @override
-  String get deleteSyncedFiles => 'Ištrinti sinchronizuotus įrašus';
-
-  @override
-  String get deleteSyncedFilesMessage => 'Šie įrašai jau sinchronizuoti su jūsų telefonu. To atšaukti negalima.';
-
-  @override
-  String get syncedFilesDeleted => 'Sinchronizuoti įrašai ištrinti';
-
-  @override
   String get deletePending => 'Ištrinti laukiančius';
 
   @override
-  String get deletePendingFiles => 'Ištrinti laukiančius įrašus';
-
-  @override
-  String get deletePendingFilesWarning =>
-      'Šie įrašai NĖRA sinchronizuoti su jūsų telefonu ir bus visam laikui prarasti. To atšaukti negalima.';
-
-  @override
-  String get pendingFilesDeleted => 'Laukiantys įrašai ištrinti';
-
-  @override
-  String get deleteAllFiles => 'Ištrinti visus įrašus';
-
-  @override
   String get deleteAll => 'Ištrinti viską';
-
-  @override
-  String get deleteAllFilesWarning =>
-      'Tai ištrins sinchronizuotus ir laukiančius įrašus. Laukiantys įrašai NĖRA sinchronizuoti ir bus visam laikui prarasti.';
-
-  @override
-  String get allFilesDeleted => 'Visi įrašai ištrinti';
 
   @override
   String nFiles(int count) {
@@ -8183,15 +8154,6 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get manageStorage => 'Tvarkyti saugyklą';
-
-  @override
-  String get safelyBackedUp => 'Sukurti pokalbiai';
-
-  @override
-  String get notYetSynced => 'Dar nesinchronizuota su jūsų telefonu';
-
-  @override
-  String get clearAll => 'Išvalyti viską';
 
   @override
   String get phoneKeypad => 'Klaviatūra';
@@ -15883,4 +15845,93 @@ class AppLocalizationsLt extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Apdorojama $date';
   }
+
+  @override
+  String get storageUploadedTitle => 'Jau įkelta';
+
+  @override
+  String get storageUploadedSubtitle => 'Transkribuota. Pašalinus telefono kopiją, nieko neprarasite.';
+
+  @override
+  String get storageFreeUpSpace => 'Atlaisvinti vietos';
+
+  @override
+  String get storageNotUploadedTitle => 'Dar neįkelta';
+
+  @override
+  String get storageOnThisPhone => 'Šiame telefone';
+
+  @override
+  String get storageOnYourOmi => 'Jūsų Omi įrenginyje';
+
+  @override
+  String storageOnPhoneAndOmi(String phone, String device) {
+    return 'Šiame telefone $phone · Jūsų Omi įrenginyje $device';
+  }
+
+  @override
+  String get storageNotUploadedWarning => 'Ištrynus, šis garsas prarandamas negrįžtamai.';
+
+  @override
+  String get storageDeleteEverything => 'Ištrinti viską';
+
+  @override
+  String storageFreeUpTitle(String duration) {
+    return 'Atlaisvinti $duration vietos?';
+  }
+
+  @override
+  String get storageFreeUpMessage => 'Pašalina šio telefono kopiją jau transkribuoto garso. Jūsų pokalbiai išlieka.';
+
+  @override
+  String storageDeletePendingTitle(String duration) {
+    return 'Ištrinti $duration garso?';
+  }
+
+  @override
+  String get storageDeletePendingMessage =>
+      'Šis garsas nebuvo įkeltas, todėl jo atkurti negalima. Trynimo metu sinchronizacija pristabdoma.';
+
+  @override
+  String storageDeleteAllTitle(String duration) {
+    return 'Ištrinti visą $duration garso?';
+  }
+
+  @override
+  String storageDeleteAllMessage(String duration) {
+    return 'Įeina $duration, kuris nebuvo įkeltas ir atkurti negalima. Trynimo metu sinchronizacija pristabdoma.';
+  }
+
+  @override
+  String get storageDeleteAllUploadedMessage =>
+      'Pašalina visus šiame telefone saugomus įrašus. Jūsų pokalbiai išlieka.';
+
+  @override
+  String get storageClearStopping => 'Sustabdoma sinchronizacija…';
+
+  @override
+  String storageClearDeleting(String progress) {
+    return 'Ištrinama… $progress';
+  }
+
+  @override
+  String get storageClearVerifying => 'Tikrinama, kas liko…';
+
+  @override
+  String storageClearDone(String duration) {
+    return 'Ištrinta $duration';
+  }
+
+  @override
+  String storageClearPartial(String deleted, String remaining) {
+    return 'Ištrinta $deleted. $remaining ištrinti nepavyko.';
+  }
+
+  @override
+  String storageClearOmiUnreachable(String duration) {
+    return '$duration vis dar yra jūsų Omi įrenginyje. Prijunkite jį ir bandykite dar kartą.';
+  }
+
+  @override
+  String get storageClearFailed => 'Nepavyko ištrinti. Bandykite dar kartą.';
 }

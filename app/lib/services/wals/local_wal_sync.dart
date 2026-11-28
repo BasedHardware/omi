@@ -2406,27 +2406,52 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           ],
       };
 
+  /// True while any recording is being uploaded, whoever started it (the
+  /// coordinator, a row's Sync button, or a live-session retry calling
+  /// [syncWal] directly). A bulk clear waits for this to clear.
+  bool get hasUploadInFlight => _wals.any(_uploadInFlight);
+
+  /// Corrupted, out-of-window and unsupported recordings never upload, so a
+  /// leftover syncing flag on one must not lock it.
+  static bool _uploadInFlight(Wal w) =>
+      w.isSyncing &&
+      w.status != WalStatus.corrupted &&
+      w.status != WalStatus.outsideRecoveryWindow &&
+      w.status != WalStatus.unsupportedAudio;
+
+  /// Deletes [wals] one at a time, reporting progress after each. A bulk clear
+  /// of thousands of recordings otherwise gives the user nothing to watch.
+  /// A recording still uploading is skipped: the server may accept it, and its
+  /// row is what reconciles that job. The clear's read-back reports it as left.
+  Future<void> _deleteEach(List<Wal> wals, int generation, WalDeleteProgress? onProgress) async {
+    onProgress?.call(0, wals.length);
+    for (var i = 0; i < wals.length; i++) {
+      if (!_isCurrent(generation)) break;
+      if (!_uploadInFlight(wals[i])) await _deleteWal(wals[i], generation: generation);
+      onProgress?.call(i + 1, wals.length);
+    }
+  }
+
   @override
-  Future<void> deleteAllSyncedWals() async {
+  Future<void> deleteAllSyncedWals({WalDeleteProgress? onProgress}) async {
     final generation = _sessionGeneration;
     final syncedWals = _wals.where((w) => w.status == WalStatus.synced).toList();
-    for (final wal in syncedWals) {
-      if (!_isCurrent(generation)) break;
-      await _deleteWal(wal, generation: generation);
-    }
+    await _deleteEach(syncedWals, generation, onProgress);
     await _saveWalsToFile(generation);
     _notifyUpdated(generation);
   }
 
+  /// [includeAccepted] also removes uploads the server accepted but has not
+  /// settled. Manage Storage passes false: that audio is not "not uploaded",
+  /// and its row is the only handle reconciliation has on the server job.
   @override
-  Future<void> deleteAllPendingWals() async {
+  Future<void> deleteAllPendingWals({WalDeleteProgress? onProgress, bool includeAccepted = true}) async {
     final generation = _sessionGeneration;
-    final pendingWals =
-        _wals.where((w) => w.status == WalStatus.miss || (w.status == WalStatus.uploaded && w.syncedAt == 0)).toList();
-    for (final wal in pendingWals) {
-      if (!_isCurrent(generation)) break;
-      await _deleteWal(wal, generation: generation);
-    }
+    final pendingWals = _wals
+        .where(
+            (w) => w.status == WalStatus.miss || (includeAccepted && w.status == WalStatus.uploaded && w.syncedAt == 0))
+        .toList();
+    await _deleteEach(pendingWals, generation, onProgress);
     await _saveWalsToFile(generation);
     _notifyUpdated(generation);
   }
@@ -2435,7 +2460,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   /// clears all local recordings. They are intentionally excluded from the
   /// retryable Pending action.
   @override
-  Future<void> deleteAllCorruptedWals() async {
+  Future<void> deleteAllCorruptedWals({WalDeleteProgress? onProgress}) async {
     final generation = _sessionGeneration;
     final corruptedWals = _wals
         .where(
@@ -2446,10 +2471,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
               w.status == WalStatus.uploadRejected,
         )
         .toList();
-    for (final wal in corruptedWals) {
-      if (!_isCurrent(generation)) break;
-      await _deleteWal(wal, generation: generation);
-    }
+    await _deleteEach(corruptedWals, generation, onProgress);
     await _saveWalsToFile(generation);
     _notifyUpdated(generation);
   }

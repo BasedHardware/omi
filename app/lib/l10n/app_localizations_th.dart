@@ -8091,39 +8091,10 @@ class AppLocalizationsTh extends AppLocalizations {
   String get deleteSynced => 'ลบที่ซิงค์แล้ว';
 
   @override
-  String get deleteSyncedFiles => 'ลบการบันทึกที่ซิงค์แล้ว';
-
-  @override
-  String get deleteSyncedFilesMessage => 'การบันทึกเหล่านี้ซิงค์กับโทรศัพท์ของคุณแล้ว ไม่สามารถย้อนกลับได้';
-
-  @override
-  String get syncedFilesDeleted => 'ลบการบันทึกที่ซิงค์แล้ว';
-
-  @override
   String get deletePending => 'ลบที่รอดำเนินการ';
 
   @override
-  String get deletePendingFiles => 'ลบการบันทึกที่รอดำเนินการ';
-
-  @override
-  String get deletePendingFilesWarning =>
-      'การบันทึกเหล่านี้ยังไม่ได้ซิงค์กับโทรศัพท์ของคุณและจะสูญหายถาวร ไม่สามารถย้อนกลับได้';
-
-  @override
-  String get pendingFilesDeleted => 'ลบการบันทึกที่รอดำเนินการแล้ว';
-
-  @override
-  String get deleteAllFiles => 'ลบการบันทึกทั้งหมด';
-
-  @override
   String get deleteAll => 'ลบทั้งหมด';
-
-  @override
-  String get deleteAllFilesWarning =>
-      'การดำเนินการนี้จะลบการบันทึกที่ซิงค์แล้วและที่รอดำเนินการ การบันทึกที่รอดำเนินการยังไม่ได้ซิงค์และจะสูญหายถาวร';
-
-  @override
-  String get allFilesDeleted => 'ลบการบันทึกทั้งหมดแล้ว';
 
   @override
   String nFiles(int count) {
@@ -8132,15 +8103,6 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get manageStorage => 'จัดการพื้นที่จัดเก็บ';
-
-  @override
-  String get safelyBackedUp => 'บทสนทนาที่สร้างแล้ว';
-
-  @override
-  String get notYetSynced => 'ยังไม่ได้ซิงค์กับโทรศัพท์ของคุณ';
-
-  @override
-  String get clearAll => 'ล้างทั้งหมด';
 
   @override
   String get phoneKeypad => 'แป้นกด';
@@ -15783,4 +15745,93 @@ class AppLocalizationsTh extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'ประมวลผลในวันที่ $date';
   }
+
+  @override
+  String get storageUploadedTitle => 'อัปโหลดแล้ว';
+
+  @override
+  String get storageUploadedSubtitle => 'ถอดความแล้ว ลบสำเนาในโทรศัพท์ได้โดยไม่สูญเสียอะไรเลย';
+
+  @override
+  String get storageFreeUpSpace => 'เพิ่มพื้นที่ว่าง';
+
+  @override
+  String get storageNotUploadedTitle => 'ยังไม่ได้อัปโหลด';
+
+  @override
+  String get storageOnThisPhone => 'ในโทรศัพท์เครื่องนี้';
+
+  @override
+  String get storageOnYourOmi => 'ใน Omi ของคุณ';
+
+  @override
+  String storageOnPhoneAndOmi(String phone, String device) {
+    return 'ในโทรศัพท์เครื่องนี้ $phone · ใน Omi ของคุณ $device';
+  }
+
+  @override
+  String get storageNotUploadedWarning => 'การลบจะทำให้เสียงนี้หายถาวร';
+
+  @override
+  String get storageDeleteEverything => 'ลบทั้งหมด';
+
+  @override
+  String storageFreeUpTitle(String duration) {
+    return 'เพิ่มพื้นที่ว่าง $duration?';
+  }
+
+  @override
+  String get storageFreeUpMessage => 'จะลบสำเนาเสียงที่ถอดความแล้วในโทรศัพท์เครื่องนี้ บทสนทนาของคุณจะยังอยู่';
+
+  @override
+  String storageDeletePendingTitle(String duration) {
+    return 'ลบเสียง $duration?';
+  }
+
+  @override
+  String get storageDeletePendingMessage =>
+      'เสียงนี้ยังไม่ได้อัปโหลด จึงกู้คืนไม่ได้ ระบบจะหยุดซิงค์ชั่วคราวระหว่างการลบ';
+
+  @override
+  String storageDeleteAllTitle(String duration) {
+    return 'ลบเสียงทั้งหมด $duration?';
+  }
+
+  @override
+  String storageDeleteAllMessage(String duration) {
+    return 'รวมเสียง $duration ที่ยังไม่ได้อัปโหลดและกู้คืนไม่ได้ ระบบจะหยุดซิงค์ชั่วคราวระหว่างการลบ';
+  }
+
+  @override
+  String get storageDeleteAllUploadedMessage =>
+      'จะลบไฟล์บันทึกเสียงทั้งหมดที่เก็บไว้ในโทรศัพท์เครื่องนี้ บทสนทนาของคุณจะยังอยู่';
+
+  @override
+  String get storageClearStopping => 'กำลังหยุดซิงค์…';
+
+  @override
+  String storageClearDeleting(String progress) {
+    return 'กำลังลบ… $progress';
+  }
+
+  @override
+  String get storageClearVerifying => 'กำลังตรวจสอบส่วนที่เหลืออยู่…';
+
+  @override
+  String storageClearDone(String duration) {
+    return 'ลบแล้ว $duration';
+  }
+
+  @override
+  String storageClearPartial(String deleted, String remaining) {
+    return 'ลบแล้ว $deleted แต่ $remaining ลบไม่สำเร็จ';
+  }
+
+  @override
+  String storageClearOmiUnreachable(String duration) {
+    return '$duration ยังอยู่ใน Omi ของคุณ เชื่อมต่อแล้วลองอีกครั้ง';
+  }
+
+  @override
+  String get storageClearFailed => 'ลบไม่สำเร็จ กรุณาลองใหม่';
 }

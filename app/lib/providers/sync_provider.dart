@@ -163,8 +163,6 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   int get pendingStatusCount => derivedWals.legacyPendingCount;
   int get syncedStatusCount => derivedWals.statusCounts[WalStatus.synced] ?? 0;
   int get corruptedStatusCount => derivedWals.corruptedCount;
-  int get clearableWalsCount =>
-      syncedStatusCount + derivedWals.deletableCount + corruptedStatusCount + terminallyFailedWalsCount;
 
   bool get isRateLimited => SyncRateLimiter.instance.isLimited;
   DateTime? get rateLimitedUntil => SyncRateLimiter.instance.until;
@@ -642,6 +640,9 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   Future<void> _discoverPendingWals() async {
     final generation = _admittedWorkGeneration;
     if (!_isCurrent(generation)) return;
+    // The clear lists the pendant itself after the stop; a pass's discovery
+    // would send STOP/INFO on the same characteristic mid-clear.
+    if (_deviceSyncs?.transfersHeldForClear == true) return;
     final syncs = _walService.getSyncs();
     if (_deviceSyncs?.usesIndependentRingDrain != true) await syncs.refreshWalsFromDevice();
   }
@@ -668,6 +669,9 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     }
     final syncs = _walService.getSyncs();
     final deviceSyncs = _deviceSyncs;
+    // A Manage Storage clear owns the stores. Skipped, not contended: the clear
+    // wakes the coordinator itself on release, so no cooldown retry is needed.
+    if (deviceSyncs?.transfersHeldForClear == true) return const RecordingTransferDrainResult.skipped();
     final storageSyncing = deviceSyncs?.isLegacyStorageSyncing ?? (syncs.isStorageSyncing == true);
     if (storageSyncing || syncs.isSdCardSyncing) {
       return const RecordingTransferDrainResult.contended();
@@ -878,37 +882,162 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     }
   }
 
-  Future<void> deleteAllSyncedWals() async {
+  /// Hours of audio per Manage Storage row, from the rows [clearStorage] targets.
+  StorageAmounts get storageAmounts => StorageAmounts.of(_allWals, freshDeviceSeconds: readyRingSeconds);
+
+  bool _clearRunning = false;
+
+  /// One Manage Storage clear, start to finish, with a verified result.
+  ///
+  /// Removing audio that has not been uploaded stops every transfer first and
+  /// keeps new ones from starting until it is done: a pendant read refuses a
+  /// ring clear, and an upload may hold a phone file open. The user has no
+  /// reliable way to stop a background drain themselves, so the clear owns it.
+  /// [StorageClearScope.uploaded] only removes phone copies of audio already
+  /// turned into conversations and never stops a transfer.
+  ///
+  /// The result is read back from the stores after the clear (and from the
+  /// pendant when it was a target), never assumed.
+  Future<StorageClearOutcome> clearStorage(
+    StorageClearScope scope, {
+    String? firmwareVersion,
+    void Function(StorageClearProgress progress)? onProgress,
+    Duration settleTimeout = const Duration(seconds: 20),
+  }) async {
     final generation = _sessionGeneration;
+    final started = DateTime.now();
+    if (_clearRunning) {
+      return verifyStorageClear(targets: const [], current: const [], elapsed: Duration.zero, failed: true);
+    }
+    _clearRunning = true;
+    final syncs = _deviceSyncs;
+    final holdTransfers = scope != StorageClearScope.uploaded;
+    void Function()? releaseHold;
+    var failed = false;
+    var targets = <Wal>[];
     try {
-      await _walService.getSyncs().deleteAllSyncedWals();
+      if (holdTransfers) {
+        onProgress?.call(const StorageClearProgress(StorageClearPhase.stopping));
+        if (syncs != null) {
+          // The hold cancels the ring drain and the upload pass. Unlike the
+          // user's Cancel, this neither releases keep-alive leases nor wakes
+          // the coordinator: a wake now would only restart what is stopping.
+          releaseHold = syncs.holdTransfersForClear();
+          if (_startBackgroundSync) RecordingTransferCoordinator.instance.cancelManualRingSync();
+          _endPhaseWork();
+          // isSyncing is left alone: it is each store's reservation on a row
+          // being uploaded, and settling waits for those to clear themselves.
+          for (final wal in _allWals) {
+            wal.syncStartedAt = null;
+            wal.syncEtaSeconds = null;
+          }
+          _updateSyncState(_syncState.toIdle(), generation);
+          final settled = await syncs.settleTransfersForClear(
+            timeout: settleTimeout,
+            uploadPass: _startBackgroundSync ? RecordingTransferCoordinator.instance.activePass : null,
+          );
+          if (!settled) {
+            // Deleting around a read that is still flushing could remove audio
+            // whose only copy is in flight. Report it; the user can retry.
+            DebugLogManager.logWarning('Storage clear: a transfer did not stop in time', {'scope': scope.name});
+            if (!_isCurrent(generation)) return _abandonedClear(started);
+            await _refreshWals(generation);
+            final pending = storageClearTargets(_allWals, scope);
+            return verifyStorageClear(
+                targets: pending, current: _allWals, elapsed: DateTime.now().difference(started), failed: true);
+          }
+        }
+        if (!_isCurrent(generation)) return _abandonedClear(started);
+        // A cancelled read leaves its partial audio on the phone; list the
+        // pendant again so the clear sees what is really there now.
+        await discoverDeviceWals(firmwareVersion: firmwareVersion);
+      } else {
+        await _refreshWals(generation);
+      }
+      if (!_isCurrent(generation)) return _abandonedClear(started);
+      targets = storageClearTargets(_allWals, scope);
+      final total = targets.length;
+      onProgress?.call(StorageClearProgress(StorageClearPhase.deleting, total: total));
+      var base = 0;
+      WalDeleteProgress progressFrom(int offset) => (done, _) {
+            final reported = offset + done;
+            onProgress?.call(StorageClearProgress(StorageClearPhase.deleting,
+                done: reported > total ? total : reported, total: total));
+          };
+      Future<void> step(Future<void> Function(WalDeleteProgress? progress) delete, int count) async {
+        if (!_isCurrent(generation)) return;
+        try {
+          await delete(progressFrom(base));
+        } catch (error) {
+          failed = true;
+          Logger.debug('Storage clear (${scope.name}) failed: ${error.runtimeType}');
+        }
+        base += count;
+      }
+
+      final dynamic stores = _walService.getSyncs();
+      final uploadedCount = targets.where((w) => storageClearScopeOf(w) == StorageClearScope.uploaded).length;
+      final pendingCount = targets.where((w) => storageClearScopeOf(w) == StorageClearScope.notUploaded).length;
+      Future<void> run(String kind, WalDeleteProgress? progress) {
+        if (syncs != null) {
+          return switch (kind) {
+            // Free up space removes phone copies only. The store-wide synced
+            // delete also reaches device stores, which this scope never touches.
+            'synced' => scope == StorageClearScope.uploaded
+                ? syncs.phone.deleteAllSyncedWals(onProgress: progress)
+                : syncs.deleteAllSyncedWals(onProgress: progress),
+            'pending' => syncs.deleteAllPendingWals(onProgress: progress, includeAccepted: false),
+            _ => syncs.deleteAllCorruptedWals(onProgress: progress),
+          };
+        }
+        return switch (kind) {
+          'synced' => stores.deleteAllSyncedWals() as Future<void>,
+          'pending' => stores.deleteAllPendingWals() as Future<void>,
+          _ => stores.deleteAllCorruptedWals() as Future<void>,
+        };
+      }
+
+      if (scope != StorageClearScope.notUploaded) await step((p) => run('synced', p), uploadedCount);
+      if (scope != StorageClearScope.uploaded) await step((p) => run('pending', p), pendingCount);
+      if (scope == StorageClearScope.all) await step((p) => run('corrupted', p), total - base);
+
+      onProgress?.call(StorageClearProgress(StorageClearPhase.verifying, done: total, total: total));
+      if (!_isCurrent(generation)) return _abandonedClear(started);
+      if (targets.any(isDeviceStoredWal)) {
+        await discoverDeviceWals(firmwareVersion: firmwareVersion);
+      } else {
+        await _refreshWals(generation);
+      }
+      if (!_isCurrent(generation)) return _abandonedClear(started);
+      return verifyStorageClear(
+        targets: targets,
+        current: _allWals,
+        elapsed: DateTime.now().difference(started),
+        failed: failed,
+      );
+    } catch (error) {
+      Logger.debug('Storage clear (${scope.name}) failed: ${error.runtimeType}');
+      if (_isCurrent(generation)) await _refreshWals(generation);
+      return verifyStorageClear(
+        targets: targets,
+        current: _isCurrent(generation) ? _allWals : targets,
+        elapsed: DateTime.now().difference(started),
+        failed: true,
+      );
     } finally {
-      await _refreshWals(generation);
+      _clearRunning = false;
+      releaseHold?.call();
+      if (holdTransfers && _isCurrent(generation)) {
+        // Resume exactly what the user's settings allow; a non-BLE wake also
+        // lifts the pendant pause that the cancel set.
+        if (syncs != null) unawaited(syncs.wakeRingDrain());
+        if (_startBackgroundSync) unawaited(_wakeTransfer(WakeTrigger.cooldownElapsed));
+      }
     }
   }
 
-  Future<void> deleteAllPendingWals() async {
-    final generation = _sessionGeneration;
-    try {
-      await _walService.getSyncs().deleteAllPendingWals();
-    } finally {
-      await _refreshWals(generation);
-    }
-  }
-
-  /// Clears every local recording category. Unlike the retryable Pending
-  /// action, this deliberately includes terminally corrupted phone WALs.
-  Future<void> deleteAllClearableWals() async {
-    final generation = _sessionGeneration;
-    final syncs = _walService.getSyncs();
-    try {
-      await syncs.deleteAllSyncedWals();
-      await syncs.deleteAllPendingWals();
-      await syncs.deleteAllCorruptedWals();
-    } finally {
-      await _refreshWals(generation);
-    }
-  }
+  StorageClearOutcome _abandonedClear(DateTime started) => verifyStorageClear(
+      targets: const [], current: const [], elapsed: DateTime.now().difference(started), failed: true);
 
   /// A manual Sync the user confirmed (after every warning): drained pendant audio waiting for
   /// on-device transcription, and audio this Sync drains, go to the cloud. A failed release
@@ -925,6 +1054,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   }
 
   Future<void> syncWals({WakeTrigger trigger = WakeTrigger.userRetry}) async {
+    if (_deviceSyncs?.transfersHeldForClear == true) return;
     final generation = _sessionGeneration;
     if (_startBackgroundSync) {
       await _wakeTransfer(trigger);
@@ -949,6 +1079,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   }
 
   Future<void> syncWal(Wal wal) async {
+    if (_deviceSyncs?.transfersHeldForClear == true) return;
     if (_deviceSyncs?.usesIndependentRingDrain == true && wal.storage == WalStorage.sdcard && wal.fileNum == -1) {
       final generation = _sessionGeneration;
       try {

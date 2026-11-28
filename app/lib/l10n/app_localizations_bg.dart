@@ -8166,40 +8166,10 @@ class AppLocalizationsBg extends AppLocalizations {
   String get deleteSynced => 'Изтриване на синхронизираните';
 
   @override
-  String get deleteSyncedFiles => 'Изтрий синхронизираните записи';
-
-  @override
-  String get deleteSyncedFilesMessage =>
-      'Тези записи вече са синхронизирани с телефона ви. Това не може да бъде отменено.';
-
-  @override
-  String get syncedFilesDeleted => 'Синхронизираните записи са изтрити';
-
-  @override
   String get deletePending => 'Изтриване на чакащите';
 
   @override
-  String get deletePendingFiles => 'Изтрий чакащите записи';
-
-  @override
-  String get deletePendingFilesWarning =>
-      'Тези записи НЕ са синхронизирани с телефона ви и ще бъдат загубени завинаги. Това не може да бъде отменено.';
-
-  @override
-  String get pendingFilesDeleted => 'Чакащите записи са изтрити';
-
-  @override
-  String get deleteAllFiles => 'Изтрий всички записи';
-
-  @override
   String get deleteAll => 'Изтриване на всички';
-
-  @override
-  String get deleteAllFilesWarning =>
-      'Това ще изтрие синхронизираните и чакащите записи. Чакащите записи НЕ са синхронизирани и ще бъдат загубени завинаги.';
-
-  @override
-  String get allFilesDeleted => 'Всички записи са изтрити';
 
   @override
   String nFiles(int count) {
@@ -8208,15 +8178,6 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get manageStorage => 'Управление на хранилището';
-
-  @override
-  String get safelyBackedUp => 'Създадени разговори';
-
-  @override
-  String get notYetSynced => 'Все още не е синхронизирано с телефона ви';
-
-  @override
-  String get clearAll => 'Изчисти всичко';
 
   @override
   String get phoneKeypad => 'Клавиатура';
@@ -15910,4 +15871,94 @@ class AppLocalizationsBg extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Ще се обработят на $date';
   }
+
+  @override
+  String get storageUploadedTitle => 'Вече качено';
+
+  @override
+  String get storageUploadedSubtitle => 'Вече транскрибирано. Нищо не се губи при изтриването на копието от телефона.';
+
+  @override
+  String get storageFreeUpSpace => 'Освободи място';
+
+  @override
+  String get storageNotUploadedTitle => 'Още не е качено';
+
+  @override
+  String get storageOnThisPhone => 'На този телефон';
+
+  @override
+  String get storageOnYourOmi => 'На вашия Omi';
+
+  @override
+  String storageOnPhoneAndOmi(String phone, String device) {
+    return 'На този телефон $phone · На вашия Omi $device';
+  }
+
+  @override
+  String get storageNotUploadedWarning => 'При изтриване това аудио се губи завинаги.';
+
+  @override
+  String get storageDeleteEverything => 'Изтрий всичко';
+
+  @override
+  String storageFreeUpTitle(String duration) {
+    return 'Освобождаване на $duration?';
+  }
+
+  @override
+  String get storageFreeUpMessage =>
+      'Премахва копието на вече транскрибираното аудио от този телефон. Разговорите ви остават.';
+
+  @override
+  String storageDeletePendingTitle(String duration) {
+    return 'Изтриване на $duration аудио?';
+  }
+
+  @override
+  String get storageDeletePendingMessage =>
+      'Това аудио не е качено, така че не може да бъде възстановено. Синхронизацията се спира временно по време на изтриването.';
+
+  @override
+  String storageDeleteAllTitle(String duration) {
+    return 'Изтриване на всичките $duration аудио?';
+  }
+
+  @override
+  String storageDeleteAllMessage(String duration) {
+    return 'Включва $duration, което не е качено и не може да бъде възстановено. Синхронизацията се спира временно по време на изтриването.';
+  }
+
+  @override
+  String get storageDeleteAllUploadedMessage =>
+      'Премахва всички записи, съхранявани на този телефон. Разговорите ви остават.';
+
+  @override
+  String get storageClearStopping => 'Спиране на синхронизацията…';
+
+  @override
+  String storageClearDeleting(String progress) {
+    return 'Изтриване… $progress';
+  }
+
+  @override
+  String get storageClearVerifying => 'Проверка какво е останало…';
+
+  @override
+  String storageClearDone(String duration) {
+    return 'Изтрито $duration';
+  }
+
+  @override
+  String storageClearPartial(String deleted, String remaining) {
+    return 'Изтрито $deleted. $remaining не можа да бъде изтрито.';
+  }
+
+  @override
+  String storageClearOmiUnreachable(String duration) {
+    return '$duration все още е на вашия Omi. Свържете го и опитайте отново.';
+  }
+
+  @override
+  String get storageClearFailed => 'Изтриването не успя. Опитайте отново.';
 }

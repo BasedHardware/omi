@@ -8155,40 +8155,10 @@ class AppLocalizationsNl extends AppLocalizations {
   String get deleteSynced => 'Gesynchroniseerde verwijderen';
 
   @override
-  String get deleteSyncedFiles => 'Gesynchroniseerde opnames verwijderen';
-
-  @override
-  String get deleteSyncedFilesMessage =>
-      'Deze opnames zijn al gesynchroniseerd met uw telefoon. Dit kan niet ongedaan worden gemaakt.';
-
-  @override
-  String get syncedFilesDeleted => 'Gesynchroniseerde opnames verwijderd';
-
-  @override
   String get deletePending => 'Wachtende verwijderen';
 
   @override
-  String get deletePendingFiles => 'Wachtende opnames verwijderen';
-
-  @override
-  String get deletePendingFilesWarning =>
-      'Deze opnames zijn NIET gesynchroniseerd met uw telefoon en gaan permanent verloren. Dit kan niet ongedaan worden gemaakt.';
-
-  @override
-  String get pendingFilesDeleted => 'Wachtende opnames verwijderd';
-
-  @override
-  String get deleteAllFiles => 'Alle opnames verwijderen';
-
-  @override
   String get deleteAll => 'Alles verwijderen';
-
-  @override
-  String get deleteAllFilesWarning =>
-      'Dit verwijdert gesynchroniseerde en wachtende opnames. Wachtende opnames zijn NIET gesynchroniseerd en gaan permanent verloren.';
-
-  @override
-  String get allFilesDeleted => 'Alle opnames verwijderd';
 
   @override
   String nFiles(int count) {
@@ -8197,15 +8167,6 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get manageStorage => 'Opslag beheren';
-
-  @override
-  String get safelyBackedUp => 'Aangemaakte gesprekken';
-
-  @override
-  String get notYetSynced => 'Nog niet gesynchroniseerd met uw telefoon';
-
-  @override
-  String get clearAll => 'Alles wissen';
 
   @override
   String get phoneKeypad => 'Toetsenbord';
@@ -15899,4 +15860,94 @@ class AppLocalizationsNl extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Worden verwerkt op $date';
   }
+
+  @override
+  String get storageUploadedTitle => 'Al geüpload';
+
+  @override
+  String get storageUploadedSubtitle => 'Getranscribeerd. Je verliest niets als je de telefoonkopie verwijdert.';
+
+  @override
+  String get storageFreeUpSpace => 'Ruimte vrijmaken';
+
+  @override
+  String get storageNotUploadedTitle => 'Nog niet geüpload';
+
+  @override
+  String get storageOnThisPhone => 'Op deze telefoon';
+
+  @override
+  String get storageOnYourOmi => 'Op je Omi';
+
+  @override
+  String storageOnPhoneAndOmi(String phone, String device) {
+    return 'Op deze telefoon $phone · Op je Omi $device';
+  }
+
+  @override
+  String get storageNotUploadedWarning => 'Als je dit verwijdert, ben je deze audio definitief kwijt.';
+
+  @override
+  String get storageDeleteEverything => 'Alles verwijderen';
+
+  @override
+  String storageFreeUpTitle(String duration) {
+    return '$duration vrijmaken?';
+  }
+
+  @override
+  String get storageFreeUpMessage =>
+      'Verwijdert de telefoonkopie van audio die al is getranscribeerd. Je gesprekken blijven behouden.';
+
+  @override
+  String storageDeletePendingTitle(String duration) {
+    return '$duration audio verwijderen?';
+  }
+
+  @override
+  String get storageDeletePendingMessage =>
+      'Deze audio is niet geüpload en kan niet worden hersteld. Tijdens het verwijderen wordt de synchronisatie gepauzeerd.';
+
+  @override
+  String storageDeleteAllTitle(String duration) {
+    return 'Alle $duration audio verwijderen?';
+  }
+
+  @override
+  String storageDeleteAllMessage(String duration) {
+    return 'Bevat $duration die niet is geüpload en niet kan worden hersteld. Tijdens het verwijderen wordt de synchronisatie gepauzeerd.';
+  }
+
+  @override
+  String get storageDeleteAllUploadedMessage =>
+      'Verwijdert elke opname die op deze telefoon staat. Je gesprekken blijven behouden.';
+
+  @override
+  String get storageClearStopping => 'Synchronisatie wordt gestopt…';
+
+  @override
+  String storageClearDeleting(String progress) {
+    return 'Verwijderen… $progress';
+  }
+
+  @override
+  String get storageClearVerifying => 'Controleren wat er nog over is…';
+
+  @override
+  String storageClearDone(String duration) {
+    return '$duration verwijderd';
+  }
+
+  @override
+  String storageClearPartial(String deleted, String remaining) {
+    return '$deleted verwijderd. $remaining kon niet worden verwijderd.';
+  }
+
+  @override
+  String storageClearOmiUnreachable(String duration) {
+    return '$duration staat nog op je Omi. Sluit de Omi aan en probeer het opnieuw.';
+  }
+
+  @override
+  String get storageClearFailed => 'Verwijderen is niet gelukt. Probeer het opnieuw.';
 }

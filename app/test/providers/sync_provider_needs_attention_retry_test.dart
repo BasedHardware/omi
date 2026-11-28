@@ -267,7 +267,8 @@ void main() {
     expect(syncProvider.needsAttentionWalsCount, 0);
     expect(syncProvider.corruptedWals, isEmpty);
     expect(syncProvider.corruptedStatusCount, 0);
-    expect(syncProvider.clearableWalsCount, 2, reason: 'an explicit storage clear still includes retained refusals');
+    expect(syncProvider.storageAmounts.allCount, 2,
+        reason: 'an explicit storage clear still includes retained refusals');
     expect(syncProvider.refusalSummary.count, 2);
     expect(syncProvider.retryableAttentionWals, isEmpty);
 

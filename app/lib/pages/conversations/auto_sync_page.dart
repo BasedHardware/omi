@@ -11,6 +11,8 @@ import 'package:omi/pages/conversations/private_cloud_sync_page.dart';
 import 'package:omi/pages/conversations/recording_blocks.dart';
 import 'package:omi/pages/conversations/widgets/device_download_meter.dart';
 import 'package:omi/pages/conversations/widgets/device_storage_card.dart';
+import 'package:omi/pages/conversations/widgets/offline_sync_storage_sheet.dart';
+import 'package:omi/pages/conversations/widgets/storage_clear_flow.dart';
 import 'package:omi/pages/conversations/widgets/sync_details_sheet.dart';
 import 'package:omi/pages/conversations/widgets/sync_step_bar.dart';
 import 'package:omi/pages/on_device/on_device_queue_banner.dart';
@@ -29,41 +31,6 @@ import 'wal_item_detail/wal_item_detail_page.dart';
 import 'widgets/too_old_recording_help.dart';
 import 'package:omi/pages/conversations/widgets/status_action_pill.dart';
 import 'package:omi/pages/conversations/wal_delete_confirmation.dart';
-
-/// The Manage Storage clear actions, each paired with the storage re-read.
-///
-/// The storage card renders the ring status this page read when it opened, so a
-/// clear performed while the page stayed open left the card showing the
-/// pre-clear numbers — the device still reported as full after its recordings
-/// were gone. Pairing happens here, in one place, rather than in each handler:
-/// the original defect was three independent handlers that each had to remember
-/// the re-read, and none of which did.
-///
-/// The re-read has to follow the clear; taken first it would return exactly the
-/// stale numbers being corrected. It also runs when the clear throws, because a
-/// clear that failed part-way still deleted files and leaves the card just as
-/// wrong; the failure itself still propagates to the caller.
-({Future<void> Function() synced, Future<void> Function() pending, Future<void> Function() all})
-    buildStorageClearActions({
-  required Future<void> Function() clearSynced,
-  required Future<void> Function() clearPending,
-  required Future<void> Function() clearAll,
-  required Future<void> Function() refreshDeviceStorage,
-}) {
-  Future<void> thenRefresh(Future<void> Function() clear) async {
-    try {
-      await clear();
-    } finally {
-      await refreshDeviceStorage();
-    }
-  }
-
-  return (
-    synced: () => thenRefresh(clearSynced),
-    pending: () => thenRefresh(clearPending),
-    all: () => thenRefresh(clearAll),
-  );
-}
 
 class AutoSyncPage extends StatefulWidget {
   const AutoSyncPage({super.key});
@@ -429,7 +396,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
             if (context.mounted) setState(() {});
           },
         ),
-        if (syncProvider.clearableWalsCount > 0)
+        if (syncProvider.storageAmounts.allCount > 0)
           OmiSettingsRow(
             leading: const FaIcon(FontAwesomeIcons.trashCan),
             title: context.l10n.manageStorage,
@@ -941,32 +908,6 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     return !failed && !remaining;
   }
 
-  Future<void> _clearVerified(
-    SyncProvider provider,
-    List<Wal> targets,
-    Future<void> Function() clear,
-    String success,
-  ) async {
-    final firmware = context.read<DeviceProvider>().currentFirmwareVersion;
-    var failed = false;
-    try {
-      await clear();
-    } catch (e) {
-      failed = true;
-      Logger.debug('Offline Sync clear failed: $e');
-    }
-    if (targets.any((w) => w.storage != WalStorage.disk && w.storage != WalStorage.mem)) {
-      await provider.discoverDeviceWals(firmwareVersion: firmware);
-    }
-    final remaining = targets.any((item) => provider.allWals.any((w) => w.id == item.id && w.storage == item.storage));
-    if (!mounted) return;
-    if (failed || remaining) {
-      OmiFeedback.error(context, context.l10n.failedToDeleteSomeItems);
-    } else if (targets.isNotEmpty) {
-      OmiFeedback.confirm(context, success);
-    }
-  }
-
   /// Row subtitle (color, icon, label). Colors stay restrained: grey for
   /// neutral/active, amber for auto-retry, red for failed/corrupted. Purple
   /// is reserved for actions and the spinner — not body text.
@@ -1066,72 +1007,44 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   // ─────────────────────────────────────────
 
   void _showManageStorageSheet(BuildContext context, SyncProvider provider) {
-    // Built before the sheet's async callbacks run, so the clear handlers do not
-    // reach through a BuildContext across an await — and so every action is
-    // paired with the storage re-read at a single construction site.
-    final clearActions = buildStorageClearActions(
-      clearSynced: provider.deleteAllSyncedWals,
-      clearPending: provider.deleteAllPendingWals,
-      clearAll: provider.deleteAllClearableWals,
-      refreshDeviceStorage: context.read<DeviceProvider>().refreshRingStorageStatus,
-    );
-    showOmiSheet<void>(
-      context: context,
-      title: context.l10n.manageStorage,
-      padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, OmiSpacing.xs, OmiSpacing.xl, OmiSpacing.xl),
-      builder: (sheetContext) => _ManageStorageSheet(
+    final amounts = provider.storageAmounts;
+    // Read before the sheet's async callbacks run, so no handler reaches
+    // through a BuildContext across an await.
+    final deviceProvider = context.read<DeviceProvider>();
+    Future<void> clear(BuildContext sheetContext, StorageClearScope scope) async {
+      // The flow confirms, then reports its own verified result.
+      Navigator.of(sheetContext).pop(); // omi-ux-allow: pop-before-await -- closes the chooser
+      await runStorageClear(
+        context: context,
         provider: provider,
-        onClearSynced: () async {
-          Navigator.of(sheetContext).pop();
-          final confirmed = await showOmiConfirm(
-            context,
-            title: context.l10n.deleteSyncedFiles,
-            message: context.l10n.deleteSyncedFilesMessage,
-            confirmLabel: context.l10n.clear,
-            destructive: true,
-          );
-          if (confirmed && context.mounted) {
-            await _clearVerified(
-                provider, List<Wal>.of(provider.syncedWals), clearActions.synced, context.l10n.syncedFilesDeleted);
-          }
-        },
-        onClearPending: () async {
-          Navigator.of(sheetContext).pop();
-          final confirmed = await showOmiConfirm(
-            context,
-            title: context.l10n.deletePendingFiles,
-            message: context.l10n.deletePendingFilesWarning,
-            confirmLabel: context.l10n.clear,
-            destructive: true,
-          );
-          if (confirmed && context.mounted) {
-            await _clearVerified(provider, List<Wal>.of(provider.pendingDeletableWals), clearActions.pending,
-                context.l10n.pendingFilesDeleted);
-          }
-        },
-        onClearAll: () async {
-          Navigator.of(sheetContext).pop();
-          final confirmed = await showOmiConfirm(
-            context,
-            title: context.l10n.deleteAllFiles,
-            message: context.l10n.deleteAllFilesWarning,
-            confirmLabel: context.l10n.clearAll,
-            destructive: true,
-          );
-          if (confirmed && context.mounted) {
-            await _clearVerified(
-                provider, List<Wal>.of(provider.allWals), clearActions.all, context.l10n.allFilesDeleted);
-          }
-        },
-        onToggleAutoRemove: (value) async {
-          SharedPreferencesUtil().autoRemoveSyncedCopies = value;
-          if (value) {
-            // Apply immediately: expired copies should not wait for the next
-            // sync pass or app restart.
-            await context.read<SyncProvider>().applySyncedCopyRetention();
-          }
-          if (context.mounted) setState(() {});
-        },
+        scope: scope,
+        amounts: amounts,
+        firmwareVersion: deviceProvider.currentFirmwareVersion,
+        // The storage card renders the ring status read when the page opened;
+        // re-read it after every clear (including a partial one).
+        afterClear: deviceProvider.refreshRingStorageStatus,
+      );
+    }
+
+    showOfflineSyncStorageSheet(
+      context: context,
+      builder: (sheetContext) => OfflineSyncStorageSheet(
+        amounts: amounts,
+        onFreeUpSpace: () => clear(sheetContext, StorageClearScope.uploaded),
+        onDeletePending: () => clear(sheetContext, StorageClearScope.notUploaded),
+        onDeleteAll: () => clear(sheetContext, StorageClearScope.all),
+        footer: _AutoRemoveRow(
+          initialValue: SharedPreferencesUtil().autoRemoveSyncedCopies,
+          onChanged: (value) async {
+            SharedPreferencesUtil().autoRemoveSyncedCopies = value;
+            if (value) {
+              // Apply immediately: expired copies should not wait for the next
+              // sync pass or app restart.
+              await provider.applySyncedCopyRetention();
+            }
+            if (mounted) setState(() {});
+          },
+        ),
       ),
     );
   }
@@ -1152,63 +1065,6 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     if (confirmed) {
       syncProvider.cancelSync();
     }
-  }
-}
-
-class _ManageStorageSheet extends StatelessWidget {
-  final SyncProvider provider;
-  final VoidCallback onClearSynced;
-  final VoidCallback onClearPending;
-  final VoidCallback onClearAll;
-  final ValueChanged<bool> onToggleAutoRemove;
-
-  const _ManageStorageSheet({
-    required this.provider,
-    required this.onClearSynced,
-    required this.onClearPending,
-    required this.onClearAll,
-    required this.onToggleAutoRemove,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final syncedCount = provider.syncedWals.length;
-    final pendingCount = provider.pendingDeletableWals.length;
-    final totalCount = provider.clearableWalsCount;
-    final autoRemoveOn = SharedPreferencesUtil().autoRemoveSyncedCopies;
-
-    return SingleChildScrollView(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _StorageRow(
-            icon: FontAwesomeIcons.circleCheck,
-            iconColor: Colors.green,
-            title: context.l10n.synced,
-            subtitle: context.l10n.safelyBackedUp,
-            count: syncedCount,
-            onClear: syncedCount > 0 ? onClearSynced : null,
-            clearLabel: context.l10n.clear,
-          ),
-          const SizedBox(height: 12),
-          _StorageRow(
-            icon: FontAwesomeIcons.clockRotateLeft,
-            iconColor: Colors.orange,
-            title: context.l10n.pending,
-            subtitle: context.l10n.notYetSynced,
-            count: pendingCount,
-            onClear: pendingCount > 0 ? onClearPending : null,
-            clearLabel: context.l10n.clear,
-          ),
-          const SizedBox(height: 12),
-          _AutoRemoveRow(initialValue: autoRemoveOn, onChanged: onToggleAutoRemove),
-          if (totalCount > 0) ...[
-            const SizedBox(height: 20),
-            OmiButton.destructive(label: context.l10n.clearAll, expand: true, onPressed: onClearAll),
-          ],
-        ],
-      ),
-    );
   }
 }
 
@@ -1236,93 +1092,16 @@ class _AutoRemoveRowState extends State<_AutoRemoveRow> {
   @override
   Widget build(BuildContext context) {
     final days = SharedPreferencesUtil().autoRemoveSyncedCopiesDays;
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.lgAll),
-      child: OmiSettingsRow.toggle(
-        leading: const Icon(Icons.auto_delete),
-        title: context.l10n.autoRemoveSyncedCopiesTitle,
-        subtitle: context.l10n.autoRemoveSyncedCopiesDays(days),
-        value: _value,
-        onChanged: (value) {
-          setState(() => _value = value);
-          widget.onChanged(value);
-        },
-      ),
-    );
-  }
-}
-
-class _StorageRow extends StatelessWidget {
-  final FaIconData icon;
-  final Color iconColor;
-  final String title;
-  final String subtitle;
-  final int count;
-  final VoidCallback? onClear;
-  final String clearLabel;
-
-  const _StorageRow({
-    required this.icon,
-    required this.iconColor,
-    required this.title,
-    required this.subtitle,
-    required this.count,
-    required this.onClear,
-    required this.clearLabel,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.lgAll),
-      child: Row(
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(color: iconColor.withValues(alpha: 0.15), borderRadius: OmiRadius.mdAll),
-            child: Center(child: FaIcon(icon, size: 16, color: iconColor)),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      title,
-                      style: OmiType.subhead.copyWith(color: OmiColors.textPrimary, fontWeight: FontWeight.w500),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                      decoration: BoxDecoration(color: OmiColors.surface3, borderRadius: OmiRadius.smAll),
-                      child: Text('$count', style: OmiType.caption.copyWith(color: OmiColors.textTertiary)),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 3),
-                Text(subtitle, style: OmiType.caption.copyWith(color: OmiColors.textSecondary)),
-              ],
-            ),
-          ),
-          if (onClear != null)
-            GestureDetector(
-              onTap: onClear,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                decoration: BoxDecoration(color: OmiColors.dangerSurface, borderRadius: OmiRadius.pillAll),
-                child: Text(
-                  clearLabel,
-                  style: OmiType.footnote.copyWith(color: OmiColors.danger, fontWeight: FontWeight.w500),
-                ),
-              ),
-            ),
-        ],
-      ),
+    // Drawn inside the uploaded-audio group, which owns the background.
+    return OmiSettingsRow.toggle(
+      leading: const Icon(Icons.auto_delete_outlined),
+      title: context.l10n.autoRemoveSyncedCopiesTitle,
+      subtitle: context.l10n.autoRemoveSyncedCopiesDays(days),
+      value: _value,
+      onChanged: (value) {
+        setState(() => _value = value);
+        widget.onChanged(value);
+      },
     );
   }
 }

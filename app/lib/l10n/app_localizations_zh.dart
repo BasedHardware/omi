@@ -8009,37 +8009,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deleteSynced => '删除已同步';
 
   @override
-  String get deleteSyncedFiles => '删除已同步录音';
-
-  @override
-  String get deleteSyncedFilesMessage => '这些录音已同步到您的手机。此操作无法撤销。';
-
-  @override
-  String get syncedFilesDeleted => '已同步录音已删除';
-
-  @override
   String get deletePending => '删除待处理';
 
   @override
-  String get deletePendingFiles => '删除待处理录音';
-
-  @override
-  String get deletePendingFilesWarning => '这些录音尚未同步到您的手机，将永久丢失。此操作无法撤销。';
-
-  @override
-  String get pendingFilesDeleted => '待处理录音已删除';
-
-  @override
-  String get deleteAllFiles => '删除所有录音';
-
-  @override
   String get deleteAll => '全部删除';
-
-  @override
-  String get deleteAllFilesWarning => '这将删除已同步和待处理的录音。待处理录音尚未同步，将永久丢失。';
-
-  @override
-  String get allFilesDeleted => '所有录音已删除';
 
   @override
   String nFiles(int count) {
@@ -8048,15 +8021,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get manageStorage => '管理存储';
-
-  @override
-  String get safelyBackedUp => '已创建对话';
-
-  @override
-  String get notYetSynced => '尚未同步到您的手机';
-
-  @override
-  String get clearAll => '全部清除';
 
   @override
   String get phoneKeypad => '键盘';
@@ -15600,4 +15564,91 @@ class AppLocalizationsZh extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return '将于 $date 处理';
   }
+
+  @override
+  String get storageUploadedTitle => '已上传';
+
+  @override
+  String get storageUploadedSubtitle => '已生成文字记录。删除手机副本不会丢失任何内容。';
+
+  @override
+  String get storageFreeUpSpace => '释放空间';
+
+  @override
+  String get storageNotUploadedTitle => '尚未上传';
+
+  @override
+  String get storageOnThisPhone => '在此手机上';
+
+  @override
+  String get storageOnYourOmi => '在你的 Omi 上';
+
+  @override
+  String storageOnPhoneAndOmi(String phone, String device) {
+    return '在此手机上 $phone · 在你的 Omi 上 $device';
+  }
+
+  @override
+  String get storageNotUploadedWarning => '删除后将无法找回这些音频。';
+
+  @override
+  String get storageDeleteEverything => '删除全部';
+
+  @override
+  String storageFreeUpTitle(String duration) {
+    return '释放 $duration？';
+  }
+
+  @override
+  String get storageFreeUpMessage => '将删除手机上已生成文字记录的音频副本。你的对话会保留。';
+
+  @override
+  String storageDeletePendingTitle(String duration) {
+    return '删除 $duration 的音频？';
+  }
+
+  @override
+  String get storageDeletePendingMessage => '这些音频尚未上传，无法恢复。删除期间同步会暂停。';
+
+  @override
+  String storageDeleteAllTitle(String duration) {
+    return '删除全部 $duration 的音频？';
+  }
+
+  @override
+  String storageDeleteAllMessage(String duration) {
+    return '其中包括尚未上传且无法恢复的 $duration。删除期间同步会暂停。';
+  }
+
+  @override
+  String get storageDeleteAllUploadedMessage => '将删除此手机上保存的所有录音。你的对话会保留。';
+
+  @override
+  String get storageClearStopping => '正在停止同步…';
+
+  @override
+  String storageClearDeleting(String progress) {
+    return '正在删除… $progress';
+  }
+
+  @override
+  String get storageClearVerifying => '正在检查剩余内容…';
+
+  @override
+  String storageClearDone(String duration) {
+    return '已删除 $duration';
+  }
+
+  @override
+  String storageClearPartial(String deleted, String remaining) {
+    return '已删除 $deleted。$remaining 无法删除。';
+  }
+
+  @override
+  String storageClearOmiUnreachable(String duration) {
+    return '$duration 仍在你的 Omi 上。请连接后重试。';
+  }
+
+  @override
+  String get storageClearFailed => '删除失败，请重试。';
 }

@@ -8139,39 +8139,10 @@ class AppLocalizationsVi extends AppLocalizations {
   String get deleteSynced => 'Xóa đã đồng bộ';
 
   @override
-  String get deleteSyncedFiles => 'Xóa bản ghi đã đồng bộ';
-
-  @override
-  String get deleteSyncedFilesMessage => 'Các bản ghi này đã được đồng bộ với điện thoại của bạn. Không thể hoàn tác.';
-
-  @override
-  String get syncedFilesDeleted => 'Đã xóa bản ghi đồng bộ';
-
-  @override
   String get deletePending => 'Xóa đang chờ';
 
   @override
-  String get deletePendingFiles => 'Xóa bản ghi đang chờ';
-
-  @override
-  String get deletePendingFilesWarning =>
-      'Các bản ghi này CHƯA được đồng bộ với điện thoại của bạn và sẽ bị mất vĩnh viễn. Không thể hoàn tác.';
-
-  @override
-  String get pendingFilesDeleted => 'Đã xóa bản ghi đang chờ';
-
-  @override
-  String get deleteAllFiles => 'Xóa tất cả bản ghi';
-
-  @override
   String get deleteAll => 'Xóa tất cả';
-
-  @override
-  String get deleteAllFilesWarning =>
-      'Thao tác này sẽ xóa các bản ghi đã đồng bộ và đang chờ. Bản ghi đang chờ CHƯA được đồng bộ và sẽ bị mất vĩnh viễn.';
-
-  @override
-  String get allFilesDeleted => 'Đã xóa tất cả bản ghi';
 
   @override
   String nFiles(int count) {
@@ -8180,15 +8151,6 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get manageStorage => 'Quản lý lưu trữ';
-
-  @override
-  String get safelyBackedUp => 'Cuộc trò chuyện đã tạo';
-
-  @override
-  String get notYetSynced => 'Chưa đồng bộ với điện thoại của bạn';
-
-  @override
-  String get clearAll => 'Xóa tất cả';
 
   @override
   String get phoneKeypad => 'Bàn phím';
@@ -15859,4 +15821,94 @@ class AppLocalizationsVi extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Xử lý vào $date';
   }
+
+  @override
+  String get storageUploadedTitle => 'Đã tải lên';
+
+  @override
+  String get storageUploadedSubtitle => 'Đã chuyển thành văn bản. Xóa bản sao trên điện thoại sẽ không mất gì.';
+
+  @override
+  String get storageFreeUpSpace => 'Giải phóng dung lượng';
+
+  @override
+  String get storageNotUploadedTitle => 'Chưa tải lên';
+
+  @override
+  String get storageOnThisPhone => 'Trên điện thoại này';
+
+  @override
+  String get storageOnYourOmi => 'Trên Omi của bạn';
+
+  @override
+  String storageOnPhoneAndOmi(String phone, String device) {
+    return 'Trên điện thoại này $phone · Trên Omi của bạn $device';
+  }
+
+  @override
+  String get storageNotUploadedWarning => 'Xóa sẽ làm mất vĩnh viễn âm thanh này.';
+
+  @override
+  String get storageDeleteEverything => 'Xóa tất cả';
+
+  @override
+  String storageFreeUpTitle(String duration) {
+    return 'Giải phóng $duration?';
+  }
+
+  @override
+  String get storageFreeUpMessage =>
+      'Xóa bản sao âm thanh đã chuyển thành văn bản trên điện thoại này. Các cuộc trò chuyện của bạn vẫn được giữ nguyên.';
+
+  @override
+  String storageDeletePendingTitle(String duration) {
+    return 'Xóa $duration âm thanh?';
+  }
+
+  @override
+  String get storageDeletePendingMessage =>
+      'Âm thanh này chưa được tải lên nên không thể khôi phục. Việc đồng bộ hóa sẽ tạm dừng trong khi xóa.';
+
+  @override
+  String storageDeleteAllTitle(String duration) {
+    return 'Xóa toàn bộ $duration âm thanh?';
+  }
+
+  @override
+  String storageDeleteAllMessage(String duration) {
+    return 'Bao gồm $duration chưa được tải lên và không thể khôi phục. Việc đồng bộ hóa sẽ tạm dừng trong khi xóa.';
+  }
+
+  @override
+  String get storageDeleteAllUploadedMessage =>
+      'Xóa mọi bản ghi âm được lưu trên điện thoại này. Các cuộc trò chuyện của bạn vẫn được giữ nguyên.';
+
+  @override
+  String get storageClearStopping => 'Đang dừng đồng bộ hóa…';
+
+  @override
+  String storageClearDeleting(String progress) {
+    return 'Đang xóa… $progress';
+  }
+
+  @override
+  String get storageClearVerifying => 'Đang kiểm tra phần còn lại…';
+
+  @override
+  String storageClearDone(String duration) {
+    return 'Đã xóa $duration';
+  }
+
+  @override
+  String storageClearPartial(String deleted, String remaining) {
+    return 'Đã xóa $deleted. Không thể xóa $remaining.';
+  }
+
+  @override
+  String storageClearOmiUnreachable(String duration) {
+    return '$duration vẫn còn trên Omi của bạn. Hãy kết nối và thử lại.';
+  }
+
+  @override
+  String get storageClearFailed => 'Không thể xóa. Vui lòng thử lại.';
 }

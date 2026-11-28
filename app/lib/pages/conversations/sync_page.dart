@@ -30,6 +30,7 @@ import 'wal_item_detail/wal_item_detail_page.dart';
 import 'widgets/too_old_recording_help.dart';
 import 'package:omi/pages/conversations/widgets/status_action_pill.dart';
 import 'package:omi/pages/conversations/wal_delete_confirmation.dart';
+import 'package:omi/pages/conversations/widgets/storage_clear_flow.dart';
 
 Widget _buildFaIcon(FaIconData icon, {double size = 18, Color color = const Color(0xFF8E8E93)}) {
   return Padding(
@@ -405,85 +406,27 @@ class _SyncPageState extends State<SyncPage> {
   }
 
   void _showManageStorageSheet(BuildContext context, SyncProvider provider) {
-    showOmiSheet<void>(
-      context: context,
-      title: context.l10n.manageStorage,
-      padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, OmiSpacing.xs, OmiSpacing.xl, OmiSpacing.xl),
-      builder: (sheetContext) => OfflineSyncStorageSheet(
-        syncedCount: provider.syncedWals.length,
-        pendingCount: provider.pendingDeletableWals.length,
-        totalCount: provider.clearableWalsCount,
-        onClearSynced: () async {
-          Navigator.of(sheetContext).pop();
-          final confirmed = await showOmiConfirm(
-            context,
-            title: context.l10n.deleteSyncedFiles,
-            message: context.l10n.deleteSyncedFilesMessage,
-            confirmLabel: context.l10n.clear,
-            destructive: true,
-          );
-          if (confirmed && context.mounted) {
-            await provider.deleteAllSyncedWals();
-            if (context.mounted) {
-              OmiFeedback.confirm(context, context.l10n.syncedFilesDeleted);
-            }
-          }
-        },
-        onClearPending: () async {
-          Navigator.of(sheetContext).pop();
-          final confirmed = await showOmiConfirm(
-            context,
-            title: context.l10n.deletePendingFiles,
-            message: context.l10n.deletePendingFilesWarning,
-            confirmLabel: context.l10n.clear,
-            destructive: true,
-          );
-          if (!confirmed || !context.mounted) return;
-          // Ring discovery rebuilds its virtual WAL with a new display timestamp.
-          (WalStorage, bool, String) pendingIdentity(Wal wal) {
-            final ring = wal.storage == WalStorage.sdcard && wal.fileNum == -1;
-            return (wal.storage, ring, ring ? wal.device : wal.id);
-          }
+    final amounts = provider.storageAmounts;
+    final deviceProvider = context.read<DeviceProvider>();
+    Future<void> clear(BuildContext sheetContext, StorageClearScope scope) async {
+      // The flow confirms, then reports its own verified result.
+      Navigator.of(sheetContext).pop(); // omi-ux-allow: pop-before-await -- closes the chooser
+      await runStorageClear(
+        context: context,
+        provider: provider,
+        scope: scope,
+        amounts: amounts,
+        firmwareVersion: deviceProvider.currentFirmwareVersion,
+      );
+    }
 
-          final targets = provider.pendingDeletableWals.map(pendingIdentity).toSet();
-          if (targets.isEmpty) return;
-          final uid = SharedPreferencesUtil().uid;
-          final hasDeviceRows = targets.any((row) => row.$1 != WalStorage.disk && row.$1 != WalStorage.mem);
-          final firmware = hasDeviceRows ? context.read<DeviceProvider>().currentFirmwareVersion : null;
-          var failed = false;
-          try {
-            await provider.deleteAllPendingWals();
-            if (hasDeviceRows && uid == SharedPreferencesUtil().uid) {
-              await provider.discoverDeviceWals(firmwareVersion: firmware);
-            }
-          } catch (error) {
-            failed = true;
-            Logger.debug('Sync clear pending failed: ${error.runtimeType}');
-          }
-          if (!context.mounted || uid != SharedPreferencesUtil().uid) return;
-          final retained = provider.allWals.any((wal) => targets.contains(pendingIdentity(wal)));
-          if (failed || retained) {
-            OmiFeedback.error(context, context.l10n.failedToDeleteSomeItems);
-          } else {
-            OmiFeedback.confirm(context, context.l10n.pendingFilesDeleted);
-          }
-        },
-        onClearAll: () async {
-          Navigator.of(sheetContext).pop();
-          final confirmed = await showOmiConfirm(
-            context,
-            title: context.l10n.deleteAllFiles,
-            message: context.l10n.deleteAllFilesWarning,
-            confirmLabel: context.l10n.clearAll,
-            destructive: true,
-          );
-          if (confirmed && context.mounted) {
-            await provider.deleteAllClearableWals();
-            if (context.mounted) {
-              OmiFeedback.confirm(context, context.l10n.allFilesDeleted);
-            }
-          }
-        },
+    showOfflineSyncStorageSheet(
+      context: context,
+      builder: (sheetContext) => OfflineSyncStorageSheet(
+        amounts: amounts,
+        onFreeUpSpace: () => clear(sheetContext, StorageClearScope.uploaded),
+        onDeletePending: () => clear(sheetContext, StorageClearScope.notUploaded),
+        onDeleteAll: () => clear(sheetContext, StorageClearScope.all),
       ),
     );
   }
