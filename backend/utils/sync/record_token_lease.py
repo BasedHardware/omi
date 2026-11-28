@@ -3,7 +3,7 @@
 import asyncio
 import contextvars
 from contextvars import ContextVar
-from functools import partial, wraps
+from functools import wraps
 import json
 import logging
 import threading
@@ -37,14 +37,26 @@ class _Step:
     executor shutdown can, which abandons a step that never started.
     """
 
-    def __init__(self, executor: Executor, fn: Callable[..., Any], args, kwargs, *, abandonable: bool):
+    def __init__(
+        self,
+        executor: Executor,
+        fn: Callable[..., Any],
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+        *,
+        abandonable: bool,
+    ):
         self._loop = asyncio.get_running_loop()
         self._gate = threading.Lock()
         self._phase = 'queued'  # queued -> running, or queued -> abandoned
         self._abandonable = abandonable
         self._outcome: tuple[bool, Any] | None = None
         self.settled: asyncio.Future[None] = self._loop.create_future()
-        call = partial(contextvars.copy_context().run, self._run, fn, args, kwargs)
+        context = contextvars.copy_context()
+
+        def call() -> Any:
+            return context.run(self._run, fn, args, kwargs)
+
         try:
             submission = self._loop.run_in_executor(executor, call)
         except Exception as error:  # e.g. the executor already shut down
@@ -55,7 +67,7 @@ class _Step:
         track_executor_future(executor, submission)
         submission.add_done_callback(self._submission_ended)
 
-    def _run(self, fn, args, kwargs):
+    def _run(self, fn: Callable[..., Any], args: tuple[Any, ...], kwargs: dict[str, Any]) -> Any:
         with self._gate:
             if self._phase != 'queued':
                 raise _Unsettled('abandoned before it started')
@@ -160,9 +172,10 @@ async def _wait_settled(state: UploadState, steps: Sequence[_Step]) -> bool:
                 await asyncio.wait(pending, timeout=remaining)
             except asyncio.CancelledError:
                 state['cancelled'] = True
+    return False  # Unreachable: the shielded scope above is never itself cancelled.
 
 
-async def _fenced(state: UploadState, executor: Executor, fn: Callable[..., Any], *args, **kwargs) -> Any:
+async def _fenced(state: UploadState, executor: Executor, fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
     """Run one step the fence owns; a cancelled caller leaves it to settle."""
     step = _Step(executor, fn, args, kwargs, abandonable=True)
     state.setdefault('steps', []).append(step)
@@ -176,9 +189,10 @@ async def settle_upload() -> None:
     Never raises a cancellation; the custody wrapper re-raises one after finish.
     """
     state = _upload.get()
-    if state is None or state.get('unsettled') or not state.get('steps'):
+    steps = state.get('steps') if state is not None else None
+    if state is None or state.get('unsettled') or not steps:
         return
-    if not await _wait_settled(state, state['steps']):
+    if not await _wait_settled(state, steps):
         state['unsettled'] = True
 
 
@@ -194,7 +208,7 @@ async def settle_then(cleanup: Callable[..., None], *args: Any) -> None:
         cleanup(*args)
 
 
-async def _complete(state: UploadState, fn: Callable[..., Any], *args, **kwargs) -> Any:
+async def _complete(state: UploadState, fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
     # Completion is never abandoned: a cancelled request still clears its fence.
     step = _Step(db_executor, fn, args, kwargs, abandonable=False)
     if not await _wait_settled(state, [step]):
@@ -202,12 +216,12 @@ async def _complete(state: UploadState, fn: Callable[..., Any], *args, **kwargs)
     return step.result()
 
 
-def _finish_session(state: UploadState, session: str, accepted: bool) -> bool:
+def _finish_session(state: UploadState, uid: str, cid: str, session: str, accepted: bool) -> bool:
     # Read on the worker as finish starts: a cancel that arrived first means the
     # response was never delivered, so it can never become an accepted receipt.
     return record_custody_append.finish(
-        state['uid'],
-        state['cid'],
+        uid,
+        cid,
         session,
         accepted=accepted and not state.get('cancelled'),
         late_observed=bool(state.get('late_observed')),
@@ -227,7 +241,7 @@ async def _close(state: UploadState, response: Response | None) -> None:
         if session:
             assert 'uid' in state and 'cid' in state  # A fence always has a resolved target.
             try:
-                await _complete(state, _finish_session, state, session, accepted)
+                await _complete(state, _finish_session, state, state['uid'], state['cid'], session, accepted)
             except record_custody_append.RecordCustodyFenceLost:
                 if not accepted:
                     raise
