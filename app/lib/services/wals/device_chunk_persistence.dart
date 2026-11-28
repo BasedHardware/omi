@@ -75,6 +75,9 @@ extension DeviceChunkPersistence on LocalWalSync {
     int? downloadRingId,
     int? downloadSeqStart,
     int? downloadSeqEnd,
+    // Phone-only custody for audio the on-device runner transcribes. Both fields are stamped so
+    // repairLegacyImportedCustody keeps the flag and no upload path ever selects the chunk.
+    bool phoneOnly = false,
   }) async {
     if (frames.isEmpty) throw StateError('refusing to persist an empty chunk');
     final data = encodeWalFrames(frames);
@@ -122,7 +125,9 @@ extension DeviceChunkPersistence on LocalWalSync {
           downloadSeqEnd: downloadSeqEnd,
           downloadFileBytes: downloadRingId != null ? data.length : null,
           fileSha256: downloadRingId != null ? sha256.convert(data).toString() : null,
-          clockRun: clockRun);
+          clockRun: clockRun,
+          onDeviceOnly: phoneOnly,
+          capturedOnDeviceOnly: phoneOnly ? true : null);
       await addExternalWal(wal, admittedGeneration: admittedGeneration);
       if (!await hasDurableWal(wal, admittedGeneration: admittedGeneration)) {
         throw StateError('WAL not durable after registration');

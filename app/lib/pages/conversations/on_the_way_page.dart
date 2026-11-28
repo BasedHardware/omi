@@ -1,4 +1,7 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import 'package:provider/provider.dart';
 
@@ -6,6 +9,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/pending_work.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/sync_state.dart';
+import 'package:omi/pages/held_audio/held_audio_views.dart';
 import 'package:omi/pages/conversations/recording_blocks.dart';
 import 'package:omi/pages/conversations/sync_pending_work.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -125,6 +129,19 @@ class _OnTheWayPageState extends State<OnTheWayPage> with _PendingWorkListener {
                 ]),
                 const SizedBox(height: OmiSpacing.lg),
               ],
+              // When and how, never what the user cannot do: held uploads process at the renewal,
+              // or now with a plan upgrade (ruling David 2026-11-27, SCA-5264).
+              if (work.allowanceHeldUntil > nowSeconds) ...[
+                OmiSettingsGroup(children: [
+                  OmiSettingsRow(
+                    key: const Key('on_the_way_allowance_held'),
+                    title: l.onTheWayAllowanceHeldTitle(_heldDate(work.allowanceHeldUntil, l)),
+                    subtitle: l.onTheWayAllowanceHeldUpgrade,
+                    onTap: () => openHeldAudioPlans(context),
+                  ),
+                ]),
+                const SizedBox(height: OmiSpacing.lg),
+              ],
               if (days.isNotEmpty || work.undatedRecordings.isNotEmpty)
                 OmiSettingsGroup(
                   key: const Key('on_the_way_days'),
@@ -231,8 +248,15 @@ class _OnTheWayPageState extends State<OnTheWayPage> with _PendingWorkListener {
 }
 
 /// What On the Way lists, split by whether a trustworthy day exists.
+String _heldDate(int seconds, AppLocalizations l) =>
+    DateFormat.MMMd(l.localeName).format(DateTime.fromMillisecondsSinceEpoch(seconds * 1000));
+
 class _PendingWork {
   _PendingWork(this.dated, this.undated);
+
+  /// The latest date by which allowance-held uploads will process, or 0 when none is held.
+  int get allowanceHeldUntil =>
+      [...dated, ...undated].fold(0, (latest, item) => math.max(latest, item.allowanceHeldUntil));
 
   /// Builds the rows from the inventory, processing conversations and server work. The page
   /// lists only work still moving: a failed or refused recording recovers without the user and is
@@ -271,7 +295,12 @@ class _PendingWork {
           step: 0,
         );
       } else if (block.wals.every((w) => w.status == WalStatus.uploaded)) {
-        item = _PendingItem.block(block, label: l.syncDetailsTranscribing, step: 2);
+        // Parked behind the monthly allowance: say when it will process, not "Transcribing".
+        final heldUntil = block.wals.fold(0, (latest, w) => math.max(latest, w.allowanceHeldUntil));
+        item = heldUntil > nowSeconds
+            ? _PendingItem.block(block,
+                label: l.onTheWayDayProcessesOn(_heldDate(heldUntil, l)), step: 2, allowanceHeldUntil: heldUntil)
+            : _PendingItem.block(block, label: l.syncDetailsTranscribing, step: 2);
       } else {
         item = _PendingItem.block(block, label: _syncingLabel(block, l), step: 1);
       }
@@ -332,7 +361,8 @@ class _PendingItem {
         moving = false,
         isRecording = true,
         recordingCount = 1,
-        isServer = true;
+        isServer = true,
+        allowanceHeldUntil = 0;
 
   /// A recording block's start, or null when no device clock value in the block
   /// is plausible: a never-set clock shows no time rather than a bogus one.
@@ -343,7 +373,7 @@ class _PendingItem {
     return null;
   }
 
-  _PendingItem.block(RecordingBlock block, {required this.label, required this.step})
+  _PendingItem.block(RecordingBlock block, {required this.label, required this.step, this.allowanceHeldUntil = 0})
       : start = _blockStart(block),
         seconds = block.seconds,
         moving = block.state == WalSyncDisplayState.syncing,
@@ -358,7 +388,8 @@ class _PendingItem {
         moving = false,
         isRecording = false,
         recordingCount = 0,
-        isServer = false;
+        isServer = false,
+        allowanceHeldUntil = 0;
 
   /// Server-reported work's start, or null when unreported or before the
   /// plausibility floor (a device clock that was never set).
@@ -378,7 +409,8 @@ class _PendingItem {
         moving = false,
         isRecording = true,
         recordingCount = work.recordingCount,
-        isServer = true;
+        isServer = true,
+        allowanceHeldUntil = 0;
 
   final DateTime? start;
   final int seconds;
@@ -394,6 +426,10 @@ class _PendingItem {
 
   /// 1: still syncing, 2: transcribing, 3: writing the conversation, 0: failed or refused.
   final int step;
+
+  /// Unix seconds when an uploaded recording parked behind the monthly allowance processes at the
+  /// latest; 0 when not held.
+  final int allowanceHeldUntil;
 
   bool get needsAttention => step == 0;
 }

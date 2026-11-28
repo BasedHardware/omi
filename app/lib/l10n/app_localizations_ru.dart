@@ -15898,4 +15898,17 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'Перезапустите Omi, чтобы обновить данные';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'Будут обработаны $date, когда обновятся ваши минуты';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'Или обработайте их сразу, улучшив тариф';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'Будут обработаны $date';
+  }
 }

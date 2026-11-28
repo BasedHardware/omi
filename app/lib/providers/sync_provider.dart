@@ -508,7 +508,12 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       ..onRingWake = independentDrainAllowed ? syncs.wakeRingDrain : null
       ..onManualRingWake = independentDrainAllowed ? syncs.wakeManualRingDrain : null;
     syncs.configureRingDrain(
-      () => !_isDisposed && !SharedPreferencesUtil().useCustomStt && SharedPreferencesUtil().autoSyncOfflineRecordings,
+      // On-device STT drains too: its chunks are stamped phone-only at persist time and go to
+      // the on-device runner, never to upload (autoUploadEnabled below stays off for custom STT).
+      () =>
+          !_isDisposed &&
+          SharedPreferencesUtil().autoSyncOfflineRecordings &&
+          (!SharedPreferencesUtil().useCustomStt || SharedPreferencesUtil().onDeviceSttSelected),
       independentDrainAllowed: independentDrainAllowed,
       onDurableChunk: coordinator.wakeForRingChunk,
     );
@@ -904,6 +909,10 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       await _refreshWals(generation);
     }
   }
+
+  /// After the user confirms the custom-STT Sync warning: drained pendant audio waiting for
+  /// on-device transcription goes to the cloud instead (see releaseDrainedDeviceAudioForUpload).
+  Future<int> releaseDrainedDeviceAudioForUpload() => _walService.getSyncs().phone.releaseDrainedDeviceAudioForUpload();
 
   Future<void> syncWals({WakeTrigger trigger = WakeTrigger.userRetry}) async {
     final generation = _sessionGeneration;

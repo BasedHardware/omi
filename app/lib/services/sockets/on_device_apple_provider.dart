@@ -6,7 +6,7 @@ import 'package:flutter/services.dart' show MethodChannel, PlatformException;
 import 'package:path_provider/path_provider.dart';
 
 import 'package:omi/models/stt_result.dart';
-import 'package:omi/services/experiments/on_device_overflow_gate.dart';
+import 'package:omi/services/experiments/on_device_runner_gate.dart';
 import 'package:omi/services/on_device/on_device_engine.dart';
 import 'package:omi/utils/audio/whisper_pcm.dart';
 import 'package:omi/services/sockets/apple_speech_readiness.dart';
@@ -32,7 +32,7 @@ class OnDeviceAppleProvider implements ISttProvider, RecoverableLocalSttProvider
       {Future<bool> Function()? useSpeechAnalyzer, bool? isIOS}) async {
     if (!(isIOS ?? Platform.isIOS)) return false;
     try {
-      if (useSpeechAnalyzer == null && await OnDeviceOverflowGate.read()) return (await readiness(language)).ready;
+      if (useSpeechAnalyzer == null && await OnDeviceRunnerGate.enabled()) return (await readiness(language)).ready;
       final available = await _channel.invokeMethod<bool>('onDeviceAvailable', {
         'language': language,
         'useSpeechAnalyzer': await (useSpeechAnalyzer ?? AppleSpeechAnalyzerGate.useNewEngine)()
@@ -51,7 +51,7 @@ class OnDeviceAppleProvider implements ISttProvider, RecoverableLocalSttProvider
   }) async {
     try {
       var overflowUsesLegacy = false;
-      if (useSpeechAnalyzer == null && await OnDeviceOverflowGate.read()) {
+      if (useSpeechAnalyzer == null && await OnDeviceRunnerGate.enabled()) {
         final batch = await AppleBatchEngine.channel.invokeMapMethod<String, dynamic>('status', {'language': language});
         final engine = batch?['engine'] as String? ?? 'unavailable';
         overflowUsesLegacy = engine == 'sfspeech';
@@ -80,7 +80,7 @@ class OnDeviceAppleProvider implements ISttProvider, RecoverableLocalSttProvider
   }) async {
     try {
       final normalized = WhisperPcm.normalize(audioData);
-      if (await OnDeviceOverflowGate.read()) {
+      if (await OnDeviceRunnerGate.enabled()) {
         final result = await AppleBatchEngine().transcribe(normalized.wav, language: language ?? this.language);
         final duration = normalized.duration;
         if (result.text.trim().isEmpty) {
@@ -157,7 +157,7 @@ class OnDeviceAppleProvider implements ISttProvider, RecoverableLocalSttProvider
       // Keep the native domain/code before translating setup failures for the
       // recovery UI. Polling otherwise only sees the bounded LocalSttFailure.
       CustomSttLogService.instance.error('OnDeviceApple', 'Transcription error: $e');
-      if (e is PlatformException && useSpeechAnalyzer == null && await OnDeviceOverflowGate.read()) {
+      if (e is PlatformException && useSpeechAnalyzer == null && await OnDeviceRunnerGate.enabled()) {
         final state = await readiness(language ?? this.language);
         if (!state.ready) throw LocalSttFailure(state.status, canProbeRecovery: true);
       }

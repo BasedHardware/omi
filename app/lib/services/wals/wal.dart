@@ -775,6 +775,17 @@ class Wal {
     _changed();
   }
 
+  /// Unix seconds by which the server will process this uploaded recording at the latest: its job
+  /// is parked behind the monthly transcription allowance (status reason `allowance_held`). 0 when
+  /// not held. Display only; custody and retries never read it.
+  int _allowanceHeldUntil;
+  int get allowanceHeldUntil => _allowanceHeldUntil;
+  set allowanceHeldUntil(int value) {
+    if (_allowanceHeldUntil == value) return;
+    _allowanceHeldUntil = value;
+    _changed();
+  }
+
   /// Unix timestamp (seconds) when the server confirmed this recording synced
   /// (job resolved to [WalStatus.synced], or the live-stream ack completed it).
   /// 0 = unknown: records synced before this field existed, and WALs whose
@@ -1044,6 +1055,7 @@ class Wal {
     String? jobId,
     int uploadedAt = 0,
     int jobPendingConfirmedAt = 0,
+    int allowanceHeldUntil = 0,
     int syncedAt = 0,
     bool keptForTranscriptRecovery = false,
     String? clockRun,
@@ -1099,6 +1111,7 @@ class Wal {
         _jobId = jobId,
         _uploadedAt = uploadedAt,
         _jobPendingConfirmedAt = jobPendingConfirmedAt,
+        _allowanceHeldUntil = allowanceHeldUntil,
         _syncedAt = syncedAt,
         _keptForTranscriptRecovery = keptForTranscriptRecovery,
         _clockRun = clockRun,
@@ -1170,6 +1183,7 @@ class Wal {
       jobId: json['job_id'],
       uploadedAt: json['uploaded_at'] ?? 0,
       jobPendingConfirmedAt: json['job_pending_confirmed_at'] ?? 0,
+      allowanceHeldUntil: json['allowance_held_until'] is int ? json['allowance_held_until'] as int : 0,
       syncedAt: json['synced_at'] ?? 0,
       keptForTranscriptRecovery: json['kept_for_transcript_recovery'] == true,
       clockRun: json['clock_run'] as String?,
@@ -1239,6 +1253,7 @@ class Wal {
       'job_id': jobId,
       'uploaded_at': uploadedAt,
       'job_pending_confirmed_at': jobPendingConfirmedAt,
+      if (allowanceHeldUntil > 0) 'allowance_held_until': allowanceHeldUntil,
       'synced_at': syncedAt,
       if (keptForTranscriptRecovery) 'kept_for_transcript_recovery': true,
       if (clockRun != null) 'clock_run': clockRun,

@@ -4769,5 +4769,8 @@
     "firmwareNewestSupportedForDevice": "Teie seadmes on juba uusim toetatud püsivaraversioon",
     "firmwareSyncRecordingsFirstTitle": "Sünkroonige oma salvestised esmalt",
     "firmwareSyncRecordingsFirstMessage": "Mõned salvestised on veel teie seadmes. Oodake, kuni need on telefonisse sünkroonitud, ja seejärel alustage uuendust.",
-    "batteryRestartToRefresh": "Taaskäivitage Omi värskendamiseks"
+    "batteryRestartToRefresh": "Taaskäivitage Omi värskendamiseks",
+    "onTheWayAllowanceHeldTitle": "Töödeldakse {date}, kui teie minutid uuenevad",
+    "onTheWayAllowanceHeldUpgrade": "Või töödelge need kohe plaani täiendusega",
+    "onTheWayDayProcessesOn": "Töödeldakse {date}"
 }

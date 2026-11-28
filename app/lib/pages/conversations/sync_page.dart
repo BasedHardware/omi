@@ -493,6 +493,8 @@ class _SyncPageState extends State<SyncPage> {
     // the limit. Confirm before proceeding.
     if (!await confirmSyncForCustomStt(context)) return;
     if (!context.mounted) return;
+    if (SharedPreferencesUtil().onDeviceSttSelected) await syncProvider.releaseDrainedDeviceAudioForUpload();
+    if (!context.mounted) return;
 
     final sdCardWals = syncProvider.missingWals.where((wal) => wal.storage == WalStorage.sdcard).toList();
 

@@ -4769,5 +4769,8 @@
     "firmwareNewestSupportedForDevice": "El vostre dispositiu ja té la versió més recent de firmware compatible",
     "firmwareSyncRecordingsFirstTitle": "Primer sincronitzeu els enregistraments",
     "firmwareSyncRecordingsFirstMessage": "Alguns enregistraments encara són al vostre dispositiu. Deixeu que acabin de sincronitzar-se al telèfon i, després, inicieu l'actualització.",
-    "batteryRestartToRefresh": "Reinicieu Omi per actualitzar el valor"
+    "batteryRestartToRefresh": "Reinicieu Omi per actualitzar el valor",
+    "onTheWayAllowanceHeldTitle": "Es processaran el {date} quan es renovin els vostres minuts",
+    "onTheWayAllowanceHeldUpgrade": "O processa'ls de seguida amb una actualització del pla",
+    "onTheWayDayProcessesOn": "Es processaran el {date}"
 }

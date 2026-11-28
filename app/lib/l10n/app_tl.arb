@@ -12326,5 +12326,8 @@
     "firmwareNewestSupportedForDevice": "Ang iyong device ay nasa pinakabagong firmware version na kayang suportahan nito",
     "firmwareSyncRecordingsFirstTitle": "I-sync muna ang iyong mga recording",
     "firmwareSyncRecordingsFirstMessage": "May mga recording pa na nasa iyong device. Hayaang matapos munang i-sync ang mga ito sa iyong phone, pagkatapos ay simulan ang pag-update.",
-    "batteryRestartToRefresh": "I-restart ang Omi upang i-refresh"
+    "batteryRestartToRefresh": "I-restart ang Omi upang i-refresh",
+    "onTheWayAllowanceHeldTitle": "Ipo-proseso sa {date} kapag mag-renew na ang iyong mga minuto",
+    "onTheWayAllowanceHeldUpgrade": "O mag-plan upgrade para maiproseso agad ang mga ito",
+    "onTheWayDayProcessesOn": "Maiiproseso sa {date}"
 }

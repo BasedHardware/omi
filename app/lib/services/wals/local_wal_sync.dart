@@ -2317,6 +2317,46 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     return true;
   }
 
+  /// A server-confirmed on-device transcript of drained device audio. The copy enters synced
+  /// retention (CUSTODY rule 2: release only on confirmation); only the existing synced-copy
+  /// retention policy deletes its bytes. Keep-everything-on-device never reaches here.
+  Future<bool> releaseConfirmedOnDeviceAudio(Wal wal, int generation) async {
+    if (!_isCurrent(generation) || !_wals.contains(wal) || !wal.onDeviceOnly || wal.onDeviceConversation == null) {
+      return false;
+    }
+    wal.status = WalStatus.synced;
+    if (wal.syncedAt == 0) wal.syncedAt = _now().millisecondsSinceEpoch ~/ 1000;
+    await _saveWalsToFile(generation);
+    _notifyUpdated(generation);
+    return true;
+  }
+
+  /// The user confirmed a warned manual cloud Sync: drained device audio still waiting for
+  /// on-device transcription returns to the ordinary upload path. Only that explicit action
+  /// calls this; a transcription-mode switch never rewrites custody. Phone-captured on-device
+  /// audio (overflow, live capture) is never released here.
+  Future<int> releaseDrainedDeviceAudioForUpload() async {
+    final generation = _sessionGeneration;
+    var released = 0;
+    for (final wal in _wals) {
+      if (wal.onDeviceOnly &&
+          wal.capturedOnDeviceOnly == true &&
+          (wal.originalStorage == WalStorage.sdcard || wal.originalStorage == WalStorage.flashPage) &&
+          wal.storage == WalStorage.disk &&
+          wal.status == WalStatus.miss &&
+          wal.onDeviceConversation == null &&
+          wal.onDevicePreparedUpload == null) {
+        wal.onDeviceOnly = false;
+        wal.capturedOnDeviceOnly = false;
+        released++;
+      }
+    }
+    if (released == 0 || !_isCurrent(generation)) return 0;
+    await _saveWalsToFile(generation);
+    _notifyUpdated(generation);
+    return released;
+  }
+
   List<Wal>? _publishedWals;
   WalTrackedList? _publishedSource;
   int _publishedRevision = -1;

@@ -38,6 +38,7 @@ Native recordings, by marker (the marker is parsed in exactly one place, `BatchR
 | `omibatchlimitless` | Limitless flash drained in batch mode | auto (it may be the only copy) |
 | `omibatchwatch` | Apple Watch recovery copy, one per minute | dropped when the live safety copy already covers it; otherwise auto |
 | `omibatchoverflow` | on-device overflow | admitted by `services/on_device/on_device_overflow_intake.dart` as `onDeviceOnly` custody |
+| pendant ring drain (on-device STT) | drained device audio while the user chose on-device transcription | `persistDeviceChunk(phoneOnly: true)` from `ring_storage_sync.dart`; stamps `onDeviceOnly` and `capturedOnDeviceOnly` |
 
 Overflow discovery runs before native migration retires the legacy owners file, and also in
 `OnDeviceRunner` (foreground and background). This replaces the old dependency on the Home
@@ -502,3 +503,25 @@ reclaim; deleted bytes cannot be restored. This PR does not create or enable the
 pass result; no filenames, paths, owners or tombstones. Missing events are unknown,
 not zero deletions. Device timing, actual reclaimed space and ramp outcomes require
 physical-device acceptance. Guard: `test/unit/wal_orphan_reclaim_test.dart`.
+
+
+## Drained pendant audio under on-device transcription (SCA-5264)
+
+Ruling David 2026-11-27 (anx `ev-87eac038a79c0e03e470`). With on-device STT selected
+(`SharedPreferencesUtil().onDeviceSttSelected`: custom provider `onDeviceWhisper` only), the ring
+drain runs as it does in cloud mode, and each chunk is persisted phone-only at persist time
+(`onDeviceOnly` plus `capturedOnDeviceOnly`, so `repairLegacyImportedCustody` keeps it). Automatic
+upload stays off for every custom provider. A later mode switch never rewrites custody.
+
+- The on-device runner transcribes these chunks newest first, while the app is open (above the
+  battery floor) or on a charger. Choosing on-device STT is the consent; the overflow setting and
+  `shouldKeepAudioLocal` are unchanged.
+- Rule 2 (release only on confirmation): after `from-segments` succeeds and the conversation reads
+  back by id, `releaseConfirmedOnDeviceAudio` moves the WAL to `synced` with `syncedAt`. Only the
+  existing synced-copy retention deletes its bytes. Keep-everything-on-device never posts, so it
+  never releases.
+- A warned manual cloud Sync (`confirmSyncForCustomStt`) calls
+  `releaseDrainedDeviceAudioForUpload`, which returns drained device audio that is still waiting
+  (no on-device conversation, no prepared upload) to the ordinary upload path. Phone-captured
+  on-device audio is never released there.
+- Other custom providers keep today's behaviour: no automatic drain or upload.

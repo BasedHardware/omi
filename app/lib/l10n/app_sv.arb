@@ -4769,5 +4769,8 @@
     "firmwareNewestSupportedForDevice": "Din enhet har redan den senaste firmwareversionen som stöds",
     "firmwareSyncRecordingsFirstTitle": "Synkronisera dina inspelningar först",
     "firmwareSyncRecordingsFirstMessage": "Vissa inspelningar finns fortfarande på din enhet. Låt dem slutföra synkroniseringen till telefonen och starta sedan uppdateringen.",
-    "batteryRestartToRefresh": "Starta om Omi för att uppdatera"
+    "batteryRestartToRefresh": "Starta om Omi för att uppdatera",
+    "onTheWayAllowanceHeldTitle": "Bearbetas {date} när dina minuter förnyas",
+    "onTheWayAllowanceHeldUpgrade": "Eller bearbeta dem direkt med en planuppgradering",
+    "onTheWayDayProcessesOn": "Bearbetas {date}"
 }

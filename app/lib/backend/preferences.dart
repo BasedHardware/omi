@@ -749,6 +749,11 @@ class SharedPreferencesUtil {
 
   bool get useCustomStt => customSttConfig.isEnabled;
 
+  /// The user chose on-device transcription (not another custom provider). Pendant audio
+  /// stored while offline then drains to the phone as phone-only custody and is transcribed
+  /// there; other custom providers keep today's behaviour (no automatic drain or upload).
+  bool get onDeviceSttSelected => useCustomStt && customSttConfig.provider == SttProvider.onDeviceWhisper;
+
   /// sttConfigId of the on-device config the paywall's "switch to free" saved, or ''.
   /// Lets a later paid plan release exactly that pin and never a user's own Custom STT.
   String get paywallOnDeviceSttConfigId => getString('paywallOnDeviceSttConfigId');

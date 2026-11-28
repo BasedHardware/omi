@@ -8,6 +8,7 @@ import 'package:omi/services/on_device/on_device_projection.dart';
 import 'package:omi/backend/schema/conversation.dart';
 
 import 'package:omi/services/experiments/on_device_overflow_gate.dart';
+import 'package:omi/services/experiments/on_device_runner_gate.dart';
 import 'package:omi/services/on_device/on_device_model.dart';
 import 'package:omi/services/on_device/on_device_provenance.dart';
 import 'package:omi/services/on_device/on_device_schedule_policy.dart';
@@ -18,8 +19,9 @@ import 'package:omi/services/on_device/phone_power_source.dart';
 /// their settings, the speech model, the latest scheduling decision and per-conversation
 /// provenance.
 ///
-/// [isActive] is false until [ensureLoaded] reads [OnDeviceOverflowGate]; while it is false every
-/// surface renders nothing, so with the flag off nothing changes for anyone.
+/// [isActive] is false until [ensureLoaded] reads [OnDeviceRunnerGate] (on unless killed); while it
+/// is false every surface renders nothing. [storefrontActive] additionally needs
+/// [OnDeviceOverflowGate], which keeps the at-cap and held-audio storefront surfaces held.
 ///
 /// The WAL runner owns processing; this controller shares scheduling and persisted provenance.
 class OnDeviceTranscriptionController extends ChangeNotifier {
@@ -29,6 +31,7 @@ class OnDeviceTranscriptionController extends ChangeNotifier {
     PhonePowerSource power = const NativePhonePowerSource(),
     OnDeviceSchedulePolicy policy = const OnDeviceSchedulePolicy(),
     Future<bool> Function()? readGate,
+    Future<bool> Function()? readStorefrontGate,
     this.canSummarizeOnPhone = false,
     this.manageNativeCustody = true,
     DateTime Function()? clock,
@@ -36,7 +39,8 @@ class OnDeviceTranscriptionController extends ChangeNotifier {
         _model = model,
         _power = power,
         _policy = policy,
-        _readGate = readGate ?? OnDeviceOverflowGate.read,
+        _readGate = readGate ?? OnDeviceRunnerGate.enabled,
+        _readStorefrontGate = readStorefrontGate ?? OnDeviceOverflowGate.read,
         _clock = clock ?? DateTime.now;
 
   static OnDeviceTranscriptionController _instance = OnDeviceTranscriptionController();
@@ -50,7 +54,13 @@ class OnDeviceTranscriptionController extends ChangeNotifier {
   final PhonePowerSource _power;
   final OnDeviceSchedulePolicy _policy;
   final Future<bool> Function() _readGate;
+  final Future<bool> Function() _readStorefrontGate;
   final DateTime Function() _clock;
+  bool _storefront = false;
+
+  /// The runner is on and the held storefront flag is on too: the at-cap offer, the held-audio
+  /// phone choices and the Plus meter shortcut.
+  bool get storefrontActive => _active && _storefront;
 
   /// Whether this phone can summarize with its built-in model (iPhone 15 Pro or later). False until
   /// the Apple Foundation Models bridge lands; summaries then come from Omi Cloud.
@@ -105,7 +115,9 @@ class OnDeviceTranscriptionController extends ChangeNotifier {
 
   Future<void> _syncNativeCustody() async {
     if (!manageNativeCustody) return;
-    await SharedPreferencesUtil().saveBool('onDeviceOverflowConfigured', _active && _settings.enabled);
+    // The headless worker also runs drained pendant audio for on-device STT users (charging).
+    await SharedPreferencesUtil().saveBool(
+        'onDeviceOverflowConfigured', _active && (_settings.enabled || SharedPreferencesUtil().onDeviceSttSelected));
     await SharedPreferencesUtil().saveBool('onDeviceOverflowActive', shouldKeepAudioLocal);
     if (shouldKeepAudioLocal) await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', false);
     if (Platform.isAndroid) {
@@ -139,6 +151,11 @@ class OnDeviceTranscriptionController extends ChangeNotifier {
       return;
     }
     _settings = (_store ??= OnDeviceSettingsStore()).load();
+    try {
+      _storefront = await _readStorefrontGate();
+    } catch (_) {
+      _storefront = false;
+    }
     _active = true;
     model.addListener(notifyListeners);
     await _syncNativeCustody();
@@ -164,7 +181,8 @@ class OnDeviceTranscriptionController extends ChangeNotifier {
   }
 
   /// Runs the policy for [pendingAudio] now and keeps the decision for the UI.
-  Future<OnDeviceRunDecision> evaluate({required Duration pendingAudio, bool transcribeNow = false}) async {
+  Future<OnDeviceRunDecision> evaluate(
+      {required Duration pendingAudio, bool transcribeNow = false, bool foreground = false}) async {
     final power = await _power.read();
     final decision = _policy.decide(OnDeviceRunInputs(
       schedule: _settings.schedule,
@@ -174,6 +192,7 @@ class OnDeviceTranscriptionController extends ChangeNotifier {
       lastRunAt: _lastRunAt,
       now: _clock(),
       transcribeNowRequested: transcribeNow,
+      isForeground: foreground,
     ));
     if (decision != _decision) {
       _decision = decision;
@@ -209,9 +228,13 @@ class OnDeviceTranscriptionController extends ChangeNotifier {
 
   /// Puts the controller in a known state for widget tests and renders.
   @visibleForTesting
-  void debugActivate({OnDeviceSettings settings = const OnDeviceSettings(enabled: true), bool transcribing = false}) {
+  void debugActivate(
+      {OnDeviceSettings settings = const OnDeviceSettings(enabled: true),
+      bool transcribing = false,
+      bool storefront = true}) {
     _loading = Future.value();
     _active = true;
+    _storefront = storefront;
     _settings = settings;
     _isTranscribing = transcribing;
     model.addListener(notifyListeners);

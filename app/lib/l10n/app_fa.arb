@@ -12326,5 +12326,8 @@
     "firmwareNewestSupportedForDevice": "دستگاه شما در حال حاضر روی جدیدترین نسخه فریم‌ور پشتیبانی‌شده قرار دارد",
     "firmwareSyncRecordingsFirstTitle": "ابتدا ضبط‌های خود را همگام‌سازی کنید",
     "firmwareSyncRecordingsFirstMessage": "برخی ضبط‌ها هنوز روی دستگاه شما هستند. اجازه دهید همگام‌سازی آن‌ها به گوشی شما کامل شود، سپس بروزرسانی را شروع کنید.",
-    "batteryRestartToRefresh": "برای بازخوانی، Omi را دوباره راه‌اندازی کنید"
+    "batteryRestartToRefresh": "برای بازخوانی، Omi را دوباره راه‌اندازی کنید",
+    "onTheWayAllowanceHeldTitle": "وقتی دقیقه‌های شما تمدید می‌شوند، در {date} پردازش می‌شود",
+    "onTheWayAllowanceHeldUpgrade": "یا با ارتقای طرح، فوراً آن‌ها را پردازش کنید",
+    "onTheWayDayProcessesOn": "در {date} پردازش می‌شود"
 }

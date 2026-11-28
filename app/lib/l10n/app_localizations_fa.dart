@@ -15838,4 +15838,17 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'برای بازخوانی، Omi را دوباره راه‌اندازی کنید';
+
+  @override
+  String onTheWayAllowanceHeldTitle(String date) {
+    return 'وقتی دقیقه‌های شما تمدید می‌شوند، در $date پردازش می‌شود';
+  }
+
+  @override
+  String get onTheWayAllowanceHeldUpgrade => 'یا با ارتقای طرح، فوراً آن‌ها را پردازش کنید';
+
+  @override
+  String onTheWayDayProcessesOn(String date) {
+    return 'در $date پردازش می‌شود';
+  }
 }

@@ -158,9 +158,14 @@ class OnDeviceRunner with WidgetsBindingObserver {
               w.status == WalStatus.miss &&
               w.onDeviceConversation == null)
           .toList();
+      // Newest first: the conversation the user just had appears before an old backlog.
+      pending.sort((a, b) => b.timerStart.compareTo(a.timerStart));
       pendingSeconds = pending.fold(0, (sum, w) => sum + w.seconds);
       controller.setPendingSeconds(pendingSeconds);
-      if (!controller.settings.enabled) return;
+      // Choosing on-device transcription is consent for drained pendant audio; the overflow
+      // setting governs only live hours. Neither changes shouldKeepAudioLocal.
+      final onDeviceStt = SharedPreferencesUtil().onDeviceSttSelected;
+      if (!controller.settings.enabled && !onDeviceStt) return;
       if (pending.any((w) => w.onDevicePreparedUpload != null) && !await ClientRefactorFlags.chunkUploads()) {
         for (final wal in pending.where((w) => w.onDevicePreparedUpload != null)) {
           await sync.rejectDisabledPreparedUpload(wal, generation);
@@ -170,8 +175,10 @@ class OnDeviceRunner with WidgetsBindingObserver {
       final hasModel = controller.model.status.isInstalled;
       final resumePrepared = !hasModel && await ClientRefactorFlags.chunkUploads();
       if (!hasModel && !(resumePrepared && pending.any((w) => w.onDevicePreparedUpload != null))) return;
-      final decision =
-          await controller.evaluate(pendingAudio: Duration(seconds: pendingSeconds), transcribeNow: transcribeNow);
+      final decision = await controller.evaluate(
+          pendingAudio: Duration(seconds: pendingSeconds),
+          transcribeNow: transcribeNow,
+          foreground: onDeviceStt && WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed);
       if (!decision.shouldRun) return;
       controller.markRunFailure(false);
       controller.markRun(running: true);
@@ -373,6 +380,11 @@ class OnDeviceRunner with WidgetsBindingObserver {
           controller.settings.saveLiveHours ? OnDeviceReason.savingLiveHours.name : OnDeviceReason.liveHoursUsed.name
     };
     if (!await sync.persistOnDeviceConversation(wal, json, generation)) return;
+    if (server != null && source != ConversationSource.phone) {
+      // The server holds the transcript (from-segments, then read back by id): drained pendant
+      // audio enters synced retention, and the existing auto-remove policy deletes its bytes.
+      await sync.releaseConfirmedOnDeviceAudio(wal, generation);
+    }
     OnDeviceUsageTracker(route: OnDeviceUsageRoute.offlineBatch, emit: emitUsage)
       ..record(audioMs: wal.seconds * 1000, segmentCount: segments.length)
       ..flush();
