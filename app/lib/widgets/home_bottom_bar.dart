@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -38,7 +40,12 @@ double homeBottomInset(BuildContext context) => MediaQuery.viewPaddingOf(context
 double homeBottomClearance(BuildContext context) => homeBottomInset(context) + kHomeScrollEndPadding;
 
 /// Offset from the bottom of the screen to the bottom edge of Home's chat bar.
-double homeChatBarOffset(BuildContext context) => homeBottomInset(context) + kHomeChatBarBottomGap;
+///
+/// In the experimental design the row rests where a conversation's floating bar does
+/// (`detailFloatingBarBottom`), so the footer buttons do not jump between the two pages.
+double homeChatBarOffset(BuildContext context) => ExperimentalDesign.of(context)
+    ? math.max(32, homeBottomInset(context))
+    : homeBottomInset(context) + kHomeChatBarBottomGap;
 
 /// Distance from the bottom of the screen that Home content clears to stay out from under the
 /// floating chat bar, with a little air above it.

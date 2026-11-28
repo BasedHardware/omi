@@ -5,7 +5,6 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart' show GlassButton;
 import 'package:omi/services/experiments/experimental_design.dart';
 import 'package:omi/widgets/footer_glass.dart';
 import 'package:flutter/rendering.dart';
@@ -1655,8 +1654,9 @@ void main() {
       expect(tester.getRect(pause).right, lessThan(tester.getRect(ask).left));
       expect(tester.getRect(ask).right, lessThan(tester.getRect(end).left));
       expect(tester.getSize(ask).width, greaterThan(100), reason: 'Ask Omi keeps the middle');
-      // Pause and Ask Omi are the glass package's buttons, with nothing drawn under the row.
-      expect(find.byType(GlassButton), findsNWidgets(2), reason: 'Pause and Ask Omi');
+      // Pause and Ask Omi are the frosted white buttons, with nothing drawn under the row.
+      expect(find.descendant(of: pause, matching: find.byType(BackdropFilter)), findsOneWidget);
+      expect(find.descendant(of: ask, matching: find.byType(BackdropFilter)), findsOneWidget);
       expect(find.byKey(const ValueKey('detail_live_tray')), findsNothing);
       await tester.tap(pause);
       await tester.pump(const Duration(milliseconds: 300));

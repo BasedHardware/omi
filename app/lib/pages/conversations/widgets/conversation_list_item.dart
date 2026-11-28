@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:omi/services/experiments/experimental_design.dart';
+import 'package:omi/widgets/row_press.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -550,25 +551,27 @@ class _ConversationListItemState extends State<ConversationListItem> {
                           PlatformManager.instance.analytics.conversationSwipedToDelete(conversation);
                           unawaited(deleteConversationsWithUndo(context, [conversation]));
                         },
-                        child: AnimatedContainer(
-                          key: const ValueKey('conversation_card'),
-                          duration: const Duration(milliseconds: 200),
-                          width: double.maxFinite,
-                          decoration: BoxDecoration(
-                            color: isSelected
-                                ? OmiColors.surface3
-                                : (isSelectionMode && !isEligible)
-                                    ? OmiColors.surface2
-                                    : (ExperimentalDesign.of(context) ? Colors.transparent : OmiColors.surface1),
-                            borderRadius: OmiRadius.xlAll,
-                            border: isSelected
-                                ? Border.all(color: OmiColors.accent, width: 2)
-                                : (isSelectionMode && !isEligible)
-                                    ? Border.all(color: OmiColors.border, width: 1)
-                                    : null,
-                          ),
-                          child: ClipRRect(borderRadius: OmiRadius.xlAll, child: _buildCardContent(context, onTap)),
-                        ),
+                        child: RowPress(
+                            enabled: !isSelectionMode && !isMerging,
+                            child: AnimatedContainer(
+                              key: const ValueKey('conversation_card'),
+                              duration: const Duration(milliseconds: 200),
+                              width: double.maxFinite,
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? OmiColors.surface3
+                                    : (isSelectionMode && !isEligible)
+                                        ? OmiColors.surface2
+                                        : (ExperimentalDesign.of(context) ? Colors.transparent : OmiColors.surface1),
+                                borderRadius: OmiRadius.xlAll,
+                                border: isSelected
+                                    ? Border.all(color: OmiColors.accent, width: 2)
+                                    : (isSelectionMode && !isEligible)
+                                        ? Border.all(color: OmiColors.border, width: 1)
+                                        : null,
+                              ),
+                              child: ClipRRect(borderRadius: OmiRadius.xlAll, child: _buildCardContent(context, onTap)),
+                            )),
                       ),
                     ),
                   ),

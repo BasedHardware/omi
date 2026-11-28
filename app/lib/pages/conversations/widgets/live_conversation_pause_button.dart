@@ -42,10 +42,7 @@ Future<void> toggleCapturePause(BuildContext context, CaptureProvider provider) 
 /// Pause on Home's live card. Shown only where End is: for the conversation this phone captures.
 /// Nothing while the capture cannot be paused (a photo device) or the system holds the microphone.
 class LiveConversationPauseButton extends StatelessWidget {
-  const LiveConversationPauseButton(
-      {super.key, required this.conversation, this.trailingGap = 10, this.style = FooterGlassStyle.blur});
-
-  final FooterGlassStyle style;
+  const LiveConversationPauseButton({super.key, required this.conversation, this.trailingGap = 10});
 
   final ServerConversation conversation;
   final double trailingGap;
@@ -97,7 +94,6 @@ class LiveConversationPauseButton extends StatelessWidget {
           height: 56,
           circle: true,
           raised: true,
-          style: style,
           onTap: toggle,
           child: Icon(paused ? Icons.play_arrow_rounded : Icons.pause_rounded, size: 26, color: OmiColors.textPrimary),
         ),

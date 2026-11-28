@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/pages/conversations/widgets/conversation_state_tile.dart';
 import 'package:omi/services/experiments/experimental_design.dart';
+import 'package:omi/widgets/row_press.dart';
 import 'package:omi/models/local_recording.dart';
 import 'package:omi/pages/on_device/on_device_queue_banner.dart';
 import 'package:omi/pages/conversations/recording_detail/recording_detail_sheet.dart';
@@ -72,7 +73,8 @@ class RecordingListItem extends StatelessWidget {
                   destructive: true,
                 ),
                 onDismissed: (_) => provider.delete(recording),
-                child: GestureDetector(
+                child: RowPress(
+                    child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTap: () => showRecordingDetailSheet(context, recording),
                   child: Padding(
@@ -127,7 +129,7 @@ class RecordingListItem extends StatelessWidget {
                       ],
                     ),
                   ),
-                ),
+                )),
               ),
             ),
           ),

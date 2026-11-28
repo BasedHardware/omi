@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/services/experiments/experimental_design.dart';
+import 'package:omi/widgets/row_press.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/pages/conversations/capture_state_labels.dart';
 import 'package:omi/pages/conversations/widgets/conversation_state_tile.dart';
@@ -66,7 +67,8 @@ class V3LivePlaceholderRow extends StatelessWidget {
           behavior: HitTestBehavior.opaque,
           onTap: () => routeToPage(
               context, LiveEpisodePage(topConversationId: context.read<CaptureProvider>().topConversationId)),
-          child: Container(
+          child: RowPress(
+              child: Container(
             width: double.maxFinite,
             decoration: BoxDecoration(
                 color: ExperimentalDesign.of(context) ? Colors.transparent : OmiColors.surface1,
@@ -113,7 +115,7 @@ class V3LivePlaceholderRow extends StatelessWidget {
                 ),
               ],
             ),
-          ),
+          )),
         ),
       ),
     );
