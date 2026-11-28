@@ -554,12 +554,12 @@ class RehearsalTest(unittest.TestCase):
 
     def test_qualification_freshness_window(self):
         now = datetime(2026, 11, 28, 2, 0, tzinfo=timezone.utc)
-        fresh = {"updated_at": "2026-11-27T03:00:01Z"}
+        fresh = {"recorded_at": "2026-11-27T03:00:01Z"}
         self.assertTrue(helper.qualification_fresh(fresh, now))
-        self.assertFalse(helper.qualification_fresh({"updated_at": "2026-11-27T01:59:59Z"}, now))
-        self.assertFalse(helper.qualification_fresh({"updated_at": "2026-11-28T02:00:01Z"}, now))
-        self.assertFalse(helper.qualification_fresh({"updated_at": "2026-11-27T03:00:01"}, now))
-        self.assertFalse(helper.qualification_fresh({"updated_at": "not a time"}, now))
+        self.assertFalse(helper.qualification_fresh({"recorded_at": "2026-11-27T01:59:59Z"}, now))
+        self.assertFalse(helper.qualification_fresh({"recorded_at": "2026-11-28T02:00:01Z"}, now))
+        self.assertFalse(helper.qualification_fresh({"recorded_at": "2026-11-27T03:00:01"}, now))
+        self.assertFalse(helper.qualification_fresh({"recorded_at": "not a time"}, now))
         self.assertFalse(helper.qualification_fresh({}, now))
 
     def test_provenance_refuses_a_stale_qualification(self):
@@ -567,11 +567,16 @@ class RehearsalTest(unittest.TestCase):
             if reason == "fresh_main_unavailable":
                 return "4" * 40
             if reason == "qualification_run_unavailable":
-                return '{"head_repository":{"full_name":"BasedHardware/omi"},"updated_at":"2026-01-01T00:00:00Z"}'
+                return '{"head_repository":{"full_name":"BasedHardware/omi"}}'
             if reason == "qualification_workflow_unavailable":
                 return "18"
             if reason == "qualification_artifact_unavailable":
-                raise AssertionError("a stale qualification must refuse before its artifact is read")
+                path = Path(args[args.index("--dir") + 1])
+                path.mkdir()
+                receipt = {"receipt": "qualified", "recorded_at": "2026-01-01T00:00:00Z"}
+                (path / "pusher-dev-deployment-receipt.json").write_text(json.dumps(receipt), encoding="utf-8")
+            if reason == "registry_digest_unavailable":
+                raise AssertionError("a stale qualification must refuse before registry reads")
             return ""
 
         with patch.object(helper, "run", side_effect=command):
@@ -591,22 +596,21 @@ class RehearsalTest(unittest.TestCase):
             if reason == "fresh_main_unavailable":
                 return main
             if reason == "qualification_run_unavailable":
-                finished = datetime.now(timezone.utc) - timedelta(hours=2)
-                return json.dumps(
-                    {"head_repository": {"full_name": "BasedHardware/omi"}, "updated_at": finished.isoformat()}
-                )
+                return '{"head_repository":{"full_name":"BasedHardware/omi"}}'
             if reason == "qualification_workflow_unavailable":
                 return "18"
             if reason == "qualification_artifact_unavailable":
                 path = Path(args[args.index("--dir") + 1])
                 path.mkdir()
-                (path / "pusher-dev-deployment-receipt.json").write_text('{"receipt": "qualified"}', encoding="utf-8")
+                recorded = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+                receipt = {"receipt": "qualified", "recorded_at": recorded}
+                (path / "pusher-dev-deployment-receipt.json").write_text(json.dumps(receipt), encoding="utf-8")
             if reason == "registry_digest_unavailable":
                 return args[4].split("@")[1]
             return ""
 
         with patch.object(helper, "run", side_effect=command):
-            self.assertEqual(helper.check_provenance(self.proof), {"receipt": "qualified"})
+            self.assertEqual(helper.check_provenance(self.proof)["receipt"], "qualified")
 
         commands = {reason: args for args, reason in seen}
         self.assertIn(f"head_sha={source}", commands["release_eligibility_unavailable"][2])

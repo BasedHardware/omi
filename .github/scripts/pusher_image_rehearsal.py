@@ -422,9 +422,12 @@ def validate_proof(proof):
 QUALIFICATION_MAX_AGE_SECONDS = 24 * 3600
 
 
-def qualification_fresh(qualification_run, now=None):
-    """The development qualification finished no more than 24 hours ago."""
-    finished = qualification_run.get("updated_at")
+def qualification_fresh(receipt, now=None):
+    """The verified development deployment receipt was recorded no more than 24 hours ago.
+
+    The window applies in every image-only mode, so preview, canary and promote must all
+    start within 24 hours of the qualification; otherwise qualify again and restart."""
+    finished = receipt.get("recorded_at") if isinstance(receipt, dict) else None
     if not isinstance(finished, str):
         return False
     try:
@@ -496,9 +499,10 @@ def check_provenance(proof):
         metadata.write_text(
             run([*gh, f"{path}/actions/runs/{run_id}"], "qualification_run_unavailable"), encoding="utf-8"
         )
-        qualification_run = json.loads(metadata.read_text(encoding="utf-8"))
-        require(qualification_run["head_repository"]["full_name"] == REPO, "qualification_repository_mismatch")
-        require(qualification_fresh(qualification_run), "qualification_stale")
+        require(
+            json.loads(metadata.read_text(encoding="utf-8"))["head_repository"]["full_name"] == REPO,
+            "qualification_repository_mismatch",
+        )
         artifacts = directory / "artifacts"
         run(
             [
@@ -541,6 +545,9 @@ def check_provenance(proof):
             "development_qualification_failed",
         )
         qualification_receipt = read_json(artifacts / "pusher-dev-deployment-receipt.json")
+        # The verified receipt's own timestamp, written per attempt and hash-bound into the
+        # evidence; a run's updated_at can move without a new qualification.
+        require(qualification_fresh(qualification_receipt), "qualification_stale")
 
     for image in (f"{dev_repository}@{digest}", candidate, proof["prior_image"]):
         remote_digest = run(
