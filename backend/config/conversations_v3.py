@@ -150,6 +150,13 @@ def manual_end_home_visible_enabled() -> bool:
     }
 
 
+def notes_finish_first_enabled() -> bool:
+    """Default on. The v3 notes drain settles the owner's Finishes first (visible passive ones, then manual
+    intent, each newest first); the other pending rows keep the scan's order after them. Off keeps the
+    scan's document-id order for every row."""
+    return os.getenv('CONVERSATIONS_V3_NOTES_FINISH_FIRST', 'on').strip().lower() not in {'off', 'false', '0', 'no'}
+
+
 def capture_continuity_enabled() -> bool:
     """Default on. A stream gap inside one capture origin is not silence, and a manual-end cut waits
     (bounded) for the batch transcript of its own or a preceding sealed recording. Off restores the

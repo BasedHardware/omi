@@ -152,6 +152,11 @@ FINISH_HELD = Counter(
     'Builder passes that kept a manual-end cut open while its own or a preceding batch transcript was pending',
 )
 
+NOTES_FINISH_FIRST = Counter(
+    'omi_conversations_v3_notes_finish_first_total',
+    'Finishes the v3 notes drain moved ahead of at least one other pending row',
+)
+
 SUMMARY_LATENCY = Histogram('omi_conversations_v3_end_to_summary_seconds', 'End to stored summary')
 SUMMARY_WRITES = Counter('omi_conversations_v3_summary_writes_total', 'First writes and late rewrites', ['kind'])
 WORD_FLOOR_COMPLETIONS = Counter(
