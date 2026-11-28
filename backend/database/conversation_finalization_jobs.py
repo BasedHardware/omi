@@ -92,6 +92,16 @@ TERMINAL_JOB_STATUSES = frozenset({'completed', 'dead_letter'})
 NONTERMINAL_JOB_STATUSES = frozenset({'queued', 'leased', 'blocked_byok'})
 DEFAULT_LEASE_SECONDS = 1500
 DEFAULT_RECONCILE_STALE_SECONDS = 300
+LIVE_ARCHIVE_UNCOMMITTED = 'live_archive_uncommitted'
+LIVE_ARCHIVE_RECHECK_INTERVAL = timedelta(seconds=10)
+# Past this bound an uncommitted archive takes the counted not-closed retry again.
+LIVE_ARCHIVE_MAX_WAIT = timedelta(minutes=10)
+
+
+class LiveArchiveWaitExpired(Exception):
+    """The live archive stayed uncommitted for LIVE_ARCHIVE_MAX_WAIT; the job was not written."""
+
+
 OWNERSHIP_RECHECK_INTERVAL = timedelta(hours=1)
 # Bound transport failures separately from accepted worker claims. Holding the
 # job leaves its latest task valid; transport failure is not processing failure.
@@ -1653,9 +1663,10 @@ def _mark_finalization_retryable_txn(
     if not count_attempt and failure_code not in {
         'record_owner_contention',
         'live_episode_notes',
+        LIVE_ARCHIVE_UNCOMMITTED,
         FINALIZATION_OWNER_REFUSAL,
     }:
-        raise ValueError('only ownership and live episode settlement waits may defer without a processing attempt')
+        raise ValueError('only ownership and live content waits may defer without a processing attempt')
     snapshot = job_ref.get(transaction=transaction)
     if not getattr(snapshot, 'exists', False):
         return False
@@ -1664,7 +1675,15 @@ def _mark_finalization_retryable_txn(
         return False
     attempt_count = int(job.get('attempt_count') or 0) + int(count_attempt)
     park = failure_code == FINALIZATION_OWNER_REFUSAL and not count_attempt and ownership_target_id is not None
-    retry_after = OWNERSHIP_RECHECK_INTERVAL if park else get_finalization_reconcile_stale_after()
+    waiting_for_archive = failure_code == LIVE_ARCHIVE_UNCOMMITTED and not count_attempt
+    wait_started = parse_timestamp(job.get('live_archive_wait_started_at')) or now
+    if waiting_for_archive and now >= wait_started + LIVE_ARCHIVE_MAX_WAIT:
+        raise LiveArchiveWaitExpired(failure_code)
+    retry_after = get_finalization_reconcile_stale_after()
+    if park:
+        retry_after = OWNERSHIP_RECHECK_INTERVAL
+    elif waiting_for_archive:
+        retry_after = LIVE_ARCHIVE_RECHECK_INTERVAL
     transaction.update(
         job_ref,
         {
@@ -1674,8 +1693,14 @@ def _mark_finalization_retryable_txn(
             'attempt_count': attempt_count,
             'reconcile_after_at': now + retry_after,
             'last_failure_code': failure_code,
+            # The delivery yielded its lease. Let the explicit due time drive replay.
+            **(
+                {'dispatch_requested_at': firestore.DELETE_FIELD, 'live_archive_wait_started_at': wait_started}
+                if waiting_for_archive
+                else {}
+            ),
             **({'finalization_waiting_on_owner': ownership_target_id} if park else {}),
-            # A contention-only delivery did no processing. Refund its durable
+            # A deferred delivery did no processing. Refund its durable
             # worker slot too, or the next claim would count it as a killed worker.
             **(
                 {'worker_claim_count': max(0, int(job.get('worker_claim_count') or 0) - 1)}
@@ -2480,6 +2505,10 @@ def _claim_finalization_replay_txn(
         if isinstance(lease_expires_at, datetime) and lease_expires_at > now:
             return _intent_from_job(job_ref.id, job)
     if status == 'queued':
+        if job.get('last_failure_code') == LIVE_ARCHIVE_UNCOMMITTED:
+            due = parse_timestamp(job.get('reconcile_after_at'))
+            if due is not None and now < due:
+                return _intent_from_job(job_ref.id, job)
         dispatch_requested_at = job.get('dispatch_requested_at')
         if job.get('requires_byok'):
             activity = [
