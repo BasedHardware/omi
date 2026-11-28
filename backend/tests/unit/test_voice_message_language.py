@@ -252,6 +252,7 @@ async def test_stream_uses_one_cancellation_safe_consumer_worker(chat, monkeypat
         (chat.sync_executor, chat.transcribe_voice_message_segment)
     ]
     assert calls[0][2] == ("audio.wav", "uid", "en")
+    assert calls[0][3] == {"detect_language": False}
 
 
 @pytest.mark.asyncio

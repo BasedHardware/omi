@@ -650,9 +650,13 @@ def get_syncing_file_temporal_signed_url_with_receipt(
 
     if not owner_uid:
         raise ValueError('staged chat input requires an authorized uid')
-    bucket_name = audio_archive.regional_bucket(owner_uid, syncing_local_bucket)
+    # Chat scratch stays in the legacy temporary bucket for every cohort. GCS
+    # lifecycle deletes only objects carrying this per-upload Custom-Time;
+    # accepted sync/capture objects without it cannot age out through this rule.
+    bucket_name = syncing_local_bucket
     bucket = _get_storage_client().bucket(bucket_name)
     blob = bucket.blob(file_path)
+    blob.custom_time = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
     with owner_storage_write_gate(owner_uid, bucket):
         blob.upload_from_filename(file_path)
     raw_generation = getattr(blob, 'generation', None)

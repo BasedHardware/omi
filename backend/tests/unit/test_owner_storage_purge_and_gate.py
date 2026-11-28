@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+import datetime
 from types import SimpleNamespace
 import struct
 from unittest.mock import MagicMock
@@ -353,14 +354,23 @@ def test_signed_url_receipt_binds_uploaded_generation_and_cleans_sign_failure(mo
     client.bucket.return_value = bucket
     monkeypatch.setattr(storage_mod, '_get_storage_client', lambda: client)
     monkeypatch.setattr(storage_mod, 'syncing_local_bucket', 'sync')
-    monkeypatch.setattr(storage_mod.audio_archive, 'regional_bucket', lambda uid, legacy: legacy)
+    regional = MagicMock()
+    monkeypatch.setattr(storage_mod.audio_archive, 'regional_bucket', regional)
     monkeypatch.setattr(storage_mod, '_get_signed_url', MagicMock(side_effect=RuntimeError('signing unavailable')))
     schedule = MagicMock()
     monkeypatch.setattr(storage_mod, 'schedule_syncing_temporal_file_deletion', schedule)
+    before = datetime.datetime.now(datetime.timezone.utc)
 
     with pytest.raises(RuntimeError, match='signing unavailable'):
         storage_mod.get_syncing_file_temporal_signed_url_with_receipt('syncing/uid1/job/input.wav', 'uid1')
 
+    after = datetime.datetime.now(datetime.timezone.utc)
+    regional.assert_not_called()
+    assert (
+        before + datetime.timedelta(days=1)
+        <= bucket.blob.return_value.custom_time
+        <= after + datetime.timedelta(days=1)
+    )
     schedule.assert_called_once_with(
         storage_mod.SyncingTemporalFileReceipt('syncing/uid1/job/input.wav', 'uid1', 'sync', 321)
     )

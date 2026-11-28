@@ -237,6 +237,7 @@ def transcribe_voice_message_segment(
     path: str,
     uid: str,
     language: str = 'multi',
+    detect_language: bool = True,
     *,
     return_provider: bool = False,
 ) -> Any:
@@ -252,7 +253,7 @@ def transcribe_voice_message_segment(
             return None, detected_language
 
         return _transcribe_voice_message_url(
-            url, path, language, **({"return_provider": True} if return_provider else {})
+            url, path, language, detect_language, **({"return_provider": True} if return_provider else {})
         )
     finally:
         # This worker owns the actual VAD/download/provider lifecycle. If an
@@ -515,6 +516,7 @@ async def process_voice_message_segment_stream(
         path,
         uid,
         language,
+        detect_language=False,
     )
     if text is None:
         return
