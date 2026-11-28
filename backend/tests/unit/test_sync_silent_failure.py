@@ -784,6 +784,9 @@ class TestProcessSegmentReal:
         fakes['pydub'].AudioSegment = MagicMock()
         fakes['utils.other.endpoints'].get_current_user_uid = MagicMock()
         fakes['utils.other.storage'].get_syncing_file_temporal_signed_url = MagicMock(return_value='https://fake')
+        fakes['utils.other.storage'].get_syncing_file_temporal_signed_url_with_receipt = MagicMock(
+            return_value=('https://fake', MagicMock())
+        )
         fakes['utils.other.storage'].schedule_syncing_temporal_file_deletion = MagicMock()
         fakes['utils.other.storage'].get_playback_artifact_signed_url = MagicMock(return_value=None)
         fakes['utils.other.storage'].get_playback_failure_retry_epoch = MagicMock(return_value=None)
@@ -1534,6 +1537,9 @@ class TestVoiceMessageRuntimeErrorHandling:
         fakes['deepgram'].DeepgramClientOptions = MagicMock()
         fakes['utils.other.endpoints'].timeit = lambda f: f
         fakes['utils.other.storage'].get_syncing_file_temporal_signed_url = MagicMock(return_value='https://fake')
+        fakes['utils.other.storage'].get_syncing_file_temporal_signed_url_with_receipt = MagicMock(
+            return_value=('https://fake', MagicMock())
+        )
         fakes['utils.other.storage'].schedule_syncing_temporal_file_deletion = MagicMock()
         fakes['utils.other.storage'].get_playback_artifact_signed_url = MagicMock(return_value=None)
         fakes['utils.other.storage'].get_playback_failure_retry_epoch = MagicMock(return_value=None)

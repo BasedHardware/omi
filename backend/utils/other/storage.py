@@ -22,6 +22,7 @@ import threading
 import time
 import wave
 from contextlib import contextmanager, nullcontext
+from dataclasses import dataclass
 from itertools import chain
 from config import audio_archive
 from config.record_wal_storage import private_archive_bucket
@@ -201,17 +202,44 @@ def owner_storage_write_gate(uid: str, bucket: Any = None):
 
 
 def _owner_uid_from_sync_path(file_path: str) -> Optional[str]:
-    """Extract the owner from the only UID-scoped temporary-sync layout."""
+    """Extract the owner from either UID-scoped chat temporary-input layout."""
 
     parts = str(file_path).replace('\\', '/').split('/')
     if len(parts) >= 2 and parts[0] == 'syncing' and parts[1] and parts[1] not in {'.', '..'}:
         return parts[1]
+    if len(parts) >= 3 and parts[:2] == ['', 'tmp']:
+        # Chat generates /tmp/{uid}_{uuid}.{ext}; split after the UID, whose
+        # authorized value may itself contain underscores.
+        owner_uid, separator, filename = parts[2].rpartition('_')
+        if separator and owner_uid and filename and owner_uid not in {'.', '..'}:
+            return owner_uid
     return None
 
 
-def _delete_owner_bucket_prefix(bucket: Any, prefix: str, *, account_deletion_uid: str | None = None) -> int:
+def _delete_owner_bucket_prefix(
+    bucket: Any,
+    prefix: str,
+    *,
+    account_deletion_uid: str | None = None,
+    object_name_allowed: Callable[[str], bool] | None = None,
+) -> int:
     return delete_owner_bucket_prefix(
-        bucket, prefix, real_gcs=_uses_real_gcs_bucket(bucket), account_deletion_uid=account_deletion_uid
+        bucket,
+        prefix,
+        real_gcs=_uses_real_gcs_bucket(bucket),
+        account_deletion_uid=account_deletion_uid,
+        object_name_allowed=object_name_allowed,
+    )
+
+
+def _delete_direct_chat_voice_objects(bucket: Any, uid: str) -> int:
+    """Erase exact-owner generations without re-expanding their names as prefixes."""
+
+    return _delete_owner_bucket_prefix(
+        bucket,
+        f'/tmp/{uid}_',
+        account_deletion_uid=uid,
+        object_name_allowed=lambda name: _owner_uid_from_sync_path(name) == uid,
     )
 
 
@@ -259,10 +287,10 @@ def delete_all_user_storage_objects(uid: str) -> int:
                 for p in (audio_packs.SOURCE_PREFIX, audio_packs.PACK_PREFIX, audio_packs.INDEX_PREFIX)
             ),
         ),
-        (syncing_local_bucket, (f'syncing/{uid}/',)),
+        (syncing_local_bucket, (f'syncing/{uid}/', f'/tmp/{uid}_')),
         (
             os.getenv('BUCKET_AUDIO_DERIVED'),
-            (f'merged/{uid}/', f'playback/{uid}/', f'syncing/{uid}/', f'chunks/{uid}/'),
+            (f'merged/{uid}/', f'playback/{uid}/', f'syncing/{uid}/', f'/tmp/{uid}_', f'chunks/{uid}/'),
         ),
         (chat_files_bucket, (f'{uid}/',)),
     ]
@@ -281,6 +309,9 @@ def delete_all_user_storage_objects(uid: str) -> int:
             if key in seen_buckets:
                 continue
             seen_buckets.add(key)
+            if prefix == f'/tmp/{uid}_':
+                deleted += _delete_direct_chat_voice_objects(bucket, uid)
+                continue
             if bucket_name == private_cloud_sync_bucket and prefix == f'diagnostics/{uid}/':
                 # Remove ticket lookups alongside their owner-scoped bundles.
                 for blob in list(bucket.list_blobs(prefix=prefix)):
@@ -585,6 +616,16 @@ def get_syncing_file_temporal_url(file_path: str):
     return _blob_public_url(blob, getattr(bucket, 'name', syncing_local_bucket), file_path)
 
 
+@dataclass(frozen=True)
+class SyncingTemporalFileReceipt:
+    """The exact staged generation admitted for one signed-URL consumer."""
+
+    file_path: str
+    owner_uid: str
+    bucket_name: Optional[str]
+    generation: Optional[int]
+
+
 @sync_phase('gcs')
 def get_syncing_file_temporal_signed_url(file_path: str):
     bucket = _get_storage_client().bucket(
@@ -601,33 +642,80 @@ def get_syncing_file_temporal_signed_url(file_path: str):
 
 
 @sync_phase('gcs')
-def delete_syncing_temporal_file(file_path: str):
-    owner_uid = _owner_uid_from_sync_path(file_path)
+def get_syncing_file_temporal_signed_url_with_receipt(
+    file_path: str,
+    owner_uid: str,
+) -> tuple[str, SyncingTemporalFileReceipt]:
+    """Stage and sign one chat input, returning its generation-bound cleanup receipt."""
+
+    if not owner_uid:
+        raise ValueError('staged chat input requires an authorized uid')
+    # Chat scratch stays in the legacy temporary bucket for every cohort. GCS
+    # lifecycle deletes only objects carrying this per-upload Custom-Time;
+    # accepted sync/capture objects without it cannot age out through this rule.
+    bucket_name = syncing_local_bucket
+    bucket = _get_storage_client().bucket(bucket_name)
+    blob = bucket.blob(file_path)
+    blob.custom_time = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
+    with owner_storage_write_gate(owner_uid, bucket):
+        blob.upload_from_filename(file_path)
+    raw_generation = getattr(blob, 'generation', None)
+    generation = int(raw_generation) if raw_generation is not None else None
+    receipt = SyncingTemporalFileReceipt(file_path, owner_uid, bucket_name, generation)
+    try:
+        return _get_signed_url(blob, 15), receipt
+    except BaseException:
+        # The upload already owned a concrete generation. Signing failure ends
+        # this consumer before a URL escapes, so it is safe to schedule cleanup.
+        schedule_syncing_temporal_file_deletion(receipt)
+        raise
+
+
+@sync_phase('gcs')
+def delete_syncing_temporal_file(file: str | SyncingTemporalFileReceipt):
+    if isinstance(file, SyncingTemporalFileReceipt):
+        bucket = _get_storage_client().bucket(file.bucket_name)
+        if file.generation is None and _uses_real_gcs_bucket(bucket):
+            logger.warning('retaining staged chat input without a generation receipt')
+            return
+        delete_kwargs = {'if_generation_match': file.generation} if file.generation is not None else {}
+        try:
+            with owner_storage_write_gate(file.owner_uid, bucket):
+                bucket.blob(file.file_path).delete(**delete_kwargs)
+        except (BlobNotFound, PreconditionFailed):
+            # A missing generation is already gone; a failed precondition means
+            # a newer retry owns this path and must not be deleted by stale work.
+            pass
+        return
+
+    # Legacy callers without an admission receipt retain their existing cleanup
+    # behavior. New signed-URL consumers must use the generation-bound receipt.
+    owner_uid = _owner_uid_from_sync_path(file)
     for name in dict.fromkeys(filter(None, (syncing_local_bucket, os.getenv('BUCKET_AUDIO_DERIVED')))):
         bucket = _get_storage_client().bucket(name)
         try:
             with owner_storage_write_gate(owner_uid, bucket) if owner_uid else nullcontext():
-                bucket.blob(file_path).delete()
+                bucket.blob(file).delete()
         except BlobNotFound:
             pass
 
 
-# Long enough for every signed-URL consumer (Deepgram fetch, speaker-ID
-# download) to finish; the URLs themselves expire at 15 minutes.
+# Post-consumption grace only: callers must schedule after their consumer has
+# actually terminated, never when its signed URL is created.
 SYNCING_TEMPORAL_DELETE_DELAY_SECONDS = 480
 
 _syncing_temporal_deleter = DeferredDeleter(delete_syncing_temporal_file, name='syncing-blob-janitor')
 
 
 def schedule_syncing_temporal_file_deletion(
-    file_path: str, delay_seconds: float = SYNCING_TEMPORAL_DELETE_DELAY_SECONDS
+    file: str | SyncingTemporalFileReceipt, delay_seconds: float = SYNCING_TEMPORAL_DELETE_DELAY_SECONDS
 ):
-    """Delete a temporal syncing blob once its signed-URL consumers are done.
+    """Delete a temporal input after its signed-URL consumer has terminated.
 
     One janitor thread + a due-time heap, instead of the previous per-file
     time.sleep(480) that parked a storage_executor thread per blob (#7531).
     """
-    _syncing_temporal_deleter.schedule(file_path, delay_seconds)
+    _syncing_temporal_deleter.schedule(file, delay_seconds)
 
 
 @sync_phase('gcs')

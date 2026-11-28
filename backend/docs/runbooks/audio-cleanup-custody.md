@@ -33,6 +33,59 @@ archive (including consent-off paths and historical receipts) do not acquire
 routine source-deletion authority. Zero-VAD early completions currently retain
 staging too. No long timer or bucket lifecycle is introduced as a substitute.
 
+## Chat voice staging
+
+Chat voice audio is single-request STT transport scratch, not a durable chat
+attachment, recovery copy or playback source. Uploading and signing no longer
+starts its 480-second deletion clock. The synchronous consumer that owns
+VAD, backend signed-URL download and bounded provider retries schedules cleanup
+only when that work reaches success, expected silence or a terminal failure.
+Cancelling an async SSE caller does not cancel its executor worker, so cleanup
+remains pending until the worker actually exits. The unchanged signed URL
+expires after 15 minutes; exceeding it is a terminal consumption failure, not
+a reason to renew the URL or retain the object for another consumer.
+
+Every cohort uses `BUCKET_TEMPORAL_SYNC_LOCAL` for this staging traffic. Chat
+multipart paths no longer acquire an owner UID merely to participate in the
+regional-cache cohort, and decoded chat paths no longer redirect to
+`BUCKET_AUDIO_DERIVED`; there is no cohort-dependent storage-location change.
+Erasure still checks both configured destinations for supported layouts.
+
+Each URL preparation returns the admitted bucket and uploaded GCS generation.
+Ordinary cleanup deletes only that generation, so a stale attempt cannot remove
+a replacement staged at the same path. Signing failure schedules the admitted
+generation immediately; an upload exception without generation proof has no
+routine deletion authority. Local/offline providers without GCS generations
+retain their existing path-delete behavior.
+
+Account erasure stays authoritative and immediate across the `syncing/{uid}/…`
+and `/tmp/{uid}_…` chat layouts in each configured temporary/derived bucket.
+Those uploads are owner-fenced against account deletion. The multipart wipe
+parses the generated UUID separator to distinguish UIDs containing underscores,
+then verifies no exact-owner objects remain without treating another owner's
+shared text prefix as a deletion target or a failed verification. That owner
+predicate covers the erase listing and the verification listing; every selected
+generation still uses the account-erasure hold checks and generation
+preconditions, never a second unfiltered prefix expansion. Derived transcript
+messages keep their existing chat-retention semantics.
+
+New chat scratch uploads carry a per-object GCS `customTime` one day after
+upload. The process-local janitor remains early, best-effort cleanup, while the
+checked-in `deploy/storage-lifecycle/voice-scratch-lifecycle.json` supplies the
+durable backstop: only objects with that explicit stamp match its
+`daysSinceCustomTime: 0` Delete rule once the stamped date is reached. Legacy
+sync/capture objects without `customTime` do not match, and no historical sweep,
+consent change or retroactive deletion is permitted.
+
+The source declaration and tests do not establish a live backstop by themselves.
+Before promotion, the release owner must ensure that exactly this scoped rule is
+present on every bucket selected for chat scratch and retain a passing
+`--require-voice-scratch-backstop` metadata receipt for each. Privacy erasure
+continues to bypass the stamped date and removes selected generations
+immediately. Soft-delete/versioning and serving-metric readbacks below also
+remain release prerequisites; missing policy, retention holds or failed readback
+block any bounded-retention claim and shipment.
+
 ## Capture-window hold
 
 `AUDIO_CLEANUP_HOLD_ENABLED` defaults to `true`; only the explicit value `false`
@@ -104,8 +157,13 @@ For the known temporal target:
 
 ```bash
 source ~/.local/bin/gcp-agent-env.sh ro-prod
-backend/.venv/bin/python backend/scripts/check_sync_staging_lifecycle.py --bucket syncing-local
+backend/.venv/bin/python backend/scripts/check_sync_staging_lifecycle.py --bucket syncing-local --require-voice-scratch-backstop
 ```
+
+`--require-voice-scratch-backstop` additionally requires the exact permitted
+`daysSinceCustomTime` Delete rule on the temporal and explicitly named chat
+buckets. It never treats an ordinary age Delete as a substitute. A bucket with
+an ordinary age Delete, a widened Custom-Time condition or no backstop fails.
 
 Keep its timestamped JSON receipt before the lead-owned post-T3b promotion. It reads bucket
 metadata only and emits counts, metagenerations and policy digests, with no

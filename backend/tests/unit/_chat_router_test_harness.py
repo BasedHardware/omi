@@ -319,6 +319,9 @@ def wire_common_stubs(install) -> SimpleNamespace:
     auth.timeit = lambda f: f
     storage = install('utils.other.storage', ModuleType('utils.other.storage'))
     storage.get_syncing_file_temporal_signed_url = MagicMock(return_value='https://example.test/audio.wav')
+    storage.get_syncing_file_temporal_signed_url_with_receipt = MagicMock(
+        return_value=('https://example.test/audio.wav', 'receipt')
+    )
     storage.schedule_syncing_temporal_file_deletion = MagicMock()
     chat_file = install('utils.other.chat_file', ModuleType('utils.other.chat_file'))
     chat_file.FileChatTool = MagicMock()

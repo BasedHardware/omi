@@ -6,34 +6,35 @@ storage_executor's 128 threads asleep as ad-hoc timers, which is what
 drove the pool's repeated saturation (#7531). One daemon thread and a
 due-time heap handle any number of pending deletions.
 
-Best-effort by design: pending deletions are lost on process death, same
-as the sleeping threads were; the syncing bucket's lifecycle rule is the
-backstop.
+Best-effort by design: pending deletions are lost on process death, same as
+the sleeping threads were. Do not infer a hard retention bound from this
+scheduler or an unverified bucket lifecycle policy; privacy erasure remains
+independent and authoritative.
 """
 
 import heapq
 import logging
 import threading
 import time
-from typing import Callable, List, Optional, Tuple
+from typing import Any, Callable, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
 
 class DeferredDeleter:
-    def __init__(self, delete_fn: Callable[[str], None], name: str = 'deferred-delete-janitor'):
+    def __init__(self, delete_fn: Callable[[Any], None], name: str = 'deferred-delete-janitor'):
         self._delete_fn = delete_fn
         self._name = name
         self._cond = threading.Condition()
-        self._heap: List[Tuple[float, int, str]] = []
+        self._heap: List[Tuple[float, int, Any]] = []
         self._seq = 0
         self._thread: Optional[threading.Thread] = None
 
-    def schedule(self, path: str, delay_seconds: float) -> None:
-        """Schedule path for deletion after delay_seconds. O(log n), never blocks."""
+    def schedule(self, item: Any, delay_seconds: float) -> None:
+        """Schedule an item for deletion after delay_seconds. O(log n), never blocks."""
         with self._cond:
             self._seq += 1
-            heapq.heappush(self._heap, (time.monotonic() + delay_seconds, self._seq, path))
+            heapq.heappush(self._heap, (time.monotonic() + delay_seconds, self._seq, item))
             # is_alive() guard: restart the janitor if a BaseException
             # (MemoryError, SystemExit) ever killed it — otherwise schedules
             # would pile up silently for the rest of the process lifetime
@@ -51,7 +52,7 @@ class DeferredDeleter:
             with self._cond:
                 while not self._heap:
                     self._cond.wait()
-                due, _, path = self._heap[0]
+                due, _, item = self._heap[0]
                 delay = due - time.monotonic()
                 if delay > 0:
                     # A schedule() for an earlier due-time re-notifies and we re-peek
@@ -59,6 +60,6 @@ class DeferredDeleter:
                     continue
                 heapq.heappop(self._heap)
             try:
-                self._delete_fn(path)
+                self._delete_fn(item)
             except Exception as e:
-                logger.warning('deferred delete failed for %s: %s', path, e)
+                logger.warning('deferred delete failed for %s: %s', item, e)

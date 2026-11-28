@@ -68,6 +68,26 @@ def _reaches(rule_prefixes: list[str], prefixes: list[str]) -> bool:
     return not rule_prefixes or any(p.startswith(q) or q.startswith(p) for p in rule_prefixes for q in prefixes)
 
 
+def custom_time_delete_allowed(contract: dict[str, Any], bucket: str, condition: dict[str, Any]) -> bool:
+    """Return whether a rule can delete only explicitly stamped chat scratch.
+
+    Objects without ``customTime`` do not match this GCS lifecycle condition, so
+    accepted sync/capture objects stay outside the rule. Keep the condition exact
+    to prevent an approval from widening into an ordinary age/prefix deletion.
+    """
+    if set(condition) != {'daysSinceCustomTime'}:
+        return False
+    allowed = contract['buckets'][bucket].get('custom_time_delete_after_days')
+    value = condition['daysSinceCustomTime']
+    return (
+        type(allowed) in (int, float)
+        and type(value) in (int, float)
+        and math.isfinite(allowed)
+        and math.isfinite(value)
+        and value == allowed
+    )
+
+
 def floor_violations(
     contract: dict[str, Any],
     bucket: str,
@@ -85,11 +105,16 @@ def floor_violations(
         condition = rule.get('condition') or {}
         if rule['action'].get('type') != 'Delete' or _noncurrent_only(condition):
             continue
+        if custom_time_delete_allowed(contract, bucket, condition):
+            continue
         if not _reaches(condition.get('matchesPrefix') or [], spec['protected_prefixes']):
             continue
         age = condition.get('age')
         if input_terminal_seconds is not None and (
-            type(age) not in (int, float) or not math.isfinite(age) or age * 86400 <= input_terminal_seconds
+            not isinstance(age, (int, float))
+            or isinstance(age, bool)
+            or not math.isfinite(age)
+            or age * 86400 <= input_terminal_seconds
         ):
             out.append({'age': age, 'required': input_terminal_seconds / 86400, 'strict': True, 'pending': pending})
         elif need is None:

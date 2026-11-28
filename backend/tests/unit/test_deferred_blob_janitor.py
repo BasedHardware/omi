@@ -127,20 +127,19 @@ class TestSleepPatternRemoved:
         pipeline_src = _read_source('utils/sync/pipeline.py')
         assert 'schedule_syncing_temporal_file_deletion' not in pipeline_src
 
-    def test_chat_cleanup_has_two_explicit_owners(self):
+    def test_chat_cleanup_is_owned_by_the_consumer_worker(self):
         source = _read_source('utils/chat.py')
 
-        # ``_prepare_voice_message_url`` is the single cleanup owner for every
-        # voice-message entry point. A direct caller-side schedule would
-        # double-schedule the same temporary object.
-        assert source.count('schedule_syncing_temporal_file_deletion(path)') == 1
+        # URL preparation cannot start the deletion clock. The single consumer
+        # worker schedules only its admitted generation after VAD/STT terminates.
+        assert source.count('schedule_syncing_temporal_file_deletion(cleanup_receipt)') == 1
 
         helper_source = source.split('def _prepare_voice_message_url(', 1)[1].split('\ndef ', 1)[0]
-        assert helper_source.count('schedule_syncing_temporal_file_deletion(path)') == 1
+        assert 'schedule_syncing_temporal_file_deletion' not in helper_source
 
         processing_source = source.split('def process_voice_message_segment(', 1)[1].split('\nasync def ', 1)[0]
         assert 'transcribe_voice_message_segment(path, uid, language)' in processing_source
-        assert 'schedule_syncing_temporal_file_deletion(path)' not in processing_source
+        assert 'schedule_syncing_temporal_file_deletion' not in processing_source
 
     def test_storage_defines_scheduler_with_480_default(self):
         src = _read_source('utils/other/storage.py')

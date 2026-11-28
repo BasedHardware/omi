@@ -1,3 +1,4 @@
+import copy
 import json
 from unittest.mock import MagicMock
 
@@ -155,6 +156,54 @@ def test_contract_buckets_are_judged_by_their_floor_others_stay_strict(bucket, r
     assert guard.policy_failure(metadata, bucket, CONTRACT) == reason
 
 
+@pytest.mark.parametrize(
+    'condition,allowed,reason',
+    [
+        ({'daysSinceCustomTime': 0}, True, None),
+        ({'daysSinceCustomTime': 1}, True, 'lifecycle_delete'),
+        ({'daysSinceCustomTime': 0, 'matchesPrefix': ['voice-scratch/']}, True, 'lifecycle_delete'),
+        ({'daysSinceCustomTime': 0}, False, 'lifecycle_delete'),
+    ],
+)
+def test_custom_time_backstop_is_exactly_scoped_to_stamped_chat_scratch(condition, allowed, reason):
+    contract = copy.deepcopy(CONTRACT)
+    if allowed:
+        contract['buckets']['synthetic-temporal']['custom_time_delete_after_days'] = 0
+    metadata = {
+        'metageneration': 3,
+        'lifecycle': {'rule': [{'action': {'type': 'Delete'}, 'condition': condition}]},
+    }
+    assert guard.policy_failure(metadata, 'synthetic-temporal', contract) == reason
+
+
+def test_chat_voice_backstop_is_required_per_selected_bucket():
+    contract = copy.deepcopy(CONTRACT)
+    contract['buckets']['synthetic-temporal']['custom_time_delete_after_days'] = 0
+    marked = {
+        'metageneration': 3,
+        'lifecycle': {'rule': [{'action': {'type': 'Delete'}, 'condition': {'daysSinceCustomTime': 0}}]},
+    }
+    unmarked = {'metageneration': 3, 'lifecycle': {}}
+
+    missing = guard.audit(
+        ['synthetic-temporal'],
+        lambda _: unmarked,
+        contract,
+        voice_scratch_buckets=['synthetic-temporal'],
+    )
+    assert missing['status'] == 'FAIL'
+    assert missing['targets'][0]['reason'] == 'voice_scratch_backstop_missing'
+
+    present = guard.audit(
+        ['synthetic-temporal', 'synthetic-other'],
+        lambda name: marked if name == 'synthetic-temporal' else unmarked,
+        contract,
+        voice_scratch_buckets=['synthetic-temporal'],
+    )
+    assert present['status'] == 'PASS'
+    assert present['targets_checked'] == 2
+
+
 def test_ceilings_are_reported_without_changing_pass_or_naming_buckets():
     metadata = {'metageneration': 3, 'lifecycle': {}, 'soft_delete_seconds': '604800', 'versioning': True}
     result = guard.audit(['synthetic-temporal', 'synthetic-other'], lambda _: dict(metadata), CONTRACT)
@@ -178,7 +227,6 @@ def test_main_reads_the_checked_in_contract(monkeypatch, capsys):
 
 @pytest.mark.parametrize('age', [30, 59, 60])
 def test_live_batch_metadata_is_checked_against_the_runtime_terminal(age):
-    import copy
     from scripts import retention_contract
     from utils.batch_pipeline.input_retention import STAGING_BUCKET
 

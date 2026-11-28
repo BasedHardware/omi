@@ -1,6 +1,6 @@
 {
   "schema": "omi.retention/v1",
-  "_doc": "The one threshold source for audio-bucket retention, both ways. Floor: every lifecycle Delete that can reach a protected prefix has age >= max(hold days) + margin_days; a hold with days=null (or a pending ruling) forbids any age Delete there. Ceiling: soft delete, versioning and cache max ages a bucket may not exceed. Read by backend/scripts/check_sync_staging_lifecycle.py (release prerequisite; floors enforce, ceilings report) and by the workspace's infra/rollout/bin/retention_check.py and drift.sh (git show origin/main:<this file>). 11-01: a whole-bucket 7-day Delete on the batch staging bucket removed 161 failed_held sync uploads held 8+ days, the only server copy.",
+  "_doc": "The one threshold source for audio-bucket retention, both ways. Floor: every lifecycle Delete that can reach a protected prefix has age >= max(hold days) + margin_days; a hold with days=null (or a pending ruling) forbids any age Delete there. The only exception is the exact custom_time_delete_after_days condition: per-object Custom-Time chat scratch, never unmarked accepted audio. Ceiling: soft delete, versioning and cache max ages a bucket may not exceed. Read by backend/scripts/check_sync_staging_lifecycle.py (release prerequisite; floors enforce, ceilings report) and by the workspace's infra/rollout/bin/retention_check.py and drift.sh (git show origin/main:<this file>). 11-01: a whole-bucket 7-day Delete on the batch staging bucket removed 161 failed_held sync uploads held 8+ days, the only server copy.",
   "margin_days": 7,
   "batch_staging_delete_age_days": 60,
   "holds": {
@@ -66,6 +66,7 @@
       "project": "based-hardware",
       "protected_prefixes": [""],
       "holds": ["staging_custody"],
+      "custom_time_delete_after_days": 0,
       "ceiling": {"soft_delete_seconds_max": 0, "noncurrent_cleanup": true, "ruling": "pending",
                   "source": ["erasure_immediate"]}
     },
@@ -74,6 +75,7 @@
       "project": "based-hardware",
       "protected_prefixes": ["syncing/"],
       "holds": ["staging_custody"],
+      "custom_time_delete_after_days": 0,
       "ceiling": {"soft_delete_seconds_max": 0, "source": ["erasure_immediate", "voice_evidence"]}
     },
     "based-hardware-batch-pipeline-staging": {

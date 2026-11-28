@@ -14,14 +14,17 @@ from models.chat import ChatSession, Message, ResponseMessage, MessageConversati
 from models.notification_message import NotificationMessage
 from models.transcript_segment import TranscriptSegment
 from utils.apps import get_available_app_by_id
-from utils.executors import db_executor, run_blocking, storage_executor, sync_executor
+from utils.executors import db_executor, run_blocking, sync_executor
 from utils.conversation_helpers import extract_memory_ids
 from utils.chat_citations import resolve_conversation_citations
 from utils.llm.chat import initial_chat_message
 from utils.llm.persona import initial_persona_chat_message
 from utils.notifications import send_client_displayed_notification, send_client_displayed_notification_async
 from utils.observability.fallback import record_fallback
-from utils.other.storage import get_syncing_file_temporal_signed_url, schedule_syncing_temporal_file_deletion
+from utils.other.storage import (
+    get_syncing_file_temporal_signed_url_with_receipt,
+    schedule_syncing_temporal_file_deletion,
+)
 from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream
 from utils.stt.pre_recorded import (
     postprocess_words,
@@ -146,11 +149,9 @@ def resolve_voice_message_language(uid: str, request_language: Optional[str]) ->
     return 'multi'
 
 
-def _prepare_voice_message_url(path: str) -> str:
-    """Create the signed input URL and schedule its cleanup on the storage lane."""
-    url = get_syncing_file_temporal_signed_url(path)
-    schedule_syncing_temporal_file_deletion(path)
-    return url
+def _prepare_voice_message_url(path: str, uid: str):
+    """Create a signed input URL and retain its exact-generation cleanup receipt."""
+    return get_syncing_file_temporal_signed_url_with_receipt(path, uid)
 
 
 def _validated_wav_is_silent(path: str, *, provider: str) -> bool:
@@ -236,22 +237,29 @@ def transcribe_voice_message_segment(
     path: str,
     uid: str,
     language: str = 'multi',
+    detect_language: bool = True,
     *,
     return_provider: bool = False,
 ) -> Any:
     if not language:
         language = resolve_voice_message_language(uid, None)
     provider, provider_language, provider_model = get_prerecorded_service(language)
-    # Schedule deletion before the VAD gate as well: silence is a valid
-    # terminal outcome, not a reason to retain temporary customer audio.
-    url = _prepare_voice_message_url(path)
-    if _validated_wav_is_silent(path, provider=provider):
-        detected_language = provider_language if provider_language != 'multi' else None
-        if return_provider:
-            return None, detected_language, provider, provider_model
-        return None, detected_language
+    url, cleanup_receipt = _prepare_voice_message_url(path, uid)
+    try:
+        if _validated_wav_is_silent(path, provider=provider):
+            detected_language = provider_language if provider_language != 'multi' else None
+            if return_provider:
+                return None, detected_language, provider, provider_model
+            return None, detected_language
 
-    return _transcribe_voice_message_url(url, path, language, **({"return_provider": True} if return_provider else {}))
+        return _transcribe_voice_message_url(
+            url, path, language, detect_language, **({"return_provider": True} if return_provider else {})
+        )
+    finally:
+        # This worker owns the actual VAD/download/provider lifecycle. If an
+        # async caller is cancelled, its executor thread still runs to this
+        # boundary before the sole staged generation becomes eligible for cleanup.
+        schedule_syncing_temporal_file_deletion(cleanup_receipt)
 
 
 def transcribe_pcm_bytes(
@@ -499,27 +507,16 @@ async def process_voice_message_segment_stream(
 ) -> AsyncGenerator[str, None]:
     if not language:
         language = await run_blocking(db_executor, resolve_voice_message_language, uid, None)
-    provider, _, _ = get_prerecorded_service(language)
-    # The storage lifecycle must cover silent files too. Keep both signing and
-    # deletion scheduling on the storage executor before VAD decides whether
-    # transcription should proceed.
-    url = await run_blocking(storage_executor, _prepare_voice_message_url, path)
-    is_silent = await run_blocking(
-        sync_executor,
-        _validated_wav_is_silent,
-        path,
-        provider=provider,
-    )
-    if is_silent:
-        return
 
+    # The synchronous consumer owns cleanup so client cancellation cannot
+    # schedule deletion while its worker is still downloading or transcribing.
     text, _detected_language = await run_blocking(
         sync_executor,
-        _transcribe_voice_message_url,
-        url,
+        transcribe_voice_message_segment,
         path,
+        uid,
         language,
-        False,
+        detect_language=False,
     )
     if text is None:
         return

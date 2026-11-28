@@ -115,16 +115,40 @@ def _governed(contract: dict[str, Any] | None, bucket: str | None) -> tuple[dict
     return contract, bucket
 
 
+def _has_voice_scratch_backstop(metadata: dict[str, Any], bucket: str, contract: dict[str, Any] | None) -> bool:
+    governed = _governed(contract, bucket)
+    if governed is None:
+        return False
+    lifecycle = metadata.get('lifecycle') or {}
+    for rule in lifecycle.get('rule', []):
+        if not isinstance(rule, dict) or not isinstance(rule.get('action'), dict):
+            continue
+        condition = rule.get('condition') or {}
+        if rule['action'].get('type') == 'Delete' and retention_contract.custom_time_delete_allowed(
+            governed[0], governed[1], condition
+        ):
+            return True
+    return False
+
+
 def audit(
     names: Sequence[str],
     reader: Callable[[str], dict[str, Any]] = read_bucket_metadata,
     contract: dict[str, Any] | None = None,
+    voice_scratch_buckets: Sequence[str] = (),
 ) -> dict[str, Any]:
     targets = []
+    voice_scratch_required = set(voice_scratch_buckets)
     for index, name in enumerate(names, start=1):
         try:
             metadata = reader(name)
             reason = policy_failure(metadata, name, contract)
+            if (
+                reason is None
+                and name in voice_scratch_required
+                and not _has_voice_scratch_backstop(metadata, name, contract)
+            ):
+                reason = 'voice_scratch_backstop_missing'
             governed = _governed(contract, name)
             receipt = {
                 'target': index,
@@ -150,6 +174,11 @@ def audit(
 def main(argv: Sequence[str] | None = None, *, reader: Callable[[str], dict[str, Any]] = read_bucket_metadata) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--bucket', action='append', default=[], help='Audit every staging target; repeat as needed')
+    parser.add_argument(
+        '--require-voice-scratch-backstop',
+        action='store_true',
+        help='Require the per-object Custom-Time Delete backstop on every chat voice bucket',
+    )
     args = parser.parse_args(argv)
     if os.getenv('GCP_AGENT_TIER') not in {'ro-prod', 'ro-dev'}:
         print(json.dumps({'status': 'FAIL', 'reason': 'read_only_agent_tier_required'}))
@@ -165,7 +194,18 @@ def main(argv: Sequence[str] | None = None, *, reader: Callable[[str], dict[str,
     if not names or any(not re.fullmatch(r'[a-z0-9][a-z0-9._-]{1,220}[a-z0-9]', name) for name in names):
         print(json.dumps({'status': 'FAIL', 'reason': 'invalid_or_missing_targets'}))
         return 2
-    result = audit(names, reader, retention_contract.load())
+    voice_scratch_buckets = []
+    if args.require_voice_scratch_backstop:
+        voice_raw = [os.getenv('BUCKET_TEMPORAL_SYNC_LOCAL'), os.getenv('BUCKET_AUDIO_DERIVED'), *args.bucket]
+        voice_scratch_buckets = list(
+            dict.fromkeys(value.removeprefix('gs://').rstrip('/') for value in voice_raw if value)
+        )
+    result = audit(
+        names,
+        reader,
+        retention_contract.load(),
+        voice_scratch_buckets=voice_scratch_buckets,
+    )
     print(json.dumps(result, sort_keys=True))
     return 0 if result['status'] == 'PASS' else 1
 
