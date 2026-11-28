@@ -9,22 +9,22 @@ import 'package:omi/ui/ui.dart';
 /// Experimental design: the pressed state of a Home list row.
 ///
 /// The row has no card of its own, so a touch has to show somewhere: a rounded wash of the primary
-/// ink comes up over the whole row and the row settles back a little, the way a row answers a
-/// touch on iOS. It leaves slowly when the finger lifts, so a quick tap is still seen.
+/// ink comes up over the whole row and the row swells a little, the way the footer buttons answer a
+/// touch. It leaves slowly when the finger lifts, so a quick tap is still seen.
 ///
 /// It only watches pointers and takes no part in gestures: the row's own tap, long press and swipe
 /// work as before. A touch that turns into a scroll or a swipe drops the state, and the short wait
 /// before it shows keeps a scrolling list from flickering. Outside the experimental design, or with
 /// [enabled] false, it is just [child].
 class RowPress extends StatefulWidget {
-  const RowPress({super.key, required this.child, this.enabled = true, this.borderRadius = OmiRadius.xlAll});
+  const RowPress({super.key, required this.child, this.enabled = true, this.borderRadius = OmiRadius.mdAll});
 
   final Widget child;
   final bool enabled;
   final BorderRadius borderRadius;
 
-  /// How far the row settles back while pressed.
-  static const double pressedScale = 0.98;
+  /// How far the row swells while pressed.
+  static const double pressedScale = 1.02;
 
   /// The wait before a touch shows, so the start of a scroll does not flash the row.
   static const Duration showDelay = Duration(milliseconds: 70);
