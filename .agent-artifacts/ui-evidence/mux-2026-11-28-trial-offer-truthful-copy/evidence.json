@@ -28,6 +28,13 @@
       "description": "This branch in German, Japanese, Portuguese and Arabic (right to left)",
       "captured_by": "agent",
       "source": "screencapture"
+    },
+    {
+      "file": "005-mobile-ios-trial-offer-largest-text-en-ar-ro.png",
+      "platform": "mobile-ios",
+      "description": "Largest accessibility text, end of the sheet in English, Arabic (right to left) and Romanian: the whole price line, the whole Claim label and No thanks on screen together",
+      "captured_by": "agent",
+      "source": "screencapture"
     }
   ]
 }
