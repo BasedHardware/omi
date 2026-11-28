@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-firmware-before-after.png",
+      "platform": "mobile-ios",
+      "description": "Firmware Update page for a connected Omi CV1 on 3.0.21 when the backend answers 404 'No suitable firmware update found': main shows 'Couldn't check for updates.' with Try Again; this PR shows 'Your device is up to date' (light).",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-firmware-before-after-dark.png",
+      "platform": "mobile-ios",
+      "description": "Same comparison in dark mode.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "003-mobile-ios-firmware-before-after-xxxl.png",
+      "platform": "mobile-ios",
+      "description": "Same comparison at the largest accessibility text size.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "004-mobile-ios-firmware-other-404-still-fails.png",
+      "platform": "mobile-ios",
+      "description": "This PR when the backend answers 404 'No releases found for the repository': still a failed check with Try Again.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}
