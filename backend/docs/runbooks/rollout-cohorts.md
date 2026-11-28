@@ -56,6 +56,9 @@ deny membership for ordinary cohorts; neither an SDK error nor the UID/document 
 `dream-agent`, `go-finalization` and `conversations-v3-holdout` instead raise
 `RolloutCohortUnavailable` and each caller decides: the holdout admits and counts
 `omi_fallback_total{component="feature_flags",from_mode="v3_holdout",reason="unavailable"}`.
+For the holdout, an invalid `OMI_ENV_STAGE` (not `prod`, `dev`, `local` or `offline`) is also unknown
+membership and is counted under the same `reason="unavailable"`: check `OMI_ENV_STAGE` before
+chasing a membership-store outage.
 
 A warm check costs **0 document reads per request**, regardless of flag count.
 An active resident UID costs approximately one document read per process per
