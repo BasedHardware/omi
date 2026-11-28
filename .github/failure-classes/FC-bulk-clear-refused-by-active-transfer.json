@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "id": "FC-bulk-clear-refused-by-active-transfer",
+  "family": "destroy-after-quiescence",
+  "violated_contract": "A user's bulk delete of recordings must itself establish the quiescence it needs, then report what is actually gone. Manage Storage > Clear asked each store to delete while the independent pendant ring drain and the upload pass kept running. RingStorageSyncImpl refuses a ring clear while a read is active and only logs it; the drain restarts by itself, so the user had no reliable way to stop it first. A 3.0.21 pendant with 11 h unread therefore could not be cleared, Clear All still toasted success without re-reading any store, and Clear Pending also removed uploads the server had accepted but not settled.",
+  "canonical_prevention": "SyncProvider.clearStorage owns every Manage Storage clear. For audio that is not uploaded it takes a WalSyncs clear hold (cancel ring drain and upload pass; block ring wakes, coordinator drain and discovery, and manual syncs), waits bounded for reads to settle, aborts rather than deleting around a transfer that will not stop, deletes from a target snapshot taken after the stop, re-reads every store (ring matched by device), releases the hold in finally and wakes transfers once. Tests run a clear against an active and an unstoppable pendant read.",
+  "canonical_prevention_artifact": [
+    "app/test/providers/sync_provider_storage_clear_test.dart",
+    "app/test/services/wals/storage_clear_hold_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/providers/sync_provider.dart",
+    "app/lib/services/wals/wal_syncs.dart",
+    "app/lib/services/wals/storage_clear.dart",
+    "app/lib/services/wals/ring_storage_sync.dart",
+    "app/lib/pages/conversations/widgets/storage_clear_flow.dart"
+  ],
+  "status": "open"
+}
