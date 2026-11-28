@@ -6,6 +6,7 @@ import hashlib
 import threading
 from unittest.mock import Mock
 
+import anyio
 import pytest
 from fastapi import HTTPException
 from google.api_core.exceptions import ServiceUnavailable
@@ -478,35 +479,38 @@ async def test_routing_cannot_rebind_an_admitted_upload_to_another_target(monkey
     assert client.rows[PATH]['record_upload_revision'] == 7
 
 
-@pytest.mark.parametrize('acquired', [True, False])
-@pytest.mark.parametrize('first_bind', ['admission', 'routing'])
-async def test_cancel_during_late_fence_acquisition_cannot_strand_the_token(monkeypatch, first_bind, acquired):
-    # SCA-3748 r3 finding 3: cancellation ran the wrapper's finish while the begin
-    # thread was still committing, so finish saw no token and begin then left it.
-    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
-    tokens: dict[str, dict[str, str]] = {}
-    begin_started, release_begin, begin_done, finish_called = (threading.Event() for _ in range(4))
-    finishes: list[bool] = []
+class _HeldBegin:
+    """begin/finish doubles that hold begin on its worker thread until released."""
 
-    def begin(uid, cid, session):
-        begin_started.set()
-        assert release_begin.wait(5)
-        if acquired:
-            tokens[session] = {'signal_source': 'custody_append'}
-        begin_done.set()
-        return acquired
+    def __init__(self, monkeypatch, acquired: bool):
+        self.acquired = acquired
+        self.tokens: dict[str, dict[str, str]] = {}
+        self.finishes: list[bool] = []
+        self.started, self.release, self.done, self.finished = (threading.Event() for _ in range(4))
+        monkeypatch.setattr(database, 'begin', self.begin)
+        monkeypatch.setattr(database, 'finish', self.finish)
 
-    def finish(uid, cid, session, *, accepted, late_observed=False):
+    def begin(self, uid, cid, session):
+        self.started.set()
+        assert self.release.wait(5)
+        if self.acquired:
+            self.tokens[session] = {'signal_source': 'custody_append'}
+        self.done.set()
+        return self.acquired
+
+    def finish(self, uid, cid, session, *, accepted, late_observed=False):
         # Records whether the token was already committed when cleanup ran.
-        finishes.append(session in tokens)
-        tokens.pop(session, None)
-        finish_called.set()
+        self.finishes.append(session in self.tokens)
+        self.tokens.pop(session, None)
+        self.finished.set()
         return False
 
-    monkeypatch.setattr(database, 'begin', begin)
-    monkeypatch.setattr(database, 'finish', finish)
-    archive = Mock(return_value=['object'])
 
+async def _thread_wait(event: threading.Event, timeout: float) -> bool:
+    return await asyncio.get_running_loop().run_in_executor(None, event.wait, timeout)
+
+
+def _custody_request(first_bind: str, archive: Mock):
     @request.custody_upload
     async def upload():
         if first_bind == 'admission':
@@ -518,22 +522,111 @@ async def test_cancel_during_late_fence_acquisition_cannot_strand_the_token(monk
         await request.archive(archive, 'synthetic', ['local'], {})
         return JSONResponse(status_code=202, content={'status': 'queued'})
 
-    loop = asyncio.get_running_loop()
-    task = asyncio.ensure_future(upload())
-    assert await loop.run_in_executor(None, begin_started.wait, 5)
-    task.cancel()
-    # Give an unowned cleanup every chance to run before begin commits.
-    await loop.run_in_executor(None, finish_called.wait, 0.3)
-    release_begin.set()
-    with pytest.raises(asyncio.CancelledError):
-        await task
-    assert await loop.run_in_executor(None, begin_done.wait, 5)
+    return upload
+
+
+@pytest.mark.parametrize('acquired', [True, False])
+@pytest.mark.parametrize('first_bind', ['admission', 'routing'])
+@pytest.mark.parametrize('cancel', ['single', 'double', 'anyio_scope'])
+async def test_cancel_during_fence_acquisition_never_holds_the_handler_or_strands_the_token(
+    monkeypatch, first_bind, acquired, cancel
+):
+    # SCA-3748 r3/r4: begin commits on a worker thread a cancelled request cannot
+    # stop. Waiting for it in cleanup held the handler (single cancel) and was
+    # itself interrupted by a second cancel or an AnyIO scope, stranding the
+    # token. The handler must exit at once and the acquisition clean up itself.
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    held = _HeldBegin(monkeypatch, acquired)
+    archive = Mock(return_value=['object'])
+    upload = _custody_request(first_bind, archive)
+    scopes: list[anyio.CancelScope] = []
+
+    async def handler():
+        if cancel != 'anyio_scope':
+            return await upload()
+        with anyio.CancelScope() as scope:
+            scopes.append(scope)
+            return await upload()
+
+    task = asyncio.ensure_future(handler())
+    try:
+        assert await _thread_wait(held.started, 5)
+        if cancel == 'anyio_scope':
+            scopes[0].cancel()
+        else:
+            task.cancel()
+            if cancel == 'double':
+                # Let cleanup start, then cancel whatever it is awaiting.
+                for _ in range(3):
+                    await asyncio.sleep(0)
+                task.cancel()
+        # The handler exits while begin is still committing on its thread.
+        done, _ = await asyncio.wait({task}, timeout=2)
+        assert done == {task}
+        assert not held.done.is_set()
+        assert held.finishes == []
+    finally:
+        held.release.set()
+    if cancel == 'anyio_scope':
+        assert task.result() is None  # The scope absorbs its own cancellation.
+    else:
+        assert task.cancelled()
+    assert await _thread_wait(held.done, 5)
+    if acquired:
+        # The acquisition thread finished its own token, exactly once.
+        assert await _thread_wait(held.finished, 5)
+    else:
+        # A refused acquisition (sync opt-out) leaves nothing to finish.
+        assert not await _thread_wait(held.finished, 0.2)
     archive.assert_not_called()
-    # Cleanup waited for the in-flight acquisition, then cleared its token; a
-    # refused acquisition (sync opt-out) leaves nothing to finish.
-    assert finishes == ([True] if acquired else [])
-    assert tokens == {}
+    assert held.finishes == ([True] if acquired else [])
+    assert held.tokens == {}
     assert request._upload.get() is None
+
+
+async def test_anyio_scope_cancel_after_acquisition_still_finishes_the_owned_token(monkeypatch):
+    # Once begin has returned the request owns finish. An AnyIO scope redelivers
+    # cancellation at every await, so that finish must not depend on this await.
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    held = _HeldBegin(monkeypatch, True)
+    held.release.set()
+    finish_entered, release_finish = threading.Event(), threading.Event()
+    finish = held.finish
+
+    def slow_finish(*args, **kwargs):
+        finish_entered.set()
+        assert release_finish.wait(5)
+        return finish(*args, **kwargs)
+
+    monkeypatch.setattr(database, 'finish', slow_finish)
+    archived, release_archive = asyncio.Event(), asyncio.Event()
+
+    @request.custody_upload
+    async def upload():
+        await request.begin_upload('synthetic', 'record', 'cancelled')
+        archived.set()
+        await release_archive.wait()
+        return JSONResponse(status_code=202, content={'status': 'queued'})
+
+    scopes: list[anyio.CancelScope] = []
+
+    async def handler():
+        with anyio.CancelScope() as scope:
+            scopes.append(scope)
+            return await upload()
+
+    task = asyncio.ensure_future(handler())
+    try:
+        await asyncio.wait_for(archived.wait(), 5)
+        scopes[0].cancel()
+        assert await _thread_wait(finish_entered, 5)
+        done, _ = await asyncio.wait({task}, timeout=2)
+        assert done == {task}
+    finally:
+        release_finish.set()
+    assert await _thread_wait(held.finished, 5)
+    assert held.finishes == [True]
+    assert held.tokens == {}
 
 
 @pytest.mark.parametrize('late', [False, True])

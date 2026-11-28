@@ -524,8 +524,12 @@ Producer Helm env bindings use the shared runtime ConfigMap; Cloud Run and that
 ConfigMap render the same protected-environment `RECORD_TOKEN_LEASE_*` input
 vector. Every prod writer (the backend stack and projection pump composites,
 Listen, Pusher and the worker Helm upgrade) binds the four Actions variables
-verbatim as its first step; a missing, empty or invalid variable fails the run
-before any registry, GitHub, Secret Manager, ConfigMap, Helm or Cloud Run write.
+verbatim before every deploy write: as its first step, except Listen, which runs
+only its pinned read-only input validation and checkout first. A missing, empty
+or invalid variable fails the run before any deploy write (registry, the backend
+break-glass audit issue, Secret Manager, ConfigMap, Helm or Cloud Run). Status
+reporters that run under `always()`, such as the deploy Telegram notifier, still
+run after a rejected binding; they write no workload.
 Prod has no fallback and the prod worker chart refuses to render without the
 vector. Only development fills `serve`, percent 100, 3600 seconds and the shared
 serve-enable epoch `1795662310`. `off` is an upload pause, not a rollback. The

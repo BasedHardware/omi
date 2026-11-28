@@ -5,6 +5,7 @@ from contextvars import ContextVar
 from functools import wraps
 import json
 import logging
+import threading
 from collections.abc import Awaitable, Callable, Sequence
 from typing import Any, ParamSpec, TypedDict, TypeVar
 
@@ -26,9 +27,7 @@ class UploadState(TypedDict, total=False):
     durable: bool
     no_append: bool
     late_observed: bool
-    # The in-flight fence acquisition. It runs on a worker thread that a
-    # cancelled request cannot stop, so cleanup waits for it before finish.
-    acquisition: 'asyncio.Task[bool]'
+    fence: '_Fence'
 
 
 P = ParamSpec('P')
@@ -37,12 +36,109 @@ Archive = Callable[[str, list[str], dict[str, Any]], list[str]]
 _upload: ContextVar[UploadState | None] = ContextVar('record_custody_upload', default=None)
 
 
+class _Fence:
+    """One request's custody token acquisition, finished exactly once.
+
+    ``begin`` runs on a DB worker thread that a cancelled request cannot stop, so
+    the request must never wait for it during cleanup (a second cancellation or
+    an AnyIO cancel scope interrupts any such wait). Instead the lock picks one
+    cleanup owner. If the acquisition settles before the request finalizes, the
+    request owns ``finish``. If the request finalizes first, the acquisition
+    thread finishes its own token as unaccepted the moment ``begin`` returns.
+    """
+
+    def __init__(self, uid: str, cid: str, session: str) -> None:
+        self.uid, self.cid, self.session = uid, cid, session
+        self._lock = threading.Lock()
+        # None until begin returns or raises; then whether a token may exist.
+        self._held: bool | None = None
+        self._finalized = False
+
+    def acquire(self) -> bool:
+        """Worker-thread side: begin, then clear the token if the request is gone."""
+        try:
+            acquired = record_custody_append.begin(self.uid, self.cid, self.session)
+        except BaseException:
+            # The commit may have landed before the error; treat it as held.
+            self._settle(True)
+            raise
+        self._settle(acquired)
+        return acquired
+
+    def _settle(self, held: bool) -> None:
+        with self._lock:
+            self._held = held
+            abandoned = self._finalized
+        if not (abandoned and held):
+            return
+        try:
+            record_custody_append.finish(self.uid, self.cid, self.session, accepted=False)
+        except Exception as error:
+            # The token exits by its own lease lapse, like a crashed pod's.
+            logger.warning(
+                'event=record_token_lease_completion outcome=abandoned_unavailable exception_type=%s',
+                type(error).__name__,
+            )
+        else:
+            logger.info('event=record_token_lease_completion outcome=abandoned_cleared')
+
+    def finalize(self) -> bool:
+        """Request side, synchronous: True when the request now owns finish."""
+        with self._lock:
+            self._finalized = True
+            return bool(self._held)
+
+
 def accepted_response(response: Response | None) -> bool:
     if response is None or not 200 <= response.status_code < 300:
         return False
     # A capped upload deliberately answers 202/failed so the WAL retries. It
     # is a refusal, not a durable append acceptance.
     return json.loads(bytes(response.body)).get('status') != 'failed'
+
+
+async def _complete(state: UploadState, response: Response | None) -> None:
+    try:
+        accepted = bool(state.get('durable') and accepted_response(response))
+        session = state.get('session')
+        if session:
+            assert 'uid' in state and 'cid' in state  # A fence always has a resolved target.
+            try:
+                await run_blocking(
+                    db_executor,
+                    record_custody_append.finish,
+                    state['uid'],
+                    state['cid'],
+                    session,
+                    accepted=accepted,
+                    late_observed=bool(state.get('late_observed')),
+                )
+            except record_custody_append.RecordCustodyFenceLost:
+                if not accepted:
+                    raise
+                await run_blocking(
+                    db_executor,
+                    record_custody_append.recover_committed,
+                    state['uid'],
+                    state['cid'],
+                    session,
+                )
+                logger.warning('event=record_token_lease_completion outcome=recovered_lost_fence')
+            if accepted_response(response) and not state.get('durable') and not state.get('no_append'):
+                raise HTTPException(status_code=503, detail='Retain local audio until durable custody is available')
+        elif accepted and state.get('late_observed'):
+            record_token_lease_metrics.LATE_APPEND.inc()
+    except Exception as error:
+        logger.warning(
+            'event=record_token_lease_completion outcome=unavailable exception_type=%s', type(error).__name__
+        )
+        if not state.get('no_append'):
+            raise HTTPException(status_code=503, detail='Retain local audio and retry custody admission') from error
+
+
+def _detached_completion_done(completion: 'asyncio.Task[None]') -> None:
+    if not completion.cancelled() and completion.exception() is not None:
+        logger.warning('event=record_token_lease_completion outcome=detached_unavailable')
 
 
 def custody_upload(fn: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R]]:
@@ -57,55 +153,19 @@ def custody_upload(fn: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R]]:
             return result
         finally:
             try:
-                acquisition = state.get('acquisition')
-                if acquisition is not None:
-                    # A cancellation can land while begin is still committing the
-                    # token. Finishing first would see no token and return, and the
-                    # commit would then strand it. Wait for the outcome; its error,
-                    # if any, is handled as an uncertain commit below.
-                    await asyncio.wait({acquisition})
-                    if not acquisition.cancelled() and acquisition.exception() is None and not acquisition.result():
-                        # Not acquired (sync opt-out): there is no token to finish.
-                        state.pop('session', None)
-                accepted = bool(state.get('durable') and accepted_response(response))
-                session = state.get('session')
-                if session:
-                    assert 'uid' in state and 'cid' in state  # A fence always has a resolved target.
-                    try:
-                        await run_blocking(
-                            db_executor,
-                            record_custody_append.finish,
-                            state['uid'],
-                            state['cid'],
-                            session,
-                            accepted=accepted,
-                            late_observed=bool(state.get('late_observed')),
-                        )
-                    except record_custody_append.RecordCustodyFenceLost:
-                        if not accepted:
-                            raise
-                        await run_blocking(
-                            db_executor,
-                            record_custody_append.recover_committed,
-                            state['uid'],
-                            state['cid'],
-                            session,
-                        )
-                        logger.warning('event=record_token_lease_completion outcome=recovered_lost_fence')
-                    if accepted_response(response) and not state.get('durable') and not state.get('no_append'):
-                        raise HTTPException(
-                            status_code=503, detail='Retain local audio until durable custody is available'
-                        )
-                elif accepted and state.get('late_observed'):
-                    record_token_lease_metrics.LATE_APPEND.inc()
-            except Exception as error:
-                logger.warning(
-                    'event=record_token_lease_completion outcome=unavailable exception_type=%s', type(error).__name__
-                )
-                if not state.get('no_append'):
-                    raise HTTPException(
-                        status_code=503, detail='Retain local audio and retry custody admission'
-                    ) from error
+                fence = state.get('fence')
+                if fence is not None and not fence.finalize():
+                    # Not held now: refused (sync opt-out), never started, or still
+                    # in flight, in which case its own thread clears the token.
+                    state.pop('session', None)
+                # A cancelled request must not drop the finish it owns: a repeated
+                # cancellation (or an AnyIO scope) interrupts only this wait.
+                completion = asyncio.ensure_future(_complete(state, response))
+                try:
+                    await asyncio.shield(completion)
+                except asyncio.CancelledError:
+                    completion.add_done_callback(_detached_completion_done)
+                    raise
             finally:
                 _upload.reset(token)
 
@@ -160,13 +220,11 @@ async def bind_upload_target(uid: str, cid: str) -> None:
         raise HTTPException(status_code=503, detail='Retain local audio and retry custody admission')
     # Retain the exact candidate even if the commit response is lost.
     state['session'] = 'custody:' + job_id
-    # custody_upload owns this task: cancelling the request must not cancel the
-    # acquisition out from under its cleanup (see custody_upload's finally).
-    state['acquisition'] = asyncio.ensure_future(
-        run_blocking(db_executor, record_custody_append.begin, uid, cid, state['session'])
-    )
+    # The fence owns its cleanup: if this request is cancelled while begin is
+    # still committing, the worker thread finishes the token itself.
+    fence = state['fence'] = _Fence(uid, cid, state['session'])
     try:
-        acquired = await asyncio.shield(state['acquisition'])
+        acquired = await run_blocking(db_executor, fence.acquire)
     except Exception as error:
         raise HTTPException(status_code=503, detail='Retain local audio and retry custody admission') from error
     if not acquired:

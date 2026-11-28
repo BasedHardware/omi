@@ -1,6 +1,9 @@
 """The strongest local lease proofs must have an automatic CI caller."""
 
+from copy import deepcopy
 from functools import lru_cache
+import hashlib
+import json
 from pathlib import Path
 import yaml
 import pytest
@@ -187,13 +190,78 @@ def _writes(step):
     return any(marker in text for marker in WRITE_MARKERS)
 
 
-def _read_only_prefix(steps):
-    # Steps allowed ahead of the binding: local checkouts and run steps that
-    # write nothing external (input validation, exact-control guards).
+# SCA-3748 r4 finding 2: the steps allowed ahead of a binding are an allowlist, not
+# a write denylist. Besides an actions/checkout with no run, only these named,
+# read-only steps may precede it, pinned by the sha256 of their canonical JSON.
+# Changing one fails here: review that it still writes nothing, then re-pin.
+READ_ONLY_PREFIX = {
+    # Listen: refuses a non-main dispatch and an unknown environment before checkout.
+    'Validate Environment Input': 'b1efd21eba390130b5c4f4c650cd86c548a83412a348a4a4e59e530c87aef7f4',
+    # Listen: compares the checked-out SHA with the requested control SHA.
+    'Verify exact listen control SHA': '1510d34ccc2e960ccec706233ec53f29113d28d14939c74224a50283c1916995',
+    # Listen: validates the image-only admission inputs (no deploy runs it after a bind).
+    'Validate image-only Listen admission': '83d3800a70336bc50b822a17cfdb014ebf48805b9f5be16a560b48094092d315',
+}
+# The only conditions a job binding may carry, each true on every run that reaches
+# that job's lease write. None means unconditional.
+BIND_CONDITIONS = {
+    ('gcp_backend_pusher.yml', 'deploy'): None,
+    # Listen writes lease env only in deploy mode, which is exactly this condition.
+    ('gcp_backend_listen_helm.yml', 'helm-upgrade'): (
+        "${{ inputs.mode != 'evidence' && ((github.event.inputs.mode || 'deploy') == 'deploy') }}"
+    ),
+    # The worker Helm upgrade's own condition (pinned equal below), plus its service.
+    ('gcp_diarizer.yml', 'deploy'): (
+        "env.SERVICE == 'batch-pipeline-worker' && inputs.mode != 'worker-depth-only' && "
+        'inputs.preserve_live_worker != true && inputs.worker_dry_run != true'
+    ),
+    # Deploy mode; the deploy-mode writers need firestore_readiness to succeed.
+    ('gcp_backend.yml', 'firestore_readiness'): "github.event.inputs.mode == 'deploy'",
+}
+
+
+def _step_digest(step):
+    return hashlib.sha256(json.dumps(step, sort_keys=True).encode()).hexdigest()
+
+
+def _assert_read_only_prefix(steps, where):
     for step in steps:
-        uses = step.get('uses', '')
-        assert not _writes(step), step.get('name') or uses
-        assert not uses or uses.startswith('actions/checkout@'), step.get('name') or uses
+        label = f"{where}: {step.get('name') or step.get('uses')}"
+        if 'uses' in step:
+            assert step['uses'].startswith('actions/checkout@'), label
+            assert 'run' not in step, label
+            continue
+        assert step.get('name') in READ_ONLY_PREFIX, f'{label} is not an allowlisted read-only step'
+        assert _step_digest(step) == READ_ONLY_PREFIX[step['name']], f'{label} changed; review and re-pin'
+
+
+def _assert_binding_runs(step, where, condition):
+    # A failed binding must stop the job: no continue-on-error, and no condition
+    # other than the pinned one that holds on every run reaching the lease write.
+    assert 'continue-on-error' not in step, where
+    assert step.get('if') == condition, where
+
+
+def _assert_write_boundary(workflow, config):
+    first = {'gcp_diarizer.yml', 'gcp_backend_pusher.yml', 'gcp_backend.yml'}
+    bound = [
+        (job_name, job, index)
+        for job_name, job in config['jobs'].items()
+        for index, step in enumerate(job.get('steps', []))
+        if step.get('name') == BINDING
+    ]
+    assert bound, workflow
+    for job_name, job, index in bound:
+        where = f'{workflow}:{job_name}'
+        assert (workflow, job_name) in BIND_CONDITIONS, where
+        # A job-level continue-on-error would report a failed binding as success.
+        assert 'continue-on-error' not in job, where
+        _assert_binding_runs(job['steps'][index], where, BIND_CONDITIONS[workflow, job_name])
+        if workflow in first:
+            assert index == 0, where
+        _assert_read_only_prefix(job['steps'][:index], where)
+        # The classifier must still see this job's writes, all after the binding.
+        assert any(_writes(step) for step in job['steps'][index + 1 :]) or job_name == 'firestore_readiness', where
 
 
 def test_every_lease_writer_binds_before_any_write():
@@ -202,27 +270,76 @@ def test_every_lease_writer_binds_before_any_write():
     # now precedes every external write in each job and composite that writes the
     # lease env: first in the worker, Pusher, firestore_readiness and both
     # composites; Listen keeps its pinned validate/checkout/exact-control prefix.
-    first = {'gcp_diarizer.yml', 'gcp_backend_pusher.yml', 'gcp_backend.yml'}
     for workflow in (*STANDALONE_WRITERS, 'gcp_backend.yml'):
-        bindings = _job_bindings(workflow)
-        assert bindings, workflow
-        for job_name, job, index, _ in bindings:
-            where = f'{workflow}:{job_name}'
-            if workflow in first:
-                assert index == 0, where
-            _read_only_prefix(job['steps'][:index])
-            # The classifier must still see this job's writes, all after the binding.
-            assert any(_writes(step) for step in job['steps'][index + 1 :]) or job_name == 'firestore_readiness', where
+        _assert_write_boundary(workflow, _workflow(workflow))
     for composite, callers in LEASE_COMPOSITES.items():
         steps = _action(composite)['runs']['steps']
         assert steps[0].get('name') == BINDING, composite
+        _assert_binding_runs(steps[0], composite, None)
         assert any(_writes(step) for step in steps[1:]), composite
         for workflow, job_name in callers:
             caller_steps = _workflow(workflow)['jobs'][job_name]['steps']
             index = next(i for i, s in enumerate(caller_steps) if f'actions/{composite}' in s.get('uses', ''))
             # Only local checkouts may precede the composite's own first-step binding.
-            _read_only_prefix(caller_steps[:index])
             assert all(s.get('uses', '').startswith('actions/checkout@') for s in caller_steps[:index])
+            _assert_read_only_prefix(caller_steps[:index], f'{workflow}:{job_name}')
+
+
+def _mutated(workflow, job_name, mutate):
+    config = deepcopy(_workflow(workflow))
+    mutate(config['jobs'][job_name]['steps'])
+    return config
+
+
+def _bind_index(steps):
+    return next(i for i, s in enumerate(steps) if s.get('name') == BINDING)
+
+
+WRITE_BOUNDARY_MUTATIONS = {
+    # Reviewer mutation: a ConfigMap patch the old write denylist did not know.
+    'kubectl_patch_before_listen_bind': (
+        'gcp_backend_listen_helm.yml',
+        'helm-upgrade',
+        lambda steps: steps.insert(
+            _bind_index(steps),
+            {'name': 'Patch config', 'run': 'kubectl -n prod-omi-backend patch configmap backend-config -p "{}"'},
+        ),
+    ),
+    # Reviewer mutation: the Pusher binding disabled while its writes still run.
+    'pusher_bind_if_false': (
+        'gcp_backend_pusher.yml',
+        'deploy',
+        lambda steps: steps[_bind_index(steps)].update({'if': False}),
+    ),
+    'allowlisted_name_with_new_run': (
+        'gcp_backend_listen_helm.yml',
+        'helm-upgrade',
+        lambda steps: steps[0].update({'run': steps[0]['run'] + '\nkubectl apply -f config.yaml\n'}),
+    ),
+    'non_checkout_action_before_bind': (
+        'gcp_backend_listen_helm.yml',
+        'helm-upgrade',
+        lambda steps: steps.insert(1, {'name': 'Auth', 'uses': 'google-github-actions/auth@v2'}),
+    ),
+    'bind_continue_on_error': (
+        'gcp_diarizer.yml',
+        'deploy',
+        lambda steps: steps[_bind_index(steps)].update({'continue-on-error': True}),
+    ),
+    'bind_condition_widened': (
+        'gcp_backend.yml',
+        'firestore_readiness',
+        lambda steps: steps[_bind_index(steps)].update({'if': "github.event.inputs.mode == 'build-only'"}),
+    ),
+}
+
+
+@pytest.mark.parametrize('mutation', sorted(WRITE_BOUNDARY_MUTATIONS))
+def test_write_boundary_check_rejects_each_mutation(mutation):
+    workflow, job_name, mutate = WRITE_BOUNDARY_MUTATIONS[mutation]
+    _assert_write_boundary(workflow, _workflow(workflow))  # The real workflow passes.
+    with pytest.raises(AssertionError):
+        _assert_write_boundary(workflow, _mutated(workflow, job_name, mutate))
 
 
 def test_backend_deploy_run_validates_the_vector_before_the_break_glass_audit_issue():

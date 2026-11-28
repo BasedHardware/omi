@@ -8,6 +8,7 @@ import pytest
 
 from testing.lifecycle_sim.test_scenarios import lifecycle_sim, stack  # noqa: F401 -- shared pytest fixtures
 from testing.lifecycle_sim import harness
+from config import record_seal_rules
 from database import record_audio
 from database.record_partial import finish_partial
 from tests.support.lifecycle_state_table import ORDERING_RULES, durable_titling_rearm, ordering_holds
@@ -150,13 +151,24 @@ async def test_no_audio_live_producer_survives_age_until_exact_finish(lifecycle_
     tokens = dict(sim.row()['record_upload_sessions'])
     assert live.list_audio_chunks(sim.uid, sim.cid, require_archive=True) == []
     assert derive_conversation_phase(sim.row()) == ConversationPhase.CAPTURING
-    # 7a6181 / lead2 9d457c: no producer TTL. Age is never proof of death.
+    # SCA-3748: registration stamps frame lease clocks, and those clocks, not pod
+    # inventory or bare age, decide lapse. Within the lease the token fences
+    # whether or not its pod is listed.
     future = (entered + timedelta(seconds=elapsed)).timestamp()
     sim.proof_time = future
     for module in (harness, record_seal_sweeper, record_producer_proof):
         monkeypatch.setattr(module, 'time', SimpleNamespace(time=lambda: future))
+    if elapsed > record_seal_rules.token_lease_seconds():
+        # A month without a frame lapses the lease even while the pod is listed.
+        for live_producer in (True, False):
+            assert record_producer_proof.producer_tokens_dead(tokens, sim.proof(live_producer=live_producer))
+        # 7a6181 / lead2 9d457c: no producer TTL. The kill switch withdraws the
+        # lease's release authority; then age is never proof of death and only
+        # the exact finish below exits.
+        monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'off')
     for _ in range(3):
-        assert not record_producer_proof.producer_tokens_dead(tokens, sim.proof(live_producer=True))
+        for live_producer in (True, False):
+            assert not record_producer_proof.producer_tokens_dead(tokens, sim.proof(live_producer=live_producer))
         sim.sweep(live_producer=True)
         await sim.tick()
     assert sim.row()['record_upload_sessions'] == tokens
@@ -174,7 +186,7 @@ async def test_no_audio_live_producer_survives_age_until_exact_finish(lifecycle_
 
 
 @pytest.mark.asyncio
-async def test_full_tail_proven_dead_repair_clears_only_after_proof(lifecycle_sim):
+async def test_full_tail_proven_dead_repair_clears_only_after_proof(lifecycle_sim, monkeypatch):
     sim = lifecycle_sim
     sim.seed()
     producer = {'pod': 'synthetic-repair-pusher', 'process_started_at': datetime.now(timezone.utc).timestamp() - 3600}
@@ -184,11 +196,21 @@ async def test_full_tail_proven_dead_repair_clears_only_after_proof(lifecycle_si
     assert sim.register()
     sim.age(61)
     tokens = dict(sim.row()['record_upload_sessions'])
-    assert not record_producer_proof.producer_tokens_dead(tokens, sim.proof(live_producer=True))
-    sim.sweep(live_producer=True)
-    assert sim.row()['record_upload_sessions'] == tokens
-    assert not sim.row().get('record_audio_closed')
-    assert record_producer_proof.producer_tokens_dead(tokens, sim.proof())
+    # SCA-3748: a fresh frame lease fences the tail whether or not its pod is
+    # listed; pod absence alone is no longer proof of death.
+    for live_producer in (True, False):
+        assert not record_producer_proof.producer_tokens_dead(tokens, sim.proof(live_producer=live_producer))
+        sim.sweep(live_producer=live_producer)
+        assert sim.row()['record_upload_sessions'] == tokens
+        assert not sim.row().get('record_audio_closed')
+    # The proof is the lease clock: past it, the token is dead whatever the
+    # inventory says, and repair clears it only then.
+    future = datetime.now(timezone.utc).timestamp() + record_seal_rules.token_lease_seconds() + 61
+    sim.proof_time = future
+    for module in (record_seal_sweeper, record_producer_proof):
+        monkeypatch.setattr(module, 'time', SimpleNamespace(time=lambda: future))
+    for live_producer in (True, False):
+        assert record_producer_proof.producer_tokens_dead(tokens, sim.proof(live_producer=live_producer))
     sim.sweep()
     assert not sim.row().get('record_upload_sessions')
     assert sim.row().get('record_audio_closed')

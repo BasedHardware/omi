@@ -454,13 +454,6 @@
       "kind": "threading.Thread",
       "count": 1,
       "why": "Flag commit_wake: one daemon thread per worker posts owner ids to the serving backend. The wake is a hint held in memory; a wake lost at SIGKILL leaves the committed row where the serving sweep finds it, as without the flag."
-    },
-    {
-      "path": "utils/sync/record_token_lease.py",
-      "function": "bind_upload_target",
-      "kind": "asyncio.ensure_future",
-      "count": 1,
-      "why": "SCA-3748: the request-owned custody fence acquisition, not detached work. bind_upload_target awaits it through asyncio.shield, and custody_upload's finally awaits it again before finish, so a cancelled request cannot finish ahead of a begin that is still committing and strand the token. SIGKILL loses only the in-flight begin; a committed custody token then exits by its own lease lapse, exactly as a crashed pod's token does today. test_record_custody_append.py::test_cancel_during_late_fence_acquisition_cannot_strand_the_token proves the ordering."
     }
   ]
 }
