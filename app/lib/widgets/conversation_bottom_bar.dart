@@ -948,48 +948,30 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       final exp = ExperimentalDesign.of(context);
       final currentLiveId = context.select<ConversationsV3Provider?, String?>((v3) => v3?.live?.id);
       final liveDevice = context.select<ConversationsV3Provider?, String?>((v3) => v3?.live?.v3?.captureDeviceId);
-      // Experimental design: when this phone captures the conversation, Pause, Ask Omi and End sit
-      // on one dark tray, as one control.
-      final tray = exp &&
+      // Experimental design: when this phone captures the conversation, the bar is Pause, Ask Omi
+      // and End. Pause and Ask Omi are the package's glass at 92% frost; End is a flat red pill.
+      final mine = exp &&
           context.select<CaptureProvider?, bool>((capture) =>
               capture != null &&
               LiveConversationEndButton.phoneCaptures(widget.conversation!, capture,
                   currentLiveId: currentLiveId, liveCaptureDeviceId: liveDevice));
-      // On the tray the three are the package's glass at 92% frost.
-      final trayStyle = tray ? FooterGlassStyle.glass : FooterGlassStyle.blur;
+      final style = mine ? FooterGlassStyle.glass : FooterGlassStyle.blur;
       // End is on both tabs: beside Ask Omi, or beside the player's round Ask button.
-      final row = Row(children: [
-        // Experimental design: Pause opposite End, Ask Omi between them.
-        if (exp)
-          LiveConversationPauseButton(conversation: widget.conversation!, trailingGap: tray ? 6 : 10, style: trayStyle),
-        if (showPlayer) ...[
-          Expanded(child: KeyedSubtree(key: const ValueKey('detail_audio_player'), child: _buildPlayer())),
-          SizedBox(width: tray ? 6 : 10),
-          _buildAskButton(context, style: trayStyle),
-        ] else
-          Expanded(child: _buildAskBar(context, style: trayStyle)),
-        LiveConversationEndButton(
-            conversation: widget.conversation!,
-            onTray: tray,
-            leadingGap: tray ? 6 : 10,
-            onEndSuppressionChanged: widget.onLiveEndSuppressionChanged),
-      ]);
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
-        child: !tray
-            ? row
-            : Container(
-                key: const ValueKey('detail_live_tray'),
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).brightness == Brightness.dark
-                      ? const Color(0xFF2C2C2E)
-                      : const Color(0xFF3A3A3C),
-                  borderRadius: BorderRadius.circular(34),
-                  boxShadow: const [BoxShadow(color: Color(0x33000000), blurRadius: 28, offset: Offset(0, 8))],
-                ),
-                child: row,
-              ),
+        child: Row(children: [
+          if (exp) LiveConversationPauseButton(conversation: widget.conversation!, style: style),
+          if (showPlayer) ...[
+            Expanded(child: KeyedSubtree(key: const ValueKey('detail_audio_player'), child: _buildPlayer())),
+            const SizedBox(width: 10),
+            _buildAskButton(context, style: style),
+          ] else
+            Expanded(child: _buildAskBar(context, style: style)),
+          LiveConversationEndButton(
+              conversation: widget.conversation!,
+              flatRed: mine,
+              onEndSuppressionChanged: widget.onLiveEndSuppressionChanged),
+        ]),
       );
     }
     return Padding(
@@ -1038,11 +1020,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
                     raised: true,
                     style: style,
                     onTap: _askOmi,
-                    // On the live bar's dark tray the label is white in both themes.
-                    child: Text(label,
-                        style: style == FooterGlassStyle.glass
-                            ? OmiType.headline.copyWith(color: Colors.white)
-                            : OmiType.headline)),
+                    child: Text(label, style: OmiType.headline)),
               )
             : Ink(
                 height: 56,
@@ -1082,8 +1060,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
                     raised: true,
                     style: style,
                     onTap: _askOmi,
-                    child: FaIcon(kAskOmiGlyph,
-                        size: 20, color: style == FooterGlassStyle.glass ? Colors.white : OmiColors.textPrimary),
+                    child: FaIcon(kAskOmiGlyph, size: 20, color: OmiColors.textPrimary),
                   )
                 : SizedBox.square(
                     dimension: 56,

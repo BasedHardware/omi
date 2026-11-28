@@ -31,10 +31,14 @@ import 'package:omi/widgets/footer_glass.dart';
 /// second finalize, as the pendant's double-tap gate does.
 class LiveConversationEndButton extends StatefulWidget {
   const LiveConversationEndButton(
-      {super.key, required this.conversation, this.leadingGap = 10, this.onEndSuppressionChanged, this.onTray = false});
+      {super.key,
+      required this.conversation,
+      this.leadingGap = 10,
+      this.onEndSuppressionChanged,
+      this.flatRed = false});
 
-  /// Experimental design: on the live bar's dark tray End is a flat red pill with a white label.
-  final bool onTray;
+  /// Experimental design: End as a flat red pill with a white label.
+  final bool flatRed;
 
   final ServerConversation conversation;
   final double leadingGap;
@@ -139,7 +143,7 @@ class _LiveConversationEndButtonState extends State<LiveConversationEndButton> {
       child: Text(shown,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: OmiType.headline.copyWith(color: widget.onTray ? Colors.white : OmiColors.danger)),
+          style: OmiType.headline.copyWith(color: widget.flatRed ? Colors.white : OmiColors.danger)),
     );
     Future<void> end() async {
       final capture = context.read<CaptureProvider>();
@@ -211,7 +215,7 @@ class _LiveConversationEndButtonState extends State<LiveConversationEndButton> {
                 child: ExperimentalDesign.of(context)
                     // As wide as its short label needs, so Ask Omi keeps the middle of the bar.
                     ? IntrinsicWidth(
-                        child: widget.onTray
+                        child: widget.flatRed
                             ? Container(
                                 height: 56,
                                 alignment: Alignment.center,

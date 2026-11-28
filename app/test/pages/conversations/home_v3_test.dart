@@ -1655,12 +1655,9 @@ void main() {
       expect(tester.getRect(pause).right, lessThan(tester.getRect(ask).left));
       expect(tester.getRect(ask).right, lessThan(tester.getRect(end).left));
       expect(tester.getSize(ask).width, greaterThan(100), reason: 'Ask Omi keeps the middle');
-      // On the tray the three are the glass package's buttons.
+      // Pause and Ask Omi are the glass package's buttons, with nothing drawn under the row.
       expect(find.byType(GlassButton), findsNWidgets(2), reason: 'Pause and Ask Omi');
-      // One tray holds the three, 6pt larger on every side.
-      final tray = find.byKey(const ValueKey('detail_live_tray'));
-      expect(tester.getSize(tray).height, 68);
-      expect(tester.getRect(pause).left - tester.getRect(tray).left, 6);
+      expect(find.byKey(const ValueKey('detail_live_tray')), findsNothing);
       await tester.tap(pause);
       await tester.pump(const Duration(milliseconds: 300));
       expect(home.capture.pauseCalls, 1);
