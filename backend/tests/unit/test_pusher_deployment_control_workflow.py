@@ -386,7 +386,7 @@ def test_dev_and_prod_validate_semantic_runtime_admission_before_cluster_mutatio
     dev_helm = AUTO.index("helm -n ${{ vars.ENV }}-omi-backend upgrade --install")
     prod_admission = MANUAL.index('validate-backend-runtime-env.py --env "${{ vars.ENV }}"')
     prod_publish = MANUAL.index('gcloud container images add-tag --quiet')
-    prod_canary = MANUAL.index('helm -n prod-omi-backend upgrade --install "$PUSHER_CANARY"')
+    prod_canary = MANUAL.index('backend/scripts/pusher_canary_from_live.py workload')
 
     assert dev_admission < dev_publish < dev_helm
     assert prod_admission < prod_publish < prod_canary
@@ -423,7 +423,16 @@ def test_prod_qualifies_an_isolated_config_then_proves_the_shared_config_is_iden
     final_verify = MANUAL.index("Verify final production Pusher matches the canary-qualified candidate")
 
     assert proposed < canary < shared < final_receipt < final_verify
-    assert 'CONFIG_MAP_NAME_OVERRIDE="$PUSHER_CANARY_CONFIG"' in MANUAL[proposed:canary]
+    assert 'backend/scripts/pusher_canary_from_live.py config-map' in MANUAL[proposed:canary]
+    assert '--live-config-map prod-omi-backend-config' in MANUAL[proposed:canary]
+    assert '--canary-config-map "$PUSHER_CANARY_CONFIG"' in MANUAL[proposed:canary]
+    # SCA-4763: only the isolated canary-only producer copies the live config. An
+    # ordinary full deploy still renders the proposed config its canary exercises.
+    assert (
+        'CONFIG_MAP_NAME_OVERRIDE="$PUSHER_CANARY_CONFIG" backend/scripts/deploy-backend-config.sh'
+        in MANUAL[proposed:canary]
+    )
+    assert 'if [[ "$CANARY_ONLY" == \'true\' ]]' in MANUAL[proposed:canary]
     assert '--config-map-name "$PUSHER_CANARY_CONFIG"' in MANUAL[canary:shared]
     assert "--phase final" in MANUAL[final_verify : final_verify + 2000]
     assert (
@@ -500,8 +509,13 @@ def test_real_config_and_capacity_gates_precede_every_pusher_helm_mutation() -> 
 
 
 def test_prod_canary_reuses_the_workload_identity_bound_shared_ksa() -> None:
-    canary = MANUAL.index('helm -n prod-omi-backend upgrade --install "$PUSHER_CANARY"')
+    canary = MANUAL.index('Create isolated production Pusher and listener canary')
     rollout = MANUAL.index('kubectl -n prod-omi-backend rollout status "deployment/$PUSHER_CANARY"')
     install = MANUAL[canary:rollout]
+    # The ordinary deploy keeps its Helm canary on the shared KSA.
     assert "--set serviceAccount.create=false" in install
     assert "--set-string serviceAccount.name=prod-omi-pusher" in install
+    # SCA-4763: the isolated canary copies the live PodTemplate, so it inherits
+    # that same shared KSA instead of creating a release-named one.
+    assert 'backend/scripts/pusher_canary_from_live.py workload' in install
+    assert '--live-deployment prod-omi-pusher' in install

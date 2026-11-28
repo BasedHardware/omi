@@ -93,7 +93,18 @@ that would revert the image or apply the held config drift.
 Use the existing production Pusher canary and semantic probe framework. Derive
 the canary Pod from the same preserved live template and exact candidate
 digest, in the same namespace, with the same environment and external
-references. Changes needed to isolate the canary's traffic must pass the
+references. For the isolated image-only producer,
+`backend/scripts/pusher_canary_from_live.py` does this literally:
+it copies the live Deployment's PodTemplate and the live runtime ConfigMap,
+changes only the Pusher image, the canary identity labels and the ConfigMap
+references (redirected to the copied map), and creates a plain ClusterIP that
+selects only the canary. Nothing is rendered from the dispatching main. A
+canary rendered from main carries chart and ConfigMap values an image-only
+promote never applies, which is exactly why the first protected canary
+verification refused with `effective_environment_differs` (run 46139487564).
+An ordinary full deploy keeps the previous behaviour: its canary renders and
+exercises the proposed configuration that the deploy will apply.
+Changes needed to isolate the canary's traffic must pass the
 same environment and admission proof. The canary must restrict work to the
 canonical synthetic probe without changing custody, retention, lease behavior,
 privacy policy or access. If isolation would require a config or reference
