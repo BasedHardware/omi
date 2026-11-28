@@ -13,7 +13,13 @@ fixed in code by #24370 (Nik's release gate still applies).
   flag project; serving SAs get read. Dev gets its own project.
   - `omi_flags/{key}`: `active`, `rollout_percentage` (0–100), optional `variant`,
     `payload` (JSON text), `allow_uids`, `deny_uids`, `surfaces` (copied from
-    `config/feature-flags.yaml`), plus `version`, `updated_at`, `updated_by`.
+    `config/feature-flags.yaml`), optional `platforms`, plus `version`, `updated_at`,
+    `updated_by`. An empty or absent `platforms` admits every platform. A non-empty
+    list accepts only `ios` and `android`. The resolver checks it before UID allow
+    and deny lists. Requests with a missing or unmatched platform receive
+    `enabled: false` for that rule, including UID allowlist members. An invalid
+    platform list disables the affected rule and emits a fallback event. The
+    rest of the snapshot still refreshes.
   - `omi_flags_meta/state.version`: bumped by every write.
   - `omi_flags_audit/*`: before/after, actor, reason; written in the same transaction.
 - **Evaluation:** `utils/omi_flags.py`, in process. Each process re-checks the version
@@ -25,7 +31,10 @@ fixed in code by #24370 (Nik's release gate still applies).
   apply their existing caller default; they never fall back to PostHog. Deleting a
   rule restores that default. Older clients retain the per-key PostHog fallback.
 - **Clients:** `GET /v1/flags?surface=macos|mobile|web-app|windows` returns the caller's
-  resolved values for keys whose `surfaces` include that surface. macOS
+  resolved values for keys whose `surfaces` include that surface. A platform-targeted
+  rule requires exactly one `X-App-Platform` header whose raw value matches its
+  platform list. Missing, empty, unknown, mis-cased, padded, comma-separated,
+  and repeated headers resolve to disabled for targeted rules. macOS
   (`OmiFlagStore`), Flutter (`PostHogAnalyticsAdapter.omiFlags`) and web
   (`lib/omiFlags.ts`) answer only from this store. Failed refreshes retain the
   same-account snapshot on mobile/macOS; account changes clear it. Missing web
@@ -48,10 +57,12 @@ fixed in code by #24370 (Nik's release gate still applies).
 
 ## Operate (`backend/scripts/omi_flags.py`)
 
-Run from `backend/` with the flag project's writer identity (`prod-operator` tier for prod).
+Run from `backend/` with flag-project access. Writes require the project's writer
+identity (`prod-operator` tier for prod).
 
 ```bash
 python scripts/omi_flags.py --project <flag-project> list
+python scripts/omi_flags.py --project <flag-project> preview mobile-batch-upload-hold --active --rollout 5 --platforms ios
 python scripts/omi_flags.py --project <flag-project> import-posthog            # dry run
 python scripts/omi_flags.py --project <flag-project> import-posthog --apply --keys screen_task_jev_gate
 python scripts/omi_flags.py --project <flag-project> set screen_activity_lossless_sync --rollout 25 --reason "ramp" --mirror-posthog
@@ -66,7 +77,31 @@ python scripts/omi_flags.py --project <flag-project> delete screen_task_jev_gate
   hand-written rule.
 - While released builds still read PostHog, pass `--mirror-posthog` so both agree. It
   only handles single-group rows; a kill stays an active 0% group, because an inactive
-  PostHog row reads as unknown on released clients.
+  PostHog row reads as unknown on released clients. The CLI refuses to mirror a
+  platform-targeted rule.
+- `set KEY --platforms ios` targets iOS. Use `--platforms ios android` to target
+  both while keeping missing or unknown headers off, or `--all-platforms` to
+  clear the restriction. Omitting both preserves the stored platforms. Targeting
+  is available for mobile-only keys so shared flags can continue to serve their
+  backend and other clients. Widening the eligible platforms on an exposed rule
+  runs the same live preflight as a percentage increase.
+- Verify the serving backend supports platform targeting before activating a
+  targeted rule. If reverting backend support, first deactivate any targeted
+  rules with the platform-aware writer and verify the deactivation has
+  propagated. Older evaluators ignore the platform field.
+- The live preflight discovers backend readers by key. A client-only key such
+  as `mobile-batch-upload-hold` can return `key_unread` on a raise. The Release
+  owner handles any approved exception through the existing audited
+  [live-preflight procedure](ramp-live-preflight.md), after verifying the
+  serving backend supports platform targeting and the ramp's release evidence
+  is in place.
+- `preview KEY` needs only the flag project's read access. It reads the same
+  snapshot as `list` once and layers the proposed options on the stored rule in
+  memory. Use `--active` to preview enabling an absent or inactive rule. It prints
+  the proposed rule with UID-list counts and the resolved enabled count and
+  percentage for iOS, Android, and a missing header across 10,000 deterministic
+  synthetic UIDs. These counts estimate bucket exposure. The command performs
+  no writes and uses no real user IDs as evaluation inputs.
 - Without Redis access the CLI still writes; pods pick the change up within 60 s.
 
 ## Roll out

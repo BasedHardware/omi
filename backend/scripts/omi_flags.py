@@ -3,6 +3,7 @@
 
     python scripts/omi_flags.py list
     python scripts/omi_flags.py show KEY
+    python scripts/omi_flags.py preview KEY --active --rollout 5 --platforms ios
     python scripts/omi_flags.py set KEY --rollout 25 --reason "ramp to 25%"
     python scripts/omi_flags.py set KEY --inactive --reason "kill"
     python scripts/omi_flags.py delete KEY --reason "hand back to PostHog"
@@ -38,12 +39,14 @@ sys.path.insert(0, str(ROOT / 'scripts'))
 
 from database import omi_flags as store  # noqa: E402
 from scripts.rollout import live_preflight  # noqa: E402
+from utils.omi_flags import FlagRule, evaluate  # noqa: E402
 from posthog_flag_sync import list_feature_flags  # noqa: E402
 
 REGISTRY_PATH = ROOT / 'config' / 'feature-flags.yaml'
 POSTHOG_HOST = 'https://us.posthog.com'
 POSTHOG_PROJECT = '302298'
-RULE_FIELDS = ('active', 'rollout_percentage', 'variant', 'payload', 'allow_uids', 'deny_uids', 'surfaces')
+RULE_FIELDS = ('active', 'rollout_percentage', 'variant', 'payload', 'allow_uids', 'deny_uids', 'surfaces', 'platforms')
+PREVIEW_UID_COUNT = 10_000
 
 
 class FlagCliError(RuntimeError):
@@ -72,7 +75,8 @@ def registry_entry(registry: dict[str, dict[str, Any]], key: str) -> dict[str, A
 
 
 def merge_rule(current: dict[str, Any] | None, entry: dict[str, Any], changes: dict[str, Any]) -> dict[str, Any]:
-    rule = {field: (current or {}).get(field) for field in RULE_FIELDS}
+    previous = {'platforms': (), **(current or {})}
+    rule = {field: previous.get(field) for field in RULE_FIELDS}
     rule.update({k: v for k, v in changes.items() if v is not None})
     rule['active'] = rule.get('active') is True
     pct = float(rule.get('rollout_percentage') or 0)
@@ -85,6 +89,9 @@ def merge_rule(current: dict[str, Any] | None, entry: dict[str, Any], changes: d
     rule['allow_uids'] = sorted(set(rule.get('allow_uids') or ()))
     rule['deny_uids'] = sorted(set(rule.get('deny_uids') or ()))
     rule['surfaces'] = list(entry['surfaces'])
+    rule['platforms'] = list(store.parse_platforms(rule['platforms']))
+    if rule['platforms'] and rule['surfaces'] != ['mobile']:
+        raise FlagCliError('platform targeting requires a mobile-only flag')
     return rule
 
 
@@ -126,6 +133,8 @@ def posthog_mirror_body(row: dict[str, Any], rule: dict[str, Any] | None) -> dic
         raise FlagCliError(f"{row.get('key')}: PostHog row is not a single unconditioned group; mirror by hand")
     if rule is None:
         raise FlagCliError('delete hands the key back to PostHog; there is nothing to mirror')
+    if rule.get('platforms'):
+        raise FlagCliError('platform targeting cannot be mirrored to PostHog')
     if rule['allow_uids'] or rule['deny_uids'] or rule['variant']:
         raise FlagCliError('allow/deny lists and variants cannot be mirrored to PostHog')
     filters['groups'] = [{**groups[0], 'properties': [], 'rollout_percentage': rule['rollout_percentage']}]
@@ -188,16 +197,48 @@ def _print(value: Any) -> None:
     print(json.dumps(value, indent=2, sort_keys=True, default=str))
 
 
+def _targeting_changes(args: argparse.Namespace) -> dict[str, Any]:
+    return {
+        'active': True if args.active else (False if args.inactive else None),
+        'rollout_percentage': args.rollout,
+        'platforms': args.platforms,
+    }
+
+
+def cmd_preview(args: argparse.Namespace) -> None:
+    entry = registry_entry(load_registry(), args.key)
+    _, docs = store.read_all(_client(args))
+    proposed = merge_rule(docs.get(args.key), entry, _targeting_changes(args))
+    rule = FlagRule.from_doc(args.key, proposed)
+    exposure = {}
+    for platform in (*store.FLAG_PLATFORMS, None):
+        enabled = sum(evaluate(rule, f'preview-{n}', platform).enabled for n in range(PREVIEW_UID_COUNT))
+        exposure[platform or 'missing_header'] = {
+            'enabled': enabled,
+            'percentage': 100 * enabled / PREVIEW_UID_COUNT,
+        }
+    # Show rule settings without emitting stored account identifiers.
+    public_rule = {key: value for key, value in proposed.items() if key not in ('allow_uids', 'deny_uids')}
+    _print(
+        {
+            'rule': {
+                'key': rule.key,
+                **public_rule,
+                'allow_count': len(rule.allow_uids),
+                'deny_count': len(rule.deny_uids),
+            },
+            'synthetic_uid_count': PREVIEW_UID_COUNT,
+            'exposure': exposure,
+        }
+    )
+
+
 def cmd_set(args: argparse.Namespace) -> None:
     entry = registry_entry(load_registry(), args.key)
     client = _client(args)
     _, docs = store.read_all(client)
     current = docs.get(args.key)
-    changes: dict[str, Any] = {
-        'active': True if args.active else (False if args.inactive else None),
-        'rollout_percentage': args.rollout,
-        'payload': args.payload,
-    }
+    changes = {**_targeting_changes(args), 'payload': args.payload}
     if args.boolean:
         changes['variant'] = ''
     elif args.variant is not None:
@@ -208,6 +249,8 @@ def cmd_set(args: argparse.Namespace) -> None:
         rule['payload'] = None
     rule['allow_uids'] = sorted((set(rule['allow_uids']) | set(args.allow or ())) - set(args.unallow or ()))
     rule['deny_uids'] = sorted((set(rule['deny_uids']) | set(args.deny or ())) - set(args.undeny or ()))
+    if args.mirror_posthog and rule['platforms']:
+        raise FlagCliError('platform targeting cannot be mirrored to PostHog')
     widening = live_preflight.widens_exposure(current, rule)
     reason = live_preflight.override_reason(args.reason, args.accept_not_live)
     if widening:
@@ -284,11 +327,16 @@ def main(argv: list[str] | None = None) -> int:
     for name in ('show', 'history'):
         sub.add_parser(name).add_argument('key')
     p_set = sub.add_parser('set')
-    p_set.add_argument('key')
-    state = p_set.add_mutually_exclusive_group()
-    state.add_argument('--active', action='store_true')
-    state.add_argument('--inactive', action='store_true')
-    p_set.add_argument('--rollout', type=float)
+    p_preview = sub.add_parser('preview', help='show proposed targeting over synthetic UIDs without writing')
+    for command in (p_set, p_preview):
+        command.add_argument('key')
+        state = command.add_mutually_exclusive_group()
+        state.add_argument('--active', action='store_true')
+        state.add_argument('--inactive', action='store_true')
+        command.add_argument('--rollout', type=float)
+        platforms = command.add_mutually_exclusive_group()
+        platforms.add_argument('--platforms', nargs='+', choices=store.FLAG_PLATFORMS)
+        platforms.add_argument('--all-platforms', dest='platforms', action='store_const', const=[])
     variant = p_set.add_mutually_exclusive_group()
     variant.add_argument('--variant')
     variant.add_argument('--boolean', action='store_true')
@@ -318,6 +366,8 @@ def main(argv: list[str] | None = None) -> int:
             _print(store.read_all(_client(args))[1].get(args.key))
         elif args.command == 'history':
             _print(store.read_audit(_client(args), args.key))
+        elif args.command == 'preview':
+            cmd_preview(args)
         elif args.command == 'set':
             cmd_set(args)
         elif args.command == 'delete':

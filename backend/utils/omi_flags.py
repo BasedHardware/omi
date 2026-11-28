@@ -23,6 +23,7 @@ from threading import Lock
 from typing import Any, Mapping
 
 from database import omi_flags as store
+from database.omi_flags import InvalidFlagPlatformsError, parse_platforms
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
@@ -43,9 +44,11 @@ class FlagRule:
     allow_uids: frozenset[str] = frozenset()
     deny_uids: frozenset[str] = frozenset()
     surfaces: tuple[str, ...] = ()
+    platforms: tuple[str, ...] = ()
 
     @classmethod
     def from_doc(cls, key: str, doc: Mapping[str, Any]) -> 'FlagRule':
+        platforms = parse_platforms(doc.get('platforms', ()))
         pct = float(doc.get('rollout_percentage') or 0)
         variant = doc.get('variant')
         payload = doc.get('payload')
@@ -58,6 +61,7 @@ class FlagRule:
             allow_uids=frozenset(str(u) for u in doc.get('allow_uids') or ()),
             deny_uids=frozenset(str(u) for u in doc.get('deny_uids') or ()),
             surfaces=tuple(str(s) for s in doc.get('surfaces') or ()),
+            platforms=platforms,
         )
 
 
@@ -87,7 +91,9 @@ def rollout_hash(key: str, uid: str) -> float:
     return int(digest, 16) / _LONG_SCALE
 
 
-def evaluate(rule: FlagRule, uid: str) -> Resolved:
+def evaluate(rule: FlagRule, uid: str, platform: str | None = None) -> Resolved:
+    if rule.platforms and platform not in rule.platforms:
+        return Resolved(False)
     if not rule.active or uid in rule.deny_uids:
         return Resolved(False)
     if uid not in rule.allow_uids:
@@ -142,7 +148,7 @@ class _SnapshotCache:
                 if docs is None and version != current:
                     version, docs = store.read_all(client)
                 if docs is not None:
-                    self._snapshot = Snapshot(version, {k: FlagRule.from_doc(k, d) for k, d in docs.items()})
+                    self._snapshot = Snapshot(version, {key: _rule_from_store(key, doc) for key, doc in docs.items()})
         except Exception as exc:
             record_fallback(
                 component='feature_flags',
@@ -153,6 +159,22 @@ class _SnapshotCache:
                 log=logger,
                 failure_subtype=type(exc).__name__[:64],
             )
+
+
+def _rule_from_store(key: str, doc: Mapping[str, Any]) -> FlagRule:
+    try:
+        return FlagRule.from_doc(key, doc)
+    except InvalidFlagPlatformsError:
+        record_fallback(
+            component='feature_flags',
+            from_mode='store',
+            to_mode='disabled',
+            reason='other',
+            outcome='degraded',
+            log=logger,
+            failure_subtype='invalid_rule_platforms',
+        )
+        return FlagRule.from_doc(key, {'surfaces': doc.get('surfaces')})
 
 
 _cache = _SnapshotCache()
@@ -168,8 +190,8 @@ def resolve(key: str, uid: str) -> Resolved | None:
     return evaluate(rule, uid) if rule is not None else None
 
 
-def resolve_surface(uid: str, surface: str) -> tuple[int | None, dict[str, Resolved]]:
+def resolve_surface(uid: str, surface: str, platform: str | None = None) -> tuple[int | None, dict[str, Resolved]]:
     snap = snapshot()
     return snap.version, {
-        key: evaluate(rule, uid) for key, rule in sorted(snap.rules.items()) if surface in rule.surfaces
+        key: evaluate(rule, uid, platform) for key, rule in sorted(snap.rules.items()) if surface in rule.surfaces
     }
