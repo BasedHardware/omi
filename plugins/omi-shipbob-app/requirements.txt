@@ -7,3 +7,4 @@ pydantic==2.8.2
 Jinja2==3.1.6
 python-multipart==0.0.29
 redis==5.0.1
+httpx==0.28.1
