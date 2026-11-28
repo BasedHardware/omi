@@ -733,6 +733,183 @@ def test_public_client_uses_pkce_without_shared_secret():
     )
 
 
+def test_dynamic_public_client_persists_exact_redirects_and_uses_pkce():
+    redirect_uri = 'https://accounts.google.com/gemini-oauth-cb'
+
+    registered = mcp_oauth.register_dynamic_public_client('Gemini Spark', [redirect_uri, redirect_uri])
+    loaded = mcp_oauth.get_client(registered['id'])
+
+    assert registered['id'].startswith('omi-dcr-')
+    assert loaded['registration_mode'] == 'dynamic_public_pkce'
+    assert loaded['allowed_redirect_uris'] == [redirect_uri]
+    assert mcp_oauth.verify_client_auth(loaded, None)
+    assert mcp_oauth.validate_redirect_uri(loaded, redirect_uri)
+    assert not mcp_oauth.validate_redirect_uri(loaded, 'https://attacker.example/callback')
+
+
+@pytest.mark.parametrize(
+    'redirect_uri',
+    [
+        'http://example.com/callback',
+        'https://user:password@example.com/callback',
+        'https://example.com/callback#fragment',
+        'custom-scheme://callback',
+    ],
+)
+def test_dynamic_public_client_rejects_unsafe_redirects(redirect_uri):
+    with pytest.raises(ValueError, match='redirect_uri'):
+        mcp_oauth.register_dynamic_public_client('Unsafe client', [redirect_uri])
+
+
+def test_dynamic_public_client_allows_native_loopback_redirect():
+    redirect_uri = 'http://127.0.0.1:49152/oauth/callback'
+    registered = mcp_oauth.register_dynamic_public_client('Native client', [redirect_uri])
+
+    assert mcp_oauth.validate_redirect_uri(registered, redirect_uri)
+
+
+def test_dynamic_public_client_allows_localhost_redirect():
+    redirect_uri = 'http://localhost:49152/oauth/callback'
+    registered = mcp_oauth.register_dynamic_public_client('Local client', [redirect_uri])
+
+    assert mcp_oauth.validate_redirect_uri(registered, redirect_uri)
+
+
+class _Clock:
+    """Controllable replacement for ``mcp_oauth._now``."""
+
+    def __init__(self):
+        from datetime import datetime, timezone
+
+        self.now = datetime(2026, 11, 17, 5, 0, tzinfo=timezone.utc)
+
+    def __call__(self):
+        return self.now
+
+    def advance(self, **delta):
+        self.now = self.now + timedelta(**delta)
+
+
+@pytest.fixture
+def dcr_clock(monkeypatch):
+    clock = _Clock()
+    monkeypatch.setattr(mcp_oauth, '_now', clock)
+    return clock
+
+
+def _dynamic_client_docs():
+    docs = mcp_oauth.db.collection('mcp_oauth_clients')._docs
+    return {doc_id: data for doc_id, data in docs.items() if doc_id.startswith('omi-dcr-')}
+
+
+def test_dynamic_registration_is_idempotent_for_identical_metadata(dcr_clock):
+    before = set(_dynamic_client_docs())
+    redirects = ['https://dedupe.example/cb', 'http://127.0.0.1:49152/cb']
+
+    first = mcp_oauth.register_dynamic_public_client('Dedupe client', redirects, ['authorization_code'])
+    dcr_clock.advance(hours=1)
+    again = mcp_oauth.register_dynamic_public_client('Dedupe client', list(reversed(redirects)), None)
+
+    assert first['reused'] is False
+    assert again['reused'] is True
+    assert again['id'] == first['id']
+    assert again['created_at'] == first['created_at']
+    assert set(_dynamic_client_docs()) - before == {first['id']}
+    # Re-registration extends the unused-client window from the latest call.
+    assert again['expires_at'] == dcr_clock.now + timedelta(hours=mcp_oauth.DYNAMIC_CLIENT_UNUSED_TTL_HOURS)
+    assert mcp_oauth.get_client(first['id'])['expires_at'] == again['expires_at']
+
+
+@pytest.mark.parametrize(
+    'name, redirects, grant_types',
+    [
+        ('Other name', ['https://dedupe-variant.example/cb'], None),
+        ('Variant client', ['https://dedupe-variant.example/other'], None),
+        ('Variant client', ['https://dedupe-variant.example/cb'], ['authorization_code', 'refresh_token']),
+    ],
+)
+def test_dynamic_registration_with_different_metadata_gets_new_client(dcr_clock, name, redirects, grant_types):
+    base = mcp_oauth.register_dynamic_public_client('Variant client', ['https://dedupe-variant.example/cb'], None)
+
+    variant = mcp_oauth.register_dynamic_public_client(name, redirects, grant_types)
+
+    assert variant['reused'] is False
+    assert variant['id'] != base['id']
+
+
+def test_dynamic_registration_never_reuses_disabled_client(dcr_clock):
+    first = mcp_oauth.register_dynamic_public_client('Disabled client', ['https://disabled.example/cb'])
+    mcp_oauth.db.collection('mcp_oauth_clients').document(first['id']).update({'disabled_at': dcr_clock.now})
+
+    again = mcp_oauth.register_dynamic_public_client('Disabled client', ['https://disabled.example/cb'])
+
+    assert again['reused'] is False
+    assert again['id'] != first['id']
+
+
+def test_unused_dynamic_client_expires_and_is_not_revived(dcr_clock):
+    first = mcp_oauth.register_dynamic_public_client('Expiring client', ['https://expiring.example/cb'])
+    assert mcp_oauth.get_client(first['id']) is not None
+
+    dcr_clock.advance(hours=mcp_oauth.DYNAMIC_CLIENT_UNUSED_TTL_HOURS, seconds=1)
+
+    assert mcp_oauth.get_client(first['id']) is None
+    again = mcp_oauth.register_dynamic_public_client('Expiring client', ['https://expiring.example/cb'])
+    assert again['reused'] is False
+    assert again['id'] != first['id']
+    assert mcp_oauth.get_client(again['id']) is not None
+    assert mcp_oauth.get_client(first['id']) is None
+
+
+def test_dynamic_client_without_timestamps_fails_closed(dcr_clock):
+    mcp_oauth.db.collection('mcp_oauth_clients').document('omi-dcr-legacy-no-dates').set(
+        {
+            'id': 'omi-dcr-legacy-no-dates',
+            'registration_mode': 'dynamic_public_pkce',
+            'allowed_redirect_uris': ['https://legacy.example/cb'],
+            'token_endpoint_auth_method': 'none',
+        }
+    )
+
+    assert mcp_oauth.get_client('omi-dcr-legacy-no-dates') is None
+
+
+def test_operator_clients_never_expire(dcr_clock):
+    mcp_oauth.db.collection('mcp_oauth_clients').document('operator-client').set(
+        {'id': 'operator-client', 'registration_mode': 'firestore', 'token_endpoint_auth_method': 'none'}
+    )
+    dcr_clock.advance(days=10_000)
+
+    assert mcp_oauth.get_client('operator-client') is not None
+
+
+def test_used_dynamic_client_slides_expiry_with_throttled_writes(dcr_clock):
+    client = mcp_oauth.register_dynamic_public_client('Used client', ['https://used.example/cb'])
+    registrations = mcp_oauth.db.collection(mcp_oauth.DYNAMIC_CLIENT_REGISTRATIONS_COLLECTION)._docs
+    dcr_clock.advance(hours=2)
+
+    assert mcp_oauth.touch_dynamic_client(mcp_oauth.get_client(client['id'])) is True
+    idle_expiry = dcr_clock.now + timedelta(days=mcp_oauth.DYNAMIC_CLIENT_IDLE_TTL_DAYS)
+    loaded = mcp_oauth.get_client(client['id'])
+    assert loaded['expires_at'] == idle_expiry
+    assert loaded['last_used_at'] == dcr_clock.now
+    assert registrations[client['registration_fingerprint']]['expires_at'] == idle_expiry
+
+    dcr_clock.advance(hours=1)
+    assert mcp_oauth.touch_dynamic_client(mcp_oauth.get_client(client['id'])) is False
+    assert mcp_oauth.get_client(client['id'])['expires_at'] == idle_expiry
+
+    # Well past the unused TTL but inside the idle TTL, the client still resolves.
+    dcr_clock.advance(days=mcp_oauth.DYNAMIC_CLIENT_IDLE_TTL_DAYS - 1)
+    assert mcp_oauth.get_client(client['id']) is not None
+    dcr_clock.advance(days=2)
+    assert mcp_oauth.get_client(client['id']) is None
+
+
+def test_touch_ignores_operator_clients(dcr_clock):
+    assert mcp_oauth.touch_dynamic_client(mcp_oauth.get_client('omi-claude-prod')) is False
+
+
 def test_delete_user_oauth_credentials_removes_unconsumed_authorization_codes():
     grant = mcp_oauth.create_or_update_grant(
         'deleted-user', 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, ['memories.read']

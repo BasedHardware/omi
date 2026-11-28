@@ -78,7 +78,7 @@ ACTION_ITEMS_LIST_HOT_CLIENT_MAX: int = _hot_client_max()
 _BOOST_EXEMPT_DEFAULT = (
     "storefront:plans,import:upload,action_items:list,action_items:list_hot_client,static_map:get,"
     "dev:memories,dev:memories_write_burst,dev:conversations,dev:conversations_from_segments,"
-    "mcp:oauth_url_client,mcp:oauth_url_client_global,screen_task:gate,screen_task:gate_daily,users:budget_choice,"
+    "mcp:oauth_url_client,mcp:oauth_url_client_global,mcp:client_registration,screen_task:gate,screen_task:gate_daily,users:budget_choice,"
     "conversations:task-presence,google_calendar:selection,"
     "conversations:historical_summary_open,conversations:historical_summary_open_daily"
 )
@@ -183,6 +183,10 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # a reconnect storm into a 429 death-spiral, so this is sized for heavy multi-session
     # use rather than a single client. Tune via RATE_LIMIT_BOOST for events.
     "mcp:sse": (2000, 3600),
+    # RFC 7591 registration is public and writes one durable OAuth client.
+    # Bound it per source address so discovery remains automatic without
+    # allowing an unauthenticated caller to grow the client collection freely.
+    "mcp:client_registration": (120, 3600),
     # Action items — lightweight Firestore writes from MCP clients (no LLM), but
     # an agent can loop, so cap creation per hour. Complete/update/delete operate
     # on existing tasks and ride the shared mcp:sse / per-request auth limits.

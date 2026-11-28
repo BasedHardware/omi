@@ -10,6 +10,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional, Tuple, TypedDict, cast
 import re
+import ipaddress
 from urllib.parse import unquote, urlsplit
 
 from google.cloud import firestore
@@ -60,6 +61,21 @@ MCP_OAUTH_REPLAY_GRACE_SECONDS = int(os.getenv("MCP_OAUTH_REPLAY_GRACE_SECONDS",
 MCP_OAUTH_REPLAY_REISSUE_LIMIT = int(os.getenv("MCP_OAUTH_REPLAY_REISSUE_LIMIT", "2"))
 PKCE_ALLOWED_RE = re.compile(r"^[A-Za-z0-9._~-]{43,128}$")
 SUPPORTED_TOKEN_AUTH_METHODS = ["client_secret_post", "none"]
+DYNAMIC_CLIENT_REDIRECT_URI_LIMIT = 10
+DYNAMIC_CLIENT_REDIRECT_URI_MAX_LENGTH = 2048
+DYNAMIC_CLIENT_REGISTRATION_MODE = "dynamic_public_pkce"
+DYNAMIC_CLIENT_REGISTRATIONS_COLLECTION = "mcp_oauth_dynamic_client_registrations"
+DYNAMIC_CLIENT_GRANT_TYPES = ("authorization_code", "refresh_token")
+# A dynamically registered client that never completes a token exchange expires
+# after the unused TTL; once it has been used, each successful token response
+# slides its expiry forward by the idle TTL. ``expires_at`` is also the Firestore
+# TTL field declared in deploy/mcp-oauth-dynamic-client-retention.json, but reads
+# enforce it directly because TTL deletion can lag by a day or more.
+DYNAMIC_CLIENT_UNUSED_TTL_HOURS = max(1, int(os.getenv("MCP_OAUTH_DYNAMIC_CLIENT_UNUSED_TTL_HOURS", "168")))
+DYNAMIC_CLIENT_IDLE_TTL_DAYS = max(1, int(os.getenv("MCP_OAUTH_DYNAMIC_CLIENT_IDLE_TTL_DAYS", "90")))
+# Sliding the expiry costs two writes, so a client is touched at most once per
+# interval no matter how often it refreshes tokens.
+DYNAMIC_CLIENT_TOUCH_INTERVAL_SECONDS = 24 * 60 * 60
 PUBLIC_CHATGPT_CLIENT_IDS = set(CONNECTOR_ACCESS_REGISTRY["chatgpt"]["client_ids"])
 # Read scopes the first-party ChatGPT directory experience assumes a ChatGPT
 # grant carries (served to clients by the connector-access contract). ChatGPT's
@@ -349,6 +365,8 @@ def get_client(client_id: str) -> Optional[Dict[str, Any]]:
         data.setdefault("allowed_scopes", SUPPORTED_SCOPES)
         data.setdefault("token_endpoint_auth_method", "client_secret_post")
         data.setdefault("allowed_redirect_uri_prefixes", [])
+        if dynamic_client_is_expired(data, _now()):
+            return None
         client = data
     else:
         env_client = _env_clients().get(client_id)
@@ -365,6 +383,201 @@ def get_client(client_id: str) -> Optional[Dict[str, Any]]:
         else:
             client = _builtin_public_chatgpt_client(client_id)
     return _finalize_client(client)
+
+
+def validate_dynamic_redirect_uris(redirect_uris: object) -> List[str]:
+    """Validate exact redirect URIs for a dynamically registered public client."""
+    if not isinstance(redirect_uris, list) or not redirect_uris:
+        raise ValueError("redirect_uris must be a non-empty array")
+    if len(redirect_uris) > DYNAMIC_CLIENT_REDIRECT_URI_LIMIT:
+        raise ValueError(f"redirect_uris supports at most {DYNAMIC_CLIENT_REDIRECT_URI_LIMIT} entries")
+
+    validated: List[str] = []
+    for value in cast(List[Any], redirect_uris):
+        if not isinstance(value, str) or not value or value != value.strip():
+            raise ValueError("redirect_uris must contain non-empty URI strings")
+        if len(value) > DYNAMIC_CLIENT_REDIRECT_URI_MAX_LENGTH:
+            raise ValueError("redirect_uri is too long")
+        try:
+            parts = urlsplit(value)
+            _ = parts.port
+        except ValueError as exc:
+            raise ValueError("redirect_uri is invalid") from exc
+        if not parts.hostname or parts.username or parts.password or parts.fragment:
+            raise ValueError("redirect_uri must be an absolute URI without credentials or a fragment")
+        if parts.scheme == "https":
+            pass
+        elif parts.scheme == "http":
+            is_loopback = parts.hostname == "localhost"
+            if not is_loopback:
+                try:
+                    is_loopback = ipaddress.ip_address(parts.hostname).is_loopback
+                except ValueError:
+                    is_loopback = False
+            if not is_loopback:
+                raise ValueError("http redirect_uri must use localhost or a loopback IP address")
+        else:
+            raise ValueError("redirect_uri must use https or loopback http")
+        if value not in validated:
+            validated.append(value)
+    return validated
+
+
+def _normalize_dynamic_grant_types(grant_types: Optional[List[str]]) -> List[str]:
+    requested = set(grant_types or ["authorization_code"])
+    if "authorization_code" not in requested or not requested.issubset(DYNAMIC_CLIENT_GRANT_TYPES):
+        raise ValueError("grant_types must include authorization_code and may include refresh_token")
+    return [grant for grant in DYNAMIC_CLIENT_GRANT_TYPES if grant in requested]
+
+
+def dynamic_client_fingerprint(client_name: str, redirect_uris: List[str], grant_types: List[str]) -> str:
+    """Stable identity of the registration metadata that decides client behavior.
+
+    Redirect URI order does not change which redirects are allowed, so it does
+    not change the fingerprint. Auth method and response types are fixed for
+    dynamic clients (public PKCE, ``code``) and are pinned into the digest so a
+    future relaxation cannot collide with today's clients.
+    """
+    canonical = json.dumps(
+        {
+            "client_name": client_name,
+            "redirect_uris": sorted(redirect_uris),
+            "grant_types": sorted(grant_types),
+            "token_endpoint_auth_method": "none",
+            "response_types": ["code"],
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _dynamic_client_expiry(client: Dict[str, Any]) -> Optional[datetime]:
+    expires_at = client.get("expires_at")
+    if isinstance(expires_at, datetime):
+        return expires_at
+    created_at = client.get("created_at")
+    if isinstance(created_at, datetime):
+        return created_at + timedelta(hours=DYNAMIC_CLIENT_UNUSED_TTL_HOURS)
+    return None
+
+
+def dynamic_client_is_expired(client: Dict[str, Any], now: datetime) -> bool:
+    """True when a dynamically registered client is past its expiry.
+
+    Only dynamic registrations expire; operator-provisioned clients never carry
+    this registration mode. A dynamic client with no usable timestamps fails
+    closed.
+    """
+    if client.get("registration_mode") != DYNAMIC_CLIENT_REGISTRATION_MODE:
+        return False
+    expiry = _dynamic_client_expiry(client)
+    return expiry is None or expiry <= now
+
+
+def register_dynamic_public_client(
+    client_name: Optional[str],
+    redirect_uris: object,
+    grant_types: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """Persist an RFC 7591 public PKCE client using exact redirect matching.
+
+    Registration is idempotent: re-registering identical metadata (client name,
+    redirect URI set, grant types) while the earlier client is still live
+    returns that client and extends its expiry instead of writing a new client
+    document. Dynamic clients are public (no secret), so returning an existing
+    ``client_id`` discloses nothing a caller could not obtain by registering the
+    same metadata, and the exact redirect allowlist still binds every code to
+    the registered redirect URIs. Expired or disabled clients are never revived;
+    re-registration mints a fresh ``client_id`` so tokens issued to the old one
+    stay dead. The returned dict carries ``reused`` to tell the two apart.
+    """
+    validated_redirect_uris = validate_dynamic_redirect_uris(redirect_uris)
+    resolved_name = (client_name or "MCP client").strip()
+    if not resolved_name or len(resolved_name) > 100:
+        raise ValueError("client_name must be between 1 and 100 characters")
+    resolved_grant_types = _normalize_dynamic_grant_types(grant_types)
+    fingerprint = dynamic_client_fingerprint(resolved_name, validated_redirect_uris, resolved_grant_types)
+    registration_ref = db.collection(DYNAMIC_CLIENT_REGISTRATIONS_COLLECTION).document(fingerprint)
+    transaction = db.transaction()
+
+    @_typed_transactional
+    def _register(transaction: Any) -> Dict[str, Any]:
+        now = _now()
+        unused_expiry = now + timedelta(hours=DYNAMIC_CLIENT_UNUSED_TTL_HOURS)
+        registration_doc = registration_ref.get(transaction=transaction)
+        existing_id = _typed_doc(registration_doc).get("client_id") if registration_doc.exists else None
+        if isinstance(existing_id, str) and existing_id:
+            client_ref = db.collection("mcp_oauth_clients").document(existing_id)
+            client_doc = client_ref.get(transaction=transaction)
+            existing = _typed_doc(client_doc) if client_doc.exists else {}
+            if (
+                existing
+                and not existing.get("disabled_at")
+                and existing.get("registration_fingerprint") == fingerprint
+                and not dynamic_client_is_expired(existing, now)
+            ):
+                current_expiry = _dynamic_client_expiry(existing) or unused_expiry
+                expires_at = max(current_expiry, unused_expiry)
+                if expires_at != current_expiry:
+                    transaction.update(client_ref, {"expires_at": expires_at})
+                    transaction.set(registration_ref, {"client_id": existing_id, "expires_at": expires_at})
+                existing.setdefault("id", existing_id)
+                return {**existing, "expires_at": expires_at, "reused": True}
+
+        client_id = f"omi-dcr-{secrets.token_urlsafe(24)}"
+        client: Dict[str, Any] = {
+            "id": client_id,
+            "name": resolved_name,
+            "registration_mode": DYNAMIC_CLIENT_REGISTRATION_MODE,
+            "registration_fingerprint": fingerprint,
+            "allowed_redirect_uris": validated_redirect_uris,
+            "allowed_redirect_uri_prefixes": [],
+            "allowed_resources": [MCP_RESOURCE_URL],
+            "allowed_scopes": SUPPORTED_SCOPES,
+            "grant_types": resolved_grant_types,
+            "token_endpoint_auth_method": "none",
+            "client_secret_hash": "",
+            "created_at": now,
+            "last_used_at": None,
+            "expires_at": unused_expiry,
+            "disabled_at": None,
+        }
+        transaction.set(db.collection("mcp_oauth_clients").document(client_id), client)
+        transaction.set(registration_ref, {"client_id": client_id, "expires_at": unused_expiry})
+        return {**client, "reused": False}
+
+    return _register(transaction)
+
+
+def touch_dynamic_client(client: Dict[str, Any]) -> bool:
+    """Slide a dynamic client's expiry after a successful token response.
+
+    Returns True when a write happened. Writes are throttled to once per
+    DYNAMIC_CLIENT_TOUCH_INTERVAL_SECONDS per client; non-dynamic clients are
+    never written.
+    """
+    if client.get("registration_mode") != DYNAMIC_CLIENT_REGISTRATION_MODE:
+        return False
+    client_id = client.get("id")
+    if not isinstance(client_id, str) or not client_id:
+        return False
+    now = _now()
+    last_used_at = client.get("last_used_at")
+    if isinstance(last_used_at, datetime) and now - last_used_at < timedelta(
+        seconds=DYNAMIC_CLIENT_TOUCH_INTERVAL_SECONDS
+    ):
+        return False
+    expires_at = now + timedelta(days=DYNAMIC_CLIENT_IDLE_TTL_DAYS)
+    db.collection("mcp_oauth_clients").document(client_id).set(
+        {"last_used_at": now, "expires_at": expires_at}, merge=True
+    )
+    fingerprint = client.get("registration_fingerprint")
+    if isinstance(fingerprint, str) and fingerprint:
+        db.collection(DYNAMIC_CLIENT_REGISTRATIONS_COLLECTION).document(fingerprint).set(
+            {"client_id": client_id, "expires_at": expires_at}
+        )
+    return True
 
 
 def verify_client_secret(client: Dict[str, Any], client_secret: Optional[str]) -> bool:

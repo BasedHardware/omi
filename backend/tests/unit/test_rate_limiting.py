@@ -215,6 +215,18 @@ class TestBoostExemption(unittest.TestCase):
             for boost in (2.0, 100.0, 1000.0):
                 self.assertEqual(get_effective_limit(policy, boost=boost), base)
 
+    def test_mcp_client_registration_budget_is_exempt_by_default(self):
+        """POST /api/oauth/register is public and unauthenticated.
+
+        Its 120/hour per-source budget is the only thing bounding how many
+        client documents one caller can create; at boost=100 it would become
+        12,000/hour.
+        """
+        self.assertIn("mcp:client_registration", BOOST_EXEMPT_POLICIES)
+        base = RATE_POLICIES["mcp:client_registration"]
+        for boost in (2.0, 100.0, 1000.0):
+            self.assertEqual(get_effective_limit("mcp:client_registration", boost=boost), base)
+
     def test_exempt_policy_ignores_the_boost(self):
         """(b) The exempt policy enforces its base limit under any boost."""
         base = RATE_POLICIES["action_items:list"]
