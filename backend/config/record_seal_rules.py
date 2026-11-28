@@ -42,6 +42,11 @@ def check_custody_write_deadline():
     return deadline
 
 
+def fenced_write_bounds():
+    """Check a fenced commit's deadline; bounded GCS call kwargs under a fence, none otherwise."""
+    return {} if check_custody_write_deadline() is None else {'timeout': 10, 'retry': None}
+
+
 @contextmanager
 def bound_custody_writes(deadline):
     token = _custody_write_deadline.set(deadline)

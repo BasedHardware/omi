@@ -2603,9 +2603,7 @@ def archive_capture_bytes(
     with owner_storage_write_gate(uid, bucket):
         if custody_conversation and conversation_tombstones.is_deleted(uid, str(custody_conversation)):
             raise audio_packs.CaptureDeleted('audio custody refused by conversation deletion intent')
-        # A sync custody fence's worker never starts this commit after its
-        # deadline; the commit itself is bounded (timeout, no retry) (SCA-3748).
-        fenced = record_seal_rules.check_custody_write_deadline() is not None
+        bounds = record_seal_rules.fenced_write_bounds()  # SCA-3748: never past a custody fence deadline
         try:
             blob.upload_from_string(
                 payload, content_type='application/octet-stream', if_generation_match=0, timeout=10, retry=None
@@ -2613,10 +2611,7 @@ def archive_capture_bytes(
         except PreconditionFailed:
             # A successful earlier upload is immutable. Do not rotate encrypted
             # ciphertext or add a billable generation on an acceptance retry.
-            if fenced:
-                blob.reload(timeout=10, retry=None)
-            else:
-                blob.reload()
+            blob.reload(**bounds)
             if (blob.metadata or {}).get('sha256') != digest:
                 raise ValueError('capture identity collision')
             created = False
