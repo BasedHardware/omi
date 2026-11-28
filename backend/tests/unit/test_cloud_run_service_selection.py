@@ -22,7 +22,7 @@ def step(name):
     return next(s for s in STEPS if s['name'] == name)
 
 
-def render(script):
+def render(script, *, service='all'):
     values = {
         'inputs.project_id': 'based-hardware',
         'inputs.admitted_sha': 'a' * 40,
@@ -33,6 +33,7 @@ def render(script):
         'inputs.deploy_profile': 'manual',
         'inputs.environment': 'prod',
         'inputs.deploy_targets': 'cloud-run-only',
+        'inputs.cloud_run_service': service,
         'inputs.deploy_gateway': 'false',
         'inputs.service': 'backend',
         'inputs.integration_only': 'false',
@@ -122,7 +123,7 @@ def test_actual_shared_shell_never_targets_omitted_services(tmp_path, service, n
     fake.chmod(0o700)
     (tmp_path / 'gcloud').symlink_to(fake)
     result = subprocess.run(
-        ['bash', '-c', render(step(name)['run'])],
+        ['bash', '-c', render(step(name)['run'], service=service)],
         env=dict(
             os.environ,
             PATH=str(tmp_path) + ':' + os.environ['PATH'],
@@ -131,6 +132,14 @@ def test_actual_shared_shell_never_targets_omitted_services(tmp_path, service, n
             SELECTED_CLOUD_RUN_SERVICES=' '.join(selected(service)),
             CLOUD_RUN_SERVICE=service,
             ROLLBACK_REVISION=f'{service}-old',
+            PROJECT='based-hardware',
+            REGION='us-central1',
+            BACKEND='backend-new',
+            PROMOTION_INVERSE='backend-old',
+            ADMITTED_SOURCE='a' * 40,
+            WORKFLOW_CONTROL='b' * 40,
+            DEPLOY_STACK_STARTED='10000',
+            DEPLOY_STACK_TIMEOUT_MINUTES='90',
             GMP_CANDIDATE_TAG='',
             RUNNER_TEMP=str(tmp_path),
         ),
@@ -140,11 +149,23 @@ def test_actual_shared_shell_never_targets_omitted_services(tmp_path, service, n
     )
     assert result.returncode == 0, result.stderr
     calls = log.read_text().splitlines() if log.exists() else []
+    staged = name == 'Shift Cloud Run traffic to validated revisions' and service in ('backend', 'all')
+    if staged:
+        inverse = ' --inverse backend-old' if service == 'backend' else ''
+        assert calls[0] == (
+            f'/controls/promote_selected_backend.py --scope {service}{inverse} '
+            '--project based-hardware --region us-central1 '
+            f"--candidate backend-new --source {'a' * 40} --control {'b' * 40} "
+            '--workflow-started 10000 --workflow-timeout-minutes 90 '
+            '--snapshot artifacts/backend-cloud-run-pre-promotion-traffic-snapshot.json '
+            '--receipt artifacts/backend-promotion-stages.json'
+        )
+        assert not any('update-traffic backend ' in call for call in calls)
     expected = set(selected(service))
     if name == 'Attach Managed Prometheus to sync and integration candidates':
         expected.discard('backend')
     # Identify actual fixed service arguments, not image/secret content.
-    seen = set()
+    seen = {'backend'} if staged else set()
     for line in calls:
         for match in re.finditer(
             r'(?:--service[= ]|--wait-revision-ready |--migrate-legacy-public-binding |update-traffic )(backend(?:-sync(?:-backfill)?|-integration)?)(?=[ =]|$)',
@@ -160,7 +181,9 @@ def test_actual_shared_shell_never_targets_omitted_services(tmp_path, service, n
             assert f'--expected-serving-revision {service}-old' in calls[0]
     if name == 'Shift Cloud Run traffic to validated revisions':
         assert len(calls) == len(expected)
-        assert all('--to-revisions=' + s + '-new=100' in c for s, c in zip(selected(service), calls))
+        direct_services = selected(service)[1:] if staged else selected(service)
+        direct_calls = calls[1:] if staged else calls
+        assert all('--to-revisions=' + s + '-new=100' in c for s, c in zip(direct_services, direct_calls))
 
 
 @pytest.mark.parametrize('service', SERVICES)
@@ -207,6 +230,20 @@ def test_global_lock_and_closed_default_remain_unchanged():
     with pytest.raises(ValueError):
         selected('backend-listen')
     assert selected() == SERVICES
+
+
+def test_production_promotion_budget_uses_the_same_timeout_as_the_runner_step():
+    workflow = yaml.safe_load((ROOT / '.github/workflows/gcp_backend.yml').read_text())
+    deploy = workflow['jobs']['deploy']
+    start, _, stack, *_ = deploy['steps']
+    assert start['id'] == 'deploy-start'
+    assert 'time.monotonic()' in start['run']
+    assert '&& 90 || 360' in deploy['env']['DEPLOY_STACK_TIMEOUT_MINUTES']
+    assert stack['timeout-minutes'] == '${{ fromJSON(env.DEPLOY_STACK_TIMEOUT_MINUTES) }}'
+    assert stack['env']['DEPLOY_STACK_STARTED'] == '${{ steps.deploy-start.outputs.monotonic }}'
+    shift = step('Shift Cloud Run traffic to validated revisions')['run']
+    assert '--workflow-started "$DEPLOY_STACK_STARTED"' in shift
+    assert '--workflow-timeout-minutes "$DEPLOY_STACK_TIMEOUT_MINUTES"' in shift
 
 
 def test_step_census_refuses_an_unclassified_new_step():
@@ -358,7 +395,9 @@ def test_selected_workflow_binds_admitted_inverse(tmp_path, service, inverse_kin
         assert 'inputs.selected_rollback_revision' in workflow['run-name']
         assert (
             'needs.validate-production-boundary.outputs.rollback_revision'
-            in jobs['deploy']['steps'][1]['with']['rollback_revision']
+            in next(step for step in jobs['deploy']['steps'] if step['name'] == 'Deploy backend stack')['with'][
+                'rollback_revision'
+            ]
         )
         boundary = subprocess.run(
             ['bash', '-c', render(step('Validate deploy profile boundary')['run'])],

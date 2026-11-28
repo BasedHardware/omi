@@ -411,6 +411,7 @@ def step_script(name, values=None, *, index=-1):
         'inputs.environment': 'prod',
         'inputs.runtime_env': 'prod',
         'inputs.deploy_targets': 'cloud-run-only',
+        'inputs.cloud_run_service': 'all',
         'inputs.deploy_gateway': 'false',
         'inputs.service': 'backend',
         'inputs.project_id': 'based-hardware',
@@ -462,13 +463,17 @@ def test_actual_profile_shell_accepts_ruled_normal_admission():
 
 
 @pytest.mark.parametrize('canary', ['true', 'false'])
-def test_actual_traffic_shell_routes_only_through_controller_for_ruled_source(canary, tmp_path):
+@pytest.mark.parametrize('backend_exit', [0, 1])
+def test_actual_traffic_shell_routes_only_through_controller_for_ruled_source(canary, backend_exit, tmp_path):
     # Execute the actual action shell with fake transport executables. This
     # exercises branch/order and fail-fast behavior, without any provider IO.
     log = tmp_path / 'calls'
     for executable in ('gcloud', 'python3'):
         path = tmp_path / executable
-        path.write_text('#!/bin/sh\nprintf "%s\\n" "$0 $*" >> "$CALLS"\n')
+        path.write_text(
+            '#!/bin/sh\nprintf "%s\\n" "$0 $*" >> "$CALLS"\n'
+            'case "$1" in */promote_selected_backend.py) exit "$BACKEND_EXIT";; esac\n'
+        )
         path.chmod(0o700)
     result = subprocess.run(
         [
@@ -482,20 +487,93 @@ def test_actual_traffic_shell_routes_only_through_controller_for_ruled_source(ca
             CALLS=str(log),
             DEPLOY_CONTROL_SCRIPTS='/controls',
             RUNNER_TEMP=str(tmp_path),
+            PROJECT='based-hardware',
+            REGION='us-central1',
+            BACKEND='backend-new',
+            ADMITTED_SOURCE='a' * 40,
+            WORKFLOW_CONTROL='b' * 40,
+            DEPLOY_STACK_STARTED='10000',
+            DEPLOY_STACK_TIMEOUT_MINUTES='90',
+            BACKEND_EXIT=str(backend_exit),
         ),
         capture_output=True,
         text=True,
         timeout=10,
     )
-    assert result.returncode == 0
+    assert result.returncode == backend_exit, result.stderr
     calls = log.read_text().splitlines()
+    assert 'promote_selected_backend.py --scope all' in calls[0]
+    assert '--inverse' not in calls[0]
+    if backend_exit:
+        assert len(calls) == 1
+        return
     assert len(calls) == 4
-    assert all('update-traffic ' + role in calls[i] for i, role in enumerate(SERVICES[:3]))
+    assert all('update-traffic ' + role in calls[i] for i, role in enumerate(SERVICES[1:3], start=1))
     if canary == 'true':
         assert 'integration_canary_controller.py promote --state' in calls[-1]
         assert not any('update-traffic backend-integration' in call for call in calls)
     else:
         assert 'update-traffic backend-integration' in calls[-1] and 'integration-new=100' in calls[-1]
+
+
+@pytest.mark.parametrize('binding', ['', 'bound'])
+def test_selected_production_backend_shift_uses_only_the_admitted_controller(tmp_path, binding):
+    script = step_script('Shift Cloud Run traffic to validated revisions', {'inputs.cloud_run_service': 'backend'})
+    log = tmp_path / 'calls'
+    output = tmp_path / 'github-output'
+    python = tmp_path / 'python3'
+    python.write_text(
+        '#!/bin/sh\n'
+        'printf "%s\\n" "$*" >> "$CALLS"\n'
+        """case "$1" in */cloud_run_split_canary.py) printf '%s\\n' '{"backend-new": 90}';; esac\n"""
+    )
+    python.chmod(0o700)
+    # No test command can reach the live traffic writer.
+    (tmp_path / 'gcloud').symlink_to(python)
+    jq = tmp_path / 'jq'
+    jq.write_text("""#!/bin/sh\nread -r result\n[ "$result" = '{"backend-new": 90}' ] && printf "90\\n"\n""")
+    jq.chmod(0o700)
+    result = subprocess.run(
+        ['bash', '-c', script],
+        env=dict(
+            os.environ,
+            PATH=str(tmp_path) + ':' + os.environ['PATH'],
+            CALLS=str(log),
+            GITHUB_OUTPUT=str(output),
+            GITHUB_RUN_ID='17',
+            GITHUB_RUN_ATTEMPT='1',
+            RUNNER_TEMP=str(tmp_path),
+            SELECTED_CLOUD_RUN_SERVICES='backend',
+            DEPLOY_CONTROL_SCRIPTS='/controls',
+            SERVICE='backend',
+            PLAN='split-plan',
+            BINDING=binding,
+            PROJECT='based-hardware',
+            REGION='us-central1',
+            BACKEND='backend-new',
+            PROMOTION_INVERSE='backend-old',
+            ADMITTED_SOURCE='a' * 40,
+            WORKFLOW_CONTROL='b' * 40,
+            DEPLOY_STACK_STARTED='10000',
+            DEPLOY_STACK_TIMEOUT_MINUTES='90',
+        ),
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+    calls = log.read_text().splitlines()
+    if binding:
+        assert len(calls) == 2
+        assert calls[0] == '-I - /controls'
+        assert calls[1].startswith(
+            '/controls/cloud_run_split_canary.py promote --service backend --plan split-plan --binding bound '
+            '--candidate backend-new '
+        )
+        assert output.read_text().splitlines() == ['promoted=true', 'serving_percent=90']
+    else:
+        assert len(calls) == 1
+        assert calls[0].startswith('/controls/promote_selected_backend.py --scope backend --inverse backend-old ')
 
 
 @pytest.mark.parametrize('shallow', ['true', 'false'])
