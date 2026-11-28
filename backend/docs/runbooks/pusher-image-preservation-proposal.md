@@ -12,7 +12,11 @@ authorization and dispatch. The serving target is Deployment
 
 Add a mutually exclusive preservation mode to
 `.github/workflows/gcp_backend_pusher.yml`. Keep the protected production
-environment and `prod-train` concurrency group. Require a full reviewed source
+environment and its own per-target Pusher concurrency group. A Cloud Run train
+keeps `prod-train` while Pusher qualifies and rolls (David's 2026-11-28 slot
+ruling, SCA-4763); the carve-out covers only the isolated canary and the
+protected image-only modes, never the ordinary full Pusher deploy. Require a
+full reviewed source
 SHA admitted on main by `verify_backend_release_admission.py`, a successful
 automatic development qualification run, and the immutable qualified image
 digest. Reuse `verify_pusher_promotion_evidence.py`, the exact development
@@ -286,7 +290,9 @@ Use `gcp_backend_pusher.yml` from main, with `environment=prod`,
 `pusher_image_digest=<sha256 digest>`, and
 `pusher_dev_qualification_run_id=<automatic development qualification run>`.
 Select `pusher_image_only=preview`, `canary`, `promote`, or `rollback`. The job
-uses the existing prod environment and prod-train lock. It does not build,
+uses the existing prod environment and the per-target `deploy-gke-pusher-prod`
+lock, which it shares with the isolated canary and break-glass Pusher deploys.
+It does not build,
 push, tag, install charts, apply configuration, or create or delete a canary.
 
 No secret is staged for this mode. The evidence is the non-secret dispatch
@@ -400,7 +406,7 @@ Each path has at most one 160-minute rollout wait, because the post-move inverse
 is decided before the forward wait. The job ceiling is 220 minutes: the rollout
 wait, two 5-minute status reports, about 20 minutes of checks, and about 30
 minutes so the receipt, summary and page land first. It also bounds how long the
-run holds `prod-train`.
+run holds the Pusher lock.
 
 ### Canary qualification run
 

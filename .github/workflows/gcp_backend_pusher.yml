@@ -91,8 +91,15 @@ on:
 # prod-train lock, so trains, config-trains and GPU/listen deploys never overlap and the
 # ramp controller can refuse while one runs (backend/scripts/prod_train_lock.py).
 # Break-glass keeps the pre-B5 per-target lock. Development groups are unchanged.
+# David's 2026-11-28 protected-Pusher-slot ruling (SCA-4763) splits the two lanes
+# that touch only the Pusher release -- the isolated canary and the protected
+# image-only preview/canary/promote/rollback -- onto the same per-target Pusher
+# lock, so a Cloud Run train keeps prod-train while Pusher qualifies and rolls.
+# This is a concurrency carve-out only: every admission gate is unchanged, the
+# protected job still refuses break-glass options, and the ordinary full Pusher
+# deploy (canary_only=false, pusher_image_only=disabled) keeps prod-train.
 concurrency:
-  group: ${{ github.event.inputs.environment == 'prod' && github.event.inputs.break_glass_lock != 'true' && 'prod-train' || (github.event.inputs.service || 'pusher') == 'llm-gateway' && format('deploy-backend-stack-{0}', github.event.inputs.environment) || format('deploy-gke-pusher-{0}', github.event.inputs.environment) }}
+  group: ${{ github.event.inputs.environment == 'prod' && github.event.inputs.break_glass_lock != 'true' && (github.event.inputs.service || 'pusher') != 'llm-gateway' && (github.event.inputs.pusher_canary_only == 'true' || (github.event.inputs.pusher_image_only || 'disabled') != 'disabled') && 'deploy-gke-pusher-prod' || github.event.inputs.environment == 'prod' && github.event.inputs.break_glass_lock != 'true' && 'prod-train' || (github.event.inputs.service || 'pusher') == 'llm-gateway' && format('deploy-backend-stack-{0}', github.event.inputs.environment) || format('deploy-gke-pusher-{0}', github.event.inputs.environment) }}
   cancel-in-progress: false
 
 env:
