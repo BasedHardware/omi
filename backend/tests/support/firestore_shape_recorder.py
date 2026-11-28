@@ -282,7 +282,11 @@ def _calling_function() -> str:
     transparent = ''
     while frame is not None:
         module = frame.f_globals.get('__name__', '')
-        if module == this_module:
+        if module == this_module or (
+            module == 'database.privacy_check_metrics'
+            and frame.f_code.co_qualname.startswith('with_batch_privacy_path.<locals>.')
+        ):
+            # The path decorator scopes telemetry and doesn't issue queries.
             frame = frame.f_back
             continue
         if module == 'database.released_memory_projection':

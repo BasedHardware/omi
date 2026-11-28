@@ -43,7 +43,7 @@ from database import record_wal_duplicate as wal_duplicate
 from database import record_wal_handoff as wal_receipts
 from database.batch_pipeline_intake import admit, cache_completed
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
-from database.privacy_check_metrics import STATUS_SKIP
+from database.privacy_check_metrics import STATUS_SKIP, BatchPrivacyPath, with_batch_privacy_path
 from database.batch_pipeline_recovery_fence import RecoveryFence
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_shadow_hook import shadow_from_env
@@ -598,6 +598,7 @@ async def _probe_upload_allowance(
         return None
 
 
+@with_batch_privacy_path(BatchPrivacyPath.SYNC_UPLOAD)
 async def accept_upload(
     *,
     uid: str,
@@ -1547,6 +1548,7 @@ def _wal_receipt_status(uid: str, job_id: str) -> dict | None:
     return durable_status(FirestoreStore(f'batch_pipeline_{current_stage()}'), uid, job_id, poll=True)
 
 
+@with_batch_privacy_path(BatchPrivacyPath.SYNC_STATUS)
 def get_durable_job_status(job_id: str, uid: str, *, artifact_retry: bool = False) -> dict | None:
     if not job_id.startswith(JOB_PREFIX):
         return None

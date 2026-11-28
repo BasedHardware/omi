@@ -16,6 +16,7 @@ from config.stt_cap_dispatch import offline_admission_enabled as cap_dispatch_en
 from config.sync_telemetry import bounded_exception_class
 from config.batch_pipeline import allowance_hold_retry_seconds
 from utils.stt_cap_dispatch import sync_admission
+from database.privacy_check_metrics import BatchPrivacyPath, with_batch_privacy_path
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from utils.batch_pipeline.scheduler import owns_lease
 from utils.fair_use import get_hard_restriction_status, is_daily_audio_ceiling_exceeded
@@ -59,6 +60,7 @@ def batch_admission(job: dict, seconds: float, provider: str, *, path: DispatchP
     return sync_admission(job['owner_id'], seconds, provider, lane='batch', path=path)
 
 
+@with_batch_privacy_path(BatchPrivacyPath.WORKER_AUTHORIZATION)
 async def authorize(store, leases: list[dict], *, now: float | None = None, budget: str | float | None = None) -> dict:
     """Return completed decisions within the call's deadline; unfinished work never gets an allow.
 

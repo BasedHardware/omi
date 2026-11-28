@@ -26,6 +26,7 @@ from config.batch_pipeline import (
     projection_pump_sweep_pages,
     projection_pump_tick_seconds,
 )
+from database.privacy_check_metrics import BatchPrivacyPath, with_batch_privacy_path
 from database.outbox import OutboxKind, outbox_for
 from database.batch_privacy_attempt import batch_privacy_attempt, with_batch_privacy_attempt
 from database.batch_pipeline_store import FirestoreStore
@@ -137,9 +138,11 @@ class Serving:
             raise ValueError('pool must be batch or live')
         return self._queues[pool]
 
+    @with_batch_privacy_path(BatchPrivacyPath.INTEGRATION_SERVING)
     def pull(self, limit: int, capacity: PoolCapacity, *, pool: str = 'batch'):
         return self.queue(pool).pull(time.time(), limit, capacity=capacity)
 
+    @with_batch_privacy_path(BatchPrivacyPath.INTEGRATION_SERVING)
     def complete(self, result: WorkResult, token: str) -> bool:
         accepted = self.queue().complete(result, token, time.time())
         if accepted:
@@ -247,6 +250,7 @@ class Serving:
             )
         return []
 
+    @with_batch_privacy_path(BatchPrivacyPath.INTEGRATION_SERVING)
     def reconcile(
         self,
         *,
