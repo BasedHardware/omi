@@ -2513,6 +2513,8 @@ environment_shared:
           DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
           DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
           DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
+          NOTES_PACKET_V2_MODE: {value: 'off', category: rollout}
+          CALLS_RECAP_MODE: {value: 'off', category: rollout}
       x-connector-sync-job:
         flags:
           --task-timeout: 3600s
