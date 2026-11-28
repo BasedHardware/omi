@@ -1,8 +1,9 @@
 """Request-scoped custody fences; no upload state survives in a process cache."""
 
 import asyncio
+import contextvars
 from contextvars import ContextVar
-from functools import wraps
+from functools import partial, wraps
 import json
 import logging
 import threading
@@ -16,7 +17,7 @@ from starlette.responses import Response
 
 from config import record_seal_rules as lease
 from database import record_custody_append, record_token_lease_metrics, record_audio
-from utils.executors import db_executor, sync_executor, run_blocking
+from utils.executors import db_executor, sync_executor, run_blocking, track_executor_future
 
 logger = logging.getLogger(__name__)
 
@@ -31,8 +32,9 @@ class _Step:
     Cancelling the awaiting coroutine never cancels a step that has started: the
     worker thread runs to its true outcome and only then marks the step settled.
     A step that has not started is abandoned atomically, so it can no longer
-    touch storage. Settlement is thread-level, independent of the submitting
-    task, which loop teardown may cancel while the worker is still writing.
+    touch storage. Settlement is thread-level. The executor future is never
+    awaited, so a caller's cancel (or loop teardown) cannot cancel it; only
+    executor shutdown can, which abandons a step that never started.
     """
 
     def __init__(self, executor: Executor, fn: Callable[..., Any], args, kwargs, *, abandonable: bool):
@@ -42,8 +44,16 @@ class _Step:
         self._abandonable = abandonable
         self._outcome: tuple[bool, Any] | None = None
         self.settled: asyncio.Future[None] = self._loop.create_future()
-        self._submission = self._loop.create_task(run_blocking(executor, self._run, fn, args, kwargs))
-        self._submission.add_done_callback(self._submission_ended)
+        call = partial(contextvars.copy_context().run, self._run, fn, args, kwargs)
+        try:
+            submission = self._loop.run_in_executor(executor, call)
+        except Exception as error:  # e.g. the executor already shut down
+            self._phase = 'abandoned'
+            self._outcome = (False, error)
+            self._settle()
+            return
+        track_executor_future(executor, submission)
+        submission.add_done_callback(self._submission_ended)
 
     def _run(self, fn, args, kwargs):
         with self._gate:
@@ -69,12 +79,12 @@ class _Step:
         if not self.settled.done():
             self.settled.set_result(None)
 
-    def _submission_ended(self, task: asyncio.Task) -> None:
-        error = None if task.cancelled() else task.exception()
+    def _submission_ended(self, submission: asyncio.Future) -> None:
+        error = None if submission.cancelled() else submission.exception()
         with self._gate:
             if self._phase != 'queued':
                 return
-            # The worker can never start now: executor shutdown, saturation or teardown.
+            # The worker can never start now: executor shutdown cancelled it.
             self._phase = 'abandoned'
             if error is not None:
                 self._outcome = (False, error)
