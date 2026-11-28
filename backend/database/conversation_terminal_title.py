@@ -380,35 +380,42 @@ def fit_document_limit(
     combined = {**base_update, **extras}
     if not extras:
         return combined
+    structured_extra = extras.get('structured')
+    staged_title = (
+        isinstance(structured_extra, Mapping)
+        and isinstance(structured_extra.get('title'), str)
+        and bool(structured_extra['title'].strip())
+    )
     after = {**conversation, **combined}
     path = getattr(conversation_ref, 'path', None)
     estimated = estimate_firestore_document_bytes(after, path if isinstance(path, str) else None)
     if estimated + TERMINAL_SIZE_HEADROOM_BYTES > FIRESTORE_MAX_DOCUMENT_BYTES:
-        TERMINAL_TITLE_DROPPED_TOTAL.labels(
-            path=terminal_path if terminal_path in TERMINAL_TITLE_PATHS else 'other'
-        ).inc()
-        sys.stdout.write(
-            json.dumps(
-                {
-                    'event': 'terminal_title',
-                    'outcome': 'dropped',
-                    'path': terminal_path,
-                    'conversation_id': getattr(conversation_ref, 'id', '') or '',
-                },
-                default=str,
+        if staged_title:
+            TERMINAL_TITLE_DROPPED_TOTAL.labels(
+                path=terminal_path if terminal_path in TERMINAL_TITLE_PATHS else 'other'
+            ).inc()
+            sys.stdout.write(
+                json.dumps(
+                    {
+                        'event': 'terminal_title',
+                        'outcome': 'dropped',
+                        'path': terminal_path,
+                        'conversation_id': getattr(conversation_ref, 'id', '') or '',
+                    },
+                    default=str,
+                )
+                + '\n'
             )
-            + '\n'
-        )
-        sys.stdout.flush()
-        from utils.observability.fallback import record_fallback
+            sys.stdout.flush()
+            from utils.observability.fallback import record_fallback
 
-        record_fallback(
-            component='conversation_relevance',
-            from_mode='deterministic_title',
-            to_mode='none',
-            reason='other',
-            outcome='degraded',
-        )
+            record_fallback(
+                component='conversation_relevance',
+                from_mode='deterministic_title',
+                to_mode='none',
+                reason='other',
+                outcome='degraded',
+            )
         return dict(base_update)
     return combined
 
