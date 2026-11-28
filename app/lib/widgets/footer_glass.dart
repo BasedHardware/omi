@@ -20,10 +20,14 @@ import 'package:flutter/material.dart';
 abstract final class GlassStyle {
   static const Duration pressIn = Duration(milliseconds: 160);
 
-  /// The fill, the lighter fill under a finger, and the rim.
-  static Color fill(bool dark) => dark ? const Color(0xE02C2C2E) : const Color(0xE6FFFFFF);
-  static Color pressedFill(bool dark) => dark ? const Color(0xF03A3A3C) : const Color(0xFFFFFFFF);
-  static Color rim(bool dark) => dark ? const Color(0x24FFFFFF) : const Color(0xFFFFFFFF);
+  /// The fill, the lighter fill under a finger, and the rim: the design's own surface tints.
+  static const _fillDark = Color(0xE02C2C2E); // omi-ux-allow: color-literal -- surface tint
+  static const _fillLight = Color(0xE6FFFFFF); // omi-ux-allow: color-literal -- surface tint
+  static const _pressedDark = Color(0xF03A3A3C); // omi-ux-allow: color-literal -- surface tint
+  static const _rimDark = Color(0x24FFFFFF); // omi-ux-allow: color-literal -- surface tint
+  static Color fill(bool dark) => dark ? _fillDark : _fillLight;
+  static Color pressedFill(bool dark) => dark ? _pressedDark : Colors.white;
+  static Color rim(bool dark) => dark ? _rimDark : Colors.white;
 
   static BoxShadow shadow(double height, {required bool dark, bool raised = false}) => raised
       ? BoxShadow(

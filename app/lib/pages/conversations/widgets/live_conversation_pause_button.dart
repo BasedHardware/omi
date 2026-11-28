@@ -1,3 +1,5 @@
+// Pause and resume for the conversation in progress: the shared toggle and the button the live
+// bar shows for it. The capture's state stays with CaptureProvider; this file only asks it.
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
@@ -28,7 +30,14 @@ Future<void> toggleCapturePause(BuildContext context, CaptureProvider provider) 
     }
   } catch (_) {
     // Say so rather than leave an unhandled future.
-    if (context.mounted) OmiFeedback.error(context, context.l10n.somethingWentWrong);
+    if (context.mounted) {
+      OmiFeedback.error(
+        context,
+        context.l10n.somethingWentWrong,
+        actionLabel: context.l10n.tryAgain,
+        onAction: () => toggleCapturePause(context, provider),
+      );
+    }
     return;
   }
   PlatformManager.instance.analytics.recordingMuteToggled(

@@ -141,8 +141,7 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
         l10n.copy,
         Icons.copy_outlined,
         () async {
-          await Clipboard.setData(ClipboardData(text: segment.text.decodeString));
-          if (mounted) OmiFeedback.confirm(context, l10n.copied);
+          if (mounted) await OmiClipboard.copy(context, segment.text.decodeString);
         },
       ),
     ];

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/ui/omi_tokens.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 
 /// The experimental design: one switch for a set of look changes that ship dark.
@@ -105,7 +106,9 @@ abstract final class ExperimentalDesign {
 /// A conversation row's title: the theme's, or 17pt medium in the experimental design.
 TextStyle? experimentalRowTitleStyle(BuildContext context) {
   final style = Theme.of(context).textTheme.titleMedium;
-  return ExperimentalDesign.of(context) ? style?.copyWith(fontSize: 17, fontWeight: FontWeight.w500) : style;
+  return ExperimentalDesign.of(context)
+      ? style?.copyWith(fontSize: OmiType.body.fontSize, fontWeight: FontWeight.w500)
+      : style;
 }
 
 /// Rebuilds the widgets that read [ExperimentalDesign.of] when the answer changes. One at the root

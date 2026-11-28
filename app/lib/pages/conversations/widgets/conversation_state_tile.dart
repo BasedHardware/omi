@@ -113,7 +113,10 @@ Widget _emoji(BuildContext context, String emoji) {
       key: key,
       textAlign: TextAlign.center,
       style: OmiType.title3.copyWith(
-          fontSize: 24, fontWeight: FontWeight.w400, height: 1, leadingDistribution: TextLeadingDistribution.even),
+          fontSize: 24, // omi-ux-allow: font-size-literal -- an emoji glyph sized to its tile, not text
+          fontWeight: FontWeight.w400,
+          height: 1,
+          leadingDistribution: TextLeadingDistribution.even),
     ),
   );
 }

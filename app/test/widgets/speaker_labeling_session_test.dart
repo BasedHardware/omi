@@ -22,6 +22,7 @@ import 'package:omi/pages/conversation_detail/widgets/transcript_tab.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/services/experiments/experimental_design.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/widgets/transcript.dart';
 import '../helpers/reprocess_fakes.dart';
 
@@ -208,6 +209,8 @@ void main() {
       ExperimentalDesign.debugOverride = true;
       addTearDown(() => ExperimentalDesign.debugOverride = null);
       String? copied;
+      OmiClipboard.debugSystemConfirmsCopy = true;
+      addTearDown(() => OmiClipboard.debugSystemConfirmsCopy = null);
       tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
         if (call.method == 'Clipboard.setData') copied = (call.arguments as Map)['text'] as String?;
         return null;

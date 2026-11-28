@@ -1,3 +1,6 @@
+// The menu a held transcript line opens on iPhone in the experimental design: the page blurs,
+// the line lifts on a card and its actions are listed under it. Paint and layout only; the
+// actions themselves belong to the transcript tab.
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
@@ -5,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:omi/ui/ui.dart';
+import 'package:omi/widgets/footer_glass.dart';
 
 /// One action of the menu a held transcript line opens.
 typedef TranscriptLineAction = ({Key key, String title, FaIconData icon, VoidCallback onTap});
@@ -18,17 +22,16 @@ Future<void> showTranscriptLineMenu(
   required Widget preview,
   required List<TranscriptLineAction> actions,
 }) {
-  return Navigator.of(context, rootNavigator: true).push(
-    PageRouteBuilder<void>(
-      opaque: false,
-      barrierDismissible: true,
-      barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
-      barrierColor: Colors.transparent,
-      transitionDuration: const Duration(milliseconds: 220),
-      reverseTransitionDuration: const Duration(milliseconds: 160),
-      pageBuilder: (context, animation, _) =>
-          _TranscriptLineMenu(animation: animation, lineRect: lineRect, preview: preview, actions: actions),
-    ),
+  // A see-through route: the page stays visible, blurred, behind the menu.
+  return showGeneralDialog<void>(
+    context: context,
+    useRootNavigator: true,
+    barrierDismissible: true,
+    barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+    barrierColor: Colors.transparent,
+    transitionDuration: const Duration(milliseconds: 220),
+    pageBuilder: (context, animation, _) =>
+        _TranscriptLineMenu(animation: animation, lineRect: lineRect, preview: preview, actions: actions),
   );
 }
 
@@ -65,8 +68,9 @@ class _TranscriptLineMenu extends StatelessWidget {
     final cardTop = (lineRect.top - _cardPadding).clamp(top, bottom - cardHeight - _gap - menuHeight);
     final cardLeft = (lineRect.left - _cardPadding).clamp(8.0, media.size.width);
     final cardWidth = (lineRect.width + _cardPadding * 2).clamp(0.0, media.size.width - cardLeft - 8);
-    final surface = dark ? const Color(0xF02C2C2E) : const Color(0xF7FFFFFF);
-    final shadow = BoxShadow(color: Color(dark ? 0x80000000 : 0x2E000000), blurRadius: 32, offset: const Offset(0, 10));
+    // The design's raised-control fill and shadow (GlassStyle), opaque enough to read text on.
+    final surface = GlassStyle.pressedFill(dark);
+    final shadow = GlassStyle.shadow(56, dark: dark, raised: true);
 
     // A route has no Material above it; without one the text draws with the debug underline.
     return Material(
@@ -107,8 +111,7 @@ class _TranscriptLineMenu extends StatelessWidget {
                       constraints: BoxConstraints(maxHeight: cardHeight),
                       clipBehavior: Clip.antiAlias,
                       padding: const EdgeInsets.all(_cardPadding),
-                      decoration:
-                          BoxDecoration(color: surface, borderRadius: BorderRadius.circular(18), boxShadow: [shadow]),
+                      decoration: BoxDecoration(color: surface, borderRadius: OmiRadius.lgAll, boxShadow: [shadow]),
                       // The scrim below takes the taps: the copy of the line is for reading only.
                       child: IgnorePointer(
                         child: SingleChildScrollView(physics: const NeverScrollableScrollPhysics(), child: preview),
@@ -123,8 +126,7 @@ class _TranscriptLineMenu extends StatelessWidget {
                       scale: Tween<double>(begin: 0.86, end: 1).animate(curved),
                       child: Container(
                         clipBehavior: Clip.antiAlias,
-                        decoration:
-                            BoxDecoration(color: surface, borderRadius: BorderRadius.circular(14), boxShadow: [shadow]),
+                        decoration: BoxDecoration(color: surface, borderRadius: OmiRadius.lgAll, boxShadow: [shadow]),
                         child: Material(
                           type: MaterialType.transparency,
                           child: Column(
