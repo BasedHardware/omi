@@ -56,6 +56,7 @@ CLIENT_SENT_CODES = (
     'lt',
     'mk',
     'ms',
+    'ml',
     'mr',
     'no',
     'fa',

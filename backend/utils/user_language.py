@@ -77,6 +77,7 @@ PRIMARY_LANGUAGE_OPTIONS: Final[tuple[tuple[str, str], ...]] = (
     ('lt', 'Lithuanian'),
     ('mk', 'Macedonian'),
     ('ms', 'Malay'),
+    ('ml', 'Malayalam'),
     ('mr', 'Marathi'),
     ('no', 'Norwegian'),
     ('fa', 'Persian'),
