@@ -52,6 +52,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
   bool _isCancelled = false;
   bool _isSyncing = false;
+  bool _inventoryUnavailable = false;
   @override
   bool get isSyncing => _isSyncing;
 
@@ -209,13 +210,16 @@ class SDCardWalSyncImpl implements SDCardWalSync {
   }
 
   Future<List<Wal>> _getMissingWals() async {
+    _inventoryUnavailable = false;
     if (_device == null || !_usesLegacySdcard) {
+      _inventoryUnavailable = _device == null;
       return [];
     }
     String deviceId = _device!.id;
     List<Wal> wals = [];
     var storageFiles = await _getStorageList(deviceId);
     if (storageFiles.isEmpty) {
+      _inventoryUnavailable = true;
       return [];
     }
     var totalBytes = storageFiles[0];
@@ -233,6 +237,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       codec = await _getAudioCodec(deviceId);
     } catch (e) {
       Logger.debug('SDCardWalSync: failed to get audio codec, skipping listing: ');
+      _inventoryUnavailable = true;
       return [];
     }
     if (totalBytes - storageOffset > 10 * codec.getFramesLengthInBytes() * codec.getFramesPerSecond()) {
@@ -257,6 +262,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
       if (connection == null) {
         Logger.debug("SDCard: Failed to establish connection for device info");
+        _inventoryUnavailable = true;
         return wals;
       }
       var pd = await _device!.getDeviceInfo(connection);
@@ -288,6 +294,28 @@ class SDCardWalSyncImpl implements SDCardWalSync {
   Future<List<Wal>> getMissingWals() async {
     if (!_usesLegacySdcard) return [];
     return _wals.where((w) => w.status == WalStatus.miss && w.storage == WalStorage.sdcard).toList();
+  }
+
+  /// Refresh the legacy SD-card inventory after device deletes. An empty
+  /// storage-list response is ambiguous (it can mean the BLE read failed), so
+  /// keep the cached WALs until the listing and any metadata needed to rebuild
+  /// them have completed successfully.
+  Future<bool> refreshWalsFromDevice() async {
+    final device = _device;
+    if (device == null) return false;
+    if (!_usesLegacySdcard) return true;
+    if (_isSyncing) return false;
+
+    try {
+      final refreshedWals = await _getMissingWals();
+      if (_device?.id != device.id || _isSyncing || _inventoryUnavailable) return false;
+      _wals = refreshedWals;
+      listener.onWalUpdated();
+      return true;
+    } catch (error) {
+      Logger.debug('SDCardWalSync.refreshWalsFromDevice: inventory read failed: $error');
+      return false;
+    }
   }
 
   @override
@@ -1014,16 +1042,26 @@ class SDCardWalSyncImpl implements SDCardWalSync {
   @override
   Future<void> deleteAllSyncedWals() async {
     final syncedWals = _wals.where((w) => w.status == WalStatus.synced).toList();
-    for (final wal in syncedWals) {
-      await deleteWal(wal);
-    }
+    await _deleteEachWal(syncedWals);
   }
 
   @override
   Future<void> deleteAllPendingWals() async {
     final pendingWals = _wals.where((w) => w.status == WalStatus.miss || w.status == WalStatus.corrupted).toList();
-    for (final wal in pendingWals) {
-      await deleteWal(wal);
+    await _deleteEachWal(pendingWals);
+  }
+
+  Future<void> _deleteEachWal(List<Wal> wals) async {
+    Object? firstError;
+    StackTrace? firstStackTrace;
+    for (final wal in wals) {
+      try {
+        await deleteWal(wal);
+      } catch (error, stackTrace) {
+        firstError ??= error;
+        firstStackTrace ??= stackTrace;
+      }
     }
+    if (firstError != null) Error.throwWithStackTrace(firstError, firstStackTrace!);
   }
 }

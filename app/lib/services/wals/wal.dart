@@ -905,6 +905,16 @@ class Wal {
     return _orphanIdentity!;
   }
 
+  /// Whether [other] is the same device inventory entry. Ring-buffer WALs are
+  /// virtual rows whose display timestamp (and therefore [id]) changes on each
+  /// discovery; their stable inventory identity is the device and storage.
+  bool hasSameDeviceInventoryIdentity(Wal other) {
+    if (storage != other.storage) return false;
+    final isRingBufferWal = storage == WalStorage.sdcard && fileNum == -1;
+    if (isRingBufferWal) return other.fileNum == -1 && device == other.device;
+    return id == other.id;
+  }
+
   /// Single source of truth for how this recording's sync state is shown to the
   /// user. The sync page renders an explicit label + icon for every value so a
   /// not-yet-synced recording is never visually identical to a failed one.

@@ -15881,6 +15881,10 @@ class AppLocalizationsNl extends AppLocalizations {
   String get firmwareSyncRecordingsFirstTitle => 'Synchroniseer eerst je opnames';
 
   @override
+  String get pendantAudioUnconfirmedSyncBlocked =>
+      'De opgeslagen audio op je Pendant kon niet worden bevestigd. Houd je Pendant verbonden en probeer opnieuw te synchroniseren.';
+
+  @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Sommige opnames staan nog op je apparaat. Laat ze eerst volledig synchroniseren naar je telefoon en start daarna de update.';
 

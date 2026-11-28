@@ -27795,6 +27795,12 @@ abstract class AppLocalizations {
   /// **'Sync your recordings first'**
   String get firmwareSyncRecordingsFirstTitle;
 
+  /// Shown when offline sync stalls and the app cannot confirm that all stored Pendant audio has transferred.
+  ///
+  /// In en, this message translates to:
+  /// **'Your Pendant\'s stored audio could not be confirmed. Keep your Pendant connected and try syncing again.'**
+  String get pendantAudioUnconfirmedSyncBlocked;
+
   /// Dialog body explaining that recordings must finish syncing from the pendant to the phone before the firmware update can start.
   ///
   /// In en, this message translates to:

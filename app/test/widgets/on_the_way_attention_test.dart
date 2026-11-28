@@ -34,7 +34,7 @@ class _FakeSync extends ChangeNotifier with WalDerivedSyncViews implements SyncP
   @override
   Future<void> syncWal(Wal wal) async => retried.add(wal);
   @override
-  Future<void> deleteWal(Wal wal) async => deleted.add(wal);
+  Future<void> deleteWal(Wal wal, {String? firmwareVersion, bool refreshDevice = true}) async => deleted.add(wal);
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);

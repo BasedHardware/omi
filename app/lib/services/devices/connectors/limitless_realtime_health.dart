@@ -7,11 +7,14 @@ enum LimitlessRealtimeHealthOutcome { restored, exhausted, censored }
 
 /// Watches decoded frames while an admitted Custom Live capture owns the link.
 class LimitlessRealtimeHealth {
+  static const int _maxReactivationAttemptsPerEpisode = 2;
+
   LimitlessRealtimeHealth({
     required this.window,
     required this.isCurrent,
     required this.reactivate,
     required this.report,
+    this.reactivationTimeout = const Duration(seconds: 5),
     Duration Function()? elapsed,
   }) : _elapsed = elapsed ?? _monotonicClock() {
     _lastFrame = _elapsed();
@@ -20,8 +23,9 @@ class LimitlessRealtimeHealth {
 
   final Duration window;
   final bool Function() isCurrent;
-  final Future<void> Function() reactivate;
+  final Future<bool> Function() reactivate;
   final void Function(LimitlessRealtimeHealthOutcome) report;
+  final Duration reactivationTimeout;
   final Duration Function() _elapsed;
 
   Timer? _timer;
@@ -29,9 +33,13 @@ class LimitlessRealtimeHealth {
   Duration? _firstRecoveryFrame;
   Duration? _recoveryDeadline;
   bool _attempted = false;
+  int _reactivationAttempts = 0;
+  bool _reactivationInFlight = false;
   bool _closed = false;
 
   bool get isClosed => _closed;
+  bool get isRecoverySpent =>
+      _attempted && (_recoveryDeadline == null || _reactivationAttempts >= _maxReactivationAttemptsPerEpisode);
 
   static Duration Function() _monotonicClock() {
     final clock = Stopwatch()..start();
@@ -51,6 +59,7 @@ class LimitlessRealtimeHealth {
         }
         _firstRecoveryFrame = null;
         _attempted = false;
+        _reactivationAttempts = 0;
         _recoveryDeadline = null;
         if (deadline != null) report(LimitlessRealtimeHealthOutcome.restored);
       }
@@ -85,9 +94,10 @@ class LimitlessRealtimeHealth {
       _firstRecoveryFrame = null;
       if (!_attempted) {
         _attempted = true;
+        _reactivationAttempts = 0;
         _recoveryDeadline = now + window * 2;
-        unawaited(_reactivate());
       }
+      _attemptReactivation();
       final recoveryDeadline = _recoveryDeadline;
       if (recoveryDeadline != null) _timer = Timer(recoveryDeadline - now, _check);
       return;
@@ -99,15 +109,45 @@ class LimitlessRealtimeHealth {
     _timer = Timer(next - now, _check);
   }
 
-  Future<void> _reactivate() async {
-    if (_closed || !isCurrent()) {
-      close();
+  void _attemptReactivation() {
+    if (_closed ||
+        !_attempted ||
+        _reactivationInFlight ||
+        _reactivationAttempts >= _maxReactivationAttemptsPerEpisode ||
+        _recoveryDeadline == null) {
       return;
     }
+    _reactivationAttempts++;
+    _reactivationInFlight = true;
+    unawaited(_reactivate());
+  }
+
+  Future<void> _reactivate() async {
     try {
-      await reactivate();
+      if (_closed || !isCurrent()) {
+        close();
+        return;
+      }
+      await reactivate().timeout(reactivationTimeout);
     } catch (_) {
-      // The same terminal deadline covers write failures and missing frames.
+      // Failed or skipped writes share the episode's bounded retry budget.
+    } finally {
+      _reactivationInFlight = false;
+    }
+    if (_closed) return;
+    // A successful BLE write may not restore decoded audio. Schedule the next
+    // health check either way; _check retries only if the stream is still quiet.
+    if (_reactivationAttempts < _maxReactivationAttemptsPerEpisode) {
+      final deadline = _recoveryDeadline;
+      if (deadline != null) {
+        _timer?.cancel();
+        final remaining = deadline - _elapsed();
+        if (remaining <= Duration.zero) {
+          _check();
+        } else {
+          _timer = Timer(remaining < window ? remaining : window, _check);
+        }
+      }
     }
     if (!isCurrent()) close();
   }

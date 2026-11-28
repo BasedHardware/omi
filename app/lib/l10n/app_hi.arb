@@ -4768,6 +4768,7 @@
     "playStripePlanPaused": "आपका {plan} प्लान रुका हुआ है।",
     "firmwareNewestSupportedForDevice": "आपका डिवाइस पहले से ही नवीनतम समर्थित फर्मवेयर संस्करण पर है",
     "firmwareSyncRecordingsFirstTitle": "पहले अपनी रिकॉर्डिंग सिंक करें",
+    "pendantAudioUnconfirmedSyncBlocked": "आपके Pendant में सहेजे गए ऑडियो की पुष्टि नहीं हो सकी। Pendant को कनेक्ट रखें और फिर से सिंक करने का प्रयास करें।",
     "firmwareSyncRecordingsFirstMessage": "कुछ रिकॉर्डिंग अभी भी आपके डिवाइस पर हैं। उन्हें आपके फ़ोन पर सिंक होने दें, फिर अपडेट शुरू करें।",
     "batteryRestartToRefresh": "रीफ़्रेश करने के लिए Omi पुनः प्रारंभ करें"
 }

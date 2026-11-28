@@ -88,7 +88,7 @@ void main() {
       });
     });
 
-    test('routes Omi controls away from the audio-only Custom Live primary', () async {
+    test('routes Omi controls away from the Custom Live provider primary', () async {
       final primary = _FakeSocket();
       final secondary = _FakeSocket();
       final socket = CompositeTranscriptionSocket(

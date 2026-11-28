@@ -5,6 +5,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/wals/ring_storage_sync.dart';
 import 'package:omi/services/wals/sdcard_wal_sync.dart';
+import 'package:omi/services/wals/storage_sync.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 
@@ -33,6 +34,12 @@ class _FakeConnection implements DeviceConnection {
   Future<bool> clearRing() async {
     clearRingCalls++;
     return clearRingResult;
+  }
+
+  @override
+  Future<bool> deleteStorageFile(int fileIndex) async {
+    deleteCommands++;
+    return true;
   }
 
   @override
@@ -97,7 +104,7 @@ void main() {
         ..testConnection = connection
         ..testWals = [_ringWal()];
 
-      await sync.deleteWal(_ringWal());
+      await expectLater(sync.deleteWal(_ringWal()), throwsStateError);
 
       expect(connection.clearRingCalls, 1);
       expect((await sync.getMissingWals()).map((w) => w.id), [_ringWal().id]);
@@ -106,19 +113,19 @@ void main() {
     test('keeps the wal when no device is set', () async {
       final sync = RingStorageSyncImpl(_Listener())..testWals = [_ringWal()];
 
-      await sync.deleteWal(_ringWal());
+      await expectLater(sync.deleteWal(_ringWal()), throwsStateError);
 
       expect((await sync.getMissingWals()).map((w) => w.id), [_ringWal().id]);
     });
 
-    test('keeps the wal when the connection cannot be established', () async {
+    test('keeps the wal and reports failure when the connection cannot be established', () async {
       // No test connection and no ServiceManager: the failed lookup must keep
-      // the wal (fail-closed) instead of dropping it, and must not throw.
+      // the wal and throw so callers cannot report a successful delete.
       final sync = RingStorageSyncImpl(_Listener())
         ..setDevice(_device)
         ..testWals = [_ringWal()];
 
-      await sync.deleteWal(_ringWal());
+      await expectLater(sync.deleteWal(_ringWal()), throwsStateError);
 
       expect((await sync.getMissingWals()).map((w) => w.id), [_ringWal().id]);
     });
@@ -143,13 +150,41 @@ void main() {
         ..testConnection = connection
         ..testWals = [_ringWal()];
 
-      await sync.deleteAllPendingWals();
+      await expectLater(sync.deleteAllPendingWals(), throwsStateError);
 
       expect((await sync.getMissingWals()).map((w) => w.id), [_ringWal().id]);
     });
   });
 
   group('SDCardWalSyncImpl durable delete', () {
+    test('refresh confirms an empty legacy card and removes stale cached WALs', () async {
+      final connection = _FakeConnection(storageList: [0, 0]);
+      final device = _device.copyWith(firmwareRevision: '3.0.16');
+      final sync = SDCardWalSyncImpl(_Listener())
+        ..testDevice = device
+        ..testConnection = connection
+        ..testWals = [_sdWal()];
+
+      expect(await sync.refreshWalsFromDevice(), isTrue);
+
+      expect(connection.storageListCalls, 1);
+      expect(await sync.getMissingWals(), isEmpty);
+    });
+
+    test('refresh preserves cached WALs when the storage-list read is ambiguous', () async {
+      final connection = _FakeConnection(storageList: []);
+      final device = _device.copyWith(firmwareRevision: '3.0.16');
+      final sync = SDCardWalSyncImpl(_Listener())
+        ..testDevice = device
+        ..testConnection = connection
+        ..testWals = [_sdWal()];
+
+      expect(await sync.refreshWalsFromDevice(), isFalse);
+
+      expect(connection.storageListCalls, 1);
+      expect((await sync.getMissingWals()).map((wal) => wal.id), [_sdWal().id]);
+    });
+
     test('removes the wal after the delete command and a readback showing the bytes gone', () async {
       final connection = _FakeConnection(storageList: [0]);
       final sync = SDCardWalSyncImpl(_Listener())
@@ -242,6 +277,44 @@ void main() {
       await sync.deleteAllPendingWals();
 
       expect((await sync.getMissingWals()).map((w) => w.id), [rejected.id]);
+    });
+
+    test('bulk pending delete continues after one file throws', () async {
+      final first = _sdWal(timerStart: 3000, fileNum: 1);
+      final second = _sdWal(timerStart: 4000, fileNum: 2);
+      final connection = _FakeConnection(
+        writeResult: (numFile, command) {
+          if (numFile == first.fileNum && command == 1) throw StateError('simulated BLE write failure');
+          return true;
+        },
+        storageList: [0],
+      );
+      final sync = SDCardWalSyncImpl(_Listener())
+        ..testDevice = _device
+        ..testConnection = connection
+        ..testWals = [first, second];
+
+      await expectLater(sync.deleteAllPendingWals(), throwsStateError);
+
+      expect(connection.deleteCommands, 2, reason: 'the second row is attempted after the first throws');
+      expect((await sync.getMissingWals()).map((wal) => wal.id), [first.id]);
+    });
+  });
+
+  group('StorageSyncImpl multi-file delete routing', () {
+    test('supported 3.0.18 firmware still receives the delete command', () async {
+      final connection = _FakeConnection();
+      final device = _device.copyWith(firmwareRevision: '3.0.18');
+      final wal = _sdWal();
+      final sync = StorageSyncImpl(_Listener())
+        ..setDevice(device)
+        ..testConnection = connection
+        ..testWals = [wal];
+
+      await sync.deleteWal(wal);
+
+      expect(connection.deleteCommands, 1);
+      expect(await sync.getMissingWals(), isEmpty);
     });
   });
 }

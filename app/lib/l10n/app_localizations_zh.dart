@@ -15583,6 +15583,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get firmwareSyncRecordingsFirstTitle => '请先同步录音';
 
   @override
+  String get pendantAudioUnconfirmedSyncBlocked => '无法确认 Pendant 中存储的音频。请保持 Pendant 连接，并再次尝试同步。';
+
+  @override
   String get firmwareSyncRecordingsFirstMessage => '部分录音仍存储在您的设备上。请等待它们同步到手机完成后，再开始更新。';
 
   @override

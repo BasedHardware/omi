@@ -46,6 +46,7 @@ import 'package:omi/env/env.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/providers/device_onboarding_provider.dart';
 import 'package:omi/services/capture/capture_coordinator.dart';
+import 'package:omi/services/capture/custom_live_audio_recovery_policy.dart';
 import 'package:omi/services/capture/capture_end.dart';
 import 'package:omi/services/capture/capture_liveness_watchdog.dart';
 import 'package:omi/services/capture/calendar_capture_gap_monitor.dart';
@@ -66,6 +67,7 @@ import 'package:omi/services/telemetry/client_telemetry.dart';
 import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/capture_session_owner.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
+import 'package:omi/services/experiments/custom_live_audio_recovery_flag.dart';
 import 'package:omi/services/capture/capture_continuity_monitor.dart';
 import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/services/capture/capture_start_errors.dart';
@@ -283,6 +285,15 @@ class CaptureController extends ChangeNotifier
   Timer? _continuityTimer;
 
   final _captureEvidenceIdentity = CaptureEvidenceIdentity();
+  bool? _customLiveAudioRecoveryKillSwitchEnabled;
+  int _customLiveAudioRecoveryFlagIdentityEpoch = -1;
+  int _customLiveAudioRecoveryFlagGeneration = 0;
+  bool _customLiveAudioRecoveryFlagRefreshInFlight = false;
+  int _customLiveAudioRecoveryFlagFetchRetriesForEpoch = 0;
+  bool _customLiveAudioRecoveryFlagUnresolvedRetriesExhausted = false;
+  String? _customLiveAudioRecoveryFlagRecordingId;
+  Timer? _customLiveAudioRecoveryFlagRetryTimer;
+  bool _limitlessCustomLiveWatchRestartPending = false;
 
   String get _captureEvidenceRoot {
     final sync = _wal.getSyncs().phone;
@@ -564,6 +575,9 @@ class CaptureController extends ChangeNotifier
     _syncCaptureHealthTimer(null);
     _installIngressByteObserver();
     _installLiveRecovery();
+    lifetime.listenTo(AnalyticsManager.identityChanges, _onCustomLiveAudioFlagContextChanged);
+    lifetime.listenTo(AnalyticsManager.settledIdentity, _onCustomLiveAudioFlagContextChanged);
+    lifetime.listenTo(AnalyticsManager.trackingConsent, _onCustomLiveAudioFlagContextChanged);
     final omiCall = _omiCallState;
     if (omiCall != null) {
       omiCall.addListener(_onOmiCallStateChanged);
@@ -837,6 +851,7 @@ class CaptureController extends ChangeNotifier
   /// codec or resolver result cannot install transport across a same-id ABA.
   int _deviceIdentityRevision = 0;
   LimitlessDeviceConnection? _limitlessAudioConnection;
+  bool _limitlessCustomLiveSocketUnavailable = false;
 
   /// Depth of in-flight `reconnectActiveCaptureForTesting` probes. Nonzero only
   /// under explicit testing probes; while held, `updateRecordingDevice` may
@@ -983,6 +998,9 @@ class CaptureController extends ChangeNotifier
 
   @visibleForTesting
   set testSessionStartSeconds(int v) => _sessionStartSeconds = v;
+
+  @visibleForTesting
+  set testCustomLiveAudioRecoveryFlagRecordingId(String? value) => _customLiveAudioRecoveryFlagRecordingId = value;
 
   /// Unix timestamp (seconds) when the current offline/batch device-recording
   /// session started. Set only in offline mode (the websocket path that sets
@@ -2078,6 +2096,8 @@ class CaptureController extends ChangeNotifier
         return;
       }
       await conn?.onNetworkSocketReconnected();
+      _limitlessCustomLiveSocketUnavailable = false;
+      _refreshLimitlessCustomLiveWatch(restartWatch: true);
     }
 
     if (!_captureSessionIsCurrent(sessionToken) || _deviceIdentityStale(deviceRevision)) {
@@ -2798,11 +2818,27 @@ class CaptureController extends ChangeNotifier
   void _stopLimitlessCustomLiveWatch() {
     _limitlessAudioConnection?.stopCustomLiveAudioWatch();
     _limitlessAudioConnection = null;
+    _limitlessCustomLiveSocketUnavailable = false;
+    _limitlessCustomLiveWatchRestartPending = false;
   }
 
-  void _refreshLimitlessCustomLiveWatch() {
+  void _cancelCustomLiveAudioFlagRetry() {
+    _customLiveAudioRecoveryFlagGeneration++;
+    _customLiveAudioRecoveryFlagIdentityEpoch = -1;
+    _customLiveAudioRecoveryFlagRefreshInFlight = false;
+    _customLiveAudioRecoveryFlagFetchRetriesForEpoch = 0;
+    _customLiveAudioRecoveryFlagUnresolvedRetriesExhausted = false;
+    _customLiveAudioRecoveryFlagRetryTimer?.cancel();
+    _customLiveAudioRecoveryFlagRetryTimer = null;
+    _customLiveAudioRecoveryKillSwitchEnabled = null;
+    _customLiveAudioRecoveryFlagRecordingId = null;
+    _limitlessCustomLiveWatchRestartPending = false;
+  }
+
+  void _refreshLimitlessCustomLiveWatch({bool refreshKillSwitch = true, bool restartWatch = false}) {
     final connection = _limitlessAudioConnection;
     if (connection == null) return;
+    if (restartWatch) _limitlessCustomLiveWatchRestartPending = true;
     final device = _recordingDevice;
     final session = _capture.stagedReadModel.state.active;
     final recordingId = session?.recordingId;
@@ -2817,13 +2853,13 @@ class CaptureController extends ChangeNotifier
         !config.isEnabled ||
         config.provider != SttProvider.customLive) {
       connection.stopCustomLiveAudioWatch();
+      _cancelCustomLiveAudioFlagRetry();
       return;
     }
-    final configId = config.sttConfigId;
-
     bool isCurrent() {
       final capture = _capture.stagedReadModel;
       final currentSession = capture.state.active;
+      final currentConfig = _preferences.customSttConfig;
       // DeviceProvider publishes normalized metadata after starting capture.
       // Use the admitted recording and link, which survive that refresh.
       if (_captureControllerDisposed ||
@@ -2839,37 +2875,189 @@ class CaptureController extends ChangeNotifier
           _omiCallActive ||
           _pendantSuspension != null ||
           capture.phase != CapturePhase.pendantLive ||
-          _preferences.batchModeEnabled) {
+          _preferences.batchModeEnabled ||
+          !currentConfig.isEnabled ||
+          currentConfig.provider != SttProvider.customLive) {
         return false;
       }
-      return _preferences.customSttConfig.sttConfigId == configId;
+      return true;
     }
 
     if (!isCurrent()) {
+      _limitlessCustomLiveWatchRestartPending = false;
       connection.stopCustomLiveAudioWatch();
       return;
     }
+    if (_customLiveAudioRecoveryFlagRecordingId != recordingId) {
+      _customLiveAudioRecoveryFlagRecordingId = recordingId;
+      _limitlessCustomLiveWatchRestartPending = false;
+      _resetCustomLiveAudioFlagResolution();
+    }
+    if (refreshKillSwitch) _refreshCustomLiveAudioKillSwitch();
     _recordingTelemetry.observeCustomLiveAudioEligibility();
-    if (_customLiveAudioRecoveryKilled) {
+    final recoveryGate = _customLiveAudioRecoveryGate;
+    if (recoveryGate == CustomLiveAudioRecoveryGate.pending) {
+      connection.stopCustomLiveAudioWatch();
+      return;
+    }
+    if (recoveryGate == CustomLiveAudioRecoveryGate.disabled) {
       connection.stopCustomLiveAudioWatch();
       _recordingTelemetry.observeCustomLiveAudioDetection(enabled: false);
       return;
     }
     connection.watchCustomLiveAudio(
       captureIsCurrent: () => isCurrent() && !_customLiveAudioRecoveryKilled,
+      reactivationIsCurrent: () => isCurrent() && _socket?.state == SocketServiceState.connected,
       onEnabled: () => _recordingTelemetry.observeCustomLiveAudioDetection(enabled: true),
       report: (outcome) {
         if (activeRecordingId == recordingId) {
           _recordingTelemetry.observeCustomLiveAudioStall(outcome);
         }
       },
+      restart: _limitlessCustomLiveWatchRestartPending,
+    );
+    _limitlessCustomLiveWatchRestartPending = false;
+    if (_socket?.state != SocketServiceState.connected) {
+      _limitlessCustomLiveSocketUnavailable = true;
+    }
+  }
+
+  void _onCustomLiveAudioFlagContextChanged() {
+    _resetCustomLiveAudioFlagResolution();
+    _refreshLimitlessCustomLiveWatch();
+    // The watch may be temporarily ineligible (pause, suspension, or call),
+    // but flag-context changes still need to restart the capture-scoped kill
+    // switch cadence. The normal watch refresh reads it only when eligible.
+    if (_customLiveAudioRecoveryFlagRecordingId != null) _refreshCustomLiveAudioKillSwitch();
+  }
+
+  void _resetCustomLiveAudioFlagResolution() {
+    _customLiveAudioRecoveryFlagGeneration++;
+    _customLiveAudioRecoveryFlagIdentityEpoch = -1;
+    _customLiveAudioRecoveryFlagRefreshInFlight = false;
+    _customLiveAudioRecoveryFlagFetchRetriesForEpoch = 0;
+    _customLiveAudioRecoveryFlagUnresolvedRetriesExhausted = false;
+    _customLiveAudioRecoveryFlagRetryTimer?.cancel();
+    _customLiveAudioRecoveryFlagRetryTimer = null;
+    _customLiveAudioRecoveryKillSwitchEnabled = null;
+  }
+
+  void _refreshCustomLiveAudioKillSwitch() {
+    if (!AnalyticsManager.canResolveBooleanFeatureFlags || _customLiveAudioRecoveryFlagRefreshInFlight) return;
+    final identityEpoch = AnalyticsManager.identityEpoch;
+    if (_customLiveAudioRecoveryFlagIdentityEpoch == identityEpoch) return;
+    _customLiveAudioRecoveryFlagIdentityEpoch = identityEpoch;
+    _customLiveAudioRecoveryFlagRefreshInFlight = true;
+    final generation = _customLiveAudioRecoveryFlagGeneration;
+    unawaited(() async {
+      var refreshFailed = false;
+      final enabled = await AnalyticsManager().resolvedBooleanFeatureFlag(
+        CustomLiveAudioRecoveryFlag.killSwitchFlag,
+        refresh: true,
+        missingIsUnresolved: true,
+        onRefreshFailure: () => refreshFailed = true,
+        refreshTimeout: const Duration(seconds: 1),
+      );
+      if (_captureControllerDisposed || generation != _customLiveAudioRecoveryFlagGeneration) return;
+      _customLiveAudioRecoveryFlagRefreshInFlight = false;
+      if (identityEpoch != AnalyticsManager.identityEpoch) {
+        _customLiveAudioRecoveryFlagIdentityEpoch = -1;
+        _scheduleCustomLiveAudioFlagRetry(
+          generation,
+          AnalyticsManager.identityEpoch,
+          delay: const Duration(seconds: 1),
+        );
+        return;
+      }
+      if (refreshFailed) {
+        // Keep the last successful result across refresh failures. A new
+        // capture or flag-context change clears it before its scoped read. A
+        // cached kill still needs the bounded retry so a remote disable is
+        // observed promptly; the retry never clears that confirmed kill.
+        if (_customLiveAudioRecoveryFlagFetchRetriesForEpoch == 0) {
+          _customLiveAudioRecoveryFlagFetchRetriesForEpoch = 1;
+          _scheduleCustomLiveAudioFlagRetry(generation, identityEpoch, delay: const Duration(seconds: 1));
+        } else {
+          _customLiveAudioRecoveryFlagIdentityEpoch = -1;
+          _customLiveAudioRecoveryFlagFetchRetriesForEpoch = 0;
+          _customLiveAudioRecoveryFlagUnresolvedRetriesExhausted = true;
+          _scheduleCustomLiveAudioFlagRetry(
+            generation,
+            identityEpoch,
+            delay: const Duration(minutes: 5),
+            resetFetchRetries: true,
+          );
+        }
+        _refreshLimitlessCustomLiveWatch(refreshKillSwitch: false);
+        return;
+      }
+      _customLiveAudioRecoveryFlagFetchRetriesForEpoch = 0;
+      _customLiveAudioRecoveryKillSwitchEnabled = enabled;
+      if (enabled == null) {
+        // A successful lookup with no key confirms that no kill is configured.
+        _customLiveAudioRecoveryFlagUnresolvedRetriesExhausted = true;
+      } else {
+        _customLiveAudioRecoveryFlagUnresolvedRetriesExhausted = false;
+      }
+      _scheduleCustomLiveAudioFlagRetry(
+        generation,
+        identityEpoch,
+        delay: const Duration(minutes: 5),
+        resetFetchRetries: true,
+      );
+      _refreshLimitlessCustomLiveWatch(refreshKillSwitch: false);
+    }());
+  }
+
+  void _scheduleCustomLiveAudioFlagRetry(
+    int generation,
+    int identityEpoch, {
+    required Duration delay,
+    bool resetFetchRetries = false,
+  }) {
+    if (_customLiveAudioRecoveryFlagRetryTimer != null) return;
+    _customLiveAudioRecoveryFlagRetryTimer = _scheduling.once(delay, () {
+      _customLiveAudioRecoveryFlagRetryTimer = null;
+      if (_captureControllerDisposed ||
+          generation != _customLiveAudioRecoveryFlagGeneration ||
+          identityEpoch != AnalyticsManager.identityEpoch) {
+        return;
+      }
+      if (activeRecordingId != _customLiveAudioRecoveryFlagRecordingId) {
+        // This can be a transient admission window during a session transition.
+        // Let the next eligible pass fetch again instead of leaving this
+        // identity epoch permanently marked as already refreshed.
+        _customLiveAudioRecoveryFlagIdentityEpoch = -1;
+        return;
+      }
+      _customLiveAudioRecoveryFlagIdentityEpoch = -1;
+      if (resetFetchRetries) {
+        _customLiveAudioRecoveryFlagFetchRetriesForEpoch = 0;
+      }
+      _refreshCustomLiveAudioKillSwitch();
+      if (activeRecordingId == _customLiveAudioRecoveryFlagRecordingId &&
+          !_customLiveAudioRecoveryFlagRefreshInFlight &&
+          _customLiveAudioRecoveryFlagRetryTimer == null) {
+        _scheduleCustomLiveAudioFlagRetry(
+          generation,
+          identityEpoch,
+          delay: const Duration(minutes: 5),
+          resetFetchRetries: true,
+        );
+      }
+    });
+  }
+
+  CustomLiveAudioRecoveryGate get _customLiveAudioRecoveryGate {
+    return resolveCustomLiveAudioRecoveryGate(
+      buildEnabled: customLiveCaptureFixEnabled,
+      flagReadContextAvailable: AnalyticsManager.canResolveBooleanFeatureFlags,
+      cachedKillSwitchEnabled: _customLiveAudioRecoveryKillSwitchEnabled,
+      unresolvedRetryExhausted: _customLiveAudioRecoveryFlagUnresolvedRetriesExhausted,
     );
   }
 
-  // DeviceService's saved-reconnect policy already refreshes the shared flag cache.
-  bool get _customLiveAudioRecoveryKilled =>
-      !customLiveCaptureFixEnabled ||
-      AnalyticsManager().isBooleanFeatureEnabledCached('android-custom-live-audio-recovery-kill');
+  bool get _customLiveAudioRecoveryKilled => _customLiveAudioRecoveryGate != CustomLiveAudioRecoveryGate.enabled;
 
   Future<void> _saveNativeBleStreamConfig(BtDevice device, BleAudioCodec codec) async {
     final audioTarget = _nativeBleAudioTarget(device);
@@ -3175,6 +3363,7 @@ class CaptureController extends ChangeNotifier
   @override
   void dispose() {
     _stopLimitlessCustomLiveWatch();
+    _cancelCustomLiveAudioFlagRetry();
     _clearIngressByteObserver();
     _uplinkSilence.cancel();
     _captureControllerDisposed = true;
@@ -3724,6 +3913,7 @@ class CaptureController extends ChangeNotifier
 
   Future<void> _stopDeviceSessionBody({required bool cleanDevice}) async {
     _rollCaptureSession('stopped');
+    _cancelCustomLiveAudioFlagRetry();
     await _cleanupCurrentState(disableNativeBackground: true);
     await _wal.getSyncs().phone.finalizeCurrentSession();
     if (cleanDevice) {
@@ -3796,6 +3986,7 @@ class CaptureController extends ChangeNotifier
     // enable-data-stream command after its BLE audio times out).
     if (recordingState == RecordingState.deviceRecord) {
       _socketReconnectPending = true;
+      _limitlessCustomLiveSocketUnavailable = true;
       _sessionTransportInterrupted = true;
     }
 
@@ -3926,6 +4117,9 @@ class CaptureController extends ChangeNotifier
       return;
     }
     liveHeldAudio.reset();
+    if (recordingState == RecordingState.deviceRecord) {
+      _limitlessCustomLiveSocketUnavailable = true;
+    }
     _recordingTelemetry.observeSocketError();
     _transcriptionServiceStatuses = [];
     _transcriptServiceReady = false;
@@ -3953,6 +4147,13 @@ class CaptureController extends ChangeNotifier
     Object? failure;
     final stagedPhase = _capture.stagedReadModel.phase;
     final stagedLive = stagedPhase == CapturePhase.phoneLive || stagedPhase == CapturePhase.pendantLive;
+    if (stagedPhase == CapturePhase.pendantLive &&
+        recordingState == RecordingState.deviceRecord &&
+        _limitlessCustomLiveSocketUnavailable &&
+        !_socketReconnectPending) {
+      _limitlessCustomLiveSocketUnavailable = false;
+      _refreshLimitlessCustomLiveWatch(restartWatch: true);
+    }
     if (stagedLive && recordingState == RecordingState.interrupted && !_micInterrupted && !_phoneMicPaused) {
       if (_activeSource is PhoneMicSource) {
         failure = await _restartPhoneMicRecording();

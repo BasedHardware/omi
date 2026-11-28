@@ -12325,6 +12325,7 @@
     "playStripePlanPaused": "Vaš paket {plan} je začasno ustavljen.",
     "firmwareNewestSupportedForDevice": "Vaša naprava že uporablja najnovejšo podprto različico firmwareja",
     "firmwareSyncRecordingsFirstTitle": "Najprej sinhronizirajte posnetke",
+    "pendantAudioUnconfirmedSyncBlocked": "Shranjene zvočne vsebine na napravi Pendant ni bilo mogoče potrditi. Naprava Pendant naj ostane povezana, nato poskusite znova sinhronizirati.",
     "firmwareSyncRecordingsFirstMessage": "Nekateri posnetki so še na vaši napravi. Počakajte, da se dokonča sinhroniziranje s telefonom, nato pa začnite posodobitev.",
     "batteryRestartToRefresh": "Ponovno zaženite Omi, da osvežite podatke"
 }

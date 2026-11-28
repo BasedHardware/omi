@@ -15852,6 +15852,10 @@ class AppLocalizationsUr extends AppLocalizations {
   String get firmwareSyncRecordingsFirstTitle => 'پہلے اپنی ریکارڈنگز سنک کریں';
 
   @override
+  String get pendantAudioUnconfirmedSyncBlocked =>
+      'آپ کے Pendant میں محفوظ آڈیو کی تصدیق نہیں ہو سکی۔ اپنے Pendant کو منسلک رکھیں اور دوبارہ سنک کرنے کی کوشش کریں۔';
+
+  @override
   String get firmwareSyncRecordingsFirstMessage =>
       'کچھ ریکارڈنگز ابھی آپ کے ڈیوائس پر ہیں۔ انہیں فون پر سنک ہونے دیں، پھر اپڈیٹ شروع کریں۔';
 

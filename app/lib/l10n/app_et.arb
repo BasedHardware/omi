@@ -4768,6 +4768,7 @@
     "playStripePlanPaused": "Sinu {plan} pakett on peatatud.",
     "firmwareNewestSupportedForDevice": "Teie seadmes on juba uusim toetatud püsivaraversioon",
     "firmwareSyncRecordingsFirstTitle": "Sünkroonige oma salvestised esmalt",
+    "pendantAudioUnconfirmedSyncBlocked": "Pendantile salvestatud heli ei õnnestunud kinnitada. Hoidke Pendant ühendatuna ja proovige uuesti sünkroonida.",
     "firmwareSyncRecordingsFirstMessage": "Mõned salvestised on veel teie seadmes. Oodake, kuni need on telefonisse sünkroonitud, ja seejärel alustage uuendust.",
     "batteryRestartToRefresh": "Taaskäivitage Omi värskendamiseks"
 }

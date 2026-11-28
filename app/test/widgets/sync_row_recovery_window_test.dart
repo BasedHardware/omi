@@ -193,6 +193,46 @@ void main() {
     expect(find.text('Delete'), findsOneWidget);
   });
 
+  testWidgets('row Delete reports a WAL that remains after a successful return', (tester) async {
+    final wal = makeWal(WalStatus.unsupportedAudio);
+    final retaining = _RetainingDeleteSync(wal);
+    provider = retaining;
+    await tester.pumpWidget(_app(
+      WalListItem(wal: wal, date: DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000), walIdx: 0),
+      retaining,
+    ));
+    await tester.pump();
+
+    await tester.tap(find.text('Delete'));
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.tap(find.text('Delete').last);
+    await tester.pump(const Duration(milliseconds: 500));
+
+    final l10n = AppLocalizations.of(tester.element(find.byType(Scaffold).first));
+    expect(retaining.deleteCalls, 1);
+    expect(find.text(l10n.failedToDeleteSomeItems), findsOneWidget);
+  });
+
+  testWidgets('TooOldRecordingHelp reports a WAL that remains after a successful return', (tester) async {
+    final wal = makeWal(WalStatus.outsideRecoveryWindow);
+    final retaining = _RetainingDeleteSync(wal);
+    provider = retaining;
+    await tester.pumpWidget(_app(
+      WalListItem(wal: wal, date: DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000), walIdx: 0),
+      retaining,
+    ));
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('too_old_delete')));
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.tap(find.text('Delete').last);
+    await tester.pump(const Duration(milliseconds: 500));
+
+    final l10n = AppLocalizations.of(tester.element(find.byType(Scaffold).first));
+    expect(retaining.deleteCalls, 1);
+    expect(find.text(l10n.failedToDeleteSomeItems), findsOneWidget);
+  });
+
   testWidgets('every unsyncable state offers the same way out', (tester) async {
     for (final status in [WalStatus.corrupted, WalStatus.outsideRecoveryWindow, WalStatus.unsupportedAudio]) {
       await pumpRow(tester, makeWal(status));
@@ -255,6 +295,27 @@ class _FailedWalSync extends ChangeNotifier implements SyncProvider {
 
   @override
   List<Wal> get allWals => wals;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _RetainingDeleteSync extends ChangeNotifier implements SyncProvider {
+  _RetainingDeleteSync(this.wal);
+
+  final Wal wal;
+  int deleteCalls = 0;
+
+  @override
+  List<Wal> get allWals => [wal];
+
+  @override
+  Wal? get failedWal => null;
+
+  @override
+  Future<void> deleteWal(Wal wal, {String? firmwareVersion, bool refreshDevice = true}) async {
+    deleteCalls++;
+  }
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);

@@ -15906,6 +15906,10 @@ class AppLocalizationsRo extends AppLocalizations {
   String get firmwareSyncRecordingsFirstTitle => 'Sincronizează mai întâi înregistrările';
 
   @override
+  String get pendantAudioUnconfirmedSyncBlocked =>
+      'Nu am putut confirma sunetul stocat pe Pendant. Păstrează Pendant conectat și încearcă din nou sincronizarea.';
+
+  @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Unele înregistrări sunt încă pe dispozitivul tău. Lasă-le să termine de sincronizat cu telefonul tău, apoi pornește actualizarea.';
 

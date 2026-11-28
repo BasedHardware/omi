@@ -100,6 +100,121 @@ void main() {
     expect(await adapter.resolvedFeatureEnabled('b'), isNull);
   });
 
+  test('overlapping same-account refreshes share the winning flag snapshot', () async {
+    final pending = Completer<Map<String, OmiFlag>?>();
+    var calls = 0;
+    final adapter = PostHogAnalyticsAdapter(
+      apiKey: 'test',
+      omiFlags: () {
+        calls++;
+        return pending.future;
+      },
+    )..identify(userId: 'u');
+
+    final firstRead = adapter.reloadFeatureFlags();
+    final overlappingRead = adapter.reloadFeatureFlags();
+    expect(calls, 1, reason: 'overlapping readers wait on one authenticated snapshot');
+    pending.complete({'kill': (enabled: true, variant: null, payloadJson: null)});
+
+    expect(await firstRead, isTrue);
+    expect(await overlappingRead, isTrue);
+    expect(await adapter.resolvedFeatureEnabled('kill'), isTrue);
+  });
+
+  test('a timed out caller does not cancel a shared refresh another caller awaits', () async {
+    final pending = Completer<Map<String, OmiFlag>?>();
+    var calls = 0;
+    final adapter = PostHogAnalyticsAdapter(
+      apiKey: 'test',
+      omiFlags: () {
+        calls++;
+        return pending.future;
+      },
+    )..identify(userId: 'u');
+
+    final unboundedRead = adapter.reloadFeatureFlags();
+    expect(await adapter.reloadFeatureFlagsWithTimeout(const Duration(milliseconds: 5)), isFalse);
+    expect(calls, 1);
+
+    pending.complete({'kill': (enabled: true, variant: null, payloadJson: null)});
+    expect(await unboundedRead, isTrue);
+    expect(await adapter.resolvedFeatureEnabled('kill'), isTrue);
+  });
+
+  test('a retry does not invalidate another caller waiting on the timed out refresh', () async {
+    final pendingFirst = Completer<Map<String, OmiFlag>?>();
+    var calls = 0;
+    final adapter = PostHogAnalyticsAdapter(
+      apiKey: 'test',
+      omiFlags: () {
+        calls++;
+        if (calls == 1) return pendingFirst.future;
+        return Future.value({'kill': (enabled: false, variant: null, payloadJson: null)});
+      },
+    )..identify(userId: 'u');
+
+    final existingWaiter = adapter.reloadFeatureFlags();
+    expect(await adapter.reloadFeatureFlagsWithTimeout(const Duration(milliseconds: 5)), isFalse);
+    expect(await adapter.reloadFeatureFlagsWithTimeout(const Duration(seconds: 1)), isTrue);
+    expect(calls, 2);
+
+    pendingFirst.complete({'kill': (enabled: true, variant: null, payloadJson: null)});
+    expect(await existingWaiter, isTrue);
+    expect(await adapter.resolvedFeatureEnabled('kill'), isFalse,
+        reason: 'the older shared fetch cannot replace the retry snapshot');
+  });
+
+  test('an older successful refresh commits while a newer retry is still pending', () async {
+    final pendingFirst = Completer<Map<String, OmiFlag>?>();
+    final pendingRetry = Completer<Map<String, OmiFlag>?>();
+    var calls = 0;
+    final adapter = PostHogAnalyticsAdapter(
+      apiKey: 'test',
+      omiFlags: () {
+        calls++;
+        return calls == 1 ? pendingFirst.future : pendingRetry.future;
+      },
+    )..identify(userId: 'u');
+
+    final existingWaiter = adapter.reloadFeatureFlags();
+    expect(await adapter.reloadFeatureFlagsWithTimeout(const Duration(milliseconds: 5)), isFalse);
+    final retry = adapter.reloadFeatureFlags();
+    expect(calls, 2);
+
+    pendingFirst.complete({'kill': (enabled: true, variant: null, payloadJson: null)});
+    expect(await existingWaiter, isTrue);
+    expect(await adapter.resolvedFeatureEnabled('kill'), isTrue,
+        reason: 'a successful in-flight snapshot remains available while its retry is pending');
+
+    pendingRetry.complete({'kill': (enabled: false, variant: null, payloadJson: null)});
+    expect(await retry, isTrue);
+    expect(await adapter.resolvedFeatureEnabled('kill'), isFalse,
+        reason: 'a later successful snapshot still replaces the older committed snapshot');
+  });
+
+  test('a timed out refresh releases the slot and ignores its late answer', () async {
+    final pendingFirst = Completer<Map<String, OmiFlag>?>();
+    var calls = 0;
+    final adapter = PostHogAnalyticsAdapter(
+      apiKey: 'test',
+      omiFlags: () {
+        calls++;
+        if (calls == 1) return pendingFirst.future;
+        return Future.value({'kill': (enabled: false, variant: null, payloadJson: null)});
+      },
+    )..identify(userId: 'u');
+
+    expect(await adapter.reloadFeatureFlagsWithTimeout(const Duration(milliseconds: 5)), isFalse);
+    expect(calls, 1);
+    expect(await adapter.reloadFeatureFlagsWithTimeout(const Duration(seconds: 1)), isTrue);
+    expect(calls, 2, reason: 'the retry must start a fresh request instead of coalescing with the timed out GET');
+
+    pendingFirst.complete({'kill': (enabled: true, variant: null, payloadJson: null)});
+    await Future<void>.delayed(Duration.zero);
+    expect(await adapter.resolvedFeatureEnabled('kill'), isFalse,
+        reason: 'the abandoned request cannot overwrite the fresh snapshot');
+  });
+
   test('same-account profile updates preserve flags and an in-flight refresh', () async {
     final pending = Completer<Map<String, OmiFlag>?>();
     var delayed = false;
@@ -127,5 +242,20 @@ void main() {
       expect(await adapter.reloadFeatureFlags(), isFalse);
       expect(await adapter.resolvedFeatureEnabled('missing'), isNull);
     }
+  });
+
+  test('synchronous Omi flag loader errors return false and release the shared slot', () async {
+    var calls = 0;
+    final adapter = PostHogAnalyticsAdapter(
+      apiKey: 'test',
+      omiFlags: () {
+        calls++;
+        throw StateError('synchronous loader failure');
+      },
+    )..identify(userId: 'u');
+
+    expect(await adapter.reloadFeatureFlags(), isFalse);
+    expect(await adapter.reloadFeatureFlags(), isFalse);
+    expect(calls, 2, reason: 'a failed synchronous loader must release the shared reload slot');
   });
 }

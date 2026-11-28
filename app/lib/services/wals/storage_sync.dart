@@ -9,6 +9,7 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
+import 'package:omi/services/devices/ring_protocol.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/device_capture_clock.dart';
@@ -22,6 +23,8 @@ import 'package:omi/services/wals/wal_interfaces.dart';
 class StorageSyncImpl implements StorageSync {
   List<Wal> _wals = [];
   BtDevice? _device;
+  String? _confirmedInventoryDeviceId;
+  String? _inventoryAttemptedDeviceId;
 
   StreamSubscription? _storageStream;
   Completer<bool>? _activeTransfer;
@@ -29,6 +32,9 @@ class StorageSyncImpl implements StorageSync {
   DeviceConnection? _activeSyncConnection;
   int? _activeSyncEpoch;
   bool _firmwareStopRequested = false;
+
+  bool get _firmwareCannotDeleteMultiFileWals =>
+      RingProtocol.hasUnsupportedMultiFileStorageFirmware(_device?.firmwareRevision);
 
   IWalSyncListener listener;
   LocalWalSync? _localSync;
@@ -61,10 +67,18 @@ class StorageSyncImpl implements StorageSync {
         _clock = clock ?? DateTime.now;
 
   @visibleForTesting
-  set testWals(List<Wal> wals) => _wals = wals;
+  set testWals(List<Wal> wals) {
+    _wals = wals;
+    final deviceId = _device?.id;
+    _confirmedInventoryDeviceId = deviceId != null && wals.every((wal) => wal.device == deviceId) ? deviceId : null;
+  }
+
+  /// Whether this sync still holds files for [deviceId] that need an
+  /// authoritative multi-file inventory before deletion can be confirmed.
+  bool hasCachedWalsForDevice(String deviceId) => _wals.any((wal) => wal.device == deviceId);
 
   @visibleForTesting
-  set testDevice(BtDevice? device) => _device = device;
+  set testDevice(BtDevice? device) => setDevice(device);
 
   DeviceConnection? _testConnection;
 
@@ -79,6 +93,10 @@ class StorageSyncImpl implements StorageSync {
   @override
   void setDevice(BtDevice? device) {
     _device = device;
+    _inventoryAttemptedDeviceId = null;
+    // A cached index is usable only after this device's current inventory has
+    // been read. A device switch or reconnect must not reuse stale indexes.
+    _confirmedInventoryDeviceId = null;
   }
 
   @override
@@ -171,36 +189,50 @@ class StorageSyncImpl implements StorageSync {
     }
   }
 
-  /// Returns cached WAL list from memory. Safe to call during sync — never touches BLE.
-  /// Call refreshWalsFromDevice() first to populate the list via BLE.
+  /// Returns cached pending WALs from memory. Safe to call during sync — never
+  /// touches BLE. Rows remain visible across disconnects and device switches;
+  /// sync and delete operations separately require a confirmed owning inventory.
   @override
   Future<List<Wal>> getMissingWals() async {
-    return _wals.where((w) => w.status == WalStatus.miss && w.storage == WalStorage.sdcard).toList();
+    final deviceId = _device?.id;
+    final inventoryAttempted = deviceId != null && _inventoryAttemptedDeviceId == deviceId;
+    return _wals
+        .where((w) =>
+            w.status == WalStatus.miss &&
+            w.storage == WalStorage.sdcard &&
+            (!inventoryAttempted || w.device == deviceId))
+        .toList();
   }
 
-  /// Whether [wal] is one of the device files this sync listed. Its recordings
-  /// share [WalStorage.sdcard] with the legacy SD card sync, so per-recording
-  /// actions use this to reach the right sync.
+  /// Whether [wal] is still tracked by this sync. Its recordings share
+  /// [WalStorage.sdcard] with the legacy SD card sync, so per-recording actions
+  /// use this to reach the right sync. This is cache membership only: the
+  /// receiving operation must still validate the active device and inventory.
   bool owns(Wal wal) => _wals.any((w) => identical(w, wal));
 
   /// Discover files on device via BLE. Must be called BEFORE syncAll() to populate _wals.
   /// Sends STOP command and subscribes to data characteristic — never call during an active sync.
-  Future<void> refreshWalsFromDevice() async {
-    if (_device == null) return;
+  Future<bool> refreshWalsFromDevice() async {
+    final device = _device;
+    if (device == null) return false;
     if (_isSyncing) {
       Logger.debug('StorageSync.refreshWalsFromDevice: skipping — sync in progress');
-      return;
+      return false;
     }
+    _inventoryAttemptedDeviceId = device.id;
+    _confirmedInventoryDeviceId = null;
 
     try {
-      var connection = await ServiceManager.instance().device.ensureConnection(_device!.id);
-      if (connection == null) return;
+      var connection = _testConnection ?? await ServiceManager.instance().device.ensureConnection(device.id);
+      if (connection == null) return false;
 
       final status = await connection.getStorageFileStats();
       Logger.debug('StorageSync.refreshWalsFromDevice: status=$status');
-      if (status == null || status.fileCount == 0) {
-        _wals = [];
-        return;
+      if (status == null || _device?.id != device.id) return false;
+      if (status.fileCount == 0) {
+        _wals = _wals.where((wal) => wal.device != device.id).toList();
+        _confirmedInventoryDeviceId = device.id;
+        return true;
       }
 
       // Stop any active auto-sync before listing (per PR #5905 pattern)
@@ -220,12 +252,12 @@ class StorageSyncImpl implements StorageSync {
       }
 
       if (files.isEmpty) {
-        _wals = [];
-        return;
+        return false;
       }
 
       BleAudioCodec codec = await connection.getAudioCodec();
-      var pd = await _device!.getDeviceInfo(connection);
+      var pd = await device.getDeviceInfo(connection);
+      if (_device?.id != device.id) return false;
       String deviceModel = pd.modelNumber.isNotEmpty ? pd.modelNumber : "Omi";
 
       List<Wal> wals = [];
@@ -247,7 +279,7 @@ class StorageSyncImpl implements StorageSync {
             storageOffset: 0,
             storageTotalBytes: file.sizeBytes,
             fileNum: file.index,
-            device: _device!.id,
+            device: device.id,
             deviceModel: deviceModel,
             totalFrames: seconds * fps,
             syncedFrameOffset: 0,
@@ -258,23 +290,40 @@ class StorageSyncImpl implements StorageSync {
       // Deterministic sync order: oldest -> newest (per PR #5905)
       wals.sort((a, b) => a.timerStart.compareTo(b.timerStart));
 
-      _wals = wals;
+      _wals = [..._wals.where((wal) => wal.device != device.id), ...wals];
+      _confirmedInventoryDeviceId = device.id;
       Logger.debug('StorageSync.refreshWalsFromDevice: Found ${wals.length} files to sync');
+      return true;
     } catch (e) {
       Logger.debug('StorageSync: Error refreshing wals from device: $e');
+      return false;
     }
   }
 
   @override
   Future deleteWal(Wal wal) async {
     if (wal.storage != WalStorage.sdcard || !_wals.any((w) => w.id == wal.id)) return;
-    if (_device != null && wal.device != _device!.id) {
+    final device = _device;
+    if (device == null) {
+      // Keep the cached row visible while disconnected. The caller can retry
+      // after reconnecting and confirming this row's owning device inventory.
+      listener.onWalUpdated();
+      return;
+    }
+    if (wal.device != device.id) {
       // Not this device's recording (e.g. left by a device this phone no
       // longer pairs with): drop the stale local row, nothing to delete.
       _wals = _wals.where((w) => w.id != wal.id).toList();
       listener.onWalUpdated();
       if (wal.status != WalStatus.synced) throw StateError("Owning device is unavailable; only cached row removed");
       return;
+    }
+    if (_confirmedInventoryDeviceId != device.id) {
+      throw StateError('Current device file indexes have not been confirmed');
+    }
+    if (_firmwareCannotDeleteMultiFileWals) {
+      listener.onWalUpdated();
+      throw StateError('Connected firmware does not support multi-file storage deletion');
     }
     // A delete that was attempted drops the row whatever the reply said: the
     // positional file index is potentially burned (FC-deleted-device-file-
@@ -312,6 +361,12 @@ class StorageSyncImpl implements StorageSync {
     // covers drops; the other device's pending rows keep their local rows.
     final stale = _previousDeviceWalIds(WalStatus.synced);
     final toDelete = _wals.where((w) => w.status == WalStatus.synced && !stale.contains(w.id)).toList();
+    if (_firmwareCannotDeleteMultiFileWals && toDelete.isNotEmpty) {
+      _wals = _wals.where((w) => !stale.contains(w.id)).toList();
+      _logStaleRowsDropped('synced', stale.length);
+      listener.onWalUpdated();
+      throw StateError('Connected firmware does not support multi-file storage deletion');
+    }
     final outcome = await _deleteWalsOnDevice(toDelete);
     _wals = _wals
         .where((w) => !stale.contains(w.id) && (w.status != WalStatus.synced || !outcome.attempted.contains(w.id)))
@@ -330,6 +385,12 @@ class StorageSyncImpl implements StorageSync {
     // deleteAllSyncedWals); they drop locally like the single-row path.
     final stale = _previousDeviceWalIds(WalStatus.miss);
     final toDelete = _wals.where((w) => w.status == WalStatus.miss && !stale.contains(w.id)).toList();
+    if (_firmwareCannotDeleteMultiFileWals && toDelete.isNotEmpty) {
+      _wals = _wals.where((w) => !stale.contains(w.id)).toList();
+      _logStaleRowsDropped('miss', stale.length);
+      listener.onWalUpdated();
+      throw StateError('Connected firmware does not support multi-file storage deletion');
+    }
     final outcome = await _deleteWalsOnDevice(toDelete);
     // Attempted deletes drop their rows whatever the reply said (a positional
     // index a delete may have removed is burned; the listing re-adds
@@ -371,13 +432,17 @@ class StorageSyncImpl implements StorageSync {
   /// connection) attempts nothing and confirms nothing.
   Future<({Set<String> attempted, Set<String> confirmed})> _deleteWalsOnDevice(List<Wal> wals) async {
     final attempted = <String>{}, confirmed = <String>{};
-    if (wals.isEmpty || _device == null || _isSyncing) return (attempted: attempted, confirmed: confirmed);
-    final connection = _testConnection ?? await ServiceManager.instance().device.ensureConnection(_device!.id);
+    final device = _device;
+    if (wals.isEmpty || device == null || _confirmedInventoryDeviceId != device.id || _isSyncing) {
+      return (attempted: attempted, confirmed: confirmed);
+    }
+    final connection = _testConnection ?? await ServiceManager.instance().device.ensureConnection(device.id);
     if (connection == null) {
       Logger.debug('StorageSync._deleteWalsOnDevice: no connection, skipping firmware delete');
       return (attempted: attempted, confirmed: confirmed);
     }
-    final targets = wals.where((w) => w.fileNum >= 0).toList()..sort((a, b) => b.fileNum.compareTo(a.fileNum));
+    final targets = wals.where((w) => w.device == device.id && w.fileNum >= 0).toList()
+      ..sort((a, b) => b.fileNum.compareTo(a.fileNum));
     final deletedIds = targets.map((w) => w.id).toSet();
     for (final wal in targets) {
       attempted.add(wal.id);
@@ -398,6 +463,7 @@ class StorageSyncImpl implements StorageSync {
         Logger.debug('StorageSync._deleteWalsOnDevice: failed fileNum=${wal.fileNum}: $e');
       }
     }
+    if (!confirmed.containsAll(attempted)) _confirmedInventoryDeviceId = null;
     return (attempted: attempted, confirmed: confirmed);
   }
 
@@ -412,7 +478,8 @@ class StorageSyncImpl implements StorageSync {
 
   @override
   Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress}) async {
-    if (_device == null) {
+    final device = _device;
+    if (device == null || _confirmedInventoryDeviceId != device.id) {
       Logger.debug('StorageSync.syncAll: _device is null, returning');
       return null;
     }
@@ -420,7 +487,9 @@ class StorageSyncImpl implements StorageSync {
     // Use already-populated _wals from getMissingWals() called earlier by WalSyncs.
     // Do NOT call getMissingWals() here — it creates a BLE subscription on the same
     // characteristic used for data transfer, causing subscription conflicts.
-    var wals = _wals.where((w) => w.status == WalStatus.miss && w.storage == WalStorage.sdcard).toList();
+    var wals = _wals
+        .where((w) => w.device == device.id && w.status == WalStatus.miss && w.storage == WalStorage.sdcard)
+        .toList();
     wals.sort((a, b) => a.timerStart.compareTo(b.timerStart));
 
     Logger.debug('StorageSync.syncAll: ${wals.length} files to sync');
@@ -523,6 +592,10 @@ class StorageSyncImpl implements StorageSync {
   Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
     // Resetting the sync state here would hijack a drain that is still reading.
     if (_isSyncing) throw Exception('Device transfer already in progress');
+    final device = _device;
+    if (device == null || _confirmedInventoryDeviceId != device.id || wal.device != device.id) {
+      throw StateError('Current device file indexes have not been confirmed');
+    }
 
     _resetSyncState();
     _isSyncing = true;
@@ -578,12 +651,14 @@ class StorageSyncImpl implements StorageSync {
     Logger.debug(
       'StorageSync._syncSingleFile: fileNum=${wal.fileNum} size=${wal.storageTotalBytes} offset=${wal.storageOffset}',
     );
-    if (_device == null) return false;
+    final device = _device;
+    if (device == null || _confirmedInventoryDeviceId != device.id || wal.device != device.id) return false;
 
-    var connection = _testConnection ?? await ServiceManager.instance().device.ensureConnection(_device!.id);
+    var connection = _testConnection ?? await ServiceManager.instance().device.ensureConnection(device.id);
     if (connection == null) throw Exception('Device not connected');
+    if (_device?.id != device.id || _confirmedInventoryDeviceId != device.id) return false;
 
-    _activeSyncDeviceId = _device!.id;
+    _activeSyncDeviceId = device.id;
     _activeSyncConnection = connection;
     try {
       _activeSyncEpoch = connection.connectionEpoch;

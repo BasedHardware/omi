@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/services/experiments/pendant_ring_drain_gate.dart';
+import 'package:omi/services/devices/ring_protocol.dart';
 import 'package:omi/services/wals/ring_drain_policy.dart';
 import 'package:omi/services/wals/ring_storage_sync.dart';
+import 'package:omi/services/wals/flash_page_wal_sync.dart';
 import 'package:omi/services/wals/wal_syncs.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -55,7 +57,7 @@ class _RingSync extends RingStorageSyncImpl {
   );
 
   @override
-  Future<void> refreshWalsFromDevice() async {}
+  Future<bool> refreshWalsFromDevice() async => true;
 
   @override
   Future<List<Wal>> getMissingWals() async => pending.status == WalStatus.miss ? [pending] : [];
@@ -78,7 +80,7 @@ class _SettlingStorage extends StorageSyncImpl {
   final pending = Wal(timerStart: 1704067200, codec: BleAudioCodec.opus, seconds: 60, status: WalStatus.miss);
 
   @override
-  Future<void> refreshWalsFromDevice() async {}
+  Future<bool> refreshWalsFromDevice() async => true;
 
   @override
   Future<List<Wal>> getMissingWals() async => [pending];
@@ -105,10 +107,74 @@ class _FailingSdcard extends _SpySdcard {
   }
 }
 
+class _DeleteSpyPhone extends _PhoneSync {
+  _DeleteSpyPhone(this._deleteEvents) : super(events: _deleteEvents);
+  final List<String> _deleteEvents;
+
+  @override
+  Future<void> deleteAllSyncedWals() async => _deleteEvents.add('phone-delete');
+
+  @override
+  Future<void> deleteAllPendingWals() async => _deleteEvents.add('phone-pending-delete');
+}
+
+class _DeleteSpySdcard extends SDCardWalSyncImpl {
+  _DeleteSpySdcard(this.events) : super(_Listener());
+  final List<String> events;
+
+  @override
+  Future<void> deleteAllSyncedWals() async => events.add('sdcard-delete');
+
+  @override
+  Future<void> deleteAllPendingWals() async => events.add('sdcard-pending-delete');
+}
+
+class _DeleteSpyFlashPage extends FlashPageWalSyncImpl {
+  _DeleteSpyFlashPage(this.events, {this.fail = false}) : super(_Listener());
+  final List<String> events;
+  final bool fail;
+
+  @override
+  Future<void> deleteAllSyncedWals() async {
+    events.add('flash-delete');
+    if (fail) throw StateError('device ACK was capped');
+  }
+
+  @override
+  Future<void> deleteAllPendingWals() async {
+    events.add('flash-pending-delete');
+    if (fail) throw StateError('device ACK was capped');
+  }
+}
+
+class _DeleteSpyStorage extends StorageSyncImpl {
+  _DeleteSpyStorage(this.events) : super(_Listener());
+  final List<String> events;
+
+  @override
+  Future<void> deleteAllSyncedWals() async => events.add('storage-delete');
+
+  @override
+  Future<void> deleteAllPendingWals() async => events.add('storage-pending-delete');
+}
+
+class _DeleteSpyRing extends RingStorageSyncImpl {
+  _DeleteSpyRing(this.events) : super(_Listener());
+  final List<String> events;
+
+  @override
+  Future<void> deleteAllSyncedWals() async => events.add('ring-delete');
+
+  @override
+  Future<void> deleteAllPendingWals() async => events.add('ring-pending-delete');
+}
+
 class _SpySdcard extends SDCardWalSyncImpl {
   _SpySdcard() : super(_Listener());
 
   BtDevice? attached;
+  int refreshCalls = 0;
+  bool refreshConfirmed = true;
   int listings = 0;
   int reads = 0;
   int starts = 0;
@@ -125,6 +191,12 @@ class _SpySdcard extends SDCardWalSyncImpl {
 
   @override
   void setDevice(BtDevice? device) => attached = device;
+
+  @override
+  Future<bool> refreshWalsFromDevice() async {
+    refreshCalls++;
+    return refreshConfirmed;
+  }
 
   @override
   Future<List<Wal>> getMissingWals() async {
@@ -145,6 +217,71 @@ class _SpySdcard extends SDCardWalSyncImpl {
   Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
     reads++;
     return null;
+  }
+}
+
+class _InventoryStorage extends StorageSyncImpl {
+  _InventoryStorage({required this.confirmed}) : super(_Listener());
+
+  final bool confirmed;
+  int refreshCalls = 0;
+
+  @override
+  Future<bool> refreshWalsFromDevice() async {
+    refreshCalls++;
+    return confirmed;
+  }
+}
+
+class _UnconfirmedMultiFileStorage extends StorageSyncImpl {
+  _UnconfirmedMultiFileStorage() : super(_Listener());
+
+  int syncAllCalls = 0;
+  final pendingFromPreviousDevice = Wal(
+    timerStart: 1704067200,
+    codec: BleAudioCodec.opus,
+    seconds: 60,
+    status: WalStatus.miss,
+    storage: WalStorage.sdcard,
+    device: 'previous-pendant',
+    fileNum: 0,
+  );
+
+  @override
+  Future<bool> refreshWalsFromDevice() async => false;
+
+  @override
+  Future<List<Wal>> getMissingWals() async => [pendingFromPreviousDevice];
+
+  @override
+  Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress}) async {
+    syncAllCalls++;
+    return null;
+  }
+}
+
+class _PendingInventoryStorage extends StorageSyncImpl {
+  _PendingInventoryStorage() : super(_Listener());
+
+  final started = Completer<void>();
+  final result = Completer<bool>();
+
+  @override
+  Future<bool> refreshWalsFromDevice() {
+    started.complete();
+    return result.future;
+  }
+}
+
+class _ReadyFlashPage extends FlashPageWalSyncImpl {
+  _ReadyFlashPage() : super(_Listener());
+
+  int refreshCalls = 0;
+
+  @override
+  Future<bool> refreshWalsFromDevice() async {
+    refreshCalls++;
+    return true;
   }
 }
 
@@ -251,6 +388,42 @@ void main() {
       await pass;
       expect(events, ['phone-live', 'device-start', 'device-settled']);
     });
+  });
+
+  test('bulk synced deletion reaches later stores after a flash ACK failure', () async {
+    final events = <String>[];
+    final syncs = WalSyncs(
+      _Listener(),
+      phoneSync: _DeleteSpyPhone(events),
+      sdcardSync: _DeleteSpySdcard(events),
+      flashPageSync: _DeleteSpyFlashPage(events, fail: true),
+      storageSync: _DeleteSpyStorage(events),
+      ringSync: _DeleteSpyRing(events),
+    );
+
+    await expectLater(syncs.deleteAllSyncedWals(), throwsStateError);
+    expect(events, ['phone-delete', 'sdcard-delete', 'flash-delete', 'storage-delete', 'ring-delete']);
+  });
+
+  test('bulk pending deletion reaches later stores after a flash failure', () async {
+    final events = <String>[];
+    final syncs = WalSyncs(
+      _Listener(),
+      phoneSync: _DeleteSpyPhone(events),
+      sdcardSync: _DeleteSpySdcard(events),
+      flashPageSync: _DeleteSpyFlashPage(events, fail: true),
+      storageSync: _DeleteSpyStorage(events),
+      ringSync: _DeleteSpyRing(events),
+    );
+
+    await expectLater(syncs.deleteAllPendingWals(), throwsStateError);
+    expect(events, [
+      'phone-pending-delete',
+      'sdcard-pending-delete',
+      'flash-pending-delete',
+      'storage-pending-delete',
+      'ring-pending-delete',
+    ]);
   });
 
   group('legacy SD isolation', () {
@@ -382,6 +555,13 @@ void main() {
   });
 
   group('end-to-end routing decision', () {
+    test('unsupported multi-file deletion gate is limited to known legacy firmware', () {
+      expect(RingProtocol.hasUnsupportedMultiFileStorageFirmware('3.0.16'), isTrue);
+      expect(RingProtocol.hasUnsupportedMultiFileStorageFirmware('3.0.17'), isFalse);
+      expect(RingProtocol.hasUnsupportedMultiFileStorageFirmware('3.0.20'), isFalse);
+      expect(RingProtocol.hasUnsupportedMultiFileStorageFirmware('Unknown'), isFalse);
+    });
+
     test('a ring-buffer device with a raw Unknown object now routes to ring', () {
       // Before the fix this classified false (raw 'Unknown') -> multi-file
       // enumerator -> recordings never discovered.
@@ -389,9 +569,325 @@ void main() {
       expect(WalSyncs.isRingBufferFirmware(resolved), isTrue);
     });
 
+    test('ring WAL inventory identity survives display timestamp changes', () {
+      Wal ringWal(int timerStart, String device) => Wal(
+            timerStart: timerStart,
+            codec: BleAudioCodec.opus,
+            seconds: 60,
+            status: WalStatus.miss,
+            storage: WalStorage.sdcard,
+            device: device,
+            fileNum: -1,
+          );
+      final listed = ringWal(1704067200, 'pendant');
+      final refreshed = ringWal(1704067260, 'pendant');
+      final otherDevice = ringWal(1704067260, 'other-pendant');
+
+      expect(refreshed.id, isNot(listed.id));
+      expect(listed.hasSameDeviceInventoryIdentity(refreshed), isTrue);
+      expect(listed.hasSameDeviceInventoryIdentity(otherDevice), isFalse);
+    });
+
+    test('ring delete fails when the virtual WAL left the current inventory', () async {
+      final staleWal = Wal(
+        timerStart: 1704067200,
+        codec: BleAudioCodec.opus,
+        seconds: 60,
+        status: WalStatus.miss,
+        storage: WalStorage.sdcard,
+        device: 'pendant',
+        fileNum: -1,
+      );
+      final ring = RingStorageSyncImpl(_Listener())..testWals = [];
+      ring.setDevice(BtDevice(id: 'pendant', name: 'Omi', type: DeviceType.omi, rssi: -40));
+
+      await expectLater(
+        ring.deleteWal(staleWal),
+        throwsA(isA<StateError>().having((error) => error.message, 'message', contains('current device inventory'))),
+      );
+    });
+
     test('older multi-file firmware still routes to storage', () {
       final resolved = WalSyncs.resolveDiscoveryFirmware('3.0.18', 'Unknown');
       expect(WalSyncs.isRingBufferFirmware(resolved), isFalse);
+    });
+
+    test('legacy SD firmware confirms deletes from the SD-card inventory', () async {
+      final sdcard = _SpySdcard();
+      final storage = _InventoryStorage(confirmed: false);
+      final syncs = WalSyncs(
+        _Listener(),
+        sdcardSync: sdcard,
+        storageSync: storage,
+        flashPageSync: _ReadyFlashPage(),
+        phoneSync: _PhoneSync(),
+      );
+      syncs.setDevice(BtDevice(
+        id: 'pendant',
+        name: 'Omi',
+        type: DeviceType.omi,
+        rssi: -40,
+        firmwareRevision: '3.0.16',
+      ));
+
+      expect(await syncs.refreshWalsFromDevice(), isTrue);
+      expect(storage.refreshCalls, 0, reason: 'pre-3.0.17 firmware has no multi-file inventory command');
+      expect(sdcard.refreshCalls, 1);
+    });
+
+    test('legacy SD firmware does not confirm stale cached multi-file rows', () async {
+      final sdcard = _SpySdcard();
+      final storage = _InventoryStorage(confirmed: false)
+        ..testWals = [
+          Wal(
+            timerStart: 1704067200,
+            codec: BleAudioCodec.opus,
+            seconds: 60,
+            status: WalStatus.miss,
+            storage: WalStorage.sdcard,
+            device: 'pendant',
+            fileNum: 2,
+          ),
+        ];
+      final syncs = WalSyncs(
+        _Listener(),
+        sdcardSync: sdcard,
+        storageSync: storage,
+        flashPageSync: _ReadyFlashPage(),
+        phoneSync: _PhoneSync(),
+      );
+      syncs.setDevice(BtDevice(
+        id: 'pendant',
+        name: 'Omi',
+        type: DeviceType.omi,
+        rssi: -40,
+        firmwareRevision: '3.0.16',
+      ));
+
+      expect(await syncs.refreshWalsFromDevice(), isFalse);
+      expect(storage.refreshCalls, 0, reason: 'the old firmware cannot confirm the cached multi-file row');
+      expect(sdcard.refreshCalls, 1);
+    });
+
+    test('tracked previous-device multi-file WAL cannot fall through to legacy SD read', () async {
+      final stale = Wal(
+        timerStart: 1704067200,
+        codec: BleAudioCodec.opus,
+        seconds: 60,
+        status: WalStatus.miss,
+        storage: WalStorage.sdcard,
+        device: 'previous-pendant',
+        fileNum: 0,
+      );
+      final storage = StorageSyncImpl(_Listener())..testWals = [stale];
+      final sdcard = _SpySdcard();
+      final syncs = WalSyncs(
+        _Listener(),
+        sdcardSync: sdcard,
+        storageSync: storage,
+        flashPageSync: _ReadyFlashPage(),
+        phoneSync: _PhoneSync(),
+      )..setDevice(BtDevice(
+          id: 'current-pendant',
+          name: 'Omi',
+          type: DeviceType.omi,
+          rssi: -40,
+          firmwareRevision: '3.0.16',
+        ));
+
+      await expectLater(
+        syncs.syncWal(wal: stale),
+        throwsA(isA<StateError>().having((error) => error.message, 'message', contains('file indexes'))),
+      );
+
+      expect(sdcard.reads, 0, reason: 'cached storage rows must not use the legacy reader for another device');
+    });
+
+    test('device disconnect during inventory refresh leaves the result unconfirmed', () async {
+      final storage = _PendingInventoryStorage();
+      final syncs = WalSyncs(
+        _Listener(),
+        sdcardSync: _SpySdcard(),
+        storageSync: storage,
+        flashPageSync: _ReadyFlashPage(),
+        phoneSync: _PhoneSync(),
+      )..setDevice(BtDevice(
+          id: 'pendant',
+          name: 'Omi',
+          type: DeviceType.omi,
+          rssi: -40,
+          firmwareRevision: '3.0.18',
+        ));
+
+      final refresh = syncs.refreshWalsFromDevice();
+      await storage.started.future;
+      syncs.setDevice(null);
+      storage.result.complete(true);
+
+      expect(await refresh, isFalse);
+    });
+
+    test('unconfirmed pre-multi-file delete remains cached through inventory refresh', () async {
+      final device = BtDevice(
+        id: 'pendant',
+        name: 'Omi',
+        type: DeviceType.omi,
+        rssi: -40,
+        firmwareRevision: 'Unknown',
+      );
+      final wal = Wal(
+        timerStart: 1704067200,
+        codec: BleAudioCodec.opus,
+        seconds: 60,
+        status: WalStatus.miss,
+        storage: WalStorage.sdcard,
+        device: device.id,
+        fileNum: 2,
+      );
+      final storage = StorageSyncImpl(_Listener())..testWals = [wal];
+      final sdcard = _SpySdcard();
+      final syncs = WalSyncs(
+        _Listener(),
+        sdcardSync: sdcard,
+        storageSync: storage,
+        flashPageSync: _ReadyFlashPage(),
+        phoneSync: _PhoneSync(),
+      )..setDevice(device, firmwareVersion: '3.0.16');
+
+      await expectLater(syncs.deleteWal(wal), throwsStateError);
+
+      // A later device-info retry must update StorageSync too, not leave its
+      // firmware gate on the raw connect object's Unknown revision.
+      syncs.setDevice(device);
+      syncs.updateFirmwareVersion(device.id, '3.0.16');
+      await expectLater(syncs.deleteWal(wal), throwsStateError);
+
+      expect(await storage.getMissingWals(), [wal]);
+      expect(await syncs.refreshWalsFromDevice(), isFalse);
+      expect(await storage.getMissingWals(), [wal]);
+    });
+
+    for (final status in [WalStatus.synced, WalStatus.miss]) {
+      test('unconfirmed pre-multi-file bulk ${status.name} delete retains rows', () async {
+        final device = BtDevice(
+          id: 'pendant',
+          name: 'Omi',
+          type: DeviceType.omi,
+          rssi: -40,
+          firmwareRevision: 'Unknown',
+        );
+        final wal = Wal(
+          timerStart: 1704067200,
+          codec: BleAudioCodec.opus,
+          seconds: 60,
+          status: status,
+          storage: WalStorage.sdcard,
+          device: device.id,
+          fileNum: 2,
+        );
+        final storage = StorageSyncImpl(_Listener())..testWals = [wal];
+        final deleteEvents = <String>[];
+        final syncs = WalSyncs(
+          _Listener(),
+          sdcardSync: _SpySdcard(),
+          storageSync: storage,
+          flashPageSync: _ReadyFlashPage(),
+          phoneSync: _DeleteSpyPhone(deleteEvents),
+        )..setDevice(device, firmwareVersion: '3.0.16');
+        final deleteAll = status == WalStatus.synced ? syncs.deleteAllSyncedWals : syncs.deleteAllPendingWals;
+
+        await expectLater(deleteAll(), throwsStateError);
+
+        expect(storage.hasCachedWalsForDevice(device.id), isTrue);
+        if (status == WalStatus.miss) expect(await storage.getMissingWals(), [wal]);
+        expect(await syncs.refreshWalsFromDevice(), isFalse);
+        expect(storage.hasCachedWalsForDevice(device.id), isTrue);
+      });
+    }
+
+    test('multi-file firmware requires both device inventories to confirm', () async {
+      final sdcard = _SpySdcard();
+      final storage = _InventoryStorage(confirmed: true);
+      final syncs = WalSyncs(
+        _Listener(),
+        sdcardSync: sdcard,
+        storageSync: storage,
+        flashPageSync: _ReadyFlashPage(),
+        phoneSync: _PhoneSync(),
+      );
+      syncs.setDevice(BtDevice(
+        id: 'pendant',
+        name: 'Omi',
+        type: DeviceType.omi,
+        rssi: -40,
+        firmwareRevision: '3.0.18',
+      ));
+
+      expect(await syncs.refreshWalsFromDevice(), isTrue);
+      expect(storage.refreshCalls, 1);
+      expect(sdcard.refreshCalls, 1);
+    });
+
+    test('multi-file firmware fails confirmation when the SD-card listing is unavailable', () async {
+      final sdcard = _SpySdcard()..refreshConfirmed = false;
+      final storage = _InventoryStorage(confirmed: true);
+      final syncs = WalSyncs(
+        _Listener(),
+        sdcardSync: sdcard,
+        storageSync: storage,
+        flashPageSync: _ReadyFlashPage(),
+        phoneSync: _PhoneSync(),
+      );
+      syncs.setDevice(BtDevice(
+        id: 'pendant',
+        name: 'Omi',
+        type: DeviceType.omi,
+        rssi: -40,
+        firmwareRevision: '3.0.18',
+      ));
+
+      expect(await syncs.refreshWalsFromDevice(), isFalse);
+      expect(storage.refreshCalls, 1);
+      expect(sdcard.refreshCalls, 1);
+    });
+
+    test('Limitless delete confirmation uses the supported flash-page inventory', () async {
+      final sdcard = _SpySdcard();
+      final storage = _InventoryStorage(confirmed: false);
+      final flash = _ReadyFlashPage();
+      final syncs = WalSyncs(
+        _Listener(),
+        sdcardSync: sdcard,
+        storageSync: storage,
+        flashPageSync: flash,
+        phoneSync: _PhoneSync(),
+      )..setDevice(BtDevice(id: 'limitless', name: 'Limitless', type: DeviceType.limitless, rssi: -40));
+
+      expect(await syncs.refreshWalsFromDevice(), isTrue);
+      expect(flash.refreshCalls, 1);
+      expect(storage.refreshCalls, 0, reason: 'Limitless does not implement multi-file storage stats');
+      expect(sdcard.refreshCalls, 0, reason: 'Limitless deletion is confirmed by its flash-page protocol');
+    });
+
+    test('sync skips stale multi-file rows when current inventory is unconfirmed', () async {
+      final storage = _UnconfirmedMultiFileStorage();
+      final syncs = WalSyncs(
+        _Listener(),
+        sdcardSync: _SpySdcard(),
+        storageSync: storage,
+        flashPageSync: _ReadyFlashPage(),
+        phoneSync: _PhoneSync(),
+      )..setDevice(BtDevice(
+          id: 'current-pendant',
+          name: 'Omi',
+          type: DeviceType.omi,
+          rssi: -40,
+          firmwareRevision: '3.0.18',
+        ));
+
+      await syncs.syncAll();
+
+      expect(storage.syncAllCalls, 0, reason: 'a failed current inventory cannot authorize an old file index');
     });
   });
 }

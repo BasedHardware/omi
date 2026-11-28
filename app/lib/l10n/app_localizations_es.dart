@@ -15887,6 +15887,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get firmwareSyncRecordingsFirstTitle => 'Sincroniza tus grabaciones primero';
 
   @override
+  String get pendantAudioUnconfirmedSyncBlocked =>
+      'No se pudo confirmar el audio almacenado en tu Pendant. Mantén el Pendant conectado e intenta sincronizar de nuevo.';
+
+  @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Algunas grabaciones siguen en tu dispositivo. Deja que terminen de sincronizarse con tu teléfono y luego inicia la actualización.';
 

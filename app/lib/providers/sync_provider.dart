@@ -860,49 +860,139 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     await _refreshWals(generation);
   }
 
+  bool _isDeviceBackedWal(Wal wal) => wal.storage != WalStorage.disk && wal.storage != WalStorage.mem;
+
+  bool _sameDeleteInventoryIdentity(Wal a, Wal b) {
+    return a.hasSameDeviceInventoryIdentity(b);
+  }
+
+  void _retainUnconfirmedDeviceWals(Iterable<Wal> targets) {
+    final retained = [..._allWals];
+    var changed = false;
+    for (final wal in targets) {
+      if (retained.any((candidate) => _sameDeleteInventoryIdentity(wal, candidate))) continue;
+      retained.add(wal);
+      changed = true;
+    }
+    if (!changed) return;
+    _allWals = retained;
+    notifyListeners();
+  }
+
+  /// A device delete can evict its cached row before the pendant confirms it.
+  /// Re-enumerate after every attempted device deletion. Preserve the original
+  /// rows only when the refreshed inventory cannot be confirmed.
+  Future<void> _deleteAndRefreshInventory({
+    required Iterable<Wal> candidates,
+    required Future<void> Function() delete,
+    String? firmwareVersion,
+    bool refreshDevice = true,
+  }) async {
+    final generation = _sessionGeneration;
+    final deviceTargets = candidates.where(_isDeviceBackedWal).toList();
+    Object? firstError;
+    StackTrace? firstStackTrace;
+    try {
+      await delete();
+    } catch (error, stackTrace) {
+      firstError = error;
+      firstStackTrace = stackTrace;
+    }
+
+    var deviceInventoryConfirmed = deviceTargets.isEmpty;
+    var snapshotRefreshConfirmed = false;
+    try {
+      if (deviceTargets.isNotEmpty && refreshDevice) {
+        deviceInventoryConfirmed =
+            await _walService.getSyncs().refreshWalsFromDevice(firmwareVersion: firmwareVersion) == true;
+      }
+      await _refreshWals(generation);
+      snapshotRefreshConfirmed = true;
+    } catch (error, stackTrace) {
+      firstError ??= error;
+      firstStackTrace ??= stackTrace;
+    }
+
+    final inventoryConfirmed =
+        deviceTargets.isEmpty || (refreshDevice && deviceInventoryConfirmed && snapshotRefreshConfirmed);
+    if (deviceTargets.isNotEmpty && refreshDevice && !inventoryConfirmed && firstError == null) {
+      firstError = StateError('Device WAL inventory could not be confirmed after deletion');
+      firstStackTrace = StackTrace.current;
+    }
+    if (firstError != null && deviceTargets.isNotEmpty && !inventoryConfirmed && _isCurrent(generation)) {
+      _retainUnconfirmedDeviceWals(deviceTargets);
+    }
+    if (firstError != null) Error.throwWithStackTrace(firstError, firstStackTrace!);
+  }
+
   Future<WalStats> getWalStats() async {
     return await _walService.getSyncs().getWalStats();
   }
 
-  Future<void> deleteWal(Wal wal) async {
-    final generation = _sessionGeneration;
-    try {
-      await _walService.getSyncs().deleteWal(wal);
-    } finally {
-      await _refreshWals(generation);
-    }
-  }
+  Future<void> deleteWal(Wal wal, {String? firmwareVersion, bool refreshDevice = true}) => _deleteAndRefreshInventory(
+        candidates: [wal],
+        firmwareVersion: firmwareVersion,
+        refreshDevice: refreshDevice,
+        delete: () => _walService.getSyncs().deleteWal(wal),
+      );
 
-  Future<void> deleteAllSyncedWals() async {
-    final generation = _sessionGeneration;
-    try {
-      await _walService.getSyncs().deleteAllSyncedWals();
-    } finally {
-      await _refreshWals(generation);
-    }
-  }
+  Future<void> deleteAllSyncedWals({String? firmwareVersion, bool refreshDevice = true}) => _deleteAndRefreshInventory(
+        candidates: List<Wal>.of(syncedWals),
+        firmwareVersion: firmwareVersion,
+        refreshDevice: refreshDevice,
+        delete: () => _walService.getSyncs().deleteAllSyncedWals(),
+      );
 
-  Future<void> deleteAllPendingWals() async {
-    final generation = _sessionGeneration;
-    try {
-      await _walService.getSyncs().deleteAllPendingWals();
-    } finally {
-      await _refreshWals(generation);
-    }
-  }
+  Future<void> deleteAllPendingWals({String? firmwareVersion, bool refreshDevice = true}) => _deleteAndRefreshInventory(
+        candidates: List<Wal>.of(pendingDeletableWals),
+        firmwareVersion: firmwareVersion,
+        refreshDevice: refreshDevice,
+        delete: () => _walService.getSyncs().deleteAllPendingWals(),
+      );
 
   /// Clears every local recording category. Unlike the retryable Pending
   /// action, this deliberately includes terminally corrupted phone WALs.
-  Future<void> deleteAllClearableWals() async {
-    final generation = _sessionGeneration;
+  Future<void> deleteAllClearableWals({String? firmwareVersion, bool refreshDevice = true}) async {
     final syncs = _walService.getSyncs();
-    try {
-      await syncs.deleteAllSyncedWals();
-      await syncs.deleteAllPendingWals();
-      await syncs.deleteAllCorruptedWals();
-    } finally {
-      await _refreshWals(generation);
-    }
+    final candidates = [...syncedWals, ...pendingDeletableWals, ...corruptedWals, ...refusedWals];
+    final terminalDeviceWals = [...corruptedWals, ...refusedWals].where((wal) {
+      final deviceBacked = wal.storage == WalStorage.sdcard || wal.storage == WalStorage.flashPage;
+      if (!deviceBacked) return false;
+      return wal.status == WalStatus.outsideRecoveryWindow ||
+          wal.status == WalStatus.unsupportedAudio ||
+          wal.status == WalStatus.uploadRejected ||
+          (wal.storage == WalStorage.sdcard && wal.fileNum == -1 && wal.status == WalStatus.corrupted);
+    }).toList();
+    await _deleteAndRefreshInventory(
+      candidates: candidates,
+      firmwareVersion: firmwareVersion,
+      refreshDevice: refreshDevice,
+      delete: () async {
+        Object? firstError;
+        StackTrace? firstStackTrace;
+
+        Future<void> attempt(Future<void> Function() operation) async {
+          try {
+            await operation();
+          } catch (error, stackTrace) {
+            firstError ??= error;
+            firstStackTrace ??= stackTrace;
+          }
+        }
+
+        await attempt(syncs.deleteAllSyncedWals);
+        await attempt(syncs.deleteAllPendingWals);
+        await attempt(syncs.deleteAllCorruptedWals);
+        // Bulk device sweeps handle synced, missed and corrupted rows. Terminal
+        // refusals live in separate display buckets, so route those through the
+        // same per-row delete path used by the explicit row action.
+        for (final wal in terminalDeviceWals) {
+          await attempt(() async => syncs.deleteWal(wal));
+        }
+
+        if (firstError != null) Error.throwWithStackTrace(firstError!, firstStackTrace!);
+      },
+    );
   }
 
   Future<void> syncWals({WakeTrigger trigger = WakeTrigger.userRetry}) async {
@@ -1053,6 +1143,9 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
         // recording via the hardware button is what unfreezes the firmware.
         DebugLogManager.logWarning('SyncProvider: $context stalled — pendant storage is full');
         _updateSyncState(_syncState.toError(message: _pendantFullMessage()), generation);
+      } else if (checkFlashStall && _walService.getSyncs().flashStallReason == FlashSyncStallReason.unknown) {
+        DebugLogManager.logWarning('SyncProvider: $context stalled — could not confirm all pendant audio');
+        _updateSyncState(_syncState.toError(message: _pendantAudioUnconfirmedMessage()), generation);
       } else if (result?.localUploadHeldOnly == true) {
         _updateSyncState(_syncState.toIdle(), generation);
       } else if ((result?.localUploadFailures ?? 0) == 0) {
@@ -1102,7 +1195,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
         if (rethrowOnError) rethrow;
         return null;
       }
-      final errorMessage = _formatSyncError(e, failedWal);
+      final stallMessage = checkFlashStall ? _pendantFlashStallMessage(_walService.getSyncs().flashStallReason) : null;
+      final errorMessage = stallMessage ?? _formatSyncError(e, failedWal);
       Logger.debug('SyncProvider: Error in $context: $errorMessage');
       DebugLogManager.logError(e, null, 'SyncProvider: $context failed: $errorMessage', {
         if (failedWal != null) 'walId': failedWal.id,
@@ -1154,6 +1248,17 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
         'Your Pendant\'s storage is full and it\'s still in recording mode, so its stored audio '
             'can\'t be transferred. Press the Pendant\'s button to stop recording, then sync again.';
   }
+
+  String _pendantAudioUnconfirmedMessage() =>
+      globalNavigatorKey.currentContext?.l10n.pendantAudioUnconfirmedSyncBlocked ??
+      "Your Pendant's stored audio could not be confirmed. Keep your Pendant connected and try syncing again.";
+
+  String? _pendantFlashStallMessage(FlashSyncStallReason reason) => switch (reason) {
+        FlashSyncStallReason.recordingSuspected => _pendantRecordingMessage(),
+        FlashSyncStallReason.deviceFull => _pendantFullMessage(),
+        FlashSyncStallReason.unknown => _pendantAudioUnconfirmedMessage(),
+        FlashSyncStallReason.none => null,
+      };
 
   String _formatSyncError(dynamic error, Wal? wal) {
     var baseMessage = error.toString().replaceAll('Exception: ', '');

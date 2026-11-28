@@ -19,6 +19,7 @@ class PostHogAnalyticsAdapter
         AnalyticsDeliveryAdapter,
         AnalyticsIdentityAdapter,
         AnalyticsFeatureFlagAdapter,
+        AnalyticsTimeoutAwareFeatureFlagAdapter,
         AnalyticsBooleanFlagAdapter {
   PostHogAnalyticsAdapter({
     required this.apiKey,
@@ -34,9 +35,13 @@ class PostHogAnalyticsAdapter
   final Future<Map<String, OmiFlag>?> Function()? omiFlags;
   Map<String, OmiFlag> _omi = const {};
 
-  /// Bumped on every identity change; a reload commits its answer only if the generation it started
-  /// in is still current, so a slow response for account A cannot land after B took over.
+  /// Bumped on every identity change so an in-flight answer for account A
+  /// cannot land after B takes over.
   int _identityGeneration = 0;
+  int _omiFlagsReloadGeneration = 0;
+  int _omiFlagsReloadCommittedGeneration = 0;
+  Future<bool>? _omiFlagsReloadInFlight;
+  int? _omiFlagsReloadInFlightIdentityGeneration;
   String? _flagIdentity;
 
   void _identityChanged(String? identity, {bool reset = false}) {
@@ -206,19 +211,53 @@ class PostHogAnalyticsAdapter
   @override
   Future<bool> reloadFeatureFlags() => _reloadOmiFlags();
 
-  /// A failed or superseded fetch keeps the previous Omi answer for this identity.
-  Future<bool> _reloadOmiFlags() async {
-    final fetch = omiFlags;
-    if (fetch == null) return false;
-    final generation = _identityGeneration;
+  @override
+  Future<bool> reloadFeatureFlagsWithTimeout(Duration timeout) async {
+    final reload = _reloadOmiFlags();
     try {
-      final flags = await fetch();
-      if (flags == null || generation != _identityGeneration) return false;
-      _omi = Map.unmodifiable(flags);
-      return true;
-    } catch (_) {
+      return await reload.timeout(timeout);
+    } on TimeoutException {
+      // The underlying GET cannot be cancelled. Release the slot so a scheduled
+      // retry starts a fresh request. Existing waiters still receive this fetch's
+      // result, and the newest successful snapshot wins even if an older fetch
+      // completes while that retry is still pending.
+      if (identical(_omiFlagsReloadInFlight, reload)) {
+        _omiFlagsReloadInFlight = null;
+        _omiFlagsReloadInFlightIdentityGeneration = null;
+      }
       return false;
     }
+  }
+
+  /// A failed or superseded fetch keeps the previous Omi answer for this identity.
+  Future<bool> _reloadOmiFlags() {
+    final inFlight = _omiFlagsReloadInFlight;
+    if (inFlight != null && _omiFlagsReloadInFlightIdentityGeneration == _identityGeneration) return inFlight;
+    final fetch = omiFlags;
+    if (fetch == null) return Future.value(false);
+    final identityGeneration = _identityGeneration;
+    final reloadGeneration = ++_omiFlagsReloadGeneration;
+    final completer = Completer<bool>();
+    final reload = completer.future;
+    _omiFlagsReloadInFlight = reload;
+    _omiFlagsReloadInFlightIdentityGeneration = identityGeneration;
+    final fetchResult = Future<Map<String, OmiFlag>?>.sync(fetch);
+    unawaited(fetchResult.then<void>((flags) {
+      final accepted = flags != null && identityGeneration == _identityGeneration;
+      if (accepted && reloadGeneration > _omiFlagsReloadCommittedGeneration) {
+        _omi = Map.unmodifiable(flags);
+        _omiFlagsReloadCommittedGeneration = reloadGeneration;
+      }
+      completer.complete(accepted);
+    }, onError: (Object _, StackTrace __) {
+      completer.complete(false);
+    }).whenComplete(() {
+      if (identical(_omiFlagsReloadInFlight, reload)) {
+        _omiFlagsReloadInFlight = null;
+        _omiFlagsReloadInFlightIdentityGeneration = null;
+      }
+    }));
+    return reload;
   }
 
   @override

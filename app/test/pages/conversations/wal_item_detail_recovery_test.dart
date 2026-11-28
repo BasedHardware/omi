@@ -8,15 +8,22 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversations/wal_item_detail/wal_item_detail_page.dart';
+import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/wals/wal.dart';
+import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/widgets/waveform_section.dart';
 
 class _Sync extends ChangeNotifier implements SyncProvider {
   final requests = <Completer<List<double>?>>[];
   final played = <Wal>[];
   final shared = <Wal>[];
+  final deleted = <Wal>[];
+  final wals = <Wal>[];
   final transferDone = Completer<void>();
+  bool failDelete = false;
+  bool retainOnDelete = false;
+  bool refreshRingIdentityOnDelete = false;
   Wal? transferring;
   @override
   double get walsSyncedProgress => 0.87;
@@ -39,6 +46,33 @@ class _Sync extends ChangeNotifier implements SyncProvider {
   Future<void> toggleWalPlayback(Wal wal) async => played.add(wal);
   @override
   Future<void> shareWalAsWav(Wal wal) async => shared.add(wal);
+  @override
+  Future<void> deleteWal(Wal wal, {String? firmwareVersion, bool refreshDevice = true}) async {
+    deleted.add(wal);
+    if (failDelete) throw StateError('simulated device delete failure');
+    if (refreshRingIdentityOnDelete) {
+      wals
+        ..clear()
+        ..add(Wal(
+          timerStart: wal.timerStart + 60,
+          codec: wal.codec,
+          seconds: wal.seconds,
+          status: WalStatus.miss,
+          storage: WalStorage.sdcard,
+          device: wal.device,
+          fileNum: -1,
+        ));
+    } else if (!retainOnDelete) {
+      wals.removeWhere(wal.hasSameDeviceInventoryIdentity);
+    }
+  }
+
+  @override
+  List<Wal> get allWals => wals;
+
+  @override
+  Future<void> discoverDeviceWals({String? firmwareVersion}) async {}
+
   @override
   Wal? getWalById(String id) => null;
   @override
@@ -66,6 +100,19 @@ class _Sync extends ChangeNotifier implements SyncProvider {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+class _Device extends ChangeNotifier implements DeviceProvider {
+  @override
+  String currentFirmwareVersion = 'Unknown';
+  @override
+  bool isConnected = false;
+  @override
+  RingStatus? get ringStatus => null;
+  @override
+  Future<void> refreshRingStorageStatus() async {}
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 Future<_Sync> _open(WidgetTester tester, {WalStorage storage = WalStorage.disk}) async {
   final sync = _Sync();
   tester.view.physicalSize = const Size(1170, 2532);
@@ -87,6 +134,55 @@ Future<_Sync> _open(WidgetTester tester, {WalStorage storage = WalStorage.disk})
       )),
     ),
   ));
+  return sync;
+}
+
+Future<_Sync> _openDeleteFlow(WidgetTester tester, {required bool failDelete, bool ringBufferWal = false}) async {
+  final sync = _Sync()..failDelete = failDelete;
+  final wal = Wal(
+    timerStart: 1700000000,
+    codec: BleAudioCodec.opus,
+    seconds: 30,
+    status: WalStatus.miss,
+    storage: WalStorage.sdcard,
+    device: 'synthetic-pendant',
+    fileNum: ringBufferWal ? -1 : 0,
+  );
+  sync.wals.add(wal);
+  final device = _Device();
+  addTearDown(sync.dispose);
+  addTearDown(device.dispose);
+  tester.view.physicalSize = const Size(1170, 2532);
+  tester.view.devicePixelRatio = 3;
+  addTearDown(tester.view.reset);
+  await tester.pumpWidget(MultiProvider(
+    providers: [
+      ChangeNotifierProvider<SyncProvider>.value(value: sync),
+      ChangeNotifierProvider<DeviceProvider>.value(value: device),
+    ],
+    child: MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Builder(
+        builder: (context) => Scaffold(
+          body: Column(
+            children: [
+              const Text('Previous screen'),
+              TextButton(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(builder: (_) => WalItemDetailPage(wal: wal)),
+                ),
+                child: const Text('Open recording'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  ));
+  await tester.tap(find.text('Open recording'));
+  await tester.pumpAndSettle();
+  expect(tester.takeException(), isNull);
   return sync;
 }
 
@@ -162,6 +258,82 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(tester.widget<WaveformSection>(find.byType(WaveformSection)).waveformData, [0.1, 0.4]);
     await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('failed recording deletion keeps the detail page open and reports the failure', (tester) async {
+    final sync = await _openDeleteFlow(tester, failDelete: true);
+    final l10n = AppLocalizations.of(tester.element(find.byType(WalItemDetailPage)));
+
+    await tester.tap(find.byIcon(Icons.more_horiz));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.text(l10n.deleteRecording));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.text(l10n.delete));
+    await tester.pumpAndSettle();
+
+    expect(sync.deleted, hasLength(1));
+    expect(find.byType(WalItemDetailPage), findsOneWidget);
+    expect(find.text(l10n.failedToDeleteSomeItems), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('successful recording deletion returns to the previous screen', (tester) async {
+    final sync = await _openDeleteFlow(tester, failDelete: false);
+    final l10n = AppLocalizations.of(tester.element(find.byType(WalItemDetailPage)));
+
+    await tester.tap(find.byIcon(Icons.more_horiz));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.text(l10n.deleteRecording));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.text(l10n.delete));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+
+    expect(sync.deleted, hasLength(1));
+    expect(find.byType(WalItemDetailPage), findsNothing);
+    expect(find.text('Previous screen'), findsOneWidget);
+  });
+
+  testWidgets('recording detail stays open when deletion returns but retains the WAL', (tester) async {
+    final sync = await _openDeleteFlow(tester, failDelete: false);
+    sync.retainOnDelete = true;
+    final l10n = AppLocalizations.of(tester.element(find.byType(WalItemDetailPage)));
+
+    await tester.tap(find.byIcon(Icons.more_horiz));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(l10n.deleteRecording));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(l10n.delete));
+    await tester.pumpAndSettle();
+
+    expect(sync.deleted, hasLength(1));
+    expect(sync.allWals, hasLength(1));
+    expect(find.byType(WalItemDetailPage), findsOneWidget);
+    expect(find.text(l10n.failedToDeleteSomeItems), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('recording detail recognizes a refreshed ring WAL after deletion', (tester) async {
+    final sync = await _openDeleteFlow(tester, failDelete: false, ringBufferWal: true);
+    sync.refreshRingIdentityOnDelete = true;
+    final l10n = AppLocalizations.of(tester.element(find.byType(WalItemDetailPage)));
+
+    await tester.tap(find.byIcon(Icons.more_horiz));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(l10n.deleteRecording));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(l10n.delete));
+    await tester.pumpAndSettle();
+
+    expect(sync.deleted, hasLength(1));
+    expect(sync.allWals.single.id, isNot(sync.deleted.single.id));
+    expect(find.byType(WalItemDetailPage), findsOneWidget);
+    expect(find.text(l10n.failedToDeleteSomeItems), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('unavailable audio shows retry and repeated failures remain retryable', (tester) async {

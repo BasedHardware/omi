@@ -69,6 +69,11 @@ abstract interface class AnalyticsFeatureFlagAdapter {
   Future<bool> reloadFeatureFlags();
 }
 
+/// Lets a caller's timeout release a shared refresh so a later caller can retry.
+abstract interface class AnalyticsTimeoutAwareFeatureFlagAdapter {
+  Future<bool> reloadFeatureFlagsWithTimeout(Duration timeout);
+}
+
 /// Boolean kill switches must not treat multivariate arms as enabled.
 abstract interface class AnalyticsBooleanFlagAdapter {
   bool isBooleanFeatureEnabledCached(String key);

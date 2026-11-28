@@ -27,7 +27,7 @@ class _FakeSyncs {
     return List<Wal>.of(wals);
   }
 
-  Future<void> refreshWalsFromDevice({String? firmwareVersion}) async {}
+  Future<bool> refreshWalsFromDevice({String? firmwareVersion}) async => false;
 
   bool get isStorageSyncing => false;
   bool get isSdCardSyncing => false;

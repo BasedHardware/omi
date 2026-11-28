@@ -12325,6 +12325,7 @@
     "playStripePlanPaused": "আপনার {plan} প্ল্যান বিরতিতে আছে।",
     "firmwareNewestSupportedForDevice": "আপনার ডিভাইস ইতিমধ্যেই ফার্মওয়্যারের সর্বশেষ সমর্থিত সংস্করণে রয়েছে",
     "firmwareSyncRecordingsFirstTitle": "প্রথমে আপনার রেকর্ডিং সিঙ্ক করুন",
+    "pendantAudioUnconfirmedSyncBlocked": "আপনার Pendant-এ সংরক্ষিত অডিও নিশ্চিত করা যায়নি। Pendant সংযুক্ত রাখুন এবং আবার সিঙ্ক করার চেষ্টা করুন।",
     "firmwareSyncRecordingsFirstMessage": "কিছু রেকর্ডিং এখনও আপনার ডিভাইসে রয়েছে। সেগুলিকে আপনার ফোনে সিঙ্ক শেষ হতে দিন, তারপর আপডেট শুরু করুন।",
     "batteryRestartToRefresh": "রিফ্রেশ করতে Omi পুনরায় চালু করুন"
 }

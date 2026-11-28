@@ -19357,6 +19357,10 @@
     "@firmwareSyncRecordingsFirstTitle": {
         "description": "Dialog title shown when the user starts a firmware update while recordings are still stored only on the pendant."
     },
+    "pendantAudioUnconfirmedSyncBlocked": "Your Pendant's stored audio could not be confirmed. Keep your Pendant connected and try syncing again.",
+    "@pendantAudioUnconfirmedSyncBlocked": {
+        "description": "Shown when offline sync stalls and the app cannot confirm that all stored Pendant audio has transferred."
+    },
     "firmwareSyncRecordingsFirstMessage": "Some recordings are still on your device. Let them finish syncing to your phone, then start the update.",
     "@firmwareSyncRecordingsFirstMessage": {
         "description": "Dialog body explaining that recordings must finish syncing from the pendant to the phone before the firmware update can start."

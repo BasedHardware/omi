@@ -4768,6 +4768,7 @@
     "playStripePlanPaused": "{plan} プランは一時停止中です。",
     "firmwareNewestSupportedForDevice": "お使いのデバイスは、すでにサポートされている最新のファームウェアバージョンで動作しています",
     "firmwareSyncRecordingsFirstTitle": "まず録音を同期してください",
+    "pendantAudioUnconfirmedSyncBlocked": "Pendant に保存された音声を確認できませんでした。Pendant を接続したまま、もう一度同期してください。",
     "firmwareSyncRecordingsFirstMessage": "一部の録音はまだデバイスに残っています。スマートフォンへの同期が完了してから、更新を開始してください。",
     "batteryRestartToRefresh": "Omiを再起動して更新"
 }

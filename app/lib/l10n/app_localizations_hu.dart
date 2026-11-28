@@ -15898,6 +15898,10 @@ class AppLocalizationsHu extends AppLocalizations {
   String get firmwareSyncRecordingsFirstTitle => 'Először szinkronizáld a felvételeidet';
 
   @override
+  String get pendantAudioUnconfirmedSyncBlocked =>
+      'Nem sikerült megerősíteni a Pendantra mentett hangot. Tartsa csatlakoztatva a Pendantet, és próbálja újra a szinkronizálást.';
+
+  @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Néhány felvétel még az eszközödön van. Várd meg, amíg a telefonodra szinkronizálásuk befejeződik, majd indítsd el a frissítést.';
 

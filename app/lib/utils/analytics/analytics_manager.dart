@@ -96,6 +96,17 @@ class AnalyticsManager {
   static ValueListenable<int> get identityChanges => _identityChanges;
   static bool get identityKnown => _identityKnown;
   static bool get trackingEnabled => _trackingEnabled;
+  static bool get canResolveBooleanFeatureFlags {
+    final adapter = _adapter;
+    return _trackingEnabled &&
+        _settledDistinctId != null &&
+        adapter != null &&
+        adapter.isInitialized &&
+        adapter is AnalyticsBooleanFlagAdapter &&
+        adapter is AnalyticsFeatureFlagAdapter &&
+        adapter is AnalyticsResolvedFlagAdapter;
+  }
+
   static final ValueNotifier<bool> _trackingConsent = ValueNotifier(true);
   static ValueListenable<bool> get trackingConsent => _trackingConsent;
   static final ValueNotifier<String?> _settledIdentity = ValueNotifier(null);
@@ -598,16 +609,43 @@ class AnalyticsManager {
       false;
 
   /// Returns null while an authenticated flag answer is unavailable.
-  Future<bool?> resolvedBooleanFeatureFlag(String key, {required bool refresh}) => _readFlag<bool?>((adapter) async {
+  Future<bool?> resolvedBooleanFeatureFlag(
+    String key, {
+    required bool refresh,
+    bool missingIsUnresolved = false,
+    void Function()? onRefreshFailure,
+    Duration refreshTimeout = const Duration(seconds: 5),
+  }) =>
+      _readFlag<bool?>((adapter) async {
         if (adapter is! AnalyticsBooleanFlagAdapter) return null;
         final boolean = adapter as AnalyticsBooleanFlagAdapter;
-        if (refresh && await adapter.reloadFeatureFlags()) return boolean.isBooleanFeatureEnabledCached(key);
+        if (refresh) {
+          bool reloaded;
+          try {
+            reloaded = adapter is AnalyticsTimeoutAwareFeatureFlagAdapter
+                ? await (adapter as AnalyticsTimeoutAwareFeatureFlagAdapter)
+                    .reloadFeatureFlagsWithTimeout(refreshTimeout)
+                : await adapter.reloadFeatureFlags().timeout(refreshTimeout);
+          } catch (_) {
+            reloaded = false;
+          }
+          if (reloaded) {
+            if (missingIsUnresolved && adapter is AnalyticsResolvedFlagAdapter) {
+              final resolved = await (adapter as AnalyticsResolvedFlagAdapter).resolvedFeatureEnabled(key);
+              if (resolved == null) return null;
+            }
+            return boolean.isBooleanFeatureEnabledCached(key);
+          }
+          onRefreshFailure?.call();
+        }
         if (adapter is AnalyticsResolvedFlagAdapter &&
             await (adapter as AnalyticsResolvedFlagAdapter).resolvedFeatureEnabled(key) != null) {
           return boolean.isBooleanFeatureEnabledCached(key);
         }
         return null;
-      }, timeout: const Duration(seconds: 6));
+      },
+          timeout: refresh ? refreshTimeout + const Duration(seconds: 1) : const Duration(seconds: 6),
+          onFailure: refresh ? onRefreshFailure : null);
 
   bool isBooleanFeatureEnabledCached(String key) {
     final adapter = _adapter;

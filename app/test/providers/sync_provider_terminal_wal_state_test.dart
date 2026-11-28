@@ -24,17 +24,101 @@ class _Listener implements IWalSyncListener {
 }
 
 class _LocalSyncs {
-  _LocalSyncs(this.phone);
+  _LocalSyncs(
+    this.phone, {
+    this.failSyncedDelete = false,
+    this.failPendingDelete = false,
+    this.failDeviceDelete = false,
+    this.deviceRefreshConfirmed = true,
+    this.deviceWal,
+    this.deviceWalOnPendant,
+  });
 
   final LocalWalSyncImpl phone;
+  final bool failSyncedDelete;
+  final bool failPendingDelete;
+  final bool failDeviceDelete;
+  final bool deviceRefreshConfirmed;
+  Wal? deviceWal;
+  final Wal? deviceWalOnPendant;
+  int deviceRefreshCalls = 0;
+  final List<String> deleteCalls = [];
+  final List<String> individualDeleteCalls = [];
 
-  Future<List<Wal>> getAllWals() => phone.getAllWals();
+  Future<List<Wal>> getAllWals() async => [
+        ...await phone.getAllWals(),
+        if (deviceWal != null) deviceWal!,
+      ];
 
-  Future<void> deleteAllSyncedWals() => phone.deleteAllSyncedWals();
+  Future<void> deleteWal(Wal wal) async {
+    individualDeleteCalls.add(wal.id);
+    if (deviceWal?.id == wal.id) {
+      deviceWal = null;
+      if (failDeviceDelete) throw StateError('simulated unconfirmed device delete');
+    }
+  }
 
-  Future<void> deleteAllPendingWals() => phone.deleteAllPendingWals();
+  Future<void> deleteAllSyncedWals() {
+    deleteCalls.add('synced');
+    if (failSyncedDelete) throw StateError('simulated flash ACK refusal');
+    return phone.deleteAllSyncedWals();
+  }
 
-  Future<void> deleteAllCorruptedWals() => phone.deleteAllCorruptedWals();
+  Future<void> deleteAllPendingWals() {
+    deleteCalls.add('pending');
+    if (failPendingDelete) {
+      deviceWal = null;
+      throw StateError('simulated unconfirmed pending delete');
+    }
+    return phone.deleteAllPendingWals();
+  }
+
+  Future<bool> refreshWalsFromDevice({String? firmwareVersion}) async {
+    deviceRefreshCalls++;
+    deviceWal = deviceWalOnPendant;
+    return deviceRefreshConfirmed;
+  }
+
+  Future<void> deleteAllCorruptedWals() {
+    deleteCalls.add('corrupted');
+    return phone.deleteAllCorruptedWals();
+  }
+}
+
+class _MixedDeviceDeleteSyncs extends _LocalSyncs {
+  _MixedDeviceDeleteSyncs(
+    super.phone, {
+    required Iterable<Wal> initialInventory,
+    required Iterable<Wal> refreshedInventory,
+    required this.failedWalId,
+    this.refreshConfirmed = true,
+  })  : _deviceWals = List.of(initialInventory),
+        _refreshedInventory = List.of(refreshedInventory);
+
+  final String failedWalId;
+  final bool refreshConfirmed;
+  final List<Wal> _deviceWals;
+  final List<Wal> _refreshedInventory;
+
+  @override
+  Future<List<Wal>> getAllWals() async => [...await phone.getAllWals(), ..._deviceWals];
+
+  @override
+  Future<void> deleteWal(Wal wal) async {
+    individualDeleteCalls.add(wal.id);
+    if (wal.id == failedWalId) throw StateError('simulated unconfirmed device delete');
+    _deviceWals.removeWhere((item) => item.id == wal.id);
+  }
+
+  @override
+  Future<bool> refreshWalsFromDevice({String? firmwareVersion}) async {
+    deviceRefreshCalls++;
+    if (!refreshConfirmed) return false;
+    _deviceWals
+      ..clear()
+      ..addAll(_refreshedInventory);
+    return true;
+  }
 }
 
 class _WalService implements IWalService {
@@ -209,5 +293,255 @@ void main() {
     await syncProvider.deleteAllClearableWals();
 
     expect(syncProvider.allWals, isEmpty, reason: 'Clear All must still be able to remove it');
+  });
+
+  test('Clear All continues pending and corrupted deletes after synced deletion fails', () async {
+    final syncs = _LocalSyncs(localSync, failSyncedDelete: true);
+    final syncProvider = SyncProvider(
+      walService: _WalService(syncs),
+      uploadGate: _offlineGate(),
+      startBackgroundSync: false,
+    );
+    provider = syncProvider;
+    await syncProvider.initialized;
+
+    await expectLater(syncProvider.deleteAllClearableWals(), throwsStateError);
+
+    expect(syncs.deleteCalls, ['synced', 'pending', 'corrupted']);
+  });
+
+  test('Clear All individually attempts a terminal device recording', () async {
+    final deviceWal = Wal(
+      timerStart: 3000,
+      codec: BleAudioCodec.opus,
+      seconds: 60,
+      status: WalStatus.outsideRecoveryWindow,
+      storage: WalStorage.sdcard,
+      device: 'ring-device',
+      fileNum: 4,
+    );
+    final syncs = _LocalSyncs(localSync, deviceWal: deviceWal);
+    final syncProvider = SyncProvider(
+      walService: _WalService(syncs),
+      uploadGate: _offlineGate(),
+      startBackgroundSync: false,
+    );
+    provider = syncProvider;
+    await syncProvider.initialized;
+
+    await syncProvider.deleteAllClearableWals();
+
+    expect(syncs.individualDeleteCalls, [deviceWal.id]);
+    expect(syncProvider.allWals, isEmpty);
+  });
+
+  test('failed row deletion rediscovers and keeps a device WAL visible', () async {
+    final deviceWal = Wal(
+      timerStart: 4000,
+      codec: BleAudioCodec.opus,
+      seconds: 60,
+      status: WalStatus.miss,
+      storage: WalStorage.sdcard,
+      device: 'device-1',
+      fileNum: 2,
+    );
+    final syncs = _LocalSyncs(
+      localSync,
+      failDeviceDelete: true,
+      deviceWal: deviceWal,
+      deviceWalOnPendant: deviceWal,
+    );
+    final syncProvider = SyncProvider(
+      walService: _WalService(syncs),
+      uploadGate: _offlineGate(),
+      startBackgroundSync: false,
+    );
+    provider = syncProvider;
+    await syncProvider.initialized;
+
+    await expectLater(syncProvider.deleteWal(deviceWal), throwsStateError);
+
+    expect(syncs.deviceRefreshCalls, 1);
+    expect(syncProvider.allWals.map((wal) => wal.id), contains(deviceWal.id));
+  });
+
+  test('failed row deletion keeps a device WAL visible when refresh is skipped', () async {
+    final deviceWal = Wal(
+      timerStart: 4500,
+      codec: BleAudioCodec.opus,
+      seconds: 60,
+      status: WalStatus.miss,
+      storage: WalStorage.sdcard,
+      device: 'device-1',
+      fileNum: 2,
+    );
+    final syncs = _LocalSyncs(localSync, failDeviceDelete: true, deviceWal: deviceWal);
+    final syncProvider = SyncProvider(
+      walService: _WalService(syncs),
+      uploadGate: _offlineGate(),
+      startBackgroundSync: false,
+    );
+    provider = syncProvider;
+    await syncProvider.initialized;
+
+    await expectLater(syncProvider.deleteWal(deviceWal, refreshDevice: false), throwsStateError);
+
+    expect(syncs.deviceRefreshCalls, 0);
+    expect(syncProvider.allWals.map((wal) => wal.id), contains(deviceWal.id));
+  });
+
+  test('failed row deletion keeps a device WAL visible when inventory refresh is unconfirmed', () async {
+    final deviceWal = Wal(
+      timerStart: 4750,
+      codec: BleAudioCodec.opus,
+      seconds: 60,
+      status: WalStatus.miss,
+      storage: WalStorage.sdcard,
+      device: 'device-1',
+      fileNum: 5,
+    );
+    final syncs = _LocalSyncs(
+      localSync,
+      failDeviceDelete: true,
+      deviceRefreshConfirmed: false,
+      deviceWal: deviceWal,
+    );
+    final syncProvider = SyncProvider(
+      walService: _WalService(syncs),
+      uploadGate: _offlineGate(),
+      startBackgroundSync: false,
+    );
+    provider = syncProvider;
+    await syncProvider.initialized;
+
+    await expectLater(syncProvider.deleteWal(deviceWal), throwsStateError);
+
+    expect(syncs.deviceRefreshCalls, 1);
+    expect(syncProvider.allWals.map((wal) => wal.id), contains(deviceWal.id));
+  });
+
+  test('row deletion is not reported complete when the follow-up inventory is unconfirmed', () async {
+    final deviceWal = Wal(
+      timerStart: 4900,
+      codec: BleAudioCodec.opus,
+      seconds: 60,
+      status: WalStatus.miss,
+      storage: WalStorage.sdcard,
+      device: 'device-1',
+      fileNum: 6,
+    );
+    final syncs = _LocalSyncs(
+      localSync,
+      deviceRefreshConfirmed: false,
+      deviceWal: deviceWal,
+    );
+    final syncProvider = SyncProvider(
+      walService: _WalService(syncs),
+      uploadGate: _offlineGate(),
+      startBackgroundSync: false,
+    );
+    provider = syncProvider;
+    await syncProvider.initialized;
+
+    await expectLater(syncProvider.deleteWal(deviceWal), throwsStateError);
+
+    expect(syncProvider.allWals.map((wal) => wal.id), contains(deviceWal.id));
+  });
+
+  test('failed Clear Pending rediscovers and keeps device WALs visible', () async {
+    final deviceWal = Wal(
+      timerStart: 5000,
+      codec: BleAudioCodec.opus,
+      seconds: 60,
+      status: WalStatus.miss,
+      storage: WalStorage.sdcard,
+      device: 'device-1',
+      fileNum: 3,
+    );
+    final syncs = _LocalSyncs(
+      localSync,
+      failPendingDelete: true,
+      deviceWal: deviceWal,
+      deviceWalOnPendant: deviceWal,
+    );
+    final syncProvider = SyncProvider(
+      walService: _WalService(syncs),
+      uploadGate: _offlineGate(),
+      startBackgroundSync: false,
+    );
+    provider = syncProvider;
+    await syncProvider.initialized;
+
+    await expectLater(syncProvider.deleteAllPendingWals(), throwsStateError);
+
+    expect(syncs.deviceRefreshCalls, 1);
+    expect(syncProvider.allWals.map((wal) => wal.id), contains(deviceWal.id));
+  });
+
+  test('Clear All trusts a successful refreshed inventory after a partial device failure', () async {
+    Wal deviceWal(int timerStart) => Wal(
+          timerStart: timerStart,
+          codec: BleAudioCodec.opus,
+          seconds: 60,
+          status: WalStatus.outsideRecoveryWindow,
+          storage: WalStorage.sdcard,
+          device: 'device-1',
+          fileNum: timerStart,
+        );
+
+    final failedWal = deviceWal(6000);
+    final deletedWal = deviceWal(7000);
+    final syncs = _MixedDeviceDeleteSyncs(
+      localSync,
+      initialInventory: [failedWal, deletedWal],
+      refreshedInventory: [failedWal],
+      failedWalId: failedWal.id,
+    );
+    final syncProvider = SyncProvider(
+      walService: _WalService(syncs),
+      uploadGate: _offlineGate(),
+      startBackgroundSync: false,
+    );
+    provider = syncProvider;
+    await syncProvider.initialized;
+
+    await expectLater(syncProvider.deleteAllClearableWals(), throwsStateError);
+
+    expect(syncs.deviceRefreshCalls, 1);
+    expect(syncs.individualDeleteCalls, containsAll([failedWal.id, deletedWal.id]));
+    expect(syncProvider.allWals.map((wal) => wal.id), [failedWal.id]);
+  });
+
+  test('Clear All keeps all original targets when the device refresh is unconfirmed', () async {
+    Wal deviceWal(int timerStart) => Wal(
+          timerStart: timerStart,
+          codec: BleAudioCodec.opus,
+          seconds: 60,
+          status: WalStatus.outsideRecoveryWindow,
+          storage: WalStorage.sdcard,
+          device: 'device-1',
+          fileNum: timerStart,
+        );
+
+    final failedWal = deviceWal(8000);
+    final deletedWal = deviceWal(9000);
+    final syncs = _MixedDeviceDeleteSyncs(
+      localSync,
+      initialInventory: [failedWal, deletedWal],
+      refreshedInventory: [failedWal],
+      failedWalId: failedWal.id,
+      refreshConfirmed: false,
+    );
+    final syncProvider = SyncProvider(
+      walService: _WalService(syncs),
+      uploadGate: _offlineGate(),
+      startBackgroundSync: false,
+    );
+    provider = syncProvider;
+    await syncProvider.initialized;
+
+    await expectLater(syncProvider.deleteAllClearableWals(), throwsStateError);
+
+    expect(syncProvider.allWals.map((wal) => wal.id), containsAll([failedWal.id, deletedWal.id]));
   });
 }

@@ -307,7 +307,7 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
   /// A connected pendant can leave a GATT read or write unanswered (and older
   /// native code orphaned a second same-characteristic read). Every awaited
   /// operation is bounded so a capture or sync pass can never wait forever.
-  @visibleForTesting
+  /// Shared with higher-level recovery deadlines that must cover BLE operations.
   static Duration operationTimeout = const Duration(seconds: 10);
 
   void _logOperationTimeout(String op, String characteristicUuid) {

@@ -115,7 +115,7 @@ class _Sync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvi
   @override
   List<Wal> walsForDisplayFilter(WalDisplayFilter filter) => wals;
   @override
-  Future<void> deleteWal(Wal wal) async {
+  Future<void> deleteWal(Wal wal, {String? firmwareVersion, bool refreshDevice = true}) async {
     deleted.add(wal);
     if (removeOnDelete && wal.id != skipDeleteId) {
       wals.remove(wal);
@@ -130,16 +130,19 @@ class _Sync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvi
   @override
   List<Wal> get pendingDeletableWals => wals.where((w) => w.status != WalStatus.synced).toList();
   @override
-  Future<void> deleteAllPendingWals() async {
+  Future<void> deleteAllPendingWals({String? firmwareVersion, bool refreshDevice = true}) async {
     for (final wal in List<Wal>.of(pendingDeletableWals)) {
       await deleteWal(wal);
     }
   }
 
   @override
-  Future<void> deleteAllClearableWals() => deleteAllPendingWals();
+  Future<void> deleteAllClearableWals({String? firmwareVersion, bool refreshDevice = true}) => deleteAllPendingWals(
+        firmwareVersion: firmwareVersion,
+        refreshDevice: refreshDevice,
+      );
   @override
-  Future<void> deleteAllSyncedWals() async {
+  Future<void> deleteAllSyncedWals({String? firmwareVersion, bool refreshDevice = true}) async {
     for (final wal in List<Wal>.of(syncedWals)) {
       await deleteWal(wal);
     }

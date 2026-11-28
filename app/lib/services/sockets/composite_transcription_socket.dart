@@ -1,7 +1,8 @@
-import 'package:omi/services/sockets/local_stt_failure.dart';
 import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
+
+import 'package:omi/services/sockets/local_stt_failure.dart';
 
 import 'package:omi/models/stt_provider.dart';
 import 'package:omi/services/custom_stt_log_service.dart';
@@ -331,6 +332,8 @@ class CompositeTranscriptionSocket implements IPureSocket {
     onError(err, trace);
   }
 
+  // With OMI_CUSTOM_LIVE_CAPTURE_FIX enabled, Omi controls belong on the Omi
+  // secondary socket, never on the configured Custom Live provider's primary socket.
   bool get _routesOmiControls => customLiveCaptureFixEnabled && sttProvider == SttProvider.customLive.name;
 
   @override

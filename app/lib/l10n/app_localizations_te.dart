@@ -15904,6 +15904,10 @@ class AppLocalizationsTe extends AppLocalizations {
   String get firmwareSyncRecordingsFirstTitle => 'ముందుగా మీ రికార్డింగ్‌లను సమకాలీకరించండి';
 
   @override
+  String get pendantAudioUnconfirmedSyncBlocked =>
+      'మీ Pendant‌లో నిల్వ చేసిన ఆడియోను నిర్ధారించలేకపోయాం. Pendant‌ను కనెక్ట్ చేసి ఉంచి, మళ్లీ సింక్ చేయడానికి ప్రయత్నించండి.';
+
+  @override
   String get firmwareSyncRecordingsFirstMessage =>
       'కొన్ని రికార్డింగ్‌లు ఇంకా మీ డివైస్‌లో ఉన్నాయి. అవి మీ ఫోన్‌కు పూర్తిగా సమకాలీకరించనివ్వండి, తర్వాత నవీకరణను ప్రారంభించండి.';
 

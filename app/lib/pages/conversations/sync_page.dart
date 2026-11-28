@@ -14,7 +14,6 @@ import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/user_provider.dart';
-import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/logger.dart';
@@ -36,6 +35,15 @@ Widget _buildFaIcon(FaIconData icon, {double size = 18, Color color = const Colo
     padding: const EdgeInsets.only(left: 2, top: 1),
     child: FaIcon(icon, size: size, color: color),
   );
+}
+
+bool _walStillListed(SyncProvider provider, Wal wal) {
+  return provider.allWals.any(wal.hasSameDeviceInventoryIdentity);
+}
+
+String? _deviceFirmwareVersion(BuildContext context, Wal wal) {
+  if (wal.storage == WalStorage.disk || wal.storage == WalStorage.mem) return null;
+  return context.read<DeviceProvider>().currentFirmwareVersion;
 }
 
 class WalListItem extends StatelessWidget {
@@ -128,7 +136,18 @@ class WalListItem extends StatelessWidget {
             confirmLabel: context.l10n.delete,
             destructive: true,
           );
-          if (confirmed) await syncProvider.deleteWal(wal);
+          if (confirmed && context.mounted) {
+            try {
+              await syncProvider.deleteWal(wal, firmwareVersion: _deviceFirmwareVersion(context, wal));
+            } catch (error) {
+              Logger.debug('Sync delete failed: ${error.runtimeType}');
+              if (context.mounted) OmiFeedback.error(context, context.l10n.failedToDeleteSomeItems);
+              return;
+            }
+            if (context.mounted && _walStillListed(syncProvider, wal)) {
+              OmiFeedback.error(context, context.l10n.failedToDeleteSomeItems);
+            }
+          }
         },
       );
     }
@@ -157,16 +176,29 @@ class WalListItem extends StatelessWidget {
             key: Key(wal.id),
             direction:
                 displayState == WalSyncDisplayState.syncing ? DismissDirection.none : DismissDirection.endToStart,
-            confirmDismiss: (direction) {
+            confirmDismiss: (direction) async {
               final copy =
                   walDeleteConfirmation(context.l10n, [wal], notUploadedMessage: context.l10n.thisCannotBeUndone);
-              return showOmiConfirm(
+              final confirmed = await showOmiConfirm(
                 context,
                 title: copy.title,
                 message: copy.message,
                 confirmLabel: context.l10n.delete,
                 destructive: true,
               );
+              if (!confirmed || !context.mounted) return false;
+              try {
+                await syncProvider.deleteWal(wal, firmwareVersion: _deviceFirmwareVersion(context, wal));
+              } catch (error) {
+                Logger.debug('Sync delete failed: ${error.runtimeType}');
+                if (context.mounted) OmiFeedback.error(context, context.l10n.failedToDeleteSomeItems);
+                return false;
+              }
+              if (!context.mounted) return false;
+              if (_walStillListed(syncProvider, wal)) OmiFeedback.error(context, context.l10n.failedToDeleteSomeItems);
+              // The provider refresh removes a confirmed delete. Returning false
+              // keeps failed device deletes from leaving a dismissed row in place.
+              return false;
             },
             background: Container(
               alignment: Alignment.centerRight,
@@ -174,9 +206,6 @@ class WalListItem extends StatelessWidget {
               color: Colors.red,
               child: const Icon(Icons.delete, color: Colors.white),
             ),
-            onDismissed: (direction) {
-              ServiceManager.instance().wal.getSyncs().deleteWal(wal);
-            },
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: () {
@@ -232,7 +261,18 @@ class WalListItem extends StatelessWidget {
                           confirmLabel: context.l10n.delete,
                           destructive: true,
                         );
-                        if (confirmed) await syncProvider.deleteWal(wal);
+                        if (confirmed && context.mounted) {
+                          try {
+                            await syncProvider.deleteWal(wal, firmwareVersion: _deviceFirmwareVersion(context, wal));
+                          } catch (error) {
+                            Logger.debug('Sync delete failed: ${error.runtimeType}');
+                            if (context.mounted) OmiFeedback.error(context, context.l10n.failedToDeleteSomeItems);
+                            return;
+                          }
+                          if (context.mounted && _walStillListed(syncProvider, wal)) {
+                            OmiFeedback.error(context, context.l10n.failedToDeleteSomeItems);
+                          }
+                        }
                       }),
                     ],
                     if (showBar) ...[
@@ -423,8 +463,35 @@ class _SyncPageState extends State<SyncPage> {
             destructive: true,
           );
           if (confirmed && context.mounted) {
-            await provider.deleteAllSyncedWals();
-            if (context.mounted) {
+            // Ring discovery rebuilds its virtual WAL with a new display timestamp.
+            (WalStorage, bool, String) syncedIdentity(Wal wal) {
+              final ring = wal.storage == WalStorage.sdcard && wal.fileNum == -1;
+              return (wal.storage, ring, ring ? wal.device : wal.id);
+            }
+
+            final targets = provider.syncedWals.map(syncedIdentity).toSet();
+            if (targets.isEmpty) {
+              OmiFeedback.confirm(context, context.l10n.noRecordings);
+              return;
+            }
+            final uid = SharedPreferencesUtil().uid;
+            final hasDeviceRows = targets.any((row) => row.$1 != WalStorage.disk && row.$1 != WalStorage.mem);
+            final firmware = hasDeviceRows ? context.read<DeviceProvider>().currentFirmwareVersion : null;
+            var failed = false;
+            try {
+              await provider.deleteAllSyncedWals(firmwareVersion: firmware);
+            } catch (error) {
+              failed = true;
+              Logger.debug('Sync clear synced failed: ${error.runtimeType}');
+            }
+            if (!context.mounted || uid != SharedPreferencesUtil().uid) return;
+            final retained = provider.allWals.any((wal) {
+              final identity = syncedIdentity(wal);
+              return targets.contains(identity) && (!identity.$2 || wal.status == WalStatus.synced);
+            });
+            if (failed || retained) {
+              OmiFeedback.error(context, context.l10n.failedToDeleteSomeItems);
+            } else {
               OmiFeedback.confirm(context, context.l10n.syncedFilesDeleted);
             }
           }
@@ -446,16 +513,16 @@ class _SyncPageState extends State<SyncPage> {
           }
 
           final targets = provider.pendingDeletableWals.map(pendingIdentity).toSet();
-          if (targets.isEmpty) return;
+          if (targets.isEmpty) {
+            OmiFeedback.confirm(context, context.l10n.noRecordings);
+            return;
+          }
           final uid = SharedPreferencesUtil().uid;
           final hasDeviceRows = targets.any((row) => row.$1 != WalStorage.disk && row.$1 != WalStorage.mem);
           final firmware = hasDeviceRows ? context.read<DeviceProvider>().currentFirmwareVersion : null;
           var failed = false;
           try {
-            await provider.deleteAllPendingWals();
-            if (hasDeviceRows && uid == SharedPreferencesUtil().uid) {
-              await provider.discoverDeviceWals(firmwareVersion: firmware);
-            }
+            await provider.deleteAllPendingWals(firmwareVersion: firmware);
           } catch (error) {
             failed = true;
             Logger.debug('Sync clear pending failed: ${error.runtimeType}');
@@ -478,8 +545,37 @@ class _SyncPageState extends State<SyncPage> {
             destructive: true,
           );
           if (confirmed && context.mounted) {
-            await provider.deleteAllClearableWals();
-            if (context.mounted) {
+            (WalStorage, bool, String) identity(Wal wal) {
+              final ring = wal.storage == WalStorage.sdcard && wal.fileNum == -1;
+              return (wal.storage, ring, ring ? wal.device : wal.id);
+            }
+
+            final clearable = [
+              ...provider.syncedWals,
+              ...provider.pendingDeletableWals,
+              ...provider.corruptedWals,
+              ...provider.refusedWals,
+            ];
+            final targets = clearable.map(identity).toSet();
+            if (targets.isEmpty) {
+              OmiFeedback.confirm(context, context.l10n.noRecordings);
+              return;
+            }
+            final uid = SharedPreferencesUtil().uid;
+            final hasDeviceRows = targets.any((row) => row.$1 != WalStorage.disk && row.$1 != WalStorage.mem);
+            final firmware = hasDeviceRows ? context.read<DeviceProvider>().currentFirmwareVersion : null;
+            var failed = false;
+            try {
+              await provider.deleteAllClearableWals(firmwareVersion: firmware);
+            } catch (error) {
+              failed = true;
+              Logger.debug('Sync clear all failed: ${error.runtimeType}');
+            }
+            if (!context.mounted || uid != SharedPreferencesUtil().uid) return;
+            final retained = provider.allWals.any((wal) => targets.contains(identity(wal)));
+            if (failed || retained) {
+              OmiFeedback.error(context, context.l10n.failedToDeleteSomeItems);
+            } else {
               OmiFeedback.confirm(context, context.l10n.allFilesDeleted);
             }
           }

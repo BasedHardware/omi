@@ -7,6 +7,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/models/playback_state.dart';
+import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/device.dart';
@@ -583,8 +584,24 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
     );
 
     if (confirmed && context.mounted) {
-      Navigator.of(context).pop(); // Go back to previous screen
-      context.read<SyncProvider>().deleteWal(widget.wal);
+      try {
+        final provider = context.read<SyncProvider>();
+        final target = widget.wal;
+        final firmwareVersion = target.storage == WalStorage.disk || target.storage == WalStorage.mem
+            ? null
+            : context.read<DeviceProvider>().currentFirmwareVersion;
+        await provider.deleteWal(target, firmwareVersion: firmwareVersion);
+        if (!context.mounted) return;
+        final retained = provider.allWals.any(target.hasSameDeviceInventoryIdentity);
+        if (retained) {
+          OmiFeedback.error(context, context.l10n.failedToDeleteSomeItems);
+        } else {
+          Navigator.of(context).pop(); // Go back to previous screen
+        }
+      } catch (error) {
+        Logger.debug('WAL detail delete failed: ${error.runtimeType}');
+        if (context.mounted) OmiFeedback.error(context, context.l10n.failedToDeleteSomeItems);
+      }
     }
   }
 

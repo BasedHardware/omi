@@ -15832,6 +15832,10 @@ class AppLocalizationsEt extends AppLocalizations {
   String get firmwareSyncRecordingsFirstTitle => 'Sünkroonige oma salvestised esmalt';
 
   @override
+  String get pendantAudioUnconfirmedSyncBlocked =>
+      'Pendantile salvestatud heli ei õnnestunud kinnitada. Hoidke Pendant ühendatuna ja proovige uuesti sünkroonida.';
+
+  @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Mõned salvestised on veel teie seadmes. Oodake, kuni need on telefonisse sünkroonitud, ja seejärel alustage uuendust.';
 

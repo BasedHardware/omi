@@ -65,6 +65,27 @@ class RingProtocol {
     return parts[2] >= 20;
   }
 
+  static List<int>? _firmwareVersionParts(String? version) {
+    if (version == null || version.isEmpty || version == 'Unknown') return null;
+    final match = RegExp(r'^(\d+)\.(\d+)\.(\d+)').firstMatch(version);
+    if (match == null) return null;
+    return [for (var index = 1; index <= 3; index++) int.parse(match.group(index)!)];
+  }
+
+  /// Firmware 3.0.17–3.0.19 uses the multi-file LittleFS storage protocol.
+  static bool isMultiFileStorageFirmware(String? version) {
+    final parts = _firmwareVersionParts(version);
+    if (parts == null || isRingBufferFirmware(version)) return false;
+    return parts[0] > 3 || (parts[0] == 3 && (parts[1] > 0 || (parts[1] == 0 && parts[2] >= 17)));
+  }
+
+  /// Firmware before 3.0.17 cannot safely delete or confirm files through the
+  /// multi-file protocol. Ring-buffer firmware uses a separate storage path.
+  static bool hasUnsupportedMultiFileStorageFirmware(String? version) {
+    if (_firmwareVersionParts(version) == null || isRingBufferFirmware(version)) return false;
+    return !isMultiFileStorageFirmware(version);
+  }
+
   /// Parse the 16-byte status read into a RingStatus. Returns null if the
   /// payload is too short.
   static RingStatus? parseStatus(List<int> value) {

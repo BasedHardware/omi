@@ -4803,6 +4803,7 @@
     "playStripePlanPaused": "{plan} planın duraklatıldı.",
     "firmwareNewestSupportedForDevice": "Cihazınız zaten desteklenen en yeni firmware sürümünü kullanıyor",
     "firmwareSyncRecordingsFirstTitle": "Önce kayıtlarınızı senkronize edin",
+    "pendantAudioUnconfirmedSyncBlocked": "Pendant'ınızda saklanan ses doğrulanamadı. Pendant'ınızı bağlı tutun ve yeniden eşitlemeyi deneyin.",
     "firmwareSyncRecordingsFirstMessage": "Bazı kayıtlar hâlâ cihazınızda. Telefonunuza senkronize edilmelerini bekleyin, ardından güncellemeyi başlatın.",
     "batteryRestartToRefresh": "Yenilemek için Omi'yi yeniden başlatın"
 }

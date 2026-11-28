@@ -15845,6 +15845,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String get firmwareSyncRecordingsFirstTitle => 'Synkronoi nauhoituksesi ensin';
 
   @override
+  String get pendantAudioUnconfirmedSyncBlocked =>
+      'Pendantiin tallennettua ääntä ei voitu vahvistaa. Pidä Pendant yhdistettynä ja yritä synkronointia uudelleen.';
+
+  @override
   String get firmwareSyncRecordingsFirstMessage =>
       'Osaa nauhoituksista on vielä laitteella. Anna niiden synkronoitua puhelimeen loppuun ja käynnistä sitten päivitys.';
 

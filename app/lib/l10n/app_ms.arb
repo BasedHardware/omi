@@ -4768,6 +4768,7 @@
     "playStripePlanPaused": "Pelan {plan} anda dijeda.",
     "firmwareNewestSupportedForDevice": "Peranti anda sudah menggunakan versi firmware terbaharu yang disokong",
     "firmwareSyncRecordingsFirstTitle": "Segerakkan rakaman anda terlebih dahulu",
+    "pendantAudioUnconfirmedSyncBlocked": "Audio yang disimpan pada Pendant anda tidak dapat disahkan. Pastikan Pendant anda disambungkan dan cuba segerakkan semula.",
     "firmwareSyncRecordingsFirstMessage": "Sebahagian rakaman masih berada pada peranti anda. Biarkan ia selesai disegerakkan ke telefon anda, kemudian mulakan kemas kini.",
     "batteryRestartToRefresh": "Mulakan semula Omi untuk memuat semula"
 }

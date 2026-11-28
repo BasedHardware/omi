@@ -32,6 +32,8 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
 
   bool _isSyncing = false;
   bool _cancelRequested = false;
+  bool _storageStatusUnavailable = false;
+  bool _storageConfirmedDrained = false;
 
   FlashSyncStallReason _lastStallReason = FlashSyncStallReason.none;
 
@@ -45,18 +47,38 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
 
   final DateTime Function() _clock;
 
+  @visibleForTesting
+  Duration testPollInterval = const Duration(milliseconds: 500);
+
+  @visibleForTesting
+  int testMaxEmptyExtractions = 60;
+
   FlashPageWalSyncImpl(this.listener, {DateTime Function()? clock}) : _clock = clock ?? DateTime.now;
 
   @visibleForTesting
   set testWals(List<Wal> wals) => _wals = wals;
 
   @visibleForTesting
+  List<Wal> get testWals => List.unmodifiable(_wals);
+
+  @visibleForTesting
   set testDevice(BtDevice? device) => _device = device;
 
   DeviceConnection? _testConnection;
+  Future<DeviceConnection?> Function(String deviceId)? _testEnsureConnection;
 
   @visibleForTesting
   set testConnection(DeviceConnection? connection) => _testConnection = connection;
+
+  @visibleForTesting
+  set testEnsureConnection(Future<DeviceConnection?> Function(String deviceId)? ensureConnection) =>
+      _testEnsureConnection = ensureConnection;
+
+  Future<DeviceConnection?> _ensureConnection(String deviceId) async {
+    final testEnsureConnection = _testEnsureConnection;
+    if (testEnsureConnection != null) return testEnsureConnection(deviceId);
+    return ServiceManager.instance().device.ensureConnection(deviceId);
+  }
 
   @override
   void setLocalSync(LocalWalSync localSync) {
@@ -99,8 +121,12 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
     return FlashSyncStallReason.unknown;
   }
 
+  @visibleForTesting
+  static int resumePageAfterDurablePage({required int startPage, required int lastDurablePageIndex}) =>
+      lastDurablePageIndex < startPage ? startPage : lastDurablePageIndex + 1;
+
   Future<Map<String, int>?> _getStorageStatus(String deviceId) async {
-    var connection = _testConnection ?? await ServiceManager.instance().device.ensureConnection(deviceId);
+    var connection = _testConnection ?? await _ensureConnection(deviceId);
     if (connection == null) return null;
 
     try {
@@ -112,10 +138,10 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
     }
   }
 
-  Future<void> _acknowledgeProcessedData(String deviceId, int upToIndex) async {
+  Future<int?> _acknowledgeProcessedData(String deviceId, int upToIndex) async {
     final connection = _testConnection ?? await ServiceManager.instance().device.ensureConnection(deviceId);
     if (connection is! LimitlessDeviceConnection) throw StateError('Device is unavailable');
-    await connection.acknowledgeProcessedData(upToIndex);
+    return connection.acknowledgeProcessedData(upToIndex);
   }
 
   Future<void> _enableRealTimeMode(String deviceId) async {
@@ -139,13 +165,17 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
     if (_isSyncing || wal.isSyncing || wal.status != WalStatus.synced || _device?.id != wal.device) {
       throw StateError('Device deletion is unavailable for this recording');
     }
-    await _acknowledgeProcessedData(wal.device, wal.storageTotalBytes);
+    final acknowledgedIndex = await _acknowledgeProcessedData(wal.device, wal.storageTotalBytes);
+    if (acknowledgedIndex == null || acknowledgedIndex < wal.storageTotalBytes) {
+      throw StateError('Device has not acknowledged this recording');
+    }
     _wals.removeWhere((w) => w.id == wal.id);
 
     listener.onWalUpdated();
   }
 
   Future<List<Wal>> _getMissingWals() async {
+    _storageStatusUnavailable = false;
     // Capture snapshot — setDevice(null) can be called concurrently during awaits
     final device = _device;
     if (device == null) return [];
@@ -160,28 +190,62 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
     List<Wal> wals = [];
 
     var storageStatus = await _getStorageStatus(deviceId);
-    if (storageStatus == null || storageStatus.isEmpty) return [];
-
+    if (storageStatus == null || storageStatus.isEmpty) {
+      _storageStatusUnavailable = true;
+      _storageConfirmedDrained = false;
+      _lastStallReason = FlashSyncStallReason.unknown;
+      return _wals
+          .where((wal) => wal.device == deviceId && wal.storage == WalStorage.flashPage && wal.status == WalStatus.miss)
+          .toList();
+    }
     _oldestPage = storageStatus['oldest_flash_page'] ?? 0;
     _newestPage = storageStatus['newest_flash_page'] ?? 0;
     _currentSession = storageStatus['current_storage_session'] ?? 0;
 
     int pageCount = _newestPage - _oldestPage + 1;
-    if (pageCount <= 0) return [];
+    _storageConfirmedDrained = pageCount <= 0;
+    if (_storageConfirmedDrained) {
+      _lastStallReason = FlashSyncStallReason.none;
+      return [];
+    }
+
+    // Preserve the durable cursor across a device refresh. The pendant's
+    // oldest-page pointer can lag it when an ACK is held, and rebuilding from
+    // that pointer would persist the same audio again on auto-resume.
+    final listed = _wals
+        .where((w) =>
+            w.device == deviceId &&
+            w.storage == WalStorage.flashPage &&
+            w.status == WalStatus.miss &&
+            w.storageOffset <= _newestPage + 1 &&
+            w.storageTotalBytes >= _oldestPage)
+        .fold<Wal?>(null, (best, wal) => best == null || wal.storageOffset > best.storageOffset ? wal : best);
+    final startPage = listed != null && listed.storageOffset > _oldestPage ? listed.storageOffset : _oldestPage;
+    final awaitingDurableAck = listed != null && listed.storageOffset == _newestPage + 1;
 
     // Each flash page contains ~1.4 seconds of audio
-    int estimatedSeconds = (pageCount * secondsPerFlashPage).round();
+    pageCount = _newestPage - startPage + 1;
+    if (pageCount <= 0 && !awaitingDurableAck) return [];
+    int estimatedSeconds = awaitingDurableAck ? listed.seconds : (pageCount * secondsPerFlashPage).round();
 
-    if (pageCount > 30) {
-      // Wal.id is device_timerStart, and this list is rebuilt on connect, on every
-      // discovery and after every sync pass. Keep the start estimated when this
-      // backlog (same pendant, same first page) was listed, so the recording keeps
-      // its id; a fresh estimate from the clock gave it a new id on every rebuild.
-      final listed = _wals.where((w) => w.device == deviceId && w.storageOffset == _oldestPage).firstOrNull;
+    // The 30-page threshold applies only to newly discovered backlogs. Once a
+    // WAL has been offered and advanced, keep its remaining range visible even
+    // when a short retry has 30 or fewer pages left.
+    if (pageCount > 30 || awaitingDurableAck || (listed != null && pageCount > 0)) {
+      // Wal.id is device_timerStart. Reuse the previous recording identity when
+      // the refreshed device range overlaps its locally pending page range.
       int timerStart = listed?.timerStart ?? DateTime.now().millisecondsSinceEpoch ~/ 1000 - estimatedSeconds;
 
-      var connection = _testConnection ?? await ServiceManager.instance().device.ensureConnection(deviceId);
-      if (connection == null) return [];
+      var connection = _testConnection ?? await _ensureConnection(deviceId);
+      if (connection == null) {
+        _storageStatusUnavailable = true;
+        _storageConfirmedDrained = false;
+        _lastStallReason = FlashSyncStallReason.unknown;
+        return _wals
+            .where(
+                (wal) => wal.device == deviceId && wal.storage == WalStorage.flashPage && wal.status == WalStatus.miss)
+            .toList();
+      }
       var pd = await device.getDeviceInfo(connection);
       String deviceModel = pd.modelNumber.isNotEmpty ? pd.modelNumber : "Limitless";
 
@@ -192,7 +256,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
           status: WalStatus.miss,
           storage: WalStorage.flashPage,
           seconds: estimatedSeconds,
-          storageOffset: _oldestPage,
+          storageOffset: startPage,
           storageTotalBytes: _newestPage,
           fileNum: _currentSession,
           device: device.id,
@@ -218,28 +282,35 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
   }
 
   @override
-  Future<void> refreshWalsFromDevice() async {
+  Future<bool> refreshWalsFromDevice() async {
     // Re-enumerate from the device's current flash-page pointers. ACKs sent
     // during a previous sync advance oldest_flash_page, so this re-reads the
     // remaining range. Without it, a second in-session Sync tap would reuse the
     // stale cached WAL (possibly already marked synced) and report "no data" —
     // forcing the user to relaunch the app to resume. Skip while a download is
     // in flight so we never swap the list out from under an active sync.
-    if (_isSyncing) return;
+    if (_isSyncing) return false;
+    final device = _device;
+    if (device == null) return false;
+    if (device.type != DeviceType.limitless) return true;
+    if (SharedPreferencesUtil().batchModeEnabled) return true;
     _wals = await _getMissingWals();
     listener.onWalUpdated();
+    return !_storageStatusUnavailable;
   }
 
   @override
   Future stop() async {
     _wals = [];
+    _lastStallReason = FlashSyncStallReason.none;
+    _storageStatusUnavailable = false;
+    _storageConfirmedDrained = false;
     await _pageStream?.cancel();
   }
 
   @override
   Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress}) async {
     _cancelRequested = false;
-    _lastStallReason = FlashSyncStallReason.none;
 
     int? globalStartPage;
     int globalEndPage = 0;
@@ -249,7 +320,10 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
       final wals = _wals.where((w) => w.status == WalStatus.miss && w.storage == WalStorage.flashPage).toList();
       if (wals.isEmpty) {
         Logger.debug("FlashPageSync: All downloaded!");
-        drained = globalStartPage != null;
+        if (_storageConfirmedDrained) {
+          drained = globalStartPage != null;
+          _lastStallReason = FlashSyncStallReason.none;
+        }
         break;
       }
 
@@ -291,7 +365,10 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
       await refreshWalsFromDevice();
       final resumeWals = _wals.where((w) => w.status == WalStatus.miss && w.storage == WalStorage.flashPage).toList();
       if (resumeWals.isEmpty) {
-        drained = true;
+        if (_storageConfirmedDrained) {
+          drained = true;
+          _lastStallReason = FlashSyncStallReason.none;
+        }
         break;
       }
 
@@ -314,7 +391,6 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
   @override
   Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
     _cancelRequested = false;
-    _lastStallReason = FlashSyncStallReason.none;
     // The list is rebuilt with new Wal objects when the pendant connects, on every
     // discovery wake and after each sync pass, while a recording page keeps the Wal
     // it was opened with. Match by id, as deleteWal does; the listing keeps the id.
@@ -356,6 +432,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
     final admittedGeneration = _localSync?.sessionGeneration ?? -1;
 
     String deviceId = _device!.id;
+    LimitlessDeviceConnection? syncingConnection;
 
     try {
       var connection = _testConnection ?? await ServiceManager.instance().device.ensureConnection(deviceId);
@@ -366,9 +443,12 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
       }
 
       final limitlessConnection = connection as LimitlessDeviceConnection;
+      syncingConnection = limitlessConnection;
       limitlessConnection.clearBuffer();
       await limitlessConnection.enableBatchMode();
       Logger.debug("FlashPageSync: Batch mode enabled");
+      // Discovery alone cannot clear a stall; only a real new drain can.
+      _lastStallReason = FlashSyncStallReason.none;
 
       _isSyncing = true;
       listener.onWalUpdated();
@@ -382,11 +462,33 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
         'totalPages': totalPages,
       });
       int emptyExtractions = 0;
-      const maxEmptyExtractions = 60;
+      final maxEmptyExtractions = testMaxEmptyExtractions;
       int? lastProcessedIndex;
       int? lastDurablePageIndex;
       int? lastAcknowledgedIndex;
       int? batchMaxIndex;
+
+      Future<int?> acknowledgePage(int pageIndex) async {
+        final acknowledged = await limitlessConnection.acknowledgeProcessedData(pageIndex);
+        if (acknowledged != null && (lastAcknowledgedIndex == null || acknowledged > lastAcknowledgedIndex!)) {
+          lastAcknowledgedIndex = acknowledged;
+        }
+        return acknowledged;
+      }
+
+      // A prior pass may have persisted every page but received only a capped
+      // ACK. Retry the ACK from the saved cursor without requesting or saving
+      // the same audio again.
+      if (wal.storageOffset == endPage + 1) {
+        final acknowledgedIndex = await acknowledgePage(endPage);
+        await limitlessConnection.enableRealTimeMode();
+        _isSyncing = false;
+        listener.onWalUpdated();
+        if (acknowledgedIndex != null && acknowledgedIndex >= endPage) return true;
+        final statusAfterStall = await _getStorageStatus(deviceId);
+        _lastStallReason = classifyStall(endPageAtEnumeration: endPage, statusAfterStall: statusAfterStall);
+        return false;
+      }
 
       final DateTime syncStartTime = DateTime.now();
 
@@ -497,9 +599,12 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
         if (pageData != null && !shouldSave && accumulatedFrames.isEmpty && lastDurablePageIndex != null) {
           if (DateTime.now().difference(lastSaveTime) >= _persistBatchDuration) {
             try {
-              await limitlessConnection.acknowledgeProcessedData(lastDurablePageIndex);
-              lastAcknowledgedIndex = lastDurablePageIndex;
-              Logger.debug("FlashPageSync: Diagnostic-only ACK sent for page $lastDurablePageIndex");
+              final acknowledgedIndex = await acknowledgePage(lastDurablePageIndex);
+              if (acknowledgedIndex != null && acknowledgedIndex >= lastDurablePageIndex) {
+                Logger.debug("FlashPageSync: Diagnostic-only ACK sent for page $lastDurablePageIndex");
+              } else {
+                Logger.debug("FlashPageSync: Diagnostic-only ACK held at ${acknowledgedIndex ?? 'none'}");
+              }
               lastSaveTime = DateTime.now();
             } catch (e) {
               Logger.debug("FlashPageSync: Diagnostic ACK failed: $e");
@@ -523,9 +628,8 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
           if (batchMaxIndex != null) {
             lastDurablePageIndex = batchMaxIndex;
             try {
-              await limitlessConnection.acknowledgeProcessedData(lastDurablePageIndex);
-              lastAcknowledgedIndex = lastDurablePageIndex;
-              Logger.debug("FlashPageSync: Incremental ACK sent for page $lastDurablePageIndex");
+              final acknowledgedIndex = await acknowledgePage(lastDurablePageIndex);
+              Logger.debug("FlashPageSync: Incremental ACK confirmed through ${acknowledgedIndex ?? 'none'}");
             } catch (e) {
               Logger.debug("FlashPageSync: Incremental ACK failed: $e");
             }
@@ -579,14 +683,19 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
           // Send ACK for processed data
           if (lastDurablePageIndex != null) {
             try {
-              await limitlessConnection.acknowledgeProcessedData(lastDurablePageIndex);
-              lastAcknowledgedIndex = lastDurablePageIndex;
-              Logger.debug("FlashPageSync: Cancel ACK sent for page $lastDurablePageIndex");
+              final acknowledgedIndex = await acknowledgePage(lastDurablePageIndex);
+              if (acknowledgedIndex == null || acknowledgedIndex < lastDurablePageIndex) {
+                Logger.debug("FlashPageSync: Cancel ACK held at ${acknowledgedIndex ?? 'none'}");
+              }
 
               // Update WAL to reflect remaining pages (for next sync attempt)
-              wal.storageOffset = lastDurablePageIndex + 1;
-              final remainingPages = endPage - lastDurablePageIndex;
-              wal.seconds = (remainingPages * secondsPerFlashPage).round();
+              final resumePage = resumePageAfterDurablePage(
+                startPage: startPage,
+                lastDurablePageIndex: lastDurablePageIndex,
+              );
+              wal.storageOffset = resumePage;
+              final remainingPages = endPage >= resumePage ? endPage - resumePage + 1 : 0;
+              if (remainingPages > 0) wal.seconds = (remainingPages * secondsPerFlashPage).round();
               Logger.debug(
                 "FlashPageSync: Updated WAL - new start page: ${wal.storageOffset}, remaining: $remainingPages pages",
               );
@@ -611,7 +720,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
           return false; // Cancelled, not completed
         }
 
-        await Future.delayed(const Duration(milliseconds: 500));
+        await Future.delayed(testPollInterval);
       }
 
       if (accumulatedFrames.isNotEmpty) {
@@ -627,9 +736,8 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
 
         if (lastDurablePageIndex != null) {
           try {
-            await limitlessConnection.acknowledgeProcessedData(lastDurablePageIndex);
-            lastAcknowledgedIndex = lastDurablePageIndex;
-            Logger.debug("FlashPageSync: Final ACK sent for page $lastDurablePageIndex");
+            final acknowledgedIndex = await acknowledgePage(lastDurablePageIndex);
+            Logger.debug("FlashPageSync: Final ACK confirmed through ${acknowledgedIndex ?? 'none'}");
           } catch (e) {
             Logger.debug("FlashPageSync: Final ACK failed: $e");
           }
@@ -648,9 +756,8 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
       // Final ACK before switching to real-time mode
       if (lastDurablePageIndex != null) {
         try {
-          await limitlessConnection.acknowledgeProcessedData(lastDurablePageIndex);
-          lastAcknowledgedIndex = lastDurablePageIndex;
-          Logger.debug("FlashPageSync: Sent final ACK for index $lastDurablePageIndex before switching to real-time");
+          final acknowledgedIndex = await acknowledgePage(lastDurablePageIndex);
+          Logger.debug("FlashPageSync: Final cleanup ACK confirmed through ${acknowledgedIndex ?? 'none'}");
         } catch (e) {
           Logger.debug("FlashPageSync: Final cleanup ACK failed: $e");
         }
@@ -659,7 +766,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
       final bool reachedEnd = lastProcessedIndex != null &&
           lastProcessedIndex >= endPage &&
           (lastDurablePageIndex == null ||
-              (lastAcknowledgedIndex != null && lastAcknowledgedIndex >= lastDurablePageIndex));
+              (lastAcknowledgedIndex != null && lastAcknowledgedIndex! >= lastDurablePageIndex));
 
       // On a stall, classify it while still in batch mode (device-status
       // requests are answered in any mode — the RX handler parses them on
@@ -701,9 +808,13 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
       // synced after only a partial download. refreshWalsFromDevice() re-reads
       // the device's advanced pointer on the next Sync.
       if (lastDurablePageIndex != null) {
-        wal.storageOffset = lastDurablePageIndex + 1;
-        final remainingPages = endPage - lastDurablePageIndex;
-        wal.seconds = (remainingPages * secondsPerFlashPage).round();
+        final resumePage = resumePageAfterDurablePage(
+          startPage: startPage,
+          lastDurablePageIndex: lastDurablePageIndex,
+        );
+        wal.storageOffset = resumePage;
+        final remainingPages = endPage >= resumePage ? endPage - resumePage + 1 : 0;
+        if (remainingPages > 0) wal.seconds = (remainingPages * secondsPerFlashPage).round();
         Logger.debug(
           "FlashPageSync: Partial download — resume start page ${wal.storageOffset}, $remainingPages pages remaining",
         );
@@ -727,6 +838,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
       wal.deviceDownloadFraction = null;
 
       listener.onWalUpdated();
+      syncingConnection?.releaseBatchDrainAfterSyncFailure();
       try {
         await _enableRealTimeMode(deviceId);
       } catch (_) {}
@@ -770,6 +882,8 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
 
   @override
   void setDevice(BtDevice? device) async {
+    _lastStallReason = FlashSyncStallReason.none;
+    _storageStatusUnavailable = false;
     _device = device;
     if (device != null && device.type == DeviceType.limitless) {
       final wals = await _getMissingWals();
@@ -786,16 +900,26 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
   @override
   Future<void> deleteAllSyncedWals() async {
     final syncedWals = _wals.where((w) => w.status == WalStatus.synced).toList();
-    for (final wal in syncedWals) {
-      await deleteWal(wal);
-    }
+    await _deleteEachWal(syncedWals);
   }
 
   @override
   Future<void> deleteAllPendingWals() async {
     final pendingWals = _wals.where((w) => w.status == WalStatus.miss || w.status == WalStatus.corrupted).toList();
-    for (final wal in pendingWals) {
-      await deleteWal(wal);
+    await _deleteEachWal(pendingWals);
+  }
+
+  Future<void> _deleteEachWal(List<Wal> wals) async {
+    Object? firstError;
+    StackTrace? firstStackTrace;
+    for (final wal in wals) {
+      try {
+        await deleteWal(wal);
+      } catch (error, stackTrace) {
+        firstError ??= error;
+        firstStackTrace ??= stackTrace;
+      }
     }
+    if (firstError != null) Error.throwWithStackTrace(firstError, firstStackTrace!);
   }
 }

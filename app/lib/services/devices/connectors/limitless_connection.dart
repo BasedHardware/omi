@@ -45,6 +45,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
   // Completed flash pages
   final List<Map<String, dynamic>> _completedFlashPages = [];
+  final Set<int> _unconfirmedStoredPageIndices = {};
 
   StreamSubscription? _rxSubscription;
   StreamSubscription? _transportReconnectSubscription;
@@ -54,6 +55,9 @@ class LimitlessDeviceConnection extends DeviceConnection {
   bool _closed = false;
   Future<void>? _disconnectOperation;
   bool _isBatchMode = false;
+  bool _batchDrainActive = false;
+  bool _batchModeUnconfirmed = false;
+  int? _batchModeEpoch;
   final Duration _streamHealthWindow;
   final Duration _storageStatusTimeout;
   Timer? _streamHealthTimer;
@@ -163,6 +167,11 @@ class LimitlessDeviceConnection extends DeviceConnection {
     await _flashPageController.close();
     await _buttonController.close();
     _isBatchMode = false;
+    _batchDrainActive = false;
+    _batchModeUnconfirmed = false;
+    _batchModeEpoch = null;
+    _unconfirmedStoredPageIndices.clear();
+    _lastAcknowledgedIndex = -1;
     await super.disconnect();
   }
 
@@ -178,26 +187,58 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
   void watchCustomLiveAudio({
     required bool Function() captureIsCurrent,
+    bool Function()? reactivationIsCurrent,
     required void Function() onEnabled,
     required void Function(LimitlessRealtimeHealthOutcome) report,
+    bool restart = false,
   }) {
     // The existing binding checks the recording, capture policy and STT config.
     // Keep its timer and spent retry budget while it still owns the link.
-    if (_customLiveHealth?.isClosed != true && (_customLiveWatch?.captureIsCurrent() ?? false)) return;
+    final restartSpentEpisode = restart && (_customLiveHealth?.isRecoverySpent ?? false);
+    if (!restartSpentEpisode &&
+        _customLiveHealth?.isClosed != true &&
+        (_customLiveWatch?.captureIsCurrent() ?? false)) {
+      return;
+    }
     stopCustomLiveAudioWatch();
     // The coordinator may install the listener while the first BLE setup settles.
     bool start(int epoch) {
       bool isCurrent() =>
-          _isCurrentSession(epoch) && _isInitialized && !_isBatchMode && !_realtimeSuppressed && captureIsCurrent();
+          _isCurrentSession(epoch) &&
+          _isInitialized &&
+          !_isBatchMode &&
+          !_batchDrainActive &&
+          !_realtimeSuppressed &&
+          captureIsCurrent();
+      bool canReactivate() =>
+          isCurrent() && !_batchDrainActive && (reactivationIsCurrent?.call() ?? true) && !_isReinitializing;
 
       if (!isCurrent()) return false;
       _cancelStreamHealthWatch();
+      _resetStreamActivationCounters();
       _customLiveHealth = LimitlessRealtimeHealth(
         window: _streamHealthWindow,
+        reactivationTimeout:
+            _storageStatusTimeout + NativeBleTransport.operationTimeout * 2 + const Duration(seconds: 1),
         isCurrent: isCurrent,
         reactivate: () async {
-          if (_isReinitializing) return; // The current setup already enables the stream.
+          if (!canReactivate()) return false;
+          final framesBeforeProbe = _audioFramesSinceStreamActivation;
+          final stage = _rxPacketsSinceStreamActivation == 0 ? 'no_rx_packets' : 'rx_without_audio_frames';
+          final status = await getStorageStatus();
+          if (!isCurrent()) return false;
+          DebugLogManager.logEvent('limitless_stream_health_probe', {
+            'stage': stage,
+            'statusReceived': status != null,
+            'storedPages': status == null
+                ? null
+                : ((status['newest_flash_page'] ?? -1) - (status['oldest_flash_page'] ?? 0) + 1).clamp(0, 1 << 31),
+            'freePages': status?['free_capture_pages'],
+          });
+          if (!canReactivate() || _audioFramesSinceStreamActivation != framesBeforeProbe) return false;
           await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, _encodeEnableDataStream());
+          if (isCurrent()) _batchModeUnconfirmed = false;
+          return true;
         },
         report: report,
       );
@@ -268,8 +309,15 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
   Future<void> _reinitializeAfterReconnect(int epoch) async {
     _realtimeSuppressed = realtimeSuppressionPolicy?.call() ?? _realtimeSuppressed;
-    // The native drain engine owns the control characteristic during a flash drain.
-    if (_isBatchMode || !_isCurrentSession(epoch)) return;
+    // A reconnect leaves the pendant's control mode unknown. Do not publish
+    // stored pages as live audio until a mode-selection write is confirmed.
+    _batchModeUnconfirmed = true;
+    if (_batchDrainActive || _isBatchMode) {
+      _isBatchMode = false;
+      _batchModeEpoch = null;
+    }
+    if (!_isCurrentSession(epoch)) return;
+    var attemptingBatchReentry = false;
     try {
       _resetProtocolSessionForReconnect();
 
@@ -280,13 +328,33 @@ class LimitlessDeviceConnection extends DeviceConnection {
       await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, timeSyncCmd);
       if (!_isCurrentSession(epoch)) return;
       await Future.delayed(_reconnectSettleDelay);
-      if (!_isCurrentSession(epoch) || _isBatchMode) return;
+      if (!_isCurrentSession(epoch)) return;
+
+      if (_batchDrainActive) {
+        final batchModeCmd = _encodeDownloadFlashPages(batchMode: true, realTime: false);
+        attemptingBatchReentry = true;
+        await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, batchModeCmd);
+        if (!_isCurrentSession(epoch)) return;
+        if (_batchDrainActive) {
+          _isBatchMode = true;
+          _batchModeUnconfirmed = false;
+          _batchModeEpoch = epoch;
+        }
+        return;
+      }
+
+      // A drain may have been explicitly cancelled while time sync was in flight.
+      _isBatchMode = false;
+      _batchModeEpoch = null;
 
       if (!_realtimeSuppressed) {
         final dataStreamCmd = _encodeEnableDataStream();
         await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, dataStreamCmd);
         if (!_isCurrentSession(epoch)) return;
-        if (!_realtimeSuppressed) _armStreamHealthWatch(reason: 'bluetooth_reconnect');
+        if (!_realtimeSuppressed) {
+          _batchModeUnconfirmed = false;
+          _armStreamHealthWatch(reason: 'bluetooth_reconnect');
+        }
       }
       DebugLogManager.logInfo('Limitless device re-initialized after reconnect', {
         'timeSynced': true,
@@ -295,6 +363,13 @@ class LimitlessDeviceConnection extends DeviceConnection {
     } catch (e) {
       Logger.debug('Limitless: Re-initialization after reconnect failed: $e');
       DebugLogManager.logError(e, null, 'Limitless reconnect initialization failed');
+      if (attemptingBatchReentry && _isCurrentSession(epoch) && _batchDrainActive) {
+        DebugLogManager.logWarning(
+            'Limitless batch re-entry failed; retaining drain ownership until mode is confirmed');
+      }
+      if (_isCurrentSession(epoch) && !_isBatchMode && !_batchDrainActive && !_realtimeSuppressed) {
+        _armStreamHealthWatch(reason: 'reconnect_reinit_failed');
+      }
     }
   }
 
@@ -306,12 +381,15 @@ class LimitlessDeviceConnection extends DeviceConnection {
       _cancelStreamHealthWatch();
     }
     final epoch = connectionEpoch;
-    if (!_isInitialized || _isBatchMode || !_isCurrentSession(epoch)) return;
+    if (!_isInitialized || _isBatchMode || _batchDrainActive || !_isCurrentSession(epoch)) return;
     try {
       final cmd = _encodeEnableDataStream(enable: !suppressed);
       await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, cmd);
       if (!_isCurrentSession(epoch)) return;
-      if (!suppressed && !_realtimeSuppressed) _armStreamHealthWatch(reason: 'realtime_resumed');
+      if (!suppressed && !_realtimeSuppressed) {
+        _batchModeUnconfirmed = false;
+        _armStreamHealthWatch(reason: 'realtime_resumed');
+      }
       DebugLogManager.logInfo('Limitless realtime ${suppressed ? 'suppressed' : 'resumed'} (Transcribe Later)');
     } catch (e) {
       Logger.debug('Limitless: setRealtimeAudioSuppressed($suppressed) failed: $e');
@@ -323,7 +401,18 @@ class LimitlessDeviceConnection extends DeviceConnection {
     // The Limitless pendant stops streaming BLE audio after an extended period
     // without a live server connection. Re-send the enable-data-stream command
     // so it resumes, just as _reinitializeAfterReconnect() does after BT reconnect.
-    if (_isInitialized) await _handleTransportReconnected();
+    // The socket outage may have exhausted the old health episode; retain the
+    // capture binding but start a fresh monitor for the reinitialized stream.
+    if (_isInitialized) {
+      final epoch = connectionEpoch;
+      _closeCustomLiveAudioWatch();
+      await _handleTransportReconnected();
+      // Reinitialization logs and swallows write failures. Restore a monitor
+      // after it returns so a failed reconnect still has a bounded retry path.
+      if (_isCurrentSession(epoch) && !_isBatchMode && !_batchDrainActive && !_realtimeSuppressed) {
+        _armStreamHealthWatch(reason: 'socket_reconnect_fallback');
+      }
+    }
   }
 
   @override
@@ -410,6 +499,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
               limitlessServiceUuid, limitlessTxCharUuid, _encodeEnableDataStream(enable: !appliedSuppression));
           if (!_isCurrentSession(epoch)) return;
         }
+        _batchModeUnconfirmed = false;
       }
 
       _isInitialized = true;
@@ -489,39 +579,146 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
   /// Handle reassembled payload in real-time mode
   void _handleRealTimePayload(List<int> payload) {
-    // Extract Opus frames from the protobuf payload
-    final frames = _extractOpusFramesFromFlashPage(payload);
-
-    if (frames.isNotEmpty) {
-      _publishAudioFrames(frames);
-    } else {
-      final result = _extractOpusFrames(payload);
-      final extractedFrames = result[0] as List<List<int>>;
-      if (extractedFrames.isNotEmpty) {
-        _publishAudioFrames(extractedFrames);
-      }
-    }
+    if (_publishAudioFramesFromPendantEnvelope(payload) || _batchModeUnconfirmed) return;
+    // Parse structured flash pages before scanning for bare Opus wrappers. A
+    // valid packet may itself contain marker-like bytes that the fallback
+    // scanner would mistake for a nested frame.
+    var frames = _extractOpusFramesFromFlashPage(payload);
+    if (frames.isEmpty) frames = _extractOpusFrames(payload)[0] as List<List<int>>;
+    if (frames.isNotEmpty) _publishAudioFrames(frames, fromRealtimeStream: true);
   }
 
-  void _publishAudioFrames(List<List<int>> frames) {
-    if (frames.isEmpty) return;
-    if (_audioFramesSinceStreamActivation == 0) {
-      Logger.debug('Limitless: First decoded audio frame observed after stream activation');
-      DebugLogManager.logEvent('limitless_first_audio_frame', {'frames': frames.length});
+  /// Handles protobuf fields in any order. Field 2 contains stored pages;
+  /// field 4 contains live frames. Raw frame payloads still use the fallback.
+  bool _publishAudioFramesFromPendantEnvelope(List<int> payload) {
+    var pos = 0;
+    var withheldStoredFrames = false;
+    final audioBatches = <(List<List<int>>, bool)>[];
+
+    try {
+      parse:
+      while (pos < payload.length) {
+        final fieldStart = pos;
+        final tagResult = _decodeVarint(payload, pos);
+        final tag = tagResult[0] as int;
+        pos = tagResult[1] as int;
+        if (tag == 0 || pos <= fieldStart) break parse;
+
+        final fieldNumber = tag >> 3;
+        final wireType = tag & 0x07;
+        switch (wireType) {
+          case 0:
+            final value = _decodeVarint(payload, pos);
+            if ((value[1] as int) <= pos) break parse;
+            pos = value[1] as int;
+            break;
+          case 1:
+            if (pos + 8 > payload.length) break parse;
+            pos += 8;
+            break;
+          case 2:
+            final lengthResult = _decodeVarint(payload, pos);
+            final length = lengthResult[0] as int;
+            final valueStart = lengthResult[1] as int;
+            if (valueStart <= pos || length < 0 || length > payload.length - valueStart) break parse;
+            pos = valueStart + length;
+            if (fieldNumber == 2) {
+              final storageBuffer = payload.sublist(valueStart, pos);
+              final flashPage = _extractStorageBufferFlashPage(storageBuffer);
+              final pageFrames = _extractOpusFramesFromFlashPage(flashPage ?? storageBuffer);
+              final pageIndex = pageFrames.isEmpty ? null : _extractStorageBufferPageIndex(storageBuffer);
+              final alreadyAcknowledged = pageIndex != null && pageIndex <= _lastAcknowledgedIndex;
+              final withheldByUnconfirmedMode = _batchModeUnconfirmed;
+              final withheldByActiveDrain = _batchDrainActive && !_isBatchMode;
+              final withheldByExistingBarrier = pageIndex != null && _unconfirmedStoredPageIndices.contains(pageIndex);
+              if (pageFrames.isNotEmpty && alreadyAcknowledged) {
+                // A delayed copy can arrive after a successful drain exit, when
+                // no mode latch is holding stored pages back. It was already
+                // delivered to the phone and ACKed, so it must never become
+                // live audio or create a new ACK barrier.
+                _unconfirmedStoredPageIndices.remove(pageIndex);
+                withheldStoredFrames = true;
+              } else if (pageFrames.isNotEmpty &&
+                  (withheldByUnconfirmedMode || withheldByActiveDrain || withheldByExistingBarrier)) {
+                if (pageIndex == null) {
+                  // Without an index there is no safe ACK barrier. While mode
+                  // is uncertain, withhold the page and let a later flash drain
+                  // retrieve it instead of duplicating it into live audio.
+                  if (withheldByUnconfirmedMode) {
+                    withheldStoredFrames = true;
+                    DebugLogManager.logEvent('limitless_stored_frames_dropped', {
+                      'frames': pageFrames.length,
+                      'pageIndex': null,
+                      'drainActive': _batchDrainActive,
+                    });
+                  } else {
+                    audioBatches.add((pageFrames, !(_batchDrainActive && !_isBatchMode)));
+                  }
+                } else {
+                  withheldStoredFrames = true;
+                  if (_unconfirmedStoredPageIndices.add(pageIndex)) {
+                    DebugLogManager.logEvent('limitless_stored_frames_dropped', {
+                      'frames': pageFrames.length,
+                      'pageIndex': pageIndex,
+                      'drainActive': _batchDrainActive,
+                    });
+                  }
+                }
+              } else {
+                if (pageFrames.isNotEmpty) {
+                  audioBatches.add((pageFrames, !(_batchDrainActive && !_isBatchMode)));
+                }
+              }
+            } else if (fieldNumber == 4) {
+              final encodedLiveField = payload.sublist(fieldStart, pos);
+              final liveFrames = _extractOpusFrames(encodedLiveField)[0] as List<List<int>>;
+              if (liveFrames.isNotEmpty) audioBatches.add((liveFrames, true));
+            }
+            break;
+          case 5:
+            if (pos + 4 > payload.length) break parse;
+            pos += 4;
+            break;
+          default:
+            break parse;
+        }
+      }
+    } catch (_) {
+      // Publish complete audio fields parsed before a malformed trailing field.
     }
-    _audioFramesSinceStreamActivation += frames.length;
-    _customLiveHealth?.observeFrame();
-    _streamHealthTimer?.cancel();
-    _streamHealthTimer = null;
+
+    if (audioBatches.isEmpty && !withheldStoredFrames) return false;
+    // Preserve stored/live field order. During reconnect, indexed pages in an
+    // active drain are withheld and ACK-capped until replay.
+    for (final batch in audioBatches) {
+      _publishAudioFrames(batch.$1, fromRealtimeStream: batch.$2);
+    }
+    return true;
+  }
+
+  void _publishAudioFrames(List<List<int>> frames, {required bool fromRealtimeStream}) {
+    if (frames.isEmpty) return;
+    if (fromRealtimeStream) {
+      if (_audioFramesSinceStreamActivation == 0) {
+        Logger.debug('Limitless: First decoded audio frame observed after stream activation');
+        DebugLogManager.logEvent('limitless_first_audio_frame', {'frames': frames.length});
+      }
+      _audioFramesSinceStreamActivation += frames.length;
+      _customLiveHealth?.observeFrame();
+      _streamHealthTimer?.cancel();
+      _streamHealthTimer = null;
+    }
     for (final frame in frames) {
       _audioController.add(frame);
     }
   }
 
   void _resetProtocolSessionForReconnect() {
+    _batchModeUnconfirmed = true;
     _rawDataBuffer.clear();
     _fragmentBuffer.clear();
     _storageState = null;
+    _lastAcknowledgedIndex = -1;
     final pendingStatus = _storageStateCompleter;
     if (pendingStatus != null && !pendingStatus.isCompleted) pendingStatus.complete(null);
     _storageStateCompleter = null;
@@ -535,13 +732,19 @@ class LimitlessDeviceConnection extends DeviceConnection {
     _streamHealthCheckInFlight = false;
   }
 
+  void _resetStreamActivationCounters() {
+    _rxPacketsSinceStreamActivation = 0;
+    _audioFramesSinceStreamActivation = 0;
+  }
+
   void _armStreamHealthWatch({required String reason, bool resetAttempts = true}) {
-    if (_customLiveHealth != null || (_customLiveWatch?.start(connectionEpoch) ?? false)) return;
     _streamHealthGeneration++;
     final generation = _streamHealthGeneration;
     _streamHealthTimer?.cancel();
-    _rxPacketsSinceStreamActivation = 0;
-    _audioFramesSinceStreamActivation = 0;
+    _streamHealthTimer = null;
+    if (_batchDrainActive) return;
+    if (_customLiveHealth != null || (_customLiveWatch?.start(connectionEpoch) ?? false)) return;
+    _resetStreamActivationCounters();
     if (resetAttempts) _streamReactivationAttempts = 0;
     _streamHealthTimer = Timer(
       _streamHealthWindow,
@@ -551,7 +754,13 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
   Future<void> _checkStreamHealth({required int generation, required String reason}) async {
     if (generation != _streamHealthGeneration || _streamHealthCheckInFlight) return;
-    if (!_isInitialized || _isBatchMode || _realtimeSuppressed || _audioFramesSinceStreamActivation > 0) return;
+    if (!_isInitialized ||
+        _isBatchMode ||
+        _batchDrainActive ||
+        _realtimeSuppressed ||
+        _audioFramesSinceStreamActivation > 0) {
+      return;
+    }
 
     _streamHealthCheckInFlight = true;
     final rxPackets = _rxPacketsSinceStreamActivation;
@@ -571,7 +780,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
       // A status round-trip distinguishes a dead notify/control path from a
       // firmware that accepts commands but does not emit realtime audio.
       final status = await getStorageStatus();
-      if (generation != _streamHealthGeneration || _isBatchMode || _realtimeSuppressed) return;
+      if (generation != _streamHealthGeneration || _isBatchMode || _batchDrainActive || _realtimeSuppressed) return;
       DebugLogManager.logEvent('limitless_stream_health_probe', {
         'stage': stage,
         'statusReceived': status != null,
@@ -589,6 +798,9 @@ class LimitlessDeviceConnection extends DeviceConnection {
         _streamReactivationAttempts = 1;
         final dataStreamCmd = _encodeEnableDataStream();
         await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, dataStreamCmd);
+        if (generation == _streamHealthGeneration && !_isBatchMode && !_batchDrainActive && !_realtimeSuppressed) {
+          _batchModeUnconfirmed = false;
+        }
         DebugLogManager.logInfo('Limitless realtime stream reactivation sent after silent start');
         _armStreamHealthWatch(reason: 'silent_start_retry', resetAttempts: false);
       }
@@ -724,6 +936,8 @@ class LimitlessDeviceConnection extends DeviceConnection {
             'did_stop_recording': pageInfo['did_stop_recording'] ?? false,
           };
 
+          _clearReplayedStoredPageBarrier(index);
+
           _completedFlashPages.add(flashPage);
 
           // Update first flash page timestamp if not set
@@ -758,6 +972,8 @@ class LimitlessDeviceConnection extends DeviceConnection {
               'did_stop_recording': false,
             };
 
+            _clearReplayedStoredPageBarrier(index);
+
             _completedFlashPages.add(flashPage);
             _flashPageController.add(flashPage);
           } else {
@@ -779,6 +995,110 @@ class LimitlessDeviceConnection extends DeviceConnection {
       Logger.debug('Limitless: Error handling storage buffer: $e');
       DebugLogManager.logError(e, null, 'Limitless storage buffer parse error', {
         'storageDataLength': storageData.length,
+      });
+    }
+  }
+
+  int? _extractStorageBufferPageIndex(List<int> storageData) {
+    var pos = 0;
+    try {
+      while (pos < storageData.length) {
+        final tagResult = _decodeVarint(storageData, pos);
+        final tag = tagResult[0] as int;
+        final afterTag = tagResult[1] as int;
+        if (tag == 0 || afterTag <= pos) return null;
+        pos = afterTag;
+        final fieldNum = tag >> 3;
+        switch (tag & 0x07) {
+          case 0:
+            final value = _decodeVarint(storageData, pos);
+            final next = value[1] as int;
+            if (next <= pos) return null;
+            if (fieldNum == 5) return value[0] as int;
+            pos = next;
+            break;
+          case 1:
+            if (pos + 8 > storageData.length) return null;
+            pos += 8;
+            break;
+          case 2:
+            final lengthResult = _decodeVarint(storageData, pos);
+            final length = lengthResult[0] as int;
+            final valueStart = lengthResult[1] as int;
+            if (valueStart <= pos || length < 0 || length > storageData.length - valueStart) return null;
+            pos = valueStart + length;
+            break;
+          case 5:
+            if (pos + 4 > storageData.length) return null;
+            pos += 4;
+            break;
+          default:
+            return null;
+        }
+      }
+    } catch (_) {
+      return null;
+    }
+    return null;
+  }
+
+  List<int>? _extractStorageBufferFlashPage(List<int> storageData) {
+    var pos = 0;
+    try {
+      while (pos < storageData.length) {
+        final tagResult = _decodeVarint(storageData, pos);
+        final tag = tagResult[0] as int;
+        final afterTag = tagResult[1] as int;
+        if (tag == 0 || afterTag <= pos) return null;
+        pos = afterTag;
+        final fieldNum = tag >> 3;
+        switch (tag & 0x07) {
+          case 0:
+            final value = _decodeVarint(storageData, pos);
+            final next = value[1] as int;
+            if (next <= pos) return null;
+            pos = next;
+            break;
+          case 1:
+            if (pos + 8 > storageData.length) return null;
+            pos += 8;
+            break;
+          case 2:
+            final lengthResult = _decodeVarint(storageData, pos);
+            final length = lengthResult[0] as int;
+            final valueStart = lengthResult[1] as int;
+            if (valueStart <= pos || length < 0 || length > storageData.length - valueStart) return null;
+            if (fieldNum == 6) return storageData.sublist(valueStart, valueStart + length);
+            pos = valueStart + length;
+            break;
+          case 5:
+            if (pos + 4 > storageData.length) return null;
+            pos += 4;
+            break;
+          default:
+            return null;
+        }
+      }
+    } catch (_) {
+      return null;
+    }
+    return null;
+  }
+
+  void _clearReplayedStoredPageBarrier(int? index) {
+    if (!_batchDrainActive || !_isBatchMode || index == null || !_unconfirmedStoredPageIndices.remove(index)) return;
+    DebugLogManager.logEvent('limitless_unconfirmed_stored_page_replayed', {'pageIndex': index});
+  }
+
+  void _pruneUnavailableStoredPageBarriers(Map<String, int> status) {
+    final oldestAvailable = status['oldest_flash_page'];
+    if (oldestAvailable == null) return;
+    final unavailable = _unconfirmedStoredPageIndices.where((index) => index < oldestAvailable).toList();
+    for (final index in unavailable) {
+      _unconfirmedStoredPageIndices.remove(index);
+      DebugLogManager.logWarning('Limitless withheld page is no longer available', {
+        'pageIndex': index,
+        'oldestAvailablePageIndex': oldestAvailable,
       });
     }
   }
@@ -1299,21 +1619,36 @@ class LimitlessDeviceConnection extends DeviceConnection {
     return _encodeBleWrapper(cmd);
   }
 
-  Future<void> acknowledgeProcessedData(int upToIndex) async {
-    if (!_isInitialized) return;
+  Future<int?> acknowledgeProcessedData(int upToIndex) async {
+    if (!_isInitialized) return null;
 
     try {
-      final ackCmd = _encodeAcknowledgeProcessedData(upToIndex);
+      var acknowledgedIndex = upToIndex;
+      if (_unconfirmedStoredPageIndices.isNotEmpty) {
+        final lowestUnconfirmed = _unconfirmedStoredPageIndices.reduce((a, b) => a < b ? a : b);
+        if (acknowledgedIndex >= lowestUnconfirmed) {
+          acknowledgedIndex = lowestUnconfirmed - 1;
+          DebugLogManager.logEvent('limitless_ack_capped_for_unconfirmed_stored_page', {
+            'requestedIndex': upToIndex,
+            'acknowledgedIndex': acknowledgedIndex,
+            'lowestUnconfirmedPageIndex': lowestUnconfirmed,
+          });
+        }
+      }
+      if (acknowledgedIndex <= _lastAcknowledgedIndex) return acknowledgedIndex;
+      final ackCmd = _encodeAcknowledgeProcessedData(acknowledgedIndex);
       await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, ackCmd);
-      Logger.debug('Limitless: Acknowledged processed data up to index $upToIndex');
+      Logger.debug('Limitless: Acknowledged processed data up to index $acknowledgedIndex');
       DebugLogManager.logInfo('Limitless ACK sent', {
-        'upToIndex': upToIndex,
+        'upToIndex': acknowledgedIndex,
         'lastAcknowledgedIndex': _lastAcknowledgedIndex,
       });
-      _lastAcknowledgedIndex = upToIndex;
+      _lastAcknowledgedIndex = acknowledgedIndex;
+      return acknowledgedIndex;
     } catch (e) {
       Logger.debug('Limitless: Error sending acknowledgment: $e');
       DebugLogManager.logError(e, null, 'Limitless ACK failed', {'upToIndex': upToIndex});
+      return null;
     }
   }
 
@@ -1410,28 +1745,64 @@ class LimitlessDeviceConnection extends DeviceConnection {
   /// Enable batch mode to download stored flash pages (offline recordings)
   Future<void> enableBatchMode() async {
     if (!_isInitialized) return;
+    final epoch = connectionEpoch;
 
     try {
-      stopCustomLiveAudioWatch();
+      // Flash drain temporarily owns the stream. Retire the current episode but
+      // keep its capture binding so Custom Live can resume afterward.
+      _closeCustomLiveAudioWatch();
       _cancelStreamHealthWatch();
       // Clear all buffers before switching modes to prevent cross-contamination
       _rawDataBuffer.clear();
       _fragmentBuffer.clear();
       _completedFlashPages.clear();
+      _batchDrainActive = true;
       _isBatchMode = true;
+      _batchModeUnconfirmed = true;
+      _batchModeEpoch = epoch;
       final cmd = _encodeDownloadFlashPages(batchMode: true, realTime: false);
       await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, cmd);
+      if (!_isCurrentSession(epoch)) return;
+      _batchModeUnconfirmed = false;
       DebugLogManager.logInfo('Limitless batch mode enabled');
     } catch (e) {
-      _isBatchMode = false;
+      if (!_isCurrentSession(epoch)) return;
+      if (_batchModeEpoch == epoch) {
+        _isBatchMode = false;
+        _batchModeEpoch = null;
+      }
+      _batchModeUnconfirmed = true;
+      _batchDrainActive = false;
+      if (!_realtimeSuppressed) _armStreamHealthWatch(reason: 'batch_mode_enable_failed');
       Logger.debug('Limitless: Error enabling batch mode: $e');
       DebugLogManager.logError(e, null, 'Limitless failed to enable batch mode');
+    }
+  }
+
+  /// Relinquish local drain ownership after a terminal sync failure. A later
+  /// reconnect will explicitly select live mode and can restart its retained
+  /// Custom Live watch; withheld-page barriers remain until replay or status
+  /// proves those pages have left the pendant's flash ring.
+  void releaseBatchDrainAfterSyncFailure() {
+    if (!_batchDrainActive && !_isBatchMode) return;
+    _batchModeUnconfirmed = true;
+    _batchDrainActive = false;
+    _isBatchMode = false;
+    _batchModeEpoch = null;
+    DebugLogManager.logWarning('Limitless batch drain ownership released after sync failure');
+    if (_isCurrentSession(connectionEpoch) && !_realtimeSuppressed) {
+      _armStreamHealthWatch(reason: 'batch_sync_failed');
     }
   }
 
   /// Disable batch mode and switch back to real-time streaming
   Future<void> disableBatchMode() async {
     if (!_isInitialized) return;
+    final epoch = connectionEpoch;
+    // An explicit exit request relinquishes drain ownership; failed writes
+    // keep a mode latch until reconnect or a later confirmed exit.
+    _batchDrainActive = false;
+    _batchModeUnconfirmed = true;
 
     try {
       final pendingPages = _completedFlashPages.length;
@@ -1448,15 +1819,58 @@ class LimitlessDeviceConnection extends DeviceConnection {
           ? _encodeEnableDataStream(enable: false)
           : _encodeDownloadFlashPages(batchMode: false, realTime: true);
       await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, cmd);
+      if (!_isCurrentSession(epoch)) {
+        if (_batchModeEpoch == epoch) {
+          _isBatchMode = false;
+          _batchModeEpoch = null;
+        }
+        return;
+      }
 
       _isBatchMode = false;
+      _batchModeUnconfirmed = false;
+      _batchModeEpoch = null;
       if (!_realtimeSuppressed) _armStreamHealthWatch(reason: 'batch_mode_disabled');
       DebugLogManager.logInfo('Limitless batch mode disabled', {
         'pendingPagesCleared': pendingPages,
         'pendingFragmentsCleared': pendingFragments,
       });
     } catch (e) {
-      _isBatchMode = false;
+      if (!_isCurrentSession(epoch)) {
+        if (_batchModeEpoch == epoch) {
+          _isBatchMode = false;
+          _batchModeEpoch = null;
+        }
+        return;
+      }
+      try {
+        final reconcileCommand = _realtimeSuppressed
+            ? _encodeEnableDataStream(enable: false)
+            : _encodeDownloadFlashPages(batchMode: false, realTime: true);
+        await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, reconcileCommand);
+        if (!_isCurrentSession(epoch)) return;
+        _isBatchMode = false;
+        _batchModeUnconfirmed = false;
+        _batchModeEpoch = null;
+        if (!_realtimeSuppressed) _armStreamHealthWatch(reason: 'batch_mode_disable_reconciled');
+      } catch (reconcileError) {
+        if (_isCurrentSession(epoch)) {
+          // The pendant's mode is unknown. Suppress stored-page delivery until
+          // reconnect or a later mode write confirms the parser's mode.
+          _isBatchMode = false;
+          _batchModeUnconfirmed = true;
+          _batchModeEpoch = null;
+          if (!_realtimeSuppressed) _armStreamHealthWatch(reason: 'batch_mode_disable_unreconciled');
+        } else if (_batchModeEpoch == epoch) {
+          _isBatchMode = false;
+          _batchModeEpoch = null;
+        }
+        DebugLogManager.logError(
+          reconcileError,
+          null,
+          'Limitless failed to reconcile realtime mode after batch mode disable',
+        );
+      }
       DebugLogManager.logError(e, null, 'Limitless failed to disable batch mode');
     }
   }
@@ -1859,6 +2273,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
               final storageState = _parseStorageStateFromDeviceStatus(data, innerPos, innerPos + statusLength);
               if (storageState != null && storageState.isNotEmpty) {
                 _storageState = storageState;
+                _pruneUnavailableStoredPageBarriers(storageState);
                 final pendingStatus = _storageStateCompleter;
                 if (pendingStatus != null && !pendingStatus.isCompleted) pendingStatus.complete(storageState);
               }

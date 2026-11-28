@@ -19,15 +19,23 @@ class _Listener implements IWalSyncListener {
 
 /// A Limitless pendant that reports [flashStatus] for its flash storage.
 class _FakePendant implements LimitlessDeviceConnection {
-  _FakePendant(this.flashStatus);
+  _FakePendant(this.flashStatus, {this.acknowledge});
 
   Map<String, int> flashStatus;
+  final Future<int?> Function(int)? acknowledge;
 
   @override
   Future<Map<String, int>?> getStorageStatus() async => flashStatus;
 
   @override
   Future<Map<String, String>> getDeviceInfo() async => {'modelNumber': 'Limitless Pendant'};
+
+  @override
+  Future<int?> acknowledgeProcessedData(int upToIndex) async {
+    final scripted = acknowledge;
+    if (scripted == null) return upToIndex;
+    return await scripted(upToIndex);
+  }
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -90,5 +98,101 @@ void main() {
     expect(rest.id, listed.id);
     expect(rest.storageOffset, 1050);
     expect(rest.seconds, 70);
+  });
+
+  test('refresh preserves the locally durable cursor while the pendant holds its ACK', () async {
+    final pendant = _FakePendant(_flash(oldest: 1000, newest: 1099));
+    final sync = _syncFor(pendant);
+
+    await sync.refreshWalsFromDevice();
+    final listed = (await sync.getMissingWals()).single;
+    listed.storageOffset = 1050;
+
+    // A held ACK leaves the device's oldest pointer behind the pages already
+    // persisted locally. Refresh must not reset the next read to page 1000.
+    await sync.refreshWalsFromDevice();
+    final resumed = (await sync.getMissingWals()).single;
+
+    expect(resumed.id, listed.id);
+    expect(resumed.storageOffset, 1050);
+    expect(resumed.storageTotalBytes, 1099);
+    expect(resumed.seconds, 70);
+  });
+
+  test('refresh keeps cached flash WALs when the connection drops during enumeration', () async {
+    final pendant = _FakePendant(_flash(oldest: 1000, newest: 1099));
+    final sync = _syncFor(pendant);
+    await sync.refreshWalsFromDevice();
+    final listed = (await sync.getMissingWals()).single;
+
+    sync.testConnection = null;
+    var connectionRequests = 0;
+    sync.testEnsureConnection = (_) async {
+      connectionRequests++;
+      return connectionRequests == 1 ? pendant : null;
+    };
+
+    expect(await sync.refreshWalsFromDevice(), isFalse);
+    final retained = await sync.getMissingWals();
+    expect(connectionRequests, 2);
+    expect(retained.single.id, listed.id);
+    expect(retained.single.storageOffset, listed.storageOffset);
+  });
+
+  test('batch-mode flash listing skip is neutral for device inventory confirmation', () async {
+    final preferences = SharedPreferencesUtil();
+    preferences.batchModeEnabled = true;
+    addTearDown(() => preferences.batchModeEnabled = false);
+    final sync = _syncFor(_FakePendant(_flash(oldest: 1000, newest: 1099)));
+
+    expect(await sync.refreshWalsFromDevice(), isTrue);
+  });
+
+  test('partial drain resumes after durable pages even when their ACK is withheld', () {
+    expect(
+      FlashPageWalSyncImpl.resumePageAfterDurablePage(startPage: 100, lastDurablePageIndex: 149),
+      150,
+    );
+    expect(
+      FlashPageWalSyncImpl.resumePageAfterDurablePage(startPage: 100, lastDurablePageIndex: 99),
+      100,
+    );
+  });
+
+  test('bulk synced deletion continues after a flash page ACK refusal', () async {
+    final attempted = <int>[];
+    final pendant = _FakePendant(
+      _flash(oldest: 100, newest: 200),
+      acknowledge: (index) async {
+        attempted.add(index);
+        return index == 100 ? 99 : index;
+      },
+    );
+    final first = Wal(
+      timerStart: 1700000000,
+      codec: BleAudioCodec.opus,
+      seconds: 30,
+      status: WalStatus.synced,
+      storage: WalStorage.flashPage,
+      device: 'limitless-1',
+      storageTotalBytes: 100,
+      fileNum: 100,
+    );
+    final second = Wal(
+      timerStart: 1700000060,
+      codec: BleAudioCodec.opus,
+      seconds: 30,
+      status: WalStatus.synced,
+      storage: WalStorage.flashPage,
+      device: 'limitless-1',
+      storageTotalBytes: 200,
+      fileNum: 200,
+    );
+    final sync = _syncFor(pendant)..testWals = [first, second];
+
+    await expectLater(sync.deleteAllSyncedWals(), throwsStateError);
+
+    expect(attempted, [100, 200]);
+    expect(sync.testWals, [first], reason: 'the later page with a complete ACK is still removed');
   });
 }

@@ -189,6 +189,7 @@ class WalSyncs implements IWalSync {
     _device = device;
     _firmwareVersion = firmwareVersion;
     if (changedDevice || (wasRing && !usesIndependentRingDrain)) _cancelRingDrain();
+    _storageSync.setDevice(device?.copyWith(firmwareRevision: _resolvedFirmware));
     _ringSync.setDevice(device?.copyWith(firmwareRevision: _resolvedFirmware));
     if (usesIndependentRingDrain && (changedDevice || !wasRing)) unawaited(wakeRingDrain());
     // Ring status shares the legacy characteristic but has a different layout.
@@ -225,6 +226,12 @@ class WalSyncs implements IWalSync {
   /// Firmware >= 3.0.20 speaks the ring-buffer protocol; older multi-file
   /// firmware (3.0.17–3.0.19) keeps using StorageSync.
   static bool isRingBufferFirmware(String? version) => RingProtocol.isRingBufferFirmware(version);
+
+  /// Firmware before 3.0.17 only exposes the legacy SD-card inventory; the
+  /// multi-file stats read is unsupported and cannot confirm a deletion.
+  static bool isMultiFileStorageFirmware(String? version) {
+    return RingProtocol.isMultiFileStorageFirmware(version);
+  }
 
   WalSyncs(
     this.listener, {
@@ -321,24 +328,40 @@ class WalSyncs implements IWalSync {
   /// enumerated on legacy-device connect via [setDevice], so they're not repeated here.
   /// Safe no-op when no device is set; each sub-sync guards against running
   /// while a sync is in progress.
-  Future<void> refreshWalsFromDevice({String? firmwareVersion}) async {
-    if (_device == null) return;
+  Future<bool> refreshWalsFromDevice({String? firmwareVersion}) async {
+    final device = _device;
+    if (device == null) return false;
+    // Limitless confirms deletions through its flash-page status/ACK protocol;
+    // it does not implement the multi-file stats command.
+    if (device.type == DeviceType.limitless) {
+      final confirmed = await _flashPageSync.refreshWalsFromDevice();
+      return _device?.id == device.id && confirmed;
+    }
     // Prefer the caller-supplied firmware, then the enriched value stored at
     // setDevice — the raw connect object's firmwareRevision can still be
     // 'Unknown', which would misroute ring-buffer discovery.
     final fw = (firmwareVersion != null && firmwareVersion.isNotEmpty && firmwareVersion != 'Unknown')
         ? firmwareVersion
         : _resolvedFirmware;
+    bool storageInventoryConfirmed;
     if (isRingBufferFirmware(fw)) {
-      if (usesIndependentRingDrain) {
-        if (_ringPass == null && !ring.isSyncing) await wakeRingDrain(discoveryOnly: true);
-        return;
-      }
-      await _ringSync.refreshWalsFromDevice();
+      if (usesIndependentRingDrain && (_ringPass != null || ring.isSyncing)) return false;
+      // The independent ring reader uses INFO without a discovery STOP and
+      // reports whether that authoritative read completed.
+      storageInventoryConfirmed = await _ringSync.refreshWalsFromDevice();
+    } else if (_usesLegacySdcard && !isMultiFileStorageFirmware(fw)) {
+      // Old firmware has no multi-file stats command; the SD-card list below
+      // is its authoritative device inventory. Any cached multi-file rows for
+      // this device still need a supported refresh before their deletes count.
+      storageInventoryConfirmed = !_storageSync.hasCachedWalsForDevice(device.id);
     } else {
-      await _storageSync.refreshWalsFromDevice();
+      storageInventoryConfirmed = await _storageSync.refreshWalsFromDevice();
     }
-    await _flashPageSync.refreshWalsFromDevice();
+    final sdcardInventoryConfirmed = !_usesLegacySdcard || await _sdcardSync.refreshWalsFromDevice();
+    if (_device?.id != device.id) return false;
+    final flashInventoryConfirmed = await _flashPageSync.refreshWalsFromDevice();
+    if (_device?.id != device.id) return false;
+    return storageInventoryConfirmed && sdcardInventoryConfirmed && flashInventoryConfirmed;
   }
 
   Future<WalStats> getWalStats() async {
@@ -396,19 +419,37 @@ class WalSyncs implements IWalSync {
   }
 
   Future<void> deleteAllSyncedWals() async {
-    await _phoneSync.deleteAllSyncedWals();
-    await _sdcardSync.deleteAllSyncedWals();
-    await _flashPageSync.deleteAllSyncedWals();
-    await _storageSync.deleteAllSyncedWals();
-    await _ringSync.deleteAllSyncedWals();
+    await _runDeleteOperations([
+      _phoneSync.deleteAllSyncedWals,
+      _sdcardSync.deleteAllSyncedWals,
+      _flashPageSync.deleteAllSyncedWals,
+      _storageSync.deleteAllSyncedWals,
+      _ringSync.deleteAllSyncedWals,
+    ]);
   }
 
   Future<void> deleteAllPendingWals() async {
-    await _phoneSync.deleteAllPendingWals();
-    await _sdcardSync.deleteAllPendingWals();
-    await _flashPageSync.deleteAllPendingWals();
-    await _storageSync.deleteAllPendingWals();
-    await _ringSync.deleteAllPendingWals();
+    await _runDeleteOperations([
+      _phoneSync.deleteAllPendingWals,
+      _sdcardSync.deleteAllPendingWals,
+      _flashPageSync.deleteAllPendingWals,
+      _storageSync.deleteAllPendingWals,
+      _ringSync.deleteAllPendingWals,
+    ]);
+  }
+
+  Future<void> _runDeleteOperations(List<Future<void> Function()> deleteOperations) async {
+    Object? firstError;
+    StackTrace? firstStackTrace;
+    for (final delete in deleteOperations) {
+      try {
+        await delete();
+      } catch (error, stackTrace) {
+        firstError ??= error;
+        firstStackTrace ??= stackTrace;
+      }
+    }
+    if (firstError != null) Error.throwWithStackTrace(firstError, firstStackTrace!);
   }
 
   /// Terminal corruption is produced by the phone-local WAL owner. Device
@@ -542,14 +583,18 @@ class WalSyncs implements IWalSync {
         await _ringSync.syncAll(progress: progress);
       }
     } else {
-      await _storageSync.refreshWalsFromDevice();
-      final storageMissing = await _storageSync.getMissingWals();
-      if (_isCancelled) return;
-      if (storageMissing.isNotEmpty) {
-        Logger.debug("WalSyncs: Phase 0 - Downloading ${storageMissing.length} multi-file storage files to phone");
-        DebugLogManager.logInfo('Sync Phase 0: Multi-file storage sync', {'fw': fwVersion ?? ''});
-        progress?.onWalSyncedProgress(0.0, phase: SyncPhase.downloadingFromDevice);
-        await _storageSync.syncAll(progress: progress);
+      final inventoryConfirmed = await _storageSync.refreshWalsFromDevice();
+      if (inventoryConfirmed) {
+        final storageMissing = await _storageSync.getMissingWals();
+        if (_isCancelled) return;
+        if (storageMissing.isNotEmpty) {
+          Logger.debug("WalSyncs: Phase 0 - Downloading ${storageMissing.length} multi-file storage files to phone");
+          DebugLogManager.logInfo('Sync Phase 0: Multi-file storage sync', {'fw': fwVersion ?? ''});
+          progress?.onWalSyncedProgress(0.0, phase: SyncPhase.downloadingFromDevice);
+          await _storageSync.syncAll(progress: progress);
+        }
+      } else {
+        Logger.debug('WalSyncs: Skipping multi-file transfer because the current device inventory is unconfirmed');
       }
     }
 
