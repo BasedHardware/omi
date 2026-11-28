@@ -154,6 +154,29 @@ def test_current_tree_mirrors_prod():
     assert staging_check.staging_diff(ROOT) == []
 
 
+@pytest.mark.parametrize(
+    'service,value,problem',
+    [
+        ('backend-integration', '11', 'env value differs from prod'),
+        ('backend-integration', None, 'env value differs from prod'),
+        ('backend-sync', '10', 'env only in staging'),
+    ],
+)
+def test_staging_tick_exception_accepts_only_the_retained_integration_difference(tmp_path, service, value, problem):
+    root = _copy_tree(tmp_path)
+    key = 'BATCH_PIPELINE_SERVING_TICK_SECONDS'
+
+    def mutate(doc):
+        env = doc['overlay']['cloud_run']['services'][service]['env']
+        if value is None:
+            env[key] = None
+        else:
+            env[key] = {'value': value, 'category': 'rollout'}
+
+    _edit_staging_overlay(root, mutate)
+    assert (service, key, problem) in staging_check.staging_diff(root)
+
+
 def test_non_allowlisted_difference_is_reported(tmp_path):
     root = _copy_tree(tmp_path)
 
@@ -385,8 +408,8 @@ def test_staging_privacy_exception_preserves_strict_map_parity(tmp_path, mutatio
     ) in staging_check.staging_diff(root)
 
 
-@pytest.mark.parametrize('environment', ['prod', 'staging'])
-def test_full_deploy_preserves_restored_integration_cadence(composer, environment):
+@pytest.mark.parametrize('environment,tick', [('prod', '20'), ('staging', '10')])
+def test_full_deploy_preserves_integration_cadence(composer, environment, tick):
     config = (
         composer.compose_staging(inputs=INPUTS)
         if environment == 'staging'
@@ -394,14 +417,17 @@ def test_full_deploy_preserves_restored_integration_cadence(composer, environmen
     )
     expected = {
         'BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS': '200',
-        'BATCH_PIPELINE_SERVING_TICK_SECONDS': '10',
+        'BATCH_PIPELINE_SERVING_TICK_SECONDS': tick,
         'BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT': '16',
     }
     assert 'backend-integration' in config['cloud_run']['services']
     for service, spec in config['cloud_run']['services'].items():
         actual = {key: entry['value'] for key, entry in spec['env'].items() if key in expected}
-        # SCA-3120: the prod-only projection pump derives from integration; serving is off there.
-        assert actual == (expected if service in ('backend-integration', 'backend-projection-pump') else {}), service
+        if service == 'backend-projection-pump':
+            # The dark pump retains its own tick while Integration follows the serving pin.
+            assert actual == {**expected, 'BATCH_PIPELINE_SERVING_TICK_SECONDS': '10'}
+        else:
+            assert actual == (expected if service == 'backend-integration' else {}), service
 
 
 def test_staging_integration_keeps_the_serving_sweep_without_a_pump(composer):

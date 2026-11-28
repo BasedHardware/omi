@@ -38,6 +38,7 @@ def users_db():
         name="get_data_plane_firestore_client", return_value=client_stub.db
     )
     client_stub.data_plane_db = client_stub.db
+    client_stub.run_transactional = MagicMock()
 
     firestore_stub = ModuleType("google.cloud.firestore")
     google_pkg = ModuleType("google")

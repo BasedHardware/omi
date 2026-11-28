@@ -64,8 +64,7 @@ cloud_run:
     max_instances: {owner: none, floor: 8, ceiling: 40}
   backend-integration-staging:
     env:
-      # Margin-40 O1 inverse, 2026-11-17: preserve restored cadence; O3 stays 16.
-      # The former 100/20 source is held. A new lead/Release ruling must supersede this.
+      # SCA-4928: staging retains its 200/10/class16 cadence.
       BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS: '200'
       BATCH_PIPELINE_SERVING_TICK_SECONDS: '10'
       # SCA-3120/SCA-4084, 2026-11-26: slots stay at 4. The 20:46-21:46Z window of
