@@ -27,6 +27,11 @@ PRODUCER_PENDING_RETRY_BUDGET = 6
 CLOSE_RETRY_MAX_SECONDS = 60.0
 CLOSE_RETRY_MAX_IN_FLIGHT = 4
 CLOSE_METADATA_DEADLINE_SECONDS = 30.0
+# Outside serve, a failed frame renewal waits this long after the failure
+# completes before retrying, instead of a full half-lease, so a transient
+# timeout cannot let the persisted lease lapse. Measured from completion so a
+# slow failure cannot be followed immediately by another stalled attempt.
+SHADOW_RENEWAL_RETRY_SECONDS = 300.0
 # Bound all outstanding writes, including abandoned ones, below pool capacity.
 # Leave one quarter of workers (four by default) for begin/failure markers.
 CLOSE_METADATA_MAX_OUTSTANDING = min(
@@ -389,20 +394,51 @@ class PusherRecordBarrier:
                     late_observation=observed,
                 )
             except Exception:
+                if not lease.token_lease_serving(self.uid):
+                    # Shadow, or serve outside this uid's cohort: the lease is
+                    # observation only and fences nothing, so a failed renewal
+                    # must not hold storage or the audio ACK. Return what the
+                    # off path returns. Back off from the failure's completion,
+                    # so a slow timeout is never followed straight away by
+                    # another stalled attempt, but only briefly rather than a
+                    # full half-lease: retrying well inside the persisted
+                    # expiry keeps a transient timeout from lapsing the lease
+                    # and surfacing as a false late append on the next commit.
+                    half = lease.token_lease_seconds() / 2
+                    failed_at = time.monotonic()
+                    self._stamp_lease(conversation_id, failed_at - half + min(SHADOW_RENEWAL_RETRY_SECONDS, half))
+                    lease_metrics.RENEWAL_FAILURES_SHADOW.inc()
+                    logger.warning('record token lease renewal failed outside serve; storage continues', exc_info=True)
+                    return conversation_id not in self.lease_renewal_failed
                 # Retain/requeue this batch before storage can accept and clear
                 # it. Keep the old clock so the next attempt retries metadata.
                 self.lease_renewal_failed.add(conversation_id)
+                lease_metrics.RENEWAL_FAILURES_SERVE.inc()
                 _record_failure('renew')
                 return False
             if conversation_id not in self.registered_sessions or conversation_id in self.failed_recordings:
-                return False  # A concurrent failed drain already retired local lease ownership.
+                # A concurrent failed drain already retired local lease ownership.
+                # Outside serve, return what the off path returns for that state.
+                return not lease.token_lease_serving(self.uid) and conversation_id not in self.lease_renewal_failed
             if observed.get('late'):
                 self.late_appends.add(conversation_id)
-            if conversation_id not in self.lease_renewed_at:
-                lease_metrics.ACTIVE.inc()
-            self.lease_renewed_at[conversation_id] = now
+            self._stamp_lease(conversation_id, now)
             self.lease_renewal_failed.discard(conversation_id)
             return True
+
+    def _stamp_lease(self, conversation_id, now):
+        """Advance the renewal clock only while this socket still owns the lease.
+
+        The clock key is the ACTIVE gauge ownership marker: _forget_lease
+        decrements exactly when it pops one. A concurrent failed drain may retire
+        ownership while a renewal awaits metadata, so a late stamp must not
+        recreate the key (a later _forget_lease would decrement twice).
+        """
+        if conversation_id not in self.registered_sessions or conversation_id in self.failed_recordings:
+            return
+        if conversation_id not in self.lease_renewed_at:
+            lease_metrics.ACTIVE.inc()
+        self.lease_renewed_at[conversation_id] = now
 
     def append_committed(self, conversation_id, *, observed=True):
         """A successful durable window/object owns the late-append event."""
