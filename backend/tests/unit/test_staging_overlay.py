@@ -401,7 +401,10 @@ def test_full_deploy_preserves_restored_integration_cadence(composer, environmen
     for service, spec in config['cloud_run']['services'].items():
         actual = {key: entry['value'] for key, entry in spec['env'].items() if key in expected}
         # SCA-3120: the prod-only projection pump derives from integration; serving is off there.
-        assert actual == (expected if service in ('backend-integration', 'backend-projection-pump') else {}), service
+        if service == 'backend-integration' and environment == 'prod':
+            assert actual == {**expected, 'BATCH_PIPELINE_SERVING_TICK_SECONDS': '20'}, service
+        else:
+            assert actual == (expected if service in ('backend-integration', 'backend-projection-pump') else {}), service
 
 
 def test_staging_integration_keeps_the_serving_sweep_without_a_pump(composer):
