@@ -22,6 +22,7 @@ The flag ships **off**. Off is the rollback: the close-out keeps counting
 from __future__ import annotations
 
 import logging
+import math
 import time
 import uuid
 from typing import Any, Callable, Mapping
@@ -34,6 +35,7 @@ from config.summary_guarantee import (
     first_week_forced_close_enabled,
     first_week_open,
 )
+from database._client import get_firestore_client
 from models.finalization_owner import python_owns_finalization
 from utils.conversations.summary_delivery import (
     EMPTY_BLOCKED_REASONS,
@@ -269,6 +271,52 @@ def force_one(
     return 'forced', pending
 
 
+CURSOR_DOCUMENT = 'maintenance/first_week_forced_close_v1'
+
+
+def _cursor(value: Any) -> dict[str, Any] | None:
+    """A usable stored bookmark, or None when the document is absent/malformed."""
+    if not isinstance(value, Mapping):
+        return None
+    end, path = value.get('window_end'), value.get('path')
+    if isinstance(end, bool) or not isinstance(end, (int, float)) or not math.isfinite(end):
+        return None
+    parts = path.split('/') if isinstance(path, str) else []
+    if len(parts) != 4 or parts[0] != 'users' or parts[2] != 'conversations' or not parts[1] or not parts[3]:
+        return None
+    return {'window_end': float(end), 'path': path}
+
+
+def _snapshot_cursor(snapshot: Any) -> dict[str, Any] | None:
+    row = snapshot.to_dict() or {}
+    stamp = row.get('first_week_summary')
+    end = stamp.get('window_end_at') if isinstance(stamp, Mapping) else None
+    path = getattr(getattr(snapshot, 'reference', None), 'path', None)
+    return _cursor({'window_end': end, 'path': path})
+
+
+def _read_cursor(client: Any) -> dict[str, Any] | None:
+    """Read the rotation bookmark; a read failure restarts from the earliest window."""
+    try:
+        snapshot = client.document(CURSOR_DOCUMENT).get()
+        return _cursor((snapshot.to_dict() or {}).get('after'))
+    except Exception as error:
+        logger.warning(
+            'event=first_week_forced_close outcome=cursor_read_error exception_type=%s', type(error).__name__
+        )
+        return None
+
+
+def _write_cursor(client: Any, after: dict[str, Any] | None, *, now: float) -> None:
+    """Persist the rotation bookmark; a lost write repeats a page, never skips one."""
+    try:
+        client.document(CURSOR_DOCUMENT).set({'after': after, 'updated_at': now}, merge=True)
+    except Exception as error:
+        logger.warning(
+            'event=first_week_forced_close outcome=cursor_write_error exception_type=%s', type(error).__name__
+        )
+
+
 def tick(
     *,
     now: float | None = None,
@@ -276,7 +324,14 @@ def tick(
     limit: int | None = None,
     wake: Callable[[dict[str, Any]], None] = outbox.wake_row,
 ) -> dict[str, int]:
-    """Force at most the per-tick admissions from one bounded approaching page."""
+    """Force at most the per-tick admissions from one rotating reserve page.
+
+    The page is a keyset rotation, not a fixed prefix: the bookmark advances past
+    every examined row and wraps to the earliest window when the page is
+    exhausted. An already-forced, non-forceable, leased or already-counted row is
+    therefore examined once per rotation and cannot pin the page, so a forceable
+    row behind it is still reached before its window closes.
+    """
     counts = {'examined': 0, 'forced': 0, 'skipped': 0, 'errors': 0, 'disabled': 0}
     if not first_week_forced_close_enabled():
         counts['disabled'] = 1
@@ -287,23 +342,34 @@ def tick(
         return counts
     from database.first_week_queries import approaching_first_week_conversations
 
+    bound = client or get_firestore_client()
     current = time.time() if now is None else now
     admission = first_week_forced_admission_limit()
     page_limit = max(admission, min(RESERVE_PAGE_LIMIT, limit or RESERVE_PAGE_LIMIT))
-    try:
-        page = approaching_first_week_conversations(
-            now=current, until=current + reserve, limit=page_limit, firestore_client=client
+
+    def page_after(after: dict[str, Any] | None) -> list[Any]:
+        return approaching_first_week_conversations(
+            now=current, until=current + reserve, limit=page_limit, after=after, firestore_client=bound
         )
+
+    cursor = _read_cursor(bound)
+    try:
+        page = page_after(cursor)
+        if not page and cursor is not None:
+            # The rotation reached the end: wrap to the earliest remaining window.
+            page = page_after(None)
     except Exception as error:
         counts['errors'] += 1
         logger.warning('event=first_week_forced_close outcome=query_error exception_type=%s', type(error).__name__)
         return counts
     counts['examined'] = len(page)
+    last = None
     for snapshot in page:
         if counts['forced'] >= admission:
             break
+        last = snapshot
         try:
-            disposition, _pending = force_one(snapshot.reference, now=current, client=client, wake=wake)
+            disposition, _pending = force_one(snapshot.reference, now=current, client=bound, wake=wake)
         except Exception as error:
             counts['errors'] += 1
             logger.warning('event=first_week_forced_close outcome=error exception_type=%s', type(error).__name__)
@@ -315,4 +381,7 @@ def tick(
             counts['errors'] += 1
         else:
             counts['skipped'] += 1
+    # A full page resumes after its last row; a short or absent page starts the
+    # next rotation at the earliest window.
+    _write_cursor(bound, _snapshot_cursor(last) if last is not None and len(page) >= page_limit else None, now=current)
     return counts

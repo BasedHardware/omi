@@ -54,6 +54,12 @@ class Ref:
             data = {field: data[field] for field in field_paths if field in data}
         return Snapshot(data, self)
 
+    def set(self, data: dict, merge: bool = False):
+        merged = dict(self.client.rows.get(self.path, {})) if merge else {}
+        merged.update(data)
+        self.data = dict(merged)
+        self.client.rows[self.path] = dict(merged)
+
 
 class Transaction:
     def __init__(self, client):
@@ -81,6 +87,9 @@ class Client:
 
     def collection(self, path: str):
         return Collection(self, path)
+
+    def document(self, path: str):
+        return Ref(self, path)
 
     def transaction(self):
         return Transaction(self)
@@ -298,8 +307,12 @@ def test_a_wake_failure_leaves_durable_due_debt():
 
 
 class PageSnapshot:
-    def __init__(self, reference):
+    def __init__(self, reference, data: dict | None = None):
         self.reference = reference
+        self._data = dict(data or {})
+
+    def to_dict(self) -> dict:
+        return dict(self._data)
 
 
 def _page(client, count):
@@ -366,3 +379,128 @@ def test_tick_skips_a_row_that_is_already_in_a_lane(monkeypatch):
     counts = forced.tick(now=WINDOW_END - HOUR, client=client, wake=lambda _row: None)
     assert counts['forced'] == 0
     assert counts['skipped'] == 1
+
+
+# --- rotation: no row class can pin the reserve page ------------------------
+
+
+class ReserveSnapshot:
+    def __init__(self, reference, data: dict):
+        self.reference = reference
+        self._data = dict(data)
+
+    def to_dict(self) -> dict:
+        return dict(self._data)
+
+
+def _reserve(client, kinds: tuple[str, ...]) -> list[ReserveSnapshot]:
+    """An ordered reserve population as the keyset query would page it."""
+    snapshots = []
+    for index, kind in enumerate(kinds):
+        cid = f'cid{index}'
+        path = f'users/uid/conversations/{cid}'
+        conversation = _conversation(**({'data_protection_level': 'private'} if kind == 'never' else {}))
+        conversation['first_week_summary'] = _stamp(end=WINDOW_END + index)
+        client.rows[path] = conversation
+        row = _parked_row(conversation_id=cid)
+        if kind == 'forced':
+            row['first_week_forced_at'] = PAID + HOUR
+        client.rows[f'{outbox.COLLECTION}/{outbox.key("uid", cid)}'] = row
+        snapshots.append(ReserveSnapshot(Ref(client, path), conversation))
+    return snapshots
+
+
+def _rotating_query(monkeypatch, snapshots: list[ReserveSnapshot], limit: int = 25):
+    """The real keyset contract: order by window end then path, resume after the bookmark."""
+    calls = []
+
+    def query(*, now, until, limit, after=None, firestore_client=None):
+        calls.append(after)
+        if after is None:
+            return snapshots[:limit]
+        return [
+            snapshot
+            for snapshot in snapshots
+            if (snapshot.to_dict()['first_week_summary']['window_end_at'], snapshot.reference.path)
+            > (after['window_end'], after['path'])
+        ][:limit]
+
+    monkeypatch.setattr(first_week_queries, 'approaching_first_week_conversations', query)
+    return calls
+
+
+def test_a_non_forceable_prefix_cannot_pin_the_reserve_page(monkeypatch):
+    """25 never-forceable rows cannot hide the 26th, forceable row for a whole window."""
+    monkeypatch.setenv(guarantee.FIRST_WEEK_FORCED_CLOSE_ENV, 'true')
+    client = Client()
+    population = _reserve(client, ('never',) * 25 + ('forceable',))
+    _rotating_query(monkeypatch, population)
+    sent = []
+
+    first = forced.tick(now=WINDOW_END - HOUR, client=client, wake=sent.append)
+    assert first['examined'] == 25
+    assert first['forced'] == 0
+    assert first['skipped'] == 25
+    assert client.rows[forced.CURSOR_DOCUMENT]['after'] == {
+        'window_end': WINDOW_END + 24,
+        'path': 'users/uid/conversations/cid24',
+    }
+
+    second = forced.tick(now=WINDOW_END - HOUR, client=client, wake=sent.append)
+    assert second['examined'] == 1
+    assert second['forced'] == 1
+    assert len(sent) == 1
+    assert sent[0]['first_week_forced_at'] == WINDOW_END - HOUR
+    assert sent[0]['first_week_forced_policy'] == forced.FORCED_POLICY_ID
+    # A short page restarts the rotation at the earliest window.
+    assert client.rows[forced.CURSOR_DOCUMENT]['after'] is None
+
+
+def test_an_already_forced_prefix_cannot_pin_the_reserve_page(monkeypatch):
+    monkeypatch.setenv(guarantee.FIRST_WEEK_FORCED_CLOSE_ENV, 'true')
+    client = Client()
+    population = _reserve(client, ('forced',) * 25 + ('forceable',))
+    _rotating_query(monkeypatch, population)
+    sent = []
+
+    first = forced.tick(now=WINDOW_END - HOUR, client=client, wake=sent.append)
+    assert (first['forced'], first['skipped']) == (0, 25)
+    second = forced.tick(now=WINDOW_END - HOUR, client=client, wake=sent.append)
+    assert (second['examined'], second['forced']) == (1, 1)
+    assert len(sent) == 1
+
+
+def test_the_rotation_wraps_when_the_bookmark_is_past_the_last_row(monkeypatch):
+    monkeypatch.setenv(guarantee.FIRST_WEEK_FORCED_CLOSE_ENV, 'true')
+    client = Client()
+    population = _reserve(client, ('forceable',))
+    _rotating_query(monkeypatch, population)
+    client.rows[forced.CURSOR_DOCUMENT] = {
+        'after': {'window_end': WINDOW_END + 100, 'path': 'users/uid/conversations/cid9'}
+    }
+    sent = []
+
+    counts = forced.tick(now=WINDOW_END - HOUR, client=client, wake=sent.append)
+    assert counts['forced'] == 1
+    assert len(sent) == 1
+
+
+def test_a_malformed_bookmark_restarts_at_the_earliest_window(monkeypatch):
+    monkeypatch.setenv(guarantee.FIRST_WEEK_FORCED_CLOSE_ENV, 'true')
+    client = Client()
+    population = _reserve(client, ('forceable',))
+    _rotating_query(monkeypatch, population)
+    client.rows[forced.CURSOR_DOCUMENT] = {'after': {'window_end': 'yesterday', 'path': 'maintenance/x'}}
+    sent = []
+
+    counts = forced.tick(now=WINDOW_END - HOUR, client=client, wake=sent.append)
+    assert counts['forced'] == 1
+
+
+def test_the_query_bookmark_is_a_conversation_keyset_only():
+    path = 'users/uid/conversations/cid'
+    assert first_week_queries._keyset_cursor({'window_end': 10.0, 'path': path}) == (10.0, path)
+    assert first_week_queries._keyset_cursor({'window_end': 10.0, 'path': 'maintenance/cursor'}) is None
+    assert first_week_queries._keyset_cursor({'window_end': True, 'path': path}) is None
+    assert first_week_queries._keyset_cursor({'window_end': 10.0}) is None
+    assert first_week_queries._keyset_cursor(None) is None
