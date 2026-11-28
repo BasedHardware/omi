@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import logging
 import wave
+from collections.abc import AsyncIterator
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -38,6 +39,8 @@ logger = logging.getLogger(__name__)
 
 AUDIO_SAMPLE_RATE = 16000
 AUDIO_URLS_POLL_AFTER_MS = 3000
+PCM_FIXED_LENGTH_LIMIT = 32 * 1024 * 1024
+PCM_STREAM_CHUNK_SIZE = 256 * 1024
 
 
 def _has_recording_pieces(conversation: dict[str, Any] | None) -> bool:
@@ -559,6 +562,11 @@ def _get_inline_download_payload(
     return audio_data, "application/octet-stream", "pcm"
 
 
+async def _iter_pcm_chunks(audio_data: bytes, start: int, stop: int) -> AsyncIterator[bytes]:
+    for offset in range(start, stop, PCM_STREAM_CHUNK_SIZE):
+        yield audio_data[offset : min(offset + PCM_STREAM_CHUNK_SIZE, stop)]
+
+
 def _stream_audio_response(
     audio_data: bytes,
     content_type: str,
@@ -571,12 +579,14 @@ def _stream_audio_response(
     filename = f"conversation_{conversation_id}_audio_{audio_file_id}.{extension}"
     file_size = len(audio_data)
 
-    base_headers = {
+    headers = {
         "Content-Disposition": f"attachment; filename={filename}",
         "Accept-Ranges": "bytes",
         "Cache-Control": "public, max-age=3600",
     }
 
+    start, stop = 0, file_size
+    status_code = 200
     if range_header:
         # Parse the range request
         range_tuple = parse_range_header(range_header, file_size)
@@ -586,33 +596,28 @@ def _stream_audio_response(
                 status_code=416,
                 headers={
                     "Content-Range": f"bytes */{file_size}",
-                    **base_headers,
+                    **headers,
                 },
             )
 
         start, end = range_tuple
-        content_length = end - start + 1
+        stop = end + 1
+        status_code = 206
+        headers["Content-Range"] = f"bytes {start}-{end}/{file_size}"
 
-        # Return partial content
-        return StreamingResponse(
-            io.BytesIO(audio_data[start : end + 1]),
-            status_code=206,
-            media_type=content_type,
-            headers={
-                "Content-Length": str(content_length),
-                "Content-Range": f"bytes {start}-{end}/{file_size}",
-                **base_headers,
-            },
-        )
-
+    content_length = stop - start
+    if extension == "pcm" and content_length > PCM_FIXED_LENGTH_LIMIT:
+        # Without Content-Length, Uvicorn uses chunked HTTP/1 framing, which
+        # bypasses Cloud Run's fixed-length response limit.
+        body = _iter_pcm_chunks(audio_data, start, stop)
+    else:
+        headers["Content-Length"] = str(content_length)
+        body = io.BytesIO(audio_data[start:stop])
     return StreamingResponse(
-        io.BytesIO(audio_data),
-        status_code=200,
+        body,
+        status_code=status_code,
         media_type=content_type,
-        headers={
-            "Content-Length": str(file_size),
-            **base_headers,
-        },
+        headers=headers,
     )
 
 
