@@ -57,7 +57,7 @@
     "voice_evidence": "utils/batch_pipeline/artifacts.py verify_voice_retention: soft delete must be 0",
     "lake_forward": "storage-lifecycle/lake-forward.json: versioning disabled and soft delete 0 at creation; data-access audit logs required.",
     "canonical_forward": "storage-lifecycle/FORWARD.md: versioning disabled and soft delete 0 at creation",
-    "declared_caches": "storage-lifecycle/prod.json: merged/ Delete 3 d, playback/ Delete 30 d",
+    "declared_caches": "storage-lifecycle/prod.json: merged/ Delete 3 d, playback/ Delete 30 d, noncurrent merged/ and playback/ Delete 7 d",
     "user_controlled_voice": "David 2026-11-12: raw voice for accounts that stay is retained until the user deletes it; automatic expiry of live source audio is forbidden. Explicit user/account privacy deletion remains allowed."
   },
   "buckets": {
@@ -95,7 +95,7 @@
     "omi-private-cloud-sync": {
       "env": "BUCKET_PRIVATE_CLOUD_SYNC",
       "project": "based-hardware",
-      "note": "2026-11-02: David dropped the existing-stock Coldline-to-Archive proposal (large one-time operation cost); prod.json and validate_storage_lifecycle.py permit only the Coldline transition. The rollout handoff reports only playback Delete 30 d and batch Coldline live. prod.json still declares merged/ Delete 3 d and noncurrent .opus.enc Delete; a prod apply would install both, pending explicit clearance. The new-empty-bucket canonical-forward policy is separate.",
+      "note": "2026-11-24: private-sync prod matches the live merged/playback cache Delete rules. SCA-4225 adds only the 128 KiB floor for the Coldline transition. The historical noncurrent .opus.enc Delete and existing-stock Archive proposals are absent. The new-empty-bucket canonical-forward policy is separate.",
       "protected_prefixes": ["chunks/", "record-wal/"],
       "holds": ["source_audio"],
       "ceiling": {"soft_delete_seconds_max": 0, "retain_until_user_deletes": ["audio-outbox/", "chunks/", "raw-live/", "record-wal/"],
