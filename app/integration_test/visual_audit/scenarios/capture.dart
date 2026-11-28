@@ -22,7 +22,6 @@ import 'package:omi/pages/activity/activity_seen.dart';
 import 'package:omi/pages/episodes/live_episode_page.dart';
 import 'package:omi/pages/home/home_content.dart';
 import 'package:omi/pages/home/widgets/battery_info_widget.dart';
-import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
 import 'package:omi/pages/home/widgets/home_tab_switcher.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
@@ -204,11 +203,9 @@ final auditPendant = BtDevice(id: 'd1', name: 'Omi Device', type: DeviceType.omi
 /// Home as HomePage lays it out: header (device chip, settings), content, the tab bar, and the
 /// [Ask Omi | record] row floating above it.
 /// Mirrors HomePage's layout: the header, the Home | Tasks switcher, Home, and the floating
-/// Ask Omi row. [recaps] feeds the Daily Recaps row (none by default).
+/// Ask Omi row.
 class HomeFrame extends StatelessWidget {
-  const HomeFrame({super.key, this.recaps = _noRecaps, this.tasks, this.activitySeen});
-
-  final RecentRecapsLoader recaps;
+  const HomeFrame({super.key, this.tasks, this.activitySeen});
 
   /// The bell's state; null uses the app's.
   final ActivitySeen? activitySeen;
@@ -254,7 +251,7 @@ class HomeFrame extends StatelessWidget {
       body: Stack(children: [
         Column(children: [
           HomeTabSwitcher(onTabTap: (_, __) {}),
-          Expanded(child: tasks ?? HomeContentPage(loadRecaps: recaps)),
+          Expanded(child: tasks ?? const HomeContentPage()),
         ]),
         if (tasks == null) const HomeChatBarBackdrop(),
         if (tasks == null)
@@ -299,7 +296,7 @@ Future<void> _runHome(
   await a.shot(action);
 }
 
-/// Home's feed: two recaps and five conversations, with the capture card in [live]'s state.
+/// Home's list: five conversations, with the live row in [live]'s state.
 Future<void> _runFeed(AuditRun a, {AuditLive live = AuditLive.idle}) async {
   final now = DateTime.now();
   ServerConversation convo(String id, String title, String emoji, DateTime at, int minutes) => ServerConversation(
@@ -325,27 +322,7 @@ Future<void> _runFeed(AuditRun a, {AuditLive live = AuditLive.idle}) async {
   )
     ..conversations = items
     ..groupConversationsByDate();
-  final recaps = [
-    DailySummary(
-      id: 'r1',
-      date: today.subtract(const Duration(days: 1)).toIso8601String().substring(0, 10),
-      createdAt: today,
-      headline: 'Rewrite, equity, and product polish dominated',
-      overview: 'Most of the day went to the v5 rewrite plan and a long equity conversation, '
-          'with a late push on the mobile polish list.',
-      dayEmoji: '🛠️',
-      stats: DayStats(totalConversations: 6, actionItemsCount: 2),
-    ),
-    DailySummary(
-      id: 'r2',
-      date: today.subtract(const Duration(days: 2)).toIso8601String().substring(0, 10),
-      createdAt: today,
-      headline: 'Omi Reliability Talk on Stage',
-      overview: '',
-      stats: DayStats(totalConversations: 4, actionItemsCount: 1),
-    ),
-  ];
-  await a.pump(HomeFrame(recaps: () async => (items: recaps, ok: true)), scaffold: false, providers: [
+  await a.pump(const HomeFrame(), scaffold: false, providers: [
     ChangeNotifierProvider<DeviceProvider>.value(
         value: live == AuditLive.idle
             ? AuditDeviceProvider()
@@ -428,17 +405,17 @@ const _live = 'lib/pages/episodes/live_episode_page.dart (LiveEpisodePage)';
 final captureScenarios = <AuditScenario>[
   AuditScenario(
     id: 'home-feed',
-    title: 'Home: daily recaps, then every conversation',
+    title: 'Home: every conversation, newest first',
     page: _home,
-    state: 'Two recaps; five conversations across today, yesterday and last week; nothing recording; '
+    state: 'Five conversations across today, yesterday and last week; nothing recording; '
         'one recording waiting to transcribe',
     run: (a) => _runFeed(a),
   ),
   AuditScenario(
     id: 'home-feed-live',
-    title: 'Home while the pendant records: live card, recaps, conversations',
+    title: 'Home while the pendant records: live row, then conversations',
     page: _home,
-    state: 'Pendant connected and recording; two recaps; five conversations; one recording waiting',
+    state: 'Pendant connected and recording; five conversations; one recording waiting',
     run: (a) => _runFeed(a, live: AuditLive.pendant),
   ),
   AuditScenario(

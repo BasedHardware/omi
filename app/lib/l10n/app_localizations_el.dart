@@ -14901,12 +14901,6 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String get dailyRecapsOnHome => 'Ημερήσιες περιλήψεις στην Αρχική';
-
-  @override
-  String get dailyRecapsOnHomeDescription => 'Εμφάνιση των πιο πρόσφατων περιλήψεων στην κορυφή της Αρχικής.';
-
-  @override
   String get yearlySwitchTitle => 'Μετάβαση σε ετήσιο';
 
   @override
@@ -14974,17 +14968,6 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get homeStepTranscribing => 'Μεταγραφή…';
-
-  @override
-  String homeRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count εγγραφές',
-      one: '$count εγγραφή',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get episodeWritingNotesDetail => 'Πρώτα ολοκληρώνεται η απομαγνητοφώνηση. Μπορείς να φύγεις από τη σελίδα.';
@@ -15950,4 +15933,55 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'Κάντε επανεκκίνηση του Omi για να ανανεωθεί η ένδειξη';
+
+  @override
+  String homeLockedTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ηχογραφήσεις σε αναμονή',
+      one: '1 ηχογράφηση σε αναμονή',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeLockedSubtitle => 'Ασφαλώς αποθηκευμένη · ξεκλειδώστε για ανάγνωση';
+
+  @override
+  String get homeLockedSubtitleNoPlans => 'Ασφαλώς αποθηκευμένη μέχρι να ανανεωθεί το όριό σας';
+
+  @override
+  String get homeTakingLonger => 'Αργεί περισσότερο από το συνηθισμένο';
+
+  @override
+  String get homeFinishingOpensWhenReady => 'Ανοίγει μόλις είναι έτοιμη';
+
+  @override
+  String get activityOnThisPhone => 'Σε αυτό το τηλέφωνο';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ηχογραφήσεις, αποθηκευμένες μόνο σε αυτό το τηλέφωνο',
+      one: '1 ηχογράφηση, αποθηκευμένη μόνο σε αυτό το τηλέφωνο',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'Μεταγραφή όλων';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return 'Δεν ολοκληρώθηκε η «$title»';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'Δεν ολοκληρώθηκε μια συνομιλία';
+
+  @override
+  String get homeRecordingCouldNotSend => 'Δεν ήταν δυνατή η αποστολή μιας ηχογράφησης';
 }

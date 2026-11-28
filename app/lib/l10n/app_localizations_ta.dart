@@ -14905,12 +14905,6 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
-  String get dailyRecapsOnHome => 'முகப்பில் தினசரி சுருக்கங்கள்';
-
-  @override
-  String get dailyRecapsOnHomeDescription => 'முகப்பின் மேலே உங்கள் சமீபத்திய சுருக்கங்களைக் காட்டு.';
-
-  @override
   String get yearlySwitchTitle => 'ஆண்டுக்கு மாறவும்';
 
   @override
@@ -14978,17 +14972,6 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get homeStepTranscribing => 'படியெடுக்கப்படுகிறது…';
-
-  @override
-  String homeRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count பதிவுகள்',
-      one: '$count பதிவு',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get episodeWritingNotesDetail => 'முதலில் படியெடுப்பை முடிக்கிறோம். இந்தப் பக்கத்தை விட்டு வெளியேறலாம்.';
@@ -15953,4 +15936,55 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'புதுப்பிக்க Omi ஐ மறுதொடக்கம் செய்யவும்';
+
+  @override
+  String homeLockedTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count பதிவுகள் காத்திருக்கின்றன',
+      one: '1 பதிவு காத்திருக்கிறது',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeLockedSubtitle => 'பாதுகாப்பாகச் சேமிக்கப்பட்டது · படிக்கத் திறக்கவும்';
+
+  @override
+  String get homeLockedSubtitleNoPlans => 'உங்கள் வரம்பு புதுப்பிக்கப்படும் வரை பாதுகாப்பாகச் சேமிக்கப்பட்டிருக்கும்';
+
+  @override
+  String get homeTakingLonger => 'வழக்கத்திற்கு மாறாக அதிக நேரம் எடுக்கிறது';
+
+  @override
+  String get homeFinishingOpensWhenReady => 'தயாரானதும் உடனே திறக்கும்';
+
+  @override
+  String get activityOnThisPhone => 'இந்த ஃபோனில்';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count பதிவுகள், இந்த ஃபோனில் மட்டும் சேமிக்கப்பட்டுள்ளன',
+      one: '1 பதிவு, இந்த ஃபோனில் மட்டும் சேமிக்கப்பட்டுள்ளது',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'அனைத்தையும் டிரான்ஸ்கிரைப் செய்யவும்';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return '“$title” முடிக்க முடியவில்லை';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'ஒரு உரையாடலை முடிக்க முடியவில்லை';
+
+  @override
+  String get homeRecordingCouldNotSend => 'ஒரு பதிவை அனுப்ப முடியவில்லை';
 }

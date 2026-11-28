@@ -14851,12 +14851,6 @@ class AppLocalizationsKn extends AppLocalizations {
   }
 
   @override
-  String get dailyRecapsOnHome => 'ಮುಖಪುಟದಲ್ಲಿ ದೈನಿಕ ಸಾರಾಂಶಗಳು';
-
-  @override
-  String get dailyRecapsOnHomeDescription => 'ಮುಖಪುಟದ ಮೇಲ್ಭಾಗದಲ್ಲಿ ನಿಮ್ಮ ಇತ್ತೀಚಿನ ಸಾರಾಂಶಗಳನ್ನು ತೋರಿಸಿ.';
-
-  @override
   String get yearlySwitchTitle => 'ವಾರ್ಷಿಕಕ್ಕೆ ಬದಲಿಸಿ';
 
   @override
@@ -14924,17 +14918,6 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get homeStepTranscribing => 'ಪ್ರತಿಲೇಖನ ಮಾಡಲಾಗುತ್ತಿದೆ…';
-
-  @override
-  String homeRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು',
-      one: '1 ರೆಕಾರ್ಡಿಂಗ್',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get episodeWritingNotesDetail => 'ಮೊದಲು ಪ್ರತಿಲೇಖನ ಮುಗಿಸಲಾಗುತ್ತಿದೆ. ನೀವು ಈ ಪುಟದಿಂದ ಹೊರಡಬಹುದು.';
@@ -15897,4 +15880,55 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'ರಿಫ್ರೆಶ್ ಮಾಡಲು Omi ಅನ್ನು ಮರುಪ್ರಾರಂಭ ಮಾಡಿ';
+
+  @override
+  String homeLockedTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ನಿರೀಕ್ಷೆಯಲ್ಲಿವೆ',
+      one: '1 ರೆಕಾರ್ಡಿಂಗ್ ನಿರೀಕ್ಷೆಯಲ್ಲಿದೆ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeLockedSubtitle => 'ಸುರಕ್ಷಿತವಾಗಿ ಇರಿಸಲಾಗಿದೆ · ಓದಲು ಅನ್‌ಲಾಕ್ ಮಾಡಿ';
+
+  @override
+  String get homeLockedSubtitleNoPlans => 'ನಿಮ್ಮ ಮಿತಿ ಮರುಹೊಂದಿಸುವವರೆಗೆ ಸುರಕ್ಷಿತವಾಗಿ ಇರಿಸಲಾಗಿದೆ';
+
+  @override
+  String get homeTakingLonger => 'ಸಾಮಾನ್ಯಕ್ಕಿಂತ ಹೆಚ್ಚು ಸಮಯ ತೆಗೆದುಕೊಳ್ಳುತ್ತಿದೆ';
+
+  @override
+  String get homeFinishingOpensWhenReady => 'ಸಿದ್ಧವಾದ ತಕ್ಷಣ ತೆರೆಯುತ್ತದೆ';
+
+  @override
+  String get activityOnThisPhone => 'ಈ ಫೋನ್‌ನಲ್ಲಿ';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು, ಈ ಫೋನ್‌ನಲ್ಲಿ ಮಾತ್ರ ಸಂಗ್ರಹಿಸಲಾಗಿದೆ',
+      one: '1 ರೆಕಾರ್ಡಿಂಗ್, ಈ ಫೋನ್‌ನಲ್ಲಿ ಮಾತ್ರ ಸಂಗ್ರಹಿಸಲಾಗಿದೆ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'ಎಲ್ಲವನ್ನೂ ಟ್ರಾನ್ಸ್‌ಕ್ರೈಬ್ ಮಾಡಿ';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return '“$title” ಪೂರ್ಣಗೊಳಿಸಲಾಗಲಿಲ್ಲ';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'ಸಂವಾದವನ್ನು ಪೂರ್ಣಗೊಳಿಸಲಾಗಲಿಲ್ಲ';
+
+  @override
+  String get homeRecordingCouldNotSend => 'ರೆಕಾರ್ಡಿಂಗ್ ಅನ್ನು ಕಳುಹಿಸಲಾಗಲಿಲ್ಲ';
 }

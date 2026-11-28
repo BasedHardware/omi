@@ -14785,12 +14785,6 @@ class AppLocalizationsHi extends AppLocalizations {
   }
 
   @override
-  String get dailyRecapsOnHome => 'होम पर दैनिक सारांश';
-
-  @override
-  String get dailyRecapsOnHomeDescription => 'होम के ऊपर अपने नवीनतम सारांश दिखाएं।';
-
-  @override
   String get yearlySwitchTitle => 'सालाना पर स्विच करें';
 
   @override
@@ -14858,17 +14852,6 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get homeStepTranscribing => 'ट्रांस्क्राइब हो रहा है…';
-
-  @override
-  String homeRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count रिकॉर्डिंग',
-      one: '1 रिकॉर्डिंग',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get episodeWritingNotesDetail => 'पहले ट्रांसक्रिप्ट पूरी हो रही है। आप यह पेज छोड़ सकते हैं।';
@@ -15827,4 +15810,55 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'रीफ़्रेश करने के लिए Omi पुनः प्रारंभ करें';
+
+  @override
+  String homeLockedTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count रिकॉर्डिंग प्रतीक्षा पर हैं',
+      one: '1 रिकॉर्डिंग प्रतीक्षा पर है',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeLockedSubtitle => 'सुरक्षित रखी गई · पढ़ने के लिए अनलॉक करें';
+
+  @override
+  String get homeLockedSubtitleNoPlans => 'आपकी सीमा रीसेट होने तक सुरक्षित रखी गई';
+
+  @override
+  String get homeTakingLonger => 'सामान्य से ज़्यादा समय लग रहा है';
+
+  @override
+  String get homeFinishingOpensWhenReady => 'तैयार होते ही खुल जाएगी';
+
+  @override
+  String get activityOnThisPhone => 'इस फ़ोन पर';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count रिकॉर्डिंग, केवल इस फ़ोन पर सहेजी गईं',
+      one: '1 रिकॉर्डिंग, केवल इस फ़ोन पर सहेजी गई',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'सभी ट्रांसक्राइब करें';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return '“$title” पूरा नहीं हो सका';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'एक बातचीत पूरी नहीं हो सकी';
+
+  @override
+  String get homeRecordingCouldNotSend => 'एक रिकॉर्डिंग नहीं भेजी जा सकी';
 }

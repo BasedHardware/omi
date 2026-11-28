@@ -14836,12 +14836,6 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
-  String get dailyRecapsOnHome => 'Штодзённыя рэзюмэ на галоўнай';
-
-  @override
-  String get dailyRecapsOnHomeDescription => 'Паказваць апошнія рэзюмэ ўверсе галоўнай.';
-
-  @override
   String get yearlySwitchTitle => 'Перайсці на гадавы';
 
   @override
@@ -14909,19 +14903,6 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get homeStepTranscribing => 'Расшыфроўваем…';
-
-  @override
-  String homeRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count запісу',
-      many: '$count запісаў',
-      few: '$count запісы',
-      one: '$count запіс',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get episodeWritingNotesDetail => 'Спачатку завяршаем транскрыпцыю. Можаце пакінуць гэту старонку.';
@@ -15880,4 +15861,55 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'Перазагрузіце Omi, каб абнавіць паказанне';
+
+  @override
+  String homeLockedTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count запісаў чакаюць',
+      one: '1 запіс чакае',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeLockedSubtitle => 'Надзейна захавана · разблакуйце, каб прачытаць';
+
+  @override
+  String get homeLockedSubtitleNoPlans => 'Надзейна захавана, пакуль не абновіцца ваш ліміт';
+
+  @override
+  String get homeTakingLonger => 'Займае больш часу, чым звычайна';
+
+  @override
+  String get homeFinishingOpensWhenReady => 'Адкрыецца, як толькі будзе гатовая';
+
+  @override
+  String get activityOnThisPhone => 'На гэтым тэлефоне';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count запісаў, захоўваюцца толькі на гэтым тэлефоне',
+      one: '1 запіс, захоўваецца толькі на гэтым тэлефоне',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'Транскрыбаваць усе';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return 'Не ўдалося завяршыць «$title»';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'Не ўдалося завяршыць размову';
+
+  @override
+  String get homeRecordingCouldNotSend => 'Не ўдалося адправіць запіс';
 }

@@ -11,9 +11,7 @@
     "app/test/unit/episode_provider_test.dart",
     "app/test/providers/conversation_provider_cache_restore_test.dart",
     "app/test/unit/home_one_processing_row_test.dart",
-    "app/test/widgets/home_processing_pending_row_test.dart",
-    "app/test/widgets/episode_page_delete_test.dart",
-    "app/test/widgets/home_row_contract_render_test.dart"
+    "app/test/widgets/episode_page_delete_test.dart"
   ],
   "evidence_prs": [],
   "scope_hints": [

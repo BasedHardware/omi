@@ -14803,12 +14803,6 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String get dailyRecapsOnHome => 'Tóm tắt hàng ngày trên Trang chủ';
-
-  @override
-  String get dailyRecapsOnHomeDescription => 'Hiển thị các tóm tắt mới nhất ở đầu Trang chủ.';
-
-  @override
   String get yearlySwitchTitle => 'Chuyển sang gói năm';
 
   @override
@@ -14876,16 +14870,6 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get homeStepTranscribing => 'Đang chép lời…';
-
-  @override
-  String homeRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count bản ghi âm',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get episodeWritingNotesDetail => 'Đang hoàn tất bản chép trước. Bạn có thể rời trang này.';
@@ -15846,4 +15830,55 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'Khởi động lại Omi để làm mới';
+
+  @override
+  String homeLockedTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count bản ghi âm đang chờ',
+      one: '1 bản ghi âm đang chờ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeLockedSubtitle => 'Được lưu an toàn · Mở khóa để đọc';
+
+  @override
+  String get homeLockedSubtitleNoPlans => 'Được lưu an toàn cho đến khi hạn mức của bạn được đặt lại';
+
+  @override
+  String get homeTakingLonger => 'Mất lâu hơn bình thường';
+
+  @override
+  String get homeFinishingOpensWhenReady => 'Sẽ mở ngay khi sẵn sàng';
+
+  @override
+  String get activityOnThisPhone => 'Trên điện thoại này';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count bản ghi âm, chỉ được lưu trên điện thoại này',
+      one: '1 bản ghi âm, chỉ được lưu trên điện thoại này',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'Chép lời tất cả';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return 'Không thể hoàn tất “$title”';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'Không thể hoàn tất một cuộc trò chuyện';
+
+  @override
+  String get homeRecordingCouldNotSend => 'Không thể gửi một bản ghi âm';
 }

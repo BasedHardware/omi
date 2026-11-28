@@ -14796,12 +14796,6 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
-  String get dailyRecapsOnHome => 'خلاصه‌های روزانه در خانه';
-
-  @override
-  String get dailyRecapsOnHomeDescription => 'نمایش جدیدترین خلاصه‌ها در بالای صفحه خانه.';
-
-  @override
   String get yearlySwitchTitle => 'تغییر به سالانه';
 
   @override
@@ -14869,16 +14863,6 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get homeStepTranscribing => 'در حال رونویسی…';
-
-  @override
-  String homeRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count ضبط',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get episodeWritingNotesDetail => 'اول متن را کامل می‌کنیم. می‌توانید این صفحه را ترک کنید.';
@@ -15838,4 +15822,55 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'برای بازخوانی، Omi را دوباره راه‌اندازی کنید';
+
+  @override
+  String homeLockedTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ضبط در انتظار',
+      one: '1 ضبط در انتظار',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeLockedSubtitle => 'ایمن نگهداری شده · برای خواندن باز کنید';
+
+  @override
+  String get homeLockedSubtitleNoPlans => 'ایمن نگهداری شده تا زمان تمدید سهمیه شما';
+
+  @override
+  String get homeTakingLonger => 'بیشتر از معمول طول می‌کشد';
+
+  @override
+  String get homeFinishingOpensWhenReady => 'به محض آماده شدن باز می‌شود';
+
+  @override
+  String get activityOnThisPhone => 'روی این گوشی';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ضبط، فقط روی این گوشی ذخیره شده‌اند',
+      one: '1 ضبط، فقط روی این گوشی ذخیره شده',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'همه را رونویسی کنید';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return '«$title» کامل نشد';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'یک گفتگو کامل نشد';
+
+  @override
+  String get homeRecordingCouldNotSend => 'یک ضبط ارسال نشد';
 }

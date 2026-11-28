@@ -14865,12 +14865,6 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String get dailyRecapsOnHome => 'Recapitulări zilnice pe Acasă';
-
-  @override
-  String get dailyRecapsOnHomeDescription => 'Afișează cele mai noi recapitulări în partea de sus a ecranului Acasă.';
-
-  @override
   String get yearlySwitchTitle => 'Treci la anual';
 
   @override
@@ -14938,18 +14932,6 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get homeStepTranscribing => 'Se transcrie…';
-
-  @override
-  String homeRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count de înregistrări',
-      few: '$count înregistrări',
-      one: '$count înregistrare',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get episodeWritingNotesDetail => 'Mai întâi terminăm transcrierea. Poți părăsi această pagină.';
@@ -15911,4 +15893,55 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'Repornește Omi pentru a actualiza valoarea';
+
+  @override
+  String homeLockedTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count înregistrări în așteptare',
+      one: '1 înregistrare în așteptare',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeLockedSubtitle => 'Păstrate în siguranță · deblochează pentru a citi';
+
+  @override
+  String get homeLockedSubtitleNoPlans => 'Păstrate în siguranță până la reînnoirea limitei';
+
+  @override
+  String get homeTakingLonger => 'Durează mai mult decât de obicei';
+
+  @override
+  String get homeFinishingOpensWhenReady => 'Se deschide imediat ce este gata';
+
+  @override
+  String get activityOnThisPhone => 'Pe acest telefon';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count înregistrări, păstrate doar pe acest telefon',
+      one: '1 înregistrare, păstrată doar pe acest telefon',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'Transcrie tot';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return 'Nu s-a putut finaliza „$title”';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'Nu s-a putut finaliza o conversație';
+
+  @override
+  String get homeRecordingCouldNotSend => 'Nu s-a putut trimite o înregistrare';
 }

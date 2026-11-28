@@ -18063,14 +18063,6 @@
             }
         }
     },
-    "dailyRecapsOnHome": "Daily Recaps on Home",
-    "@dailyRecapsOnHome": {
-        "description": "Developer Settings toggle title: show the Daily Recaps row on Home"
-    },
-    "dailyRecapsOnHomeDescription": "Show your latest recaps at the top of Home.",
-    "@dailyRecapsOnHomeDescription": {
-        "description": "Subtitle for the Daily Recaps on Home toggle in Developer Settings"
-    },
     "yearlySwitchTitle": "Switch to Yearly",
     "@yearlySwitchTitle": {
         "description": "Title of the sheet, row and button that switch a monthly subscription to the same plan billed yearly"
@@ -18182,15 +18174,6 @@
     "homeStepTranscribing": "Transcribing…",
     "@homeStepTranscribing": {
         "description": "Home processing row subtitle while a recording is being transcribed."
-    },
-    "homeRecordingsCount": "{count, plural, =1{1 recording} other{{count} recordings}}",
-    "@homeRecordingsCount": {
-        "description": "Home processing row subtitle giving how many recordings one row stands for.",
-        "placeholders": {
-            "count": {
-                "type": "int"
-            }
-        }
     },
     "episodeWritingNotesDetail": "Finishing the transcript first. You can leave this page.",
     "@episodeWritingNotesDetail": {
@@ -19364,5 +19347,64 @@
     "batteryRestartToRefresh": "Restart Omi to refresh",
     "@batteryRestartToRefresh": {
         "description": "Short caption under the Battery value (shown as a dash) in Omi device settings when the pendant's near-empty battery reading looks stuck after charging. Tells the user that restarting the Omi pendant refreshes the reading. Omi is the product name; keep it untranslated."
+    },
+    "homeLockedTitle": "{count, plural, =1{1 recording waiting} other{{count} recordings waiting}}",
+    "@homeLockedTitle": {
+        "description": "Title of the one Home row that stands for everything over the plan's limit on a day: locked conversations and held recordings together, so the noun is 'recording' for both. {count} is how many.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "homeLockedSubtitle": "Kept safe · unlock to read",
+    "@homeLockedSubtitle": {
+        "description": "Second line of the Home row for conversations over the plan's limit; the row has an Unlock button that opens the plans."
+    },
+    "homeLockedSubtitleNoPlans": "Kept safe until your allowance resets",
+    "@homeLockedSubtitleNoPlans": {
+        "description": "Second line of the Home row for conversations over the plan's limit, on a build that sells no plan (no Unlock button)."
+    },
+    "homeTakingLonger": "Taking longer than usual",
+    "@homeTakingLonger": {
+        "description": "Status line on a Home row whose transcription or summary has been running much longer than normal. Shown instead of 'Transcribing…' or 'Writing summary…'."
+    },
+    "homeFinishingOpensWhenReady": "Opens as soon as it's ready",
+    "@homeFinishingOpensWhenReady": {
+        "description": "Short toast when the reader taps the 'Finishing up…' Home row before the conversation they just ended exists on the server."
+    },
+    "activityOnThisPhone": "On this phone",
+    "@activityOnThisPhone": {
+        "description": "Section header in Activity listing recordings kept only on this phone: waiting to be transcribed, or ones that could not be sent. Shown in capitals like the other Activity headers."
+    },
+    "activityOnThisPhoneSummary": "{count, plural, =1{1 recording, kept only on this phone} other{{count} recordings, kept only on this phone}}",
+    "@activityOnThisPhoneSummary": {
+        "description": "Line under the 'On this phone' header in Activity: how many recordings exist only on this phone (the audio has not reached Omi's servers yet). {count} is how many.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "activityTranscribeAll": "Transcribe all",
+    "@activityTranscribeAll": {
+        "description": "Button beside the 'On this phone' header in Activity: sends every waiting recording to be transcribed."
+    },
+    "homeRowCouldNotFinish": "Couldn't finish “{title}”",
+    "@homeRowCouldNotFinish": {
+        "description": "Short toast on Home when a conversation the reader was looking at fails and moves from Home to Activity. {title} is the conversation's title. A 'View' button opens Activity.",
+        "placeholders": {
+            "title": {
+                "type": "String"
+            }
+        }
+    },
+    "homeRowCouldNotFinishUntitled": "A conversation couldn't finish",
+    "@homeRowCouldNotFinishUntitled": {
+        "description": "Short toast on Home when an untitled conversation the reader was looking at fails and moves to Activity. A 'View' button opens Activity."
+    },
+    "homeRecordingCouldNotSend": "A recording couldn't be sent",
+    "@homeRecordingCouldNotSend": {
+        "description": "Short toast on Home when a recording from this phone fails to upload and moves from Home to Activity. A 'View' button opens Activity."
     }
 }

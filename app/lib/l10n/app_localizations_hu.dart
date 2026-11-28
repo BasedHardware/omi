@@ -14861,12 +14861,6 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String get dailyRecapsOnHome => 'Napi összefoglalók a Kezdőlapon';
-
-  @override
-  String get dailyRecapsOnHomeDescription => 'A legújabb összefoglalók megjelenítése a Kezdőlap tetején.';
-
-  @override
   String get yearlySwitchTitle => 'Váltás éves fizetésre';
 
   @override
@@ -14934,17 +14928,6 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get homeStepTranscribing => 'Átírás folyamatban…';
-
-  @override
-  String homeRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count felvétel',
-      one: '1 felvétel',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get episodeWritingNotesDetail => 'Először befejezzük az átiratot. Elhagyhatod ezt az oldalt.';
@@ -15903,4 +15886,55 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'Indítsa újra az Omit a frissítéshez';
+
+  @override
+  String homeLockedTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count felvétel várakozik',
+      one: '1 felvétel várakozik',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeLockedSubtitle => 'Biztonságban tárolva · olvasáshoz oldd fel';
+
+  @override
+  String get homeLockedSubtitleNoPlans => 'Biztonságban tárolva, amíg a kereted vissza nem áll';
+
+  @override
+  String get homeTakingLonger => 'Szokásosnál tovább tart';
+
+  @override
+  String get homeFinishingOpensWhenReady => 'Megnyílik, amint elkészül';
+
+  @override
+  String get activityOnThisPhone => 'Ezen a telefonon';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count felvétel, csak ezen a telefonon tárolva',
+      one: '1 felvétel, csak ezen a telefonon tárolva',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'Összes felvétel átírása';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return 'Nem sikerült befejezni: „$title”';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'Nem sikerült befejezni egy beszélgetést';
+
+  @override
+  String get homeRecordingCouldNotSend => 'Nem sikerült elküldeni egy felvételt';
 }

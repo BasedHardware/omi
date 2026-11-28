@@ -64,6 +64,34 @@ void main() {
         await provider.forceRefreshConversations();
 
         expect(provider.processingConversations.map((row) => row.id), homeStep == 'failed' ? isEmpty : ['c1']);
+        // A failure leaves the processing list for the conversation list, where Activity lists it with
+        // Try Again: Home no longer shows failed rows (SCA-5226), so it must not vanish from both.
+        if (homeStep == 'failed') {
+          expect(provider.conversations.map((row) => row.id), ['c1']);
+          expect(homeStepOf(provider.conversations.single), HomeStep.failed);
+        }
+      });
+    }
+
+    for (final read in ['fetch', 'recent']) {
+      test('${status.name} probe with a failed Home step keeps the row listable after a $read read', () async {
+        final provider = ConversationProvider(
+          conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
+          conversationLifecycleFetcher: (_) async =>
+              (item: _conversation('c1', status: status, homeStep: 'failed'), ok: true),
+          isSignedIn: () => true,
+        );
+        addTearDown(provider.dispose);
+        provider.addProcessingConversation(_conversation('c1', status: status));
+
+        if (read == 'fetch') {
+          await provider.fetchConversations();
+        } else {
+          await provider.refreshRecentConversations(DateTime.now().subtract(const Duration(days: 1)));
+        }
+
+        expect(provider.processingConversations, isEmpty);
+        expect(provider.conversations.map((row) => row.id), ['c1'], reason: 'Activity lists it from here');
       });
     }
 

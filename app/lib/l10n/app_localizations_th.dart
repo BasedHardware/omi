@@ -14729,12 +14729,6 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String get dailyRecapsOnHome => 'สรุปรายวันในหน้าหลัก';
-
-  @override
-  String get dailyRecapsOnHomeDescription => 'แสดงสรุปล่าสุดของคุณที่ด้านบนของหน้าหลัก';
-
-  @override
   String get yearlySwitchTitle => 'เปลี่ยนเป็นรายปี';
 
   @override
@@ -14802,16 +14796,6 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get homeStepTranscribing => 'กำลังถอดเสียง…';
-
-  @override
-  String homeRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'บันทึก $count รายการ',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get episodeWritingNotesDetail => 'กำลังทำบทถอดความให้เสร็จก่อน คุณออกจากหน้านี้ได้';
@@ -15770,4 +15754,55 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'รีสตาร์ท Omi เพื่อรีเฟรช';
+
+  @override
+  String homeLockedTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'มีการบันทึก $count รายการรออยู่',
+      one: 'มีการบันทึก 1 รายการรออยู่',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeLockedSubtitle => 'เก็บไว้อย่างปลอดภัย · ปลดล็อกเพื่ออ่าน';
+
+  @override
+  String get homeLockedSubtitleNoPlans => 'เก็บไว้อย่างปลอดภัยจนกว่าโควตาของคุณจะรีเซ็ต';
+
+  @override
+  String get homeTakingLonger => 'ใช้เวลานานกว่าปกติ';
+
+  @override
+  String get homeFinishingOpensWhenReady => 'จะเปิดทันทีที่พร้อม';
+
+  @override
+  String get activityOnThisPhone => 'ในเครื่องนี้';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count การบันทึก, เก็บไว้ในเครื่องนี้เท่านั้น',
+      one: '1 การบันทึก, เก็บไว้ในเครื่องนี้เท่านั้น',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'ถอดเสียงทั้งหมด';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return '“$title” ประมวลผลไม่สำเร็จ';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'บทสนทนาประมวลผลไม่สำเร็จ';
+
+  @override
+  String get homeRecordingCouldNotSend => 'ส่งการบันทึกไม่สำเร็จ';
 }

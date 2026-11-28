@@ -1,5 +1,7 @@
 import 'package:flutter/widgets.dart';
 
+import 'package:clock/clock.dart' as clock_package;
+
 import 'package:intl/intl.dart';
 
 import 'package:omi/l10n/app_localizations.dart';
@@ -31,7 +33,8 @@ class OmiDateFormat {
     DateTime Function()? clock,
   })  : localeName = resolveIntlLocale(locale),
         _l10n = l10n,
-        _clock = clock ?? DateTime.now;
+        // The ambient clock (the system's outside tests), so "Today" agrees with everything else.
+        _clock = clock ?? clock_package.clock.now;
 
   /// Reads the app locale, its strings and the device's 24-hour setting from [context].
   factory OmiDateFormat.of(BuildContext context) {

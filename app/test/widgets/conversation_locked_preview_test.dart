@@ -7,6 +7,9 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/models/subscription.dart';
+import 'package:omi/pages/conversations/home/home_locked_row.dart';
+import 'package:omi/pages/conversations/home/home_model.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
@@ -171,113 +174,61 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('consecutive locked rows share one frosted card and one upgrade action', (tester) async {
-    final routes = _Routes();
-    final run = [
-      for (var i = 0; i < 3; i++)
-        ServerConversation(
-          id: 'locked-$i',
-          createdAt: DateTime.utc(2020, 1, 1, 12 - i),
-          structured: Structured('$_title $i', 'Overview', emoji: '📝'),
-          isLocked: true,
-        ),
-    ];
-    await pumpRow(
-      tester,
-      observer: routes,
-      body: LockedConversationRun(conversations: run, date: run.first.createdAt),
-    );
-
-    expect(find.byType(OmiLockedPreview), findsOneWidget);
-    expect(find.text(_upgrade), findsOneWidget);
-    for (final conversation in run) {
-      expect(
-        find.descendant(of: find.byType(ImageFiltered), matching: find.text(conversation.structured.title)),
-        findsOneWidget,
+  HomeLockedRow lockedDay(int conversations, {int held = 0}) => HomeLockedRow(
+        day: DateTime(2020, 1, 1),
+        conversations: [
+          for (var i = 0; i < conversations; i++)
+            ServerConversation(
+              id: 'locked-$i',
+              createdAt: DateTime.utc(2020, 1, 1, 12 - i),
+              structured: Structured('$_title $i', 'Overview', emoji: '📝'),
+              isLocked: true,
+            ),
+        ],
+        held: [
+          for (var i = 0; i < held; i++) HeldAudioRecording(id: 'held-$i', startedAt: 1577872800 + i, seconds: 60)
+        ],
       );
-    }
-    await tester.tap(find.byKey(const Key('locked_preview_action')));
-    expect(routes.pushed, hasLength(2));
-    expect(routes.pushed.last, isA<OmiSheetRoute>());
+
+  testWidgets('a day over the plan is one row: its count, and one Unlock that opens the plans', (tester) async {
+    usage.dispose();
+    usage = _Usage(true);
+    final routes = _Routes();
+    await pumpRow(tester, observer: routes, body: HomeLockedRowView(row: lockedDay(3, held: 2)));
+    expect(find.text('5 recordings waiting'), findsOneWidget);
+    expect(find.text('Kept safe · unlock to read'), findsOneWidget);
+    // No titles leak from behind the lock.
+    expect(find.textContaining(_title), findsNothing);
+    final before = routes.pushed.length;
+    await tester.tap(find.text('Unlock'));
+    await tester.pump();
+    expect(routes.pushed.length, before + 1);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  List<ServerConversation> lockedRun() => [
-        for (var i = 0; i < 2; i++)
-          ServerConversation(
-            id: 'locked-$i',
-            createdAt: DateTime.utc(2020, 1, 1, 12 - i),
-            structured: Structured('$_title $i', 'Overview', emoji: '📝'),
-            isLocked: true,
-          ),
-      ];
-
-  testWidgets('rows in a locked run keep their own long-press menu', (tester) async {
-    final run = lockedRun();
-    await pumpRow(
-      tester,
-      body: LockedConversationRun(conversations: run, date: run.first.createdAt),
-    );
-    final row = tester.getRect(find.byKey(const ValueKey('locked_locked-1')));
-    // The central usage action is interactive; the leading edge still opens this row's menu.
-    await tester.longPressAt(Offset(row.left + 16, row.center.dy));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('conversation_action_delete')), findsOneWidget);
-  });
-
-  testWidgets('a locked run upgrade action respects selection mode', (tester) async {
+  testWidgets('a build that sells no plan says the recordings are kept, with no dead action', (tester) async {
+    usage.dispose();
+    usage = _Usage(false);
     final routes = _Routes();
-    final run = lockedRun();
-    await pumpRow(
-      tester,
-      observer: routes,
-      body: LockedConversationRun(conversations: run, date: run.first.createdAt),
-    );
-    conversations.enterSelectionMode();
+    await pumpRow(tester, observer: routes, body: HomeLockedRowView(row: lockedDay(1)));
+    expect(find.text('1 recording waiting'), findsOneWidget);
+    expect(find.text('Kept safe until your allowance resets'), findsOneWidget);
+    expect(find.text('Unlock'), findsNothing);
+    final before = routes.pushed.length;
+    await tester.tap(find.text('1 recording waiting'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('locked_preview_action')));
-    await tester.pump();
-    expect(routes.pushed, hasLength(1));
-    expect(conversations.selectedConversationIds, isEmpty);
+    expect(routes.pushed.length, before);
     expect(tester.takeException(), isNull);
   });
+
   for (final visible in [true, false]) {
-    for (final grouped in [true, false]) {
-      testWidgets('frost tap on ${grouped ? 'grouped' : 'single'} held conversation visibility $visible',
-          (tester) async {
-        usage.dispose();
-        usage = _Usage(visible);
-        final routes = _Routes();
-        final run = lockedRun();
-        await pumpRow(tester,
-            observer: routes,
-            body: grouped ? LockedConversationRun(conversations: run, date: run.first.createdAt) : null);
-        final rect =
-            tester.getRect(grouped ? find.byKey(const ValueKey('locked_locked-1')) : find.byType(OmiLockedPreview));
-        await tester.tapAt(Offset(rect.left + 16, rect.center.dy));
-        expect(routes.pushed, hasLength(visible ? 2 : 1));
-        if (visible) {
-          expect(routes.pushed.last, isA<OmiSheetRoute>());
-          await tester.pumpWidget(const SizedBox.shrink());
-        } else {
-          await tester.pumpAndSettle();
-          expect(find.bySemanticsLabel(RegExp(_title)), findsNothing);
-          expect(tester.takeException(), isNull);
-        }
-      });
-    }
-  }
-  for (final visible in [true, false]) {
-    testWidgets('gap in held conversation run uses guarded action visibility $visible', (tester) async {
+    testWidgets('frost tap on a single held conversation, plans visible $visible', (tester) async {
       usage.dispose();
       usage = _Usage(visible);
       final routes = _Routes();
-      final run = lockedRun();
-      await pumpRow(tester,
-          observer: routes, body: LockedConversationRun(conversations: run, date: run.first.createdAt));
-      final first = tester.getRect(find.byKey(const ValueKey('locked_locked-0')));
-      final second = tester.getRect(find.byKey(const ValueKey('locked_locked-1')));
-      await tester.tapAt(Offset(first.left + 16, (first.bottom + second.top) / 2));
+      await pumpRow(tester, observer: routes);
+      final rect = tester.getRect(find.byType(OmiLockedPreview));
+      await tester.tapAt(Offset(rect.left + 16, rect.center.dy));
       expect(routes.pushed, hasLength(visible ? 2 : 1));
       if (visible) {
         expect(routes.pushed.last, isA<OmiSheetRoute>());

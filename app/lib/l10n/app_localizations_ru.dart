@@ -14850,12 +14850,6 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
-  String get dailyRecapsOnHome => 'Ежедневные сводки на главной';
-
-  @override
-  String get dailyRecapsOnHomeDescription => 'Показывать последние сводки вверху главной.';
-
-  @override
   String get yearlySwitchTitle => 'Перейти на годовой';
 
   @override
@@ -14923,19 +14917,6 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get homeStepTranscribing => 'Расшифровываем…';
-
-  @override
-  String homeRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count записи',
-      many: '$count записей',
-      few: '$count записи',
-      one: '$count запись',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get episodeWritingNotesDetail => 'Сначала завершаем расшифровку. Можно покинуть эту страницу.';
@@ -15898,4 +15879,55 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'Перезапустите Omi, чтобы обновить данные';
+
+  @override
+  String homeLockedTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ожидающие записи: $count',
+      one: '1 ожидающая запись',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeLockedSubtitle => 'Надёжно сохранено · разблокируйте, чтобы прочитать';
+
+  @override
+  String get homeLockedSubtitleNoPlans => 'Надёжно сохранено до обновления лимита';
+
+  @override
+  String get homeTakingLonger => 'Занимает больше времени, чем обычно';
+
+  @override
+  String get homeFinishingOpensWhenReady => 'Откроется, как только будет готов';
+
+  @override
+  String get activityOnThisPhone => 'На этом телефоне';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count записей, хранятся только на этом телефоне',
+      one: '1 запись, хранится только на этом телефоне',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'Транскрибировать все';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return 'Не удалось завершить «$title»';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'Не удалось завершить разговор';
+
+  @override
+  String get homeRecordingCouldNotSend => 'Не удалось отправить запись';
 }

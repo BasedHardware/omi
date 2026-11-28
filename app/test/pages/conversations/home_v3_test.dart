@@ -9,6 +9,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:visibility_detector/visibility_detector.dart';
@@ -20,13 +21,15 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/conversation_speakers.dart';
-import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/backend/http/api/conversations_v3.dart';
 import 'package:omi/backend/schema/conversation_v3.dart';
 import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/schema/folder.dart';
 import 'package:omi/backend/schema/gen/speaker_tag_prompts_wire.g.dart';
 import 'package:omi/backend/schema/pending_work.dart';
+import 'package:omi/backend/schema/review.dart' show ReviewChangesPage;
+import 'package:omi/pages/activity/activity_page.dart';
+import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
@@ -41,17 +44,19 @@ import 'package:omi/pages/conversation_detail/widgets/summary_tab.dart';
 import 'package:omi/pages/conversations/widgets/live_conversation_end_button.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
+import 'package:omi/pages/conversations/widgets/recording_list_item.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/pages/conversation_detail/widgets.dart' show ConversationTitleField;
 import 'package:omi/pages/conversations/widgets/date_list_item.dart';
 import 'package:omi/pages/conversations/widgets/empty_conversations.dart';
-import 'package:omi/pages/conversations/widgets/v3_live_placeholder_row.dart';
+import 'package:omi/pages/conversations/home/home_live_rows.dart';
+import 'package:omi/pages/conversations/home/home_row_shell.dart';
+import 'package:omi/pages/conversations/home/home_model.dart';
 import 'package:omi/services/live_preview/live_preview_controller.dart';
 import 'package:omi/utils/reliability_experiments.dart';
 import 'package:omi/pages/conversations/widgets/conversation_state_tile.dart';
 import 'package:omi/pages/conversations/widgets/day_summary_link.dart';
 import 'package:omi/pages/episodes/live_episode_page.dart';
-import 'package:omi/pages/episodes/live_episode_row.dart';
 import 'package:omi/pages/home/home_navigation.dart';
 import 'package:omi/pages/episodes/finish_capture.dart';
 import 'package:omi/providers/app_provider.dart';
@@ -141,6 +146,9 @@ class _StubSyncProvider extends ChangeNotifier implements SyncProvider {
   bool get isSyncing => true;
 
   @override
+  List<Wal> get attentionWals => const [];
+
+  @override
   List<Wal> get allWals => const [];
 
   @override
@@ -161,8 +169,13 @@ class _StubSyncProvider extends ChangeNotifier implements SyncProvider {
 }
 
 class _StubLocalRecordings extends ChangeNotifier implements LocalRecordingsProvider {
+  _StubLocalRecordings([this.recordings = const []]);
+
   @override
-  List<LocalRecording> get recordings => const [];
+  final List<LocalRecording> recordings;
+
+  @override
+  bool isPlaying(LocalRecording recording) => false;
 
   @override
   Future<void> refresh() async {}
@@ -551,14 +564,15 @@ class _Home {
       _conversation('c-yesterday', DateTime(2026, 11, 15, 15, 0), 'Design review', v3: _done),
       _conversation('c-yesterday-2', DateTime(2026, 11, 15, 11, 10), 'Lunch with Sam',
           v3: const ConversationV3Fields(kind: 'conversation', tileState: ConversationTileState.done)),
-      // Its summary failed for good: it belongs to Activity, not Home (X5).
+      // Its summary failed for good: it is in Activity with its Try Again, not on Home (SCA-5226).
       _conversation('c-failed', DateTime(2026, 11, 15, 9, 30), 'Vendor call',
           v3: const ConversationV3Fields(kind: 'conversation', tileState: ConversationTileState.failed)),
     ]
     ..groupConversationsByDate();
 }
 
-Widget _app(_Home home, {Key? boundary, ThemeData? theme}) {
+Widget _app(_Home home,
+    {Key? boundary, ThemeData? theme, List<LocalRecording> recordings = const [], UsageProvider? usage}) {
   return RepaintBoundary(
       key: boundary,
       child: MultiProvider(
@@ -568,7 +582,7 @@ Widget _app(_Home home, {Key? boundary, ThemeData? theme}) {
           ChangeNotifierProvider<CaptureProvider>.value(value: home.capture),
           ChangeNotifierProvider<ConversationsV3Provider>.value(value: home.conversationsV3),
           ChangeNotifierProvider<EpisodeProvider>.value(value: home.episodes),
-          ChangeNotifierProvider<LocalRecordingsProvider>.value(value: _StubLocalRecordings()),
+          ChangeNotifierProvider<LocalRecordingsProvider>.value(value: _StubLocalRecordings(recordings)),
           ChangeNotifierProvider<FolderProvider>.value(value: FolderProvider(foldersFetcher: () async => <Folder>[])),
           ChangeNotifierProvider<HomeProvider>.value(value: HomeProvider()),
           ChangeNotifierProvider<DeviceProvider>.value(value: _StubDeviceProvider()),
@@ -583,7 +597,7 @@ Widget _app(_Home home, {Key? boundary, ThemeData? theme}) {
           ChangeNotifierProvider<PeopleProvider>.value(
             value: PeopleProvider(loadPeople: () async => const PeopleListResponse(people: [])),
           ),
-          ChangeNotifierProvider<UsageProvider>.value(value: UsageProvider()),
+          ChangeNotifierProvider<UsageProvider>.value(value: usage ?? UsageProvider()),
           ChangeNotifierProvider<IntegrationProvider>.value(
             value: IntegrationProvider(
               fetchStatus: (_) async => null,
@@ -607,7 +621,6 @@ Widget _app(_Home home, {Key? boundary, ThemeData? theme}) {
           home: Scaffold(
             body: ConversationsPage(
               requestInitialLoad: false,
-              loadRecaps: () async => (items: <DailySummary>[], ok: true),
               openDaySummary: (_) async => const ApiFailure(ApiProblem(ApiProblemKind.transport)),
               pendingWork: PendingWorkStore(
                 loadPending: () async => const ApiSuccess(PendingWorkSnapshot.disabled),
@@ -620,13 +633,21 @@ Widget _app(_Home home, {Key? boundary, ThemeData? theme}) {
 }
 
 Future<_Home> _pumpHome(WidgetTester tester,
-    {required bool v3, bool remembered = true, Key? boundary, ThemeData? theme, Size? size}) async {
+    {required bool v3,
+    bool remembered = true,
+    Key? boundary,
+    ThemeData? theme,
+    Size? size,
+    List<LocalRecording> recordings = const [],
+    UsageProvider? usage,
+    void Function(_Home home)? prepare}) async {
   tester.view.physicalSize = size ?? const Size(800, 1600);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
   final home = _Home(v3: v3, remembered: remembered);
-  await tester.pumpWidget(_app(home, boundary: boundary, theme: theme));
+  prepare?.call(home);
+  await tester.pumpWidget(_app(home, boundary: boundary, theme: theme, recordings: recordings, usage: usage));
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 300));
   await tester.pump(const Duration(milliseconds: 300));
@@ -645,6 +666,8 @@ Future<void> _dispose(WidgetTester tester, _Home home) async {
 
 class _Conversations extends ConversationProvider {
   _Conversations() : super(isSignedIn: () => false);
+
+  void ping() => notifyListeners();
 
   int listReads = 0;
   int forcedReads = 0;
@@ -687,6 +710,74 @@ Future<void> settleDetailTab(WidgetTester tester) async {
   await tester.pump();
 }
 
+/// The live row standing for a capture the server shows no conversation for yet (the old v3 placeholder).
+final _placeholder = find.byWidgetPredicate((w) => w is HomeLiveRowView && w.row.kind == HomeLiveKind.capture);
+
+/// Sells plans, so the locked row offers Unlock.
+class _PlansUsage extends UsageProvider {
+  @override
+  bool get showSubscriptionUI => true;
+}
+
+LocalRecording _saved(String id, DateTime at, int seconds, LocalRecordingState state, {DateTime? uploadedAt}) =>
+    LocalRecording(
+      fileName: id,
+      filePath: '/tmp/$id.bin',
+      timerStart: at.millisecondsSinceEpoch ~/ 1000,
+      codec: BleAudioCodec.opus,
+      frameSize: 160,
+      sizeBytes: 4096,
+      seconds: seconds,
+      state: state,
+      uploadedAt: uploadedAt,
+    );
+
+/// Every Home row kind and state at once (SCA-5226): the live row, saved recordings in each state,
+/// conversations transcribing, writing, past their deadline, failed and done, a day's locked
+/// conversations as one row, and yesterday. The failed conversation and the waiting and failed
+/// recordings are Activity's; Home shows the rest.
+void _galleryRows(_Home home) {
+  ServerConversation locked(String id, DateTime at) => ServerConversation(
+        id: id,
+        createdAt: at,
+        startedAt: at,
+        finishedAt: at.add(const Duration(minutes: 12)),
+        structured: Structured('Locked $id', ''),
+        isLocked: true,
+        v3: _done,
+      );
+  home.conversations
+    ..conversations = [
+      _conversation('g-transcribing', DateTime(2026, 11, 16, 12, 0), 'Call with the venue',
+          length: const Duration(minutes: 24),
+          status: ConversationStatus.processing,
+          v3: const ConversationV3Fields(kind: 'conversation', tileState: ConversationTileState.transcribing)),
+      _conversation('g-writing', DateTime(2026, 11, 16, 11, 45), 'Hiring plan',
+          length: const Duration(minutes: 35),
+          status: ConversationStatus.processing,
+          v3: const ConversationV3Fields(kind: 'conversation', tileState: ConversationTileState.writing)),
+      _conversation('g-overdue', DateTime(2026, 11, 16, 10, 40), 'Budget walkthrough',
+          length: const Duration(minutes: 20),
+          status: ConversationStatus.processing,
+          v3: const ConversationV3Fields(kind: 'conversation', tileState: ConversationTileState.transcribing)),
+      _conversation('g-failed', DateTime(2026, 11, 16, 10, 0), 'Vendor call',
+          v3: const ConversationV3Fields(kind: 'conversation', tileState: ConversationTileState.failed)),
+      _conversation('g-done', DateTime(2026, 11, 16, 9, 0), 'Standup', v3: _done),
+      locked('g-locked-1', DateTime(2026, 11, 16, 8, 10)),
+      locked('g-locked-2', DateTime(2026, 11, 16, 7, 30)),
+      _conversation('g-yesterday', DateTime(2026, 11, 15, 15, 0), 'Design review', v3: _done),
+      _conversation('g-yesterday-2', DateTime(2026, 11, 15, 11, 10), 'Lunch with Sam', v3: _done),
+    ]
+    ..groupConversationsByDate();
+}
+
+final _gallerySaved = [
+  _saved('s-pending', DateTime(2026, 11, 16, 12, 5), 140, LocalRecordingState.pending),
+  _saved('s-processing', DateTime(2026, 11, 16, 11, 30), 95, LocalRecordingState.processing,
+      uploadedAt: DateTime(2026, 11, 16, 12, 25)),
+  _saved('s-failed', DateTime(2026, 11, 16, 10, 20), 62, LocalRecordingState.failed),
+];
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() async {
@@ -713,8 +804,8 @@ void main() {
 
       expect(_rowIds(tester),
           ['live-1', 'c-call', 'c-transcribing', 'c-writing', 'c-today', 'c-yesterday', 'c-yesterday-2'],
-          reason: 'the live conversation leads Today; the hidden and failed ones are off Home (X5)');
-      expect(find.byType(LiveEpisodeRow), findsNothing);
+          reason: 'the live conversation leads Today; the hidden one is off Home, and the failed one is in '
+              'Activity with its Try Again (SCA-5226)');
       expect(find.byKey(const Key('conversation_tile_live')), findsOneWidget);
       expect(find.byKey(const Key('conversation_tile_writing')), findsOneWidget);
       expect(find.byKey(const Key('conversation_tile_transcribing')), findsOneWidget);
@@ -738,7 +829,7 @@ void main() {
 
       // Home stays uncluttered: End lives on the live conversation's detail page, not on its row.
       expect(find.byKey(const Key('live_conversation_end')), findsNothing);
-      expect(find.byType(V3LivePlaceholderRow), findsNothing);
+      expect(_placeholder, findsNothing);
       await _dispose(tester, home);
     });
   });
@@ -753,22 +844,23 @@ void main() {
       await home.conversationsV3.refresh();
       await tester.pump();
       await tester.pump();
-      expect(find.byType(V3LivePlaceholderRow), findsOneWidget);
+      expect(_placeholder, findsOneWidget);
       final headers = tester.widgetList<DateListItem>(find.byType(DateListItem)).toList();
       expect(headers.map((h) => h.date), [DateTime(_now.year, _now.month, _now.day)], reason: 'one header: Today');
       final today = tester.getRect(find.byType(DateListItem));
-      expect(tester.getRect(find.byType(V3LivePlaceholderRow)).top, greaterThanOrEqualTo(today.bottom));
+      expect(tester.getRect(_placeholder).top, greaterThanOrEqualTo(today.bottom));
       expect(find.byType(NoConversationsHero), findsNothing, reason: 'something is being captured: not a new account');
       expect(find.byType(EmptyConversationsWidget), findsNothing);
       await _dispose(tester, home);
     });
   });
 
-  testWidgets('v3: a failed live window falls back to one Listening row while streaming', (tester) async {
+  testWidgets('v3: a failed live window hands the top to one Listening row and leaves Home for Activity',
+      (tester) async {
     await withClock(Clock.fixed(_now), () async {
       final home = await _pumpHome(tester, v3: true);
       final serverRow = find.byKey(const ValueKey('live-1'));
-      final placeholder = find.byType(V3LivePlaceholderRow);
+      final placeholder = _placeholder;
       expect(serverRow, findsOneWidget);
       expect(placeholder, findsNothing);
       final top = tester.getTopLeft(serverRow).dy;
@@ -785,9 +877,9 @@ void main() {
       await home.conversationsV3.refresh();
       await tester.pump();
       await tester.pump();
-      expect(serverRow, findsNothing);
       expect(placeholder, findsOneWidget);
       expect(tester.getTopLeft(placeholder).dy, top);
+      expect(serverRow, findsNothing, reason: 'a failed conversation is in Activity (SCA-5226)');
 
       await _dispose(tester, home);
     });
@@ -801,7 +893,7 @@ void main() {
       await tester.pump();
       await tester.pump();
       expect(find.byKey(const ValueKey('live-1')), findsNothing);
-      expect(find.byType(V3LivePlaceholderRow), findsOneWidget, reason: 'a hidden live window still reads as live');
+      expect(_placeholder, findsOneWidget, reason: 'a hidden live window still reads as live');
 
       home.liveHidden = false;
       await home.conversationsV3.refresh();
@@ -811,17 +903,41 @@ void main() {
       home.conversations.notifyListeners();
       await tester.pump();
       expect(find.byKey(const ValueKey('live-1')), findsNothing);
-      expect(find.byType(V3LivePlaceholderRow), findsNothing, reason: 'the owner deleted it: nothing stands in');
+      expect(_placeholder, findsNothing, reason: 'the owner deleted it: nothing stands in');
 
       // Deleted and hidden at once: still nothing.
       home.liveHidden = true;
       await home.conversationsV3.refresh();
       await tester.pump();
       await tester.pump();
-      expect(find.byType(V3LivePlaceholderRow), findsNothing, reason: 'a deleted window stays gone when hidden');
+      expect(_placeholder, findsNothing, reason: 'a deleted window stays gone when hidden');
       await _dispose(tester, home);
     });
   });
+
+  for (final (name, widen) in <(String, void Function(ConversationProvider))>[
+    ('Show short', (c) => c.showShortConversations = true),
+    ('Show discarded', (c) => c.showDiscardedConversations = true),
+  ]) {
+    testWidgets('v3: $name widens the list and keeps the live row and saved recordings; a filter hides them',
+        (tester) async {
+      await withClock(Clock.fixed(_now), () async {
+        final saved = _saved('s-widen', _now.subtract(const Duration(minutes: 30)), 60, LocalRecordingState.processing,
+            uploadedAt: _now.subtract(const Duration(minutes: 5)));
+        final home =
+            await _pumpHome(tester, v3: true, recordings: [saved], prepare: (home) => widen(home.conversations));
+        expect(home.conversations.showsDefaultHome, isFalse, reason: 'the list is widened');
+        expect(_rowIds(tester).first, 'live-1', reason: 'widening is not a filter: the live row still leads');
+        expect(find.byType(RecordingListItem), findsOneWidget);
+        home.conversations.toggleStarredFilter();
+        await tester.pump();
+        await tester.pump();
+        expect(find.byKey(const ValueKey('live-1')), findsNothing, reason: 'a filter shows only conversations');
+        expect(find.byType(RecordingListItem), findsNothing);
+        await _dispose(tester, home);
+      });
+    });
+  }
 
   testWidgets('v3: a live window that started before midnight still leads Today', (tester) async {
     await withClock(Clock.fixed(_now), () async {
@@ -883,13 +999,13 @@ void main() {
 
       // The pendant is still streaming with no window open: the live row's placeholder stands in, and
       // the pendant capture card does not come back between windows.
-      expect(find.byType(V3LivePlaceholderRow), findsOneWidget);
+      expect(_placeholder, findsOneWidget);
       expect(find.descendant(of: find.byType(ConversationCaptureWidget), matching: find.byType(GestureDetector)),
           findsNothing);
       // It sits under Today, first in the day, never above the day list (David, 2026-11-21).
       final today =
           tester.getRect(find.byKey(ValueKey('date_${DateTime(_now.year, _now.month, _now.day).toIso8601String()}')));
-      final placeholder = tester.getRect(find.byType(V3LivePlaceholderRow));
+      final placeholder = tester.getRect(_placeholder);
       expect(placeholder.top, greaterThanOrEqualTo(today.bottom), reason: 'the placeholder is inside Today');
       expect(placeholder.top, lessThan(tester.getRect(find.byKey(const ValueKey('c-call'))).top),
           reason: 'and leads it');
@@ -899,7 +1015,7 @@ void main() {
       await home.conversationsV3.refresh();
       await tester.pump();
       await tester.pump();
-      expect(find.byType(V3LivePlaceholderRow), findsNothing);
+      expect(_placeholder, findsNothing);
       expect(_rowIds(tester).first, 'live-1');
       expect(tester.getRect(find.byKey(const ValueKey('live-1'))).top, placeholder.top,
           reason: 'the live row takes the placeholder\'s slot');
@@ -913,29 +1029,6 @@ void main() {
       expect(home.conversationsV3.v3, isTrue);
       expect(_rowIds(tester).first, 'live-1');
       expect(home.episodeCalls, 0);
-      await _dispose(tester, home);
-    });
-  });
-
-  testWidgets('first launch, not v3: episodes start once the switch says so', (tester) async {
-    await withClock(Clock.fixed(_now), () async {
-      final home = await _pumpHome(tester, v3: false, remembered: false);
-      expect(home.conversationsV3.resolved, isTrue);
-      expect(home.episodeCalls, greaterThan(0));
-      expect(find.byType(DaySummaryHeader), findsNothing);
-      await _dispose(tester, home);
-    });
-  });
-
-  testWidgets('v3 off: Home is unchanged, with the live episode and plain day labels', (tester) async {
-    await withClock(Clock.fixed(_now), () async {
-      final home = await _pumpHome(tester, v3: false);
-      expect(home.conversationsV3.v3, isFalse);
-      expect(find.byType(DaySummaryHeader), findsNothing);
-      expect(find.byType(LiveEpisodeRow), findsOneWidget, reason: "today's live episode row");
-      expect(find.byType(ConversationWritingPen), findsNothing);
-      expect(_rowIds(tester), isNot(contains('live-1')));
-      expect(home.episodeCalls, greaterThan(0));
       await _dispose(tester, home);
     });
   });
@@ -955,7 +1048,7 @@ void main() {
       home.liveOpen = false;
       await home.conversationsV3.refresh();
       await tester.pump();
-      expect(find.byType(V3LivePlaceholderRow), findsOneWidget);
+      expect(_placeholder, findsOneWidget);
       expect(visibleHomeFinish, findsNothing);
       expect(endButton, findsNothing);
       await _dispose(tester, home);
@@ -1027,7 +1120,7 @@ void main() {
       home.publishManualEnds();
       await home.conversationsV3.refresh();
       await tester.pump();
-      await tester.tap(find.byType(V3LivePlaceholderRow));
+      await tester.tap(_placeholder);
       await settleDetailTab(tester);
       expect(find.byType(LiveEpisodePage), findsOneWidget);
       expect(finishButton.hitTestable(), findsOneWidget);
@@ -1038,7 +1131,7 @@ void main() {
       expect(home.capture.finishCalls, 1);
       expect(home.capture.finishedLiveId, isNull);
       expect(find.byType(LiveEpisodePage), findsNothing);
-      expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
+      expect(find.byKey(const Key('home_finishing')), findsOneWidget);
       await _dispose(tester, home);
     });
   });
@@ -1053,7 +1146,7 @@ void main() {
         ..segments = [];
       await home.conversationsV3.refresh();
       await tester.pump();
-      await tester.tap(find.byType(V3LivePlaceholderRow));
+      await tester.tap(_placeholder);
       await settleDetailTab(tester);
       expect(find.byType(LiveEpisodePage), findsOneWidget);
       expect(finishButton.hitTestable(), findsOneWidget);
@@ -1154,7 +1247,7 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 500));
         expect(find.byType(ConversationDetailPage), findsNothing);
-        expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
+        expect(find.byKey(const Key('home_finishing')), findsOneWidget);
         await _dispose(tester, home);
       });
     });
@@ -1608,7 +1701,7 @@ void main() {
       await home.conversationsV3.refresh();
       await tester.pump();
       await tester.pump();
-      await tester.tap(find.byType(V3LivePlaceholderRow));
+      await tester.tap(_placeholder);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
       final title = find.byKey(const Key('live_page_v3_title'));
@@ -1684,13 +1777,13 @@ void main() {
         await tester.pump();
 
         expect(find.byKey(const ValueKey('omi.conversations.error')), findsOneWidget);
-        expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
+        expect(find.byKey(const Key('home_finishing')), findsOneWidget);
         await shoot(tester, '003-mobile-ios-finish-list-retry');
         await tester.tap(find.text('Try Again'));
         await tester.pump();
         expect(home.conversations.forcedReads, 1);
         expect(find.byKey(const ValueKey('omi.conversations.error')), findsNothing);
-        expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
+        expect(find.byKey(const Key('home_finishing')), findsOneWidget);
         await _dispose(tester, home);
         debugDefaultTargetPlatformOverride = null;
       });
@@ -1780,7 +1873,7 @@ void main() {
         await tester.pump(const Duration(milliseconds: 500));
         expect(tabs.selectedIndex, HomeProvider.homeTab);
         expect(find.byType(ConversationDetailPage), findsNothing);
-        expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
+        expect(find.byKey(const Key('home_finishing')), findsOneWidget);
         await shoot(tester, '004-mobile-ios-end-returns-home');
         await _dispose(tester, home);
         debugDefaultTargetPlatformOverride = null;
@@ -1860,7 +1953,7 @@ void main() {
         expect(home.capture.endCalls, 1);
         expect(home.capture.endedLiveId, 'live-1');
         expect(find.byType(ConversationDetailPage), findsNothing);
-        expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
+        expect(find.byKey(const Key('home_finishing')), findsOneWidget);
         expect(find.byType(SnackBar), findsNothing);
         await shoot(tester, '003-mobile-ios-home-processing-after-end');
         await _dispose(tester, home);
@@ -1900,7 +1993,7 @@ void main() {
               ),
               isTrue);
           home.capture.closedRecordingIds.add('rec-1');
-          expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
+          expect(find.byKey(const Key('home_finishing')), findsOneWidget);
 
           // The pendant keeps its client capture ID. Home reads the successor before
           // the socket delivers its new conversation_session event.
@@ -1932,10 +2025,10 @@ void main() {
             await home.conversationsV3.refresh();
             await settleDetailTab(tester);
           }
-          final nextRow = placeholder ? find.byType(V3LivePlaceholderRow) : find.byKey(const ValueKey('live-2'));
+          final nextRow = placeholder ? _placeholder : find.byKey(const ValueKey('live-2'));
           expect(nextRow, findsOneWidget);
           expect(find.descendant(of: nextRow, matching: find.text('Listening')), findsOneWidget);
-          expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
+          expect(find.byKey(const Key('home_finishing')), findsOneWidget);
           if (!placeholder) {
             await tester.drag(nextRow, const Offset(-200, 0));
             await settleDetailTab(tester);
@@ -1993,8 +2086,8 @@ void main() {
           home.capture
             ..heardOnPhone = heard
             ..ping();
-          final placeholder = find.byType(V3LivePlaceholderRow);
-          final processing = find.byKey(const Key('home_processing_row'));
+          final placeholder = _placeholder;
+          final processing = find.byKey(const Key('home_finishing'));
 
           home.publishManualEnds();
           final pending = home.capture.onManualEnd!('live-1');
@@ -2040,7 +2133,7 @@ void main() {
           final home =
               await _pumpHome(tester, v3: true, boundary: boundary, theme: theme(), size: const Size(393, 852));
           home.liveStart = todayAtNoon.subtract(const Duration(minutes: 20));
-          final processing = find.byKey(const Key('home_processing_row'));
+          final processing = find.byKey(const Key('home_finishing'));
           final row = find.byKey(const ValueKey('live-1'));
           Finder inRow(Finder what) => find.descendant(of: row, matching: what);
           ServerConversation ended(ConversationTileState state, {required bool outlined}) =>
@@ -2052,7 +2145,7 @@ void main() {
           home.publishManualEnds();
           home.capture.onManualEnd!('live-1');
           await tester.pump();
-          expect(find.descendant(of: processing, matching: find.text('Processing…')), findsOneWidget);
+          expect(find.descendant(of: processing, matching: find.text('Finishing up…')), findsOneWidget);
           expect(row, findsNothing);
 
           // The server lists the conversation as ended while its audio is still being transcribed: the
@@ -2119,7 +2212,7 @@ void main() {
         home.conversations.groupConversationsByDate();
         final today = find.text('Today');
         final listening = find.text('Listening');
-        final processing = find.byKey(const Key('home_processing_row'));
+        final processing = find.byKey(const Key('home_finishing'));
         final call = find.byKey(const ValueKey('today-call'));
 
         void expectOrder(List<Finder> rows) {
@@ -2136,16 +2229,16 @@ void main() {
         await tester.pump();
         expect(home.conversationsV3.finishRow, same(pending));
         expect(find.byKey(const ValueKey('live-1')), findsNothing);
-        expect(find.byType(V3LivePlaceholderRow), findsNothing);
+        expect(_placeholder, findsNothing);
         expectOrder([today, processing, call]);
-        expect(find.descendant(of: processing, matching: find.text('Processing…')), findsOneWidget);
+        expect(find.descendant(of: processing, matching: find.text('Finishing up…')), findsOneWidget);
 
         home.liveOpen = false;
         await home.conversationsV3.refresh();
         home.capture.activeRecordingId = 'capture-2';
         home.capture.ping();
         await tester.pump();
-        final placeholder = find.byType(V3LivePlaceholderRow);
+        final placeholder = _placeholder;
         expect(find.descendant(of: placeholder, matching: listening), findsOneWidget);
         expectOrder([today, placeholder, processing, call]);
 
@@ -2180,7 +2273,7 @@ void main() {
         v3.startManualFinish(pending, null, captureId: home.capture.activeRecordingId);
         expect(v3.settleManualFinish(pending, null, alreadyClosed: true), isTrue);
         await tester.pump();
-        expect(find.byKey(const Key('home_processing_row')), findsNothing);
+        expect(find.byKey(const Key('home_finishing')), findsNothing);
         presentFinishOutcome(
           tester.element(find.byType(ConversationsPage)),
           const FinishAwaitingResult(),
@@ -2191,9 +2284,9 @@ void main() {
         expect(home.conversations.showDiscardedConversations, isTrue);
         expect(home.conversations.showsDefaultHome, isFalse);
         expect(find.text('Launch checklist'), findsNothing);
-        expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
-        expect(find.byType(V3LivePlaceholderRow), findsNothing);
-        final processing = find.byKey(const Key('home_processing_row'));
+        expect(find.byKey(const Key('home_finishing')), findsOneWidget);
+        expect(_placeholder, findsNothing);
+        final processing = find.byKey(const Key('home_finishing'));
         final navigator = Navigator.of(tester.element(processing));
         await tester.tap(processing);
         await tester.pump();
@@ -2205,7 +2298,7 @@ void main() {
         v3.tick();
         await tester.pump();
         expect(home.conversations.listReads, greaterThan(reads));
-        expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
+        expect(find.byKey(const Key('home_finishing')), findsOneWidget);
         await shoot(tester, '001-mobile-ios-finish-404-processing');
 
         home.conversations
@@ -2218,16 +2311,16 @@ void main() {
         );
         await tester.pump();
         await tester.pump();
-        expect(find.byKey(const Key('home_processing_row')), findsNothing);
+        expect(find.byKey(const Key('home_finishing')), findsNothing);
         expect(find.text('Launch checklist'), findsOneWidget);
         expect(v3.finishRow, isNull);
-        expect(find.byType(V3LivePlaceholderRow), findsNothing);
+        expect(_placeholder, findsNothing);
         await shoot(tester, '002-mobile-ios-v3-manual-finish-summary');
 
         home.capture.activeRecordingId = 'capture-2';
         home.capture.ping();
         await tester.pump();
-        expect(find.byType(V3LivePlaceholderRow), findsOneWidget,
+        expect(_placeholder, findsOneWidget,
             reason: 'the next capture can show Listening before its live window exists');
         await _dispose(tester, home);
         debugDefaultTargetPlatformOverride = null;
@@ -2249,7 +2342,7 @@ void main() {
         home.liveOpen = false;
         await v3.refresh();
         await tester.pump();
-        expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
+        expect(find.byKey(const Key('home_finishing')), findsOneWidget);
 
         // The conversation an earlier End closed is not this End's result.
         home.conversations.upsertConversation(
@@ -2263,7 +2356,7 @@ void main() {
         await tester.pump();
         await tester.pump();
         expect(find.text('Earlier talk'), findsOneWidget);
-        expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
+        expect(find.byKey(const Key('home_finishing')), findsOneWidget);
 
         home.conversations.upsertConversation(
           _conversation('closed-by-end', home.liveStart, 'Launch checklist',
@@ -2273,7 +2366,7 @@ void main() {
         );
         await tester.pump();
         await tester.pump();
-        expect(find.byKey(const Key('home_processing_row')), findsNothing);
+        expect(find.byKey(const Key('home_finishing')), findsNothing);
         expect(find.text('Launch checklist'), findsOneWidget);
         expect(v3.finishRow, isNull);
         await _dispose(tester, home);
@@ -2290,13 +2383,13 @@ void main() {
         home.liveOpen = false;
         await v3.refresh();
         await tester.pump();
-        expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
+        expect(find.byKey(const Key('home_finishing')), findsOneWidget);
 
         final reads = home.conversations.listReads;
         await tester.pump(OptimisticProcessingPlaceholder.timeout + const Duration(seconds: 1));
         await tester.pump();
         await tester.pump();
-        expect(find.byKey(const Key('home_processing_row')), findsNothing);
+        expect(find.byKey(const Key('home_finishing')), findsNothing);
         expect(v3.finishRow, isNull);
         expect(home.conversations.listReads, greaterThan(reads), reason: 'Home reads its list once');
         await _dispose(tester, home);
@@ -2318,7 +2411,7 @@ void main() {
         home.liveOpen = false;
         await v3.refresh();
         await tester.pump();
-        expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
+        expect(find.byKey(const Key('home_finishing')), findsOneWidget);
 
         // The conversation an earlier End closed is not this End's result.
         home.conversations.upsertConversation(
@@ -2332,7 +2425,7 @@ void main() {
         await tester.pump();
         await tester.pump();
         expect(find.text('Earlier talk'), findsOneWidget);
-        expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
+        expect(find.byKey(const Key('home_finishing')), findsOneWidget);
 
         home.conversations.upsertConversation(
           _conversation('closed-by-end', home.liveStart, 'Launch checklist',
@@ -2342,7 +2435,7 @@ void main() {
         );
         await tester.pump();
         await tester.pump();
-        expect(find.byKey(const Key('home_processing_row')), findsNothing);
+        expect(find.byKey(const Key('home_finishing')), findsNothing);
         expect(find.text('Launch checklist'), findsOneWidget);
         expect(v3.finishRow, isNull);
         await _dispose(tester, home);
@@ -2359,13 +2452,13 @@ void main() {
         home.liveOpen = false;
         await v3.refresh();
         await tester.pump();
-        expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
+        expect(find.byKey(const Key('home_finishing')), findsOneWidget);
 
         final reads = home.conversations.listReads;
         await tester.pump(OptimisticProcessingPlaceholder.timeout + const Duration(seconds: 1));
         await tester.pump();
         await tester.pump();
-        expect(find.byKey(const Key('home_processing_row')), findsNothing);
+        expect(find.byKey(const Key('home_finishing')), findsNothing);
         expect(v3.finishRow, isNull);
         expect(home.conversations.listReads, greaterThan(reads), reason: 'Home reads its list once');
         await _dispose(tester, home);
@@ -2400,7 +2493,7 @@ void main() {
           home.liveOpen = false;
           await v3.refresh();
           await tester.pump();
-          expect(find.byKey(const Key('home_processing_row')), findsOneWidget,
+          expect(find.byKey(const Key('home_finishing')), findsOneWidget,
               reason: 'the unrelated failed conversation must not settle this finish');
 
           final resultAfterTimeout = caseName == '20-minute deadline followed by a result';
@@ -2409,7 +2502,7 @@ void main() {
             await tester.pump(const Duration(minutes: 19, seconds: 59));
             expect(v3.finishRow, same(pending));
             forcedBefore = home.conversations.forcedReads;
-            expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
+            expect(find.byKey(const Key('home_finishing')), findsOneWidget);
             if (caseName == '20-minute deadline off Home' || resultAfterTimeout) {
               final tabs = tester.element(find.byType(ConversationsPage)).read<HomeProvider>();
               tabs.setIndex(HomeProvider.tasksTab);
@@ -2448,11 +2541,12 @@ void main() {
           await tester.pump();
           await tester.pump(const Duration(milliseconds: 300));
           expect(v3.finishRow, isNull);
-          expect(find.byKey(const Key('home_processing_row')), findsNothing);
+          expect(find.byKey(const Key('home_finishing')), findsNothing);
           expect(find.byType(SnackBar), findsNothing);
           expect(find.byKey(const ValueKey('home_activity_attention_dot')), findsNothing);
+          // A failed result is in Activity, not on Home (SCA-5226); neither is the fixture's own failure.
           expect(find.byKey(const Key('conversation_summary_failed_indicator')), findsNothing);
-          expect(find.text('Launch checklist'), resultAfterTimeout ? findsOneWidget : findsNothing);
+          expect(find.byKey(const ValueKey('live-1')), resultAfterTimeout ? findsOneWidget : findsNothing);
           if (forcedBefore != null) {
             expect(home.conversations.forcedReads, forcedBefore + 1, reason: 'the deadline reconciles the list once');
           }
@@ -2585,7 +2679,7 @@ void main() {
         await home.conversationsV3.refresh();
         await tester.pump();
         await tester.pump();
-        expect(find.byType(V3LivePlaceholderRow), findsOneWidget);
+        expect(_placeholder, findsOneWidget);
         await shoot(tester, '003-mobile-ios-v3-home-live-placeholder');
 
         debugDefaultTargetPlatformOverride = null;
@@ -2609,12 +2703,12 @@ void main() {
         await home.conversationsV3.refresh();
         await tester.pump();
         await tester.pump();
-        expect(find.byType(V3LivePlaceholderRow), findsOneWidget);
+        expect(_placeholder, findsOneWidget);
         expect(visibleHomeFinish, findsNothing);
         await shoot(tester, '009-mobile-ios-v3-placeholder-in-today');
 
         // Its page reads Listening until the server names the conversation.
-        await tester.tap(find.byType(V3LivePlaceholderRow));
+        await tester.tap(_placeholder);
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 500));
         expect(find.descendant(of: find.byKey(const Key('live_page_v3_title')), matching: find.text('Listening')),
@@ -2631,7 +2725,7 @@ void main() {
         await home.conversationsV3.refresh();
         await tester.pump();
         await tester.pump();
-        expect(find.byType(V3LivePlaceholderRow), findsNothing);
+        expect(_placeholder, findsNothing);
         expect(find.descendant(of: find.byKey(const ValueKey('live-1')), matching: find.text('Listening')),
             findsOneWidget);
         await shoot(tester, '011-mobile-ios-v3-live-row-untitled');
@@ -2667,6 +2761,206 @@ void main() {
         await shoot(tester, '005-mobile-ios-v3-live-detail-light');
         debugDefaultTargetPlatformOverride = null;
         await _dispose(tester, home);
+      });
+    });
+  });
+
+  // Real renders of every Home row (SCA-5226), written when HOME_ROWS_RENDER_OUTPUT names a directory;
+  // otherwise a layout and overflow check.
+  group('Home rows render', () {
+    const output = String.fromEnvironment('HOME_ROWS_RENDER_OUTPUT');
+    final boundary = GlobalKey();
+    setUpAll(_loadFonts);
+
+    Future<void> shoot(WidgetTester tester, String name) async {
+      expect(tester.takeException(), isNull, reason: '$name rendered with an exception');
+      if (output.isEmpty) return;
+      await tester.runAsync(() async {
+        final render = boundary.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+        final image = await render.toImage(pixelRatio: 3);
+        final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+        await Directory(output).create(recursive: true);
+        await File('$output/$name.png').writeAsBytes(bytes!.buffer.asUint8List());
+      });
+    }
+
+    ThemeData theme(Brightness brightness) {
+      final base = buildOmiTheme(brightness: brightness);
+      return base.copyWith(
+        appBarTheme: base.appBarTheme.copyWith(
+          titleTextStyle: base.appBarTheme.titleTextStyle?.copyWith(fontFamily: 'SF Pro Display'),
+        ),
+      );
+    }
+
+    Future<_Home> pumpGallery(WidgetTester tester, Brightness brightness, {Size size = const Size(393, 1560)}) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      final palette = OmiColors.active;
+      addTearDown(() => OmiColors.active = palette);
+      OmiColors.active = OmiColors.forBrightness(brightness);
+      return _pumpHome(tester,
+          v3: true,
+          boundary: boundary,
+          theme: theme(brightness),
+          size: size,
+          recordings: _gallerySaved,
+          usage: _PlansUsage(),
+          prepare: _galleryRows);
+    }
+
+    for (final brightness in Brightness.values) {
+      testWidgets('every row kind on one Home (${brightness.name})', (tester) async {
+        await withClock(Clock.fixed(_now), () async {
+          final home = await pumpGallery(tester, brightness);
+          expect(_rowIds(tester).first, 'live-1', reason: 'the live row leads Today');
+          expect(find.text('Taking longer than usual'), findsOneWidget);
+          expect(find.text('2 recordings waiting'), findsOneWidget);
+          // Anything that needs the reader is in Activity (SCA-5226).
+          expect(find.text('Vendor call'), findsNothing);
+          expect(
+              find.byWidgetPredicate((w) => w is RecordingListItem && w.recording.id != 's-processing'), findsNothing);
+          expect(find.byWidgetPredicate((w) => w is RecordingListItem && w.recording.id == 's-processing'),
+              findsOneWidget);
+          // One row height for every kind, with or without an action (SCA-5226 UI sweep).
+          final cards = [
+            ...find.byKey(const ValueKey('conversation_card')).evaluate(),
+            // The card inside the shell's 8pt gap above it.
+            for (final shell in find.byType(HomeRowShell).evaluate())
+              find.descendant(of: find.byWidget(shell.widget), matching: find.byType(Material)).evaluate().first,
+          ];
+          final heights = {for (final e in cards) (e.size!.height * 2).round() / 2};
+          expect(cards.length, greaterThanOrEqualTo(9));
+          expect(heights, hasLength(1), reason: 'rows differ in height: $heights');
+          await shoot(
+              tester, '00${brightness == Brightness.dark ? 1 : 2}-mobile-ios-home-every-row-${brightness.name}');
+          await _dispose(tester, home);
+          debugDefaultTargetPlatformOverride = null;
+        });
+      });
+    }
+
+    testWidgets('Activity holds what needs the reader: the failed conversation and recordings on this phone',
+        (tester) async {
+      await withClock(Clock.fixed(_now), () async {
+        final home = await pumpGallery(tester, Brightness.dark, size: const Size(393, 852));
+        final store = PendingWorkStore(
+          loadPending: () async => const ApiSuccess(PendingWorkSnapshot.disabled),
+          loadAttention: () async => const ApiSuccess(AttentionItemsPage.disabled),
+        );
+        unawaited(Navigator.of(tester.element(find.byType(ConversationsPage))).push(MaterialPageRoute<void>(
+            builder: (_) => ActivityPage(
+                  pendingWork: store,
+                  probeDreamReport: () async => false,
+                  loadRecaps: () async => (items: <DailySummary>[], ok: true),
+                  loadChanges: ({cursor}) async => const ApiSuccess(ReviewChangesPage(changes: [])),
+                ))));
+        for (var i = 0; i < 6; i++) {
+          await tester.pump(const Duration(milliseconds: 100));
+        }
+        expect(find.byKey(const ValueKey('activity_failed_g-failed')), findsOneWidget);
+        expect(find.byKey(const Key('activity_on_this_phone')), findsOneWidget);
+        expect(find.text('2 recordings, kept only on this phone'), findsOneWidget);
+        expect(find.byKey(const Key('activity_transcribe_all')), findsOneWidget);
+        expect(find.byKey(const ValueKey('activity_rec_s-pending')), findsOneWidget);
+        expect(find.byKey(const ValueKey('activity_rec_s-failed')), findsOneWidget);
+        expect(find.byKey(const ValueKey('activity_rec_s-processing')), findsNothing,
+            reason: 'one being processed is on Home');
+        await shoot(tester, '006-mobile-ios-activity-needs-you');
+        await _dispose(tester, home);
+        store.dispose();
+        debugDefaultTargetPlatformOverride = null;
+      });
+    });
+
+    testWidgets('a row that fails while Home is on screen says where it went', (tester) async {
+      await withClock(Clock.fixed(_now), () async {
+        final home = await pumpGallery(tester, Brightness.dark, size: const Size(393, 852));
+        expect(find.text('Hiring plan'), findsOneWidget);
+        home.conversations.upsertConversation(
+          _conversation('g-writing', DateTime(2026, 11, 16, 11, 45), 'Hiring plan',
+              v3: const ConversationV3Fields(kind: 'conversation', tileState: ConversationTileState.failed)),
+          preserveHomeStep: false,
+        );
+        await tester.pump();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(find.text('Hiring plan'), findsNothing, reason: 'it left Home for Activity');
+        expect(find.text('Couldn\'t finish “Hiring plan”'), findsOneWidget);
+        expect(find.text('View'), findsOneWidget);
+        await _dispose(tester, home);
+        debugDefaultTargetPlatformOverride = null;
+      });
+    });
+
+    testWidgets('Finishing up opens its conversation when only the processing rows know it yet', (tester) async {
+      await withClock(Clock.fixed(_now), () async {
+        final home = await pumpGallery(tester, Brightness.dark, size: const Size(393, 852));
+        final v3 = home.conversationsV3;
+        final pending = OptimisticProcessingPlaceholder.conversation(targetConversationId: 'p-1');
+        v3.startManualFinish(pending, 'rec-9', liveConversationId: 'p-1', captureId: home.capture.activeRecordingId);
+        home.liveOpen = false;
+        await v3.refresh();
+        home.conversations.processingConversations = [
+          _conversation('p-1', home.liveStart, 'Launch checklist',
+              status: ConversationStatus.processing,
+              v3: const ConversationV3Fields(kind: 'conversation', tileState: ConversationTileState.transcribing)),
+        ];
+        home.conversations.ping();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        final finishing = find.byKey(const Key('home_finishing'));
+        expect(finishing, findsOneWidget);
+        final navigator = Navigator.of(tester.element(finishing));
+        await tester.tap(finishing);
+        await tester.pump();
+        expect(find.text('Opens as soon as it\'s ready'), findsNothing);
+        expect(navigator.canPop(), isTrue, reason: 'it opened the conversation the processing rows hold');
+        await _dispose(tester, home);
+        debugDefaultTargetPlatformOverride = null;
+      });
+    });
+
+    testWidgets('Home on a phone screen, then Finishing up after End', (tester) async {
+      await withClock(Clock.fixed(_now), () async {
+        final home = await pumpGallery(tester, Brightness.dark, size: const Size(393, 852));
+        await shoot(tester, '003-mobile-ios-home-phone-top');
+        final v3 = home.conversationsV3;
+        final pending = OptimisticProcessingPlaceholder.conversation(targetConversationId: 'live-1');
+        v3.startManualFinish(pending, 'rec-1', liveConversationId: 'live-1', captureId: home.capture.activeRecordingId);
+        home.liveOpen = false;
+        await v3.refresh();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(find.byKey(const Key('home_finishing')), findsOneWidget);
+        await shoot(tester, '004-mobile-ios-home-finishing-after-end');
+        await _dispose(tester, home);
+        debugDefaultTargetPlatformOverride = null;
+      });
+    });
+
+    testWidgets('swiping a row shows its delete mark centred', (tester) async {
+      await withClock(Clock.fixed(_now), () async {
+        final home = await pumpGallery(tester, Brightness.dark, size: const Size(393, 852));
+        final row = find.byKey(const ValueKey('g-done'));
+        await tester.ensureVisible(row);
+        await tester.pump();
+        final gesture = await tester.startGesture(tester.getCenter(row));
+        for (var i = 0; i < 10; i++) {
+          await gesture.moveBy(const Offset(-14, 0));
+          await tester.pump(const Duration(milliseconds: 16));
+        }
+        await tester.pump(const Duration(milliseconds: 200));
+        final button = find.descendant(of: row, matching: find.byKey(const ValueKey('conversation_swipe_delete')));
+        expect(button, findsOneWidget, reason: 'the swipe reveals the delete mark');
+        final mark = find.descendant(of: button, matching: find.byType(FaIcon));
+        final circle = tester.getRect(button);
+        final icon = tester.getRect(mark);
+        expect((icon.center - circle.center).distance, lessThan(1), reason: 'the delete mark is centred');
+        await shoot(tester, '005-mobile-ios-home-swipe-delete');
+        await gesture.up();
+        await tester.pump(const Duration(milliseconds: 400));
+        await _dispose(tester, home);
+        debugDefaultTargetPlatformOverride = null;
       });
     });
   });

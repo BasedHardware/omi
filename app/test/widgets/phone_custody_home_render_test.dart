@@ -62,7 +62,8 @@ void main() {
     await _loadFonts();
   });
   for (final processing in [false, true]) {
-    testWidgets('Home renders only explicit Transcribe Later rows (processing=$processing)', (tester) async {
+    testWidgets('only explicit Transcribe Later recordings are rows, on Home while processing (processing=$processing)',
+        (tester) async {
       debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
       tester.view.physicalSize = const Size(393, 852);
       tester.view.devicePixelRatio = 1;
@@ -124,7 +125,9 @@ void main() {
       await tester.pumpWidget(RepaintBoundary(key: boundary, child: screen));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 250));
-      expect(find.byType(RecordingListItem), findsOneWidget);
+      // One recording, not the Watch copies; on Home only while the server processes it, in Activity's
+      // On this phone section while it waits (SCA-5226).
+      expect(find.byType(RecordingListItem), processing ? findsOneWidget : findsNothing);
       expect(find.text('Planning the weekend'), findsOneWidget);
       if (processing) expect(find.text('Uploaded · processing on Omi'), findsOneWidget);
       expect(tester.takeException(), isNull);

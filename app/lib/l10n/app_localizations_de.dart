@@ -14915,12 +14915,6 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
-  String get dailyRecapsOnHome => 'Tägliche Zusammenfassungen auf Start';
-
-  @override
-  String get dailyRecapsOnHomeDescription => 'Zeige deine neuesten Zusammenfassungen oben auf Start.';
-
-  @override
   String get yearlySwitchTitle => 'Zu jährlich wechseln';
 
   @override
@@ -14988,17 +14982,6 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get homeStepTranscribing => 'Wird transkribiert…';
-
-  @override
-  String homeRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count Aufnahmen',
-      one: '$count Aufnahme',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get episodeWritingNotesDetail => 'Zuerst wird das Transkript fertiggestellt. Du kannst diese Seite verlassen.';
@@ -15962,4 +15945,55 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'Starten Sie Omi neu, um den Wert zu aktualisieren';
+
+  @override
+  String homeLockedTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Aufnahmen warten',
+      one: '1 Aufnahme wartet',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeLockedSubtitle => 'Sicher aufbewahrt · zum Lesen freischalten';
+
+  @override
+  String get homeLockedSubtitleNoPlans => 'Sicher aufbewahrt, bis sich Ihr Limit zurücksetzt';
+
+  @override
+  String get homeTakingLonger => 'Dauert länger als gewöhnlich';
+
+  @override
+  String get homeFinishingOpensWhenReady => 'Öffnet sich, sobald sie bereit ist';
+
+  @override
+  String get activityOnThisPhone => 'Auf diesem Telefon';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Aufnahmen, nur auf diesem Telefon gespeichert',
+      one: '1 Aufnahme, nur auf diesem Telefon gespeichert',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'Alle transkribieren';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return '„$title“ konnte nicht abgeschlossen werden';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'Eine Unterhaltung konnte nicht abgeschlossen werden';
+
+  @override
+  String get homeRecordingCouldNotSend => 'Eine Aufnahme konnte nicht gesendet werden';
 }

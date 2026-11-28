@@ -14921,12 +14921,6 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String get dailyRecapsOnHome => 'Daily Recaps sa Home';
-
-  @override
-  String get dailyRecapsOnHomeDescription => 'Ipakita ang pinakabagong recaps sa itaas ng Home.';
-
-  @override
   String get yearlySwitchTitle => 'Lumipat sa Taunan';
 
   @override
@@ -14994,17 +14988,6 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get homeStepTranscribing => 'Tinatranscribe…';
-
-  @override
-  String homeRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count na recording',
-      one: '1 recording',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get episodeWritingNotesDetail => 'Tinatapos muna ang transcript. Maaari kang umalis sa pahinang ito.';
@@ -15972,4 +15955,55 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'I-restart ang Omi upang i-refresh';
+
+  @override
+  String homeLockedTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count na recording na naghihintay',
+      one: '1 recording na naghihintay',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeLockedSubtitle => 'Ligtas na nakaimbak · i-unlock para basahin';
+
+  @override
+  String get homeLockedSubtitleNoPlans => 'Ligtas na nakatago hanggang sa mag-reset ang iyong allowance';
+
+  @override
+  String get homeTakingLonger => 'Mas matagal kaysa karaniwan';
+
+  @override
+  String get homeFinishingOpensWhenReady => 'Bubuksan agad kapag handa na';
+
+  @override
+  String get activityOnThisPhone => 'Sa teleponong ito';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count recording, nakaimbak lang sa teleponong ito',
+      one: '1 recording, nakaimbak lang sa teleponong ito',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'I-transcribe ang lahat';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return 'Hindi natapos ang “$title”';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'Hindi natapos ang isang pag-uusap';
+
+  @override
+  String get homeRecordingCouldNotSend => 'Hindi naipadala ang isang recording';
 }

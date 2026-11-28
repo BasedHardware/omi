@@ -14830,12 +14830,6 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
-  String get dailyRecapsOnHome => 'Resumos diários no Início';
-
-  @override
-  String get dailyRecapsOnHomeDescription => 'Mostre seus resumos mais recentes no topo do Início.';
-
-  @override
   String get yearlySwitchTitle => 'Mudar para anual';
 
   @override
@@ -14903,17 +14897,6 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get homeStepTranscribing => 'Transcrevendo…';
-
-  @override
-  String homeRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count gravações',
-      one: '$count gravação',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get episodeWritingNotesDetail => 'Primeiro terminamos a transcrição. Você pode sair desta página.';
@@ -15874,4 +15857,55 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'Reinicie o Omi para atualizar';
+
+  @override
+  String homeLockedTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count gravações aguardando',
+      one: '1 gravação aguardando',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeLockedSubtitle => 'Salvas com segurança · desbloqueie para ler';
+
+  @override
+  String get homeLockedSubtitleNoPlans => 'Salvas com segurança até seu limite ser renovado';
+
+  @override
+  String get homeTakingLonger => 'Está demorando mais do que o normal';
+
+  @override
+  String get homeFinishingOpensWhenReady => 'Abre assim que estiver pronta';
+
+  @override
+  String get activityOnThisPhone => 'Neste telefone';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count gravações, mantidas somente neste telefone',
+      one: '1 gravação, mantida somente neste telefone',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'Transcrever tudo';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return 'Não foi possível concluir “$title”';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'Não foi possível concluir uma conversa';
+
+  @override
+  String get homeRecordingCouldNotSend => 'Não foi possível enviar uma gravação';
 }

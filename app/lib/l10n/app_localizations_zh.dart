@@ -14568,12 +14568,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get dailyRecapsOnHome => '首页每日回顾';
-
-  @override
-  String get dailyRecapsOnHomeDescription => '在首页顶部显示最新的回顾。';
-
-  @override
   String get yearlySwitchTitle => '改为按年付费';
 
   @override
@@ -14641,16 +14635,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get homeStepTranscribing => '正在转录…';
-
-  @override
-  String homeRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count 条录音',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get episodeWritingNotesDetail => '正在先完成转录。你可以离开此页面。';
@@ -15587,4 +15571,55 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => '重启 Omi 以刷新';
+
+  @override
+  String homeLockedTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 条录音等待中',
+      one: '1 条录音等待中',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeLockedSubtitle => '已妥善保存 · 解锁后可阅读';
+
+  @override
+  String get homeLockedSubtitleNoPlans => '已妥善保存，直到您的额度重置';
+
+  @override
+  String get homeTakingLonger => '耗时比平时更长';
+
+  @override
+  String get homeFinishingOpensWhenReady => '准备好后会立即打开';
+
+  @override
+  String get activityOnThisPhone => '在此手机上';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 条录音，仅保存在此手机上',
+      one: '1 条录音，仅保存在此手机上',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => '全部转写';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return '“$title”未能完成';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => '一个对话未能完成';
+
+  @override
+  String get homeRecordingCouldNotSend => '一条录音未能发送';
 }

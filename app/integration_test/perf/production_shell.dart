@@ -1,5 +1,5 @@
 // Derived by python3 tool/perf_shell.py from main.dart. Do not hand edit.
-// Extracted shell SHA256 (imports, telemetry field, builder chain): b0d1682ba2bc5d10ef3ada62b90bba12fb95af1729c9875300b6b82c03147eac
+// Extracted shell SHA256 (imports, telemetry field, builder chain): 20beee0678cc73c207c49f8c7788f8ccfe98c960d70cf4485a1c685458e4c10b
 // ignore_for_file: unused_import, unnecessary_import
 import 'package:omi/services/on_device/on_device_background.dart';
 import 'package:omi/services/onboarding_sync_runtime.dart';
@@ -75,7 +75,6 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/conversation_task_presence_provider.dart';
 import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:omi/providers/episode_provider.dart';
-import 'package:omi/providers/home_feed_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/goals_provider.dart';

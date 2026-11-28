@@ -14795,12 +14795,6 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String get dailyRecapsOnHome => 'Päevased kokkuvõtted avalehel';
-
-  @override
-  String get dailyRecapsOnHomeDescription => 'Näita viimaseid kokkuvõtteid avalehe ülaosas.';
-
-  @override
   String get yearlySwitchTitle => 'Mine üle aastasele';
 
   @override
@@ -14868,17 +14862,6 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get homeStepTranscribing => 'Transkribeerime…';
-
-  @override
-  String homeRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count salvestust',
-      one: '$count salvestus',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get episodeWritingNotesDetail => 'Kõigepealt lõpetame transkriptsiooni. Võid sellelt lehelt lahkuda.';
@@ -15837,4 +15820,55 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'Taaskäivitage Omi värskendamiseks';
+
+  @override
+  String homeLockedTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count salvestist ootab',
+      one: '1 salvestis ootab',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeLockedSubtitle => 'Turvaliselt hoitud · ava lugemiseks';
+
+  @override
+  String get homeLockedSubtitleNoPlans => 'Turvaliselt hoitud kuni sinu kasutuslimiit lähtestub';
+
+  @override
+  String get homeTakingLonger => 'Võtab tavapärasest rohkem aega';
+
+  @override
+  String get homeFinishingOpensWhenReady => 'Avaneb niipea, kui see on valmis';
+
+  @override
+  String get activityOnThisPhone => 'Selles telefonis';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count salvestist, mis on ainult selles telefonis',
+      one: '1 salvestis, mis on ainult selles telefonis',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'Transkribeeri kõik';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return 'Vestlust „$title“ ei õnnestunud lõpetada';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'Vestlust ei õnnestunud lõpetada';
+
+  @override
+  String get homeRecordingCouldNotSend => 'Salvestist ei õnnestunud saata';
 }

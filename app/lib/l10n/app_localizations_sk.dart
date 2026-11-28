@@ -14796,12 +14796,6 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String get dailyRecapsOnHome => 'Denné súhrny na domovskej obrazovke';
-
-  @override
-  String get dailyRecapsOnHomeDescription => 'Zobraziť najnovšie súhrny v hornej časti domovskej obrazovky.';
-
-  @override
   String get yearlySwitchTitle => 'Prejsť na ročné';
 
   @override
@@ -14869,19 +14863,6 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get homeStepTranscribing => 'Prepisujeme…';
-
-  @override
-  String homeRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count nahrávky',
-      many: '$count nahrávok',
-      few: '$count nahrávky',
-      one: '$count nahrávka',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get episodeWritingNotesDetail => 'Najprv dokončujeme prepis. Túto stránku môžete opustiť.';
@@ -15840,4 +15821,55 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'Pre obnovenie údajov reštartujte Omi';
+
+  @override
+  String homeLockedTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Čakajúce nahrávky: $count',
+      one: '1 čakajúca nahrávka',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeLockedSubtitle => 'Bezpečne uložené · odomknite na prečítanie';
+
+  @override
+  String get homeLockedSubtitleNoPlans => 'Bezpečne uložené do obnovenia vášho limitu';
+
+  @override
+  String get homeTakingLonger => 'Trvá to dlhšie ako zvyčajne';
+
+  @override
+  String get homeFinishingOpensWhenReady => 'Otvorí sa hneď, ako bude hotová';
+
+  @override
+  String get activityOnThisPhone => 'V tomto telefóne';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count nahrávok, uložených len v tomto telefóne',
+      one: '1 nahrávka, uložená len v tomto telefóne',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'Transkribovať všetko';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return 'Nepodarilo sa dokončiť „$title“';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'Nepodarilo sa dokončiť konverzáciu';
+
+  @override
+  String get homeRecordingCouldNotSend => 'Nepodarilo sa odoslať nahrávku';
 }

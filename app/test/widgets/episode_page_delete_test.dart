@@ -11,16 +11,13 @@ import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/episodes/episode_page.dart';
-import 'package:omi/pages/conversations/widgets/processing_conversation_row.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/episode_provider.dart';
-import 'package:omi/providers/home_feed_provider.dart';
-import 'package:omi/backend/schema/home_feed.dart';
 import 'package:omi/ui/ui.dart';
 
 void main() {
-  for (final change in ['ready', 'composed', 'card ready', 'card composed', 'legacy ready', 'cold composed']) {
+  for (final change in ['ready', 'composed', 'legacy ready']) {
     testWidgets('processing confirmation cancels stale $change scope; Delete and Undo touch nothing', (tester) async {
       SharedPreferences.setMockInitialValues({});
       await SharedPreferencesUtil.init();
@@ -38,37 +35,6 @@ void main() {
           closedAt: at,
           conversationIds: ['a', 'b'],
           members: members);
-      var changed = false;
-      final feed = HomeFeedProvider(
-          owner: () => 'fixture',
-          fetch: ({cursor}) async => ApiSuccess(HomeFeedPage(
-              items: (changed || change == 'legacy ready')
-                  ? [
-                      HomeFeedCard(
-                          id: 'changed',
-                          kind: change.endsWith('composed') ? 'episode' : 'conversation',
-                          detailId: change.endsWith('composed') ? 'owner' : 'a',
-                          startedAt: at,
-                          title: 'Ready',
-                          emoji: '',
-                          preview: '',
-                          status: 'completed',
-                          homeStep: change == 'legacy ready' ? 'transcribing' : 'ready',
-                          starred: false,
-                          isLocked: false,
-                          hasTasks: false,
-                          memberCount: 1,
-                          sources: const [],
-                          summaryAvailable: true,
-                          revision: 'new')
-                    ]
-                  : [],
-              nextCursor: null,
-              hasMore: false,
-              truncated: false,
-              generation: changed ? 'new' : 'old')));
-      await feed.start();
-      addTearDown(feed.dispose);
       final calls = <String>[];
       final history = ConversationProvider(isSignedIn: () => true)..conversations = members;
       history.conversationDeleteFetcherOverride = (id) async {
@@ -79,7 +45,7 @@ void main() {
           detail: (_) async => const ApiFailure(ApiProblem(ApiProblemKind.transport)),
           lookup: (_) async => ApiSuccess(EpisodeRead(enabled: true, episode: owner)))
         ..debugSetLive(null)
-        ..debugSetHomeEpisodes(change == 'cold composed' ? [] : [owner]);
+        ..debugSetHomeEpisodes([owner]);
       final connectivity = ConnectivityProvider();
       addTearDown(history.dispose);
       addTearDown(episodes.dispose);
@@ -89,25 +55,12 @@ void main() {
             ChangeNotifierProvider<ConversationProvider>.value(value: history),
             ChangeNotifierProvider<EpisodeProvider>.value(value: episodes),
             ChangeNotifierProvider<ConnectivityProvider>.value(value: connectivity),
-            ChangeNotifierProvider<HomeFeedProvider>.value(value: feed),
           ],
           child: MaterialApp(
               theme: buildOmiTheme(brightness: Brightness.light),
               localizationsDelegates: AppLocalizations.localizationsDelegates,
               supportedLocales: AppLocalizations.supportedLocales,
-              home: Scaffold(
-                  body: ProcessingConversationRow(
-                      conversation: members.first,
-                      episode: change == 'cold composed'
-                          ? Episode(
-                              id: '',
-                              live: false,
-                              startedAt: at,
-                              lastActivityAt: at,
-                              members: members,
-                              conversationIds: ['a', 'b'])
-                          : owner,
-                      processingEpisodes: change == 'cold composed' ? [] : [owner])))));
+              home: Scaffold(body: _OpenProcessingEpisode(episode: owner, processingEpisodes: [owner])))));
       await tester.tap(find.byKey(const Key('home_processing_row')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
@@ -129,9 +82,6 @@ void main() {
                 status: ConversationStatus.completed,
                 structured: Structured('Ready own notes', 'Finished notes')),
             preserveHomeStep: false);
-      } else if (change.startsWith('card') || change == 'cold composed') {
-        changed = true;
-        await feed.refresh();
       } else {
         episodes.debugSetHomeEpisodes([
           Episode(
@@ -234,8 +184,7 @@ void main() {
               localizationsDelegates: AppLocalizations.localizationsDelegates,
               supportedLocales: AppLocalizations.supportedLocales,
               home: Scaffold(
-                  body: ProcessingConversationRow(
-                      conversation: pending, episode: projection, processingEpisodes: synthetic ? [] : [owner])),
+                  body: _OpenProcessingEpisode(episode: projection, processingEpisodes: synthetic ? [] : [owner])),
             )));
         await tester.tap(find.byKey(const Key('home_processing_row')));
         await tester.pump();
@@ -437,4 +386,22 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     });
   }
+}
+
+/// Opens the processing-members page the way Home's old processing row did: a pending-member
+/// projection, never the full episode.
+class _OpenProcessingEpisode extends StatelessWidget {
+  const _OpenProcessingEpisode({required this.episode, required this.processingEpisodes});
+
+  final Episode episode;
+  final List<Episode> processingEpisodes;
+
+  @override
+  Widget build(BuildContext context) => TextButton(
+        key: const Key('home_processing_row'),
+        onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+            builder: (_) =>
+                EpisodePage(processingAggregate: true, processingEpisodes: processingEpisodes, episode: episode))),
+        child: const Text('Open'),
+      );
 }

@@ -13,7 +13,6 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/gen/episodes_wire.g.dart' as episode_wire;
 import 'package:omi/backend/schema/structured.dart';
-import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/backend/schema/action_item.dart' show ActionItemsResponse;
 import 'package:omi/pages/action_items/action_items_page.dart';
@@ -536,13 +535,10 @@ Future<void> runLiveScenario(WidgetTester tester, PerfWorld world, String name) 
     case 'home_live_scroll':
       // The shell's Scaffold supplies the Material the capture card's ink needs; the first
       // frames still show the card while the episodes capability is in flight.
-      globalNavigatorKey.currentState!.push(MaterialPageRoute<void>(
-          builder: (_) => Scaffold(
-              body: ConversationsPage(
-                  requestInitialLoad: false, loadRecaps: () async => (items: <DailySummary>[], ok: true)))));
+      globalNavigatorKey.currentState!.push(
+          MaterialPageRoute<void>(builder: (_) => const Scaffold(body: ConversationsPage(requestInitialLoad: false))));
       await settleLiveEpisode(tester, world);
-      expect(find.byKey(const ValueKey('home_live_episode_row')), findsOneWidget,
-          reason: 'Home must show the live episode row');
+      expect(find.byKey(const ValueKey('home_live')), findsOneWidget, reason: 'Home must show the live episode row');
       await liveScrollRoundTrip(tester, world, ConversationsPage);
       globalNavigatorKey.currentState!.pop();
       await drainFixtureIo(tester);
@@ -658,9 +654,8 @@ class _TabShellPageState extends State<_TabShellPage> {
   @override
   Widget build(BuildContext context) {
     final selected = context.select<HomeProvider, int>((home) => home.selectedIndex);
-    _pages[selected] ??= selected == HomeProvider.homeTab
-        ? ConversationsPage(requestInitialLoad: false, loadRecaps: () async => (items: <DailySummary>[], ok: true))
-        : const ActionItemsPage();
+    _pages[selected] ??=
+        selected == HomeProvider.homeTab ? const ConversationsPage(requestInitialLoad: false) : const ActionItemsPage();
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(
@@ -711,8 +706,7 @@ Future<void> runScenario(WidgetTester tester, PerfWorld world, String name) asyn
     return;
   }
   final Widget page = switch (name) {
-    'home_scroll' =>
-      ConversationsPage(requestInitialLoad: false, loadRecaps: () async => (items: <DailySummary>[], ok: true)),
+    'home_scroll' => const ConversationsPage(requestInitialLoad: false),
     'detail_scroll' => ConversationDetailPage(
         conversation: world.conversations.conversations.singleWhere((c) => c.id == 'perf-conv-0'),
         initialTab: ConversationTab.transcript),

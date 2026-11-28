@@ -14593,12 +14593,6 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get dailyRecapsOnHome => '홈의 일일 요약';
-
-  @override
-  String get dailyRecapsOnHomeDescription => '홈 상단에 최근 요약을 표시합니다.';
-
-  @override
   String get yearlySwitchTitle => '연간 결제로 전환';
 
   @override
@@ -14666,16 +14660,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get homeStepTranscribing => '음성 변환 중…';
-
-  @override
-  String homeRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '녹음 $count개',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get episodeWritingNotesDetail => '먼저 대화 내용을 마무리하고 있어요. 이 페이지를 나가도 됩니다.';
@@ -15617,4 +15601,55 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => '새로고침하려면 Omi를 다시 시작하세요';
+
+  @override
+  String homeLockedTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '녹음 $count개 대기 중',
+      one: '녹음 1개 대기 중',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeLockedSubtitle => '안전하게 보관됨 · 잠금 해제하여 읽기';
+
+  @override
+  String get homeLockedSubtitleNoPlans => '한도가 초기화될 때까지 안전하게 보관됩니다';
+
+  @override
+  String get homeTakingLonger => '평소보다 오래 걸리고 있습니다';
+
+  @override
+  String get homeFinishingOpensWhenReady => '준비되는 대로 열립니다';
+
+  @override
+  String get activityOnThisPhone => '이 휴대폰에만 있음';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '녹음 $count개, 이 휴대폰에만 저장됨',
+      one: '녹음 1개, 이 휴대폰에만 저장됨',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => '모두 텍스트 변환';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return '“$title”을(를) 완료하지 못했습니다';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => '대화를 완료하지 못했습니다';
+
+  @override
+  String get homeRecordingCouldNotSend => '녹음을 전송하지 못했습니다';
 }

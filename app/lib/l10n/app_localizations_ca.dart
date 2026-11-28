@@ -14877,12 +14877,6 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
-  String get dailyRecapsOnHome => 'Resums diaris a l\'Inici';
-
-  @override
-  String get dailyRecapsOnHomeDescription => 'Mostra els teus resums més recents a dalt de l\'Inici.';
-
-  @override
   String get yearlySwitchTitle => 'Canvia a anual';
 
   @override
@@ -14950,17 +14944,6 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get homeStepTranscribing => 'Transcrivint…';
-
-  @override
-  String homeRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count enregistraments',
-      one: '$count enregistrament',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get episodeWritingNotesDetail => 'Primer acabem la transcripció. Pots sortir d\'aquesta pàgina.';
@@ -15925,4 +15908,55 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'Reinicieu Omi per actualitzar el valor';
+
+  @override
+  String homeLockedTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count enregistraments en espera',
+      one: '1 enregistrament en espera',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeLockedSubtitle => 'Desada amb seguretat · desbloquegeu per llegir';
+
+  @override
+  String get homeLockedSubtitleNoPlans => 'Desada amb seguretat fins que es restableixi el vostre límit';
+
+  @override
+  String get homeTakingLonger => 'Està trigant més del normal';
+
+  @override
+  String get homeFinishingOpensWhenReady => 'S\'obrirà tan bon punt estigui a punt';
+
+  @override
+  String get activityOnThisPhone => 'En aquest telèfon';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count enregistraments, desats només en aquest telèfon',
+      one: '1 enregistrament, desat només en aquest telèfon',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'Transcriure-ho tot';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return 'No s\'ha pogut completar «$title»';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'No s\'ha pogut completar una conversa';
+
+  @override
+  String get homeRecordingCouldNotSend => 'No s\'ha pogut enviar un enregistrament';
 }

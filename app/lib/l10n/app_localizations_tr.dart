@@ -14814,12 +14814,6 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String get dailyRecapsOnHome => 'Ana Sayfada Günlük Özetler';
-
-  @override
-  String get dailyRecapsOnHomeDescription => 'En son özetlerini Ana Sayfanın üstünde göster.';
-
-  @override
   String get yearlySwitchTitle => 'Yıllığa geçin';
 
   @override
@@ -14887,16 +14881,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get homeStepTranscribing => 'Metne dökülüyor…';
-
-  @override
-  String homeRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count kayıt',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get episodeWritingNotesDetail => 'Önce döküm tamamlanıyor. Bu sayfadan çıkabilirsiniz.';
@@ -15855,4 +15839,55 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'Yenilemek için Omi\'yi yeniden başlatın';
+
+  @override
+  String homeLockedTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kayıt bekliyor',
+      one: '1 kayıt bekliyor',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeLockedSubtitle => 'Güvenle saklandı · okumak için kilidini açın';
+
+  @override
+  String get homeLockedSubtitleNoPlans => 'Kotanız yenilenene kadar güvenle saklandı';
+
+  @override
+  String get homeTakingLonger => 'Normalden daha uzun sürüyor';
+
+  @override
+  String get homeFinishingOpensWhenReady => 'Hazır olur olmaz açılır';
+
+  @override
+  String get activityOnThisPhone => 'Bu telefonda';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kayıt, yalnızca bu telefonda saklanıyor',
+      one: '1 kayıt, yalnızca bu telefonda saklanıyor',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'Tümünü yazıya dök';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return '“$title” tamamlanamadı';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'Bir konuşma tamamlanamadı';
+
+  @override
+  String get homeRecordingCouldNotSend => 'Bir kayıt gönderilemedi';
 }

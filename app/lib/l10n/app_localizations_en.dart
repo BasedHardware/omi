@@ -14786,12 +14786,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get dailyRecapsOnHome => 'Daily Recaps on Home';
-
-  @override
-  String get dailyRecapsOnHomeDescription => 'Show your latest recaps at the top of Home.';
-
-  @override
   String get yearlySwitchTitle => 'Switch to Yearly';
 
   @override
@@ -14859,17 +14853,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get homeStepTranscribing => 'Transcribing…';
-
-  @override
-  String homeRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count recordings',
-      one: '1 recording',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get episodeWritingNotesDetail => 'Finishing the transcript first. You can leave this page.';
@@ -15828,4 +15811,55 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'Restart Omi to refresh';
+
+  @override
+  String homeLockedTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count recordings waiting',
+      one: '1 recording waiting',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeLockedSubtitle => 'Kept safe · unlock to read';
+
+  @override
+  String get homeLockedSubtitleNoPlans => 'Kept safe until your allowance resets';
+
+  @override
+  String get homeTakingLonger => 'Taking longer than usual';
+
+  @override
+  String get homeFinishingOpensWhenReady => 'Opens as soon as it\'s ready';
+
+  @override
+  String get activityOnThisPhone => 'On this phone';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count recordings, kept only on this phone',
+      one: '1 recording, kept only on this phone',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'Transcribe all';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return 'Couldn\'t finish “$title”';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'A conversation couldn\'t finish';
+
+  @override
+  String get homeRecordingCouldNotSend => 'A recording couldn\'t be sent';
 }

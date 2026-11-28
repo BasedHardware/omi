@@ -14806,12 +14806,6 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String get dailyRecapsOnHome => 'Päivittäiset yhteenvedot Koti-näkymässä';
-
-  @override
-  String get dailyRecapsOnHomeDescription => 'Näytä uusimmat yhteenvedot Koti-näkymän yläosassa.';
-
-  @override
   String get yearlySwitchTitle => 'Vaihda vuosimaksuun';
 
   @override
@@ -14879,17 +14873,6 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get homeStepTranscribing => 'Litteroidaan…';
-
-  @override
-  String homeRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count tallennetta',
-      one: '$count tallenne',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get episodeWritingNotesDetail => 'Viimeistelemme ensin litteroinnin. Voit poistua tältä sivulta.';
@@ -15850,4 +15833,55 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'Käynnistä Omi uudelleen päivittämiseksi';
+
+  @override
+  String homeLockedTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count nauhoitusta odottaa',
+      one: '1 nauhoitus odottaa',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeLockedSubtitle => 'Turvassa · avaa lukeaksesi';
+
+  @override
+  String get homeLockedSubtitleNoPlans => 'Turvassa, kunnes kiintiösi nollautuu';
+
+  @override
+  String get homeTakingLonger => 'Kestää tavallista kauemmin';
+
+  @override
+  String get homeFinishingOpensWhenReady => 'Aukeaa heti, kun se on valmis';
+
+  @override
+  String get activityOnThisPhone => 'Tässä puhelimessa';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count nauhoitusta, jotka ovat vain tässä puhelimessa',
+      one: '1 nauhoitus, joka on vain tässä puhelimessa',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'Transkriboi kaikki';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return 'Keskustelua ”$title” ei saatu valmiiksi';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'Keskustelua ei saatu valmiiksi';
+
+  @override
+  String get homeRecordingCouldNotSend => 'Nauhoitusta ei voitu lähettää';
 }

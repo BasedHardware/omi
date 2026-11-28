@@ -14588,12 +14588,6 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get dailyRecapsOnHome => 'ホームの日次の要約';
-
-  @override
-  String get dailyRecapsOnHomeDescription => '最新の要約をホームの上部に表示します。';
-
-  @override
   String get yearlySwitchTitle => '年払いに切り替える';
 
   @override
@@ -14661,16 +14655,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get homeStepTranscribing => '文字起こし中…';
-
-  @override
-  String homeRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count件の録音',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get episodeWritingNotesDetail => '先に文字起こしを仕上げています。このページを離れても大丈夫です。';
@@ -15611,4 +15595,55 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'Omiを再起動して更新';
+
+  @override
+  String homeLockedTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count件の録音が待機中',
+      one: '1件の録音が待機中',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeLockedSubtitle => '安全に保管中 · ロック解除して読む';
+
+  @override
+  String get homeLockedSubtitleNoPlans => '利用枠がリセットされるまで安全に保管されます';
+
+  @override
+  String get homeTakingLonger => '通常より時間がかかっています';
+
+  @override
+  String get homeFinishingOpensWhenReady => '準備ができ次第開きます';
+
+  @override
+  String get activityOnThisPhone => 'この端末のみ';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count件の録音（この端末のみに保存）',
+      one: '1件の録音（この端末のみに保存）',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'すべて文字起こし';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return '「$title」を完了できませんでした';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => '会話を完了できませんでした';
+
+  @override
+  String get homeRecordingCouldNotSend => '録音を送信できませんでした';
 }

@@ -14716,12 +14716,6 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String get dailyRecapsOnHome => 'الملخصات اليومية في الرئيسية';
-
-  @override
-  String get dailyRecapsOnHomeDescription => 'اعرض أحدث ملخصاتك أعلى الشاشة الرئيسية.';
-
-  @override
   String get yearlySwitchTitle => 'التبديل إلى الاشتراك السنوي';
 
   @override
@@ -14789,20 +14783,6 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get homeStepTranscribing => 'جارٍ التفريغ…';
-
-  @override
-  String homeRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count تسجيل',
-      many: '$count تسجيلًا',
-      few: '$count تسجيلات',
-      two: 'تسجيلان',
-      one: 'تسجيل واحد',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get episodeWritingNotesDetail => 'ننهي النص أولًا. يمكنك مغادرة هذه الصفحة.';
@@ -15757,4 +15737,55 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'أعد تشغيل Omi لتحديث القراءة';
+
+  @override
+  String homeLockedTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count تسجيلات في الانتظار',
+      one: 'تسجيل واحد في الانتظار',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeLockedSubtitle => 'محفوظة بأمان · افتح القفل للقراءة';
+
+  @override
+  String get homeLockedSubtitleNoPlans => 'محفوظة بأمان حتى تتجدد حصتك';
+
+  @override
+  String get homeTakingLonger => 'يستغرق وقتًا أطول من المعتاد';
+
+  @override
+  String get homeFinishingOpensWhenReady => 'ستُفتح بمجرد أن تجهز';
+
+  @override
+  String get activityOnThisPhone => 'على هذا الهاتف';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count تسجيلات، محفوظة على هذا الهاتف فقط',
+      one: '1 تسجيل، محفوظ على هذا الهاتف فقط',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'تحويل الكل إلى نص';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return 'تعذّر إكمال «$title»';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'تعذّر إكمال محادثة';
+
+  @override
+  String get homeRecordingCouldNotSend => 'تعذّر إرسال تسجيل';
 }

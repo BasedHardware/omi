@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 
-import 'package:provider/provider.dart';
-
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/conversation_v3.dart';
-import 'package:omi/providers/conversations_v3_provider.dart';
+import 'package:omi/pages/conversations/home/home_model.dart' show homeTileState;
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/conversations/early_title.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -41,8 +39,7 @@ class _ConversationStateTileState extends State<ConversationStateTile> {
   Widget build(BuildContext context) {
     final conversation = widget.conversation;
     final l10n = context.l10n;
-    final v3On = context.select<ConversationsV3Provider?, bool>((p) => p?.v3 ?? false);
-    final state = v3On ? conversation.v3?.tileState : null;
+    final state = homeTileState(conversation);
     final previous = _shown;
     _shown = state;
     if (state == ConversationTileState.done &&
@@ -68,7 +65,7 @@ class _ConversationStateTileState extends State<ConversationStateTile> {
         ),
       ConversationTileState.failed => (
           Icon(Icons.error_outline_rounded,
-              key: const Key('conversation_tile_failed'), size: 20, color: OmiColors.warning),
+              key: const Key('conversation_tile_failed'), size: 20, color: OmiColors.danger),
           l10n.conversationSummaryFailed,
         ),
       _ => (

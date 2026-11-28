@@ -14836,12 +14836,6 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String get dailyRecapsOnHome => 'Dienas kopsavilkumi sākumā';
-
-  @override
-  String get dailyRecapsOnHomeDescription => 'Rādīt jaunākos kopsavilkumus sākuma augšdaļā.';
-
-  @override
   String get yearlySwitchTitle => 'Pāriet uz gada maksu';
 
   @override
@@ -14909,18 +14903,6 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get homeStepTranscribing => 'Notiek transkribēšana…';
-
-  @override
-  String homeRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count ieraksti',
-      one: '$count ieraksts',
-      zero: '$count ierakstu',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get episodeWritingNotesDetail => 'Vispirms pabeidzam transkripciju. Varat pamest šo lapu.';
@@ -15880,4 +15862,55 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'Restartējiet Omi, lai atsvaidzinātu';
+
+  @override
+  String homeLockedTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ieraksti gaida',
+      one: '1 ieraksts gaida',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeLockedSubtitle => 'Uzglabātas drošībā · atbloķēt lasīšanai';
+
+  @override
+  String get homeLockedSubtitleNoPlans => 'Uzglabātas drošībā, līdz tiek atjaunots jūsu limits';
+
+  @override
+  String get homeTakingLonger => 'Aizņem vairāk laika nekā parasti';
+
+  @override
+  String get homeFinishingOpensWhenReady => 'Tiks atvērta, tiklīdz būs gatava';
+
+  @override
+  String get activityOnThisPhone => 'Šajā tālrunī';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ieraksti, saglabāti tikai šajā tālrunī',
+      one: '1 ieraksts, saglabāts tikai šajā tālrunī',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'Transkribēt visus';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return 'Neizdevās pabeigt „$title“';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'Neizdevās pabeigt sarunu';
+
+  @override
+  String get homeRecordingCouldNotSend => 'Ierakstu nevarēja nosūtīt';
 }

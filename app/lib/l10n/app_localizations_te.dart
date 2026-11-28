@@ -14865,12 +14865,6 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
-  String get dailyRecapsOnHome => 'హోమ్‌లో రోజువారీ రీక్యాప్‌లు';
-
-  @override
-  String get dailyRecapsOnHomeDescription => 'హోమ్ పైభాగంలో మీ తాజా రీక్యాప్‌లను చూపించు.';
-
-  @override
   String get yearlySwitchTitle => 'వార్షికానికి మారండి';
 
   @override
@@ -14938,17 +14932,6 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get homeStepTranscribing => 'ట్రాన్స్‌క్రైబ్ చేస్తున్నాం…';
-
-  @override
-  String homeRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count రికార్డింగ్‌లు',
-      one: '$count రికార్డింగ్',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get episodeWritingNotesDetail => 'ముందు ట్రాన్స్‌క్రిప్ట్ పూర్తి చేస్తున్నాం. మీరు ఈ పేజీ వదిలి వెళ్లవచ్చు.';
@@ -15909,4 +15892,55 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'రిఫ్రెష్ చేయడానికి Omi ను రీస్టార్ట్ చేయండి';
+
+  @override
+  String homeLockedTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count రికార్డింగ్‌లు వేచి ఉన్నాయి',
+      one: '1 రికార్డింగ్ వేచి ఉంది',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeLockedSubtitle => 'సురక్షితంగా ఉంచబడింది · చదవడానికి అన్‌లాక్ చేయండి';
+
+  @override
+  String get homeLockedSubtitleNoPlans => 'మీ కేటాయింపు రీసెట్ అయ్యే వరకు సురక్షితంగా ఉంచబడుతుంది';
+
+  @override
+  String get homeTakingLonger => 'సాధారణం కంటే ఎక్కువ సమయం పడుతోంది';
+
+  @override
+  String get homeFinishingOpensWhenReady => 'సిద్ధమవగానే తెరుచుకుంటుంది';
+
+  @override
+  String get activityOnThisPhone => 'ఈ ఫోన్‌లో';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count రికార్డింగ్‌లు, ఈ ఫోన్‌లో మాత్రమే ఉంచబడ్డాయి',
+      one: '1 రికార్డింగ్, ఈ ఫోన్‌లో మాత్రమే ఉంచబడింది',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'అన్నింటినీ ట్రాన్స్‌క్రైబ్ చేయండి';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return '“$title” పూర్తి కాలేదు';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'ఒక సంభాషణ పూర్తి కాలేదు';
+
+  @override
+  String get homeRecordingCouldNotSend => 'ఒక రికార్డింగ్ పంపబడలేదు';
 }

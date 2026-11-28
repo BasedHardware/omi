@@ -14800,12 +14800,6 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
-  String get dailyRecapsOnHome => 'Denní souhrny na domovské obrazovce';
-
-  @override
-  String get dailyRecapsOnHomeDescription => 'Zobrazit nejnovější souhrny v horní části domovské obrazovky.';
-
-  @override
   String get yearlySwitchTitle => 'Přejít na roční';
 
   @override
@@ -14873,19 +14867,6 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get homeStepTranscribing => 'Přepisujeme…';
-
-  @override
-  String homeRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count nahrávky',
-      many: '$count nahrávek',
-      few: '$count nahrávky',
-      one: '$count nahrávka',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get episodeWritingNotesDetail => 'Nejprve dokončujeme přepis. Tuto stránku můžete opustit.';
@@ -15844,4 +15825,55 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'Restartujte Omi pro obnovení údaje';
+
+  @override
+  String homeLockedTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count nahrávek čeká',
+      one: '1 nahrávka čeká',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeLockedSubtitle => 'Bezpečně uloženo · odemkněte pro čtení';
+
+  @override
+  String get homeLockedSubtitleNoPlans => 'Bezpečně uloženo, dokud se váš limit neobnoví';
+
+  @override
+  String get homeTakingLonger => 'Trvá to déle než obvykle';
+
+  @override
+  String get homeFinishingOpensWhenReady => 'Otevře se, jakmile bude připravena';
+
+  @override
+  String get activityOnThisPhone => 'V tomto telefonu';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count nahrávek, uložených jen v tomto telefonu',
+      one: '1 nahrávka, uložená jen v tomto telefonu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'Přepsat vše';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return 'Nepodařilo se dokončit „$title“';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'Nepodařilo se dokončit konverzaci';
+
+  @override
+  String get homeRecordingCouldNotSend => 'Nahrávku se nepodařilo odeslat';
 }

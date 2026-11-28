@@ -14817,12 +14817,6 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
-  String get dailyRecapsOnHome => 'Ringkasan Harian di Beranda';
-
-  @override
-  String get dailyRecapsOnHomeDescription => 'Tampilkan ringkasan terbaru di bagian atas Beranda.';
-
-  @override
   String get yearlySwitchTitle => 'Beralih ke Tahunan';
 
   @override
@@ -14890,16 +14884,6 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get homeStepTranscribing => 'Sedang mentranskrip…';
-
-  @override
-  String homeRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count rekaman',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get episodeWritingNotesDetail => 'Menyelesaikan transkrip dulu. Anda boleh meninggalkan halaman ini.';
@@ -15860,4 +15844,55 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'Mulai ulang Omi untuk menyegarkan';
+
+  @override
+  String homeLockedTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count rekaman menunggu',
+      one: '1 rekaman menunggu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeLockedSubtitle => 'Tersimpan aman · buka kunci untuk membaca';
+
+  @override
+  String get homeLockedSubtitleNoPlans => 'Tersimpan aman hingga kuota Anda direset';
+
+  @override
+  String get homeTakingLonger => 'Memakan waktu lebih lama dari biasanya';
+
+  @override
+  String get homeFinishingOpensWhenReady => 'Terbuka begitu siap';
+
+  @override
+  String get activityOnThisPhone => 'Di ponsel ini';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count rekaman, hanya disimpan di ponsel ini',
+      one: '1 rekaman, hanya disimpan di ponsel ini',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'Transkripsikan Semua';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return 'Tidak dapat menyelesaikan “$title”';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'Percakapan tidak dapat diselesaikan';
+
+  @override
+  String get homeRecordingCouldNotSend => 'Rekaman tidak dapat dikirim';
 }

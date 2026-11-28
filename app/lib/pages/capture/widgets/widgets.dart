@@ -8,6 +8,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/pages/conversations/home/home_row_shell.dart';
 import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/pages/home/omiglass_ota_update.dart';
 import 'package:omi/pages/settings/settings_destinations.dart';
@@ -63,7 +64,8 @@ class SpeechProfileCardWidget extends StatelessWidget {
   }
 }
 
-/// A tappable card row on the capture surfaces: icon, label, chevron; announced as a button.
+/// A Home prompt row (Teach Omi your voice, Update firmware): the Home row shape with the prompt's
+/// icon in the tile, its label, and a chevron; a dot marks a setup step still to do.
 class _CardRow extends StatelessWidget {
   const _CardRow({required this.icon, required this.label, required this.onTap, this.badge = false});
 
@@ -74,36 +76,21 @@ class _CardRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.md, OmiSpacing.md, 0),
-      child: Semantics(
-        button: true,
-        label: label,
-        excludeSemantics: true,
-        child: Material(
-          color: OmiColors.surface1,
-          borderRadius: OmiRadius.xlAll,
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: onTap,
-            child: Padding(
-              padding: const EdgeInsets.all(OmiSpacing.md),
-              child: Row(
-                children: [
-                  Icon(icon, color: OmiColors.textPrimary),
-                  const SizedBox(width: OmiSpacing.md),
-                  Expanded(child: Text(label, style: OmiType.callout)),
-                  if (badge) ...[
-                    Icon(Icons.fiber_manual_record, color: OmiColors.danger, size: 10),
-                    const SizedBox(width: OmiSpacing.xs),
-                  ],
-                  Icon(Icons.arrow_forward_ios, color: OmiColors.textPrimary, size: 16),
-                ],
-              ),
-            ),
-          ),
-        ),
+    return HomeRowShell(
+      tile: HomeRowTile(child: Icon(icon, size: 20, color: OmiColors.textPrimary)),
+      title: label,
+      semanticsLabel: label,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (badge) ...[
+            Icon(Icons.fiber_manual_record, color: OmiColors.danger, size: 10),
+            const SizedBox(width: OmiSpacing.xs),
+          ],
+          HomeRowShell.chevron(),
+        ],
       ),
+      onTap: onTap,
     );
   }
 }

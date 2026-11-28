@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 
+import 'package:omi/pages/conversations/home/home_row_shell.dart';
 import 'package:omi/pages/review/review_page.dart';
 import 'package:omi/providers/review_provider.dart';
 import 'package:omi/ui/ui.dart';
@@ -61,62 +62,30 @@ class _ReviewEntryCardState extends State<ReviewEntryCard> with WidgetsBindingOb
     final count = provider.items.length;
     if (count == 0) return const SizedBox.shrink();
     final title = context.l10n.reviewEntryTitle;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 15, OmiSpacing.md, 0),
-      child: Semantics(
-        button: true,
-        label: '$title, $count',
-        excludeSemantics: true,
-        child: Material(
-          key: const Key('review_entry_card'),
-          color: OmiColors.surface1,
-          borderRadius: OmiRadius.lgAll,
-          child: InkWell(
-            borderRadius: OmiRadius.lgAll,
-            onTap: () => routeToPage(context, const ReviewPage()),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 40,
-                    height: 40,
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(color: OmiColors.surface2, shape: BoxShape.circle),
-                          child: Icon(Icons.record_voice_over_outlined, size: 20, color: OmiColors.textPrimary),
-                        ),
-                        Positioned(
-                          top: -2,
-                          right: -2,
-                          child: Container(
-                            constraints: const BoxConstraints(minWidth: 18),
-                            height: 18,
-                            padding: const EdgeInsets.symmetric(horizontal: 5),
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(color: OmiColors.accent, borderRadius: OmiRadius.pillAll),
-                            child: Text(
-                              '$count',
-                              style: OmiType.caption.copyWith(color: OmiColors.onAccent, fontWeight: FontWeight.w700),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: OmiSpacing.sm),
-                  Expanded(child: Text(title, style: OmiType.callout.copyWith(fontWeight: FontWeight.w600))),
-                  Icon(Icons.chevron_right, color: OmiColors.textTertiary),
-                ],
-              ),
+    return HomeRowShell(
+      key: const Key('review_entry_card'),
+      tile: HomeRowTile(child: Icon(Icons.record_voice_over_outlined, size: 20, color: OmiColors.textPrimary)),
+      title: title,
+      semanticsLabel: '$title, $count',
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            constraints: const BoxConstraints(minWidth: 22),
+            height: 22,
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(color: OmiColors.accent, borderRadius: OmiRadius.pillAll),
+            child: Text(
+              '$count',
+              style: OmiType.caption.copyWith(color: OmiColors.onAccent, fontWeight: FontWeight.w700),
             ),
           ),
-        ),
+          const SizedBox(width: OmiSpacing.xs),
+          HomeRowShell.chevron(),
+        ],
       ),
+      onTap: () => routeToPage(context, const ReviewPage()),
     );
   }
 }

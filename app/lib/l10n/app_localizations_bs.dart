@@ -14830,12 +14830,6 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get dailyRecapsOnHome => 'Dnevni rezimei na početnoj';
-
-  @override
-  String get dailyRecapsOnHomeDescription => 'Prikaži najnovije rezimee na vrhu početne.';
-
-  @override
   String get yearlySwitchTitle => 'Pređi na godišnje';
 
   @override
@@ -14903,18 +14897,6 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get homeStepTranscribing => 'Transkribujemo…';
-
-  @override
-  String homeRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count snimaka',
-      few: '$count snimka',
-      one: '$count snimak',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get episodeWritingNotesDetail => 'Prvo završavamo transkript. Možete napustiti ovu stranicu.';
@@ -15873,4 +15855,55 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'Ponovo pokrenite Omi radi osvježavanja';
+
+  @override
+  String homeLockedTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count snimaka čeka',
+      one: '1 snimak čeka',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeLockedSubtitle => 'Sigurno sačuvano · otključajte za čitanje';
+
+  @override
+  String get homeLockedSubtitleNoPlans => 'Sigurno sačuvano dok se vaše ograničenje ne obnovi';
+
+  @override
+  String get homeTakingLonger => 'Traje duže nego obično';
+
+  @override
+  String get homeFinishingOpensWhenReady => 'Otvoriće se čim bude spreman';
+
+  @override
+  String get activityOnThisPhone => 'Na ovom telefonu';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count snimaka, sačuvanih samo na ovom telefonu',
+      one: '1 snimak, sačuvan samo na ovom telefonu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'Transkribuj sve';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return 'Nije moguće završiti „$title“';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'Nije moguće završiti razgovor';
+
+  @override
+  String get homeRecordingCouldNotSend => 'Nije moguće poslati snimak';
 }

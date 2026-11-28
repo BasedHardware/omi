@@ -352,8 +352,9 @@ rules cover what happens after it is tapped. Guards: `silent-catch`, `generic-er
 primary action (Finish: `test/widgets/finish_outcome_test.dart`).
 
 1. **A finishing action lands on its result.** Finish, Save, Submit and Import open the thing they
-   made, in a processing state until it is ready. On Home v3, the Processing row under Today
-   is the visible result of a manual finish until the conversation card takes its place. For
+   made, in a processing state until it is ready. On Home, the Finishing up… row under Today
+   (after the live row) is the visible result of a manual finish until the conversation's own row
+   takes its place; tapping it opens that conversation once it exists. For
    other finishing actions, opening Home is the reader's choice. Finish from the live page,
    Home's Wrap Up or the record button returns one typed `FinishOutcome` (`lib/services/capture/finish_outcome.dart`)
    and is presented by `presentFinishOutcome`, so no caller can receive a bare null.
@@ -390,4 +391,6 @@ Changing a rule here is a product decision: update the primitive, migrate its ca
 and add or tighten a rule in `check_mobile_ux_contract.py` (with a failing case in
 `test_check_mobile_ux_contract.py`) so the old pattern cannot come back.
 
-Closed episode headers use `OmiDateFormat.weekdayDate` with `timeRange` and `OmiDuration.compact`; their Home rows reuse `ConversationListItem`.
+Closed episode headers use `OmiDateFormat.weekdayDate` with `timeRange` and `OmiDuration.compact`.
+
+Home's rows follow [home.md](home.md): one model (`buildHome`), one row shape (`HomeRowShell`), one swipe-delete.

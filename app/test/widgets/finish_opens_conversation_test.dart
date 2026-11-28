@@ -754,25 +754,23 @@ void main() {
     v3.dispose();
   });
 
-  for (final v3On in [true, false]) {
-    testWidgets('an already closed Finish returns to Home without an error (v3: $v3On)', (tester) async {
-      final v3 = ConversationsV3Provider(uid: () => 'owner', cached: 'owner:${v3On ? 1 : 0}');
-      addTearDown(v3.dispose);
-      final capture = _Capture(preview: v3On ? null : _Preview(const [_line], 4))
-        ..verifiedLiveServerRecordingId = 'rec-1'
-        ..failure = ProcessAbsence.notFound;
-      await _pump(tester, capture, v3: v3);
+  testWidgets('an already closed Finish returns to Home without an error', (tester) async {
+    final v3 = ConversationsV3Provider(uid: () => 'owner', cached: 'owner:1');
+    addTearDown(v3.dispose);
+    final capture = _Capture()
+      ..verifiedLiveServerRecordingId = 'rec-1'
+      ..failure = ProcessAbsence.notFound;
+    await _pump(tester, capture, v3: v3);
 
-      expect(await _finishAndCapturePushed(tester, capture), isNull);
-      expect(capture.finishes, 1);
-      await tester.pumpAndSettle();
-      expect(find.byType(LiveEpisodePage), findsNothing);
-      expect(find.text("Didn't go through. Your audio is safe."), findsNothing);
-      expect(find.text("Already saved. It's on Home."), v3On ? findsNothing : findsOneWidget);
-      expect(find.text('home'), findsOneWidget);
-      await tester.pumpWidget(const SizedBox());
-    });
-  }
+    expect(await _finishAndCapturePushed(tester, capture), isNull);
+    expect(capture.finishes, 1);
+    await tester.pumpAndSettle();
+    expect(find.byType(LiveEpisodePage), findsNothing);
+    expect(find.text("Didn't go through. Your audio is safe."), findsNothing);
+    expect(find.text("Already saved. It's on Home."), findsNothing);
+    expect(find.text('home'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
 
   for (final stale in [false, true]) {
     testWidgets("a v3 404 does not open the previous window's late close (stale verified id: $stale)", (tester) async {

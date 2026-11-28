@@ -14793,12 +14793,6 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
-  String get dailyRecapsOnHome => 'Daglige opsummeringer på Hjem';
-
-  @override
-  String get dailyRecapsOnHomeDescription => 'Vis dine seneste opsummeringer øverst på Hjem.';
-
-  @override
   String get yearlySwitchTitle => 'Skift til årlig';
 
   @override
@@ -14866,17 +14860,6 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get homeStepTranscribing => 'Transskriberer…';
-
-  @override
-  String homeRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count optagelser',
-      one: '$count optagelse',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get episodeWritingNotesDetail => 'Vi gør først transskriptionen færdig. Du kan godt forlade siden.';
@@ -15836,4 +15819,55 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'Genstart Omi for at opdatere værdien';
+
+  @override
+  String homeLockedTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count optagelser venter',
+      one: '1 optagelse venter',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeLockedSubtitle => 'Gemt sikkert · lås op for at læse';
+
+  @override
+  String get homeLockedSubtitleNoPlans => 'Gemt sikkert, indtil din grænse nulstilles';
+
+  @override
+  String get homeTakingLonger => 'Tager længere tid end sædvanligt';
+
+  @override
+  String get homeFinishingOpensWhenReady => 'Åbner, så snart den er klar';
+
+  @override
+  String get activityOnThisPhone => 'På denne telefon';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count optagelser, som kun er gemt på denne telefon',
+      one: '1 optagelse, som kun er gemt på denne telefon',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'Transskriber alle';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return 'Kunne ikke fuldføre ”$title”';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'En samtale kunne ikke fuldføres';
+
+  @override
+  String get homeRecordingCouldNotSend => 'En optagelse kunne ikke sendes';
 }

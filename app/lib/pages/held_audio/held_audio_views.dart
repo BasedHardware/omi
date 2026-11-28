@@ -42,6 +42,14 @@ List<HeldAudioRecording> lockedHeldRecordings(HeldAudioSummary? held, Processing
   return held.recordings;
 }
 
+/// Waiting recordings the server counted but did not list, under the same gate as
+/// [lockedHeldRecordings]: a running release shows none of them either.
+int lockedHeldMore(HeldAudioSummary? held, ProcessingBacklog? backlog) {
+  if (held == null || held.seconds <= 0 || backlog?.isProcessing == true) return 0;
+  final more = held.count - held.recordings.length;
+  return more > 0 ? more : 0;
+}
+
 class HeldRecordingLockedRow extends StatelessWidget {
   const HeldRecordingLockedRow({super.key, required this.recording, this.more = 0, this.onPressed});
 

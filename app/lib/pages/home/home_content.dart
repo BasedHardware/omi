@@ -1,19 +1,15 @@
 import 'package:flutter/material.dart';
 
 import 'package:omi/pages/conversations/conversations_page.dart';
-import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
 
-/// The Home page of the shell: the live capture row, Daily Recaps, then every conversation, loading
+/// The Home page of the shell: one prompt at most, the live row, then every conversation, loading
 /// more as it scrolls. Home and the Conversations tab are one page since 2026-09-29; search,
 /// folders, starred and places open from the header's search button.
 class HomeContentPage extends StatefulWidget {
-  const HomeContentPage({super.key, this.requestInitialLoad = true, this.loadRecaps});
+  const HomeContentPage({super.key, this.requestInitialLoad = true});
 
   /// See [ConversationsPage.requestInitialLoad].
   final bool requestInitialLoad;
-
-  /// Injectable for tests and the visual audit; defaults to the recaps endpoint.
-  final RecentRecapsLoader? loadRecaps;
 
   @override
   State<HomeContentPage> createState() => HomeContentPageState();
@@ -29,10 +25,6 @@ class HomeContentPageState extends State<HomeContentPage> {
 
   @override
   Widget build(BuildContext context) {
-    return ConversationsPage(
-      key: _listKey,
-      requestInitialLoad: widget.requestInitialLoad,
-      loadRecaps: widget.loadRecaps,
-    );
+    return ConversationsPage(key: _listKey, requestInitialLoad: widget.requestInitialLoad);
   }
 }

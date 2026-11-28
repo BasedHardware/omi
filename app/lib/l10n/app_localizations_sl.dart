@@ -14829,12 +14829,6 @@ class AppLocalizationsSl extends AppLocalizations {
   }
 
   @override
-  String get dailyRecapsOnHome => 'Dnevni povzetki na začetnem zaslonu';
-
-  @override
-  String get dailyRecapsOnHomeDescription => 'Prikaži najnovejše povzetke na vrhu začetnega zaslona.';
-
-  @override
   String get yearlySwitchTitle => 'Preklopi na letno';
 
   @override
@@ -14902,19 +14896,6 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get homeStepTranscribing => 'Prepisujemo…';
-
-  @override
-  String homeRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count posnetkov',
-      few: '$count posnetki',
-      two: '$count posnetka',
-      one: '$count posnetek',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get episodeWritingNotesDetail => 'Najprej dokončujemo prepis. To stran lahko zapustite.';
@@ -15873,4 +15854,55 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'Ponovno zaženite Omi, da osvežite podatke';
+
+  @override
+  String homeLockedTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Čakajoči posnetki: $count',
+      one: '1 čakajoči posnetek',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeLockedSubtitle => 'Varno shranjeno · odklenite za branje';
+
+  @override
+  String get homeLockedSubtitleNoPlans => 'Varno shranjeno, dokler se vaša omejitev ne obnovi';
+
+  @override
+  String get homeTakingLonger => 'Traja dlje kot običajno';
+
+  @override
+  String get homeFinishingOpensWhenReady => 'Odpre se takoj, ko bo pripravljen';
+
+  @override
+  String get activityOnThisPhone => 'Na tem telefonu';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count posnetkov, shranjenih samo na tem telefonu',
+      one: '1 posnetek, shranjen samo na tem telefonu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'Prepiši vse';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return 'Ni bilo mogoče dokončati „$title“';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'Pogovora ni bilo mogoče dokončati';
+
+  @override
+  String get homeRecordingCouldNotSend => 'Posnetka ni bilo mogoče poslati';
 }

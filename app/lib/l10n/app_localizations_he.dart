@@ -14691,12 +14691,6 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get dailyRecapsOnHome => 'סיכומים יומיים במסך הבית';
-
-  @override
-  String get dailyRecapsOnHomeDescription => 'הצג את הסיכומים האחרונים שלך בראש מסך הבית.';
-
-  @override
   String get yearlySwitchTitle => 'מעבר לתשלום שנתי';
 
   @override
@@ -14764,19 +14758,6 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get homeStepTranscribing => 'מתמללים…';
-
-  @override
-  String homeRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count הקלטות',
-      many: '$count הקלטות',
-      two: 'שתי הקלטות',
-      one: 'הקלטה אחת',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get episodeWritingNotesDetail => 'קודם מסיימים את התמלול. אפשר לעזוב את הדף.';
@@ -15731,4 +15712,55 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'הפעל מחדש את Omi כדי לרענן';
+
+  @override
+  String homeLockedTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count הקלטות ממתינות',
+      one: 'הקלטה אחת ממתינה',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeLockedSubtitle => 'נשמרה בבטחה · בטל נעילה כדי לקרוא';
+
+  @override
+  String get homeLockedSubtitleNoPlans => 'נשמרה בבטחה עד שהמגבלה שלך מתאפסת';
+
+  @override
+  String get homeTakingLonger => 'לוקח יותר זמן מהרגיל';
+
+  @override
+  String get homeFinishingOpensWhenReady => 'תיפתח ברגע שתהיה מוכנה';
+
+  @override
+  String get activityOnThisPhone => 'בטלפון הזה';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count הקלטות, נשמרות בטלפון הזה בלבד',
+      one: 'הקלטה אחת, נשמרת בטלפון הזה בלבד',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'תמלל הכל';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return 'לא ניתן היה לסיים את “$title”';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'לא ניתן היה לסיים שיחה';
+
+  @override
+  String get homeRecordingCouldNotSend => 'לא ניתן היה לשלוח הקלטה';
 }

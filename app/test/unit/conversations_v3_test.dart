@@ -11,11 +11,8 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/conversation_v3.dart';
 import 'package:omi/backend/schema/episode.dart';
-import 'package:omi/backend/schema/gen/home_feed_wire.g.dart' as feed_wire;
-import 'package:omi/backend/schema/home_feed.dart';
 import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:omi/providers/episode_provider.dart';
-import 'package:omi/providers/home_feed_provider.dart';
 
 Map<String, dynamic> _conversationJson({Map<String, dynamic> extra = const {}}) => {
       'id': 'c1',
@@ -162,32 +159,33 @@ void main() {
     ApiResult<ConversationsLiveRead> live(bool v3, {Map<String, dynamic>? conversation}) =>
         ApiSuccess(ConversationsLiveRead.fromGeneratedWireJson({'v3': v3, 'conversation': conversation}));
 
-    test('unknown until the server answers, and legacy reads wait for the answer', () async {
-      final provider = ConversationsV3Provider(fetchLive: () async => live(false), uid: () => 'u1', cached: '');
-      expect(provider.v3, isFalse);
-      expect(provider.resolved, isFalse);
+    test('every signed-in account is on v3, whatever the server answers or before it answers', () async {
+      final provider = ConversationsV3Provider(fetchLive: () async => live(false), uid: () => 'u1', cached: 'u1:0');
+      expect(provider.v3, isTrue);
+      expect(provider.resolved, isTrue);
       expect(provider.suppressesLegacy, isTrue);
       await provider.refresh();
-      expect(provider.resolved, isTrue);
-      expect(provider.suppressesLegacy, isFalse);
-      await Future<void>.delayed(Duration.zero);
-      expect(SharedPreferencesUtil().getString('conversationsV3Answer'), 'u1:0');
-      final next = ConversationsV3Provider(fetchLive: () async => live(true), uid: () => 'u1');
-      expect(next.resolved, isTrue, reason: 'a remembered "no" is an answer too');
-      expect(next.suppressesLegacy, isFalse);
+      expect(provider.v3, isTrue, reason: 'a holdout or rollback answer no longer selects another Home');
+      final signedOut = ConversationsV3Provider(fetchLive: () async => live(true), uid: () => '');
+      expect(signedOut.v3, isFalse);
     });
 
-    test('a server error as the first answer runs today\'s Home; offline stays unknown', () async {
-      ApiResult<ConversationsLiveRead> result = const ApiFailure(ApiProblem(ApiProblemKind.transport));
-      final provider = ConversationsV3Provider(fetchLive: () async => result, uid: () => 'u1', cached: '');
+    test('a server error or offline read keeps the last live conversation; a 404 clears it', () async {
+      ApiResult<ConversationsLiveRead> result =
+          live(true, conversation: _conversationJson(extra: {'tile_state': 'live'}));
+      final provider = ConversationsV3Provider(fetchLive: () async => result, uid: () => 'u1');
       await provider.refresh();
-      expect(provider.resolved, isFalse);
+      expect(provider.live, isNotNull);
       result = const ApiFailure(ApiProblem(ApiProblemKind.server, statusCode: 503));
       await provider.refresh();
-      expect(provider.resolved, isTrue);
-      expect(provider.v3, isFalse);
-      await Future<void>.delayed(Duration.zero);
-      expect(SharedPreferencesUtil().getString('conversationsV3Answer'), isEmpty, reason: 'not remembered');
+      expect(provider.live, isNotNull);
+      result = const ApiFailure(ApiProblem(ApiProblemKind.transport));
+      await provider.refresh();
+      expect(provider.live, isNotNull);
+      result = const ApiFailure(ApiProblem(ApiProblemKind.notFound, statusCode: 404));
+      await provider.refresh();
+      expect(provider.live, isNull);
+      expect(provider.v3, isTrue);
     });
 
     test('an account switch mid-read leaves one read in flight', () async {
@@ -216,37 +214,6 @@ void main() {
       expect(provider.v3, isTrue);
     });
 
-    test('on with a live conversation, and remembered for this account only', () async {
-      final provider = ConversationsV3Provider(
-        fetchLive: () async => live(true, conversation: _conversationJson(extra: {'tile_state': 'live'})),
-        uid: () => 'u1',
-        cached: '',
-      );
-      await provider.refresh();
-      expect(provider.v3, isTrue);
-      expect(provider.live?.v3?.tileState, ConversationTileState.live);
-      await Future<void>.delayed(Duration.zero);
-      expect(SharedPreferencesUtil().getString('conversationsV3Answer'), 'u1:1');
-
-      final sameAccount = ConversationsV3Provider(fetchLive: () async => live(true), uid: () => 'u1');
-      expect(sameAccount.v3, isTrue, reason: 'a cold start opens on the remembered Home');
-      final otherAccount = ConversationsV3Provider(fetchLive: () async => live(true), uid: () => 'u2');
-      expect(otherAccount.v3, isFalse);
-    });
-
-    test('a 404 is an older server; other failures keep the last answer', () async {
-      var result = live(true);
-      final provider = ConversationsV3Provider(fetchLive: () async => result, uid: () => 'u1', cached: '');
-      await provider.refresh();
-      expect(provider.v3, isTrue);
-      result = const ApiFailure(ApiProblem(ApiProblemKind.transport));
-      await provider.refresh();
-      expect(provider.v3, isTrue);
-      result = const ApiFailure(ApiProblem(ApiProblemKind.notFound, statusCode: 404));
-      await provider.refresh();
-      expect(provider.v3, isFalse);
-    });
-
     test('ignores a late answer for a previous account', () async {
       var uid = 'u1';
       final provider = ConversationsV3Provider(
@@ -258,7 +225,7 @@ void main() {
         cached: '',
       );
       await provider.refresh();
-      expect(provider.v3, isFalse);
+      expect(provider.live, isNull, reason: 'the answer belonged to the previous account');
     });
 
     test('watching polls; unwatching stops', () async {
@@ -284,7 +251,7 @@ void main() {
     });
   });
 
-  group('a v3 account makes no episode or feed calls', () {
+  group('a v3 account makes no episode calls', () {
     test('episode reads are skipped and the Home overlay is complete', () async {
       var calls = 0;
       final episodes = EpisodeProvider(
@@ -308,22 +275,6 @@ void main() {
       expect(calls, 0);
       expect(episodes.enabled, isFalse);
       episodes.dispose();
-    });
-
-    test('the Home feed stays inactive', () async {
-      var calls = 0;
-      final feed = HomeFeedProvider(
-        fetch: ({cursor}) async {
-          calls++;
-          return const ApiSuccess(HomeFeedPage(items: [], nextCursor: null, hasMore: false, truncated: false));
-        },
-        owner: () => 'u1',
-      )..suppressed = () => true;
-      feed.setActive(true);
-      await feed.start();
-      await feed.refresh();
-      expect(calls, 0);
-      feed.dispose();
     });
   });
 
@@ -367,17 +318,6 @@ void _wireDecoderContracts() {
     final completed = ServerConversation.fromJson({...base, 'id': 'recording', 'sync_merged_into': 'covering'});
     expect(completed.id, 'recording');
     expect(completed.isMergedDonor, true);
-  });
-  test('v3 Home uses the existing closed kind vocabulary', () {
-    final card = feed_wire.GeneratedHomeFeedCard.fromJson({
-      'id': 'c',
-      'kind': 'conversation',
-      'detail_id': 'c',
-      'sort_at': base['created_at'],
-      'status': 'completed',
-      'revision': 'synthetic',
-    });
-    expect(card.kind, 'conversation');
   });
   test('compact live row decodes with a nullable finished_at key', () {
     final row = ServerConversation.fromJson({

@@ -14824,12 +14824,6 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String get dailyRecapsOnHome => 'Dienos apžvalgos pradžios ekrane';
-
-  @override
-  String get dailyRecapsOnHomeDescription => 'Rodyti naujausias apžvalgas pradžios ekrano viršuje.';
-
-  @override
   String get yearlySwitchTitle => 'Pereiti prie metinio';
 
   @override
@@ -14897,19 +14891,6 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get homeStepTranscribing => 'Transkribuojama…';
-
-  @override
-  String homeRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count įrašų',
-      many: '$count įrašo',
-      few: '$count įrašai',
-      one: '$count įrašas',
-    );
-    return '$_temp0';
-  }
 
   @override
   String get episodeWritingNotesDetail => 'Pirmiausia baigiame transkripciją. Galite palikti šį puslapį.';
@@ -15870,4 +15851,55 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get batteryRestartToRefresh => 'Paleiskite Omi iš naujo, kad atnaujintumėte';
+
+  @override
+  String homeLockedTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count įrašų laukia',
+      one: '1 įrašas laukia',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeLockedSubtitle => 'Saugiai išsaugoti · atrakinkite, kad skaitytumėte';
+
+  @override
+  String get homeLockedSubtitleNoPlans => 'Saugiai išsaugoti, kol atstatomas jūsų limitas';
+
+  @override
+  String get homeTakingLonger => 'Trunka ilgiau nei įprasta';
+
+  @override
+  String get homeFinishingOpensWhenReady => 'Atsidarys, kai tik bus paruošta';
+
+  @override
+  String get activityOnThisPhone => 'Šiame telefone';
+
+  @override
+  String activityOnThisPhoneSummary(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count įrašų, saugomų tik šiame telefone',
+      one: '1 įrašas, saugomas tik šiame telefone',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityTranscribeAll => 'Transkribuoti visus';
+
+  @override
+  String homeRowCouldNotFinish(String title) {
+    return 'Nepavyko užbaigti „$title“';
+  }
+
+  @override
+  String get homeRowCouldNotFinishUntitled => 'Nepavyko užbaigti pokalbio';
+
+  @override
+  String get homeRecordingCouldNotSend => 'Nepavyko išsiųsti įrašo';
 }

@@ -297,7 +297,10 @@ void main() {
             key: boundary, child: await buildTypedConversationScreen(provider, pendingWork: store, theme: _theme())));
         final index = past ? (after ? '004' : '003') : (after ? '002' : '001');
         await _capture(tester, boundary, '$index-mobile-ios-home-${past ? 'past' : 'today'}-$phase');
-        expect(find.byKey(const Key('home_processing_row')), past && after ? findsNothing : findsOneWidget);
+        // Rows stay in place on Home, on any day (David 2026-11-27, SCA-5226); Activity also lists them.
+        expect(find.byWidgetPredicate((w) => w is ConversationListItem && w.conversation.id == 'processing'),
+            findsOneWidget);
+        expect(find.byKey(const Key('home_processing_row')), findsNothing);
         expect(find.text('Planning the week'), findsOneWidget);
         await tester.pumpWidget(const SizedBox());
         debugDefaultTargetPlatformOverride = null;
@@ -416,7 +419,8 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     debugDefaultTargetPlatformOverride = null;
   });
-  testWidgets('Home and Activity move a recording at midnight while open and cancel on dispose', (tester) async {
+  testWidgets('at midnight Home keeps a recording in place while Activity picks it up; both cancel on dispose',
+      (tester) async {
     var now = DateTime(2026, 11, 10, 23, 59, 59);
     await withClock(Clock(() => now), () async {
       final row = _conversation('midnight', now.subtract(const Duration(minutes: 10)), step: 'transcribing');
@@ -443,12 +447,13 @@ void main() {
       await tester.pumpWidget(await buildTypedConversationScreen(provider, pendingWork: store, theme: _theme()));
       await tester.pump(const Duration(milliseconds: 200));
       await tester.pump();
-      expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
+      final homeRow = find.byWidgetPredicate((w) => w is ConversationListItem && w.conversation.id == 'midnight');
+      expect(homeRow, findsOneWidget);
       now = DateTime(2026, 11, 11, 0, 0, 2);
       await tester.pump(const Duration(seconds: 3));
       await tester.pump(const Duration(milliseconds: 200));
       await tester.pump();
-      expect(find.byKey(const Key('home_processing_row')), findsNothing);
+      expect(homeRow, findsOneWidget, reason: 'the row stays, now under its own day');
       await tester.pumpWidget(const SizedBox());
       now = DateTime(2026, 11, 10, 23, 59, 59);
       final monitor = CaptureWedgeMonitor(
@@ -569,8 +574,8 @@ void main() {
       await tester.pumpWidget(RepaintBoundary(
           key: boundary, child: await buildTypedConversationScreen(provider, pendingWork: store, theme: _theme())));
       await _capture(tester, boundary, '${after ? '012' : '011'}-mobile-ios-home-failed-${after ? 'after' : 'before'}');
-      expect(find.byWidgetPredicate((w) => w is ConversationListItem && w.conversation.id == 'failed'),
-          after ? findsNothing : findsOneWidget);
+      // A failed conversation is in Activity, with its Try Again, not on Home (SCA-5226).
+      expect(find.byWidgetPredicate((w) => w is ConversationListItem && w.conversation.id == 'failed'), findsNothing);
       expect(find.text('Coffee with Maya'), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
       debugDefaultTargetPlatformOverride = null;

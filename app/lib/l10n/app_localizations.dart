@@ -26139,18 +26139,6 @@ abstract class AppLocalizations {
   /// **'No recordings synced for over {hours} hours'**
   String activityAttentionSyncStalledSubtitle(int hours);
 
-  /// Developer Settings toggle title: show the Daily Recaps row on Home
-  ///
-  /// In en, this message translates to:
-  /// **'Daily Recaps on Home'**
-  String get dailyRecapsOnHome;
-
-  /// Subtitle for the Daily Recaps on Home toggle in Developer Settings
-  ///
-  /// In en, this message translates to:
-  /// **'Show your latest recaps at the top of Home.'**
-  String get dailyRecapsOnHomeDescription;
-
   /// Title of the sheet, row and button that switch a monthly subscription to the same plan billed yearly
   ///
   /// In en, this message translates to:
@@ -26264,12 +26252,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Transcribing…'**
   String get homeStepTranscribing;
-
-  /// Home processing row subtitle giving how many recordings one row stands for.
-  ///
-  /// In en, this message translates to:
-  /// **'{count, plural, =1{1 recording} other{{count} recordings}}'**
-  String homeRecordingsCount(int count);
 
   /// Under Writing notes on the processing page.
   ///
@@ -27806,6 +27788,72 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Restart Omi to refresh'**
   String get batteryRestartToRefresh;
+
+  /// Title of the one Home row that stands for everything over the plan's limit on a day: locked conversations and held recordings together, so the noun is 'recording' for both. {count} is how many.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 recording waiting} other{{count} recordings waiting}}'**
+  String homeLockedTitle(int count);
+
+  /// Second line of the Home row for conversations over the plan's limit; the row has an Unlock button that opens the plans.
+  ///
+  /// In en, this message translates to:
+  /// **'Kept safe · unlock to read'**
+  String get homeLockedSubtitle;
+
+  /// Second line of the Home row for conversations over the plan's limit, on a build that sells no plan (no Unlock button).
+  ///
+  /// In en, this message translates to:
+  /// **'Kept safe until your allowance resets'**
+  String get homeLockedSubtitleNoPlans;
+
+  /// Status line on a Home row whose transcription or summary has been running much longer than normal. Shown instead of 'Transcribing…' or 'Writing summary…'.
+  ///
+  /// In en, this message translates to:
+  /// **'Taking longer than usual'**
+  String get homeTakingLonger;
+
+  /// Short toast when the reader taps the 'Finishing up…' Home row before the conversation they just ended exists on the server.
+  ///
+  /// In en, this message translates to:
+  /// **'Opens as soon as it\'s ready'**
+  String get homeFinishingOpensWhenReady;
+
+  /// Section header in Activity listing recordings kept only on this phone: waiting to be transcribed, or ones that could not be sent. Shown in capitals like the other Activity headers.
+  ///
+  /// In en, this message translates to:
+  /// **'On this phone'**
+  String get activityOnThisPhone;
+
+  /// Line under the 'On this phone' header in Activity: how many recordings exist only on this phone (the audio has not reached Omi's servers yet). {count} is how many.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 recording, kept only on this phone} other{{count} recordings, kept only on this phone}}'**
+  String activityOnThisPhoneSummary(int count);
+
+  /// Button beside the 'On this phone' header in Activity: sends every waiting recording to be transcribed.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribe all'**
+  String get activityTranscribeAll;
+
+  /// Short toast on Home when a conversation the reader was looking at fails and moves from Home to Activity. {title} is the conversation's title. A 'View' button opens Activity.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t finish “{title}”'**
+  String homeRowCouldNotFinish(String title);
+
+  /// Short toast on Home when an untitled conversation the reader was looking at fails and moves to Activity. A 'View' button opens Activity.
+  ///
+  /// In en, this message translates to:
+  /// **'A conversation couldn\'t finish'**
+  String get homeRowCouldNotFinishUntitled;
+
+  /// Short toast on Home when a recording from this phone fails to upload and moves from Home to Activity. A 'View' button opens Activity.
+  ///
+  /// In en, this message translates to:
+  /// **'A recording couldn\'t be sent'**
+  String get homeRecordingCouldNotSend;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

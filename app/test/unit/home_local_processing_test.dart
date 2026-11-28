@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
-import 'package:omi/pages/conversations/home_card_rows.dart';
 import 'package:omi/pages/conversations/home_rows.dart';
 
 import '../helpers/home_ready_members_fixture.dart';
@@ -34,10 +33,6 @@ void main() {
     for (final terminal in [failed, discarded, deleted]) {
       expect(localHomeProcessingEntry(terminal, serverStep: 'transcribing'), same(terminal));
     }
-    final rows = buildHomeCardRows([], [ready, failed, discarded, deleted], now: now, processingTitle: 'Processing');
-    expect(rows, hasLength(1));
-    expect(rows.single.isProcessing, isFalse);
-    expect(rows.single.conversation, same(ready));
   });
 
   test('Today pending members of an older owner share the one row; terminal members do not count', () {

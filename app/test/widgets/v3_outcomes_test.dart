@@ -17,6 +17,7 @@ import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/activity/activity_bell_button.dart';
 import 'package:omi/pages/activity/past_processing_section.dart';
 import 'package:omi/pages/conversation_detail/conversation_live_guard.dart';
+import 'package:omi/pages/conversations/home/home_model.dart' show listedOnHome;
 import 'package:omi/pages/conversations/home_rows.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/conversations/widgets/conversation_state_tile.dart';
@@ -131,7 +132,7 @@ void main() {
     PlatformManager.initializeForLocalHarness();
   });
 
-  group('X5: a failed conversation leaves Home for Activity without lighting the bell', () {
+  group('X5: a failed conversation leaves Home for Activity and lights the bell until Activity shows it', () {
     test('one predicate reads the tile state first, then the legacy fields', () {
       expect(isFailedConversation(_decoded('failed')), isTrue, reason: 'status completed, tile failed');
       expect(isFailedConversation(_decoded('done', status: 'failed')), isFalse, reason: 'the tile wins');
@@ -151,14 +152,14 @@ void main() {
     test('Home and Activity, per tile state', () {
       for (final (tile, home, activity) in table) {
         final c = _decoded(tile);
-        expect(shownOnV3Home(c), home, reason: '$tile on Home');
+        expect(listedOnHome(c), home, reason: '$tile on Home');
         expect(failedActivityConversations(pending: const [], conversations: [c], v3Only: true).isNotEmpty, activity,
             reason: '$tile in Activity');
       }
     });
 
-    testWidgets('summary tile states do not light the bell', (tester) async {
-      for (final (tile, _, _) in table) {
+    testWidgets('only a failed tile lights the bell, and only until Activity has shown it', (tester) async {
+      for (final (tile, _, activity) in table) {
         final conversations = ConversationProvider(isSignedIn: () => false)..conversations = [_decoded(tile)];
         final store = _store();
         await tester.pumpWidget(_app(
@@ -168,7 +169,11 @@ void main() {
             ChangeNotifierProvider<ConversationsV3Provider>.value(value: _v3(true)),
           ],
         ));
-        expect(find.byKey(const ValueKey('home_activity_attention_dot')), findsNothing, reason: '$tile dot');
+        expect(find.byKey(const ValueKey('home_activity_attention_dot')), activity ? findsOneWidget : findsNothing,
+            reason: '$tile dot');
+        store.markFailedConversationsSeen(['c1']);
+        await tester.pump();
+        expect(find.byKey(const ValueKey('home_activity_attention_dot')), findsNothing, reason: '$tile seen');
         await tester.pumpWidget(const SizedBox());
         conversations.dispose();
       }
@@ -451,15 +456,26 @@ void main() {
     }
 
     testWidgets('transcribing and writing say so under the title, with no button', (tester) async {
-      await pumpRow(tester, _decoded('transcribing'));
+      // Just finished: inside the deadline.
+      final fresh = {'finished_at': DateTime.now().toUtc().toIso8601String()};
+      await pumpRow(tester, _decoded('transcribing', extra: fresh));
       expect(find.text('Transcribing…'), findsOneWidget);
       expect(find.byType(OmiButton), findsNothing);
-      await pumpRow(tester, _decoded('writing'));
+      await pumpRow(tester, _decoded('writing', extra: fresh));
       await tester.pump(const Duration(milliseconds: 400));
       expect(find.text('Writing summary…'), findsOneWidget);
       await pumpRow(tester, _decoded('live'));
       await tester.pump(const Duration(seconds: 1));
       expect(find.textContaining('Listening'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('a step past its deadline says it is taking longer, never failed', (tester) async {
+      await pumpRow(tester, _decoded('transcribing'));
+      expect(find.text('Taking longer than usual'), findsOneWidget);
+      expect(find.text('Transcribing…'), findsNothing);
+      expect(find.textContaining('Failed'), findsNothing);
+      expect(find.byType(OmiButton), findsNothing);
       await tester.pumpWidget(const SizedBox());
     });
 
