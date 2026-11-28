@@ -11,6 +11,20 @@ from database import conversations as conversations_db
 from utils.conversations.v3.outline import utc, playback_origin
 
 
+class V3PieceNotReady(RuntimeError):
+    def __init__(self):
+        super().__init__('v3_piece_not_ready')
+
+
+def playback_piece_scope(conversation: dict[str, Any]) -> str:
+    """Identify the requested windows independently of late source metadata."""
+    return hashlib.sha256(
+        json.dumps(
+            [conversation.get('started_at'), conversation['recording_pieces']], sort_keys=True, default=str
+        ).encode()
+    ).hexdigest()
+
+
 def resolve(uid, conversation, audio_file):
     owner = conversations_db.get_conversation(uid, conversation['id'])
     if not owner or owner.get('deleted') or owner.get('is_locked'):
@@ -107,7 +121,7 @@ def build_artifact(uid, conversation):
     )
     for part in parts:
         if part.get('pending'):
-            raise RuntimeError('v3_piece_not_ready')
+            raise V3PieceNotReady()
         if 'source' not in part or not part.get('intervals'):
             continue
         af = part['source']
@@ -125,12 +139,12 @@ def build_artifact(uid, conversation):
                     [af], playback.list_audio_chunks(uid, part['recording_id'], source_identity=True)
                 )
         except FileNotFoundError as exc:
-            raise RuntimeError('v3_piece_not_ready') from exc
+            raise V3PieceNotReady() from exc
         for left, right in part['intervals']:
             # Align slices to PCM16 sample boundaries, never encoder padding.
             a, b = int(left * playback.AUDIO_SAMPLE_RATE) * 2, int(right * playback.AUDIO_SAMPLE_RATE) * 2
             if b > len(pcm):
-                raise RuntimeError('v3_piece_not_ready')
+                raise V3PieceNotReady()
             clipped = pcm[a:b]
             if not clipped:
                 continue

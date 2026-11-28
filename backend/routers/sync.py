@@ -3964,6 +3964,8 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
 # without a 5xx or a spent attempt. Delays run 60, 120, 240, 480, 900, 900 s,
 # about 45 min in total.
 AUDIO_MERGE_DESTRUCTIVE_DEFERRALS_MAX = 6
+# Late source metadata or bytes get the same delay schedule, with a separate budget.
+AUDIO_MERGE_PIECE_READINESS_DEFERRALS_MAX = 6
 
 
 async def _refuse_changed_playback_source(payload: dict, *, fingerprint: str | None = None):
@@ -3996,7 +3998,8 @@ async def _refuse_changed_playback_source(payload: dict, *, fingerprint: str | N
         return JSONResponse(status_code=503, content={'status': 'retry'})
     PLAYBACK_WRITES.labels('skipped').inc()
     logger.warning(
-        'audio_merge: refused reason=source_manifest_changed kind=%s', 'file' if fingerprint is None else 'conversation'
+        'audio_merge: refused reason=source_manifest_changed kind=%s',
+        'file' if fingerprint is None else 'conversation',
     )
     return JSONResponse(status_code=200, content={'status': 'unavailable', 'reason': 'source_manifest_changed'})
 
@@ -4008,16 +4011,20 @@ async def _defer_merge_for_destructive_operation(payload: dict):
     deferrals = int(payload.get('destructive_deferrals') or 0)
     if deferrals >= AUDIO_MERGE_DESTRUCTIVE_DEFERRALS_MAX:
         return None
+    return await _defer_audio_merge(
+        {**payload, 'destructive_deferrals': deferrals + 1}, deferrals, 'destructive_operation'
+    )
+
+
+async def _defer_audio_merge(payload: dict, deferrals: int, reason: str) -> JSONResponse | None:
     delay = min(60 * 2**deferrals, 900)
     try:
-        await run_blocking(
-            db_executor, enqueue_audio_merge_job_deferred, {**payload, 'destructive_deferrals': deferrals + 1}, delay
-        )
+        await run_blocking(db_executor, enqueue_audio_merge_job_deferred, payload, delay)
     except Exception as e:
-        logger.warning(f'audio_merge: destructive deferral enqueue failed exception_type={type(e).__name__}')
+        logger.warning('audio_merge: deferral enqueue failed reason=%s exception_type=%s', reason, type(e).__name__)
         return None
-    logger.info(f'audio_merge: deferred reason=destructive_operation deferral={deferrals + 1} delay_s={delay}')
-    return JSONResponse(status_code=200, content={'status': 'deferred', 'reason': 'destructive_operation'})
+    logger.info('audio_merge: deferred reason=%s deferral=%s delay_s=%s', reason, deferrals + 1, delay)
+    return JSONResponse(status_code=200, content={'status': 'deferred', 'reason': reason})
 
 
 # response_model omitted: include_in_schema=False Cloud Tasks handler; JSONResponse status
@@ -4166,7 +4173,12 @@ async def _handle_audio_merge_job(request: Request, task_retry_count: int):
                 # clients stop polling; the 30-day lifecycle grants a retry.
                 try:
                     await run_blocking(
-                        storage_executor, mark_playback_unavailable, uid, conversation_id, audio_file_id, 'merge_failed'
+                        storage_executor,
+                        mark_playback_unavailable,
+                        uid,
+                        conversation_id,
+                        audio_file_id,
+                        'merge_failed',
                     )
                 except DestructiveOperationInProgress:
                     logger.info(
@@ -4212,7 +4224,12 @@ async def _handle_audio_merge_job(request: Request, task_retry_count: int):
                 logger.error(f'audio_merge_failed_final conv={conversation_id} file={audio_file_id}: {e}')
                 try:
                     await run_blocking(
-                        storage_executor, mark_playback_unavailable, uid, conversation_id, audio_file_id, 'merge_failed'
+                        storage_executor,
+                        mark_playback_unavailable,
+                        uid,
+                        conversation_id,
+                        audio_file_id,
+                        'merge_failed',
                     )
                 except DestructiveOperationInProgress:
                     logger.info(
@@ -4234,21 +4251,21 @@ async def _handle_audio_merge_job(request: Request, task_retry_count: int):
 
 
 async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
-    from database.legal_holds import (
-        DestructiveOperationInProgress,
-    )  # deferred: sync.py imported with database stubbed in test isolation
+    """Build and stamp the v2 conversation-level artifact from the current snapshot.
 
-    """schema_version 2: build the conversation-level dense MP3 + spans and stamp
-    the doc (conversation_audio). Upload precedes the stamp so a stamped
-    fingerprint always implies a servable blob. Freshness is re-checked from the
-    doc, not the payload: if audio_files changed since enqueue, a newer
-    fingerprint-named task exists and this one is acked as superseded.
+    Upload precedes the stamp so a stamped fingerprint always implies a servable
+    blob. A stale task is superseded unless it is a readiness continuation for
+    the same v3 playback windows.
     """
+    from database.legal_holds import DestructiveOperationInProgress
+    from utils.conversations.v3.audio import V3PieceNotReady, playback_piece_scope, playback_snapshot
+
     try:
         uid = payload['uid']
         conversation_id = payload['conversation_id']
         payload_fingerprint = payload.get('fingerprint')
         demand = payload.get('on_demand') is True
+        readiness_scope = payload.get('piece_readiness_scope')
     except Exception as e:
         logger.error(f'audio_merge handler: invalid v2 payload, dropping task: {e}')
         return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'invalid_payload'})
@@ -4256,7 +4273,7 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
     lock_key = f'audio:{conversation_id}:conversation'
     lock_token = await run_blocking(db_executor, try_acquire_job_run_lock, lock_key)
     if not lock_token:
-        if await run_blocking(db_executor, playback_build.superseded_while_locked, payload):
+        if not readiness_scope and await run_blocking(db_executor, playback_build.superseded_while_locked, payload):
             return JSONResponse(status_code=200, content={'status': 'superseded'})
         return JSONResponse(status_code=409, content={'status': 'locked'})
 
@@ -4271,11 +4288,17 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
             return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'no_audio_files'})
         audio_files = conversation['audio_files']
         if conversation.get('recording_pieces') is not None:
-            from utils.conversations.v3.audio import playback_snapshot
-
             conversation = await run_blocking(db_executor, playback_snapshot, uid, conversation)
         fingerprint = sync_playback.conversation_merge_fingerprint(conversation, demand=demand)
-        if payload_fingerprint and payload_fingerprint != fingerprint:
+        if readiness_scope:
+            # Source metadata can arrive during the wait and change the artifact
+            # fingerprint. Only follow it while the requested windows still match.
+            superseded = (
+                conversation.get('recording_pieces') is None or playback_piece_scope(conversation) != readiness_scope
+            )
+        else:
+            superseded = bool(payload_fingerprint and payload_fingerprint != fingerprint)
+        if superseded:
             PLAYBACK_WRITES.labels('skipped').inc()
             return JSONResponse(status_code=200, content={'status': 'superseded'})
 
@@ -4339,6 +4362,75 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
                 )
         except PlaybackSourceChanged:
             return await _refuse_changed_playback_source(payload, fingerprint=fingerprint)
+        except V3PieceNotReady:
+            deferrals = int(payload.get('piece_readiness_deferrals') or 0)
+            if deferrals < AUDIO_MERGE_PIECE_READINESS_DEFERRALS_MAX:
+                deferred = await _defer_audio_merge(
+                    {
+                        **payload,
+                        'fingerprint': payload_fingerprint or fingerprint,
+                        'piece_readiness_scope': readiness_scope or playback_piece_scope(conversation),
+                        'piece_readiness_deferrals': deferrals + 1,
+                    },
+                    deferrals,
+                    'v3_piece_not_ready',
+                )
+                if deferred is not None:
+                    return deferred
+                # The original task retains custody until Cloud Tasks accepts
+                # its replacement. Queue submission errors remain retryable.
+                if task_retry_count >= get_sync_tasks_max_attempts() - 1:
+                    logger.error(
+                        'audio_merge_failed_final conversation artifact conv=%s '
+                        'reason=readiness_deferral_enqueue_failed',
+                        conversation_id,
+                    )
+                    try:
+                        await run_blocking(
+                            storage_executor,
+                            mark_conversation_playback_unavailable,
+                            uid,
+                            conversation_id,
+                            fingerprint,
+                            'merge_failed',
+                        )
+                    except DestructiveOperationInProgress:
+                        deferred = await _defer_merge_for_destructive_operation(payload)
+                        if deferred is not None:
+                            return deferred
+                        logger.info(
+                            'audio_merge: unavailable marker deferred reason=destructive_operation conv=%s',
+                            conversation_id,
+                        )
+                        return JSONResponse(status_code=503, content={'status': 'retry'})
+                    except Exception as e:
+                        logger.warning(
+                            'audio_merge: final enqueue failure marker failed exception_type=%s', type(e).__name__
+                        )
+                        return JSONResponse(status_code=503, content={'status': 'retry'})
+                    return JSONResponse(status_code=200, content={'status': 'failed_final'})
+                return JSONResponse(status_code=503, content={'status': 'retry'})
+
+            try:
+                await run_blocking(
+                    storage_executor,
+                    mark_conversation_playback_unavailable,
+                    uid,
+                    conversation_id,
+                    fingerprint,
+                    'piece_readiness_expired',
+                )
+            except DestructiveOperationInProgress:
+                deferred = await _defer_merge_for_destructive_operation(payload)
+                if deferred is not None:
+                    return deferred
+                logger.info(
+                    'audio_merge: readiness expiry marker deferred reason=destructive_operation conv=%s',
+                    conversation_id,
+                )
+                return JSONResponse(status_code=503, content={'status': 'retry'})
+            logger.warning('audio_merge: readiness wait expired reason=v3_piece_not_ready')
+            return JSONResponse(status_code=200, content={'status': 'unavailable', 'reason': 'piece_readiness_expired'})
         except FileNotFoundError:
             logger.warning(f'audio_merge: conversation chunks missing conv={conversation_id}, dropping')
             try:
@@ -4404,7 +4496,11 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
         if demand:
             record_playback_ready(payload, 'conversation')
         logger.info(
-            f'audio_merge: built conversation artifact conv={conversation_id} size={mp3_size} spans={len(spans)}'
+            'audio_merge: built conversation artifact conv=%s size=%s spans=%s piece_readiness_deferrals=%s',
+            conversation_id,
+            mp3_size,
+            len(spans),
+            payload.get('piece_readiness_deferrals', 0),
         )
         return JSONResponse(status_code=200, content={'status': 'done'})
     finally:
