@@ -136,4 +136,31 @@ final class ShortcutSettingsTests: XCTestCase {
       )
     )
   }
+
+  func testDraggableBarEnabledPersistsAndResetPositionClearsSavedOrigin() {
+    let previousDraggable = ShortcutSettings.shared.draggableBarEnabled
+    let previousPosition = UserDefaults.standard.string(forKey: FloatingControlBarWindow.positionKey)
+    defer {
+      ShortcutSettings.shared.draggableBarEnabled = previousDraggable
+      if let previousPosition {
+        UserDefaults.standard.set(previousPosition, forKey: FloatingControlBarWindow.positionKey)
+      } else {
+        UserDefaults.standard.removeObject(forKey: FloatingControlBarWindow.positionKey)
+      }
+    }
+
+    ShortcutSettings.shared.draggableBarEnabled = true
+    XCTAssertTrue(UserDefaults.standard.bool(forKey: "shortcut_draggableBarEnabled"))
+    XCTAssertFalse(
+      FloatingControlBarWindow.shouldUseNotchIsland(
+        displayHasCameraHousing: true,
+        hasActiveIsland: false,
+        draggableBarEnabled: ShortcutSettings.shared.draggableBarEnabled
+      )
+    )
+
+    UserDefaults.standard.set("{120, 340}", forKey: FloatingControlBarWindow.positionKey)
+    FloatingControlBarManager.shared.resetPosition()
+    XCTAssertNil(UserDefaults.standard.string(forKey: FloatingControlBarWindow.positionKey))
+  }
 }
