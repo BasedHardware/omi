@@ -4771,5 +4771,6 @@
     "firmwareSyncRecordingsFirstMessage": "部分录音仍存储在您的设备上。请等待它们同步到手机完成后，再开始更新。",
     "experimentalDesign": "实验性设计",
     "experimentalDesignDescription": "在正式发布前试用主页和对话的新外观。",
-    "endConversationShort": "结束"
+    "endConversationShort": "结束",
+    "transcriptHoldLineHint": "长按某一行，可为说话人命名。"
 }

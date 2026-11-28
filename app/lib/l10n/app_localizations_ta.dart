@@ -15960,4 +15960,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get endConversationShort => 'முடி';
+
+  @override
+  String get transcriptHoldLineHint => 'யார் பேசுகிறார் என்று பெயரிட ஒரு வரியை அழுத்திப் பிடிக்கவும்.';
 }

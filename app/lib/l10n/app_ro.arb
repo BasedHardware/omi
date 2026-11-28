@@ -4771,5 +4771,6 @@
     "firmwareSyncRecordingsFirstMessage": "Unele înregistrări sunt încă pe dispozitivul tău. Lasă-le să termine de sincronizat cu telefonul tău, apoi pornește actualizarea.",
     "experimentalDesign": "Design experimental",
     "experimentalDesignDescription": "Încearcă noul aspect al ecranului principal și al conversațiilor înainte de lansare.",
-    "endConversationShort": "Încheie"
+    "endConversationShort": "Încheie",
+    "transcriptHoldLineHint": "Ține apăsat pe un rând pentru a numi cine vorbește."
 }

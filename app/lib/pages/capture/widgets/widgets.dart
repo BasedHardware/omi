@@ -221,6 +221,7 @@ getTranscriptWidget(
   ValueChanged<TranscriptSegment>? onTopVisibleSegmentChanged,
   Set<String>? selectedSegmentIds,
   ValueChanged<TranscriptSegment>? onToggleSegmentSelection,
+  void Function(TranscriptSegment segment, Offset globalPosition, Rect lineRect)? onSegmentLongPress,
 }) {
   if (conversationCreating) {
     return const Padding(
@@ -274,6 +275,7 @@ getTranscriptWidget(
       onTopVisibleSegmentChanged: onTopVisibleSegmentChanged,
       selectedSegmentIds: selectedSegmentIds,
       onToggleSegmentSelection: onToggleSegmentSelection,
+      onSegmentLongPress: onSegmentLongPress,
     );
   }
 

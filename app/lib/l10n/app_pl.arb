@@ -4806,5 +4806,6 @@
     "firmwareSyncRecordingsFirstMessage": "Niektóre nagrania wciąż znajdują się na urządzeniu. Poczekaj, aż zostaną zsynchronizowane z telefonem, a następnie rozpocznij aktualizację.",
     "experimentalDesign": "Eksperymentalny wygląd",
     "experimentalDesignDescription": "Wypróbuj nowy wygląd ekranu głównego i rozmów przed wydaniem.",
-    "endConversationShort": "Zakończ"
+    "endConversationShort": "Zakończ",
+    "transcriptHoldLineHint": "Przytrzymaj wiersz, aby nazwać osobę, która mówi."
 }

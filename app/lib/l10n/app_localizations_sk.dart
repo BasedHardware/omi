@@ -15846,4 +15846,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get endConversationShort => 'Ukončiť';
+
+  @override
+  String get transcriptHoldLineHint => 'Podržaním riadka pomenujete, kto hovorí.';
 }

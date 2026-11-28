@@ -15846,4 +15846,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get endConversationShort => 'শেষ';
+
+  @override
+  String get transcriptHoldLineHint => 'কে কথা বলছেন তার নাম দিতে যেকোনো লাইনে চেপে ধরে রাখুন।';
 }

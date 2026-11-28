@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/pages/conversation_detail/widgets/conversation_scrolling_header.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/episodes/episode_moments_section.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -15,6 +16,7 @@ import 'package:omi/pages/conversation_detail/widgets.dart';
 import 'package:omi/pages/on_device/on_device_provenance_section.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversations_v3_provider.dart';
+import 'package:omi/services/experiments/experimental_design.dart';
 import 'package:omi/services/app_review_service.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
@@ -73,6 +75,11 @@ class SummaryTab extends StatefulWidget {
 }
 
 class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMixin {
+  /// Experimental design: the summary's words can be selected with the system's own text
+  /// selection (hold a word, drag the handles, Copy).
+  static Widget _selectable(BuildContext context, Widget list) =>
+      ExperimentalDesign.of(context) ? SelectionArea(child: list) : list;
+
   bool _isEditing = false;
 
   /// v3: the summary written on open stands in for the stored one until it is stored. Null until the
@@ -149,124 +156,129 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                 summarySelection.content.trim().isNotEmpty,
             child: Stack(
               children: [
-                CustomScrollView(
-                  keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.manual,
-                  // The page leaves the side margin to each tab; everything here sits inside it
-                  // except the screenshot strip, which scrolls edge to edge.
-                  slivers: [
-                    SliverPadding(
-                      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
-                      sliver: SliverMainAxisGroup(slivers: [
-                        // Title and facts live in the page header, shared by every tab.
-                        SliverToBoxAdapter(child: SizedBox(height: leadsWithHeading ? 0 : 18)),
-                        // Where the transcript and summary were made, when the phone made them.
-                        // Redo with Omi Cloud waits on a re-transcription endpoint.
-                        if (conversation != null && !discarded)
-                          SliverToBoxAdapter(child: OnDeviceProvenanceSection(conversationId: conversation.id)),
-                        if (liveWanted)
-                          LiveSummarySection(
-                            key: ValueKey('live-summary-${conversation.id}'),
-                            conversation: conversation,
-                            open: widget.liveSummaryOpen,
-                            refreshTick: widget.liveSummaryTick,
-                            liveInterval: widget.liveSummaryInterval,
-                            claimOpen: widget.claimLiveSummaryOpen,
-                            detailHydrated: provider.hasHydratedDetail(conversation.id),
-                            detailReadFailed: provider.detailLoad == ConversationDetailLoad.failed,
-                            isSummaryVisible: widget.isLiveSummaryVisible,
-                            refresh: provider.refreshConversation,
-                            onActiveChanged: (active) {
-                              if (mounted && active != _liveSummaryActive) {
-                                setState(() => _liveSummaryActive = active);
-                              }
-                            },
-                          ),
-                        discarded
-                            ? const SliverToBoxAdapter(child: ReprocessDiscardedWidget())
-                            : liveWanted && (_liveSummaryActive ?? true)
-                                ? const SliverToBoxAdapter(child: SizedBox.shrink())
-                                : GetAppsWidgets(
-                                    onOpenSource: widget.onOpenSource,
-                                    searchQuery: widget.searchQuery,
-                                    currentResultIndex: widget.currentResultIndex,
-                                    onOpenTranscript: widget.onOpenTranscript,
-                                    canStartEditing: () {
-                                      final connectivityProvider =
-                                          Provider.of<ConnectivityProvider>(context, listen: false);
-                                      if (!connectivityProvider.isConnected) {
-                                        ConnectivityProvider.showNoInternetDialog(context);
-                                        return false;
-                                      }
-                                      return true;
-                                    },
-                                    onEditStarted: (_) {
-                                      setState(() => _isEditing = true);
-                                      PlatformManager.instance.analytics.editSummaryStarted();
-                                    },
-                                    onEditCancelled: (_) {
-                                      setState(() => _isEditing = false);
-                                      PlatformManager.instance.analytics.editSummaryCancelled();
-                                    },
-                                    onSaveSummarySelection: (selection, newContent) {
-                                      PlatformManager.instance.analytics.editSummarySaved();
-                                      context.read<ConversationDetailProvider>().saveEditingSummarySelection(
-                                            selection,
-                                            newContent,
-                                          );
-                                    },
-                                  ),
-                        // After the note's sections, before the screenshots: the Mac's order.
-                        if (conversation != null &&
-                            !_isEditing &&
-                            !summarySelection.isApp &&
-                            !provider.isLoading &&
-                            !provider.loadingReprocessConversation)
-                          SliverToBoxAdapter(child: SummaryTaskRecovery(conversation: conversation)),
-                        if (!discarded && conversation != null)
-                          ConversationActionItemsSection(
-                            items: conversation.structured.actionItems,
-                            conversationId: conversation.id,
-                            onShowInTranscript: widget.onShowActionItemInTranscript ?? (_) {},
-                            searchQuery: widget.searchQuery,
-                            currentResultIndex: widget.currentResultIndex,
-                            searchResultOffset: widget.summarySearchResultOffset,
-                          ),
-                      ]),
-                    ),
-                    // Where the Mac puts its strip: after the note's own sections. Only a completed
-                    // conversation can have adjudicated screenshots.
-                    if (!discarded && conversation != null && conversation.status == ConversationStatus.completed)
-                      ConversationScreenshotsSection(
-                        key: ValueKey('conversation-screenshots-${conversation.id}'),
-                        conversationId: conversation.id,
-                      ),
-                    SliverPadding(
-                      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
-                      sliver: SliverMainAxisGroup(slivers: [
-                        // The episode this conversation belonged to, when it had several moments.
-                        if (!discarded && conversation != null && conversation.status == ConversationStatus.completed)
-                          SliverToBoxAdapter(
-                            child: EpisodeMomentsSection(
-                              key: ValueKey('episode-moments-${conversation.id}'),
-                              conversationId: conversation.id,
-                              onOpenConversation: (id) => _openConversation(context, id),
+                _selectable(
+                  context,
+                  CustomScrollView(
+                    keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.manual,
+                    // The page leaves the side margin to each tab; everything here sits inside it
+                    // except the screenshot strip, which scrolls edge to edge.
+                    slivers: [
+                      // Room for the page's header when it scrolls with this list (experimental design).
+                      SliverToBoxAdapter(child: SizedBox(height: ConversationScrollingHeader.insetOf(context))),
+                      SliverPadding(
+                        padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
+                        sliver: SliverMainAxisGroup(slivers: [
+                          // Title and facts live in the page header, shared by every tab.
+                          SliverToBoxAdapter(child: SizedBox(height: leadsWithHeading ? 0 : 18)),
+                          // Where the transcript and summary were made, when the phone made them.
+                          // Redo with Omi Cloud waits on a re-transcription endpoint.
+                          if (conversation != null && !discarded)
+                            SliverToBoxAdapter(child: OnDeviceProvenanceSection(conversationId: conversation.id)),
+                          if (liveWanted)
+                            LiveSummarySection(
+                              key: ValueKey('live-summary-${conversation.id}'),
+                              conversation: conversation,
+                              open: widget.liveSummaryOpen,
+                              refreshTick: widget.liveSummaryTick,
+                              liveInterval: widget.liveSummaryInterval,
+                              claimOpen: widget.claimLiveSummaryOpen,
+                              detailHydrated: provider.hasHydratedDetail(conversation.id),
+                              detailReadFailed: provider.detailLoad == ConversationDetailLoad.failed,
+                              isSummaryVisible: widget.isLiveSummaryVisible,
+                              refresh: provider.refreshConversation,
+                              onActiveChanged: (active) {
+                                if (mounted && active != _liveSummaryActive) {
+                                  setState(() => _liveSummaryActive = active);
+                                }
+                              },
                             ),
-                          ),
-                        if (feedbackKind == FeedbackPromptKind.summary)
-                          SummaryFeedbackPrompt(
-                            key: ValueKey('summary-feedback-${conversation?.id ?? ''}'),
-                            conversationId: conversation?.id,
-                          ),
-                        if (feedbackKind == FeedbackPromptKind.recording && conversation != null)
-                          RecordingQualityFeedbackPrompt(
-                            key: ValueKey('recording-feedback-${conversation.id}'),
-                            recordingId: conversation.id,
-                          ),
-                        const SliverToBoxAdapter(child: GetGeolocationWidgets()),
-                        const SliverToBoxAdapter(child: SizedBox(height: 150)),
-                      ]),
-                    ),
-                  ],
+                          discarded
+                              ? const SliverToBoxAdapter(child: ReprocessDiscardedWidget())
+                              : liveWanted && (_liveSummaryActive ?? true)
+                                  ? const SliverToBoxAdapter(child: SizedBox.shrink())
+                                  : GetAppsWidgets(
+                                      onOpenSource: widget.onOpenSource,
+                                      searchQuery: widget.searchQuery,
+                                      currentResultIndex: widget.currentResultIndex,
+                                      onOpenTranscript: widget.onOpenTranscript,
+                                      canStartEditing: () {
+                                        final connectivityProvider =
+                                            Provider.of<ConnectivityProvider>(context, listen: false);
+                                        if (!connectivityProvider.isConnected) {
+                                          ConnectivityProvider.showNoInternetDialog(context);
+                                          return false;
+                                        }
+                                        return true;
+                                      },
+                                      onEditStarted: (_) {
+                                        setState(() => _isEditing = true);
+                                        PlatformManager.instance.analytics.editSummaryStarted();
+                                      },
+                                      onEditCancelled: (_) {
+                                        setState(() => _isEditing = false);
+                                        PlatformManager.instance.analytics.editSummaryCancelled();
+                                      },
+                                      onSaveSummarySelection: (selection, newContent) {
+                                        PlatformManager.instance.analytics.editSummarySaved();
+                                        context.read<ConversationDetailProvider>().saveEditingSummarySelection(
+                                              selection,
+                                              newContent,
+                                            );
+                                      },
+                                    ),
+                          // After the note's sections, before the screenshots: the Mac's order.
+                          if (conversation != null &&
+                              !_isEditing &&
+                              !summarySelection.isApp &&
+                              !provider.isLoading &&
+                              !provider.loadingReprocessConversation)
+                            SliverToBoxAdapter(child: SummaryTaskRecovery(conversation: conversation)),
+                          if (!discarded && conversation != null)
+                            ConversationActionItemsSection(
+                              items: conversation.structured.actionItems,
+                              conversationId: conversation.id,
+                              onShowInTranscript: widget.onShowActionItemInTranscript ?? (_) {},
+                              searchQuery: widget.searchQuery,
+                              currentResultIndex: widget.currentResultIndex,
+                              searchResultOffset: widget.summarySearchResultOffset,
+                            ),
+                        ]),
+                      ),
+                      // Where the Mac puts its strip: after the note's own sections. Only a completed
+                      // conversation can have adjudicated screenshots.
+                      if (!discarded && conversation != null && conversation.status == ConversationStatus.completed)
+                        ConversationScreenshotsSection(
+                          key: ValueKey('conversation-screenshots-${conversation.id}'),
+                          conversationId: conversation.id,
+                        ),
+                      SliverPadding(
+                        padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
+                        sliver: SliverMainAxisGroup(slivers: [
+                          // The episode this conversation belonged to, when it had several moments.
+                          if (!discarded && conversation != null && conversation.status == ConversationStatus.completed)
+                            SliverToBoxAdapter(
+                              child: EpisodeMomentsSection(
+                                key: ValueKey('episode-moments-${conversation.id}'),
+                                conversationId: conversation.id,
+                                onOpenConversation: (id) => _openConversation(context, id),
+                              ),
+                            ),
+                          if (feedbackKind == FeedbackPromptKind.summary)
+                            SummaryFeedbackPrompt(
+                              key: ValueKey('summary-feedback-${conversation?.id ?? ''}'),
+                              conversationId: conversation?.id,
+                            ),
+                          if (feedbackKind == FeedbackPromptKind.recording && conversation != null)
+                            RecordingQualityFeedbackPrompt(
+                              key: ValueKey('recording-feedback-${conversation.id}'),
+                              recordingId: conversation.id,
+                            ),
+                          const SliverToBoxAdapter(child: GetGeolocationWidgets()),
+                          const SliverToBoxAdapter(child: SizedBox(height: 150)),
+                        ]),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),

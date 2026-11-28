@@ -4771,5 +4771,6 @@
     "firmwareSyncRecordingsFirstMessage": "Някои записи все още са на устройството. Оставете ги да приключат със синхронизирането към телефона, след което започнете актуализацията.",
     "experimentalDesign": "Експериментален дизайн",
     "experimentalDesignDescription": "Изпробвайте новия вид на началния екран и разговорите преди пускането му.",
-    "endConversationShort": "Край"
+    "endConversationShort": "Край",
+    "transcriptHoldLineHint": "Натиснете и задръжте ред, за да посочите кой говори."
 }

@@ -4771,5 +4771,6 @@
     "firmwareSyncRecordingsFirstMessage": "Sebahagian rakaman masih berada pada peranti anda. Biarkan ia selesai disegerakkan ke telefon anda, kemudian mulakan kemas kini.",
     "experimentalDesign": "Reka bentuk percubaan",
     "experimentalDesignDescription": "Cuba rupa baharu Laman Utama dan perbualan sebelum ia dikeluarkan.",
-    "endConversationShort": "Tamat"
+    "endConversationShort": "Tamat",
+    "transcriptHoldLineHint": "Tekan dan tahan satu baris untuk menamakan siapa yang bercakap."
 }

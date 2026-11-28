@@ -12328,5 +12328,6 @@
     "firmwareSyncRecordingsFirstMessage": "Некаторыя запісы ўсё яшчэ на вашай прыладзе. Дайце ім завяршыць сінхранізацыю на тэлефон, а потым пачніце абнаўленне.",
     "experimentalDesign": "Эксперыментальны дызайн",
     "experimentalDesignDescription": "Паспрабуйце новы выгляд галоўнай старонкі і размоў да выхаду.",
-    "endConversationShort": "Завяршыць"
+    "endConversationShort": "Завяршыць",
+    "transcriptHoldLineHint": "Націсніце і ўтрымлівайце радок, каб назваць таго, хто гаворыць."
 }

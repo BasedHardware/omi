@@ -15910,4 +15910,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get endConversationShort => 'Befejezés';
+
+  @override
+  String get transcriptHoldLineHint => 'Tartsd lenyomva a sort, hogy elnevezd a beszélőt.';
 }

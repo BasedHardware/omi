@@ -12328,5 +12328,6 @@
     "firmwareSyncRecordingsFirstMessage": "חלק מההקלטות עדיין נמצאות במכשיר שלך. תן להן להשלים את הסינכרון לטלפון, ואז התחל את העדכון.",
     "experimentalDesign": "עיצוב ניסיוני",
     "experimentalDesignDescription": "נסו את המראה החדש של מסך הבית והשיחות לפני שהוא משוחרר.",
-    "endConversationShort": "סיום"
+    "endConversationShort": "סיום",
+    "transcriptHoldLineHint": "לחצו לחיצה ארוכה על שורה כדי לתת שם למי שמדבר."
 }

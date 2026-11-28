@@ -15903,4 +15903,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get endConversationShort => 'ಮುಗಿಸಿ';
+
+  @override
+  String get transcriptHoldLineHint => 'ಯಾರು ಮಾತನಾಡುತ್ತಿದ್ದಾರೆ ಎಂದು ಹೆಸರಿಸಲು ಸಾಲನ್ನು ಒತ್ತಿ ಹಿಡಿಯಿರಿ.';
 }

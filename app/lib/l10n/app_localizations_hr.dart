@@ -15887,4 +15887,7 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get endConversationShort => 'Završi';
+
+  @override
+  String get transcriptHoldLineHint => 'Pritisnite i držite redak da imenujete tko govori.';
 }

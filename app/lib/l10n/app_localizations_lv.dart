@@ -15886,4 +15886,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get endConversationShort => 'Beigt';
+
+  @override
+  String get transcriptHoldLineHint => 'Nospiediet un turiet rindu, lai nosauktu runātāju.';
 }

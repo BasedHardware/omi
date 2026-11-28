@@ -15623,4 +15623,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get endConversationShort => '종료';
+
+  @override
+  String get transcriptHoldLineHint => '줄을 길게 누르면 말하는 사람의 이름을 지정할 수 있습니다.';
 }

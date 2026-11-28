@@ -15886,4 +15886,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get endConversationShort => 'Завяршыць';
+
+  @override
+  String get transcriptHoldLineHint => 'Націсніце і ўтрымлівайце радок, каб назваць таго, хто гаворыць.';
 }

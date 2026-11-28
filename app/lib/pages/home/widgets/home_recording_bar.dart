@@ -219,7 +219,11 @@ class _HomeRecordingBarState extends State<HomeRecordingBar> {
     const padding = EdgeInsetsDirectional.only(start: OmiSpacing.lg, end: OmiSpacing.sm);
     if (ExperimentalDesign.of(context)) {
       return FooterGlassSurface(
-          key: const ValueKey('home_recording_bar'), height: kHomeChatBarHeight, padding: padding, child: row);
+          key: const ValueKey('home_recording_bar'),
+          height: kHomeChatBarHeight,
+          swell: false,
+          padding: padding,
+          child: row);
     }
     return Container(
       key: const ValueKey('home_recording_bar'),

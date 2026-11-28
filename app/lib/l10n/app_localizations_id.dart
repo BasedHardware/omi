@@ -15866,4 +15866,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get endConversationShort => 'Akhiri';
+
+  @override
+  String get transcriptHoldLineHint => 'Tekan dan tahan sebuah baris untuk menamai siapa yang berbicara.';
 }

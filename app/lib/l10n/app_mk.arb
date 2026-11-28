@@ -12328,5 +12328,6 @@
     "firmwareSyncRecordingsFirstMessage": "Некои записи се уште се на вашиот уред. Оставете ги да ја завршат синхронизацијата со телефонот, а потоа започнете со ажурирањето.",
     "experimentalDesign": "Експериментален дизајн",
     "experimentalDesignDescription": "Испробајте го новиот изглед на почетниот екран и разговорите пред објавување.",
-    "endConversationShort": "Заврши"
+    "endConversationShort": "Заврши",
+    "transcriptHoldLineHint": "Притиснете и задржете ред за да именувате кој зборува."
 }

@@ -12328,5 +12328,6 @@
     "firmwareSyncRecordingsFirstMessage": "برخی ضبط‌ها هنوز روی دستگاه شما هستند. اجازه دهید همگام‌سازی آن‌ها به گوشی شما کامل شود، سپس بروزرسانی را شروع کنید.",
     "experimentalDesign": "طراحی آزمایشی",
     "experimentalDesignDescription": "ظاهر جدید صفحه اصلی و گفتگوها را پیش از انتشار امتحان کنید.",
-    "endConversationShort": "پایان"
+    "endConversationShort": "پایان",
+    "transcriptHoldLineHint": "برای نام‌گذاری گوینده، روی یک خط فشار دهید و نگه دارید."
 }

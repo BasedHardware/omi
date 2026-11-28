@@ -15737,4 +15737,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get endConversationShort => 'סיום';
+
+  @override
+  String get transcriptHoldLineHint => 'לחצו לחיצה ארוכה על שורה כדי לתת שם למי שמדבר.';
 }

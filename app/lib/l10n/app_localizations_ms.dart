@@ -15889,4 +15889,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get endConversationShort => 'Tamat';
+
+  @override
+  String get transcriptHoldLineHint => 'Tekan dan tahan satu baris untuk menamakan siapa yang bercakap.';
 }

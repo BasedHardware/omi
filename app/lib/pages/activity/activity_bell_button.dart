@@ -15,7 +15,10 @@ import 'package:omi/widgets/header_circle_button.dart';
 ///
 /// The dot announces new recaps, unseen capture problems, and other unseen attention items.
 class ActivityBellButton extends StatelessWidget {
-  const ActivityBellButton({super.key, this.seen, this.pendingWork, this.captureMonitor});
+  const ActivityBellButton({super.key, this.seen, this.pendingWork, this.captureMonitor, this.fillColor});
+
+  /// The circle's colour; the header's default when null.
+  final Color? fillColor;
 
   final ActivitySeen? seen;
 
@@ -38,6 +41,7 @@ class ActivityBellButton extends StatelessWidget {
         final hasNew = (state.hasNew.value && state.describesCurrentOwner) || attention;
         final button = HeaderCircleButton(
           key: const ValueKey('home_activity_button'),
+          color: fillColor,
           semanticLabel: hasNew
               ? (attention ? context.l10n.activityAttentionSemantics : context.l10n.activityNewSemantics)
               : context.l10n.activity,

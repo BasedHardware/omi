@@ -4806,5 +4806,6 @@
     "firmwareSyncRecordingsFirstMessage": "Некоторые записи всё ещё находятся на устройстве. Дождитесь завершения их синхронизации с телефоном, а затем начните обновление.",
     "experimentalDesign": "Экспериментальный дизайн",
     "experimentalDesignDescription": "Попробуйте новый вид главного экрана и разговоров до выпуска.",
-    "endConversationShort": "Завершить"
+    "endConversationShort": "Завершить",
+    "transcriptHoldLineHint": "Нажмите и удерживайте строку, чтобы указать, кто говорит."
 }

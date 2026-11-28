@@ -4771,5 +4771,6 @@
     "firmwareSyncRecordingsFirstMessage": "Alguns enregistraments encara són al vostre dispositiu. Deixeu que acabin de sincronitzar-se al telèfon i, després, inicieu l'actualització.",
     "experimentalDesign": "Disseny experimental",
     "experimentalDesignDescription": "Prova el nou aspecte d'Inici i de les converses abans que es publiqui.",
-    "endConversationShort": "Finalitza"
+    "endConversationShort": "Finalitza",
+    "transcriptHoldLineHint": "Mantén premuda una línia per posar nom a qui parla."
 }

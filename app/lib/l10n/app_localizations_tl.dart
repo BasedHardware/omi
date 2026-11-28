@@ -15978,4 +15978,8 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get endConversationShort => 'Tapusin';
+
+  @override
+  String get transcriptHoldLineHint =>
+      'Pindutin nang matagal ang isang linya para pangalanan kung sino ang nagsasalita.';
 }

@@ -12328,5 +12328,6 @@
     "firmwareSyncRecordingsFirstMessage": "Nekateri posnetki so še na vaši napravi. Počakajte, da se dokonča sinhroniziranje s telefonom, nato pa začnite posodobitev.",
     "experimentalDesign": "Poskusni dizajn",
     "experimentalDesignDescription": "Preizkusite novi videz začetnega zaslona in pogovorov pred izidom.",
-    "endConversationShort": "Končaj"
+    "endConversationShort": "Končaj",
+    "transcriptHoldLineHint": "Pritisnite in pridržite vrstico, da poimenujete, kdo govori."
 }

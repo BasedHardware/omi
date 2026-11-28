@@ -15859,4 +15859,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get endConversationShort => 'समाप्त';
+
+  @override
+  String get transcriptHoldLineHint => 'कोण बोलत आहे त्याला नाव देण्यासाठी ओळ दाबून धरा.';
 }

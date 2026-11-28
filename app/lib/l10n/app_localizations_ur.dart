@@ -15863,4 +15863,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get endConversationShort => 'ختم';
+
+  @override
+  String get transcriptHoldLineHint => 'بولنے والے کا نام رکھنے کے لیے کسی سطر کو دبا کر رکھیں۔';
 }

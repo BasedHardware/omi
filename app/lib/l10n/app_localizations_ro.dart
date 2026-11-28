@@ -15918,4 +15918,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get endConversationShort => 'Încheie';
+
+  @override
+  String get transcriptHoldLineHint => 'Ține apăsat pe un rând pentru a numi cine vorbește.';
 }

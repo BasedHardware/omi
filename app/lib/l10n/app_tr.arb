@@ -4806,5 +4806,6 @@
     "firmwareSyncRecordingsFirstMessage": "Bazı kayıtlar hâlâ cihazınızda. Telefonunuza senkronize edilmelerini bekleyin, ardından güncellemeyi başlatın.",
     "experimentalDesign": "Deneysel tasarım",
     "experimentalDesignDescription": "Ana sayfa ve konuşmaların yeni görünümünü yayınlanmadan önce deneyin.",
-    "endConversationShort": "Bitir"
+    "endConversationShort": "Bitir",
+    "transcriptHoldLineHint": "Kimin konuştuğunu adlandırmak için bir satıra basılı tutun."
 }

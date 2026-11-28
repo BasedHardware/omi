@@ -19372,5 +19372,9 @@
     "endConversationShort": "End",
     "@endConversationShort": {
         "description": "Short label of the button that ends the conversation in progress, in a bar beside Pause and Ask Omi; keep it to one short word"
+    },
+    "transcriptHoldLineHint": "Press and hold a line to name who's speaking.",
+    "@transcriptHoldLineHint": {
+        "description": "Shown above a conversation transcript: how to open the menu on a transcript line. Must read naturally on both iOS and Android."
     }
 }

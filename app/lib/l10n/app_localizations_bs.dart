@@ -15879,4 +15879,7 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get endConversationShort => 'Završi';
+
+  @override
+  String get transcriptHoldLineHint => 'Pritisnite i držite red da imenujete ko govori.';
 }

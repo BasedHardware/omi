@@ -4771,5 +4771,6 @@
     "firmwareSyncRecordingsFirstMessage": "Kai kurie įrašai dar yra jūsų įrenginyje. Leiskite jiems užbaigti sinchronizavimą į telefoną, tada pradėkite atnaujinimą.",
     "experimentalDesign": "Eksperimentinis dizainas",
     "experimentalDesignDescription": "Išbandykite naują pagrindinio ekrano ir pokalbių išvaizdą prieš ją išleidžiant.",
-    "endConversationShort": "Baigti"
+    "endConversationShort": "Baigti",
+    "transcriptHoldLineHint": "Paspauskite ir palaikykite eilutę, kad pavadintumėte kalbantįjį."
 }

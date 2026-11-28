@@ -4771,5 +4771,6 @@
     "firmwareSyncRecordingsFirstMessage": "Některé nahrávky jsou stále ve vašem zařízení. Počkejte, až se synchronizují do telefonu, a potom spusťte aktualizaci.",
     "experimentalDesign": "Experimentální design",
     "experimentalDesignDescription": "Vyzkoušejte nový vzhled domovské obrazovky a konverzací před vydáním.",
-    "endConversationShort": "Ukončit"
+    "endConversationShort": "Ukončit",
+    "transcriptHoldLineHint": "Podržením řádku pojmenujete, kdo mluví."
 }

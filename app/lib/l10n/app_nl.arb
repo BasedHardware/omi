@@ -4771,5 +4771,6 @@
     "firmwareSyncRecordingsFirstMessage": "Sommige opnames staan nog op je apparaat. Laat ze eerst volledig synchroniseren naar je telefoon en start daarna de update.",
     "experimentalDesign": "Experimenteel ontwerp",
     "experimentalDesignDescription": "Probeer het nieuwe uiterlijk van Home en gesprekken voordat het wordt uitgebracht.",
-    "endConversationShort": "Beëindig"
+    "endConversationShort": "Beëindig",
+    "transcriptHoldLineHint": "Houd een regel ingedrukt om de spreker een naam te geven."
 }

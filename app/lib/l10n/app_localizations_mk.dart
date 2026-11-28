@@ -15917,4 +15917,7 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get endConversationShort => 'Заврши';
+
+  @override
+  String get transcriptHoldLineHint => 'Притиснете и задржете ред за да именувате кој зборува.';
 }

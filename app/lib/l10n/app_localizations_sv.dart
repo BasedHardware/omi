@@ -15859,4 +15859,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get endConversationShort => 'Avsluta';
+
+  @override
+  String get transcriptHoldLineHint => 'Tryck och håll på en rad för att namnge den som talar.';
 }

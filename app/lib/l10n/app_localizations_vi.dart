@@ -15853,4 +15853,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get endConversationShort => 'Kết thúc';
+
+  @override
+  String get transcriptHoldLineHint => 'Nhấn và giữ một dòng để đặt tên cho người đang nói.';
 }

@@ -4771,5 +4771,6 @@
     "firmwareSyncRecordingsFirstMessage": "一部の録音はまだデバイスに残っています。スマートフォンへの同期が完了してから、更新を開始してください。",
     "experimentalDesign": "試験的デザイン",
     "experimentalDesignDescription": "ホームと会話の新しいデザインをリリース前に試せます。",
-    "endConversationShort": "終了"
+    "endConversationShort": "終了",
+    "transcriptHoldLineHint": "行を長押しすると、話している人に名前を付けられます。"
 }

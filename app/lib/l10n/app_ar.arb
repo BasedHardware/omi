@@ -4771,5 +4771,6 @@
     "firmwareSyncRecordingsFirstMessage": "لا تزال بعض التسجيلات على جهازك. دعها تكمل المزامنة إلى هاتفك، ثم ابدأ التحديث.",
     "experimentalDesign": "التصميم التجريبي",
     "experimentalDesignDescription": "جرّب المظهر الجديد للصفحة الرئيسية والمحادثات قبل إصداره.",
-    "endConversationShort": "إنهاء"
+    "endConversationShort": "إنهاء",
+    "transcriptHoldLineHint": "اضغط مطولاً على أي سطر لتسمية المتحدث."
 }

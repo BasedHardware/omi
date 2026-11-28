@@ -4771,5 +4771,6 @@
     "firmwareSyncRecordingsFirstMessage": "कुछ रिकॉर्डिंग अभी भी आपके डिवाइस पर हैं। उन्हें आपके फ़ोन पर सिंक होने दें, फिर अपडेट शुरू करें।",
     "experimentalDesign": "प्रायोगिक डिज़ाइन",
     "experimentalDesignDescription": "रिलीज़ से पहले होम और बातचीत का नया रूप आज़माएँ।",
-    "endConversationShort": "समाप्त"
+    "endConversationShort": "समाप्त",
+    "transcriptHoldLineHint": "कौन बोल रहा है, उसका नाम देने के लिए किसी पंक्ति को दबाकर रखें।"
 }

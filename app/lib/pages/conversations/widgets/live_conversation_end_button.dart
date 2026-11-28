@@ -216,12 +216,15 @@ class _LiveConversationEndButtonState extends State<LiveConversationEndButton> {
                     // As wide as its short label needs, so Ask Omi keeps the middle of the bar.
                     ? IntrinsicWidth(
                         child: widget.flatRed
-                            ? Container(
+                            ? PressSwell(
                                 height: 56,
-                                alignment: Alignment.center,
-                                padding: const EdgeInsets.symmetric(horizontal: 22),
-                                decoration: BoxDecoration(color: OmiColors.danger, borderRadius: OmiRadius.pillAll),
-                                child: text,
+                                child: Container(
+                                  height: 56,
+                                  alignment: Alignment.center,
+                                  padding: const EdgeInsets.symmetric(horizontal: 22),
+                                  decoration: BoxDecoration(color: OmiColors.danger, borderRadius: OmiRadius.pillAll),
+                                  child: text,
+                                ),
                               )
                             : FooterGlassSurface(
                                 height: 56,

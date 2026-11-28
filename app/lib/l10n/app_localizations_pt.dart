@@ -15881,4 +15881,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get endConversationShort => 'Encerrar';
+
+  @override
+  String get transcriptHoldLineHint => 'Toque e segure uma linha para dar nome a quem fala.';
 }

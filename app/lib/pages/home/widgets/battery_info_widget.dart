@@ -252,13 +252,30 @@ class _DevicePill extends StatelessWidget {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
-        child: Container(
-          height: 36,
-          margin: _pillTargetMargin,
-          padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm),
-          decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.pillAll),
-          child: Row(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.center, children: children),
-        ),
+        // Experimental design: the footer's surface (fill, rim and shadow) instead of the flat pill.
+        child: ExperimentalDesign.of(context)
+            ? Padding(
+                padding: _pillTargetMargin,
+                child: IntrinsicWidth(
+                  child: FooterGlassSurface(
+                    height: 36,
+                    padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: children,
+                    ),
+                  ),
+                ),
+              )
+            : Container(
+                height: 36,
+                margin: _pillTargetMargin,
+                padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm),
+                decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.pillAll),
+                child: Row(
+                    mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.center, children: children),
+              ),
       ),
     );
   }

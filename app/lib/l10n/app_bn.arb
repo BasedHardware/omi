@@ -12328,5 +12328,6 @@
     "firmwareSyncRecordingsFirstMessage": "কিছু রেকর্ডিং এখনও আপনার ডিভাইসে রয়েছে। সেগুলিকে আপনার ফোনে সিঙ্ক শেষ হতে দিন, তারপর আপডেট শুরু করুন।",
     "experimentalDesign": "পরীক্ষামূলক ডিজাইন",
     "experimentalDesignDescription": "প্রকাশের আগেই হোম ও কথোপকথনের নতুন চেহারা ব্যবহার করে দেখুন।",
-    "endConversationShort": "শেষ"
+    "endConversationShort": "শেষ",
+    "transcriptHoldLineHint": "কে কথা বলছেন তার নাম দিতে যেকোনো লাইনে চেপে ধরে রাখুন।"
 }

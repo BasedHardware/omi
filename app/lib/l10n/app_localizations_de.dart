@@ -15969,4 +15969,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get endConversationShort => 'Beenden';
+
+  @override
+  String get transcriptHoldLineHint => 'Halte eine Zeile gedrückt, um zu benennen, wer spricht.';
 }

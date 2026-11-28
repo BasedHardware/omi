@@ -4771,5 +4771,6 @@
     "firmwareSyncRecordingsFirstMessage": "Einige Aufnahmen sind noch auf Ihrem Gerät. Warten Sie, bis sie vollständig mit Ihrem Telefon synchronisiert wurden, und starten Sie dann die Aktualisierung.",
     "experimentalDesign": "Experimentelles Design",
     "experimentalDesignDescription": "Teste das neue Aussehen von Home und Unterhaltungen vor der Veröffentlichung.",
-    "endConversationShort": "Beenden"
+    "endConversationShort": "Beenden",
+    "transcriptHoldLineHint": "Halte eine Zeile gedrückt, um zu benennen, wer spricht."
 }

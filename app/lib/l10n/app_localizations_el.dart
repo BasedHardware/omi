@@ -15957,4 +15957,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get endConversationShort => 'Τέλος';
+
+  @override
+  String get transcriptHoldLineHint => 'Πατήστε παρατεταμένα μια γραμμή για να ονομάσετε ποιος μιλάει.';
 }

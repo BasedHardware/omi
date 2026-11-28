@@ -27818,6 +27818,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'End'**
   String get endConversationShort;
+
+  /// Shown above a conversation transcript: how to open the menu on a transcript line. Must read naturally on both iOS and Android.
+  ///
+  /// In en, this message translates to:
+  /// **'Press and hold a line to name who\'s speaking.'**
+  String get transcriptHoldLineHint;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

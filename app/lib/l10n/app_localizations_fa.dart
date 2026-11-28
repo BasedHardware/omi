@@ -15844,4 +15844,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get endConversationShort => 'پایان';
+
+  @override
+  String get transcriptHoldLineHint => 'برای نام‌گذاری گوینده، روی یک خط فشار دهید و نگه دارید.';
 }

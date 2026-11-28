@@ -15834,4 +15834,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get endConversationShort => 'End';
+
+  @override
+  String get transcriptHoldLineHint => 'Press and hold a line to name who\'s speaking.';
 }

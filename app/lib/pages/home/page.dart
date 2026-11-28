@@ -6,6 +6,7 @@
 // permission), and the static FGS call here stays an App UI handoff -- capture
 // ownership belongs to CaptureSessionOwner (app/lib/services/capture/OWNERSHIP.md).
 import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/services/experiments/experimental_design.dart';
 import 'package:omi/services/on_device/on_device_runner.dart';
 import 'package:omi/services/on_device/on_device_transcription_controller.dart';
 import 'package:omi/services/services.dart';
@@ -74,6 +75,7 @@ import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:omi/widgets/top_bar_glass.dart';
 import 'package:omi/widgets/freemium_switch_dialog.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
 import 'package:omi/widgets/upgrade_alert.dart';
@@ -1073,8 +1075,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     );
   }
 
+  static Widget _trailing(bool glass, List<Widget> buttons) => glass
+      ? Padding(
+          padding: const EdgeInsets.only(right: (kMinTapTarget - kHeaderCircleDiameter) / 2),
+          child: TopBarGlass(children: buttons),
+        )
+      : Row(children: buttons);
+
   PreferredSizeWidget _buildAppBar(BuildContext context, bool onHome) {
+    // Experimental design: the trailing buttons share one capsule in the footer's style.
+    final glass = ExperimentalDesign.of(context);
+    final fill = glass ? Colors.transparent : null;
     return AppBar(
+      clipBehavior: glass ? Clip.none : null,
       automaticallyImplyLeading: false,
       backgroundColor: Theme.of(context).colorScheme.surface,
       // The trailing buttons paint 36pt circles inside 44pt touch targets, so the
@@ -1092,39 +1105,40 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               child: BatteryInfoWidget(),
             ),
           ),
-          Row(
-            children: [
-              if (onHome)
-                HeaderCircleButton(
-                  key: const ValueKey('home_calendar_button'),
-                  semanticLabel: context.l10n.filterByDate,
-                  icon: FaIcon(FontAwesomeIcons.calendar, size: 16, color: OmiColors.textSecondary),
-                  onTap: () {
-                    OmiHaptics.selection();
-                    unawaited(_openCalendar(context));
-                  },
-                ),
-              // Search: conversations, recaps, tasks and memories, from any page of the shell.
+          _trailing(glass, [
+            if (onHome)
               HeaderCircleButton(
-                key: const ValueKey('home_search_button'),
-                semanticLabel: context.l10n.search,
-                icon: Icon(Icons.search, size: 20, color: OmiColors.textSecondary),
-                onTap: () => unawaited(_openSearch()),
-              ),
-              // Activity: what Omi did on its own; the dot only for something new worth opening.
-              if (onHome) const ActivityBellButton(),
-              // Settings button - always visible
-              HeaderCircleButton(
-                semanticLabel: context.l10n.settings,
-                icon: FaIcon(FontAwesomeIcons.gear, size: 16, color: OmiColors.textSecondary),
+                color: fill,
+                key: const ValueKey('home_calendar_button'),
+                semanticLabel: context.l10n.filterByDate,
+                icon: FaIcon(FontAwesomeIcons.calendar, size: 16, color: OmiColors.textSecondary),
                 onTap: () {
                   OmiHaptics.selection();
-                  PlatformManager.instance.analytics.pageOpened('Settings');
-                  unawaited(_openSettings());
+                  unawaited(_openCalendar(context));
                 },
               ),
-            ],
-          ),
+            // Search: conversations, recaps, tasks and memories, from any page of the shell.
+            HeaderCircleButton(
+              color: fill,
+              key: const ValueKey('home_search_button'),
+              semanticLabel: context.l10n.search,
+              icon: Icon(Icons.search, size: 20, color: OmiColors.textSecondary),
+              onTap: () => unawaited(_openSearch()),
+            ),
+            // Activity: what Omi did on its own; the dot only for something new worth opening.
+            if (onHome) ActivityBellButton(fillColor: fill),
+            // Settings button - always visible
+            HeaderCircleButton(
+              color: fill,
+              semanticLabel: context.l10n.settings,
+              icon: FaIcon(FontAwesomeIcons.gear, size: 16, color: OmiColors.textSecondary),
+              onTap: () {
+                OmiHaptics.selection();
+                PlatformManager.instance.analytics.pageOpened('Settings');
+                unawaited(_openSettings());
+              },
+            ),
+          ]),
         ],
       ),
       elevation: 0,

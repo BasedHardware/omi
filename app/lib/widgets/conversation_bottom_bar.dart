@@ -1080,7 +1080,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       ],
     );
     final Widget player = ExperimentalDesign.of(context)
-        ? FooterGlassSurface(height: 56, raised: true, padding: playerPadding, child: controls)
+        ? FooterGlassSurface(height: 56, raised: true, swell: false, padding: playerPadding, child: controls)
         : Container(height: 56, padding: playerPadding, decoration: _barDecoration, child: controls);
     if (controller == null && _failure == null) return player;
     return Column(

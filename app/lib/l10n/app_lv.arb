@@ -4771,5 +4771,6 @@
     "firmwareSyncRecordingsFirstMessage": "Daži ieraksti vēl atrodas jūsu ierīcē. Ļaujiet tiem pabeigt sinhronizēšanu ar tālruni, pēc tam sāciet atjaunināšanu.",
     "experimentalDesign": "Eksperimentālais dizains",
     "experimentalDesignDescription": "Izmēģiniet sākuma ekrāna un sarunu jauno izskatu pirms tā izlaišanas.",
-    "endConversationShort": "Beigt"
+    "endConversationShort": "Beigt",
+    "transcriptHoldLineHint": "Nospiediet un turiet rindu, lai nosauktu runātāju."
 }

@@ -111,6 +111,11 @@ class TranscriptWidget extends StatefulWidget {
   final Set<String>? selectedSegmentIds;
   final ValueChanged<TranscriptSegment>? onToggleSegmentSelection;
 
+  /// A press held on a line, with where the finger is on screen. When set, holding a line no longer
+  /// selects its text: the caller opens its own menu there (experimental design).
+  /// [lineRect] is where the line is on screen.
+  final void Function(TranscriptSegment segment, Offset globalPosition, Rect lineRect)? onSegmentLongPress;
+
   /// When the conversation started. A saved conversation's lines show their clock time
   /// ("12:40 PM") from it; without it they show the offset into the recording.
   final DateTime? startedAt;
@@ -156,6 +161,7 @@ class TranscriptWidget extends StatefulWidget {
     this.onTopVisibleSegmentChanged,
     this.selectedSegmentIds,
     this.onToggleSegmentSelection,
+    this.onSegmentLongPress,
   }) : assert(leadingItems.length == leadingItemIds.length);
 
   /// The clear space every transcript keeps under its last row, on top of [bottomMargin].
@@ -1451,21 +1457,24 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     );
     // The tap lives inside the selection area too: its own tap recognizer would otherwise win a tap
     // on the words over the line's. A long press still selects.
+    final hold = selecting ? null : widget.onSegmentLongPress;
+    final Widget tappable = GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onTap: seek == null ? null : play,
+      onDoubleTap: widget.onEditSegmentText == null
+          ? null
+          : () {
+              HapticFeedback.mediumImpact();
+              widget.onEditSegmentText!(segmentIdx);
+            },
+      child: text,
+    );
+    // With a hold menu the hold belongs to the line, so the words are not a text selection.
     final words = selecting
         ? text
-        : SelectionArea(
-            child: GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onTap: seek == null ? null : play,
-              onDoubleTap: widget.onEditSegmentText == null
-                  ? null
-                  : () {
-                      HapticFeedback.mediumImpact();
-                      widget.onEditSegmentText!(segmentIdx);
-                    },
-              child: text,
-            ),
-          );
+        : hold != null
+            ? tappable
+            : SelectionArea(child: tappable);
 
     // 8 above and below, plus the list's 4 between segments: the design's 20 between lines.
     Widget line = Padding(
@@ -1521,6 +1530,21 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
           onTap: play,
           child: line,
         ),
+      );
+    }
+    if (hold != null) {
+      line = GestureDetector(
+        key: ValueKey('transcript_hold_${data.id}'),
+        behavior: HitTestBehavior.opaque,
+        onLongPressStart: (details) {
+          HapticFeedback.mediumImpact();
+          final box = _segmentKeys[data.id]?.currentContext?.findRenderObject();
+          final rect = box is RenderBox && box.hasSize
+              ? box.localToGlobal(Offset.zero) & box.size
+              : Rect.fromCenter(center: details.globalPosition, width: 1, height: 1);
+          hold(data, details.globalPosition, rect);
+        },
+        child: line,
       );
     }
     if (isCurrent) {

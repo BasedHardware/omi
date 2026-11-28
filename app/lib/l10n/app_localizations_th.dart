@@ -15776,4 +15776,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get endConversationShort => 'จบ';
+
+  @override
+  String get transcriptHoldLineHint => 'แตะบรรทัดค้างไว้เพื่อตั้งชื่อผู้พูด';
 }

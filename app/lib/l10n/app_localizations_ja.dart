@@ -15617,4 +15617,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get endConversationShort => '終了';
+
+  @override
+  String get transcriptHoldLineHint => '行を長押しすると、話している人に名前を付けられます。';
 }

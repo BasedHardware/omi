@@ -15856,4 +15856,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get endConversationShort => 'Avslutt';
+
+  @override
+  String get transcriptHoldLineHint => 'Trykk og hold på en linje for å gi navn til den som snakker.';
 }

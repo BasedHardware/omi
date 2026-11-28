@@ -15884,4 +15884,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get endConversationShort => 'Завершити';
+
+  @override
+  String get transcriptHoldLineHint => 'Натисніть і утримуйте рядок, щоб указати, хто говорить.';
 }

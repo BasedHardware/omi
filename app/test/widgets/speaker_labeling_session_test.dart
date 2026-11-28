@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nested/nested.dart';
 import 'package:provider/provider.dart';
@@ -19,6 +21,7 @@ import 'package:omi/pages/conversation_detail/widgets/speaker_tag_outcome.dart';
 import 'package:omi/pages/conversation_detail/widgets/transcript_tab.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/people_provider.dart';
+import 'package:omi/services/experiments/experimental_design.dart';
 import 'package:omi/widgets/transcript.dart';
 import '../helpers/reprocess_fakes.dart';
 
@@ -147,6 +150,93 @@ void main() {
       detail.dispose();
       outcome.dispose();
     }
+
+    testWidgets('experimental design: holding a line offers Select and Name Speaker instead of a heading',
+        (tester) async {
+      ExperimentalDesign.debugOverride = true;
+      addTearDown(() => ExperimentalDesign.debugOverride = null);
+      await pumpTab(tester);
+      // The tab above already says Transcript; Select is in the hold menu.
+      expect(find.byKey(const Key('conversation_transcript_heading')), findsNothing);
+      expect(find.byKey(const Key('transcript_select_lines')), findsNothing);
+      expect(find.text("Press and hold a line to name who's speaking."), findsOneWidget);
+
+      await tester.longPress(find.byKey(const ValueKey('transcript_hold_b')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('transcript_line_menu_name')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('transcript_line_menu_select')));
+      await tester.pumpAndSettle();
+      // Selection mode, with the held line already chosen.
+      expect(find.byKey(const Key('speaker_labeling_session_bar')), findsOneWidget);
+      expect(find.text('1 selected'), findsOneWidget);
+      expect(find.byKey(const ValueKey('transcript_hold_b')), findsNothing);
+      await finish(tester);
+    });
+
+    testWidgets('experimental design, iPhone: a held line lifts on a card with its actions under it', (tester) async {
+      ExperimentalDesign.debugOverride = true;
+      addTearDown(() => ExperimentalDesign.debugOverride = null);
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      await pumpTab(tester);
+      await tester.longPress(find.byKey(const ValueKey('transcript_hold_b')));
+      await tester.pumpAndSettle();
+      final preview = find.byKey(const Key('transcript_line_menu_preview'));
+      expect(preview, findsOneWidget);
+      expect(find.descendant(of: preview, matching: find.text('A reply from the second voice.')), findsOneWidget);
+      // The actions sit under the card.
+      final select = find.byKey(const Key('transcript_line_menu_select'));
+      expect(tester.getTopLeft(select).dy, greaterThan(tester.getBottomLeft(preview).dy));
+      expect(find.byKey(const Key('transcript_line_menu_name')), findsOneWidget);
+      expect(find.byKey(const Key('transcript_line_menu_copy')), findsOneWidget);
+
+      // A tap elsewhere closes it and changes nothing.
+      await tester.tapAt(const Offset(5, 5));
+      await tester.pumpAndSettle();
+      expect(preview, findsNothing);
+      expect(find.byKey(const Key('speaker_labeling_session_bar')), findsNothing);
+
+      await tester.longPress(find.byKey(const ValueKey('transcript_hold_b')));
+      await tester.pumpAndSettle();
+      await tester.tap(select);
+      await tester.pumpAndSettle();
+      expect(find.text('1 selected'), findsOneWidget);
+      debugDefaultTargetPlatformOverride = null;
+      await finish(tester);
+    });
+
+    testWidgets('experimental design: Copy in the hold menu copies the line', (tester) async {
+      ExperimentalDesign.debugOverride = true;
+      addTearDown(() => ExperimentalDesign.debugOverride = null);
+      String? copied;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+        if (call.method == 'Clipboard.setData') copied = (call.arguments as Map)['text'] as String?;
+        return null;
+      });
+      addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null));
+      await pumpTab(tester);
+      await tester.longPress(find.byKey(const ValueKey('transcript_hold_b')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('transcript_line_menu_copy')));
+      await tester.pumpAndSettle();
+      expect(copied, 'A reply from the second voice.');
+      await tester.pump(const Duration(seconds: 5));
+      await finish(tester);
+    });
+
+    testWidgets('experimental design: Name Speaker in the hold menu opens the naming sheet', (tester) async {
+      ExperimentalDesign.debugOverride = true;
+      addTearDown(() => ExperimentalDesign.debugOverride = null);
+      await pumpTab(tester);
+      await tester.longPress(find.byKey(const ValueKey('transcript_hold_a')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('transcript_line_menu_name')));
+      await tester.pumpAndSettle();
+      expect(
+          find.byType(SpeakerQuickPicker).evaluate().isNotEmpty ||
+              find.byType(NameSpeakerBottomSheet).evaluate().isNotEmpty,
+          isTrue);
+      await finish(tester);
+    });
 
     testWidgets('select lines, name them with one tap, and Done updates the summary once', (tester) async {
       await pumpTab(tester);

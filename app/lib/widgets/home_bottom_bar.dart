@@ -102,10 +102,10 @@ class HomeAskAnythingButton extends StatelessWidget {
     final label = context.l10n.askAnything;
     final text = Text(
       label,
-      style: OmiType.subhead.copyWith(
-        color: OmiColors.textPrimary,
-        fontWeight: FontWeight.w500,
-      ),
+      // Experimental design: the conversation page's Ask Omi label style.
+      style: ExperimentalDesign.of(context)
+          ? OmiType.headline
+          : OmiType.subhead.copyWith(color: OmiColors.textPrimary, fontWeight: FontWeight.w500),
       textAlign: TextAlign.center,
       overflow: TextOverflow.ellipsis,
     );

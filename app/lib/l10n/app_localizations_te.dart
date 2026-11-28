@@ -15915,4 +15915,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get endConversationShort => 'ముగించు';
+
+  @override
+  String get transcriptHoldLineHint => 'ఎవరు మాట్లాడుతున్నారో పేరు పెట్టడానికి ఒక పంక్తిని నొక్కి పట్టుకోండి.';
 }

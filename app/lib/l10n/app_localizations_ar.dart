@@ -15763,4 +15763,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get endConversationShort => 'إنهاء';
+
+  @override
+  String get transcriptHoldLineHint => 'اضغط مطولاً على أي سطر لتسمية المتحدث.';
 }

@@ -4771,5 +4771,6 @@
     "firmwareSyncRecordingsFirstMessage": "ไฟล์บันทึกเสียงบางส่วนยังอยู่ในอุปกรณ์ของคุณ รอให้ซิงค์ไปยังโทรศัพท์เสร็จก่อน แล้วจึงเริ่มการอัปเดต",
     "experimentalDesign": "ดีไซน์ทดลอง",
     "experimentalDesignDescription": "ลองใช้หน้าตาใหม่ของหน้าหลักและบทสนทนาก่อนเปิดตัว",
-    "endConversationShort": "จบ"
+    "endConversationShort": "จบ",
+    "transcriptHoldLineHint": "แตะบรรทัดค้างไว้เพื่อตั้งชื่อผู้พูด"
 }

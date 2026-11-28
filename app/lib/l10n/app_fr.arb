@@ -4806,5 +4806,6 @@
     "firmwareSyncRecordingsFirstMessage": "Certains enregistrements sont encore sur votre appareil. Laissez-les terminer leur synchronisation vers votre téléphone, puis lancez la mise à jour.",
     "experimentalDesign": "Design expérimental",
     "experimentalDesignDescription": "Essayez le nouveau look de l'accueil et des conversations avant sa sortie.",
-    "endConversationShort": "Terminer"
+    "endConversationShort": "Terminer",
+    "transcriptHoldLineHint": "Maintenez une ligne appuyée pour nommer la personne qui parle."
 }

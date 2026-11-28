@@ -15893,4 +15893,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get endConversationShort => 'Beëindig';
+
+  @override
+  String get transcriptHoldLineHint => 'Houd een regel ingedrukt om de spreker een naam te geven.';
 }

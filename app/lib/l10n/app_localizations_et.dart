@@ -15843,4 +15843,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get endConversationShort => 'Lõpeta';
+
+  @override
+  String get transcriptHoldLineHint => 'Vajuta ja hoia rida, et anda kõnelejale nimi.';
 }

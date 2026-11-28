@@ -15593,4 +15593,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get endConversationShort => '结束';
+
+  @override
+  String get transcriptHoldLineHint => '长按某一行，可为说话人命名。';
 }

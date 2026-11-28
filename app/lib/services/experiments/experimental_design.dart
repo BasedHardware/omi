@@ -10,7 +10,15 @@ import 'package:omi/utils/analytics/analytics_manager.dart';
 ///   the conversation page (Ask Omi, the audio player, End Conversation) are frosted surfaces with
 ///   a soft shadow that show the content scrolling behind them, and the page-coloured block those
 ///   screens paint under the row is left out or softened;
-/// - conversation rows have no card behind them, a larger icon tile and larger title and subtitle.
+/// - conversation rows have no card behind them, a larger icon tile and larger title and subtitle;
+/// - the conversation page's Summary / Transcript tabs are capsules, the open one filled, with no
+///   line under them;
+/// - the conversation page's title, facts and tabs scroll away with the open tab's content instead
+///   of staying fixed above it; its top bar has no background, so the page scrolls behind the
+///   buttons, and the bar's glyphs are grey like Home's;
+/// - on the Transcript tab the heading chip and Select button are gone: a line of text says to press
+///   and hold a line, which opens a menu (Select, Name Speaker, Copy); the Summary tab's words can be
+///   selected with the system's text selection; a place with no name shows no map;
 /// - a conversation in progress has one page, whether or not the server has made it yet: the live
 ///   page draws the conversation page's layout (Summary and Transcript) and becomes the
 ///   conversation's page in place once the server lists it (`LiveEpisodePage`).
@@ -94,10 +102,10 @@ abstract final class ExperimentalDesign {
   }
 }
 
-/// A conversation row's title: the theme's, or 17pt semibold in the experimental design.
+/// A conversation row's title: the theme's, or 17pt medium in the experimental design.
 TextStyle? experimentalRowTitleStyle(BuildContext context) {
   final style = Theme.of(context).textTheme.titleMedium;
-  return ExperimentalDesign.of(context) ? style?.copyWith(fontSize: 17, fontWeight: FontWeight.w600) : style;
+  return ExperimentalDesign.of(context) ? style?.copyWith(fontSize: 17, fontWeight: FontWeight.w500) : style;
 }
 
 /// Rebuilds the widgets that read [ExperimentalDesign.of] when the answer changes. One at the root

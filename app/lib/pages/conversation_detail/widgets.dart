@@ -1,3 +1,4 @@
+import 'package:omi/services/experiments/experimental_design.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
@@ -635,7 +636,11 @@ class GetGeolocationWidgets extends StatelessWidget {
     return Selector<ConversationDetailProvider, Geolocation?>(
       selector: (context, provider) {
         if (provider.conversation.discarded) return null;
-        return provider.conversation.geolocation;
+        final geolocation = provider.conversation.geolocation;
+        // Experimental design: a place with no name is not shown at all, instead of a map
+        // captioned "Unknown location".
+        if (ExperimentalDesign.enabled && (geolocation?.address ?? '').trim().isEmpty) return null;
+        return geolocation;
       },
       builder: (context, geolocation, child) {
         return Column(

@@ -15877,4 +15877,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get endConversationShort => 'Baigti';
+
+  @override
+  String get transcriptHoldLineHint => 'Paspauskite ir palaikykite eilutę, kad pavadintumėte kalbantįjį.';
 }

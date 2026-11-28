@@ -15904,4 +15904,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get endConversationShort => 'Завершить';
+
+  @override
+  String get transcriptHoldLineHint => 'Нажмите и удерживайте строку, чтобы указать, кто говорит.';
 }

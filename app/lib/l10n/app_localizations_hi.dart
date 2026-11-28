@@ -15833,4 +15833,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get endConversationShort => 'समाप्त';
+
+  @override
+  String get transcriptHoldLineHint => 'कौन बोल रहा है, उसका नाम देने के लिए किसी पंक्ति को दबाकर रखें।';
 }

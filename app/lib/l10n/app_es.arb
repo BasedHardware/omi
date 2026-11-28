@@ -4771,5 +4771,6 @@
     "firmwareSyncRecordingsFirstMessage": "Algunas grabaciones siguen en tu dispositivo. Deja que terminen de sincronizarse con tu teléfono y luego inicia la actualización.",
     "experimentalDesign": "Diseño experimental",
     "experimentalDesignDescription": "Prueba el nuevo aspecto de Inicio y de las conversaciones antes de su lanzamiento.",
-    "endConversationShort": "Finalizar"
+    "endConversationShort": "Finalizar",
+    "transcriptHoldLineHint": "Mantén pulsada una línea para poner nombre a quien habla."
 }

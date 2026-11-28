@@ -15861,4 +15861,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get endConversationShort => 'Bitir';
+
+  @override
+  String get transcriptHoldLineHint => 'Kimin konuştuğunu adlandırmak için bir satıra basılı tutun.';
 }

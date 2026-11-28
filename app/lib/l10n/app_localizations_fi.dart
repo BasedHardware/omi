@@ -15856,4 +15856,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get endConversationShort => 'Lopeta';
+
+  @override
+  String get transcriptHoldLineHint => 'Paina riviä pitkään nimetäksesi puhujan.';
 }

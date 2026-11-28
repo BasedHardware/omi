@@ -4771,5 +4771,6 @@
     "firmwareSyncRecordingsFirstMessage": "Osaa nauhoituksista on vielä laitteella. Anna niiden synkronoitua puhelimeen loppuun ja käynnistä sitten päivitys.",
     "experimentalDesign": "Kokeellinen ulkoasu",
     "experimentalDesignDescription": "Kokeile Kodin ja keskustelujen uutta ulkoasua ennen julkaisua.",
-    "endConversationShort": "Lopeta"
+    "endConversationShort": "Lopeta",
+    "transcriptHoldLineHint": "Paina riviä pitkään nimetäksesi puhujan."
 }
