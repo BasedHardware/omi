@@ -12329,5 +12329,8 @@
     "batteryRestartToRefresh": "ریفریش کرنے کے لیے Omi کو دوبارہ شروع کریں",
     "onTheWayAllowanceHeldTitle": "آپ کے منٹ تجدید ہونے پر {date} کو پروسیس ہوں گے",
     "onTheWayAllowanceHeldUpgrade": "یا پلان اپ گریڈ کے ساتھ انہیں فوراً پروسیس کریں",
-    "onTheWayDayProcessesOn": "{date} کو پروسیس ہوں گے"
+    "onTheWayDayProcessesOn": "{date} کو پروسیس ہوں گے",
+    "pendantReconnectNudgeTitle": "آپ کا Omi 3 دن سے منسلک نہیں ہوا",
+    "pendantReconnectNudgeBody": "اسے دوبارہ پہنیں اور جوڑیں تاکہ Omi ریکارڈنگ جاری رکھے۔",
+    "pendantReconnectNudgeAction": "دوبارہ جوڑیں"
 }

@@ -224,6 +224,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   bool _isDisposed = false;
   final Debouncer _disconnectDebouncer = Debouncer(delay: const Duration(milliseconds: 500));
   final Debouncer _connectDebouncer = Debouncer(delay: const Duration(milliseconds: 100));
+  final DateTime Function() _clock;
 
   void Function(BtDevice device)? onDeviceConnected;
   void Function(BtDevice device, int fileCount, int totalBytes)? onOfflineDataDetected;
@@ -269,9 +270,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         _findDeviceRunner = findDeviceRunner ?? _defaultFindDeviceRunner,
         _deviceInfoConnectionLoader = deviceInfoConnectionLoader ?? ServiceManager.instance().device.ensureConnection,
         _chargingConnectionLoader = chargingConnectionLoader ?? ServiceManager.instance().device.ensureConnection,
-        _wedgeMonitor = captureWedgeMonitor ?? CaptureWedgeMonitor.instance {
+        _wedgeMonitor = captureWedgeMonitor ?? CaptureWedgeMonitor.instance,
+        _clock = clock ?? DateTime.now {
     _fullyChargedAlert = FullyChargedAlertGate(
-      now: clock ?? DateTime.now,
+      now: _clock,
       monotonicNow: monotonicNow,
       minimumDwell: fullyChargedMinimumDwell ?? FullyChargedAlertGate.minimumOnChargerDwell,
       onFullyCharged: (level) {
@@ -1100,9 +1102,16 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   /// Hardware connect is not account publication; `_handleDeviceConnected` is.
   Future<void> initiateConnection(String caller, {bool boundDeviceOnly = false}) async {
     if (_isDisposed) return;
-    final pairedDeviceId = SharedPreferencesUtil().btDevice.id;
+    final preferences = SharedPreferencesUtil();
+    final savedDevice = preferences.btDevice;
+    final pairedDeviceId = savedDevice.id;
+    // An older pairing may have no link history on this build. Begin the
+    // observation window now so a missing stamp cannot imply 72 hours away.
+    if (savedDevice.isPendant && preferences.lastPendantConnectedAt == 0) {
+      preferences.lastPendantConnectedAt = _clock().millisecondsSinceEpoch;
+    }
     if (pairedDeviceId.isNotEmpty) {
-      unawaited(DeviceHealthTelemetry.maybeEmit(SharedPreferencesUtil().btDevice));
+      unawaited(DeviceHealthTelemetry.maybeEmit(savedDevice));
     }
 
     if (ServiceManager.instance().device.staleBondRecoveryRequired) {
@@ -1111,7 +1120,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     }
 
     // Arm recovery even if native restoration connected before the home frame.
-    if (pairedDeviceId.isNotEmpty && SharedPreferencesUtil().btDevice.locator?.kind == TransportKind.bluetooth) {
+    if (pairedDeviceId.isNotEmpty && savedDevice.locator?.kind == TransportKind.bluetooth) {
       await ServiceManager.instance().device.reconnectSavedDevice('launch');
       return;
     }
@@ -1420,6 +1429,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     await refreshOfflineStorageCapability();
     if (!_isCurrentBatterySession(generation, batterySession, device.id)) return;
+    if (normalizedDevice.isPendant) {
+      SharedPreferencesUtil().lastPendantConnectedAt = _clock().millisecondsSinceEpoch;
+    }
     setIsConnected(true);
     // A live link is sync-activity evidence for the stall watchdog: the
     // pendant (re)connecting means retrieval can proceed (#15501).
@@ -1982,6 +1994,12 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         // Check if this is the paired device or currently connected device
         // Coz connectedDevice and pairedDevice are the same but connectedDevice becomes null after disconnect
         if (deviceId == connectedDevice?.id || deviceId == pairedDevice?.id) {
+          // Record when the live pendant link ended, before any UI debounce.
+          if (_isCurrent(generation) &&
+              connectedDevice?.id == deviceId &&
+              capabilityNormalizedDevice?.isPendant == true) {
+            SharedPreferencesUtil().lastPendantConnectedAt = _clock().millisecondsSinceEpoch;
+          }
           // Capture sees the loss before a sub-500ms reconnect can cancel the
           // UI debounce. Native published its reason before this callback.
           _notifyCaptureLinkLost(deviceId);

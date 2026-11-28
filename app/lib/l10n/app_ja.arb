@@ -4772,5 +4772,8 @@
     "batteryRestartToRefresh": "Omiを再起動して更新",
     "onTheWayAllowanceHeldTitle": "分数が更新される{date}に処理されます",
     "onTheWayAllowanceHeldUpgrade": "またはプランのアップグレードですぐに処理できます",
-    "onTheWayDayProcessesOn": "{date}に処理予定"
+    "onTheWayDayProcessesOn": "{date}に処理予定",
+    "pendantReconnectNudgeTitle": "Omi が 3 日間接続されていません",
+    "pendantReconnectNudgeBody": "Omi をもう一度身につけて再接続すると、録音を続けられます。",
+    "pendantReconnectNudgeAction": "再接続"
 }

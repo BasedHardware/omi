@@ -15624,4 +15624,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return '$dateに処理予定';
   }
+
+  @override
+  String get pendantReconnectNudgeTitle => 'Omi が 3 日間接続されていません';
+
+  @override
+  String get pendantReconnectNudgeBody => 'Omi をもう一度身につけて再接続すると、録音を続けられます。';
+
+  @override
+  String get pendantReconnectNudgeAction => '再接続';
 }

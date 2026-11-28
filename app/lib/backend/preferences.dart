@@ -111,6 +111,7 @@ class SharedPreferencesUtil {
     _appsListRevision++;
     if (!PhysicalQualification.enabled) await _quarantineBootSettings();
     await _migrateAppearanceDefault();
+    await _migratePendantReconnectNudgeCap(_preferences!);
     _mirrorNativeAuthToken = mirrorNativeAuthToken ?? Platform.isAndroid;
     await _loadCapturePolicy();
     await _reconcileNativeCapturePolicy();
@@ -789,6 +790,45 @@ class SharedPreferencesUtil {
   int get lastSyncAlertTimestamp => getInt('lastSyncAlertTimestamp', defaultValue: 0);
 
   set lastSyncAlertTimestamp(int value) => saveInt('lastSyncAlertTimestamp', value);
+
+  // Per-account epoch millis from the last live pendant link. For old pairings
+  // without a stamp, the first observation starts a conservative window.
+  int get lastPendantConnectedAt => uid.isEmpty ? 0 : getInt(_userScopedKey('lastPendantConnectedAt', uid));
+
+  set lastPendantConnectedAt(int value) {
+    if (uid.isNotEmpty) unawaited(saveInt(_userScopedKey('lastPendantConnectedAt', uid), value));
+  }
+
+  static const _pendantReconnectNudgeLastShownKey = 'pendant_reconnect_nudge_last_shown_at';
+
+  int get pendantReconnectNudgeLastShownAt => getInt(_pendantReconnectNudgeLastShownKey);
+
+  set pendantReconnectNudgeLastShownAt(int value) => unawaited(saveInt(_pendantReconnectNudgeLastShownKey, value));
+
+  static Future<void> _migratePendantReconnectNudgeCap(SharedPreferences prefs) async {
+    if (prefs.containsKey(_pendantReconnectNudgeLastShownKey)) return;
+    var latest = 0;
+    for (final key in prefs.getKeys().where((key) => key.startsWith('$_pendantReconnectNudgeLastShownKey:'))) {
+      final value = prefs.get(key);
+      if (value is int && value > latest) latest = value;
+    }
+    if (latest > 0) await prefs.setInt(_pendantReconnectNudgeLastShownKey, latest);
+  }
+
+  int get pendantReconnectNudgeLastEnrolledAt =>
+      uid.isEmpty ? 0 : getInt(_userScopedKey('pendant_reconnect_nudge_last_enrolled_at', uid));
+
+  set pendantReconnectNudgeLastEnrolledAt(int value) {
+    if (uid.isNotEmpty) unawaited(saveInt(_userScopedKey('pendant_reconnect_nudge_last_enrolled_at', uid), value));
+  }
+
+  // Shared with SCA-4815's drop-off question. Both surfaces check and claim
+  // this same local calendar day (yyyy-MM-dd) when showing, in one sync turn.
+  static const _pendantDropoffSurfaceLastDayKey = 'pendant_dropoff_surface_last_day';
+
+  String get pendantDropoffSurfaceLastDay => getString(_pendantDropoffSurfaceLastDayKey);
+
+  set pendantDropoffSurfaceLastDay(String value) => unawaited(saveString(_pendantDropoffSurfaceLastDayKey, value));
 
   // Per-provider config storage
   CustomSttConfig? getConfigForProvider(SttProvider provider) {
@@ -1765,6 +1805,13 @@ class SharedPreferencesUtil {
     _authTokenCache = '';
     await _deleteSecureAuthToken();
     _appsListRevision++;
-    return await _preferences?.clear() ?? false;
+    final prefs = _preferences;
+    if (prefs == null) return false;
+    // Account resets preserve the installation's reconnect reminder cooldown.
+    final lastShown = pendantReconnectNudgeLastShownAt;
+    final cleared = await prefs.clear();
+    if (lastShown == 0) return cleared;
+    final saved = await prefs.setInt(_pendantReconnectNudgeLastShownKey, lastShown);
+    return cleared && saved;
   }
 }

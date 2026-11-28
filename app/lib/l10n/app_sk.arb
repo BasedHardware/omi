@@ -4772,5 +4772,8 @@
     "batteryRestartToRefresh": "Pre obnovenie údajov reštartujte Omi",
     "onTheWayAllowanceHeldTitle": "Spracuje sa {date}, keď sa obnovia vaše minúty",
     "onTheWayAllowanceHeldUpgrade": "Alebo ich spracujte hneď s upgradom plánu",
-    "onTheWayDayProcessesOn": "Spracuje sa {date}"
+    "onTheWayDayProcessesOn": "Spracuje sa {date}",
+    "pendantReconnectNudgeTitle": "Tvoje Omi sa už 3 dni nepripojilo",
+    "pendantReconnectNudgeBody": "Znova si ho nasaď a pripoj, aby Omi ďalej nahrávalo.",
+    "pendantReconnectNudgeAction": "Znova pripojiť"
 }

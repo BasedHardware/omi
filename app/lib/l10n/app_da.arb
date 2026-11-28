@@ -4814,5 +4814,8 @@
     "batteryRestartToRefresh": "Genstart Omi for at opdatere værdien",
     "onTheWayAllowanceHeldTitle": "Behandles {date}, når dine minutter fornyes",
     "onTheWayAllowanceHeldUpgrade": "Eller behandl dem med det samme med en opgradering af din plan",
-    "onTheWayDayProcessesOn": "Behandles {date}"
+    "onTheWayDayProcessesOn": "Behandles {date}",
+    "pendantReconnectNudgeTitle": "Din Omi har ikke været forbundet i 3 dage",
+    "pendantReconnectNudgeBody": "Tag den på igen, og opret forbindelse, så Omi kan fortsætte med at optage.",
+    "pendantReconnectNudgeAction": "Opret forbindelse igen"
 }

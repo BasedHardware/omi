@@ -4772,5 +4772,8 @@
     "batteryRestartToRefresh": "Starta om Omi för att uppdatera",
     "onTheWayAllowanceHeldTitle": "Bearbetas {date} när dina minuter förnyas",
     "onTheWayAllowanceHeldUpgrade": "Eller bearbeta dem direkt med en planuppgradering",
-    "onTheWayDayProcessesOn": "Bearbetas {date}"
+    "onTheWayDayProcessesOn": "Bearbetas {date}",
+    "pendantReconnectNudgeTitle": "Din Omi har inte varit ansluten på 3 dagar",
+    "pendantReconnectNudgeBody": "Ta på dig den igen och återanslut så att Omi fortsätter spela in.",
+    "pendantReconnectNudgeAction": "Återanslut"
 }

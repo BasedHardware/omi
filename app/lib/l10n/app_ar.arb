@@ -4772,5 +4772,8 @@
     "batteryRestartToRefresh": "أعد تشغيل Omi لتحديث القراءة",
     "onTheWayAllowanceHeldTitle": "ستتم المعالجة في {date} عندما تتجدد دقائقك",
     "onTheWayAllowanceHeldUpgrade": "أو عالجها فورًا بترقية خطتك",
-    "onTheWayDayProcessesOn": "تتم المعالجة في {date}"
+    "onTheWayDayProcessesOn": "تتم المعالجة في {date}",
+    "pendantReconnectNudgeTitle": "لم يتصل جهاز Omi منذ 3 أيام",
+    "pendantReconnectNudgeBody": "ارتدِه مجددًا وأعد توصيله ليواصل Omi التسجيل.",
+    "pendantReconnectNudgeAction": "إعادة الاتصال"
 }

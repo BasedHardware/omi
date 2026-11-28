@@ -4807,5 +4807,8 @@
     "batteryRestartToRefresh": "Mulai ulang Omi untuk menyegarkan",
     "onTheWayAllowanceHeldTitle": "Akan diproses pada {date} saat menit Anda diperbarui",
     "onTheWayAllowanceHeldUpgrade": "Atau proses langsung dengan upgrade paket",
-    "onTheWayDayProcessesOn": "Diproses pada {date}"
+    "onTheWayDayProcessesOn": "Diproses pada {date}",
+    "pendantReconnectNudgeTitle": "Omi kamu belum terhubung selama 3 hari",
+    "pendantReconnectNudgeBody": "Pakai kembali dan hubungkan agar Omi terus merekam.",
+    "pendantReconnectNudgeAction": "Hubungkan kembali"
 }

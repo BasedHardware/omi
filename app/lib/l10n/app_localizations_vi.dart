@@ -15859,4 +15859,13 @@ class AppLocalizationsVi extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Xử lý vào $date';
   }
+
+  @override
+  String get pendantReconnectNudgeTitle => 'Omi của bạn đã 3 ngày không kết nối';
+
+  @override
+  String get pendantReconnectNudgeBody => 'Đeo lại và kết nối để Omi tiếp tục ghi âm.';
+
+  @override
+  String get pendantReconnectNudgeAction => 'Kết nối lại';
 }

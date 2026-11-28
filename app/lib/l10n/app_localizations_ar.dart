@@ -15770,4 +15770,13 @@ class AppLocalizationsAr extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'تتم المعالجة في $date';
   }
+
+  @override
+  String get pendantReconnectNudgeTitle => 'لم يتصل جهاز Omi منذ 3 أيام';
+
+  @override
+  String get pendantReconnectNudgeBody => 'ارتدِه مجددًا وأعد توصيله ليواصل Omi التسجيل.';
+
+  @override
+  String get pendantReconnectNudgeAction => 'إعادة الاتصال';
 }

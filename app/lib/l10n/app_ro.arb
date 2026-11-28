@@ -4772,5 +4772,8 @@
     "batteryRestartToRefresh": "Repornește Omi pentru a actualiza valoarea",
     "onTheWayAllowanceHeldTitle": "Vor fi procesate pe {date} când se reînnoiesc minutele tale",
     "onTheWayAllowanceHeldUpgrade": "Sau procesează-le imediat cu un upgrade de plan",
-    "onTheWayDayProcessesOn": "Se procesează {date}"
+    "onTheWayDayProcessesOn": "Se procesează {date}",
+    "pendantReconnectNudgeTitle": "Dispozitivul tău Omi nu s-a conectat de 3 zile",
+    "pendantReconnectNudgeBody": "Poartă-l din nou și reconectează-l, ca Omi să continue să înregistreze.",
+    "pendantReconnectNudgeAction": "Reconectează"
 }

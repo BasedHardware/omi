@@ -4807,5 +4807,8 @@
     "batteryRestartToRefresh": "Yenilemek için Omi'yi yeniden başlatın",
     "onTheWayAllowanceHeldTitle": "Dakikalarınız yenilendiğinde {date} tarihinde işlenecek",
     "onTheWayAllowanceHeldUpgrade": "Ya da plan yükseltmesiyle bunları hemen işleme alın",
-    "onTheWayDayProcessesOn": "{date} tarihinde işlenecek"
+    "onTheWayDayProcessesOn": "{date} tarihinde işlenecek",
+    "pendantReconnectNudgeTitle": "Omi cihazın 3 gündür bağlanmadı",
+    "pendantReconnectNudgeBody": "Omi'nin kayda devam etmesi için cihazını yeniden tak ve bağla.",
+    "pendantReconnectNudgeAction": "Yeniden bağlan"
 }

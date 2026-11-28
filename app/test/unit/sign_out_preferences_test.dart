@@ -38,6 +38,23 @@ void main() {
     expect(prefs.getBool('onboardingCompleted'), isNull);
   });
 
+  test('sign out keeps the migrated installation reconnect cap and clears account enrollment', () async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('pendant_reconnect_nudge_last_shown_at:user-123', 100);
+    await prefs.setInt('pendant_reconnect_nudge_last_shown_at:another-user', 200);
+    await SharedPreferencesUtil.init();
+    final preferences = SharedPreferencesUtil();
+    preferences.pendantReconnectNudgeLastEnrolledAt = 123;
+    expect(preferences.pendantReconnectNudgeLastShownAt, 200);
+
+    await clearPreferencesForSignOut();
+    preferences.uid = 'another-user';
+    expect(preferences.pendantReconnectNudgeLastShownAt, 200);
+    expect(preferences.pendantReconnectNudgeLastEnrolledAt, 0);
+    expect(prefs.getInt('pendant_reconnect_nudge_last_enrolled_at:user-123'), isNull);
+    expect(prefs.getInt('pendant_reconnect_nudge_last_shown_at:another-user'), isNull);
+  });
+
   for (final mode in ['light', 'dark', 'system']) {
     test('sign out preserves explicit $mode appearance across restart', () async {
       await SharedPreferencesUtil().setAppearanceMode(mode);

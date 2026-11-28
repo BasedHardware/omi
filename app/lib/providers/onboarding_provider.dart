@@ -406,6 +406,9 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       }
       Logger.debug('Connected to device: ${device.name}');
       deviceId = device.id;
+      if (device.isPendant) {
+        SharedPreferencesUtil().lastPendantConnectedAt = DateTime.now().millisecondsSinceEpoch;
+      }
       await SharedPreferencesUtil().btDeviceSet(device);
       _syncSavedDevices();
       deviceName = device.name;

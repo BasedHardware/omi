@@ -15873,4 +15873,13 @@ class AppLocalizationsId extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Diproses pada $date';
   }
+
+  @override
+  String get pendantReconnectNudgeTitle => 'Omi kamu belum terhubung selama 3 hari';
+
+  @override
+  String get pendantReconnectNudgeBody => 'Pakai kembali dan hubungkan agar Omi terus merekam.';
+
+  @override
+  String get pendantReconnectNudgeAction => 'Hubungkan kembali';
 }

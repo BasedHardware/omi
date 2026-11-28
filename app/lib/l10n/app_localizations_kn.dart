@@ -15910,4 +15910,13 @@ class AppLocalizationsKn extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return '$date ರಂದು ಪ್ರಕ್ರಿಯೆ';
   }
+
+  @override
+  String get pendantReconnectNudgeTitle => 'ನಿಮ್ಮ Omi 3 ದಿನಗಳಿಂದ ಸಂಪರ್ಕಗೊಂಡಿಲ್ಲ';
+
+  @override
+  String get pendantReconnectNudgeBody => 'Omi ರೆಕಾರ್ಡಿಂಗ್ ಮುಂದುವರಿಸಲು ಅದನ್ನು ಮತ್ತೆ ಧರಿಸಿ ಮತ್ತು ಸಂಪರ್ಕಿಸಿ.';
+
+  @override
+  String get pendantReconnectNudgeAction => 'ಮತ್ತೆ ಸಂಪರ್ಕಿಸಿ';
 }

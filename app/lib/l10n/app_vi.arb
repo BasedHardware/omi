@@ -4772,5 +4772,8 @@
     "batteryRestartToRefresh": "Khởi động lại Omi để làm mới",
     "onTheWayAllowanceHeldTitle": "Sẽ xử lý vào {date} khi số phút của bạn được gia hạn",
     "onTheWayAllowanceHeldUpgrade": "Hoặc xử lý ngay bằng cách nâng cấp gói",
-    "onTheWayDayProcessesOn": "Xử lý vào {date}"
+    "onTheWayDayProcessesOn": "Xử lý vào {date}",
+    "pendantReconnectNudgeTitle": "Omi của bạn đã 3 ngày không kết nối",
+    "pendantReconnectNudgeBody": "Đeo lại và kết nối để Omi tiếp tục ghi âm.",
+    "pendantReconnectNudgeAction": "Kết nối lại"
 }

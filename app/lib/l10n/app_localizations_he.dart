@@ -15744,4 +15744,13 @@ class AppLocalizationsHe extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'ייעבדו ב-$date';
   }
+
+  @override
+  String get pendantReconnectNudgeTitle => 'ה־Omi שלך לא התחבר כבר 3 ימים';
+
+  @override
+  String get pendantReconnectNudgeBody => 'כדאי לענוד אותו שוב ולחבר אותו כדי ש־Omi ימשיך להקליט.';
+
+  @override
+  String get pendantReconnectNudgeAction => 'חיבור מחדש';
 }

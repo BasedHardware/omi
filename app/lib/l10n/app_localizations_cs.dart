@@ -15857,4 +15857,13 @@ class AppLocalizationsCs extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Zpracuje se $date';
   }
+
+  @override
+  String get pendantReconnectNudgeTitle => 'Tvoje Omi se už 3 dny nepřipojilo';
+
+  @override
+  String get pendantReconnectNudgeBody => 'Znovu si ho nasaď a připoj, aby Omi dál nahrávalo.';
+
+  @override
+  String get pendantReconnectNudgeAction => 'Znovu připojit';
 }

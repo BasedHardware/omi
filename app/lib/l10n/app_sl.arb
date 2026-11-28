@@ -12329,5 +12329,8 @@
     "batteryRestartToRefresh": "Ponovno zaženite Omi, da osvežite podatke",
     "onTheWayAllowanceHeldTitle": "Obdelani bodo {date}, ko se obnovijo vaše minute",
     "onTheWayAllowanceHeldUpgrade": "Ali pa jih obdelajte takoj z nadgradnjo paketa",
-    "onTheWayDayProcessesOn": "Obdelani bodo {date}"
+    "onTheWayDayProcessesOn": "Obdelani bodo {date}",
+    "pendantReconnectNudgeTitle": "Tvoj Omi se ni povezal že 3 dni",
+    "pendantReconnectNudgeBody": "Znova si ga nadeni in poveži, da bo Omi še naprej snemal.",
+    "pendantReconnectNudgeAction": "Znova poveži"
 }

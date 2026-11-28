@@ -15923,4 +15923,13 @@ class AppLocalizationsMk extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Обработка на $date';
   }
+
+  @override
+  String get pendantReconnectNudgeTitle => 'Твојот Omi не е поврзан веќе 3 дена';
+
+  @override
+  String get pendantReconnectNudgeBody => 'Стави го повторно и поврзи го за Omi да продолжи да снима.';
+
+  @override
+  String get pendantReconnectNudgeAction => 'Поврзи повторно';
 }

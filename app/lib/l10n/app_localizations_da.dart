@@ -15849,4 +15849,13 @@ class AppLocalizationsDa extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Behandles $date';
   }
+
+  @override
+  String get pendantReconnectNudgeTitle => 'Din Omi har ikke været forbundet i 3 dage';
+
+  @override
+  String get pendantReconnectNudgeBody => 'Tag den på igen, og opret forbindelse, så Omi kan fortsætte med at optage.';
+
+  @override
+  String get pendantReconnectNudgeAction => 'Opret forbindelse igen';
 }

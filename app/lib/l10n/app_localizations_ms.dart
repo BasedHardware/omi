@@ -15896,4 +15896,13 @@ class AppLocalizationsMs extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Diproses pada $date';
   }
+
+  @override
+  String get pendantReconnectNudgeTitle => 'Omi anda belum bersambung selama 3 hari';
+
+  @override
+  String get pendantReconnectNudgeBody => 'Pakai semula dan sambungkan supaya Omi terus merakam.';
+
+  @override
+  String get pendantReconnectNudgeAction => 'Sambung semula';
 }

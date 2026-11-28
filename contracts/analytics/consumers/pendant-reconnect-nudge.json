@@ -1,0 +1,21 @@
+{
+  "id": "pendant-reconnect-nudge",
+  "kind": "question",
+  "owner": "Goal: Churn",
+  "question": "Are EXP-005 eligibility and card lifecycle events present for the selected mobile namespace and build?",
+  "query": "contracts/analytics/consumers/pendant-reconnect-nudge-presence.sql",
+  "events": [
+    "pendantReconnectNudgeEligible",
+    "pendantReconnectNudgeShown",
+    "pendantReconnectNudgeTapped",
+    "pendantReconnectNudgeDismissed"
+  ],
+  "namespace_property": "$app_namespace",
+  "dimensions": [
+    "arm",
+    "days_since_connection",
+    "tenure_days",
+    "paying"
+  ],
+  "zero_policy": "While the switch is off, no events are expected. Eligible includes both arms. Delivery events are treatment only. Unknown paying means the app had no subscription snapshot."
+}

@@ -5,6 +5,210 @@
   ],
   "events": [
     {
+      "id": "pendantReconnectNudgeEligible",
+      "wire_name": "Pendant Reconnect Nudge Eligible",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "arm": {
+          "type": "enum",
+          "wire_name": "arm",
+          "values": [
+            "treatment",
+            "holdout"
+          ]
+        },
+        "daysSinceConnection": {
+          "type": "enum",
+          "wire_name": "days_since_connection",
+          "values": [
+            "days_3_to_6",
+            "days_7_to_13",
+            "days_14_to_29",
+            "days_30_plus"
+          ]
+        },
+        "tenureDays": {
+          "type": "enum",
+          "wire_name": "tenure_days",
+          "values": [
+            "under_14",
+            "days_14_to_59",
+            "days_60_plus",
+            "unknown"
+          ]
+        },
+        "paying": {
+          "type": "enum",
+          "wire_name": "paying",
+          "values": [
+            "paying",
+            "not_paying",
+            "unknown"
+          ]
+        }
+      },
+      "consumers": [
+        "pendant-reconnect-nudge"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "pendantReconnectNudgeShown",
+      "wire_name": "Pendant Reconnect Nudge Shown",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "arm": {
+          "type": "enum",
+          "wire_name": "arm",
+          "values": [
+            "treatment",
+            "holdout"
+          ]
+        },
+        "daysSinceConnection": {
+          "type": "enum",
+          "wire_name": "days_since_connection",
+          "values": [
+            "days_3_to_6",
+            "days_7_to_13",
+            "days_14_to_29",
+            "days_30_plus"
+          ]
+        },
+        "tenureDays": {
+          "type": "enum",
+          "wire_name": "tenure_days",
+          "values": [
+            "under_14",
+            "days_14_to_59",
+            "days_60_plus",
+            "unknown"
+          ]
+        },
+        "paying": {
+          "type": "enum",
+          "wire_name": "paying",
+          "values": [
+            "paying",
+            "not_paying",
+            "unknown"
+          ]
+        }
+      },
+      "consumers": [
+        "pendant-reconnect-nudge"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "pendantReconnectNudgeTapped",
+      "wire_name": "Pendant Reconnect Nudge Tapped",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "arm": {
+          "type": "enum",
+          "wire_name": "arm",
+          "values": [
+            "treatment",
+            "holdout"
+          ]
+        },
+        "daysSinceConnection": {
+          "type": "enum",
+          "wire_name": "days_since_connection",
+          "values": [
+            "days_3_to_6",
+            "days_7_to_13",
+            "days_14_to_29",
+            "days_30_plus"
+          ]
+        },
+        "tenureDays": {
+          "type": "enum",
+          "wire_name": "tenure_days",
+          "values": [
+            "under_14",
+            "days_14_to_59",
+            "days_60_plus",
+            "unknown"
+          ]
+        },
+        "paying": {
+          "type": "enum",
+          "wire_name": "paying",
+          "values": [
+            "paying",
+            "not_paying",
+            "unknown"
+          ]
+        }
+      },
+      "consumers": [
+        "pendant-reconnect-nudge"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "pendantReconnectNudgeDismissed",
+      "wire_name": "Pendant Reconnect Nudge Dismissed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "arm": {
+          "type": "enum",
+          "wire_name": "arm",
+          "values": [
+            "treatment",
+            "holdout"
+          ]
+        },
+        "daysSinceConnection": {
+          "type": "enum",
+          "wire_name": "days_since_connection",
+          "values": [
+            "days_3_to_6",
+            "days_7_to_13",
+            "days_14_to_29",
+            "days_30_plus"
+          ]
+        },
+        "tenureDays": {
+          "type": "enum",
+          "wire_name": "tenure_days",
+          "values": [
+            "under_14",
+            "days_14_to_59",
+            "days_60_plus",
+            "unknown"
+          ]
+        },
+        "paying": {
+          "type": "enum",
+          "wire_name": "paying",
+          "values": [
+            "paying",
+            "not_paying",
+            "unknown"
+          ]
+        }
+      },
+      "consumers": [
+        "pendant-reconnect-nudge"
+      ],
+      "correlation": null
+    },
+    {
       "id": "onDeviceTranscriptionUsed",
       "wire_name": "On Device Transcription Used",
       "status": "active",

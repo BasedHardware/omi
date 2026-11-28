@@ -4772,5 +4772,8 @@
     "batteryRestartToRefresh": "重启 Omi 以刷新",
     "onTheWayAllowanceHeldTitle": "将在您的分钟数于 {date} 刷新时处理",
     "onTheWayAllowanceHeldUpgrade": "或升级套餐以立即处理",
-    "onTheWayDayProcessesOn": "将于 {date} 处理"
+    "onTheWayDayProcessesOn": "将于 {date} 处理",
+    "pendantReconnectNudgeTitle": "你的 Omi 已有 3 天未连接",
+    "pendantReconnectNudgeBody": "重新戴上并连接 Omi，让它继续录音。",
+    "pendantReconnectNudgeAction": "重新连接"
 }

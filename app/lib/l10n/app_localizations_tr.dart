@@ -15868,4 +15868,13 @@ class AppLocalizationsTr extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return '$date tarihinde işlenecek';
   }
+
+  @override
+  String get pendantReconnectNudgeTitle => 'Omi cihazın 3 gündür bağlanmadı';
+
+  @override
+  String get pendantReconnectNudgeBody => 'Omi\'nin kayda devam etmesi için cihazını yeniden tak ve bağla.';
+
+  @override
+  String get pendantReconnectNudgeAction => 'Yeniden bağlan';
 }

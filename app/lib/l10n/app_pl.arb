@@ -4807,5 +4807,8 @@
     "batteryRestartToRefresh": "Uruchom ponownie Omi, aby odświeżyć odczyt",
     "onTheWayAllowanceHeldTitle": "Zostaną przetworzone {date}, gdy odnowią się Twoje minuty",
     "onTheWayAllowanceHeldUpgrade": "Albo przetwórz je od razu, ulepszając plan",
-    "onTheWayDayProcessesOn": "Zostaną przetworzone {date}"
+    "onTheWayDayProcessesOn": "Zostaną przetworzone {date}",
+    "pendantReconnectNudgeTitle": "Twój Omi nie łączył się od 3 dni",
+    "pendantReconnectNudgeBody": "Załóż go i połącz ponownie, aby Omi nadal nagrywał.",
+    "pendantReconnectNudgeAction": "Połącz ponownie"
 }

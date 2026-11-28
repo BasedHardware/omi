@@ -4807,5 +4807,8 @@
     "batteryRestartToRefresh": "Reinicie o Omi para atualizar",
     "onTheWayAllowanceHeldTitle": "Serão processados em {date} quando seus minutos renovarem",
     "onTheWayAllowanceHeldUpgrade": "Ou processe-os imediatamente com um upgrade de plano",
-    "onTheWayDayProcessesOn": "Processa em {date}"
+    "onTheWayDayProcessesOn": "Processa em {date}",
+    "pendantReconnectNudgeTitle": "O teu Omi não se liga há 3 dias",
+    "pendantReconnectNudgeBody": "Volta a usá-lo e liga-o novamente para que o Omi continue a gravar.",
+    "pendantReconnectNudgeAction": "Voltar a ligar"
 }

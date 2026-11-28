@@ -15990,4 +15990,13 @@ class AppLocalizationsFr extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Traitement le $date';
   }
+
+  @override
+  String get pendantReconnectNudgeTitle => 'Ton Omi ne s’est pas connecté depuis 3 jours';
+
+  @override
+  String get pendantReconnectNudgeBody => 'Remets-le et reconnecte-le pour qu’Omi continue d’enregistrer.';
+
+  @override
+  String get pendantReconnectNudgeAction => 'Reconnecter';
 }

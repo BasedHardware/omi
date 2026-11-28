@@ -15905,4 +15905,13 @@ class AppLocalizationsEs extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Se procesan el $date';
   }
+
+  @override
+  String get pendantReconnectNudgeTitle => 'Tu Omi lleva 3 días sin conectarse';
+
+  @override
+  String get pendantReconnectNudgeBody => 'Vuelve a ponértelo y conéctalo para que Omi siga grabando.';
+
+  @override
+  String get pendantReconnectNudgeAction => 'Volver a conectar';
 }

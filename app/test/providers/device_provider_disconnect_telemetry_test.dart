@@ -14,6 +14,7 @@ import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
+import 'package:omi/services/experiments/pendant_reconnect_nudge.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/wals/sync_wake_scope.dart';
@@ -300,6 +301,72 @@ void main() {
     transport.notifications.add([0]);
     transport.notifications.add([1]);
     expect(capture.chargeStarts, 2, reason: 'a real unplug and replug remains a resume trigger');
+  });
+
+  test('reconnect nudge measures the 72-hour gap from live pendant link loss', () {
+    final connectedAt = DateTime(2026, 11, 27, 12);
+    final disconnectedAt = connectedAt.add(const Duration(hours: 12));
+    final preferences = SharedPreferencesUtil();
+    final previousUid = preferences.uid;
+    preferences.uid = 'fixture-1';
+    preferences.lastPendantConnectedAt = connectedAt.millisecondsSinceEpoch;
+    addTearDown(() {
+      preferences.lastPendantConnectedAt = 0;
+      preferences.uid = previousUid;
+    });
+    final device = _device('long-lived-pendant');
+    final provider = DeviceProvider(clock: () => disconnectedAt)
+      ..pairedDevice = device
+      ..connectedDevice = device
+      ..isConnected = true;
+    addTearDown(provider.dispose);
+
+    bool eligibleAt(DateTime now) =>
+        PendantReconnectNudge.evaluate(
+          enabled: true,
+          uid: preferences.uid,
+          hasPairedPendant: device.isPendant,
+          now: now,
+          lastConnectedAt: preferences.lastPendantConnectedAt,
+          lastShownAt: 0,
+          lastEnrolledAt: 0,
+          lastDropoffSurfaceDay: '',
+          lastSyncAlertAt: 0,
+          createdAt: null,
+          paying: null,
+        ) !=
+        null;
+
+    provider.onDeviceConnectionStateChanged(device.id, DeviceConnectionState.disconnected);
+
+    expect(preferences.lastPendantConnectedAt, disconnectedAt.millisecondsSinceEpoch);
+    expect(eligibleAt(connectedAt.add(const Duration(hours: 72))), isFalse);
+    expect(eligibleAt(disconnectedAt.add(const Duration(hours: 72))), isTrue);
+  });
+
+  test('loss of an unconnected pairing or a non-pendant link leaves the nudge stamp alone', () {
+    final connectedAt = DateTime(2026, 11, 27, 12);
+    final preferences = SharedPreferencesUtil();
+    final previousUid = preferences.uid;
+    preferences.uid = 'fixture-1';
+    preferences.lastPendantConnectedAt = connectedAt.millisecondsSinceEpoch;
+    addTearDown(() {
+      preferences.lastPendantConnectedAt = 0;
+      preferences.uid = previousUid;
+    });
+    final provider = DeviceProvider(clock: () => connectedAt.add(const Duration(hours: 12)));
+    addTearDown(provider.dispose);
+
+    final pendant = _device('paired-pendant');
+    provider.pairedDevice = pendant;
+    provider.onDeviceConnectionStateChanged(pendant.id, DeviceConnectionState.disconnected);
+    expect(preferences.lastPendantConnectedAt, connectedAt.millisecondsSinceEpoch);
+
+    final watch = BtDevice(id: 'connected-watch', name: 'Watch', type: DeviceType.appleWatch, rssi: -50);
+    provider.pairedDevice = watch;
+    provider.connectedDevice = watch;
+    provider.onDeviceConnectionStateChanged(watch.id, DeviceConnectionState.disconnected);
+    expect(preferences.lastPendantConnectedAt, connectedAt.millisecondsSinceEpoch);
   });
 
   test('disconnect emits Device Disconnected Detailed from the freshest persisted event', () async {

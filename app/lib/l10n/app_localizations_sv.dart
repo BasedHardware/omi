@@ -15866,4 +15866,13 @@ class AppLocalizationsSv extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Bearbetas $date';
   }
+
+  @override
+  String get pendantReconnectNudgeTitle => 'Din Omi har inte varit ansluten på 3 dagar';
+
+  @override
+  String get pendantReconnectNudgeBody => 'Ta på dig den igen och återanslut så att Omi fortsätter spela in.';
+
+  @override
+  String get pendantReconnectNudgeAction => 'Återanslut';
 }

@@ -12329,5 +12329,8 @@
     "batteryRestartToRefresh": "برای بازخوانی، Omi را دوباره راه‌اندازی کنید",
     "onTheWayAllowanceHeldTitle": "وقتی دقیقه‌های شما تمدید می‌شوند، در {date} پردازش می‌شود",
     "onTheWayAllowanceHeldUpgrade": "یا با ارتقای طرح، فوراً آن‌ها را پردازش کنید",
-    "onTheWayDayProcessesOn": "در {date} پردازش می‌شود"
+    "onTheWayDayProcessesOn": "در {date} پردازش می‌شود",
+    "pendantReconnectNudgeTitle": "دستگاه Omi شما ۳ روز است که متصل نشده",
+    "pendantReconnectNudgeBody": "آن را دوباره بپوشید و وصل کنید تا Omi به ضبط ادامه دهد.",
+    "pendantReconnectNudgeAction": "اتصال دوباره"
 }

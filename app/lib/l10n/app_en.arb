@@ -19388,5 +19388,17 @@
                 "example": "Dec 1"
             }
         }
+    },
+    "pendantReconnectNudgeTitle": "Your Omi hasn't connected in 3 days",
+    "@pendantReconnectNudgeTitle": {
+        "description": "Title of a Home reminder after three days without a pendant connection."
+    },
+    "pendantReconnectNudgeBody": "Put it back on and reconnect so Omi keeps capturing.",
+    "@pendantReconnectNudgeBody": {
+        "description": "Home reminder to wear and reconnect the Omi pendant so it can keep recording."
+    },
+    "pendantReconnectNudgeAction": "Reconnect",
+    "@pendantReconnectNudgeAction": {
+        "description": "Button that opens device settings to reconnect the Omi pendant."
     }
 }

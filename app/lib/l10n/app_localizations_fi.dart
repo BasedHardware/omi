@@ -15863,4 +15863,13 @@ class AppLocalizationsFi extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Käsitellään $date';
   }
+
+  @override
+  String get pendantReconnectNudgeTitle => 'Omisi ei ole muodostanut yhteyttä 3 päivään';
+
+  @override
+  String get pendantReconnectNudgeBody => 'Pue se takaisin ja yhdistä se uudelleen, jotta Omi jatkaa tallentamista.';
+
+  @override
+  String get pendantReconnectNudgeAction => 'Yhdistä uudelleen';
 }

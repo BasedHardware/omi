@@ -15966,4 +15966,13 @@ class AppLocalizationsTa extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return '$date அன்று செயலாக்கம்';
   }
+
+  @override
+  String get pendantReconnectNudgeTitle => 'உங்கள் Omi 3 நாட்களாக இணைக்கப்படவில்லை';
+
+  @override
+  String get pendantReconnectNudgeBody => 'Omi தொடர்ந்து பதிவுசெய்ய, அதை மீண்டும் அணிந்து இணைக்கவும்.';
+
+  @override
+  String get pendantReconnectNudgeAction => 'மீண்டும் இணைக்கவும்';
 }

@@ -15630,4 +15630,13 @@ class AppLocalizationsKo extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return '$date에 처리';
   }
+
+  @override
+  String get pendantReconnectNudgeTitle => 'Omi가 3일 동안 연결되지 않았어요';
+
+  @override
+  String get pendantReconnectNudgeBody => 'Omi를 다시 착용하고 연결하면 녹음을 계속할 수 있어요.';
+
+  @override
+  String get pendantReconnectNudgeAction => '다시 연결';
 }

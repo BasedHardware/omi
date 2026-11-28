@@ -15853,4 +15853,13 @@ class AppLocalizationsBn extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return '$date তারিখে প্রসেস হবে';
   }
+
+  @override
+  String get pendantReconnectNudgeTitle => 'আপনার Omi ৩ দিন ধরে সংযুক্ত হয়নি';
+
+  @override
+  String get pendantReconnectNudgeBody => 'এটি আবার পরে সংযোগ করুন, যাতে Omi রেকর্ডিং চালিয়ে যায়।';
+
+  @override
+  String get pendantReconnectNudgeAction => 'আবার সংযোগ করুন';
 }

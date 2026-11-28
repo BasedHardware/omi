@@ -4,6 +4,10 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 
 | API | Wire name | Properties | Status | Consumers |
 | --- | --- | --- | --- | --- |
+| pendantReconnectNudgeEligible | Pendant Reconnect Nudge Eligible | arm, days_since_connection, tenure_days, paying | active | pendant-reconnect-nudge |
+| pendantReconnectNudgeShown | Pendant Reconnect Nudge Shown | arm, days_since_connection, tenure_days, paying | active | pendant-reconnect-nudge |
+| pendantReconnectNudgeTapped | Pendant Reconnect Nudge Tapped | arm, days_since_connection, tenure_days, paying | active | pendant-reconnect-nudge |
+| pendantReconnectNudgeDismissed | Pendant Reconnect Nudge Dismissed | arm, days_since_connection, tenure_days, paying | active | pendant-reconnect-nudge |
 | onDeviceTranscriptionUsed | On Device Transcription Used | route, audio_ms, segment_count | active | on-device-transcription-usage |
 | walWriteReceipt | WAL Write Receipt | result, recovered, withheld | active | wal-write-receipt |
 | savedPendantReconnectObserved | Saved Pendant Reconnect | trigger, attempt, result, disconnected_ms | active | saved-pendant-reconnect |

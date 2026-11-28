@@ -15963,4 +15963,13 @@ class AppLocalizationsEl extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Επεξεργασία στις $date';
   }
+
+  @override
+  String get pendantReconnectNudgeTitle => 'Το Omi σου δεν έχει συνδεθεί εδώ και 3 ημέρες';
+
+  @override
+  String get pendantReconnectNudgeBody => 'Φόρεσέ το ξανά και σύνδεσέ το, ώστε το Omi να συνεχίσει την καταγραφή.';
+
+  @override
+  String get pendantReconnectNudgeAction => 'Επανασύνδεση';
 }

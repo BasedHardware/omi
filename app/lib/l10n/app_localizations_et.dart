@@ -15850,4 +15850,13 @@ class AppLocalizationsEt extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Töödeldakse $date';
   }
+
+  @override
+  String get pendantReconnectNudgeTitle => 'Sinu Omi pole 3 päeva ühendust loonud';
+
+  @override
+  String get pendantReconnectNudgeBody => 'Pane see uuesti külge ja ühenda, et Omi saaks salvestamist jätkata.';
+
+  @override
+  String get pendantReconnectNudgeAction => 'Ühenda uuesti';
 }

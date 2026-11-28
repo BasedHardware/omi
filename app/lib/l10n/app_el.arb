@@ -4772,5 +4772,8 @@
     "batteryRestartToRefresh": "Κάντε επανεκκίνηση του Omi για να ανανεωθεί η ένδειξη",
     "onTheWayAllowanceHeldTitle": "Θα επεξεργαστούν στις {date} όταν ανανεωθούν τα λεπτά σας",
     "onTheWayAllowanceHeldUpgrade": "Ή επεξεργαστείτε τα αμέσως με μια αναβάθμιση προγράμματος",
-    "onTheWayDayProcessesOn": "Επεξεργασία στις {date}"
+    "onTheWayDayProcessesOn": "Επεξεργασία στις {date}",
+    "pendantReconnectNudgeTitle": "Το Omi σου δεν έχει συνδεθεί εδώ και 3 ημέρες",
+    "pendantReconnectNudgeBody": "Φόρεσέ το ξανά και σύνδεσέ το, ώστε το Omi να συνεχίσει την καταγραφή.",
+    "pendantReconnectNudgeAction": "Επανασύνδεση"
 }

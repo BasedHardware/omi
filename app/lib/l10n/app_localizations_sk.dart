@@ -15853,4 +15853,13 @@ class AppLocalizationsSk extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Spracuje sa $date';
   }
+
+  @override
+  String get pendantReconnectNudgeTitle => 'Tvoje Omi sa už 3 dni nepripojilo';
+
+  @override
+  String get pendantReconnectNudgeBody => 'Znova si ho nasaď a pripoj, aby Omi ďalej nahrávalo.';
+
+  @override
+  String get pendantReconnectNudgeAction => 'Znova pripojiť';
 }

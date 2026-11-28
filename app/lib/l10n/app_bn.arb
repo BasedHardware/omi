@@ -12329,5 +12329,8 @@
     "batteryRestartToRefresh": "রিফ্রেশ করতে Omi পুনরায় চালু করুন",
     "onTheWayAllowanceHeldTitle": "আপনার মিনিট নবায়ন হলে {date} তারিখে প্রসেস হবে",
     "onTheWayAllowanceHeldUpgrade": "অথবা প্ল্যান আপগ্রেড করে সেগুলো এখনই প্রসেস করুন",
-    "onTheWayDayProcessesOn": "{date} তারিখে প্রসেস হবে"
+    "onTheWayDayProcessesOn": "{date} তারিখে প্রসেস হবে",
+    "pendantReconnectNudgeTitle": "আপনার Omi ৩ দিন ধরে সংযুক্ত হয়নি",
+    "pendantReconnectNudgeBody": "এটি আবার পরে সংযোগ করুন, যাতে Omi রেকর্ডিং চালিয়ে যায়।",
+    "pendantReconnectNudgeAction": "আবার সংযোগ করুন"
 }

@@ -264,6 +264,8 @@ class BtDevice {
   String id;
   DeviceType type;
   int rssi;
+
+  bool get isPendant => id.isNotEmpty && (type == DeviceType.omi || type == DeviceType.friendPendant);
   // Protocol-agnostic discovery locator for post-discovery connection
   final DeviceLocator? locator;
   String? _modelNumber;

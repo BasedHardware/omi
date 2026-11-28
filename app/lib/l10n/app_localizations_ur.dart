@@ -15870,4 +15870,13 @@ class AppLocalizationsUr extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return '$date کو پروسیس ہوں گے';
   }
+
+  @override
+  String get pendantReconnectNudgeTitle => 'آپ کا Omi 3 دن سے منسلک نہیں ہوا';
+
+  @override
+  String get pendantReconnectNudgeBody => 'اسے دوبارہ پہنیں اور جوڑیں تاکہ Omi ریکارڈنگ جاری رکھے۔';
+
+  @override
+  String get pendantReconnectNudgeAction => 'دوبارہ جوڑیں';
 }

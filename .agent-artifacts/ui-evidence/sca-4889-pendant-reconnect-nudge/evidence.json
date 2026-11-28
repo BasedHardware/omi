@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-pendant-reconnect-nudge.png",
+      "platform": "mobile-ios",
+      "description": "Eligible treatment card in the iOS-sized Home widget fixture.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

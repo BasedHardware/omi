@@ -12329,5 +12329,8 @@
     "batteryRestartToRefresh": "Перазагрузіце Omi, каб абнавіць паказанне",
     "onTheWayAllowanceHeldTitle": "Будуць апрацаваны {date}, калі абновяцца вашыя хвіліны",
     "onTheWayAllowanceHeldUpgrade": "Або апрацуйце іх адразу з абнаўленнем плана",
-    "onTheWayDayProcessesOn": "Будуць апрацаваны {date}"
+    "onTheWayDayProcessesOn": "Будуць апрацаваны {date}",
+    "pendantReconnectNudgeTitle": "Ваша Omi не падключалася 3 дні",
+    "pendantReconnectNudgeBody": "Надзеньце яе зноў і падключыце, каб Omi працягвала запісваць.",
+    "pendantReconnectNudgeAction": "Падключыць зноў"
 }

@@ -15924,4 +15924,13 @@ class AppLocalizationsRo extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Se procesează $date';
   }
+
+  @override
+  String get pendantReconnectNudgeTitle => 'Dispozitivul tău Omi nu s-a conectat de 3 zile';
+
+  @override
+  String get pendantReconnectNudgeBody => 'Poartă-l din nou și reconectează-l, ca Omi să continue să înregistreze.';
+
+  @override
+  String get pendantReconnectNudgeAction => 'Reconectează';
 }

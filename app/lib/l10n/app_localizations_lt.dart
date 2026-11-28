@@ -15883,4 +15883,13 @@ class AppLocalizationsLt extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Apdorojama $date';
   }
+
+  @override
+  String get pendantReconnectNudgeTitle => 'Tavo „Omi“ neprisijungė jau 3 dienas';
+
+  @override
+  String get pendantReconnectNudgeBody => 'Vėl jį užsidėk ir prijunk, kad „Omi“ toliau įrašinėtų.';
+
+  @override
+  String get pendantReconnectNudgeAction => 'Prijungti iš naujo';
 }

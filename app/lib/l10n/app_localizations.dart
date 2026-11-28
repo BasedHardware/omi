@@ -27824,6 +27824,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Processes {date}'**
   String onTheWayDayProcessesOn(String date);
+
+  /// Title of a Home reminder after three days without a pendant connection.
+  ///
+  /// In en, this message translates to:
+  /// **'Your Omi hasn\'t connected in 3 days'**
+  String get pendantReconnectNudgeTitle;
+
+  /// Home reminder to wear and reconnect the Omi pendant so it can keep recording.
+  ///
+  /// In en, this message translates to:
+  /// **'Put it back on and reconnect so Omi keeps capturing.'**
+  String get pendantReconnectNudgeBody;
+
+  /// Button that opens device settings to reconnect the Omi pendant.
+  ///
+  /// In en, this message translates to:
+  /// **'Reconnect'**
+  String get pendantReconnectNudgeAction;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

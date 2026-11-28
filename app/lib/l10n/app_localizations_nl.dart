@@ -15899,4 +15899,13 @@ class AppLocalizationsNl extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Worden verwerkt op $date';
   }
+
+  @override
+  String get pendantReconnectNudgeTitle => 'Je Omi is al 3 dagen niet verbonden';
+
+  @override
+  String get pendantReconnectNudgeBody => 'Draag hem weer en verbind hem opnieuw, zodat Omi blijft opnemen.';
+
+  @override
+  String get pendantReconnectNudgeAction => 'Opnieuw verbinden';
 }

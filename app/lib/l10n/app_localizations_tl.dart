@@ -15985,4 +15985,13 @@ class AppLocalizationsTl extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Maiiproseso sa $date';
   }
+
+  @override
+  String get pendantReconnectNudgeTitle => 'Hindi nakakonekta ang Omi mo sa loob ng 3 araw';
+
+  @override
+  String get pendantReconnectNudgeBody => 'Isuot at ikonekta itong muli para patuloy na makapag-record ang Omi.';
+
+  @override
+  String get pendantReconnectNudgeAction => 'Kumonekta muli';
 }

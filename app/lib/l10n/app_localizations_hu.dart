@@ -15916,4 +15916,13 @@ class AppLocalizationsHu extends AppLocalizations {
   String onTheWayDayProcessesOn(String date) {
     return 'Feldolgozás: $date';
   }
+
+  @override
+  String get pendantReconnectNudgeTitle => 'Az Omi 3 napja nem kapcsolódott';
+
+  @override
+  String get pendantReconnectNudgeBody => 'Vedd fel újra, és csatlakoztasd, hogy az Omi folytassa a rögzítést.';
+
+  @override
+  String get pendantReconnectNudgeAction => 'Újracsatlakozás';
 }
