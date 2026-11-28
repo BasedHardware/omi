@@ -1,0 +1,1 @@
+{"change": "Fix PLAUD NotePin S missing from device discovery when it advertises no local name"}

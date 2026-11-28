@@ -2,10 +2,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/services/devices/discovery/native_bluetooth_discoverer.dart';
+import 'package:omi/services/devices/discovery/plaud_discovery.dart';
 import 'package:omi/services/devices/models.dart';
 
 void main() {
-  group('NativeBluetoothDiscoverer PLAUD and NotePin S discovery (#14376)', () {
+  group('NativeBluetoothDiscoverer PLAUD and NotePin S discovery (#14376, #20033)', () {
     test('identifies classic PLAUD NOTE device by prefix', () {
       final peripheral = BlePeripheral(
         uuid: '0000-1111-2222',
@@ -83,6 +84,41 @@ void main() {
 
       final device = NativeBluetoothDiscoverer.peripheralToDevice(peripheral);
       expect(device.type, DeviceType.plaud);
+    });
+
+    for (final serviceUuid in ['1910', plaudServiceUuid]) {
+      test('unnamed peripheral advertising PLAUD service $serviceUuid survives and is PLAUD (#20033)', () {
+        final named = withNotePinFallbackName(
+          BlePeripheral(uuid: '0000-6666-7777', name: '', rssi: -65, serviceUuids: [serviceUuid]),
+        );
+
+        expect(named.name, 'NotePin');
+        expect(NativeBluetoothDiscoverer.isSupportedPeripheral(named), isTrue);
+        final device = NativeBluetoothDiscoverer.peripheralToDevice(named);
+        expect(device.type, DeviceType.plaud);
+        expect(device.name, 'NotePin');
+        expect(device.id, '0000-6666-7777');
+      });
+    }
+
+    test('unnamed peripheral without PLAUD service stays unnamed so the scan drops it (#20033)', () {
+      final other = BlePeripheral(uuid: '0000-7777-8888', name: '', rssi: -60, serviceUuids: ['180a']);
+
+      expect(withNotePinFallbackName(other).name, isEmpty);
+      expect(withNotePinFallbackName(BlePeripheral(uuid: 'x', name: '', rssi: -60, serviceUuids: [])).name, isEmpty);
+    });
+
+    test('named non-PLAUD peripheral advertising short UUID 1910 is not PLAUD (#20033)', () {
+      final other = BlePeripheral(uuid: 'x', name: 'Other Gadget', rssi: -60, serviceUuids: ['1910']);
+
+      expect(NativeBluetoothDiscoverer.isPlaud(other), isFalse);
+      expect(NativeBluetoothDiscoverer.isSupportedPeripheral(withNotePinFallbackName(other)), isFalse);
+    });
+
+    test('named peripheral keeps its own name', () {
+      final p = BlePeripheral(uuid: 'x', name: 'My Recorder', rssi: -60, serviceUuids: [plaudServiceUuid]);
+
+      expect(withNotePinFallbackName(p).name, 'My Recorder');
     });
 
     test('does not misidentify unrelated peripherals as PLAUD', () {
