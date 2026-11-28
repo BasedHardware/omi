@@ -45,6 +45,7 @@ from utils.batch_pipeline.artifact_reads import ArtifactReadBudget, ArtifactRead
 from utils.batch_pipeline.projection_parts import split_result, bounded_projection_words
 from utils.batch_pipeline.projection_segments import projection_segments
 from utils.conversations.final_pass_assignment import assign_words
+from utils.conversations.owner_attribution import FINAL_CENTROID_MATCH_SOURCE
 from utils.conversations.final_pass_errors import error_details
 from utils.conversations import final_pass_split as splitting
 from utils.conversations.final_pass_dependencies import transient_cause
@@ -853,7 +854,13 @@ def _run(uid, conversation, receipt, load_prints, apply, failure_context: UnitFa
                 for segment in copy.transcript_segments
                 for piece in (splits.get(segment.id) or [segment])
             ]
-        apply(copy, *plan, owner_voiceprint_available=bool(cache and 'user' in cache), scope=scope)
+        apply(
+            copy,
+            *plan,
+            owner_voiceprint_available=bool(cache and 'user' in cache),
+            scope=scope,
+            match_source=FINAL_CENTROID_MATCH_SOURCE,
+        )
         return copy
 
     candidate, partial_resolution = None, None

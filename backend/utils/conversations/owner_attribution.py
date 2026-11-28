@@ -9,7 +9,8 @@ from config.refactor_modes import default_on
 
 OwnerTrust = Literal["unique_owner", "no_owner", "multi_owner", "no_speaker_ids"]
 ClusterKey = tuple[Optional[str], Any]
-OWNER_MATCH_SOURCES = frozenset(('conversation_voice', 'speaker_evidence_v2'))
+FINAL_CENTROID_MATCH_SOURCE = 'final_centroid'
+OWNER_MATCH_SOURCES = frozenset(('conversation_voice', 'speaker_evidence_v2', FINAL_CENTROID_MATCH_SOURCE))
 
 
 def _field(row: Any, key: str, default: Any = None) -> Any:
