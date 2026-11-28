@@ -190,8 +190,8 @@ class SemanticControls {
   ];
 
   /// Installs the VM service extensions when (and only when) the current
-  /// build is [semanticControlsEligible]. Called from the debug branch of
-  /// `main()` next to `MarionetteBinding.ensureInitialized()`; inert elsewhere.
+  /// build is [semanticControlsEligible]. Startup calls this in debug builds
+  /// after validating the build flavor.
   void installIfEligible({void Function(String, developer.ServiceExtensionHandler)? register}) {
     if (!semanticControlsEligible || _installed) return;
     _installed = true;
